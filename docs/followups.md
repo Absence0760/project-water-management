@@ -4247,17 +4247,19 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2 are open decisions; D3 is a provisional position** (2026-10-01, pre-counsel research, built in 162; [allocations.md § Who sees what](./allocations.md#who-sees-what)) ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
-      recommended defaults: D2's anonymised baseline and results (downstream
-      units as a whole percentage, nothing but the EWR for a run with a
-      baseline assumption) are **pending the client and the licensing
-      authority**. D1 (who decides: the responsible authority, members acting
-      for it, the endorsement and the conflict guard) and the outcome words
-      (D14: `licence_issued`, `licence_refused`, `application_rejected`,
-      `not_considered`) are built on provisional positions (pre-counsel
-      research, 2026-10-01, 163_licensing_authority) and wait for the client,
-      the pilot authority's house style and counsel (#92). Trigger: the
-      client's answers.
+- [ ] **D1, D2, D3 and D14 are provisional positions** (pre-counsel
+      research, 2026-10-01; [issue #90](https://github.com/Absence0760/project-water-management/issues/90);
+      step-3 § 11; [legal-status.md § Positions taken pending counsel](./legal-status.md#positions-taken-pending-counsel-2026-10-01)),
+      built and waiting for the client, the pilot authority and counsel
+      (#92): D1 (who decides: the responsible authority, members acting for
+      it, the endorsement and the conflict guard, 163_licensing_authority);
+      D2 (the applicant sees the farmer scope plus the river: the k rule
+      split, the issued copy's frozen units, 164_applicant_visibility and
+      165_applicant_copy); D3 (names to editors, owners and the linked
+      farmer; volumes outside the organisation as totals, 162; [allocations.md § Who sees what](./allocations.md#who-sees-what));
+      and the outcome words (D14: `licence_issued`, `licence_refused`,
+      `application_rejected`, `not_considered`, 163), whose labels may follow
+      the pilot authority's house style. Trigger: the client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant

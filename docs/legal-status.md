@@ -215,148 +215,200 @@ Tracked in issue #103.
 
 ### Positions taken pending counsel (2026-10-01)
 
-Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
-and not approved by counsel), built so the app is ready for release. Counsel
-reviews them with the rest (#92); the client's information officer may
-override any of them by written instruction (operator agreement cl. 3).
+Each item below is a provisional position (pre-counsel research,
+2026-10-01): not legal advice, and not approved by counsel. They are built
+so the app is ready for release, before the client and counsel confirm
+them (issue #90; counsel review #92). The client's information officer may
+override any privacy position by written instruction (operator agreement
+cl. 3). The licensing ones are rows in
+[roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
 
-- **Lawful bases** (Privacy §4, security.md § Personal information):
-  accounts on contract (POPIA s11(1)(b)); memberships, farm links, notes,
-  the audit log, sign-offs and alerts on the organisation's legitimate
-  interest (s11(1)(f)), with the s11(3) objection built in (an alert's
-  unsubscribe, leaving a project; Privacy §10); records kept under
-  s14(1)(b). "And duty to keep" dropped: no statute requiring this record
-  was found. Alerts are service messages, not direct marketing (s1, s69):
+#### Privacy (POPIA)
+
+- [ ] **Lawful bases** (Privacy §4, security.md § Personal information):
+  *Provisional position (pre-counsel research, 2026-10-01):* accounts on
+  contract (POPIA s11(1)(b)); memberships, farm links, notes, the audit
+  log, sign-offs and alerts on the organisation's legitimate interest
+  (s11(1)(f)), with the s11(3) objection built in (an alert's unsubscribe,
+  leaving a project; Privacy §10); records kept under s14(1)(b). "And duty
+  to keep" dropped: no statute requiring this record was found. Alerts are
+  service messages, not direct marketing (s1, s69):
   `backend/src/mail/alerts.content.test.ts` holds their links to an
   allowlist, and SES open and click tracking stays off.
-- **Deleted notes** (Privacy §7): the text is erased 90 days after
-  deletion (158_note_purge.sql), the `note.deleted` event stays; a note on
-  a scenario or pack past draft is kept hidden with the licence record
+- [ ] **Deleted notes** (Privacy §7): *Provisional position (pre-counsel
+  research, 2026-10-01):* the text is erased 90 days after deletion
+  (158_note_purge.sql), the `note.deleted` event stays; a note on a
+  scenario or pack past draft is kept hidden with the licence record
   (s14(6)(b)).
-- **Backups after an erasure** (Privacy §7, operator agreement 5.8 and
-  10.2): backups age out within 35 days; a restore re-applies every
-  erasure and revocation since its restore point before traffic is back,
-  from a 40-day `erasure_log` of deleted account, project and team ids
-  (159_erasure_log.sql) and the audit log's revocations; the old instance's
-  final snapshot is deleted within 30 days and the teardown snapshot 90
-  days after the shutdown notice.
-- **The organisation's privacy contact** (Privacy §2, s18(1)(b)): a team
-  names whom to ask about its projects' information (168); farmers see it
-  from the farm menu ("Who decides about your farm's information") and
+- [ ] **Backups after an erasure** (Privacy §7, operator agreement 5.8 and
+  10.2): *Provisional position (pre-counsel research, 2026-10-01):*
+  backups age out within 35 days; a restore re-applies every erasure and
+  revocation since its restore point before traffic is back, from a 40-day
+  `erasure_log` of deleted account, project and team ids
+  (159_erasure_log.sql) and the audit log's revocations; the old
+  instance's final snapshot is deleted within 30 days and the teardown
+  snapshot 90 days after the shutdown notice.
+- [ ] **The organisation's privacy contact** (Privacy §2, s18(1)(b)):
+  *Provisional position (pre-counsel research, 2026-10-01):* a team names
+  whom to ask about its projects' information (168); farmers see it from
+  the farm menu ("Who decides about your farm's information") and
   invitation emails name it. Where none is set, operator agreement 3A.1(b)
   (the client's own notice) still covers it.
-### Licensing positions (pre-counsel, 2026-10-01)
+- [ ] **The audit log after an account is deleted (D12)** (security.md §
+  Personal information): *Provisional position (pre-counsel research,
+  2026-10-01):* pseudonymising is enough: s24(1)(b) reaches only what s14
+  no longer authorises, and s14(1)(b) authorises the audit trail. The
+  entries stay and are treated as personal information, not as
+  de-identified; deletion now also blanks the masked address in invitation
+  entries (160_pseudonymise_invites, Privacy §7). *For counsel:* whether
+  the events must be de-identified instead (clearing `subject.userId` and
+  node names in events about the person).
+- [ ] **The life of the licence record** (Privacy §7, evidence-pack.md §
+  Retention): *Provisional position (pre-counsel research, 2026-10-01):* a
+  date the project holds (161_licence_record): the licence's expiry, or
+  the refusal or withdrawal, + 3 years (Prescription Act s11(d), s12(3);
+  PAJA; NWA s28(1)(e)), with a 5-yearly review while no outcome is
+  recorded (NWA s28(1)(f)'s interval). The tick emails the owners and the
+  operator; it never deletes: the operator deletes on the client's written
+  confirmation (deployment.md runbook item 16). A pack's signer is told so
+  before signing (the dialog's note, not part of the hashed statement, so
+  no sign-off version change). *For counsel:* whether 3 years is the right
+  tail.
+- [ ] **Public bodies' records** (operator agreement 3A.2): *Provisional
+  position (pre-counsel research, 2026-10-01):* a team the operator marks
+  `team.public_records` (a DWS or CMA client, National Archives and
+  Records Service Act s13(2)(a)) keeps its members' names in its projects'
+  history after account deletion, and is kept until the client confirms
+  disposal (161). Privacy §7's sentence for such a team, with its own
+  `LEGAL_VERSION` bump, waits for the first such client (followups.md).
+  *For counsel:* whether the Act applies to a CMA's or DWS's use of the
+  app.
 
-Provisional positions (pre-counsel research, 2026-10-01; not legal advice,
-nothing here is approved by counsel), built so the app can ship before the
-client and counsel confirm them (issue #90; counsel review #92). Each is a
-row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
+#### Licensing
 
-- [ ] **D1, who hosts the baseline / who decides.** *Position:* the
-  National Water Act fixes who decides a licence (the responsible
-  authority: DWS, or a CMA the power is assigned or delegated to; s1, s40(1),
-  s41, s42) and whose evidence it accepts (s41(2)), not who hosts the model.
-  *Built (163_licensing_authority):* each project names its responsible
+- [ ] **D1, who hosts the baseline / who decides.** *Provisional position
+  (pre-counsel research, 2026-10-01):* the National Water Act fixes who
+  decides a licence (the responsible authority: DWS, or a CMA the power is
+  assigned or delegated to; s1, s40(1), s41, s42) and whose evidence it
+  accepts (s41(2)), not who hosts the model. *Built
+  (163_licensing_authority):* each project names its responsible
   authority; only members the owner marks as acting for it record its
   decision or endorse a published baseline; packs print whom they are for
   and whether the baseline was endorsed; a database conflict guard keeps
-  editors out of applying parties, so a consultancy host can't also act for
-  applicants. *For counsel:* whether a WUA or consultancy host changes the
-  POPIA responsible party and the PAIA regime (a CMA, and probably a WUA,
-  is a public body), and whether a marked member's endorsement can stand for
-  the authority's acceptance of evidence under s41(2).
-- [ ] **D14, the outcome words.** *Position:* "approved with conditions"
-  has no meaning of its own (every licence carries conditions, s28(1)(d)),
-  and no app user decides. *Built (163):* the outcomes are *Licence issued
-  (see its conditions)*, *Licence refused*, *Application rejected (formal
-  requirements)* and *Not considered: use already authorised*; the action is
-  **Record the authority's decision**, with the authority's name, the
+  editors out of applying parties, so a consultancy host can't also act
+  for applicants. *For counsel:* whether a WUA or consultancy host changes
+  the POPIA responsible party and the PAIA regime (a CMA, and probably a
+  WUA, is a public body), and whether a marked member's endorsement can
+  stand for the authority's acceptance of evidence under s41(2).
+- [ ] **D2, what an applicant sees, and freezing "own".** *Provisional
+  position (pre-counsel research, 2026-10-01):* keep the farmer scope plus
+  the river (other farms' figures are personal or commercial information,
+  POPIA s1, PAIA s36/s64; fairness to the applicant is the authority's
+  duty, PAJA s3, s5). An issued pack's applicant copy keeps the units it
+  was issued about: the right of access attaches to the application, not
+  to who holds the land now (PAIA s50(1)(a)). *Built
+  (164_applicant_visibility):* the copy reads the units the frozen report
+  counted as the applicant's, within the application's stored own nodes,
+  never the owner's current links. *For counsel:* whether figures about
+  land the applicant no longer holds now relate to the new holder.
+- [ ] **The k rule on catchment series.** *Provisional position
+  (pre-counsel research, 2026-10-01):* natural flow (and the EWR made from
+  it) describes the river, not anyone's use, so it shows at any holder
+  count; the series from which "natural minus outflow = the farms' use"
+  follows keep k ≥ 5 (a judgement in line with statistical-disclosure
+  practice, not a statutory number). *Built (164):* share links and
+  applicants see natural flow and the EWR always; outflow, observed flow
+  below the farms, the EWR shortfall and the volume rows stay at five
+  holders. A dominance rule (one holder taking most of the use) is a
+  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
+  dominance rule is needed before go-live.
+- [ ] **Rules broken by hidden farms.** *Provisional position (pre-counsel
+  research, 2026-10-01):* a validation refusal the applicant can't fix
+  blind is a fairness problem; an aggregate over five or more holders
+  relates to no one of them (POPIA s1). The authority, not the operator,
+  decides what its reasons disclose (NWA s42(b), PAJA s5). *Built (164):*
+  the catchment's aggregate past five hidden holders, the generic words
+  below; the assessors read the rule's real words; the applicant's **Ask
+  the assessors why** sends the line, the changes it names and the rule's
+  kind (nothing hidden), and an editor answers once. *For counsel:* how
+  much third-party detail the authority's reasons may carry (PAJA s5(4)).
+- [ ] **The applicant's printable copy, and the full pack to the
+  authority.** *Provisional position (pre-counsel research, 2026-10-01):*
+  the applicant files the technical report (R267 reg 11(1)) and what they
+  file reaches the public (Annexure D item 8), so the copy they file
+  withholds other users' figures, close to what PAIA severance would give;
+  the full pack goes where s41(2) says the evidence goes. *Built
+  (165_applicant_copy):* a party's printable copy of an issued pack,
+  printed as them, saying it is a derived copy and where to check the
+  pack, with its own hash; an editor sends the full pack to the members
+  acting for the responsible authority (a link to sign in to, never a
+  file). Sending to an outside address is a tracked follow-up. *For
+  counsel:* whether the copy needs the third parties' notice at all, and
+  whether delivery to an authority inbox outside the app is needed.
+- [ ] **D3, registered volumes and names** (allocations.md § Who sees
+  what): *Provisional position (pre-counsel research, 2026-10-01):*
+  registered users' names never go to viewers or public pages (editors,
+  owners and the linked farmer only); viewers see per-farm volumes only
+  when an owner allows it, else totals at 5 or more holders
+  (162_allocation_viewer_units); § 5 of an issued pack lists only the
+  applicant's own units, the rest as totals (report format `evidence-15`);
+  a WARMS extract records how it was obtained (operator agreement
+  3A.1(d)). *For counsel:* the WARMS data terms, and whether 5 holders is
+  enough.
+- [ ] **D5, public participation (item 7).** *Provisional position
+  (pre-counsel research, 2026-10-01):* only someone who timeously lodged a
+  written objection may appeal (NWA s148(1)(f)) and is told of the
+  decision (s42(a)); the objection goes to the notice's address (R267 reg
+  17(4)(b)(vii)); the applicant keeps the I&AP register and compiles the
+  participation report (regs 18–19). *Built (166_public_participation):*
+  every public comment box and share page says a comment is not a written
+  objection and prints the notice's address and closing date when the
+  applicant gives them; anyone signed in comments through a live link with
+  no project role (an NGO is never a viewer); the applicant and the
+  assessors download the reg 19 record (CSV and a print page under
+  Annexure D item 8's headings), with a commenter's email only where they
+  ticked the reg 18 box, with the POPIA s18 notice at the box and Privacy
+  §5. *For counsel:* whether the warning's words are enough to protect an
+  NGO's standing, whether the operator or the host is the responsible
+  party for the emails handed to the applicant, and whether the record
+  meets reg 19(1)(a) as a submission.
+- [ ] **D14, the outcome words.** *Provisional position (pre-counsel
+  research, 2026-10-01):* "approved with conditions" has no meaning of its
+  own (every licence carries conditions, s28(1)(d)), and no app user
+  decides. *Built (163):* the outcomes are *Licence issued (see its
+  conditions)*, *Licence refused*, *Application rejected (formal
+  requirements)* and *Not considered: use already authorised*; the action
+  is **Record the authority's decision**, with the authority's name, the
   decision letter's date, its reference and whether written reasons were
   received; the app says appeals run from the decision letter and computes
   no deadline. Older decisions were mapped. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
-- [ ] **D5, public participation (item 7).** *Position:* only someone who
-  timeously lodged a written objection may appeal (NWA s148(1)(f)) and is
-  told of the decision (s42(a)); the objection goes to the notice's address
-  (R267 reg 17(4)(b)(vii)); the applicant keeps the I&AP register and
-  compiles the participation report (regs 18–19). *Built
-  (166_public_participation):* every public comment box and share page says
-  a comment is not a written objection and prints the notice's address and
-  closing date when the applicant gives them; anyone signed in comments
-  through a live link with no project role (an NGO is never a viewer); the
-  applicant and the assessors download the reg 19 record (CSV and a print
-  page under Annexure D item 8's headings), with a commenter's email only
-  where they ticked the reg 18 box, with the POPIA s18 notice at the box and
-  Privacy §5. *For counsel:* whether the warning's words are enough to
-  protect an NGO's standing, whether the operator or the host is the
-  responsible party for the emails handed to the applicant, and whether the
-  record meets reg 19(1)(a) as a submission.
-- [ ] **D16, signers (item 9).** *Position:* neither the NWA nor R267
-  requires a registered signer, but consulting for a fee is practising
-  (NSP Act s20(1)); the evidence is the applicant's (s41(2)(a)(ii)).
-  *Built (167_signers):* the applicant's appointed specialist signs
-  (`specialist`), an editor may add a `review`; a sign-off, issue and
-  withdrawal need a code from the authenticator within 10 minutes; the host
-  (an owner, or a member acting for the authority) records its check of
-  the signer's registration against the public register, which verify then
-  shows ("checked … by <org>, <date>", else "self-declared"), and issue
-  waits for it while the project requires it (on by default); the dialog
-  and Terms §3 say an in-app sign-off is not the signature the authority
-  requires (ECTA s13(1)). *For counsel:* whether the sign-off wording is a
-  material Terms change; whether the host's recorded check creates any
-  assurance by the operator; whether an integrated (NEMA) application's
+- [ ] **D15, the impact basis.** *Provisional position (pre-counsel
+  research, 2026-10-01):* report both, labelled, with full authorised use
+  as the headline (s27(1)(a), (f), s29(1)(a)(iii); R267 "existing and
+  potential impacts"), and the authorised volume's mix, since only a
+  licence or verified existing lawful use is an entitlement. *Built (165,
+  report format `evidence-14`):* both boards on page 1; an editor runs the
+  full-allocation pair; a fixed row says when there is none. *For counsel
+  and the client's hydrologist:* which basis an authority expects first,
+  and how to treat registered but unverified volumes.
+- [ ] **D16, signers (item 9).** *Provisional position (pre-counsel
+  research, 2026-10-01):* neither the NWA nor R267 requires a registered
+  signer, but consulting for a fee is practising (NSP Act s20(1)); the
+  evidence is the applicant's (s41(2)(a)(ii)). *Built (167_signers):* the
+  applicant's appointed specialist signs (`specialist`), an editor may add
+  a `review`; a sign-off, issue and withdrawal need a code from the
+  authenticator within 10 minutes; the host (an owner, or a member acting
+  for the authority) records its check of the signer's registration
+  against the public register, which verify then shows ("checked … by
+  <org>, <date>", else "self-declared"), and issue waits for it while the
+  project requires it (on by default); the dialog and Terms §3 say an
+  in-app sign-off is not the signature the authority requires (ECTA
+  s13(1)). *For counsel:* whether the sign-off wording is a material Terms
+  change; whether the host's recorded check creates any assurance by the
+  operator; whether an integrated (NEMA) application's
   SACNASP-registration protocol (GN 320 of 2020) changes the product rule.
-- [ ] **D2, what an applicant sees, and freezing "own".** *Position:* keep
-  the farmer scope plus the river (other farms' figures are personal or
-  commercial information, POPIA s1, PAIA s36/s64; fairness to the applicant
-  is the authority's duty, PAJA s3, s5). An issued pack's applicant copy
-  keeps the units it was issued about: the right of access attaches to the
-  application, not to who holds the land now (PAIA s50(1)(a)). *Built
-  (164_applicant_visibility):* the copy reads the units the frozen report
-  counted as the applicant's, within the application's stored own nodes,
-  never the owner's current links. *For counsel:* whether figures about land
-  the applicant no longer holds now relate to the new holder.
-- [ ] **The k rule on catchment series.** *Position:* natural flow (and the
-  EWR made from it) describes the river, not anyone's use, so it shows at
-  any holder count; the series from which "natural minus outflow = the
-  farms' use" follows keep k ≥ 5 (a judgement in line with
-  statistical-disclosure practice, not a statutory number). *Built (164):*
-  share links and applicants see natural flow and the EWR always; outflow,
-  observed flow below the farms, the EWR shortfall and the volume rows stay
-  at five holders. A dominance rule (one holder taking most of the use) is a
-  tracked follow-up. *For counsel:* whether 5 is defensible, and whether a
-  dominance rule is needed before go-live.
-- [ ] **Rules broken by hidden farms.** *Position:* a validation refusal
-  the applicant can't fix blind is a fairness problem; an aggregate over
-  five or more holders relates to no one of them (POPIA s1). The authority,
-  not the operator, decides what its reasons disclose (NWA s42(b), PAJA
-  s5). *Built (164):* the catchment's aggregate past five hidden holders,
-  the generic words below; the assessors read the rule's real words; the
-  applicant's **Ask the assessors why** sends the line, the changes it names
-  and the rule's kind (nothing hidden), and an editor answers once. *For
-  counsel:* how much third-party detail the authority's reasons may carry
-  (PAJA s5(4)).
-- [ ] **The applicant's printable copy, and the full pack to the authority.**
-  *Position:* the applicant files the technical report (R267 reg 11(1)) and
-  what they file reaches the public (Annexure D item 8), so the copy they
-  file withholds other users' figures, close to what PAIA severance would
-  give; the full pack goes where s41(2) says the evidence goes. *Built
-  (165_applicant_copy):* a party's printable copy of an issued pack, printed
-  as them, saying it is a derived copy and where to check the pack, with its
-  own hash; an editor sends the full pack to the members acting for the
-  responsible authority (a link to sign in to, never a file). Sending to an
-  outside address is a tracked follow-up. *For counsel:* whether the copy
-  needs the third parties' notice at all, and whether delivery to an
-  authority inbox outside the app is needed.
-- [ ] **D15, the impact basis.** *Position:* report both, labelled, with
-  full authorised use as the headline (s27(1)(a), (f), s29(1)(a)(iii); R267
-  "existing and potential impacts"), and the authorised volume's mix, since
-  only a licence or verified existing lawful use is an entitlement. *Built
-  (165, report format `evidence-14`):* both boards on page 1; an editor runs
-  the full-allocation pair; a fixed row says when there is none. *For
-  counsel and the client's hydrologist:* which basis an authority expects
-  first, and how to treat registered but unverified volumes.
 
 ## Change log
 
@@ -420,7 +472,7 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   change (it still listed 2026-09-28's).
 - 2026-10-01: provisional positions (pre-counsel research, 2026-10-01; not
   legal advice, counsel review #92) on issue #90's D12, evidence that names
-  its maker, and D3, built on branch r3/popia-records:
+  its maker, and D3 (§ Positions taken pending counsel):
   **D12**: pseudonymising the audit log is enough (s24(1)(b) reaches only
   what s14 no longer authorises; s14(1)(b) authorises the trail), the
   entries are treated as personal information, and deletion now also
@@ -452,8 +504,13 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   text is erased after 90 days (158), that a restore deletes again what was
   deleted after the backup (a 40-day list of deleted accounts and projects,
   159), and that the teardown copy is kept 90 days. Other changes in the
-  same round (history, licence records, registered water use) share this
-  version. `LEGAL_VERSION` 2026-10-02 (a new date, since the 2026-10-01
+  same round share this version: history, licence records and registered
+  water use (above); Privacy §3 and §5 on public comments (the applicant
+  receives a comment, its display name and date for the reg 19 report, and
+  the email only with the reg 18 register box ticked; commenting through a
+  link needs no project role, 166) and the host's record of a registration
+  check (167); Terms §3 says an in-app sign-off is not the signature the
+  authority requires and needs a fresh authenticator code (167). `LEGAL_VERSION` 2026-10-02 (a new date, since the 2026-10-01
   version had already been bumped that day; every account accepts again,
   and nothing is in production yet); the re-acceptance notice's "what
   changed" list is rewritten for it.
