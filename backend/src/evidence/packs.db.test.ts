@@ -922,9 +922,67 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			await expect(withUser(owner.id, (db) => db.query('DELETE FROM pack_reproduction WHERE pack_id = $1', [v1.id]))).rejects.toMatchObject({ code: '42501' });
 		});
 
+		// An editor's "Re-run on the server" (POST …/reproduce): after the job gave up, or on a newer engine.
+		it('re-runs again on request: refused while this engine’s outcome stands, queued once on a newer engine, recorded beside the old', async () => {
+			const rerun = (u: User) => u.call('POST', `${packPath(v1.id)}/reproduce`);
+			// This engine's outcome is recorded (above): it stands, so no re-run is offered or queued.
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', serverEngine: ENGINE_VERSION, canRerun: false });
+			const refused = await rerun(editor);
+			expect(refused.status).toBe(409);
+			expect(refused.body.error).toMatch(/recorded already/);
+			// Editor and above only (the role ladder sweeps the rest).
+			expect((await viewer.call('POST', `${packPath(v1.id)}/reproduce`)).status).toBe(403);
+			const pendingJobs = async () => (await reproduceJobs()).filter((j) => j.status !== 'done').map((j) => [j.status, j.actingUserId]);
+			expect(await pendingJobs()).toEqual([]);
+			// The server's engine moves on: the recorded outcome is now an older engine's.
+			await asOwner(`UPDATE pack_reproduction SET engine_version = '0.0.1-older' WHERE pack_id = $1`, [v1.id]);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: '0.0.1-older', canRerun: true });
+			const asked = await rerun(editor);
+			expect(asked.status).toBe(202);
+			expect(asked.body.reproduction).toMatchObject({ status: 'checking', canRerun: false });
+			// Idempotent while it is pending: the same job comes back, and nothing more is queued.
+			const again = await rerun(owner);
+			expect(again.status).toBe(202);
+			expect(again.body.jobId).toBe(asked.body.jobId);
+			expect(await pendingJobs()).toEqual([['queued', editor.id]]);
+			await runTick({ feeds: false, reports: false, alerts: false });
+			// Recorded beside the older engine's, not in place of it; the newest stands on the page.
+			expect((await asOwner('SELECT engine_version, outcome FROM pack_reproduction WHERE pack_id = $1 ORDER BY checked_at', [v1.id])).map((r) => [r.engine_version, r.outcome])).toEqual([
+				['0.0.1-older', 'reproduced'],
+				[ENGINE_VERSION, 'reproduced']
+			]);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: ENGINE_VERSION, canRerun: false });
+		});
+
+		it('a re-run that gave up says so and may be asked for again (positive control: the next one records)', async () => {
+			// This engine's outcome gone, and the newest job dead, as when the packs bucket was unreachable for all its attempts.
+			await asOwner('DELETE FROM pack_reproduction WHERE pack_id = $1 AND engine_version = $2', [v1.id, ENGINE_VERSION]);
+			await asOwner(
+				`UPDATE job SET status = 'dead', last_error = 'the packs bucket was unreachable' WHERE id = (
+					SELECT id FROM job WHERE project_id = $1 AND kind = 'pack_reproduce' AND payload->>'packId' = $2 ORDER BY created_at DESC, id DESC LIMIT 1)`,
+				[projectId, v1.id]
+			);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'failed', error: 'the packs bucket was unreachable', canRerun: true });
+			const asked = await editor.call('POST', `${packPath(v1.id)}/reproduce`);
+			expect(asked.status).toBe(202);
+			await runTick({ feeds: false, reports: false, alerts: false });
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: ENGINE_VERSION, error: null, canRerun: false });
+		});
+
 		it('a draft is never re-run: no job, state none', async () => {
 			const d = await draft(editor, baseRun);
-			expect((await editor.call('GET', packPath(d.id))).body.reproduction).toEqual({ status: 'none', engineVersion: null, runEngines: [], checkedAt: null, checks: [], error: null });
+			expect((await editor.call('GET', packPath(d.id))).body.reproduction).toEqual({
+				status: 'none',
+				engineVersion: null,
+				runEngines: [],
+				checkedAt: null,
+				checks: [],
+				error: null,
+				serverEngine: ENGINE_VERSION,
+				canRerun: false
+			});
+			// Nor asked for one: 409, and no job.
+			expect((await editor.call('POST', `${packPath(d.id)}/reproduce`)).status).toBe(409);
 			expect(await asOwner(`SELECT 1 FROM job WHERE kind = 'pack_reproduce' AND payload->>'packId' = $1`, [d.id])).toEqual([]);
 			expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
 		});

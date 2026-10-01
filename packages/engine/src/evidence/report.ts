@@ -1687,14 +1687,14 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
-		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a provisional rule (2026-10-01) not yet confirmed by the hydrologist.
 		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
 		if (below) {
 			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
 			add(
 				`belowTable-${s.key}`,
 				'caution',
-				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a provisional rule not yet confirmed by the catchment’s hydrologist.${
 					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
 				}`,
 				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'

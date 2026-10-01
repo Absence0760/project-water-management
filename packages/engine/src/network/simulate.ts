@@ -106,8 +106,8 @@ export interface PlanNode {
 	/** Share β of the application losses (1 − e)·G that returns to the river the same day (audit N1). */
 	lossReturnFraction: number;
 	/**
-	 * Dam surface area when full (m²), as entered or estimated (capacity ÷ 3 m
-	 * mean depth); the area on a day is A = full × (Q[t−1] / capacity)^b
+	 * Dam surface area when full (m²), as entered or estimated (7.2 × capacity^0.77,
+	 * engine ≥ 1.63.0; capacity ÷ 3 m before); the area on a day is A = full × (Q[t−1] / capacity)^b
 	 * (engine ≥ 0.16.0, audit N2). 0 for a node without a dam.
 	 */
 	damAreaFullM2: number;

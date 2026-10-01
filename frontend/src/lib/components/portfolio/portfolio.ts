@@ -22,7 +22,7 @@ export function thresholdsRule(t: Pick<PortfolioThresholds, 'green' | 'amber'>):
 
 /** Whose thresholds these are: the team's own, or the defaults still waiting for the hydrologist's sign-off (D11). */
 export function thresholdsSource(t: Pick<PortfolioThresholds, 'source'>): string {
-	return t.source === 'team' ? 'These are the team’s own thresholds.' : 'These are the default thresholds, still to be confirmed by the hydrologist.';
+	return t.source === 'team' ? 'These are the team’s own thresholds.' : 'These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.';
 }
 
 /**

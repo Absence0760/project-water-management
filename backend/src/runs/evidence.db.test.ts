@@ -111,7 +111,7 @@ describe('POST /projects/:id/evidence', () => {
 		await asOwner('UPDATE model_run SET inputs = $2 WHERE id = $1', [overRun, inputs]);
 		const over = await nominate(owner, overRun);
 		expect(over.status).toBe(409);
-		expect(over.body.error).toMatch(/^this run cannot be nominated as evidence: its farm flow shares sum to \d+\.00%, more than 100%/);
+		expect(over.body.error).toMatch(/^this run cannot be nominated as evidence: its unit flow shares sum to \d+\.00%, more than 100%/);
 		// Another project's run, by an editor of both, is not found through this one.
 		const other = await runnableProject(editor, 'Elsewhere');
 		const otherRun = await newRun(editor, other, 'Theirs');

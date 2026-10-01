@@ -34,7 +34,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireStepUp, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
@@ -42,7 +42,7 @@ import { wakeWorker } from '../jobs/wake.js';
 import { packBundleFileName, packDownloadUrl, packFileName } from '../reports/storage.js';
 import { toVerify } from '../share/links.js';
 import { issuePackBundle } from './bundle.js';
-import { packReproductionState, queuePackReproduce } from './packReproduce.js';
+import { packReproductionState, queuePackReproduce, requestPackReproduce } from './packReproduce.js';
 import { errataFoundSince, type PackErratum, type PackRunEngines } from './errata.js';
 import { buildEvidenceReport } from './report.js';
 import { queuePackNotices } from './notices.js';
@@ -327,7 +327,7 @@ export const packRoutes = new Hono<AuthEnv>()
 					// The server-rendered PDF of an issued pack (119_pack_render): ready, rendering, failed or none.
 					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
 					// The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify.
-					reproduction: await packReproductionState(db, id, packId),
+					reproduction: await packReproductionState(db, id, packId, pack.issuedAt !== null),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
 					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest, errataFoundSince) : null
 				});
@@ -368,7 +368,7 @@ export const packRoutes = new Hono<AuthEnv>()
 							? 'requires editor role'
 							: pack.status !== 'draft'
 								? `only a draft pack is signed; this one is ${pack.status}`
-								: (blocked ?? (unverified ? RUN_UNVERIFIED : null)),
+								: (blocked ?? (unverified ? RUN_UNVERIFIED : ((await stepUpRefusal(db))?.message ?? null))),
 					signoffs: rows
 				});
 			},
@@ -380,6 +380,8 @@ export const packRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status !== 'draft') throw new ApiError(409, `only a draft pack is signed; this one is ${pack.status}`);
 			const { statement, sha256: expected, blocked, unverified } = await packStatementFor(db, id, pack);
@@ -480,6 +482,19 @@ export const packRoutes = new Hono<AuthEnv>()
 		});
 		await wakeWorker(jobId);
 		return c.json({ jobId, pdf: { status: 'rendering', error: null } }, 202);
+	})
+	.post('/:id/packs/:packId/reproduce', async (c) => {
+		// Re-run an issued pack on the server again (after its job gave up, or on a newer engine); idempotent while one is pending.
+		const { id, packId } = c.req.param();
+		PackIssueBody.parse((await readJson(c, { optional: true })) ?? {});
+		const result = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const pack = await loadPack(db, id, packId, true);
+			const queued = await requestPackReproduce(db, id, packId, pack.issuedAt !== null);
+			return { ...queued, reproduction: await packReproductionState(db, id, packId, true) };
+		});
+		if (result.created) await wakeWorker(result.jobId);
+		return c.json({ jobId: result.jobId, reproduction: result.reproduction }, 202);
 	})
 	.get('/:id/packs/:packId/bundle', async (c) => {
 		// The reproduction bundle (docs/evidence-pack.md § Reproduction): a 302 to a short-lived signed GET, as a report's PDF.

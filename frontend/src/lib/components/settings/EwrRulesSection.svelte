@@ -81,7 +81,7 @@
 					<option value="pragmatic">The pragmatic EWR</option>
 					<option value="ruleTable">The rule tables</option>
 				</select>
-				<span class="hint" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. Pending the hydrologist.</span>
+				<span class="hint" id="{uid}-charge-h">Which daily requirement sets the EWR charge, curtailment and the water account at a site with a table. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
 			</div>
 			<div class="field">
 				<span class="lbl"><label for="{uid}-low">Low flows judged on</label><HelpTip key="settings.lowFlowMeasure" /></span>
@@ -89,7 +89,7 @@
 					<option value="total">The month’s total flow</option>
 					<option value="baseflow">The month’s base flow</option>
 				</select>
-				<span class="hint" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. Pending the hydrologist.</span>
+				<span class="hint" id="{uid}-low-h">Base flow keeps a flood month from passing its low flows. A provisional default, not yet confirmed by the catchment’s hydrologist.</span>
 			</div>
 		</div>
 	{/if}

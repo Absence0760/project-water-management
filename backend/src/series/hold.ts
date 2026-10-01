@@ -43,6 +43,14 @@
 // The hold ends when a person runs the model (the Run button or a queued
 // manual re-run; not a scenario run): they have looked at the data, fixed it
 // or accepted it.
+// A push with no outlier limit at all (no step has OUTLIER_MIN_POSITIVE
+// non-zero days: a short series, checked for negatives only) isn't held, so a
+// new logger's automatic runs go on, but it holds automatic *publication*
+// (operator decision, 2026-10-01): the merge records `series.unchecked`, the
+// re-run still runs, and autoPublish leaves it for a person while such an
+// event is newer than the project's latest manual run
+// (uncheckedSinceLastRun). Farmers never see a leaked key's absurd value
+// until a person has run the model on it.
 // A person's own merge from the UI is never held, and a data feed's values
 // are checked by its parser instead (feeds/ingest.ts).
 // The factor is the engine's default (outlierFactorOf without settings), not
@@ -220,4 +228,23 @@ export async function heldSinceLastRun(db: Db, projectId: string): Promise<boole
 		[projectId]
 	);
 	return rows[0]?.held === true;
+}
+
+/**
+ * Whether an API key pushed into a series too short for any outlier limit
+ * (`series.unchecked`, series/merge.ts) since the project's latest run a
+ * person made: the automatic runs go on, but autoPublish leaves publishing
+ * them to a person until someone runs the model (operator decision,
+ * 2026-10-01). Read as the re-run's acting user, an editor.
+ */
+export async function uncheckedSinceLastRun(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ unchecked: boolean }>(
+		`SELECT EXISTS (
+			SELECT 1 FROM audit_event e
+			WHERE e.project_id = $1 AND e.kind = 'series.unchecked'
+				AND e.created_at > coalesce((SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.trigger = 'manual' AND r.scenario_id IS NULL), '-infinity')
+		) AS unchecked`,
+		[projectId]
+	);
+	return rows[0]?.unchecked === true;
 }

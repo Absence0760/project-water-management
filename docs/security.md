@@ -166,8 +166,12 @@ decide a licence application.
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
-  deciding an application (`…/decide`) and issuing or withdrawing an
-  evidence pack. The owner and admin checks a route makes by hand are
+  deciding an application (`…/decide`), issuing or withdrawing an
+  evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
+  needs an authenticator: a sign-off is the professional record an
+  authority relies on, and without it is only as strong as the signer's
+  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
   stepped up too: removing someone else from a project or a team (leaving
   isn't), and an owner making or revoking a share link of any kind. A guard
   (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
@@ -194,11 +198,13 @@ decide a licence application.
   **Sign in again**, which signs out and returns to the page after the
   password and the code. A `403 mfa_required` or `mfa_step_up` from any
   request shows the same two (the API client's `onError`), for an editor
-  publishing to farmers too, whose role alone doesn't need it; the action's
+  publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
   own error message stays where the page shows it. The banner is English
   and stays off the translated pages (the Account page has its own warning,
-  the farm view's roles never need it). Dismissable until the next refusal;
-  signing out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  the farm view's roles never need it). Dismissable until the next refusal
+  (kept so by the operator's decision, 2026-10-01: every refused action
+  brings it back, so a person who needs it can't miss it for long); signing
+  out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
@@ -299,7 +305,10 @@ decide a licence application.
   keeps up with: the check fails closed on all of them. The remaining
   owners see such an invite flagged (`senderLapsed`) and re-send it (which
   makes them its sender) or revoke it; a deleted sender's invites cascade
-  away with the account. Tests: `invites/invites.db.test.ts` "an invite is
+  away with the account. A lapsed invite **revives** if its sender regains
+  the role (owner, or team admin): accepted by the operator (2026-10-01),
+  since they could re-send it anyway, so keeping it dead would protect
+  nothing. Tests: `invites/invites.db.test.ts` "an invite is
   good only while its sender may still send it", `farms/invites.db.test.ts`
   (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
@@ -1060,7 +1069,22 @@ and nothing else.
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a short
     series is checked for negatives only (a new one a key creates is held
-    whatever its days, below);
+    whatever its days, below). Such a push **pauses automatic publishing**
+    (operator decision, 2026-10-01, #93: option (b) for auto-publish, (a)
+    for automatic runs): when no outlier limit could be taken at all, the
+    merge records `series.unchecked` as the key and answers
+    `autoPublishHeld: true`; the automatic run still runs, so a new
+    logger's figures stay current in the workspace, but
+    `publish/autoPublish.ts` publishes no automatic run while such an event
+    is newer than the project's latest manual run
+    (`uncheckedSinceLastRun`). So a leaked key's absurd value in a short
+    series can reach an automatic run, which only staff see, and never
+    farmers until a person has run the model on it. Holding the runs too
+    was rejected: a new logger's automatic runs would wait for a manual run
+    every day, for months on a dry rain record. A ceiling per kind was
+    rejected: it works for rain, but flow has none. Editors seed a series
+    with its record so far, not one day (the `409` below says so), which
+    shortens the paused stretch;
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -1116,7 +1140,9 @@ and nothing else.
   key pushing in batches held by the limit without its own days, another
   key's and a person's days counting, the guard's directions; a key that
   alone fills a series held by the accepted values, a genuine value passing,
-  the `own` bootstrap before a manual run), `series/hold.test.ts`.
+  the `own` bootstrap before a manual run; a push into a short series
+  running automatically but not published until a person runs the model,
+  with a long-enough record as the positive control), `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route

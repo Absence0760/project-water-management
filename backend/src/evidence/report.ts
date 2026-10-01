@@ -12,6 +12,7 @@ import {
 	DISCLAIMER,
 	diffInputs,
 	ENGINE_ERRATA,
+	ENGINE_VERSION,
 	evidenceReport,
 	KNOWN_LIMITATIONS,
 	METHODOLOGY,
@@ -309,8 +310,28 @@ interface OwnApplication {
  * assessment; a matching complete assessment already passed that check on
  * the same base and ops. Under the reader's RLS: an assessment is an
  * editor's, so a viewer's report finds none.
+ *
+ * Only an assessment made on the baseline run's engine counts (operator
+ * decision, 2026-10-01), so the row's baseline figure is the report's own
+ * baseline. One made on another engine is named with why it isn't read
+ * (`staleAssessment`); and when this server runs another engine than the
+ * baseline's, no new assessment can match either, so the row says to run the
+ * baseline again.
  */
-async function loadCombined(db: Db, projectId: string, baselineRunId: string, own: OwnApplication | null): Promise<EvidenceCombinedInput> {
+export function staleAssessment(assessedOn: string | null, baselineEngine: string, serverEngine: string = ENGINE_VERSION): string | null {
+	const was = assessedOn ? `they were assessed together on engine ${assessedOn}, but the baseline ran on engine ${baselineEngine}` : null;
+	if (baselineEngine !== serverEngine)
+		return `${was ? `${was}, and` : `the baseline ran on engine ${baselineEngine}, and`} an assessment now runs on engine ${serverEngine}, so none made now would match the report’s baseline: run the baseline again on engine ${serverEngine} and assess the applications on that run.`;
+	return was ? `${was}, so its baseline figure isn’t this report’s: assess them together again.` : null;
+}
+
+async function loadCombined(
+	db: Db,
+	projectId: string,
+	baselineRunId: string,
+	baselineEngine: string,
+	own: OwnApplication | null
+): Promise<EvidenceCombinedInput> {
 	const none: EvidenceCombinedInput = { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false };
 	const { rows: others } = await db.query<{ scenarioId: string; scenarioName: string; status: 'submitted' | 'decided'; outcome: string | null; opsSha256: string }>(
 		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, s.ops_sha256 AS "opsSha256"
@@ -339,17 +360,21 @@ async function loadCombined(db: Db, projectId: string, baselineRunId: string, ow
 			AND (SELECT count(*) FROM assessment_member m WHERE m.assessment_id = a.id) = $4
 			AND NOT EXISTS (SELECT 1 FROM assessment_member m WHERE m.assessment_id = a.id
 				AND (m.scenario_id IS NULL OR NOT (m.scenario_id::text || ':' || m.ops_sha256) = ANY($3::text[])))
-		 ORDER BY a.status = 'complete' DESC, a.created_at DESC, a.id DESC
+		 ORDER BY a.status = 'complete' AND a.engine_version = $5 DESC, a.status = 'pending' DESC, a.created_at DESC, a.id DESC
 		 LIMIT 1`,
-		[projectId, baselineRunId, members, members.length]
+		[projectId, baselineRunId, members, members.length, baselineEngine]
 	);
 	const hit = found[0];
-	if (hit?.status === 'complete' && hit.report)
+	if (hit?.status === 'complete' && hit.report && hit.engineVersion === baselineEngine)
 		return {
 			...none,
 			others: listed,
 			assessment: { id: hit.id, name: hit.name, createdAt: iso(hit.createdAt)!, createdBy: hit.createdBy, engineVersion: hit.engineVersion, report: hit.report }
 		};
+	// None on the baseline's engine (a pending one comes next, then one on another engine): one on another engine
+	// isn't read, and says why; nor can one be made now while the server runs another engine than the baseline's.
+	const stale = staleAssessment(hit?.status === 'complete' ? hit.engineVersion : null, baselineEngine);
+	if (stale) return { ...none, others: listed, unavailable: stale };
 
 	// No assessment of exactly these: check that they combine at all, so a conflict is named now.
 	const { rows: full } = await db.query<{ id: string; name: string; origin: ScenarioOrigin; ops: ScenarioOp[]; ownedNodeIds: string[] }>(
@@ -468,6 +493,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		db,
 		projectId,
 		baseline.id,
+		baseline.engineVersion,
 		recorded && application
 			? {
 					id: recorded.id,

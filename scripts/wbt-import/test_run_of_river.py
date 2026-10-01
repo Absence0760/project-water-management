@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from extract_project import as_run_of_river, extract, run_of_river_note  # noqa: E402
+from extract_project import as_run_of_river, extract, placeholder_pool_note, run_of_river_note  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "synthetic_b023.xlsx"
 
@@ -65,6 +65,27 @@ class RunOfRiverNote(unittest.TestCase):
             "WARNING: farm No dam: probable run-of-river, for the modeller to confirm: it has no dam but takes 100 % of the "
             "upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)",
         )
+
+
+class PlaceholderPoolNote(unittest.TestCase):
+    """A near-empty dam taking less than all the upstream inflow (issue #90 Q18); farms.test.ts has the same text."""
+
+    def test_a_near_empty_pool_off_the_river_is_flagged(self):
+        self.assertEqual(
+            placeholder_pool_note("Pool", 0, 0.5, 0),
+            "WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a "
+            "day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to "
+            "the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply "
+            "rule to run of river with a pump capacity (issue #90 Q18)",
+        )
+        self.assertIsNotNone(placeholder_pool_note("Tank", 0.5, 99.9, 0))
+        self.assertIsNotNone(placeholder_pool_note("Pool", 0.25, 129.5, 12960))  # under 1 % of a day's diversion
+
+    def test_a_real_dam_no_dam_or_a_run_of_river_candidate_is_not(self):
+        self.assertIsNone(placeholder_pool_note("Small dam", 0, 100, 0))
+        self.assertIsNone(placeholder_pool_note("Small dam", 0.5, 4000, 12960))
+        self.assertIsNone(placeholder_pool_note("No dam", 0, 0, 0))
+        self.assertIsNone(placeholder_pool_note("Dummy dam", 1.0, 0.5, 0))  # run_of_river_note's case
 
 
 class RunOfRiverOption(unittest.TestCase):

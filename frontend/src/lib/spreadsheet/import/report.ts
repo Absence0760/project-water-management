@@ -23,6 +23,8 @@ export type ImportNoteCode =
 	| 'dam-min-is-transfer-minimum'
 	/** WARNING: a farm's dam looks like b023's dummy dam for a unit that pumps from the river (issue #54, 2d). */
 	| 'probable-run-of-river'
+	/** WARNING: a near-empty dam that takes less than all the upstream inflow, probably a placeholder (issue #90 Q18). */
+	| 'placeholder-pool'
 	/** WARNING: a transfer whose draw formula is the constant 0 is imported switched off (issue #54). */
 	| 'transfer-switched-off'
 	| 'transfer-river-offtake'
