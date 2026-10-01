@@ -365,7 +365,7 @@ English only: its readers are licensing assessors, like the methods page's.
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
-`/verify-email` and `/alerts/unsubscribe` share one frame,
+`/verify-email`, `/alerts/unsubscribe` and `/alerts/feedback` share one frame,
 `lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
 brand panel with the catchment drawing on the left (55 %), the form on the
 right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
@@ -7178,6 +7178,7 @@ view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
+"Was this useful?" page (`/alerts/feedback`), the
 public shared view (`/share`), the public landing page (`/` signed out,
 `/welcome`, [§ Landing page](#landing-page)), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
@@ -7490,7 +7491,14 @@ the catalogue, [§ Language](#language)); both unit-tested.
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
-  and that each alert is sent once per crossing.
+  and that each alert is sent once per crossing. Under the rules, **Was it
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 147, issue #74): what
+  people answered to "Was this alert useful?" over the last year, one line
+  per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
+  most answered first), then **Comments** (the newest 50, each with its
+  kind, useful or not and the day; shown as text), never who gave them;
+  "No answers yet." before any. It says only people who chose to answer are
+  counted, and that nothing records whether an email was opened.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
   kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
   kind by kind and reader by reader). A dam alert to a farmer
@@ -7580,6 +7588,21 @@ the catalogue, [§ Language](#language)); both unit-tested.
   means the link is dead; no signal or a server problem keeps the question
   and its button, with the reason above them, to try again. The page sets
   `no-referrer`, like the reset pages.
+- **`/alerts/feedback`** (an alert email's *Was this alert useful? Yes · No*
+  links, 147, issue #74; signed in or out, on `AuthCard`; translated): reads
+  the token and the link's answer from the fragment (`#t=…&a=yes|no`) once
+  and strips them from the address bar. Titled *Was this alert useful?*,
+  it shows **Your answer** (Yes, it was useful / No, it wasn't useful) with
+  the link's answer chosen, *Anything to add? (optional)* (500 characters
+  at most, said under it when over), the line "Your WUA reads your answer
+  and comment without your name. Nothing is kept until you press Send.", and
+  **Send**. Nothing is recorded until Send (a mail scanner that opens the
+  link answers nothing). Then "Thank you. Your answer goes to the people who
+  run alerts for <catchment>, without your name." with *Manage alerts*.
+  Send with neither chosen says "Choose Yes or No." A dead link ("This link
+  doesn't work any more: it lasts 30 days, and only while you are a member
+  of the catchment.") and a link without its token have their own states;
+  as on the unsubscribe page, only the API's 404 means dead.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
   alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may

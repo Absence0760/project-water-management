@@ -38,7 +38,27 @@ export function newSubscriptionSecret(secret: string = alertsTokenSecret()): { n
 	return { nonce, hash: hashToken(unsubscribeToken(nonce, secret)) };
 }
 
+const FEEDBACK_LABEL = 'wm-alert-feedback/v1/';
+
+/**
+ * The "Was this useful?" token of a feedback row's nonce (151_alert_feedback):
+ * the unsubscribe token's scheme under its own label, so one can never stand
+ * in for the other. Only its SHA-256 is stored; the API looks it up by that.
+ */
+export function feedbackToken(nonce: Buffer, secret: string = alertsTokenSecret()): string {
+	return createHmac('sha256', secret).update(FEEDBACK_LABEL).update(nonce.toString('hex')).digest('base64url');
+}
+
 const trimSlash = (s: string) => s.replace(/\/+$/, '');
+
+/**
+ * The feedback page a mail's "Yes" / "No" link opens, the answer chosen. The
+ * token and the answer ride the fragment, so neither reaches a server log,
+ * and opening the link records nothing: the page asks before it sends.
+ */
+export function feedbackPageUrl(token: string, useful: boolean): string {
+	return `${trimSlash(process.env.SITE_URL || 'http://localhost:7777')}/alerts/feedback#t=${token}&a=${useful ? 'yes' : 'no'}`;
+}
 
 /** The landing page a mail links to; the token rides the fragment, so it never reaches a server log. */
 export function unsubscribePageUrl(token: string): string {

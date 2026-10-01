@@ -200,7 +200,7 @@ export const SETTINGS: Record<string, Setting> = {
 	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
 
 	// --- Alerts ----------------------------------------------------------------------------
-	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
+	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe and “Was this useful?” links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
 	ALERTS_ENABLED: { why: 'The alert-email kill switch: the worker must be told explicitly (Terraform var.alerts_enabled).', checks: { worker: decision } },
 	ALERTS_DAILY_CAP: { why: 'Per-person immediate mails a day; the code default (5) is safe.' },
 	API_PUBLIC_URL: {

@@ -784,6 +784,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'PUT /me/alerts/:projectId', exempt: 'a member’s own alert subscription: their preference, not the project’s rules (alert_rules.changed covers those)' },
 	{ route: 'POST /me/alerts/resume', exempt: 'resumes the caller’s own paused alert emails; a personal delivery setting, not project data' },
 	{ route: 'POST /alerts/unsubscribe', exempt: 'a recipient’s one-click unsubscribe from alert emails: a personal delivery setting, not project data' },
+	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },

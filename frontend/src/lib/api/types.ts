@@ -528,6 +528,19 @@ export interface Unsubscribed {
 	farm: string | null;
 }
 
+/** POST /alerts/feedback: what the answered mail was about (151_alert_feedback). */
+export interface FeedbackAnswered {
+	kind: AlertKind | 'digest';
+	project: { name: string };
+}
+
+/** GET /projects/:id/alert-feedback (editors): answers counted per kind, and comments, never who gave them. */
+export interface AlertFeedbackSummary {
+	since: string;
+	kinds: { kind: AlertKind | 'digest'; yes: number; no: number }[];
+	comments: { kind: AlertKind | 'digest'; useful: boolean; comment: string; answeredAt: string }[];
+}
+
 export interface Portfolio {
 	team: { id: string; name: string; role: TeamRole };
 	/** The traffic-light thresholds the statuses were judged by (the team's, or the defaults). */

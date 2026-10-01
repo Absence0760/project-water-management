@@ -151,7 +151,7 @@ describe('a render session, over every route', () => {
 		expect(refused.length).toBeGreaterThan(100);
 		expect(refused).toEqual(expect.arrayContaining(['DELETE /projects/:id', 'GET /projects/:id/runs', 'GET /projects/:id/runs/:runId/export/daily.csv', 'GET /projects/:id/runs/:runId/allocations', 'POST /auth/logout-everywhere', 'GET /auth/me/export']));
 		// What was skipped as public is only the sign-in and token flows, and a pack's public verify (its printed fields only).
-		for (const r of publicRoutes) expect(r).toMatch(/^(GET \/health|POST \/auth\/|POST \/share\/|POST \/alerts\/unsubscribe|GET \/verify\/:code$)/);
+		for (const r of publicRoutes) expect(r).toMatch(/^(GET \/health|POST \/auth\/|POST \/share\/|POST \/alerts\/(unsubscribe|feedback)|GET \/verify\/:code$)/);
 
 		// The project the session could have harmed is untouched (the refused DELETE and PATCH did nothing).
 		const after = await owner.call('GET', `/projects/${projectId}`);
