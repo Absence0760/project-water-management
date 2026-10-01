@@ -452,6 +452,8 @@
 
 {#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</span>{/snippet}
 {#snippet headerActions()}
+	<!-- The geographic map (issue #288): a tab reached from here, not a sidebar row (lib/workspace/tabs.ts LINKED_ONLY). -->
+	<a class="btn" href="?tab=map" data-testid="network-open-map">Map</a>
 	<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>

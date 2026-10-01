@@ -2720,6 +2720,46 @@ never a farm's row, name or id.
   `revokedBy`), not yet as audit events (WP-2.4,
   [followups.md](./followups.md)).
 
+## Catchment map
+
+The map's features, GeoJSON imports, areas accepted from polygons and the
+quaternary lookup (issue #288, roadmap WP-3.12, `152_catchment_map.sql`,
+[maps.md](./maps.md)). Geometry is GeoJSON in WGS84 longitude/latitude, 2D;
+every geometry is checked and every area computed on the server
+(`backend/src/geo`). Nothing here changes the model except `area-from-map`,
+and the quaternary lookup only proposes.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
+| POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one | editor |
+| PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
+| DELETE | `/projects/:id/map/features/:fid` | – | `204`; its import goes with its last feature. A node whose area came from it keeps the area and loses the link | editor |
+| POST | `/projects/:id/map/import` | `{ fileName, kind, text }`: the GeoJSON file's text (≤ 5 MB; this route has its own body limit, 7 MB of JSON), `kind` what its features are | `201 { source: { id, fileName, sha256 }, features }`. A `catchment_boundary` file's polygons become one boundary (replacing the current one); other kinds one feature each, linked to a node of the same name (case-insensitive) and a fitting kind. `422 { error, details: { feature: n \| null, message }[] }` with every problem, per feature (nothing is imported); `409` for the same file twice (SHA-256); `413` over the limit | editor |
+| POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm or a feature without an area; `404` for another project's feature | editor |
+| GET | `/projects/:id/map/quaternary` | `?lon=&lat=` | `{ point: [lon, lat], quaternary: QuaternaryProposal \| null, datasets: { dataset, count }[] }`: the quaternary in the loaded dataset that contains the point (null: none does, or none is loaded). Writes nothing | viewer |
+
+- `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
+  'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
+  areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
+  `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
+  points and lines; `center` is a point itself, a polygon's centroid (its
+  largest part's), a line's middle vertex; `properties` holds only
+  `description` and `ref` from a file. A boundary or parcel is a Polygon or
+  MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
+  dam a Point or polygon, `other` any of these. A parcel or dam stands for a
+  farm or water user, a gauge for a gauge; a boundary or river for nothing.
+- `QuaternaryProposal = { code, dataset, synthetic, areaKm2, mapMm, marMm3,
+  monthlyMm3 (12, Oct … Sep, Mm³) | null, periodStart, periodEnd, source,
+  loadedAt }`. `synthetic` is true for the repo's invented dataset. The
+  client fills the WR2012 check's form from it value by value; saving goes
+  through `PATCH /projects/:id` like any typed value.
+- Each write is in the audit log (`map.imported`, `map.feature_created`,
+  `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
+  geometry). Farmers and applicants get `403` on every route here (RLS lets
+  them read the boundary, gauges, rivers and their own farm's features, for a
+  later farm view).
+
 ## Notes
 
 Plain-text notes and comments on a node, a run, a settings group, a

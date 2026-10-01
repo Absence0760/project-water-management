@@ -234,6 +234,7 @@ async function snapshot() {
 		feeds: await get('/feeds'),
 		schedules: await get('/report-schedules'),
 		allocations: await get('/allocations'),
+		map: await get('/map/features'),
 		shareLinks: await get('/share-links'),
 		keys: await get('/api-keys'),
 		alertRules: await get('/alert-rules'),

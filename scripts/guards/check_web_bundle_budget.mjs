@@ -71,6 +71,24 @@
 //   largestAssetKb  the largest single non-JS/CSS file (fonts, images, HTML,
 //                   the manifest). Per file and never summed: a visitor loads
 //                   one favicon, one font weight at a time.
+//   mapKb           MapLibre and the PMTiles reader (the catchment map, issue
+//                   #288, roadmap WP-3.12 decision D8 (b)): every chunk holding
+//                   code of the maplibre-gl or pmtiles packages, with its CSS,
+//                   summed. ~290 KB of a third-party renderer that loads only
+//                   when someone opens the Map tab and the map is
+//                   drawn (lib/components/map/maplibre.ts, a dynamic import of
+//                   a dynamic import), never on a workspace visit. It has a
+//                   ceiling of its own and is left out of totalCodeKb and
+//                   largestChunkKb: counted there it would be a design-sized
+//                   raise of the total that says nothing about the app's own
+//                   code (the ratchet the total keeps), and a vendor chunk
+//                   far over the per-chunk ceiling that no split can bring
+//                   under it. The guard fails if it finds no map chunk, or
+//                   finds MapLibre in the workspace page's chunk or a tab's
+//                   (it must stay lazy). MapLibre's worker entry
+//                   (workers/maplibre.worker-*.js) is a worker like the
+//                   others: it counts in totalCodeKb and largestWorkerKb, and
+//                   must import MapLibre's shared code from chunks/.
 //   landingKb       the public landing page's own code (issue #57): every
 //                   chunk holding a module of frontend/src/lib/components/landing/,
 //                   with its CSS, summed. It is the first thing a new visitor
@@ -109,6 +127,8 @@ export const BUDGET = Object.freeze({
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,
+	// MapLibre + PMTiles (issue #288, roadmap D8 (b); measured 2026-10-01: 301 KB, its two chunks, the PMTiles reader and its CSS, maplibre-gl 6.10.0 + pmtiles 4.5.0).
+	mapKb: 305,
 });
 
 /** The entry files that raise (or lower) BUDGET.totalCodeKb, one per change. */
@@ -243,6 +263,8 @@ const WORKER = /(^|\/)workers\//;
 const PAGE_BUILD_WORKERS = [
 	{ label: 'calibration worker', file: 'workers/autocal.worker-*.js', url: 'virtual:autocal-worker-url', re: /(^|\/)workers\/autocal\.worker-[^/]*\.js$/ },
 	{ label: 'preview worker', file: 'workers/preview.worker-*.js', url: 'virtual:preview-worker-url', re: /(^|\/)workers\/preview\.worker-[^/]*\.js$/ },
+	// MapLibre's worker (issue #288): built on its own it would carry a second copy of MapLibre's shared code (~145 KB).
+	{ label: 'map worker', file: 'workers/maplibre.worker-*.js', url: 'virtual:maplibre-worker-url', re: /(^|\/)workers\/maplibre\.worker-[^/]*\.js$/ },
 ];
 /** A static import from the page build's shared chunks, as Rollup writes it next to workers/. */
 const SHARED_CHUNK_IMPORT = /(?:\bfrom|\bimport)\s*["']\.\.\/chunks\//;
@@ -339,13 +361,45 @@ export function landingChunks(chunks) {
 	return { files, errors };
 }
 
+/** The npm packages whose chunks are the map's (mapKb). */
+export const MAP_PACKAGES = ['maplibre-gl', 'pmtiles'];
+
+/**
+ * The map library's chunk files (JS and CSS), from the chunk map's
+ * `packages`: every chunk holding code of MAP_PACKAGES, outside workers/.
+ * @param {Record<string, { modules: string[], css?: string[], packages?: string[] }>} chunks
+ * @param {string[]} tabMods tabModules(): MapLibre must share no chunk with a tab
+ * @returns {{ files: Set<string>, errors: string[] }}
+ */
+export function mapChunks(chunks, tabMods = []) {
+	const errors = [];
+	const files = new Set();
+	for (const [file, chunk] of Object.entries(chunks)) {
+		if (WORKER.test(file) || !(chunk.packages ?? []).some((p) => MAP_PACKAGES.includes(p))) continue;
+		const eager = [WORKSPACE_PAGE, ...tabMods].filter((m) => chunk.modules.includes(m));
+		if (eager.length) {
+			errors.push(
+				`MapLibre is in the chunk of ${eager.join(' and ')} (${file}): something imports it statically, so it loads with the workspace or a tab. Load it only through lib/components/map/maplibre.ts's dynamic import (issue #288).`,
+			);
+		}
+		files.add(file);
+		for (const css of chunk.css ?? []) files.add(css);
+	}
+	if (files.size === 0) {
+		errors.push(`Found no chunk holding ${MAP_PACKAGES.join(' or ')}: the map ceiling measured nothing. Check frontend/vite.config.ts's chunkModuleMap still records each chunk's packages, and the catchment map still loads MapLibre.`);
+	}
+	return { files, errors };
+}
+
 /**
  * @param {{ path: string, gzipBytes: number }[]} files
  * @param {Set<string>} [tabFiles] tabChunks().files: measured against the tab ceiling instead of the page one
  * @param {Set<string>} [landingFiles] landingChunks().files: also summed against the landing ceiling
+ * @param {Set<string>} [mapFiles] mapChunks().files: summed against the map ceiling only (not the total or the per-chunk ceiling)
  */
-export function measure(files, tabFiles = new Set(), landingFiles = new Set()) {
+export function measure(files, tabFiles = new Set(), landingFiles = new Set(), mapFiles = new Set()) {
 	let landingBytes = 0;
+	let mapBytes = 0;
 	let codeBytes = 0;
 	let codeCount = 0;
 	let largestChunk = { path: '', gzipBytes: 0 };
@@ -356,6 +410,10 @@ export function measure(files, tabFiles = new Set(), landingFiles = new Set()) {
 	let largestAsset = { path: '', gzipBytes: 0 };
 	for (const f of files) {
 		if (landingFiles.has(f.path)) landingBytes += f.gzipBytes;
+		if (mapFiles.has(f.path)) {
+			mapBytes += f.gzipBytes;
+			continue;
+		}
 		if (CODE.test(f.path)) {
 			codeBytes += f.gzipBytes;
 			codeCount += 1;
@@ -382,6 +440,7 @@ export function measure(files, tabFiles = new Set(), landingFiles = new Set()) {
 		largestSpreadsheetWorker: { path: largestSpreadsheetWorker.path, kb: kb(largestSpreadsheetWorker.gzipBytes) },
 		largestAsset: { path: largestAsset.path, kb: kb(largestAsset.gzipBytes) },
 		landingKb: kb(landingBytes),
+		mapKb: kb(mapBytes),
 	};
 }
 
@@ -424,6 +483,11 @@ export function violations(m, budget = BUDGET) {
 	if (m.landingKb > budget.landingKb) {
 		out.push(
 			`The landing page's code is ${m.landingKb} KB, over the ${budget.landingKb} KB landing budget: it is the first download of every new visitor (issue #57). Check it still imports no workspace code, uPlot or engine, and trim before raising the ceiling.`,
+		);
+	}
+	if (m.mapKb > budget.mapKb) {
+		out.push(
+			`The map library is ${m.mapKb} KB, over the ${budget.mapKb} KB map budget (MapLibre and PMTiles, issue #288). Check a MapLibre upgrade's size, or that nothing else landed in its chunks, before raising the ceiling.`,
 		);
 	}
 	if (m.largestAsset.kb > budget.largestAssetKb) {
@@ -493,8 +557,9 @@ function main() {
 	}
 	const tabs = tabChunks(tabModules(readFileSync(join('frontend', WORKSPACE_PAGE), 'utf8')), chunkModules);
 	const landing = landingChunks(chunkModules);
+	const map = mapChunks(chunkModules, tabModules(readFileSync(join('frontend', WORKSPACE_PAGE), 'utf8')));
 	const files = paths.map((p) => ({ path: relative(buildDir, p), gzipBytes: gzipSync(readFileSync(p)).length }));
-	const m = measure(files, tabs.files, landing.files);
+	const m = measure(files, tabs.files, landing.files, map.files);
 	const rows = [
 		['Total gzipped JS+CSS', `${m.totalCodeKb} KB`, `${budget.totalCodeKb} KB: base ${BUDGET.totalCodeKb}, ${entries.addKb >= 0 ? '+' : ''}${entries.addKb} from ${entries.entries.length} entries in ${ENTRIES_DIR_SHOWN}/`],
 		[`Largest chunk (${m.largestChunk.path})`, `${m.largestChunk.kb} KB`, `${budget.largestChunkKb} KB`],
@@ -503,6 +568,7 @@ function main() {
 		[`Largest spreadsheet worker (${m.largestSpreadsheetWorker.path || 'none'})`, `${m.largestSpreadsheetWorker.kb} KB`, `${budget.largestSpreadsheetWorkerKb} KB`],
 		[`Largest other asset (${m.largestAsset.path || 'none'})`, `${m.largestAsset.kb} KB`, `${budget.largestAssetKb} KB`],
 		[`Landing page (${landing.files.size} files)`, `${m.landingKb} KB`, `${budget.landingKb} KB`],
+		[`Map library, lazy (${map.files.size} files; not in the total)`, `${m.mapKb} KB`, `${budget.mapKb} KB`],
 	];
 	for (const [what, size, ceiling] of rows) console.log(`${what}: ${size} (budget ${ceiling})`);
 	console.log(`Raise the total with an entry file (${ADD_USAGE}), never by editing BUDGET.totalCodeKb.`);
@@ -516,7 +582,7 @@ function main() {
 	const stale = tabs.errors.length === 0 && m.tabCount !== tabs.files.size
 		? [`The chunk map names ${tabs.files.size} tab files, but ${m.tabCount} of them are in ${buildDir}: the map is from another build. Run pnpm build:frontend again.`]
 		: [];
-	const bad = [...tabs.errors, ...landing.errors, ...stale, ...violations(m, budget), ...pageBuildWorkerViolations(workers)];
+	const bad = [...tabs.errors, ...landing.errors, ...map.errors, ...stale, ...violations(m, budget), ...pageBuildWorkerViolations(workers)];
 	for (const v of bad) console.error(`::error::${v}`);
 	process.exit(bad.length ? 1 : 0);
 }

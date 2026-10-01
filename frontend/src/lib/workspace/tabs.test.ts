@@ -5,6 +5,7 @@ import {
 	canOpenTab,
 	NAV_SECTIONS,
 	navSections,
+	LINKED_ONLY,
 	hasModelInputsToggle,
 	DEFAULT_HIDDEN_TABS,
 	hiddenChoice,
@@ -22,9 +23,9 @@ const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'c
 const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'allocations', 'history'];
 
 describe('visibleTabs', () => {
-	it('shows owners and editors every tab, in order', () => {
+	it('shows owners and editors every tab but the linked-only ones, in order', () => {
 		for (const role of ['owner', 'editor'] as const) {
-			expect(visibleTabs(role)).toEqual(ALL_TABS);
+			expect(visibleTabs(role)).toEqual(ALL_TABS.filter((id) => !LINKED_ONLY.includes(id)));
 			expect(visibleTabs(role, {}, PAGE)).toEqual(PAGE);
 			// The viewer toggle doesn't take anything away from them.
 			expect(visibleTabs(role, { showModelInputs: false }, PAGE)).toEqual(PAGE);
@@ -40,7 +41,7 @@ describe('visibleTabs', () => {
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
-		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications'));
+		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications' && !LINKED_ONLY.includes(id)));
 		expect(visibleTabs('viewer', { showModelInputs: true }, PAGE)).toEqual(PAGE);
 	});
 
@@ -199,7 +200,7 @@ describe('navSections', () => {
 	it('puts the outcomes first (the Summary a project opens on at the top), then the model, then review', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 		]);
 	});
@@ -259,3 +260,17 @@ describe('canOpenTab', () => {
 		expect(canOpenTab('viewer', 'overview')).toBe(true);
 	});
 });
+
+describe('linked-only tabs (the Map, issue #288)', () => {
+	it('are never listed for any role, open from a link, and show in place while open', () => {
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			expect(visibleTabs(role, { showModelInputs: true, hidden: [] })).not.toContain('map');
+			expect(canOpenTab(role, 'map')).toBe(true);
+		}
+		const shown = visibleTabs('owner', { hidden: [] });
+		const strip = stripTabs(shown, 'map', ALL_TABS);
+		expect(strip.indexOf('map')).toBe(strip.indexOf('network') + 1);
+		expect(LINKED_ONLY).toEqual(['map']);
+	});
+});
+

@@ -362,6 +362,26 @@ that hash on the pack. MinIO keeps it like any object: the production
 bucket's Object Lock retention (infra/packs.tf) has no local stand-in. Without
 the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
+## Map
+
+The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
+with nothing else: features are drawn on a plain background, and GeoJSON
+uploads, points, areas and the quaternary lookup all work. Two optional
+pieces:
+
+```bash
+pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
+pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, hundreds of MB at maxzoom 13):
+pnpm dev:tiles:fetch
+pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
+```
+
+The synthetic quaternaries are six invented cells in region Z around 21.0–21.75° E,
+33.25–33.75° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
+proposal; anywhere else says no quaternary contains the point. Real DWS/WR2012
+data is loaded the same way from your own download ([maps.md § Quaternary
+dataset](./maps.md#quaternary-dataset)); never commit it.
+
 ## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
