@@ -16,7 +16,10 @@
 	// the URL (`feature=<id>`, or `node=<nodeId>` for a node's parcel) so Back
 	// undoes it; Upload (`upload=1`), Place a point (`place=1`) and Every
 	// feature (`grid=map-features`) open over the page from the header and
-	// the list, each in the URL. Viewers read.
+	// the list, each in the URL. Viewers read. Editors draw on the map
+	// (#326 C1, D1, D4): Draw a shape and Place a point put the map in a
+	// drawing mode with a draw bar over it (draw/), and a drawing is saved only
+	// through its sheet's confirm.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -38,6 +41,12 @@
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
 	import { overlayColours } from './mapStyle';
 	import PlaceSheet from './PlaceSheet.svelte';
+	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import { Draft } from './draw/draft.svelte';
+	import DraftSheet from './draw/DraftSheet.svelte';
+	import DrawBar from './draw/DrawBar.svelte';
+	import PasteSheet from './draw/PasteSheet.svelte';
+	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import SourceList from './SourceList.svelte';
 	import UploadSheet from './UploadSheet.svelte';
 
@@ -158,8 +167,82 @@
 	}
 	async function placed(f: MapFeature) {
 		notice = `Placed ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draft.cancel();
 		await load();
 		await pickInPlace(f.id, 'place');
+	}
+
+	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
+	const draft = new Draft();
+	let mapState = $state<'loading' | 'ready' | 'failed'>('loading');
+	let drawSaving = $state(false);
+	let drawError = $state<string | null>(null);
+	let draftSheetOpen = $state(false);
+	let pasteOpen = $state(false);
+	/** The features the map draws: the one being edited is drawn as the draft instead. */
+	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
+
+	async function afterStart() {
+		drawError = null;
+		await tick();
+		// The map takes the keyboard focus, so Enter adds a corner at once; its label says how.
+		if (mapState === 'ready') mapRef?.focusMap();
+	}
+	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
+	function startDraw(choiceId?: string) {
+		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
+		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
+		void afterStart();
+	}
+	function startPlace() {
+		draft.place('gauge');
+		void afterStart();
+	}
+	function startEdit(f: MapFeature) {
+		if (draft.edit(f)) void afterStart();
+	}
+	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
+	async function saveDraft() {
+		const g = draft.geometry;
+		if (!g) return;
+		if (draft.mode === 'draw') {
+			draftSheetOpen = true;
+			return;
+		}
+		if (draft.mode === 'place') {
+			await goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true });
+			return;
+		}
+		const f = draft.feature;
+		if (!f) return;
+		drawSaving = true;
+		drawError = null;
+		try {
+			await api.map.update(projectId, f.id, g.type === 'Point' ? { lon: g.coordinates[0], lat: g.coordinates[1] } : { geometry: g });
+			notice = `Saved the new ${g.type === 'Point' ? 'position' : 'shape'} of ${featureName(f)}.`;
+			draft.cancel();
+			await load();
+			await pickInPlace(f.id);
+		} catch (err) {
+			drawError = msg(err);
+		} finally {
+			drawSaving = false;
+		}
+	}
+	async function drafted(f: MapFeature) {
+		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
+		draftSheetOpen = false;
+		draft.cancel();
+		await load();
+		await pickInPlace(f.id);
+	}
+	function pasted(g: MapGeometry) {
+		draft.replace(g);
+		pasteOpen = false;
+		mapRef?.frameGeometry(g);
+	}
+	function located(at: MapPosition) {
+		mapRef?.frameGeometry({ type: 'Point', coordinates: at });
 	}
 
 	// --- per feature: link, area, delete (from the card and from Every feature) ---
@@ -228,7 +311,7 @@
 		}
 	}
 
-	let mapRef = $state<{ showAll: () => void }>();
+	let mapRef = $state<{ showAll: () => void; frameGeometry: (g: MapGeometry) => void; focusMap: () => void }>();
 
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
@@ -257,8 +340,9 @@
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
 	{#if canEdit}
+		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place'} data-testid="map-start-place">Place a point</button>
 		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
-		<a class="btn" href={withParam(page.url, 'place', '1')} data-testid="map-open-place">Place a point</a>
 	{/if}
 {/snippet}
 
@@ -334,7 +418,8 @@
 	{/if}
 	{#if data && features.length && !boundary}
 		<p class="alert alert-info slim" data-testid="map-no-boundary">
-			No catchment boundary yet.{canEdit ? ' Upload one (GeoJSON, in WGS84) to draw it and frame the map.' : ''}
+			No catchment boundary yet.{canEdit ? ' Draw it on the map, or upload it as a GeoJSON file (WGS84).' : ''}
+			{#if canEdit && draft.mode !== 'draw'}<button type="button" class="btn btn-sm" onclick={() => startDraw('catchment_boundary')}>Draw the boundary</button>{/if}
 		</p>
 	{/if}
 
@@ -342,10 +427,32 @@
 		{#if data}
 			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
+					{#if canEdit && draft.active}
+						<DrawBar
+							{draft}
+							mapReady={mapState === 'ready'}
+							saving={drawSaving}
+							error={drawError}
+							onsave={saveDraft}
+							onpaste={() => (pasteOpen = true)}
+							oncoords={() => goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+							onlocated={located}
+						/>
+					{/if}
 					<div class="map-body">
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
-								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" fill />
+								<CatchmentMap
+									bind:this={mapRef}
+									features={mapFeatures}
+									{selectedId}
+									onselect={select}
+									{tilesUrl}
+									label="Map of the catchment"
+									fill
+									draft={canEdit ? draft : null}
+									onstatus={(s) => (mapState = s)}
+								/>
 							{/snippet}
 						</Lazy>
 					</div>
@@ -392,14 +499,28 @@
 							</dl>
 							{@render dirtyHint()}
 							{#if rowError?.id === picked.id}<p class="err" role="alert">{rowError.text}</p>{/if}
-							{#if canEdit}<div class="card-actions">{@render deleteButton(picked)}</div>{/if}
+							{#if canEdit}
+								<div class="card-actions">
+									{#if editableCorners(picked.geometry) && !(draft.mode === 'edit' && draft.feature?.id === picked.id)}
+										{@const target = picked}
+										<button type="button" class="btn btn-sm" onclick={() => startEdit(target)} data-testid="map-edit-shape">
+											{picked.geometry.type === 'Point' ? 'Move the point' : 'Edit the shape'}
+										</button>
+									{/if}
+									{@render deleteButton(picked)}
+								</div>
+							{/if}
 						{:else if features.length}
 							<p class="muted small pick-hint">Select a feature on the map or in the list to see it here.</p>
 						{:else}
-							<!-- The one empty-state line (D4 makes it lead with drawing, with C1). -->
-							<p class="pick-hint" data-testid="map-no-boundary">
-								Nothing on the map yet.{canEdit ? ' Upload a catchment boundary (GeoJSON, in WGS84) to draw it and frame the map, or place a point.' : ''}
-							</p>
+							<!-- The empty state leads with drawing (#326 D4); uploading a file is the other way in. -->
+							<div class="pick-hint" data-testid="map-no-boundary">
+								<p class="empty-line">Nothing on the map yet.{canEdit ? ' Start with the catchment boundary: draw it on the map.' : ''}</p>
+								{#if canEdit}
+									<p class="empty-line"><button type="button" class="btn btn-primary" onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button></p>
+									<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+								{/if}
+							</div>
 						{/if}
 					</section>
 
@@ -439,7 +560,20 @@
 				</Dialog>
 			{/if}
 			{#if place.open}
-				<PlaceSheet bind:open={place.open} {projectId} {nodes} onplaced={placed} />
+				<PlaceSheet
+					bind:open={place.open}
+					{projectId}
+					{nodes}
+					at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null}
+					kind={draft.mode === 'place' ? draft.kind : 'gauge'}
+					onplaced={placed}
+				/>
+			{/if}
+			{#if draftSheetOpen && draft.geometry}
+				<DraftSheet bind:open={draftSheetOpen} {projectId} {nodes} geometry={draft.geometry} kind={draft.kind} hasBoundary={!!boundary} onsaved={drafted} />
+			{/if}
+			{#if pasteOpen && draft.active}
+				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />
 			{/if}
 			{#if grid.open}
 				<Dialog bind:open={grid.open} title={TAB_GRIDS[GRID_ID].title} full>
@@ -652,7 +786,12 @@
 	.card-actions {
 		margin-top: 0.6rem;
 		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 		justify-content: flex-end;
+	}
+	.empty-line {
+		margin: 0 0 0.5rem;
 	}
 	.pick-hint {
 		margin: 0;

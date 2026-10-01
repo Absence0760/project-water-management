@@ -1,33 +1,55 @@
 <!--
-	Place a point from typed coordinates, in a side sheet over the Map
-	(`place=1`; issue #326 E5, docs/ui.md § Map). The form's fields are as they
-	were at the foot of the page: D1 (click to place, coordinates behind a
-	disclosure) replaces it later.
+	Save a point, in a side sheet over the Map (`place=1`; issue #326 E5, D1,
+	docs/ui.md § Map): its kind, name and what it stands for. Clicking the map
+	(or Use my location) is the main way to say where it is: the sheet opens
+	from the draw bar's Save… with that position (`at`), and the coordinates
+	sit behind **Enter coordinates**, filled in from it so they can be corrected
+	to a published value. Opened with no position (the bar's Enter
+	coordinates, a direct link, a browser without WebGL) the coordinates show
+	at once. Typed coordinates stay for three reasons: published positions
+	(DWS stations, the register of dams, WARMS) are more exact typed than
+	clicked, they are the non-pointer way to place a point (WCAG 2.1.1, 2.5.7),
+	and e2e drives the form, never the canvas.
 -->
 <script lang="ts">
 	import { api, type MapFeature, type MapFeatureKind, type MapNodeArea } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { KIND_NODES, parseDegrees, POINT_KINDS, KIND_LABEL } from './mapData';
+	import type { MapPosition } from '$lib/api/types';
+	import { KIND_NODES, parseDegrees, POINT_KINDS, KIND_LABEL, positionText } from './mapData';
 
 	let {
 		open = $bindable(false),
 		projectId,
 		nodes,
+		at = null,
+		kind = 'gauge',
 		onplaced
 	}: {
 		open?: boolean;
 		projectId: string;
 		nodes: MapNodeArea[];
+		/** Where the point was clicked or located (lon, lat), or null: the coordinates are typed. */
+		at?: MapPosition | null;
+		/** The kind picked in the draw bar. */
+		kind?: MapFeatureKind;
 		/** The point was saved: the tab reloads, closes the sheet and picks it. */
 		onplaced: (f: MapFeature) => Promise<void> | void;
 	} = $props();
 
 	const uid = $props.id();
 	const formId = `${uid}-form`;
-	let pointKind = $state<MapFeatureKind>('gauge');
+	// Seeded once from the bar (the kind, the clicked position); the fields are the person's after that.
+	// svelte-ignore state_referenced_locally
+	let pointKind = $state<MapFeatureKind>(kind);
 	let pointName = $state('');
-	let latText = $state('');
-	let lonText = $state('');
+	/** Seven decimals: about a centimetre, the server's own rounding. */
+	const deg = (v: number) => String(Math.round(v * 1e7) / 1e7);
+	// svelte-ignore state_referenced_locally
+	let latText = $state(at ? deg(at[1]) : '');
+	// svelte-ignore state_referenced_locally
+	let lonText = $state(at ? deg(at[0]) : '');
+	// svelte-ignore state_referenced_locally
+	let showCoords = $state(!at);
 	let pointNode = $state('');
 	let placing = $state(false);
 	let pointError = $state<string | null>(null);
@@ -40,7 +62,10 @@
 		e.preventDefault();
 		triedPoint = true;
 		pointError = null;
-		if ('error' in lat || 'error' in lon) return;
+		if ('error' in lat || 'error' in lon) {
+			showCoords = true;
+			return;
+		}
 		placing = true;
 		try {
 			const f = await api.map.create(projectId, { kind: pointKind, name: pointName.trim(), lat: lat.value, lon: lon.value, nodeId: pointNode || null });
@@ -72,6 +97,11 @@
 				<input id="{uid}-pname" maxlength="100" bind:value={pointName} />
 			</div>
 		</div>
+		{#if at}
+			<p class="at" data-testid="map-place-at">Put on the map at {positionText(at)}. To correct it to a published position, enter its coordinates.</p>
+		{/if}
+		<details class="coords" bind:open={showCoords}>
+			<summary>Enter coordinates</summary>
 		<div class="form-row">
 			<div class="field">
 				<label for="{uid}-lat">Latitude</label>
@@ -98,6 +128,7 @@
 				<span class="hint" id="{uid}-lon-e">{#if triedPoint && 'error' in lon}<span class="err">{lon.error}</span>{:else}Decimal degrees; east is positive.{/if}</span>
 			</div>
 		</div>
+		</details>
 		{#if pointNodes.length}
 			<div class="field">
 				<label for="{uid}-pnode">Stands for <span class="u">(optional)</span></label>
@@ -137,5 +168,17 @@
 	.err {
 		color: var(--danger);
 		margin: 0;
+	}
+	.at {
+		margin: 0;
+	}
+	.coords summary {
+		cursor: pointer;
+		min-height: 24px;
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.coords[open] summary {
+		margin-bottom: 0.5rem;
 	}
 </style>
