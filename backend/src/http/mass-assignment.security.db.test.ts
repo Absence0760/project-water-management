@@ -211,6 +211,10 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		// The next step's code: confirming used this one, and a step is accepted once.
 		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
 	},
+	'POST /auth/mfa/step-up': async () => {
+		const { u, key } = await enrolledUser('Mstepup');
+		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
 	'POST /auth/mfa/verify': async () => {
 		const { u, key } = await enrolledUser('Mverify');
 		const login = await app.request('/auth/login', {
