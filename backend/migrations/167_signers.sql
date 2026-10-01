@@ -33,24 +33,29 @@
 --     Issue needs a `specialist` sign-off of the current statement; a
 --     `review` adds to it, never replaces it (evidence/packs.ts).
 --
---  3. The registration check. A signer's registration is typed in; the host
---     checks it against the public SACNASP or ECSA register and the operator
---     records that check with `pnpm import:registration-check`, as the schema
---     owner (registration_check: insert-only, no water_app write grant). At
---     issue, app_pack_bind_registration_checks binds each sign-off of the
---     pack to its signer's current check (signoff_registration_check,
---     written only by that function), and names the specialist signers who
---     have none: with REGISTRATION_CHECK_REQUIRED on (always on Lambda) issue
---     is refused until they do. Verify and the sign-off lists show
---     "checked against the register" only from such a record; anything else
---     reads "self-declared".
+--  3. The registration check. A signer types their SACNASP or ECSA
+--     registration in; the host checks it against the public register and an
+--     owner of the project records that check in the app
+--     (app_record_registration_check; registration_check is insert-only, no
+--     water_app write grant). The operator never becomes the checker: that
+--     would be an assurance the Terms disclaim. At issue,
+--     app_pack_bind_registration_checks binds each sign-off of the pack to its
+--     signer's current check in that project (signoff_registration_check,
+--     written only by that function) and names the specialist signers who
+--     have none: while project.require_registration_check is on (the owner's
+--     choice, on by default) issue is refused until they do. Verify and the
+--     sign-off lists show "checked against the register" only from such a
+--     record; anything else reads "self-declared".
 --       - A check is current for 365 days, and only while it is the latest
---         check of that registration for that person and says `registered`.
+--         check of that registration for that person in that project and
+--         says `registered`.
 --       - Bound at issue, so verify keeps showing what was checked when the
 --         pack was issued, even after the signer's account is deleted
 --         (registration_check.user_id SET NULL; a bound check stays, as the
 --         sign-off's typed name does; one no pack rests on is removed,
 --         registration_check_forget).
+--       - Recording a check is an owner's for now; an authority-flagged
+--         member (project_member.acts_for_authority) gets it once that lands.
 
 -- ---------------------------------------------------------------------------
 -- 1. The applicant's specialist
@@ -194,9 +199,31 @@ CREATE POLICY signoff_select_specialist ON signoff FOR SELECT
 -- ---------------------------------------------------------------------------
 -- 3. The registration check
 -- ---------------------------------------------------------------------------
+-- Whether issue waits for it: the owner's choice, on by default (every
+-- project that issues packs is a licensing project). A change by anyone else
+-- is refused here, since water_app's UPDATE on project is the editors'.
+ALTER TABLE project ADD COLUMN require_registration_check boolean NOT NULL DEFAULT true;
+COMMENT ON COLUMN project.require_registration_check IS
+	'Issuing an evidence pack waits until each specialist signer''s registration has a current check against the public register (167). The owner''s to change; on by default.';
+
+CREATE FUNCTION project_registration_check_owner() RETURNS trigger
+	LANGUAGE plpgsql SET search_path = public
+	AS $$
+	BEGIN
+		IF NEW.require_registration_check IS DISTINCT FROM OLD.require_registration_check AND NOT app_has_role(NEW.id, 'owner') THEN
+			RAISE EXCEPTION 'only an owner of the project turns the registration check on or off' USING ERRCODE = '42501';
+		END IF;
+		RETURN NEW;
+	END
+	$$;
+CREATE TRIGGER project_registration_check_owner BEFORE UPDATE OF require_registration_check ON project
+	FOR EACH ROW EXECUTE FUNCTION project_registration_check_owner();
+
 CREATE TABLE registration_check (
 	id                    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-	-- The account whose registration was checked. SET NULL with the account:
+	-- The project whose host checked: a check stands in that project only.
+	project_id            uuid NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+	-- The member whose registration was checked. SET NULL with the account:
 	-- a bound check stays as the record of what verify showed.
 	user_id               uuid REFERENCES app_user(id) ON DELETE SET NULL,
 	registration_body     text NOT NULL CHECK (registration_body IN ('sacnasp', 'ecsa')),
@@ -208,30 +235,35 @@ CREATE TABLE registration_check (
 	-- Who checked: the host organisation (the responsible party), never the operator's assurance.
 	checked_by_org        text NOT NULL CHECK (checked_by_org = btrim(checked_by_org) AND char_length(checked_by_org) BETWEEN 1 AND 200),
 	-- When the register was consulted.
-	checked_at            timestamptz NOT NULL CHECK (checked_at <= now() + interval '1 minute'),
+	checked_at            timestamptz NOT NULL CHECK (checked_at <= recorded_at + interval '1 minute'),
 	note                  text NOT NULL DEFAULT '' CHECK (char_length(note) <= 1000),
-	recorded_at           timestamptz NOT NULL DEFAULT now(),
-	-- The database role that recorded it (the schema owner, through the operator's script).
-	recorded_by           text NOT NULL DEFAULT current_user
+	-- The member who recorded it (an owner of the project). SET NULL with the account.
+	recorded_by           uuid REFERENCES app_user(id) ON DELETE SET NULL,
+	recorded_at           timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE registration_check IS
-	'A check of a signer''s registration against the public SACNASP or ECSA register, done by the host and recorded by the operator''s script as the schema owner (165, `pnpm import:registration-check`). Insert-only; a later check of the same registration supersedes it.';
-CREATE INDEX registration_check_user_idx ON registration_check (user_id, registration_body, checked_at DESC);
+	'A check of a member''s SACNASP or ECSA registration against the public register, done by the project''s host and recorded in the app by an owner (167, app_record_registration_check). Insert-only; a later check of the same registration supersedes it.';
+CREATE INDEX registration_check_project_idx ON registration_check (project_id, user_id, registration_body, checked_at DESC);
+CREATE INDEX registration_check_user_idx ON registration_check (user_id);
+CREATE INDEX registration_check_recorded_by_idx ON registration_check (recorded_by);
 
--- Insert-only, even for the schema owner, except what an account deletion does:
--- its SET NULL, then (registration_check_forget) the removal of a check that
--- no issued pack's sign-off rests on.
+-- Insert-only, even for the schema owner, except what an account deletion
+-- does: its SET NULLs, then (registration_check_forget) the removal of a check
+-- that no issued pack's sign-off rests on, and a project's deletion.
 CREATE FUNCTION registration_check_insert_only() RETURNS trigger
 	LANGUAGE plpgsql SET search_path = public
 	AS $$
 	BEGIN
-		IF TG_OP = 'UPDATE' AND NEW.user_id IS NULL AND OLD.user_id IS NOT NULL
-		   AND (to_jsonb(NEW) - 'user_id') = (to_jsonb(OLD) - 'user_id')
-		   AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = OLD.user_id) THEN
+		IF TG_OP = 'UPDATE'
+		   AND (to_jsonb(NEW) - 'user_id' - 'recorded_by') = (to_jsonb(OLD) - 'user_id' - 'recorded_by')
+		   AND (NEW.user_id IS NOT DISTINCT FROM OLD.user_id OR (NEW.user_id IS NULL AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = OLD.user_id)))
+		   AND (NEW.recorded_by IS NOT DISTINCT FROM OLD.recorded_by OR (NEW.recorded_by IS NULL AND NOT EXISTS (SELECT 1 FROM app_user u WHERE u.id = OLD.recorded_by))) THEN
 			RETURN NEW;
 		END IF;
-		IF TG_OP = 'DELETE' AND OLD.user_id IS NULL
-		   AND NOT EXISTS (SELECT 1 FROM signoff_registration_check b WHERE b.check_id = OLD.id) THEN
+		IF TG_OP = 'DELETE' AND (
+			(OLD.user_id IS NULL AND NOT EXISTS (SELECT 1 FROM signoff_registration_check b WHERE b.check_id = OLD.id))
+			OR NOT EXISTS (SELECT 1 FROM project p WHERE p.id = OLD.project_id)
+		) THEN
 			RETURN OLD;
 		END IF;
 		RAISE EXCEPTION 'a registration check is recorded once and never changed; record a new check instead' USING ERRCODE = 'check_violation';
@@ -239,6 +271,16 @@ CREATE FUNCTION registration_check_insert_only() RETURNS trigger
 	$$;
 CREATE TRIGGER registration_check_insert_only BEFORE UPDATE OR DELETE ON registration_check
 	FOR EACH ROW EXECUTE FUNCTION registration_check_insert_only();
+
+-- Which check backed each sign-off of an issued pack, bound at issue.
+CREATE TABLE signoff_registration_check (
+	signoff_id uuid PRIMARY KEY REFERENCES signoff(id) ON DELETE CASCADE,
+	check_id   bigint NOT NULL REFERENCES registration_check(id),
+	bound_at   timestamptz NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE signoff_registration_check IS
+	'The registration check that stood behind a pack sign-off when the pack was issued (167): what verify shows as "checked against the register". Written only by app_pack_bind_registration_checks.';
+CREATE INDEX signoff_registration_check_check_idx ON signoff_registration_check (check_id);
 
 -- An account deleted: a check no issued pack rests on has no purpose left and
 -- goes (POPIA s14); a bound one stays, without the account, as the record of
@@ -254,25 +296,16 @@ CREATE FUNCTION registration_check_forget() RETURNS trigger
 	END
 	$$;
 REVOKE ALL ON FUNCTION registration_check_forget() FROM PUBLIC, water_app;
-
-ALTER TABLE registration_check ENABLE ROW LEVEL SECURITY;
--- A person reads the checks of their own registration (their data export); everything else goes through the functions below.
-CREATE POLICY registration_check_own ON registration_check FOR SELECT USING (user_id = app_current_user_id());
-GRANT SELECT ON registration_check TO water_app;
-
--- Which check backed each sign-off of an issued pack, bound at issue.
-CREATE TABLE signoff_registration_check (
-	signoff_id uuid PRIMARY KEY REFERENCES signoff(id) ON DELETE CASCADE,
-	check_id   bigint NOT NULL REFERENCES registration_check(id),
-	bound_at   timestamptz NOT NULL DEFAULT now()
-);
-COMMENT ON TABLE signoff_registration_check IS
-	'The registration check that stood behind a pack sign-off when the pack was issued (167): what verify shows as "checked against the register". Written only by app_pack_bind_registration_checks.';
-CREATE INDEX signoff_registration_check_check_idx ON signoff_registration_check (check_id);
-
 CREATE TRIGGER registration_check_forget AFTER UPDATE OF user_id ON registration_check
 	FOR EACH ROW WHEN (OLD.user_id IS NOT NULL AND NEW.user_id IS NULL)
 	EXECUTE FUNCTION registration_check_forget();
+
+ALTER TABLE registration_check ENABLE ROW LEVEL SECURITY;
+-- A person reads the checks of their own registration (their data export), and the project's editors and owners its
+-- checks (the members page). Written only through app_record_registration_check.
+CREATE POLICY registration_check_select ON registration_check FOR SELECT
+	USING (user_id = app_current_user_id() OR app_has_role(project_id, 'editor'));
+GRANT SELECT ON registration_check TO water_app;
 
 ALTER TABLE signoff_registration_check ENABLE ROW LEVEL SECURITY;
 -- Read as its sign-off is (the subquery runs under the caller's signoff policies).
@@ -280,24 +313,54 @@ CREATE POLICY signoff_registration_check_select ON signoff_registration_check FO
 	USING (EXISTS (SELECT 1 FROM signoff s WHERE s.id = signoff_registration_check.signoff_id));
 GRANT SELECT ON signoff_registration_check TO water_app;
 
--- The current check of one person's registration: the latest for that
--- registration, if it says `registered` and is under a year old. Internal.
-CREATE FUNCTION app_registration_check_current(p_user uuid, p_body text, p_category text, p_no text) RETURNS bigint
+-- Record a check (POST /projects/:id/members/:userId/registration-checks): an
+-- owner of the project, of a member's registration. The host's check, done
+-- against the public register; never the operator's.
+CREATE FUNCTION app_record_registration_check(
+	p_project uuid, p_user uuid, p_body text, p_category text, p_no text, p_register_name text,
+	p_outcome text, p_org text, p_checked_at timestamptz, p_note text
+) RETURNS bigint
+	LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_id bigint;
+	BEGIN
+		IF app_current_user_id() IS NULL OR NOT app_has_role(p_project, 'owner') THEN
+			RAISE EXCEPTION 'app_record_registration_check: only an owner of the project records a registration check' USING ERRCODE = '42501';
+		END IF;
+		IF NOT EXISTS (SELECT 1 FROM project_member m WHERE m.project_id = p_project AND m.user_id = p_user) THEN
+			RAISE EXCEPTION 'app_record_registration_check: not a member of the project' USING ERRCODE = 'no_data_found';
+		END IF;
+		INSERT INTO registration_check (project_id, user_id, registration_body, registration_category, registration_no, register_name, outcome, checked_by_org, checked_at, note, recorded_by)
+		VALUES (p_project, p_user, lower(p_body), p_category, p_no, p_register_name, p_outcome, p_org, p_checked_at, coalesce(p_note, ''), app_current_user_id())
+		RETURNING id INTO v_id;
+		RETURN v_id;
+	END
+	$$;
+COMMENT ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) IS
+	'Records the host''s check of a member''s registration against the public SACNASP or ECSA register (167): an owner of the project only, the only writer of registration_check.';
+REVOKE ALL ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) TO water_app;
+
+-- The current check of one person's registration in one project: the latest
+-- for that registration, if it says `registered` and is under a year old.
+-- Internal.
+CREATE FUNCTION app_registration_check_current(p_project uuid, p_user uuid, p_body text, p_category text, p_no text) RETURNS bigint
 	LANGUAGE sql STABLE SET search_path = public
 	AS $$
 	SELECT x.id FROM (
 		SELECT c.id, c.outcome, c.checked_at FROM registration_check c
-		WHERE c.user_id = p_user AND c.registration_body = lower(p_body) AND c.registration_category = p_category
+		WHERE c.project_id = p_project AND c.user_id = p_user AND c.registration_body = lower(p_body) AND c.registration_category = p_category
 		  AND lower(regexp_replace(c.registration_no, '\s', '', 'g')) = lower(regexp_replace(p_no, '\s', '', 'g'))
 		ORDER BY c.checked_at DESC, c.id DESC LIMIT 1
 	) x
 	WHERE x.outcome = 'registered' AND x.checked_at > now() - interval '365 days'
 	$$;
-REVOKE ALL ON FUNCTION app_registration_check_current(uuid, text, text, text) FROM PUBLIC, water_app;
+REVOKE ALL ON FUNCTION app_registration_check_current(uuid, uuid, text, text, text) FROM PUBLIC, water_app;
 
 -- A sign-off's check as the app shows it: the one bound at issue, else
 -- (a draft) the signer's current one, not yet bound. For whoever reads the
--- sign-off (the caller's signoff policies decide, inside the subquery).
+-- sign-off.
 CREATE FUNCTION app_signoff_registration_check(p_signoff uuid) RETURNS jsonb
 	LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
 	AS $$
@@ -321,7 +384,7 @@ CREATE FUNCTION app_signoff_registration_check(p_signoff uuid) RETURNS jsonb
 		END IF;
 		SELECT b.check_id INTO v_check FROM signoff_registration_check b WHERE b.signoff_id = p_signoff;
 		IF v_check IS NULL AND s.user_id IS NOT NULL AND s.registration_category IS NOT NULL THEN
-			v_check := app_registration_check_current(s.user_id, s.registration_body, s.registration_category, s.registration_no);
+			v_check := app_registration_check_current(s.project_id, s.user_id, s.registration_body, s.registration_category, s.registration_no);
 			v_bound := false;
 		END IF;
 		IF v_check IS NULL THEN
@@ -332,7 +395,7 @@ CREATE FUNCTION app_signoff_registration_check(p_signoff uuid) RETURNS jsonb
 	END
 	$$;
 COMMENT ON FUNCTION app_signoff_registration_check(uuid) IS
-	'A sign-off''s registration check (167): the one bound when its pack was issued, else the signer''s current check; NULL when there is none or the caller can''t read the sign-off.';
+	'A sign-off''s registration check (167): the one bound when its pack was issued, else the signer''s current check in the project; NULL when there is none or the caller can''t read the sign-off.';
 REVOKE ALL ON FUNCTION app_signoff_registration_check(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_signoff_registration_check(uuid) TO water_app;
 
@@ -355,7 +418,7 @@ CREATE FUNCTION app_pack_bind_registration_checks(p_project uuid, p_pack uuid, p
 		END IF;
 		FOR s IN SELECT * FROM signoff WHERE pack_id = p_pack AND project_id = p_project ORDER BY signed_at, id LOOP
 			v_check := CASE WHEN s.user_id IS NOT NULL AND s.registration_category IS NOT NULL
-				THEN app_registration_check_current(s.user_id, s.registration_body, s.registration_category, s.registration_no) END;
+				THEN app_registration_check_current(p_project, s.user_id, s.registration_body, s.registration_category, s.registration_no) END;
 			IF v_check IS NOT NULL THEN
 				CONTINUE WHEN NOT p_bind;
 				INSERT INTO signoff_registration_check (signoff_id, check_id) VALUES (s.id, v_check)
@@ -430,7 +493,7 @@ CREATE OR REPLACE FUNCTION app_verify_pack(p_code text) RETURNS jsonb
 					'registrationField', s.registration_field,
 					'registrationNo', s.registration_no,
 					'signedAt', s.signed_at,
-					-- 165: who signed as what, and the check bound at issue (none: self-declared).
+					-- 167: who signed as what, and the check bound at issue (none: self-declared).
 					'kind', s.kind,
 					'registrationCheck', (
 						SELECT jsonb_build_object('checkedAt', rc.checked_at, 'checkedByOrg', rc.checked_by_org)

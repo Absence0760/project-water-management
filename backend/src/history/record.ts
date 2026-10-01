@@ -204,6 +204,8 @@ export type AuditKind =
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	| 'registration.checked'
+	| 'registration.requirement'
 	// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): ids, version, short code and hash; a withdrawal its reason.
 	| 'pack.drafted'
 	| 'pack.deleted'

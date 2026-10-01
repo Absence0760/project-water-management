@@ -37,7 +37,7 @@ import { rank, requireRole, UUID } from '../projects/access.js';
 import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified, stampMatches } from '../runs/stamp.js';
-import { registrationCheckRequired, registrationNotChecked } from '../signoffs/registrationCheck.js';
+import { projectRequiresRegistrationCheck, registrationNotChecked } from '../signoffs/registrationCheck.js';
 import {
 	FORECAST_NOT_SIGNABLE,
 	insertSignoff,
@@ -233,9 +233,9 @@ async function issueChecks(db: Db, projectId: string, pack: PackMeta, manifest: 
 		runsVerified: !unverified,
 		errataRecorded: found.length === 0,
 		// The specialist signers of the current statement whose registration has no current check (167_signers), and
-		// whether issue waits for them (always in production; signoffs/registrationCheck.ts).
+		// whether issue waits for them (the project's setting, on by default; signoffs/registrationCheck.ts).
 		registrationUnchecked: await registrationUnchecked(db, projectId, pack.id, current, false),
-		registrationCheckRequired: registrationCheckRequired(),
+		registrationCheckRequired: await projectRequiresRegistrationCheck(db, projectId),
 		statementSha256: current
 	};
 }
@@ -550,7 +550,7 @@ export const packRoutes = new Hono<AuthEnv>()
 			// Bind each sign-off to its signer's registration check (167_signers); without one, a specialist signer
 			// stops the issue while the requirement is on (always in production).
 			const unchecked = await registrationUnchecked(db, id, packId, checks.statementSha256, true);
-			if (unchecked.length && registrationCheckRequired()) throw registrationNotChecked(unchecked);
+			if (unchecked.length && (await projectRequiresRegistrationCheck(db, id))) throw registrationNotChecked(unchecked);
 			const pred = pack.supersedesId ? await loadPack(db, id, pack.supersedesId, true) : null;
 			if (pred && pred.status !== 'issued')
 				throw new ApiError(409, `the pack this version replaces is ${pred.status} now, so this version can’t supersede it; start a new pack`);
@@ -708,7 +708,7 @@ export interface PackVerification {
 		kind: SignoffKind;
 		/**
 		 * The check of the registration against the public register that stood when the pack was issued, recorded by
-		 * the host through the operator (167_signers); null: the registration is self-declared.
+		 * an owner of the project in the app (167_signers); null: the registration is self-declared.
 		 */
 		registrationCheck: { checkedAt: string; checkedByOrg: string } | null;
 	}[];

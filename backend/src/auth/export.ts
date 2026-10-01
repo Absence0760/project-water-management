@@ -118,8 +118,9 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'share_link.created_by': { excluded: 'the project’s share link; share_link.created is in auditEvents; never the token' },
 	'share_link.revoked_by': { excluded: 'the project’s share link; share_link.revoked is in auditEvents' },
 	'signoff.user_id': { section: 'signoffs' },
-	// The host's checks of the person's professional registration (167_signers): own rows under RLS.
+	// The host's checks of the person's professional registration, recorded by a project owner (167_signers): own rows under RLS.
 	'registration_check.user_id': { section: 'registrationChecks' },
+	'registration_check.recorded_by': { excluded: 'a check this owner recorded of another member’s registration; it is that member’s, and registration.checked is in auditEvents' },
 	'team.created_by': { excluded: 'the team itself; the membership is in teamMemberships' },
 	'team_member.user_id': { section: 'teamMemberships' },
 	// The person's own display preferences (083): the workspace sections they hid.
@@ -286,7 +287,7 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 		);
 		// The registration checks the host recorded (167_signers): own rows under RLS.
 		const { rows: registrationChecks } = await db.query(
-			`SELECT registration_body AS "registrationBody", registration_category AS "registrationCategory", registration_no AS "registrationNo",
+			`SELECT project_id AS "projectId", registration_body AS "registrationBody", registration_category AS "registrationCategory", registration_no AS "registrationNo",
 				register_name AS "registerName", outcome, checked_by_org AS "checkedByOrg", checked_at AS "checkedAt", note, recorded_at AS "recordedAt"
 			 FROM registration_check WHERE user_id = $1 ORDER BY checked_at DESC, id DESC`,
 			[userId]

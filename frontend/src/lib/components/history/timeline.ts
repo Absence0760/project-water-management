@@ -271,6 +271,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				? `Signed off ${what} as ${str(s.fullName)}, ${line}`
 				: `Signed off ${what} as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
 		}
+		// The host's check of a member's registration against the public register, recorded by an owner (167_signers).
+		case 'registration.checked':
+			return `Recorded ${who}’s ${str(s.registrationBody).toUpperCase()} registration ${str(s.registrationNo)} as ${s.outcome === 'registered' ? 'on the register' : 'not on the register'}, checked by ${str(s.checkedByOrg)}`;
+		case 'registration.requirement':
+			return s.required ? 'Issuing an evidence pack now waits for each signer’s registration check' : 'Issuing an evidence pack no longer waits for a registration check';
 		// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): by version and short code, never a name.
 		case 'pack.drafted':
 			return `Drafted ${packName(s)}`;

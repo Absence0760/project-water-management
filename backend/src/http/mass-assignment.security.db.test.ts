@@ -254,6 +254,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /share/scenario': () => ({ as: null, body: { token: ctx.shareToken } }),
 	// The same baseline token: the pack read answers it 404 too (128_pack_share_notes).
 	'POST /share/pack': () => ({ as: null, body: { token: ctx.shareToken } }),
+	// The same baseline token, signed in: a comment goes only through a live application or pack link (166).
+	'POST /share/comment': () => ({ as: ctx.owner, body: { token: ctx.shareToken, body: 'A comment', registerConsent: false } }),
 	'POST /ingest/v1/series/merge': () => ({
 		as: null,
 		headers: { authorization: `Bearer ${ctx.apiKey}` },
@@ -399,6 +401,7 @@ const NO_WRITE = new Map<string, string>([
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 	['POST /share/scenario', { why: 'a read (app_share_scenario); the ladder link is a baseline link, which opens no scenario', legit: 404 }],
 	['POST /share/pack', { why: 'a read (app_share_pack); the ladder link is a baseline link, which opens no pack', legit: 404 }],
+	['POST /share/comment', { why: 'app_share_comment writes only through a live application or pack link; the ladder link is a baseline link', legit: 404 }],
 	[
 		'POST /projects/:id/packs',
 		{

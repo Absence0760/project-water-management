@@ -580,12 +580,19 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			expect(refused.status, JSON.stringify(refused.body)).toBe(409);
 			expect(refused.body).toMatchObject({ code: 'registration_not_checked', details: { signers: ['Dr A. Hydrologist'] } });
 			expect(await asOwner('SELECT 1 FROM signoff_registration_check b JOIN signoff s ON s.id = b.signoff_id WHERE s.pack_id = $1', [v1.id])).toEqual([]);
-			// The host checked the register and the operator recorded it (scripts/registration-check.ts), as the schema owner.
-			await asOwner(
-				`INSERT INTO registration_check (user_id, registration_body, registration_category, registration_no, register_name, outcome, checked_by_org, checked_at)
-				 VALUES ($1, 'sacnasp', 'pr_sci_nat', '400999 / 20', 'Dr A Hydrologist', 'registered', 'Pack catchment WUA', now() - interval '1 day')`,
-				[editor.id]
-			);
+			// The host checked the register and an owner records it on the Members page; an editor can't.
+			const check = {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999 / 20',
+				registerName: 'Dr A Hydrologist',
+				outcome: 'registered',
+				checkedByOrg: 'Pack catchment WUA',
+				checkedAt: new Date(Date.now() - 86_400_000).toISOString()
+			};
+			expect((await editor.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check)).status).toBe(403);
+			const recorded = await owner.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check);
+			expect(recorded.status, JSON.stringify(recorded.body)).toBe(201);
 			const listed = (await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.signoffs[0];
 			expect(listed.registrationCheck).toMatchObject({ checkedByOrg: 'Pack catchment WUA', bound: false });
 			res = await issue(owner, v1.id);

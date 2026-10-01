@@ -128,6 +128,26 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/members/${c.member.id}`, { role: 'editor' })
 	},
 	{
+		// The host's check of a member's registration (167_signers), recorded before the member leaves below.
+		route: `POST ${P}/members/:userId/registration-checks`,
+		records: ['registration.checked'],
+		call: (c) =>
+			c.owner.call('POST', `${at(c)}/members/${c.member.id}/registration-checks`, {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999/20',
+				registerName: 'Guard Member',
+				outcome: 'registered',
+				checkedByOrg: 'Guard WUA',
+				checkedAt: '2026-01-01'
+			})
+	},
+	{
+		route: `PUT ${P}/registration-check-required`,
+		records: ['registration.requirement'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
+	},
+	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/members/${c.member.id}`)
@@ -860,6 +880,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'POST /share/comment', exempt: 'a public comment through a share link (166_public_participation): the note is the record, with its author and the link it came through, and its edits are kept (note_revision)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/pack', exempt: 'reads one evidence pack through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'PATCH /auth/me', exempt: 'the caller’s own account settings; history rows keep a snapshot of the name as it was (actor_label)' },

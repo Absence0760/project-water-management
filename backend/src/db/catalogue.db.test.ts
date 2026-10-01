@@ -275,6 +275,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'signoff.user_id': 'set null',
 	// A registration check stays as the record of what verify showed when a pack was issued, without the account (167_signers).
 	'registration_check.user_id': 'set null',
+	'registration_check.recorded_by': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).

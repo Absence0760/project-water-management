@@ -33,6 +33,18 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/copy': () => ({ body: { name: 'Ladder copy' } }),
 	'POST /projects/:id/members': () => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, role: 'viewer' } }),
 	'PATCH /projects/:id/members/:userId': () => ({ body: { role: 'editor' } }),
+	'POST /projects/:id/members/:userId/registration-checks': () => ({
+		body: {
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationNo: '400999/20',
+			registerName: 'Ladder Signer',
+			outcome: 'registered',
+			checkedByOrg: 'Ladder WUA',
+			checkedAt: '2026-01-01'
+		}
+	}),
+	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
 	'PUT /projects/:id/model': (c) => ({ body: c.model }),
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),

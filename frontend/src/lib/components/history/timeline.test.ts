@@ -88,6 +88,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.participation_exported', { application: true, comments: 3, emails: 1 }))).toBe(
 			'Downloaded the public comments on an application (3 comments, 1 emails given for the register)'
 		);
+		expect(eventLine(ev('signoff.created', { packId: 'p1', kind: 'review', fullName: 'Dr R', registrationBody: 'SACNASP', registrationNo: '1' }))).toMatch(
+			/^Signed off an evidence pack as the authority’s reviewer as Dr R/
+		);
+		expect(
+			eventLine(ev('registration.checked', { displayName: 'Ben', registrationBody: 'sacnasp', registrationNo: '400999/20', outcome: 'registered', checkedByOrg: 'Pack WUA' }))
+		).toBe('Recorded Ben’s SACNASP registration 400999/20 as on the register, checked by Pack WUA');
+		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');
