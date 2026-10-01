@@ -627,6 +627,15 @@ export interface RunMeta {
 	 * from an older API (= manual).
 	 */
 	trigger?: RunTrigger;
+	/** The engine of the automatic fit its parameters came from (settings.fitRecord); null for entered parameters. Absent from an older API. */
+	fitEngineVersion?: string | null;
+	/**
+	 * The known engine bugs that may affect it (issue #103, docs/engine-errata.md):
+	 * the ids of the errata whose range holds its engine, or its fit's for a `fit`
+	 * erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
+	 * from an older API.
+	 */
+	errata?: string[];
 }
 
 export type RunTrigger = 'manual' | 'auto' | 'forecast';

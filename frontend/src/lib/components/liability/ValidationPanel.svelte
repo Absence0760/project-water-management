@@ -2,7 +2,9 @@
 	// The validation statement on screen (WP-3.13 UI, docs/ui.md § Runs &
 	// results › Record and § Scenarios): the report's own ValidationStatement,
 	// folded shut. It is closed by default, so the statement (and the engine's
-	// known-limitations list) loads as its own chunk only when opened.
+	// known-limitations list) loads as its own chunk only when opened. `open`
+	// is bindable, so the run header's known-bug badge (issue #103) can open it
+	// on the errata it names.
 	import type { RunSummary } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 
@@ -12,15 +14,15 @@
 		summary,
 		engineVersion,
 		legacy,
-		fitEngineVersion = null
-	}: { summary: RunSummary; engineVersion: string; legacy: boolean; fitEngineVersion?: string | null } = $props();
+		fitEngineVersion = null,
+		open = $bindable(false)
+	}: { summary: RunSummary; engineVersion: string; legacy: boolean; fitEngineVersion?: string | null; open?: boolean } = $props();
 
 	const uid = $props.id();
-	let open = $state(false);
 </script>
 
 <section aria-labelledby="{uid}-h" class="vpanel" data-testid="validation-panel">
-	<details ontoggle={(e) => (open = (e.currentTarget as HTMLDetailsElement).open)}>
+	<details bind:open>
 		<summary>
 			<h3 id="{uid}-h">Validation statement</h3>
 			<span class="muted small">Engine {engineVersion}: its checks, this run’s self-checks and calibration ratings, data quality, the known limitations and errata. Also in the report.</span>
