@@ -22,6 +22,7 @@ import type { YearClassMethod } from '../views/yearClasses';
 import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } from '../uncertainty/options';
 import type { PairedSummary } from '../uncertainty/paired';
 import type { ApplicantPrompts } from './prompts';
+import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
 
 /**
  * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
@@ -65,16 +66,22 @@ import type { ApplicantPrompts } from './prompts';
  * interaction; a conflict makes it *Not assessed* with the conflicts named, never a silent merge. The
  * row's label and basis change with it. A pack drafted before it has no `combined`: its frozen § 4
  * and page-1 row keep the sum, which says it is one.
- * evidence-12: the responsible authority (161_licensing_authority; provisional position, pre-counsel
+ * evidence-12: § 1's locality map (`localityMap`, issue #326 A5): the project's map features the
+ * figure draws (boundary, parcels, dams, rivers, gauges, EWR sites; another unit's parcel or dam
+ * unnamed), rounded and simplified to the figure, their date and source files, and the SHA-256 of
+ * the SVG drawn from them (geo/localityMap.ts), so a pack freezes the figure and reproduce:pack draws
+ * it again. Null when the project has no map features; absent from a pack drafted before it, whose
+ * § 1 says the figure isn't part of it.
+ * evidence-13: the responsible authority (163_licensing_authority; provisional position, pre-counsel
  * research, 2026-10-01): the identity block names the project's authority ("For: …",
  * `identity.authority`) and whether it endorsed the baseline (`identity.baseline.endorsement`), and
  * page 1 flags "Baseline not endorsed by the responsible authority" (`notEndorsed`) when it hasn't.
  * § 4's decided applications carry the Act's outcome words (licence_issued, licence_refused,
  * application_rejected, not_considered); a pack drafted before keeps its frozen approved /
- * approved_with_conditions, which the report still words. A pack drafted before evidence-12 has
+ * approved_with_conditions, which the report still words. A pack drafted before evidence-13 has
  * neither field: its identity block says nothing about the authority, and it has no such flag.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-12';
+export const EVIDENCE_REPORT_VERSION = 'evidence-13';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -307,6 +314,22 @@ export interface EvidenceInput {
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
 	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
 	impact?: EvidenceImpactInput | null;
+	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
+	mapFeatures?: EvidenceMapFeatureInput[] | null;
+}
+
+/** A map feature (152 map_feature) as § 1's locality map reads it. */
+export interface EvidenceMapFeatureInput {
+	kind: 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
+	/** '' = unnamed. Used only for a gauge, or the applicant's unit, that no node names. */
+	name: string;
+	nodeId: string | null;
+	/** GeoJSON geometry, WGS84 lon/lat (validated by the backend's geo/geojson.ts). */
+	geometry: LocalityGeometry;
+	/** ISO timestamp of its last change. */
+	updatedAt: string;
+	/** The imported file it came from; null = drawn in the app. */
+	source: { fileName: string; sha256: string; importedAt: string } | null;
 }
 
 /**
@@ -926,6 +949,12 @@ export interface EvidenceReport {
 	licenceImpact?: EvidenceLicenceImpact | null;
 	/** § 6: the applicant's demand objects and their sources (evidence-9); null for baseline evidence. Absent from an older pack's document, which has no § 6. */
 	demandObjects?: EvidenceDemandObjects | null;
+	/**
+	 * § 1's locality map (evidence-12): what the figure is drawn from and its SVG's SHA-256
+	 * (geo/localityMap.ts). Null when the project has no map features; absent from an older pack's
+	 * document, which has no figure.
+	 */
+	localityMap?: LocalityMapData | null;
 	appendix: {
 		/** The baseline's settings and model, as it ran (the report's Appendix A.1 reads them). */
 		baselineInputs: RunInputsSnapshot;

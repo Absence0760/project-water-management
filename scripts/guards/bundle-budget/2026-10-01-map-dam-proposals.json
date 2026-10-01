@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Dams page: the Proposed from the register and the map box (DamProposalsBox.svelte, damProposals.ts) and its API client; measured 1482 KB without it, 1486 KB with it (pnpm build:frontend && pnpm check:bundle, 2026-10-01)"
+}

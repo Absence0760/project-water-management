@@ -5,7 +5,8 @@
 // the bundle's tests (evidence/bundle.test.ts) and scripts/reproduce-pack's.
 // The SHA-256 is the caller's, so this stays free of Node APIs.
 import { diffInputs, type RunInputsSnapshot } from '../compare';
-import { buildPackManifest, type PackBundleInput, type PackBundleRun } from '../evidence';
+import { buildPackManifest, localitySection, type PackBundleInput, type PackBundleRun } from '../evidence';
+import { localityMapSvg } from '../geo/localityMap';
 import type { EvidenceReport } from '../evidence/types';
 import { canonicalJson, seriesDigest } from '../manifest';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
@@ -86,11 +87,35 @@ function storedRun(hash: SyncHash, runId: string, input: ModelInput, out: ModelO
 	};
 }
 
+/** § 1's locality map of the fixture (evidence-12): an invented boundary, Farm one's parcel, a river and the gauge, with its SVG's SHA-256. */
+function fixtureLocality(hash: SyncHash, applicant: boolean, svgSha256?: string) {
+	const sq = (lon: number, lat: number, d: number): [number, number][] => [
+		[lon, lat],
+		[lon + d, lat],
+		[lon + d, lat + d],
+		[lon, lat + d],
+		[lon, lat]
+	];
+	const at = '2026-09-30T00:00:00.000Z';
+	const loc = localitySection(
+		[
+			{ kind: 'catchment_boundary', name: '', nodeId: null, geometry: { type: 'Polygon', coordinates: [sq(21.3, -33.7, 0.1)] }, updatedAt: at, source: null },
+			{ kind: 'farm_parcel', name: '', nodeId: 'F1', geometry: { type: 'Polygon', coordinates: [sq(21.32, -33.68, 0.03)] }, updatedAt: at, source: null },
+			{ kind: 'river', name: '', nodeId: null, geometry: { type: 'LineString', coordinates: [[21.3, -33.6], [21.35, -33.65], [21.4, -33.7]] }, updatedAt: at, source: null },
+			{ kind: 'gauge', name: '', nodeId: 'G', geometry: { type: 'Point', coordinates: [21.4, -33.7] }, updatedAt: at, source: null }
+		],
+		{ applicant, ownedNodeIds: ['F1'], ewrSiteNodeIds: [], models: [packFixtureInput().model] }
+	)!;
+	return { ...loc, svgSha256: svgSha256 ?? hash(localityMapSvg(loc).svg) };
+}
+
 /**
  * A pack's bundle input: an application pack (Farm one doubles its maize) by
- * default, or with `application: false` baseline evidence alone.
+ * default, or with `application: false` baseline evidence alone. With
+ * `locality`, the report carries § 1's locality map (evidence-12) and its
+ * SVG's SHA-256, or `locality.svgSha256` in its place (a wrong one).
  */
-export function packBundleFixture(hash: SyncHash, opts: { application?: boolean } = {}): PackBundleInput {
+export function packBundleFixture(hash: SyncHash, opts: { application?: boolean; locality?: boolean | { svgSha256: string } } = {}): PackBundleInput {
 	const base = packFixtureInput();
 	const baseline = storedRun(hash, '00000000-0000-4000-8000-0000000000a1', base, runModelChecked(structuredClone(base)));
 	let application: PackBundleRun | null = null;
@@ -125,7 +150,8 @@ export function packBundleFixture(hash: SyncHash, opts: { application?: boolean 
 			changes: application ? diffInputs(baseline.inputs, application.inputs, { a: baseline.values, b: application.values }) : [],
 			series: [...listed(baseline, 'baseline'), ...(application ? listed(application, 'application') : [])]
 		},
-		summaries: { baseline: baseline.summary, application: application?.summary ?? null }
+		summaries: { baseline: baseline.summary, application: application?.summary ?? null },
+		...(opts.locality ? { builtBy: ENGINE_VERSION, localityMap: fixtureLocality(hash, !!application, typeof opts.locality === 'object' ? opts.locality.svgSha256 : undefined) } : {})
 	} as unknown as EvidenceReport;
 	const manifest = buildPackManifest({ pack: { id: PACK_FIXTURE_ID, version: 1, supersedes: null }, project, report, engine: { version: ENGINE_VERSION, build: null } });
 	// As the backend reads it back from jsonb.

@@ -145,7 +145,7 @@ feature of the current engine:
 | --- | --- |
 | **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
 | **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
-| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. |
+| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. It is the one example with a catchment map (Map tab): boundary, parcels, dams, gauges and streams, all invented. |
 
 Every dam has a surveyed full-supply area, so dam evaporation and rain on the
 dam are not estimated. The only run warnings are the ones each example is built
@@ -291,7 +291,11 @@ answers every source from the synthetic files in `backend/fixtures/feeds/`,
 re-dated to today, and the panel shows a "Sample data" badge. The sample grid
 is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
 25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
-feed), and any river-gauge (H) code for DWS (e.g. `X0H000`).
+feed), and any river-gauge (H) code for DWS (e.g. `X0H000`). Around it the
+files repeat that grid over 21.0–25.4° E, 20.0–34.0° S (no sea there), so on
+the seeded Sandspruit example **Use the catchment boundary** sets up a rain
+feed from its map's boundary that fetches offline too
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
 
 Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
 they fetch daily on their own, and "Run now" fetches at once. Without it:
@@ -368,21 +372,51 @@ the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
 The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
 with nothing else: features are drawn on a plain background, and GeoJSON
-uploads, points, areas and the quaternary lookup all work. Two optional
-pieces:
+uploads, points, areas, the quaternary lookup and the dam proposals all
+work. Optional pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
-pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, hundreds of MB at maxzoom 13):
-pnpm dev:tiles:fetch
-pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
+pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
+pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
+pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
+pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
+pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL; restart pnpm dev
 ```
 
-The synthetic quaternaries are six invented cells in region Z around 21.0–21.75° E,
-33.25–33.75° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
-proposal; anywhere else says no quaternary contains the point. Real DWS/WR2012
+The fonts come from the Protomaps `basemaps-assets` repository at a pinned
+commit (`TILES_FONTS_REF` overrides it), cached in
+`~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under
+`tiles/fonts/` with their licence (`OFL.txt`). With
+`PUBLIC_TILES_GLYPHS_URL` empty (the committed default) the map draws no
+names and fetches no fonts. The **Quaternary catchments** layer works with
+neither: it draws the synthetic outlines and lists their codes beside the map.
+
+The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
+33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
+proposal; anywhere else says no quaternary contains the point. The
+synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
+round the Sandspruit example's outlet, so its Settings → Data feeds →
+**Attach a feed** → DWS lists them nearest first; a real station list loads
+the same way once its licence allows ([maps.md § Gauging-station
+dataset](./maps.md#gauging-station-dataset)).
+
+To see a map without uploading anything, open the **Sandspruit** example
+(`pnpm seed:examples`; analyst@ owns it, demo@ views it; a database seeded before the map existed keeps its map-less examples until `pnpm dev:db:reset` and a re-seed) and its **Map** tab: an
+invented boundary, a parcel and a dam for each farm (linked to its
+hydrological unit, each parcel drawn to the unit's modelled area), the two
+gauges and the four streams, all inside the synthetic quaternaries
+(`backend/scripts/examples/map.ts`). As analyst@, **Use … km²** on a parcel
+proposes the area the model already has, and the WR2012 check's **Propose
+from the map** finds a quaternary. On **Dams**, **Proposed from the register
+and the map** proposes, for most units' dams, an invented registered dam's
+capacity (the synthetic register sits a few hundred metres from the seeded
+dams; Bosrand's is 1.5 km off, so none) and the dam polygon's area; as
+analyst@, **Use** saves one value and History names its source. Real DWS/WR2012
 data is loaded the same way from your own download ([maps.md § Quaternary
-dataset](./maps.md#quaternary-dataset)); never commit it.
+dataset](./maps.md#quaternary-dataset)); never commit it. The DWS register of dams is
+blocked until its licence is confirmed ([maps.md § Sources](./maps.md#sources)).
 
 ## Import the client catchment (demo data)
 
@@ -413,6 +447,25 @@ the seed with a message, since they're linked by a team, shares, farmers and
 an application). It never updates a project either: to reload one from a
 changed workbook, delete it in the app (or `pnpm dev:db:reset` for a clean
 database) and seed again.
+
+**The fixed workbooks.** The source repo also keeps a fixed copy of each client
+workbook, in `../project-water-management-source/Fixed/workbooks/`: the
+original with the review's formula fixes applied (the findings this repo's
+[engine-audit.md](./engine-audit.md) and [model.md §3](./model.md) describe),
+recalculated, and checked column by column against the engine (that repo's
+`Fixed/README.md` and `Fixed/VERIFICATION.md`). Load them with
+
+```bash
+pnpm seed:demo:fixed
+```
+
+which imports each `*_FIXED_recalculated.xlsx` there as `<Name> (fixed)`, into
+`data/client-<name>-fixed-app/`, beside the original's project; the
+per-workbook settings below apply to both. Expect the two to load almost the
+same model: the app reads only a workbook's inputs (the network, areas, crops,
+rain and flow records, transfer rules) and computes everything itself with
+the corrected methods, so formula fixes don't reach it. What does reach it is
+a fix to an input, such as a client's decision to start the record later.
 
 A b023 gauge column need not measure the modelled catchment itself, so by
 default the seed imports it as a reference gauge (`--gauge-as-reference`)

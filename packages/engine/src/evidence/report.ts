@@ -20,6 +20,7 @@ import { demandSourceShares, type DemandSourceShare } from '../network/demandSou
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
+import { localitySection } from './locality';
 import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
@@ -474,6 +475,12 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		allocations,
 		licenceImpact,
 		demandObjects,
+		localityMap: localitySection(input.mapFeatures, {
+			applicant: !!a,
+			ownedNodeIds: a?.scenario.ownedNodeIds ?? [],
+			ewrSiteNodeIds: river.flatMap((s) => (s.isOutlet ? [] : [s.key])),
+			models: [a?.inputs.model, b.inputs.model]
+		}),
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],

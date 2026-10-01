@@ -18,6 +18,7 @@ import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
+import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -387,6 +388,26 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/area-from-map`, { featureId: c.mapParcelId })
 	},
 	{
+		// A dam's full-supply area from its polygon (issue #326 B-dams): a revision whose reason names the dam.
+		route: `POST ${P}/nodes/:nodeId/dam-area-from-map`,
+		records: ['revision'],
+		call: async (c) => {
+			// Round the synthetic register's Z100/07, so the next entry has a registered dam to propose.
+			const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
+			const f = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'dam', name: 'Guard dam', nodeId: c.farmId, geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+		}
+	},
+	{
+		// A dam's capacity from the register of dams: a revision whose reason names the registered dam.
+		route: `POST ${P}/nodes/:nodeId/dam-capacity-from-register`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-capacity-from-register`, { registerNo: 'Z100/07' });
+		}
+	},
+	{
 		route: `POST ${P}/map/features`,
 		records: ['map.feature_created'],
 		call: async (c) => {
@@ -473,6 +494,16 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/feeds/:feedId`,
 		records: ['feed.configured'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/feeds/${c.feedId}`)
+	},
+	{
+		// The rain feed from the map's boundary (#326 B-rain): records feed.configured naming the boundary.
+		route: `POST ${P}/feeds/chirps/from-boundary`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-boundary`, { featureId: b.body.feature.id, updatedAt: b.body.feature.updatedAt });
+		}
 	},
 	{
 		route: `POST ${P}/report-schedules`,
@@ -572,6 +603,7 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },
+	{ route: `POST ${P}/map/import/preview`, exempt: 'the import review (issue #326 D2) reads a GeoJSON file and proposes each feature’s kind, and writes nothing; the import records map.imported' },
 	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (037_notes.sql)' },
 	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
 	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },

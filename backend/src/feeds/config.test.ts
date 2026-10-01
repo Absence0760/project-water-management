@@ -19,6 +19,13 @@ describe('FeedInput', () => {
 		expect(FeedInput.parse({ source: 'dws', config: { station: ' x0h000 ' } })).toMatchObject({ targetKind: 'flow_observed_m3s', config: { station: 'X0H000' } });
 	});
 
+	it('takes up to 100 listed cells in up to 25 grid rows, and the catchment boundary they came from (issue #326)', () => {
+		const many = Array.from({ length: 100 }, (_, i) => ({ lat: -20.025 - 0.05 * (i % 25), lon: 25.025 + 0.05 * Math.floor(i / 25) }));
+		expect(FeedInput.safeParse({ source: 'chirps', config: { cells: many } }).success).toBe(true);
+		const boundary = { featureId: '00000000-0000-4000-8000-000000000000', name: 'Sample catchment', updatedAt: '2026-10-01T08:00:00.000Z', areaKm2: 210.2 };
+		expect(FeedInput.parse({ source: 'chirps', config: { cells, boundary } }).config).toEqual({ cells: [{ ...cells[0], weight: 1 }], boundary });
+	});
+
 	it('lets a source write only its own kinds', () => {
 		expect(FeedInput.parse({ source: 'dws', config: { station: 'X0H000' }, targetKind: 'flow_reference_m3s' }).targetKind).toBe('flow_reference_m3s');
 		const bad = FeedInput.safeParse({ source: 'dws', config: { station: 'X0H000' }, targetKind: 'rain_chirps_mm' });
@@ -29,7 +36,10 @@ describe('FeedInput', () => {
 
 	it.each([
 		['no cells', { source: 'chirps', config: { cells: [] } }],
-		['26 cells', { source: 'chirps', config: { cells: Array.from({ length: 26 }, () => cells[0]) } }],
+		['101 cells', { source: 'chirps', config: { cells: Array.from({ length: 101 }, () => cells[0]) } }],
+		['cells in 26 grid rows', { source: 'chirps', config: { cells: Array.from({ length: 26 }, (_, i) => ({ lat: -20.025 - 0.05 * i, lon: 25.025 })) } }],
+		['a boundary mark on a bounding box', { source: 'chirps', config: { bbox: { south: -20.2, west: 25.1, north: -20.1, east: 25.2 }, boundary: { featureId: '00000000-0000-4000-8000-000000000000', name: 'B', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 1 } } }],
+		['a boundary mark with an unknown key', { source: 'chirps', config: { cells, boundary: { featureId: '00000000-0000-4000-8000-000000000000', name: 'B', updatedAt: '2026-10-01T00:00:00.000Z', areaKm2: 1, geometry: {} } } }],
 		['a latitude beyond the grid', { source: 'chirps', config: { cells: [{ lat: 61, lon: 25 }] } }],
 		['a negative weight', { source: 'chirps', config: { cells: [{ ...cells[0], weight: -1 }] } }],
 		['a station on a grid source', { source: 'chirps', config: { station: 'X0H000' } }],

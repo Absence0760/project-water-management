@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Map tab results (#326 A1): measure/run pickers, legend, results columns, and mapStatus.ts with the band/dam-level/allocation helpers it imports; total 1459 -> 1465 KB measured against the round-2 base build"
+}

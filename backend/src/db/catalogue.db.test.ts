@@ -163,9 +163,11 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * pack_reproduce job through app_record_pack_reproduction (154_pack_reproduce),
  * so no member can claim a pack reproduced. The quaternary reference dataset is
  * loaded by the operator as the schema owner (152_catchment_map.sql,
- * `pnpm import:quaternaries`); the app only proposes from it.
+ * `pnpm import:quaternaries`); the app only proposes from it. So is the
+ * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
+ * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction', 'gauge_station_reference', 'dam_register_reference']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
