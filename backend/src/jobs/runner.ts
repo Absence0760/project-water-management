@@ -1,4 +1,5 @@
-// One tick of the queue: purge old jobs, reports, alerts and lapsed invites, queue the data feeds
+// One tick of the queue: purge old jobs, reports, alerts, lapsed invites and deleted
+// notes' text, queue the data feeds
 // (feeds/schedule.ts), report schedules (reports/schedule.ts) and scheduled
 // alert checks (app_alert_schedule) that are due, then claim and run due
 // jobs one at a time until none are due or the time budget is spent, then
@@ -88,6 +89,11 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 export const ALERT_CHECK_GAP = '1 hour';
 /** Alert deliveries (and events cleared this long ago) are kept this long, then the tick deletes them. */
 export const ALERT_RETENTION_DAYS = 180;
+/**
+ * A deleted note (its text and earlier texts) is erased this long after it was deleted, unless it belongs to a
+ * licence record (156_note_purge; Privacy §7). Long enough for a complaint about what was written to surface.
+ */
+export const DELETED_NOTE_RETENTION_DAYS = 90;
 
 /** Queue a job_dead check for one project at once (app_alert_schedule); a failure is logged, never thrown. */
 async function scheduleAlertCheck(projectId: string): Promise<void> {
@@ -132,6 +138,8 @@ export interface TickResult {
 	purged: number;
 	/** Lapsed invites deleted (invites/invites.ts purgeInvites). */
 	invitesPurged: number;
+	/** Notes deleted more than DELETED_NOTE_RETENTION_DAYS ago, erased with their earlier texts (156_note_purge). */
+	notesPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -165,6 +173,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const result: TickResult = {
 		purged: 0,
 		invitesPurged: 0,
+		notesPurged: 0,
 		claimed: 0,
 		done: 0,
 		failed: 0,
@@ -177,6 +186,9 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
+	result.notesPurged = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_purge_deleted_notes(make_interval(days => $1)) AS n', [DELETED_NOTE_RETENTION_DAYS])).rows[0]?.n ?? 0
+	);
 	const noticesPurged = await purgePackNotices();
 	const erratumPurged = await purgeErratumNotices();
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });

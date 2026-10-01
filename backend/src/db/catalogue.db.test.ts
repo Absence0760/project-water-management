@@ -116,8 +116,10 @@ const APPEND_ONLY = new Set([
  * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
- * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (037_notes.sql). An API key too: audit events name it
+ * soft-deleted and hidden (037_notes.sql); 90 days later the tick erases it
+ * through app_purge_deleted_notes, a SECURITY DEFINER function, the only path
+ * that removes a note row (156_note_purge.sql), so water_app still has no
+ * DELETE on it. An API key too: audit events name it
  * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
  * only by the operator, as the schema owner, on a POPIA request
  * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
