@@ -35,7 +35,7 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
@@ -261,16 +261,20 @@ describe('canOpenTab', () => {
 	});
 });
 
-describe('linked-only tabs (the Map, issue #288)', () => {
-	it('are never listed for any role, open from a link, and show in place while open', () => {
+describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
+	it('is listed for every member, after the Network, and nothing is linked-only now', () => {
+		expect(LINKED_ONLY).toEqual([]);
 		for (const role of ['owner', 'editor', 'viewer'] as const) {
-			expect(visibleTabs(role, { showModelInputs: true, hidden: [] })).not.toContain('map');
+			const shown = visibleTabs(role, { hidden: [] });
+			expect(shown).toContain('map');
 			expect(canOpenTab(role, 'map')).toBe(true);
 		}
-		const shown = visibleTabs('owner', { hidden: [] });
-		const strip = stripTabs(shown, 'map', ALL_TABS);
-		expect(strip.indexOf('map')).toBe(strip.indexOf('network') + 1);
-		expect(LINKED_ONLY).toEqual(['map']);
+		const model = navSections(visibleTabs('owner', { hidden: [] })).find((s) => s.id === 'model')!;
+		expect(model.tabs.indexOf('map')).toBe(model.tabs.indexOf('network') + 1);
+		// A viewer sees it without "Show model inputs" (it shows results too), but not the Network.
+		const viewer = navSections(visibleTabs('viewer', { hidden: [] }));
+		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series']);
+		expect(TAB_GROUP.map).toBe('core');
 	});
 });
 

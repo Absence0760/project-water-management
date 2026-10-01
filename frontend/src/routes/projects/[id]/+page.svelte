@@ -69,7 +69,7 @@
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -444,6 +444,7 @@
 	});
 
 	// --- the grid modal: open while the URL names a grid, closed the same way --
+	// A tab's own grid (TAB_GRIDS: the Map's `grid=map-features`) is the tab's to open and close.
 	// Not over the grid's own tab, where the grid is already on the page.
 	const gridParam = $derived(modelOverlays ? page.url.searchParams.get('grid') : null);
 	const openGrid = $derived(isGridId(gridParam) && GRID_TAB[gridParam] !== tab ? gridParam : null);
@@ -452,7 +453,7 @@
 		gridOpen = !!openGrid;
 	});
 	$effect(() => {
-		if (!gridOpen && untrack(() => gridParam) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
 	});
 	// A grid that left the modal: its old link goes where the grid is now (grid=demand → Crops & demand's table, issue #174).
 	$effect(() => {
@@ -1131,14 +1132,17 @@
 		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
+	/* Budgeted to fit every section an owner can show (17 with the Map's row, #326 D3) and the account
+	   block in 1440×960 with a row to spare: 32 px rows (still past the 24 px target size) and 0.5rem
+	   between the groups (app-sidebar.spec.ts). */
 	.project-side .tabs {
-		gap: 0.75rem;
+		gap: 0.5rem;
 	}
 	.project-side .section-label {
 		padding-bottom: 0.1rem;
 	}
 	.project-side .tabs a {
-		min-height: 34px;
+		min-height: 32px;
 	}
 	/* Phones: the catchment's name and your role, above the Sections button. */
 	.phone-project {

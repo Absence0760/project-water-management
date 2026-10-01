@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMAND_TABLE_ID, GRID_TAB, GRIDS, gridHref, isGridId, movedGridHref, overlayHref, withoutParam, withParam } from './overlays';
+import { DEMAND_TABLE_ID, GRID_TAB, GRIDS, gridHref, isGridId, isTabGridId, movedGridHref, TAB_GRIDS, overlayHref, withoutParam, withParam } from './overlays';
 
 describe('overlays', () => {
 	it('knows its grids and the tab each lives on', () => {
@@ -40,5 +40,16 @@ describe('overlays', () => {
 	it('closes one overlay and keeps everything else', () => {
 		expect(withoutParam(new URL('http://x/p?tab=network&grid=transfers&view=table#h'), 'grid')).toBe('/p?tab=network&view=table#h');
 		expect(withoutParam(new URL('http://x/p?grid=transfers'), 'grid')).toBe('/p');
+	});
+
+	it('a tab’s own grid (the map’s features, #326) is not the page’s GridModal, and opens on its tab from anywhere', () => {
+		expect(isTabGridId('map-features')).toBe(true);
+		expect(isGridId('map-features')).toBe(false);
+		expect(isTabGridId('nodes')).toBe(false);
+		expect(isTabGridId(null)).toBe(false);
+		expect(TAB_GRIDS['map-features'].tab).toBe('map');
+		expect(movedGridHref(new URL('http://x/projects/p?tab=map&grid=map-features'))).toBeNull();
+		expect(movedGridHref(new URL('http://x/projects/p?tab=network&grid=map-features&feature=f1'))).toBe('/projects/p?tab=map&grid=map-features&feature=f1');
+		expect(movedGridHref(new URL('http://x/projects/p?grid=map-features'))).toBe('/projects/p?grid=map-features&tab=map');
 	});
 });
