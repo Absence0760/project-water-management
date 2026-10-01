@@ -1507,17 +1507,27 @@ Every step is an ordinary app action by an owner unless it says "operator".
    the worker's logs and the `jobs-dlq`, redrive or purge it; leases expire
    after 6 minutes and the next tick claims the jobs again.
 7. **A POPIA request to delete a person's account** (operator; there is no
-   self-service deletion yet, [security.md § Personal information](./security.md#personal-information-popia)).
-   Confirm the request with the WUA (the responsible party for its farmers).
-   As the schema owner, in one transaction: `DELETE FROM app_user WHERE id =
-   '…';`. Memberships, farm links, tokens, their pending jobs and the invites
-   they sent go with it; notes, publications, keys and links stay with no
-   author; the audit log is pseudonymised ("Deleted user"). A foreign-key
-   error (`23503`) means they made a project, team, run, scenario, ensemble,
-   import or nomination: that is evidence naming them, and what happens to it
-   is for the operator and the client's information officer to decide first
-   (followups.md § POPIA). Record the request and the outcome in the operator
-   log.
+   self-service deletion yet, issue #112, [security.md § Personal information](./security.md#personal-information-popia)).
+   A request may come by email or any other expedient way (POPIA s24,
+   Regulation 3); act on it as soon as reasonably practicable. Confirm it
+   comes from the account's address, and tell the WUA (the responsible
+   party for its farmers). As the schema owner, in one transaction:
+   `DELETE FROM app_user WHERE id = '…';`. Memberships, farm links, tokens,
+   their pending jobs and the invites they sent go with it; notes,
+   publications, keys and links stay with no author; projects, teams, runs,
+   nominations, ensembles, imports and scenarios they made stay with the
+   maker cleared (138: keep the evidence, remove the name), except an
+   ensemble they never completed and their **draft** applications, which go;
+   sign-offs keep the typed name and registration; the audit log is
+   pseudonymised ("Deleted user"). A `23514` error at commit ("a project must
+   keep at least one owner", "a team must keep at least one admin") means
+   they are the only owner or admin of something: ask them, or the
+   project's or team's other members, to hand it over (make someone else
+   owner or admin), then delete again. Then email the person what was done
+   (s24(4)): the account is gone, and what was kept without their name and
+   with it (sign-offs, the names printed in issued evidence packs). Record
+   the request, the date and the outcome in the operator log (the list of
+   erased accounts, kept outside the database).
 8. **A POPIA request for a copy of a person's data** (access, s23). The
    person downloads it themselves: Account → Your data → **Download my
    data** (`GET /auth/me/export`, [security.md § Personal information](./security.md#personal-information-popia)).

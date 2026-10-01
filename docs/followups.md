@@ -4566,15 +4566,24 @@ own. Loop in the CISO or security analyst before acting on any of them.
       key to `app_user` (guarded by `export.db.test.ts`). The privacy notice
       (above) must say it exists.
 - [ ] **Self-service account deletion, and evidence that names its maker.**
-      Deleting an account is an operator act today (deployment.md §
-      Runbooks, item 7), and it is refused for anyone who created a
-      project, team, run, scenario, ensemble, import or nomination (those
-      keys restrict: `catalogue.db.test.ts` `APP_USER_ON_DELETE`). Decide
-      with the information officer whether that evidence keeps the name (the
-      regulator's record, like a sign-off), is reassigned, or is
-      pseudonymised, then change those keys to match and build the Account
-      page's "delete my account". Trigger: before public registration opens,
-      or the first deletion request from a modeller.
+      **Operator path done (138, issue #112):** deleting an account keeps
+      the evidence it made (project, team, run, ensemble, nomination,
+      scenario, import) with the maker cleared, deletes a started ensemble
+      and draft applications, and refuses only the sole owner or admin until
+      handed over (deployment.md § Runbooks, item 7; Privacy §7 rewritten,
+      `LEGAL_VERSION` 2026-09-30). **Still to build (#112):** `DELETE
+      /auth/me` (password again; 409 naming the projects and teams they solely
+      own or administer; audit event; a confirmation email of what was done,
+      s24(4)) and the Account page's **Delete my account** with its e2e and
+      the Afrikaans words. The information officer still confirms the rule
+      (#90). Trigger: before public registration opens, or the first deletion
+      request from a modeller.
+- [ ] **A DWS or CMA responsible party may have to keep the maker's name**
+      (National Archives Act, operator agreement notes for counsel, clause
+      8.4). Durable fix: a per-team setting that keeps a snapshot of the name
+      on the evidence (its own migration), on for such a team. Trigger: D1
+      (#50) puts the published baseline with a CMA or DWS, or counsel says
+      the Act applies.
 - [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
       body for editors for the life of the project (037). Decide a limit (for
       example a year, then purge the body and keep the event). Who: client.

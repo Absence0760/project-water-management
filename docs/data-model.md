@@ -501,12 +501,13 @@ any row keeps the project, withdrawn or not.
   withdrawal is ever added, since a withdrawn nomination is still history.
   There is no un-nominate; a nomination can only be replaced. Cascades into
   `project`: none. `project.team_id` is `ON DELETE SET NULL` (deleting a team
-  keeps its projects) and `project.created_by` is `NO ACTION` (there is no
-  account deletion). The operator's out-of-band removal is in
+  keeps its projects) and `project.created_by` is `ON DELETE SET NULL`
+  (138: an account's deletion keeps the project, its maker cleared). The
+  operator's out-of-band removal is in
   [security.md](./security.md) § Authorization, "Tamper evidence".
-- No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
-  is no account deletion yet. When there is, it must keep the history (for
-  example a tombstone user), not cascade it away.
+- `nominated_by` is `ON DELETE SET NULL` (138), the same as
+  `model_run.created_by`: deleting the account keeps the history, with who
+  nominated cleared (never reassigned, never cascaded away).
 - Migration 009 was reserved for pinned runs (issue #7), which landed as
   015 instead. 009 is an unused gap; the runner applies every unapplied file
   in name order, so the gap is harmless.
@@ -700,9 +701,33 @@ the result change?", and put back any earlier version.
   `author` in every `note.deleted` about their note; then the foreign key
   clears `actor_user_id`. The events, kinds and times stay (the project's
   audit trail). What every other foreign key to `app_user` does is
-  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
-  null, or restrict for evidence that names its maker);
+  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade or
+  set null; none restricts since 138);
   `auth/account-deletion.db.test.ts` checks the outcome.
+- **Evidence that names its maker (138, issue #112).** `project.created_by`,
+  `team.created_by`, `model_run.created_by`, `run_uncertainty.created_by`,
+  `run_nomination.nominated_by`, `project_import.imported_by` and
+  `scenario.owner_user_id` were `RESTRICT`, so an account that had made any of
+  them couldn't be deleted. They are `ON DELETE SET NULL` and nullable now:
+  the evidence stays, the name goes ("keep the evidence, remove the name";
+  never reassigned, which would make the record false). The maker is still
+  required where it was: `app_maker_kept` (BEFORE INSERT OR UPDATE OF
+  `created_by` on `project`, `team` and `model_run`) refuses an insert
+  without one (`not_null_violation`) and any change but clearing it once its
+  account is gone (`check_violation`); the other four are stamped from the
+  session by their insert triggers. `run_uncertainty_complete` and
+  `scenario_guard` let the key's SET NULL through (an update whose only
+  change is that column going to NULL, for an account that no longer
+  exists), as 052 and 066 did for their keys. Before the row goes,
+  `app_user_pseudonymise` also deletes the person's still-`started`
+  ensembles and their **draft applications** (`origin = 'applicant'`,
+  `status = 'draft'`) with those drafts' runs; a draft the project keeps
+  (public comments, an evidence pack, or a pinned, nominated or cited run)
+  stays, its applicant cleared. Deletion is still refused, at commit, for
+  the only owner of a project or the only admin of a team
+  (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
+  joined `app_user` on these columns left-join it, and the API answers
+  `null` for the maker's name.
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -1265,8 +1290,8 @@ assessor, needs it long after the import. `POST /projects/import` stores it in
 the import's own transaction ([api.md § Import report](./api.md#import-report)).
 
 - **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
-  `imported_by` (→ `app_user`; no `ON DELETE`, like `model_run.created_by`:
-  there is no account deletion yet, and WP-1.13 makes both `SET NULL`),
+  `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
+  `model_run.created_by`: the record stays with who imported it cleared),
   `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
   `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
   `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and
