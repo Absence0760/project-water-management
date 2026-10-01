@@ -1402,6 +1402,17 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
+- **Licence record** (159, `project/LicenceRecordPanel.svelte`, words in
+  `project/licenceRecord.ts`), editors and owners, under Share links
+  (heading id `licence-record`, the target of the licence-record emails):
+  how long the issued packs, nominated runs and the names they keep are kept
+  ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
+  says where it stands (nothing to keep yet; the next review; the review is
+  due; granted and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome (Not recorded,
+  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  no outcome is recorded and a review is set, **The record is still
+  needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
@@ -6899,7 +6910,10 @@ their own application's in [their own view](#the-applicants-pack-view).
   evidence pack…** opens the run's sign-off dialog with the pack's version,
   manifest hash and engines, the eleventh confirmation, and first a warning
   that the signer's name, registration and date are shown publicly on the
-  verify page, for as long as the pack exists.
+  verify page, even if the pack is withdrawn, for as long as the licence
+  record it supports is kept (three years after the licence expires, or
+  after the application is refused or withdrawn; [evidence-pack.md §
+  Retention](./evidence-pack.md#retention)).
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
