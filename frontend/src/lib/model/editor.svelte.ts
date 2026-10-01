@@ -110,6 +110,11 @@ export class ModelEditor {
 		return $state.snapshot(this.model) as ProjectModel;
 	}
 
+	/** The model as last loaded or saved (a fresh copy): the unsaved-edits preview's "before" (lib/preview/overlay.ts). */
+	savedModel(): ProjectModel {
+		return JSON.parse(this.#saved) as ProjectModel;
+	}
+
 	revert() {
 		this.model = JSON.parse(this.#saved) as ProjectModel;
 		this.saveError = null;

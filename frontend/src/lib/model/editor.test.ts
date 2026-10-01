@@ -22,6 +22,17 @@ describe('ModelEditor', () => {
 		expect(ed.model.nodes).toHaveLength(0);
 	});
 
+	it("savedModel is the model as loaded, a fresh copy, whatever is unsaved (the preview's before)", () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const saved = ed.savedModel();
+		expect(saved.nodes).toHaveLength(0);
+		saved.nodes.push(ed.snapshot().nodes[0]!);
+		expect(ed.savedModel().nodes).toHaveLength(0);
+		expect(ed.model.nodes).toHaveLength(1);
+	});
+
 	it('knows which nodes the server has: the loaded ones, not one added since (notes go only on those)', () => {
 		const ed = new ModelEditor();
 		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
