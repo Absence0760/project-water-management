@@ -9,15 +9,21 @@ import { buildAuditWorkbook } from '../audit/auditWorkbook';
 import { collectAudit } from '../audit/collect';
 import { collectWorkbookInput } from './collect';
 import type { ExportProgress } from './collect';
-import type { FromWorker, ToWorker } from './messages';
+import { parseStartMessage, type FromWorker } from './messages';
 import { buildWorkbook } from './workbook';
 
 const post = (m: FromWorker, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(m, transfer);
 
-self.onmessage = async (e: MessageEvent<ToWorker>) => {
-	if (e.data.type !== 'start') return;
+self.onmessage = async (e: MessageEvent<unknown>) => {
+	// A dedicated worker only hears the page that made it (its messages carry
+	// an empty origin); refuse anything that names another origin.
+	if (e.origin && e.origin !== self.location.origin) return;
+	// Checked before anything is fetched. A malformed request ends the export
+	// with an error rather than leaving the page waiting.
+	const msg = parseStartMessage(e.data);
+	if (!msg) return post({ type: 'error', message: 'the workbook export request is malformed' });
 	try {
-		const request = e.data.request;
+		const request = msg.request;
 		const onProgress = (progress: ExportProgress) => post({ type: 'progress', progress });
 		// One farm's audit workbook (issue #68), or the whole run's.
 		if (request.auditNodeId) {
