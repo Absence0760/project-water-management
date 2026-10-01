@@ -5938,6 +5938,43 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   published in Runs & results) and a filter with none ("Nothing is awaiting a
   decision." and **Show all**).
 
+**Assess together** (roadmap WP-3.11, `&view=assess` in the URL, so Back
+returns to the list; `CumulativeAssessment.svelte`, the pure parts in
+`cumulative.ts`): the section header's **Assess together** link swaps the
+card for the cumulative impact view, and **Back to the list** swaps it back.
+
+- **Pick:** every submitted or decided application, ticked two or more; once
+  one is ticked, an application on another base run can't be (it says
+  "based on another run than …"). A **Name**, then **Check they combine** (a
+  dry run: nothing written) or **Assess together** (writes the assessment
+  and queues its job).
+- **Refused, never merged:** when two applications change the same thing,
+  or one removes what another uses, each conflict is listed: its target
+  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  what the other uses, and both changes side by side (each application's
+  name, change number and the change in words). Changes that apply alone but
+  not together (two new dams given one name) are listed too.
+- **The result** (the newest assessment, or one picked under **Assessment**):
+  while it runs, *Queued* or *Running each application alone and all
+  together… N %* (followed every 1.5 s); a refused or failed one says why,
+  line by line. Complete: one matrix, rows = each measure at each EWR site
+  (the outlet first) and for the catchment (days the EWR is not met, mean
+  EWR shortfall, Reserve months met and deficit at each rule-table site,
+  mean flow at the outlet, supplied to existing users and their share of
+  demand met), columns = **Baseline**, each application **alone**, **All
+  together** (each with its change from the baseline under it, coloured
+  worse or better) and **Interaction** (together less the sum of the
+  separate changes; its plain-words reading is the cell's title and is read
+  out), with a one-paragraph explanation of the interaction above it and
+  **Download CSV** (the raw numbers, names guarded against CSV injection)
+  below.
+- Workspace English, like the rest of the assessors' tab.
+
+e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
+conflicting pair refused with both changes named, a pair that combines run
+by a worker tick into the matrix, the CSV, Back to the list; axe light and
+dark).
+
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
 list; only its owner edits it, and an editor who isn't its owner gets the

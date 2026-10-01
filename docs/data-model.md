@@ -2478,6 +2478,50 @@ project. `job` holds status, progress and errors.
   key), `base_run_id`, `job_id`, `created_by`; on members the unique
   `(sweep_id, position)` and `(sweep_id, lower(name))`, and `project_id`.
 
+### Assessments (145_assessment.sql)
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311), [api.md §
+Assessments](./api.md#assessments)): several scenarios on one base run,
+each alone and all together, run as one `assessment` job. The sweep's
+pattern: written at the start with everything the result depends on, then
+completed once by whoever asked and never changed after. Derived, not
+evidence: an editor may delete one; the API keeps the newest 20 per project.
+
+`assessment`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `base_run_id` | The run every member's scenario is based on. `ON DELETE CASCADE`. Never a scenario or forecast run (`assessment_guard`) |
+| `job_id` | The `assessment` job (`ON DELETE SET NULL` when the 30-day purge deletes it) |
+| `name` | 1–200 characters |
+| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input) |
+| `problems` | Why it was refused or failed (non-empty exactly then) |
+| `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport`, and the combined run's summary and window, when `complete` |
+| `engine_version`, `completed_at` | Set when it leaves `pending` |
+| `created_by`, `created_at` | Stamped by the insert trigger; `created_by` is `ON DELETE SET NULL` |
+
+`assessment_member`:
+
+| Column | Holds |
+| --- | --- |
+| `assessment_id`, `project_id` | Its assessment (`ON DELETE CASCADE`) and project |
+| `scenario_id` | The scenario it was copied from (`ON DELETE SET NULL`: a team scenario can be deleted; the copy stays). `UNIQUE (scenario_id, assessment_id)` |
+| `position` | 0–7: at most 8 (`ASSESSMENT_SCENARIOS_MAX`). `UNIQUE (assessment_id, position)` |
+| `name`, `origin`, `ops`, `ops_sha256`, `owned_node_ids` | **Copied from the scenario** by `assessment_member_guard` (SECURITY INVOKER: RLS hides a draft application, so it can't be named), which also checks it is this project's, on the assessment's base run, and a team scenario or a submitted or decided application. The job runs these, never the live scenario |
+| `status`, `problems`, `summary`, `start_date`, `end_date`, `finished_at` | Its run alone: `pending`, then `done` (`summary` its `RunSummary`), `problems` or `failed`, once |
+
+- **RLS: editors only, read and write.** Contributors never (an assessment
+  reveals other applications), and viewers neither (it names submitted
+  applications, which a viewer reads only once decided).
+- **Grants:** `SELECT, INSERT, DELETE`, and `UPDATE` of the outcome columns
+  only. The completion triggers (`assessment_complete`,
+  `assessment_member_outcome`) fire only on those columns, so the foreign
+  keys' own `SET NULL`s (the job purge, an account deletion, a team scenario
+  deleted) pass, and water_app can't write those columns.
+- `job.kind` accepts `assessment`.
+
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 
 A base run × a season × demand levels over the record's analogue years,

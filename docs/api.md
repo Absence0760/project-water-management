@@ -3018,6 +3018,59 @@ kept fit is the server's too.
   automatic re-run); with `apply` and signed-off rules, its job applies the
   kept fit and makes an `auto` run.
 
+## Assessments
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)): several scenarios on one
+base run, each alone and all together, run by one background `assessment`
+job on the base run's stored input. **Editors only**: an assessment names
+submitted applications, which neither contributors nor viewers read.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
+| GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+
+- Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
+  distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).
+- Each scenario must be one the caller reads in this project (`404`: an
+  application still a draft is its applicant's alone), a team scenario or a
+  submitted or decided application (`409` for a withdrawn one), and all on
+  one base run (`422 these scenarios are based on different runs …`). The
+  base run is rebuilt from its stored input as for a scenario (`409` when it
+  can't be).
+- **Refused, never merged:** `422` when the scenarios don't combine, with
+  `details: { conflicts, problems }`. A conflict is
+  `{ reason: 'same_target' | 'removed_in_use', target, a, b, message }`,
+  `a`/`b` = `{ scenario, scenarioId, opIndex, op }`; `problems` are lines
+  naming the scenario (`"App B" alone: op 2 …`, or `"App B": op 1 …` for an
+  op that applies alone but not on top of the others). The message says how
+  many conflicts. Nothing is written.
+- **At most 2 assessment jobs queued or running per user** (`429`; a dry run
+  doesn't count). A job gets 2 attempts. A project keeps its newest **20**
+  assessments; one goes with its base run.
+- `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  status, problems, report?, engineVersion, job, createdBy, createdAt,
+  completedAt, members: AssessmentMember[] }`. `status`: `pending`, then
+  `complete` (`report` is the engine's `CumulativeReport`), `refused` (the
+  job found the scenarios no longer combine, or one doesn't apply alone;
+  `problems` says why) or `failed` (the engine refused an input). `job` as
+  for a sweep.
+- `AssessmentMember = { id, position, scenarioId, name, origin, opsSha256,
+  opCount, status, problems, startDate, endDate }`: the scenario's ops are
+  **copied** when the assessment is written (by the database, never from the
+  request), so a team scenario edited or deleted later (`scenarioId` then
+  `null`) doesn't change it. `status`: `pending`, `done` (its run alone is
+  stored), `problems` or `failed`.
+- `CumulativeReport = { scenarios: [{ id, name }], rows: CumulativeRow[],
+  warnings }`; a row is one measure at one EWR site (`siteNodeId` null = the
+  outlet) or of the catchment (`site` null): `{ metric, siteNodeId, site,
+  isOutlet, unit, higherIsWorse, baseline, singles[], combined,
+  singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
+  value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
+  lists the measures).
+
 ## Seasonal outlooks
 
 The seasonal outlook (issue #53 R5, [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core),
