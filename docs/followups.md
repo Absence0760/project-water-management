@@ -201,6 +201,17 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
 Every engine decision marked "pending the hydrologist" in model.md is
 collected as a checklist in issue #46; tick it there as they answer.
 
+**Provisional decisions 2026-10-01.** Issue #90's calibration, data-quality,
+EWR, planning and help-text questions (modelled area to D10) were answered
+from the literature, provisionally, so the app can be called
+production-ready: one row per question, with its source, in
+[calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01). They are **not** the hydrologist's sign-off; each item below
+stays open until they confirm it. Two change the engine (1.61.0):
+validation benchmarks from the calibration period (CR-5, engine-audit C4)
+and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
+(the modelled area, QF-4's ratings, which Reserve table, which zero-rain
+runs and accumulations are real) can't be decided without the client.
+
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
@@ -254,6 +265,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep every default as built ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
       engine 1.44.0, issue #123; to put to the hydrologist through #90).
       A restriction what-if holds a domestic or municipal object's floor
@@ -483,6 +495,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** for the items in this pass (`ewrChargeSource`, `lowFlowMeasure`, the filter's passes, τ, the outcome cut-offs and the 5 % / 20 % days, the ±15 % natural-MAR tolerance) keep the built defaults; the pass count is the first thing to check if base flow is switched on ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
       issue #68). The suite now compares the N1 columns against an **N1
       replay**: each farm with e < 1 runs with a demand factor of e, so it
@@ -562,6 +575,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       a zero run (50 %, `ZERO_RUN_CHIRPS_SHARE`) and the coverage it needs
       (50 % of the run's days) are constants; the ±5-year window and the 25 %
       scaled-minimum share are too.
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep all four off; deciding needs a semi-arid record with a known drought, which only the client can supply ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
@@ -585,6 +599,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       engine 1.0.0 removed the legacy model (issue #16). The last client
       record of legacy against the workbook is the regression run on engine
       0.45.0 (`run.test.ts`, engine-audit.md § Regression suite).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep linear monthly scaling as the default, the sample and clamp limits; the quantile map stays opt-in, recommended where a month has ≥ 30 wet days on both sides ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [ ] **Multi-day rain accumulations (issue #2, audit B4). Built (engine
       0.20.0, model.md §2.4d): detection, spreading by bias-corrected CHIRPS
       (default on), keep-as-recorded and listed windows in Settings → Rain
@@ -601,6 +616,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       with its own threshold (the window's total against corrected CHIRPS),
       once the hydrologist says which; until then the gauge total is kept.
       Trigger: the hydrologist's review of issue #2.
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #2; the hydrologist's answer is on #46). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
@@ -664,6 +680,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       blank run, on a day CHIRPS is dry). None of this is applied: the
       hydrologist decides what to list
       ([plan.md § Questions, *Zero-rain runs*](./plan.md#questions-for-the-client)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep treating flagged runs as missing; which runs are real dry spells needs the station's records (client data).
 - [x] **CHIRPS fit period / per-segment factors (tracked from audit B3,
       2026-09-24; done, engine 0.29.0, issue #40 (a)).** The double-mass
       check (model.md §2.10a) can find the catchment / CHIRPS ratio breaking
@@ -777,6 +794,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       shared constants are in `packages/engine/src/quantileMap.ts`, the
       heavy-day ones in `rainSourcePeriods.ts` ([model.md §2.4b *Quantile
       map*](./model.md#quantile-map-engine--1530-cr-23)).
+      **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the defaults as built, the gauge map keeping wet-day counts and the CHIRPS map opt-in ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;
@@ -793,7 +811,10 @@ collected as a checklist in issue #46; tick it there as they answer.
       re-translated and re-checked). **Pending the client's hydrologist**
       (persona drafts, tracked on #46 with D10): base flow described via the Lyne–Hollick filter,
       not GR4J's routing store; the Reserve set for a target category A–D;
-      "IFR" as the older term.
+      "IFR" as the older term. **Provisional decision 2026-10-01:** all
+      three kept, and D10's narrow no-break space too; the `ewr` article now
+      names the Act's term (the Reserve, its ecological part) and the
+      `ecological-category` article says E and F aren't management targets.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
 - [x] **Issue #46 persona drafts, four changes built** (engine 1.11.0,
@@ -1129,7 +1150,7 @@ the reports):
       engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
       hydrologist-review trigger ([plan.md](./plan.md) Decisions,
       [model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)).
-- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it. Asked in issue #90 (2026-09-28).
+- [x] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it. Asked in issue #90 (2026-09-28). **Provisional decision 2026-10-01: not built.** GR6J (CR-10) is the planned structural alternative for low flows and the climatology benchmark already tests GR4J's skill; reopen if the client's hydrologist asks ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -1290,7 +1311,10 @@ the suggested order (the IDs carry the detail):
       the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Both
       have (CR-18/19 in engine 1.22.0): the rule set can now read
       `dayQuality` and the per-day flags; it still waits on the hydrologist
-      signing off the default rules.
+      signing off the default rules. **Provisional decision 2026-10-01:** the
+      default rules are adopted as drafted, but `signedOff` stays false, so a
+      fit they pick is still not evidence until the hydrologist signs them
+      ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
       dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
@@ -2822,6 +2846,10 @@ role and not before it.
   - [ ] **CHIRPS scale factor** (hydrologist, D7): a feed writes CHIRPS as
         published into `rain_chirps_mm`; the existing CHIRPS bias correction
         (Settings → Rain gaps) applies at run time, as for an uploaded series.
+        **Provisional decision 2026-10-01 (to be confirmed by the client's
+        hydrologist):** yes, CHIRPS needs one, and the run-time bias
+        correction is it; no separate factor at ingest, so the stored feed
+        stays as published ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
   - [x] Marking a fed series on the Data tab ("from CHIRPS feed", from
         `time_series.feed_id`): built, `SeriesMeta.feed` and the Data tab's
         *Written by the … feed* (#69). Merges are already audited

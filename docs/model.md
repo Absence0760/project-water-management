@@ -1307,6 +1307,8 @@ the factors and so the rain on every gap-filled day: the fit record flags
 changed. The model itself never reads the label, so this needs no
 `ENGINE_VERSION` bump.
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep linear scaling per calendar month as the default, with the 90-day / 50 mm sample and the 0.25–4 clamp; the quantile map stays opt-in, recommended where a month has ≥ 30 wet days on both sides. This run-time correction is also D7's CHIRPS scale factor: a feed stores CHIRPS as published.
+
 ### 2.4c Zero-rain runs treated as missing
 
 Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
@@ -1392,6 +1394,8 @@ default sets aside exactly the flagged runs, changes catchment rain on no
 other day, finds CHIRPS for every day it sets aside, and passes the
 self-checks. It runs with multi-day accumulations as recorded, so B2 is
 judged on its own; the "B4:" test (§2.4d) runs both defaults.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `'missing'` as the default. Which flagged runs are real dry spells needs the station's records (keep-dry periods take the answer).
 
 ### 2.4d Multi-day rainfall accumulations
 
@@ -1501,6 +1505,8 @@ client catchment suite replays with `accumulationMode: 'asRecorded'`. Its
 "B4:" test runs the defaults: each window wholly inside the run adds up to
 its recorded total, no window day is also filled as a zero run, catchment
 rain changes on no other day, and every self-check passes.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the detection thresholds and the gauge total as recorded until the station's observer logs are seen.
 
 ### 2.4e Rain-source periods (engine ≥ 0.30.0, issue #40 (b))
 
@@ -4472,6 +4478,8 @@ months, seasonality, magnitude, contiguity) · Kleynhans & Louw 2007, WRC
 TT 329/08, *River EcoClassification*, Module A (the ecological categories
 A–F a REC is stated in).
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the method as built (engine-audit A1–A4): each table judged against its own requirement, the percentile from the run with the ±15 % natural-MAR warning (or the gazette's curve per table), linear interpolation, the requirement scaled with the flow below the driest point, and the daily charge on the pragmatic EWR (`ewrChargeSource: 'pragmatic'`); a month a forecast starts in is charged on the pragmatic EWR (K1). Where a gazetted Reserve covers the reach it is the evidence (CR-30); which table at which site needs the client's gazette.
+
 ### 2.9d EWR from Desktop Reserve tables, several sites: low flows and high flows (engine ≥ 0.33.0, roadmap WP-3.7)
 
 §2.9c judges each EWR site against one rule table. The Desktop Reserve Model
@@ -4758,6 +4766,8 @@ the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
 this is signed off; each is a row of the engine audit (A5–A7,
 [engine-audit.md § Findings](./engine-audit.md#findings)), so the known
 limitations list it.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `lowFlowMeasure: 'total'` (base flow at α 0.995, three passes, judged on the record to date, as the option), freshets capped by natural events and counted per water year, the half-peak-for-half-duration event rule, and no DRM high-flow volume check. Hughes, Hannart & Watkins (2003) use the same filter family (β 0.5 at a daily step, α 0.925–0.997); their pass count is still unread (an earlier persona reading says one forward pass), so check it before switching base flow on.
 
 ### 2.9e No-flow days, and users served in full while an EWR site fails (engine ≥ 1.33.0, issue #71)
 
@@ -5191,12 +5201,20 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     has its own slot). A 10-year record has only ten values per calendar
     day, so unsmoothed day-of-year means keep individual storms and make the
     benchmark fit the record's own noise; 15 days smooths that while
-    keeping the seasonal cycle. Both are in-sample: built from the scored
-    period's own observations, so on a validation period the climatology
-    knows those days' flows and the model doesn't. That makes it a hard
-    benchmark, deliberately. In a strongly seasonal catchment climatology
-    is hard to beat (Schaefli & Gupta 2007), and a model that doesn't beat
-    it adds little beyond the seasonal cycle.
+    keeping the seasonal cycle. On the fitted period, a split-sample or
+    dry → wet *calibration* half and a validation on the other observed
+    record, both are built from the scored period's own observations
+    (`builtFrom: 'period'`). **On a split-sample or dry → wet validation
+    period (engine ≥ 1.61.0, CR-5, engine-audit C4)** both come from that
+    test's calibration period and are applied to the validation days
+    (`builtFrom: 'calibration'`; a calendar day the calibration period
+    never saw takes its mean), as a forecast made without the validation
+    flows would be: the published practice (Gründemann et al. 2026, HESS
+    30:3439). Up to 1.60.0 they were the validation days' own, a benchmark
+    that already knew the flows. *Provisional decision 2026-10-01, to be
+    confirmed by the client's hydrologist* ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)). In a strongly
+    seasonal catchment climatology is hard to beat (Schaefli & Gupta 2007),
+    and a model that doesn't beat it adds little beyond the seasonal cycle.
 - **How representative is the record** (engine ≥ 1.19.0, calibration
   research CR-34, part of CR-22; `calibrate/representativeness.ts`,
   `report.representativeness`). A few years from one climate state can't
@@ -5500,6 +5518,8 @@ run with it (`RunSummary.wr2012`). It never changes model results.
 - **Deterministic:** the same inputs and engine version give an identical
   report (tested).
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the five-statistic table and its bands, labelled indicative: only the < 4 % MAR band has a second citation, and WRC's TT 689/16 still can't be reached (CR-28). Where two published MARs disagree, report toward both ends rather than pick one (CR-7).
+
 ### 2.10a Data quality: do the observed flow records agree?
 
 Not in the workbook — added after comparing a catchment's two observed records.
@@ -5559,7 +5579,9 @@ r / (0.01·Q) days, and a run is flagged once it lasts three such steps
 `flowFlatlineMinDays`). At r = 0.001: 1 m³/s needs 14 days, 0.01 needs 30,
 0.004 needs 75, and 0.002 or less the cap. Zero flow counts like any low value
 and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
-rivers; the check never changes results). With fewer than two distinct values
+rivers; the check never changes results). The per-day flags for calibration
+don't follow it there: from engine 1.61.0 a zero-flow stretch is never a
+suspect day (§2.10h, QF-3). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
 
@@ -5778,6 +5800,8 @@ For the client catchment the comparison and the choice of calibration record
 are in the private source repo (decided in issue #1; the hydrologist's
 agreement is assumed, not yet in writing; §2.10 and the first hydrologist
 question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the outlier and flat-line limits, the zero-rain and low-vs-CHIRPS checks, and the four alternatives off (deciding them needs a semi-arid record with a known drought). Where entered catchment areas disagree, the area to model is the one draining to the calibration point, which needs the client's boundary; the `areaMismatches` warning shows the gap meanwhile.
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
@@ -6182,6 +6206,8 @@ Eckhardt 2005, *Hydrological Processes* 19:507–515 · Eckhardt 2008,
 WRC 494/1/97 · Yilmaz, Gupta & Wagener 2008, *WRR* 44:W09417 · Gnann et
 al. 2021 (TOSSH) · Klemeš 1986 (split-sample testing).
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the recession diagnostics' limits (≤ 1 mm rain-free days, b within 0.5, rate within ×2, 8 segments, on the rain the run uses, at the calibration site) and the representativeness rules (terciles, ≥ 10 complete water years at ≥ 95 % of days, the note below 5 scored years) (CR-13, CR-34).
+
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
 A single run gives one number for EWR days not met, curtailment and the annual
@@ -6503,6 +6529,8 @@ budgets 2 s).
 dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
 not findings.
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep the 0.8 decision share, the ranges and one factor at a time; the joint uncertainty is the ensemble's (§2.10e), so no worst-case corners (CR-21).
+
 ### 2.10h Per-day quality flags and the flag-aware objective (engine ≥ 1.22.0, calibration research CR-18/19/22)
 
 A gauge measures water level; its rating curve turns level into flow, and the
@@ -6602,12 +6630,26 @@ are exactly the days the run warnings already call "a stuck logger or a
 filled-in gap?". Censoring rather than dropping flood days keeps the
 information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
-steering the low-flow parameters. One caution: a river that really stops
-trips the flat-stretch check after 90 days of zero flow
-(`settings.dataQuality.flatlineFlowMaxDays`, 90 by default), and leaving those days out hides the dry spell
-from the fit. The panel counts suspect zero-flow days and says to score
-suspect days as recorded if the river really stops. The defaults are the
-hydrologist's to confirm (issue #66 questions).
+steering the low-flow parameters.
+
+**Zero flow held for months (engine ≥ 1.61.0, QF-3, engine-audit C3).** A
+river that really stops trips the flat-stretch check after 90 days of zero
+flow (`settings.dataQuality.flatlineFlowMaxDays`, 90 by default). Up to
+1.60.0 those days were suspect, so the default left them out and hid the dry
+spell from the fit. Now a zero-flow stretch is never suspect (`flowDayFlags`
+calls only a non-zero flat stretch and an outlier suspect), as GSIM's
+flat-line rule flags only values above zero (Gudmundsson et al. 2018). The
+Data checks still list the stretch as a run warning, and the panel names the
+days (`DayQuality.longZeroDays`, counted over runs of consecutive zero
+readings at least the cap long) with the way out for a logger that failed
+reading zero: an exclusion period. `suspectZeroDays` stays for older
+reports and is 0 from 1.61.0. The run's `observed_flow_quality` column
+follows.
+
+The defaults (censor above the rating; leave out below-rating, suspect and
+infilled days) are a *provisional decision 2026-10-01, to be confirmed by
+the client's hydrologist* ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)); the
+gauged ranges themselves need the client's gauging lists (QF-4).
 
 **Provenance.** The fit record stores `qualityFlags` (the settings at the
 time), `dayQuality` and `fitAllDays`. `fitRecordStatus.qualityFlagsChanged`
@@ -6802,6 +6844,8 @@ day should be clamped to the record's maximum or to the weir's rated
 maximum, when known; and whether a filled record should ever be scored by
 default (it isn't).
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep gap filling off by default with its limits as built; filled days stay unscored.
+
 ### 2.10j Automated calibration with pre-declared rules (engine ≥ 1.25.0, issue #153)
 
 Engine 1.25.0 brought the rules and a fit run in the browser; engine 1.26.0
@@ -6931,6 +6975,8 @@ account in the project's history (`calibration_rules.signed_off`, and
 `calibration_rules.sign_off_withdrawn`), so who signed off is the account
 that did, not a name anyone could type (docs/security.md § Calibration rules
 sign-off).
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): adopt the default rules as drafted, but they stay **not signed off** in the app, so a fit they pick is not evidence until the hydrologist signs them. The fit-sweep's 24-cell default stays. No IHACRES benchmark: GR6J (CR-10) is the planned structural alternative.
 
 ### 2.10k Calibrating at a gauge inside the network (engine ≥ 1.41.0)
 
@@ -7215,6 +7261,8 @@ V1](./engine-audit.md#findings)). `nodeReliability`'s day loop therefore
 lives in its own function, `tallyWindow`, which takes the series as
 parameters. Keep it that way.
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep demand days only, complete water years only and the node-based model's stress thresholds.
+
 ### 2.11b Water account (engine ≥ 0.32.0, roadmap WP-3.4)
 
 `RunSummary.supplyAssurance.waterAccount`: one row per water year and one for
@@ -7334,6 +7382,8 @@ once; the groundwater side alone equals Σ `groundwater_used` + Σ
 `groundwater_to_dam`; the surface side is never below the year's
 `river_abstraction`; every run day falls in exactly one water year; and the
 result is the same at UTC+14 and UTC−11.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep τ = 0.1 (a project setting) and the s21b reading (supply from a farm's own dam counts as abstraction; storage compared with capacity only). The abstraction estimate to trust is metered, else SAPWAT4, with the registered volume as an upper bound (CR-21/32).
 
 ### 2.12a Allocations and full-allocation runs (engine ≥ 1.18.0, issue #72)
 
@@ -7764,6 +7814,8 @@ every risk label at and beside its cut-offs, cut-off validation, the
 wording; and on random fuzz runs, every day below the EWR and every Reserve
 month of the classed years is counted exactly once.
 
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep `DEFAULT_OUTCOME_RISK_CUTOFFS` (months met ≥ 0.90 / ≥ 0.75; days below the EWR ≤ 0.05 / ≤ 0.20) and the portfolio traffic lights' 5 % / 20 % of the last 30 days (D11). `OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST` stays true, and the badges read "provisional".
+
 ### 2.14a Licence impact by year class (issue #53 R7, engine and report)
 
 A derived view over two saved runs, not part of `runModel`: no run output
@@ -7853,6 +7905,8 @@ the wording; on the outlook's synthetic test catchment (with a Reserve rule
 table) and on fuzz runs with every account term in play, the waterfall closes
 and Σ `otherParts` = other within 10⁻⁹ of the account's scale, the counts equal
 the runs' own Reserve months, and a run against itself changes nothing.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep consumptive use, steps closing at the outlet, year classes from the baseline's natural flow and the verdict from months below the Reserve (or days below the pragmatic EWR).
 
 ### 2.15 Seasonal outlook: an ESP ensemble from a decision date (issue #53 R5, engine core)
 
@@ -8048,6 +8102,8 @@ farms add up to the member; each farm's statistic is its own; a farm
 without demand has no row), `views/farmOutlook.test.ts` (no other farm's id
 or name; shares in 0–1; why there is no projection, an outlook from before
 1.19.0 included).
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep at least 10 analogue years. A lower demand can add days below the EWR because irrigation return flow puts dam water in the river on dry days: physical, not a bug, and to be said wherever the outlook is shown to a WUA.
 
 ### 2.15a Review triggers from the outlook (issue #53 R6)
 
@@ -8248,6 +8304,8 @@ storage is the plain member; hand-made members for the monotonicity notes;
 `outlook.warmstart.test.ts`: the snapshot path is the re-run path's table
 to the bit on the invented catchment, a snapshot given is used, one of
 another day refused.
+
+**Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep terciles by calendar day (the lowest band from the lowest storage on record, the total shared pro rata to capacity) and the table drawn on the latest review date the record holds.
 
 ### 2.16 Starting a run from a saved state: model-state snapshots (engine ≥ 1.1.0, issue #53)
 
