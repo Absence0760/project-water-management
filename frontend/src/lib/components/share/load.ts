@@ -26,11 +26,15 @@ export type ShareLoad =
 
 const is404 = (e: unknown) => e instanceof ApiError && e.status === 404;
 
-/** The chart's months, or null when either series isn't there to show. Any other failure throws. */
+/**
+ * Every month of the run, or null when either series isn't there to show (the
+ * page draws the latest, recentMonths; the member summary its period's). Any
+ * other failure throws.
+ */
 export async function loadFlow(api: ShareApi, token: string): Promise<FlowMonth[] | null> {
 	try {
 		const [flow, ewr] = await Promise.all([api.series(token, 'simulated_outflow'), api.series(token, 'ewr')]);
-		const months = flowMonths(flow, ewr);
+		const months = flowMonths(flow, ewr, Infinity);
 		return months.length ? months : null;
 	} catch (e) {
 		if (is404(e)) return null;
