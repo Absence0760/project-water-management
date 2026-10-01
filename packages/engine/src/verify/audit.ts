@@ -19,7 +19,7 @@
 // carry yet (boreholes, a release rule, a river pump, off-takes, demand
 // objects, senior users downstream, an allocation cap, a storage reset, a
 // survey curve, a hands-off flow, River to dam by month, a daily A-pan
-// series on a dam, a dam capacity that changes over the run) gets `unsupported` instead, naming each, rather than a
+// series on a dam, a dam capacity that changes over the run, a drought restriction rule) gets `unsupported` instead, naming each, rather than a
 // workbook whose numbers would disagree.
 import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
@@ -183,7 +183,11 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	[ALLOCATION_SERIES.surfaceLeft.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterLeft.key, 'an allocation cap'],
 	['senior_requirement', 'senior water users downstream'],
-	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)']
+	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)'],
+	// Engine ≥ 1.54.0: the day's level cuts what the sources are asked for.
+	['restricted_demand', 'a drought restriction rule'],
+	// Engine ≥ 1.54.0: a unit's own level under the 'own' basis (always beside its restricted demand).
+	['restriction_level', 'a drought restriction rule']
 ];
 
 /** The farm series the formulas compare against (and the inputs they read). */

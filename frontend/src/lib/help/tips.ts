@@ -247,6 +247,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
 	},
 	{
+		id: 'drought-restriction',
+		term: 'Drought restrictions',
+		short: 'A model rule: on each review date a level is chosen from the farm dams’ storage; it cuts each part of demand until the next review.',
+		units: '% of capacity; % cut',
+		category: 'network',
+		fields: ['settings.droughtRestriction', 'run.restriction_level', 'run.restricted_demand']
+	},
+	{
 		id: 'hands-off-flow',
 		term: 'Hands-off flow',
 		short: 'Flow a hydrological unit leaves in the river before its river pump or River to dam takes anything: an amount by month, and/or the EWR.',

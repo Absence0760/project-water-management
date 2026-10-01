@@ -130,6 +130,8 @@ describe('scenarios on random networks', () => {
 		const failures: string[] = [];
 		let changed = 0;
 		let objectChanges = 0;
+		// Drought restriction rules set or cleared (engine ≥ 1.54.0): the run comparison lists them too.
+		let ruleChanges = 0;
 		for (let seed = SEED0; seed < SEED0 + CASES * 4 && failures.length < 3; seed++) {
 			const base = baseFor(seed);
 			const empty = applyScenario(base, []);
@@ -141,6 +143,7 @@ describe('scenarios on random networks', () => {
 				if (resolved(r.input) !== resolved(cur)) {
 					changed++;
 					if (op.op.startsWith('demandObject.')) objectChanges++;
+					if (op.op === 'settings.set' && op.path === 'droughtRestriction') ruleChanges++;
 					if (diffInputs(snapshot(cur), snapshot(r.input)).length === 0) failures.push(`seed ${seed}: silent change from ${JSON.stringify(op)}`);
 				}
 				// A skipped op changes nothing at all.
@@ -152,6 +155,7 @@ describe('scenarios on random networks', () => {
 		// The property is only as good as the changes it saw.
 		expect(changed).toBeGreaterThan(CASES * 4);
 		expect(objectChanges).toBeGreaterThan(0);
+		expect(ruleChanges).toBeGreaterThan(0);
 	}, 300_000);
 
 	/** The 0-based ops a problem names: `op 3 (…)`, `ops 3–5 (…)` or `ops 3, 5 (…)` (1-based). */

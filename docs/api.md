@@ -374,6 +374,25 @@ alongside teams, e.g. to give an outside client `viewer` access.
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
+  `settings.droughtRestriction` (engine ≥ 1.54.0, WP-3.8,
+  [model.md §2.7i](./model.md), [ui.md § Drought restrictions](./ui.md#drought-restrictions))
+  is the model's drought restriction rule: `{ reviewDates: ['MM-DD', …]
+  (1–12), liftDates?: ['MM-DD', …] (0–12, none a review date), levels: [{
+  label?, belowPct (0 < x ≤ 1), cuts: { crops?, domestic?, municipal?,
+  industrial?, livestock?, irrigation?, external?, other? } (each 0–1) }]
+  (1–6, mildest first), source? (≤ 500 characters), basis?: 'total' |
+  'dams' | 'own', damNodeIds? (with 'dams' only, 1–500 farm dam ids),
+  nodeIds? (1–500 farm ids, the units cut), ewrTrigger?: { siteNodeId: a
+  gauge id (an EWR site) or null for the outlet (the catchment's EWR), level: 1…levels } }`, or `null` / absent
+  for off (the default). Replaced whole, never merged; the engine's
+  `droughtRestrictionIssues` checks it (`400 drought restriction rule: …`:
+  real month-days, not 29 February, no date twice, thresholds strictly
+  falling, a deeper level cutting each part at least as much and every part
+  a milder one cuts, the trigger's level one of the rule's, no other
+  field). Ids that aren't in the model are saved and left out by the run
+  with a warning (the Settings form refuses them). A project copy moves its
+  ids to the copy's nodes. A model input: runs record it, and changing it
+  moves `updatedAt`.
   `settings.evidenceUncertaintyRule` (issue #71, [design/evidence-report.md](./design/evidence-report.md)
   ER3 and G4; [ui.md § Settings & calibration](./ui.md#settings--calibration)) is the uncertainty rule an
   evidence report's cited ensemble must follow: `{ members, bounds:
@@ -1607,6 +1626,24 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `ewr_shortfall` and `ewr_charge`; with a senior user every node also has
   `senior_requirement`, and farms `passed_for_senior`. The day trace's `kind`
   may be `"user"` (`previousStorageM3` null).
+- `summary.droughtRestriction` (engine ≥ 1.54.0, WP-3.8; only with
+  `settings.droughtRestriction`): `{ rule (as applied), years: [{
+  waterYear, days, daysByLevel: [none, level 1, …] }], daysByLevel (the
+  whole run), reviews (days the level was decided), units: [{ nodeId, name,
+  avgDemandM3Day, avgRestrictedDemandM3Day, avgSuppliedM3Day,
+  avgCutOnRestrictedDaysM3Day (the mean cut over the days a level was in
+  force, null when none was), daysByLevel }] (the units the rule cuts, id
+  order), ewrReviews? (with an EWR trigger: reviews after a day its site
+  failed), start? (a resumed run: { levelsBefore: { nodeId: level } | null,
+  ewrFailedBefore, damStorageBeforeM3: { nodeId: m³ } }) }`. Under the
+  'own' basis the catchment `restriction_level` is the deepest any unit is
+  at, each cut unit has its own `restriction_level`, and there is no
+  `restriction_cut@<part>`. The run has the catchment series `restriction_level` (0 =
+  none) and `restriction_cut@<part>` (the day's cut, 0–1, for each part a
+  level cuts), and every farm `restricted_demand` (m³/day, what its sources
+  are asked for; `demand` and `deficit` stay the unrestricted demand's).
+  The summary CSV has a *Drought restrictions* block. `verification.checks`
+  has `droughtRestriction`.
 - `summary.groundwaterAnnualUse` (engine ≥ 0.36.0, WP-3.9; only with
   boreholes) is one row per farm or user with boreholes (node-id order) per
   water year the run touches: `{ nodeId, name, kind, waterYear (start year),
@@ -1802,7 +1839,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
   with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
-  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.34.0:
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0), `droughtRestriction` (engine ≥ 1.54.0, only with `settings.droughtRestriction`) and `assurance` (engine ≥ 1.34.0:
   the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,

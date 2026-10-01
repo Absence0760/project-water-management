@@ -13,6 +13,8 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-share', label: 'Flow share' },
 	{ id: 'set-ewr', label: 'EWR' },
 	{ id: 'set-reserve', label: 'Reserve rules' },
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a model input, off by default.
+	{ id: 'set-restrict', label: 'Drought restrictions' },
 	{ id: 'set-period', label: 'Simulation period' },
 	// Its zero-rain and low-vs-CHIRPS limits change results (issue #66), so it is a model input (issue #173).
 	{ id: 'set-quality', label: 'Data quality' },
@@ -34,22 +36,27 @@ export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
  * The menu's groups (issue #17): the model's inputs (Data quality among them:
  * some of its limits change results, issue #173); the settings that only
  * decide how results are read (they change no result); and what runs or
- * connects by itself. The last group also links the panels after Data feeds,
- * which save on their own: API keys (owners only) and Scheduled reports.
+ * connects by itself. The last group is one link, "Automation & access": its
+ * panels (Automatic runs, Data feeds, API keys for owners, Scheduled reports)
+ * keep their own headings and ids, so a link to any of them still lands, but
+ * the bar has one link for the four, or its nineteen links no longer fit two
+ * rows at 1280 px (section-nav.spec.ts). The link lands on the group's first
+ * panel, and `covers` names the panels it stands for (a problem on any of
+ * them marks it).
  */
-export function settingsNavGroups(isOwner: boolean): { label: string; ids: string[] }[] {
+export function settingsNavGroups(isOwner: boolean): { label: string; ids: string[]; covers?: Record<string, string[]> }[] {
 	const ids = SETTINGS_SECTIONS.map((s) => s.id as string);
 	const read = ids.indexOf('set-outcomes');
 	const auto = ids.indexOf('set-auto');
 	return [
 		{ label: 'Model inputs', ids: ids.slice(0, read) },
 		{ label: 'How results are read', ids: ids.slice(read, auto) },
-		{ label: 'Runs, feeds and reports', ids: [...ids.slice(auto), ...(isOwner ? ['set-api-keys'] : []), 'set-report-schedules'] }
+		{ label: AUTOMATION_LABEL, ids: ['set-auto'], covers: { 'set-auto': [...ids.slice(auto), ...(isOwner ? ['set-api-keys'] : []), 'set-report-schedules'] } }
 	];
 }
 
-/** Menu labels of the panels after Data feeds, which aren't Save blockers. */
-export const AFTER_FORM_LABELS: Record<string, string> = { 'set-api-keys': 'API keys', 'set-report-schedules': 'Scheduled reports' };
+/** The menu's one link for the panels that run or connect by themselves. */
+export const AUTOMATION_LABEL = 'Automation & access';
 
 export interface SaveBlocker {
 	id: SettingsSectionId;
