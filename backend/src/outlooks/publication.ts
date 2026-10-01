@@ -72,7 +72,7 @@ export async function publishOutlook(db: Db, projectId: string, outlookId: strin
 		if (got.problem !== null) {
 			if (got.problem === 'noSuchLevel') throw new ApiError(422, `the outlook has no level ${levelId}`);
 			if (got.problem === 'levelNotRun') throw new ApiError(409, 'that level did not run, so there are no figures to publish for it');
-			throw new ApiError(409, 'this outlook was computed before farms had figures of their own: run it again to publish it');
+			throw new ApiError(409, 'this outlook was computed before units had figures of their own: run it again to publish it');
 		}
 		views.push({ nodeId: f.id, view: got.projection });
 	}

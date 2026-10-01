@@ -69,7 +69,7 @@ async function shareableScenario(db: Db, projectId: string, scenarioId: string, 
 	const s = rows[0];
 	if (!s) throw new ApiError(404, 'not found');
 	// A team scenario's ops name the real farms with their values: only an application (its projection hides them) is shared.
-	if (s.origin !== 'applicant') throw new ApiError(409, 'only an application can be shared by link: a team scenario names every farm');
+	if (s.origin !== 'applicant') throw new ApiError(409, 'only an application can be shared by link: a team scenario names every unit');
 	if (rank[role] < rank.editor && s.owner_user_id !== userId) throw new ApiError(403, 'only the assessors or the applicant can share this scenario');
 	if (s.status !== 'submitted' && s.status !== 'decided')
 		throw new ApiError(409, 'only a submitted or decided scenario can be shared: a draft is still changing');

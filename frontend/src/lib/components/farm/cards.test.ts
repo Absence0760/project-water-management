@@ -74,6 +74,18 @@ describe('the notice', () => {
 		expect(n.byline).toBe('Example WUA, 12 Jan 2024');
 	});
 
+	it('shows the WUA’s percentage beside its own words, as the alert email does (operator, 2026-10-01)', () => {
+		const v = vaalbankFixture();
+		v.publication.restriction = { ...v.publication.restriction, level: 'restricted', pct: 20 };
+		const n = noticeCard(v)!;
+		expect(n.heading).toBe('Please cut back where you can');
+		expect(n.body).toMatch(/^The river at the outlet/);
+		expect(sp(n.pctLine)).toBe('Set by the WUA: a 20 % cut in registered water use.');
+		// No percentage published: no line, words or not.
+		v.publication.restriction = { ...v.publication.restriction, pct: null };
+		expect(noticeCard(v)!.pctLine).toBeNull();
+	});
+
 	// Issue #51: the API sent English "a former member", which leaked into the Afrikaans byline.
 	it('words a deleted publisher from the catalogue', async () => {
 		const v = vaalbankFixture();

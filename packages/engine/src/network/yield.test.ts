@@ -101,7 +101,7 @@ describe('firmYield', () => {
 		expect(() => firmYield(p, 'dam', { pattern: new Array(12).fill(0) })).toThrow(/zero in every month/);
 		expect(() => firmYield(p, 'dam', { pattern: 'demand' })).toThrow(/no irrigation demand/);
 		expect(() => firmYield(p, 'dam', { assurance: 0.2 })).toThrow(/assurance/);
-		expect(() => firmYield(p, 'g')).toThrow(/farm or dam/);
+		expect(() => firmYield(p, 'g')).toThrow(/unit or dam/);
 		expect(() => firmYield(p, 'nope')).toThrow(/not found/);
 	});
 

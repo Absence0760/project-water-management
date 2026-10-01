@@ -276,8 +276,8 @@ export function withDamStorage(snapshot: ModelStateSnapshot, input: ModelInput, 
 	for (const [id, v] of Object.entries(storageM3)) {
 		const i = input.model.nodes.findIndex((n) => n.id === id);
 		const n = input.model.nodes[i];
-		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) throw new Error(`withDamStorage: "${id}" is not a farm with a dam`);
-		if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`withDamStorage: farm "${n.name}" storage ${String(v)} is not a number`);
+		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) throw new Error(`withDamStorage: "${id}" is not a unit with a dam`);
+		if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`withDamStorage: unit "${n.name}" storage ${String(v)} is not a number`);
 		const node = state.nodes[i]!;
 		node.setFromM3 ??= node.storageM3;
 		// Within the capacity on the snapshot's day (engine ≥ 1.30.0: it can change over the run).

@@ -67,6 +67,7 @@ import type {
 	RestoreResult,
 	SeriesRevisionMeta,
 	PackPdfState,
+	PackReproductionState,
 	Signoff,
 	SignoffList,
 	Pack,
@@ -674,7 +675,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
 			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
 			renderPdf: (id: string, packId: string) =>
-				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf)
+				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf),
+			/**
+			 * Re-run an issued pack on the server again (editor): after the last re-run gave up, or on a newer engine.
+			 * The pending re-run comes back while one is queued; 409 once this engine's outcome is recorded.
+			 */
+			reproduce: (id: string, packId: string) =>
+				request<{ jobId: string; reproduction: PackReproductionState }>('POST', `${p(id)}/packs/${enc(packId)}/reproduce`, {}).then((r) => r.reproduction)
 		},
 		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
 		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),

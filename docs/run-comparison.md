@@ -634,7 +634,7 @@ is what that run used; the same rule reads a snapshot without a runoff model
 as legacy (a run from before the setting, so it did run the legacy model), and one without a dam evaporation factor (engine < 0.16.0) as 0,
 no dam evaporation. A dam's area when full, area exponent and seepage have
 their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
-(capacity ÷ 3 m)"*). Month
+(7.2 × capacity^0.77)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range. A registered volume's line (engine ≥ 1.35.0, issue #73)

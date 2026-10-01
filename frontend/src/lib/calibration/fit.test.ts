@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	applyReport,
 	benchmarkRows,
+	benchmarkSourceNote,
 	climatologyWarning,
 	fitInput,
 	fitParams,
@@ -272,6 +273,44 @@ describe('score intervals and benchmarks (CR-5)', () => {
 		);
 		const both = report({ ...r, fit: withExtras(period('2003-01-01', '2008-12-31', 0.3), 0.3) });
 		expect(climatologyWarning(scoreColumns(both), 'kgePrime')).toMatch(/^On the fitted period and “Split: other half”, /);
+	});
+});
+
+describe('where the validation benchmarks come from (CR-5, engine 1.62.0)', () => {
+	const bench = (builtFrom?: 'period' | 'calibration') => ({ meanFlow: scores(-0.41), climatology: scores(0.3), halfWindowDays: 7, ...(builtFrom ? { builtFrom } : {}) });
+	const split = (builtFrom?: 'period' | 'calibration') => ({
+		params: {},
+		calibration: period('2003-01-01', '2005-12-31', 0.8),
+		validation: { ...period('2006-01-01', '2008-12-31', 0.4), benchmarks: bench(builtFrom) }
+	});
+
+	it('names the calibration period when every validation column was built from it', () => {
+		expect(benchmarkSourceNote(scoreColumns(report({ splitSample: split('calibration') })))).toMatch(/^On a validation column both benchmarks are built from that test’s calibration period/);
+	});
+
+	it('says an older report’s validation benchmarks already knew the validation flows', () => {
+		expect(benchmarkSourceNote(scoreColumns(report({ splitSample: split() })))).toMatch(/before engine 1\.62\.0/);
+	});
+
+	it('names a column built from its own flows (another record) beside the rest', () => {
+		const r = report({
+			splitSample: split('calibration'),
+			independentRecord: {
+				flowKind: 'flow_logger_m3s',
+				simulatedKey: 'simulated_outflow',
+				params: {},
+				calibration: period('2003-01-01', '2008-12-31', 0.8),
+				validation: { ...period('2005-10-01', '2008-09-30', 0.5), benchmarks: bench('period') },
+				overlapDays: 0
+			}
+		});
+		expect(benchmarkSourceNote(scoreColumns(r))).toBe(
+			'On “Independent record: Logger flow” the benchmarks are built from the column’s own flows, so they already know them; on the other validation columns from the test’s calibration period, as a forecast made without the validation flows would be.'
+		);
+	});
+
+	it('nothing without a validation column carrying benchmarks', () => {
+		expect(benchmarkSourceNote(scoreColumns(report({})))).toBeNull();
 	});
 });
 

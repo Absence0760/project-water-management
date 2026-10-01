@@ -5,7 +5,7 @@
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, estimatedDamAreaM2, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
@@ -363,7 +363,7 @@ function ewrSiteKey(d: Draft): (id: string | null | undefined) => string | null 
  * A farm dam whose capacity an op changed keeps its geometry along its own
  * area–volume relation (engine ≥ 1.10.0, docs/model.md §2.13, ../network/damResize.ts):
  * a survey curve is cut at, or extrapolated to, its top × the capacity ratio;
- * a power-law dam's area when full (as entered, or the capacity ÷ 3 m
+ * a power-law dam's area when full (as entered, or the 7.2 × capacity^0.77
  * estimate) becomes A_full × ratio^b. A later `damAreaFullM2` op on the node
  * sets the new dam's own area; one before this op described the old dam and
  * is resized with it. Likewise a `damCurve` op after it sets the new dam's own
@@ -398,9 +398,9 @@ function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
 		return `dam survey curve cut below its lowest row; area when full ${Math.round(n.damAreaFullM2)} m² from it, on the power law`;
 	}
 	const estimated = n.damAreaFullM2 === null || n.damAreaFullM2 === undefined || !(n.damAreaFullM2 >= 0);
-	const from = estimated ? oldCap / ESTIMATED_DAM_DEPTH_M : n.damAreaFullM2!;
+	const from = estimated ? estimatedDamAreaM2(oldCap) : n.damAreaFullM2!;
 	n.damAreaFullM2 = resizedFullArea(from, oldCap, cap, b);
-	return `dam area when full ${Math.round(from)} → ${Math.round(n.damAreaFullM2)} m² along the dam's own area–volume relation (× ${ratio.toFixed(3)}^${b})${estimated ? `, from the capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m estimate` : ''}`;
+	return `dam area when full ${Math.round(from)} → ${Math.round(n.damAreaFullM2)} m² along the dam's own area–volume relation (× ${ratio.toFixed(3)}^${b})${estimated ? ', from the 7.2 × capacity^0.77 estimate' : ''}`;
 }
 
 function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[] {
@@ -490,7 +490,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 		}
 		case 'cropArea.set': {
 			const n = findNode(d, op.nodeId);
-			if (n.kind !== 'farm') fail(`crops grow on farms; "${n.name}" is a ${n.kind}`);
+			if (n.kind !== 'farm') fail(`crops grow on units; "${n.name}" is a ${n.kind}`);
 			if (!m.crops.some((c) => c.id === op.cropId)) fail(`crop ${op.cropId} not found`);
 			if (!(Number.isFinite(op.areaM2) && op.areaM2 >= 0)) fail('areaM2 must be a finite number ≥ 0');
 			const at = m.cropAreas.findIndex((a) => a.nodeId === op.nodeId && a.cropId === op.cropId);
@@ -570,7 +570,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (typeof p?.id !== 'string') fail('the new patch needs an id');
 			if ((m.landCover ?? []).some((x) => x.id === p.id)) fail(`land-cover id ${p.id} is already in use`);
 			const n = findNode(d, p.nodeId);
-			if (n.kind !== 'farm') fail(`land cover lies on a farm; "${n.name}" is a ${n.kind}`);
+			if (n.kind !== 'farm') fail(`land cover lies on a unit; "${n.name}" is a ${n.kind}`);
 			m.landCover = [...(m.landCover ?? []), cloneData(p) as LandCoverPatch];
 			break;
 		}
@@ -592,7 +592,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (typeof b?.id !== 'string') fail('the new borehole needs an id');
 			if ((m.boreholes ?? []).some((x) => x.id === b.id)) fail(`borehole id ${b.id} is already in use`);
 			const n = findNode(d, b.nodeId);
-			if (n.kind === 'gauge') fail(`a borehole supplies a farm or other user; "${n.name}" is a gauge`);
+			if (n.kind === 'gauge') fail(`a borehole supplies a unit or other water user; "${n.name}" is a gauge`);
 			m.boreholes = [...(m.boreholes ?? []), cloneData(b) as Borehole];
 			break;
 		}
@@ -742,7 +742,7 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!allocation) fail(`the registered volume isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
 			const a = allocation!;
 			const n = findNode(d, a.nodeId!);
-			if (n.kind === 'gauge') fail(`a registered volume is held for a farm or other water user; "${n.name}" is a gauge`);
+			if (n.kind === 'gauge') fail(`a registered volume is held for a unit or other water user; "${n.name}" is a gauge`);
 			// Months as a sorted set, as the backend stores them.
 			const entry: AllocationEntry = { ...a, ...(Array.isArray(a.months) ? { months: monthSet(a.months) } : {}) };
 			const list = m.allocations ?? [];

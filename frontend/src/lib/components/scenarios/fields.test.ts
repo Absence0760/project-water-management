@@ -115,8 +115,9 @@ describe('field specs cover the engine’s op catalogue', () => {
 			}
 		};
 		// The GR4J bounds are the engine's own (GR4J_PARAMS).
-		// The sediment rate's range is 0–20 % (the sample's 35 % is out of it): its own case below.
-		check(NODE_FIELD_SPECS, nodeFieldError, ['damSedimentPctPerYear']);
+		// The sediment rate's range is 0–20 % (the sample's 35 % is out of it), and the dam area exponent's
+		// 0–1 (the sample's 1.25 is out of it, engine ≥ 1.63.0): their own cases below.
+		check(NODE_FIELD_SPECS, nodeFieldError, ['damSedimentPctPerYear', 'damAreaExponent']);
 		check(TRANSFER_FIELD_SPECS, transferFieldError);
 		check(SETTINGS_SPECS, settingsValueError, ['gr4j.x1', 'gr4j.x2', 'gr4j.x3', 'gr4j.x4']);
 	});
@@ -141,6 +142,14 @@ describe('development over the run (engine 1.30.0, issue #67)', () => {
 		]);
 		expect(nodeFields('user').filter((f) => dev.includes(f.field))).toEqual([{ field: 'abstractionFrom', label: 'Abstraction starts' }]);
 		expect(nodeFields('gauge').some((f) => dev.includes(f.field))).toBe(false);
+	});
+
+	it('takes a dam area exponent above 0 up to 1, which the engine checks (engine ≥ 1.63.0)', () => {
+		const spec = NODE_FIELD_SPECS.damAreaExponent.spec;
+		expect(parseValue(spec, '0.7')).toEqual({ ok: true, value: 0.7 });
+		expect(nodeFieldError('damAreaExponent', 0.7)).toBeNull();
+		expect(nodeFieldError('damAreaExponent', 1)).toBeNull();
+		expect(nodeFieldError('damAreaExponent', 1.25)).toMatch(/at most 1/);
 	});
 
 	it('reads a sediment rate as a percentage within 0–20 %, and a date as the engine checks it', () => {
@@ -228,7 +237,7 @@ describe('formatValue', () => {
 	it('shows units, percentages and each field’s “none”', () => {
 		expect(formatValue(NODE_FIELD_SPECS.damCapacityM3.spec, 180_000)).toBe('180\u202f000 m³');
 		expect(formatValue(NODE_FIELD_SPECS.irrigationEfficiency.spec, 0.8)).toBe('80 %');
-		expect(formatValue(NODE_FIELD_SPECS.damAreaFullM2.spec, null)).toBe('estimated (capacity ÷ 3 m)');
+		expect(formatValue(NODE_FIELD_SPECS.damAreaFullM2.spec, null)).toBe('estimated (7.2 × capacity^0.77)');
 		expect(formatValue(SETTINGS_SPECS.flowShareMethod.spec, 'hiLo')).toBe('High/low MAP');
 		expect(formatValue(SETTINGS_SPECS.simulationStart.spec, null)).toBe('first day with rain');
 		expect(formatValue(SETTINGS_SPECS.apanMm.spec, new Array(12).fill(100))).toBe('100 mm every month');

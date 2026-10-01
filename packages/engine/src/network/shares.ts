@@ -38,7 +38,7 @@ export function flowShares(
 
 	if (method === 'manual') {
 		for (const { n, i } of farms) {
-			if (n.flowShareManual === null) warnings.push(`farm "${n.name}" has no manual flow share; using 0`);
+			if (n.flowShareManual === null) warnings.push(`unit "${n.name}" has no manual flow share; using 0`);
 			share[i] = n.flowShareManual ?? 0;
 		}
 	} else if (method === 'hiLo') {
@@ -60,7 +60,7 @@ export function flowShares(
 		let sum = 0;
 		for (const { n } of farms) sum += n.areaKm2;
 		for (const { n, i } of farms) share[i] = sum > 0 ? n.areaKm2 / sum : 0;
-		if (sum === 0 && farms.length > 0) warnings.push('area flow shares: total farm area is 0');
+		if (sum === 0 && farms.length > 0) warnings.push('area flow shares: total unit area is 0');
 	}
 
 	let sum = 0;
@@ -68,8 +68,8 @@ export function flowShares(
 	// Over 100 % is refused by the run (overAllocationError), so only a shortfall is a warning.
 	if (farms.length > 0 && 1 - sum >= SHARE_TOLERANCE) {
 		warnings.push(
-			`farm flow shares sum to ${(sum * 100).toFixed(2)}%, not 100% (tolerance ±${SHARE_TOLERANCE * 100}%): ` +
-				'natural flow and EWR are not fully allocated to farms'
+			`unit flow shares sum to ${(sum * 100).toFixed(2)}%, not 100% (tolerance ±${SHARE_TOLERANCE * 100}%): ` +
+				'natural flow and EWR are not fully allocated to units'
 		);
 	}
 	return { share, sum, warnings };
@@ -84,7 +84,7 @@ export function flowShares(
 export function overAllocationError(sum: number): string | null {
 	if (sum - 1 < SHARE_TOLERANCE) return null;
 	return (
-		`farm flow shares sum to ${(sum * 100).toFixed(2)}%, more than 100%: the farms would generate more water than the catchment's natural flow. ` +
+		`unit flow shares sum to ${(sum * 100).toFixed(2)}%, more than 100%: the units would generate more water than the catchment's natural flow. ` +
 		'Correct the manual flow shares (Network) or the high/low MAP split (Settings) so they add up to 100%'
 	);
 }

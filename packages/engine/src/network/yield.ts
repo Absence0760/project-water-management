@@ -117,7 +117,7 @@ const isProblem = (x: ModelInput | YieldProblem): x is YieldProblem => 'plan' in
 function nodeIndex(p: YieldProblem, nodeId: string): number {
 	const i = p.nodeIds.indexOf(nodeId);
 	if (i < 0) throw new Error(`node ${nodeId} not found`);
-	if (p.plan.nodes[i]!.kind !== 'farm') throw new Error('a yield is for a farm or dam node, not a gauge or other water user');
+	if (p.plan.nodes[i]!.kind !== 'farm') throw new Error('a yield is for a unit or dam node, not a gauge or other water user');
 	return i;
 }
 

@@ -226,7 +226,7 @@ describe('land cover (WP-1.35)', () => {
 			expect(res.status).toBe(400);
 			expect(JSON.stringify(res.body)).toMatch(pattern);
 		};
-		await bad({ ...model, landCover: [{ ...patch, nodeId: outlet.id }] }, /land cover lies on a farm/);
+		await bad({ ...model, landCover: [{ ...patch, nodeId: outlet.id }] }, /land cover lies on a unit/);
 		await bad({ ...model, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }, /unknown node/);
 		await bad({ ...model, landCover: [{ ...patch, coverClass: 'bamboo' }] }, /coverClass/);
 		await bad({ ...model, landCover: [{ ...patch, densityPct: 1.5 }] }, /densityPct/);
@@ -303,7 +303,7 @@ describe('dam storage (WP-3.5)', () => {
 			expect(JSON.stringify(res.body)).toMatch(pattern);
 		};
 		await bad({ ...model, nodes: [outlet, { ...farm, damCurve: [curve[0], { ...curve[1], areaM2: 20_000 }, curve[2]] }] }, /dam survey curve: the survey area falls/);
-		await bad({ ...model, nodes: [{ ...outlet, damCurve: curve }, farm] }, /only a farm has a dam/);
+		await bad({ ...model, nodes: [{ ...outlet, damCurve: curve }, farm] }, /only a unit has a dam/);
 		await bad({ ...model, nodes: [outlet, { ...farm, damReleaseRule: 'spill' }] }, /damReleaseRule/);
 		await bad({ ...model, nodes: [outlet, { ...farm, damSeepageReturnPct: 2 }] }, /damSeepageReturnPct/);
 		await expect(asOwner(`UPDATE node SET dam_release_rule = 'spill' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);
@@ -344,7 +344,7 @@ describe('dam storage (WP-3.5)', () => {
 		};
 		await bad({ ...model, nodes: [outlet, upper, { ...lower, damCapacityM3: 5000 }] }, /run of river has no dam/);
 		await bad({ ...model, nodes: [outlet, { ...upper, supplyRule: 'trigger', supplyTriggerPct: 0.5, supplyStopPct: 0.3 }, lower] }, /stop level must be at least its trigger level/);
-		await bad({ ...model, nodes: [{ ...outlet, supplyRule: 'riverFirst' }, upper, lower] }, /only a farm has a supply rule/);
+		await bad({ ...model, nodes: [{ ...outlet, supplyRule: 'riverFirst' }, upper, lower] }, /only a unit has a supply rule/);
 		await bad({ ...model, nodes: [outlet, { ...upper, supplyRule: 'pumpFirst' }, lower] }, /supplyRule/);
 		await expect(asOwner(`UPDATE node SET supply_rule = 'pumpFirst' WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
 		await expect(asOwner(`UPDATE node SET pump_capacity_m3_day = -1 WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
@@ -376,7 +376,7 @@ describe('dam storage (WP-3.5)', () => {
 
 		const res = await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, supplyRule: 'riverFirst' }, farm] });
 		expect(res.status).toBe(400);
-		expect(JSON.stringify(res.body)).toMatch(/only a farm has a supply rule; an other water user always takes from the river/);
+		expect(JSON.stringify(res.body)).toMatch(/only a unit has a supply rule; an other water user always takes from the river/);
 		expect((await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, pumpCapacityM3Day: -1 }, farm] })).status).toBe(400);
 	});
 
@@ -407,8 +407,8 @@ describe('dam storage (WP-3.5)', () => {
 			expect(res.status).toBe(400);
 			expect(JSON.stringify(res.body)).toMatch(pattern);
 		};
-		await bad({ ...model, nodes: [{ ...outlet, handsOffM3Day: monthly(10) }, farm] }, /only a farm has a hands-off flow/);
-		await bad({ ...model, nodes: [{ ...outlet, handsOffEwr: true }, farm] }, /only a farm has a hands-off flow/);
+		await bad({ ...model, nodes: [{ ...outlet, handsOffM3Day: monthly(10) }, farm] }, /only a unit has a hands-off flow/);
+		await bad({ ...model, nodes: [{ ...outlet, handsOffEwr: true }, farm] }, /only a unit has a hands-off flow/);
 		await bad({ ...model, nodes: [outlet, { ...farm, handsOffM3Day: [1, 2, 3] }] }, /handsOffM3Day/);
 		await bad({ ...model, nodes: [outlet, { ...farm, divertMonthlyM3Day: [...winter.slice(1), -1] }] }, /divertMonthlyM3Day/);
 		await expect(asOwner(`UPDATE node SET hands_off_m3_day = '{1,2,3}' WHERE id = $1`, [farm.id])).rejects.toThrow(/check/i);

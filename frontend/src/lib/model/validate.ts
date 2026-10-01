@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -82,7 +82,7 @@ export function ewrSiteIssue(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 
  */
 export function developmentIssue(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>): string | null {
 	const p = developmentProblem(n);
-	return p === null ? null : `${p.replace('only a farm has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
+	return p === null ? null : `${p.replace('only a unit has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
 }
 
 export function validateModel(model: ProjectModel): ModelIssue[] {
@@ -126,7 +126,8 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
 		if (badFrac) issues.push({ area: 'network', message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', message: `${label}: irrigation efficiency must be above 0%.` });
-		if (!(n.damAreaExponent > 0 && n.damAreaExponent <= 3)) issues.push({ area: 'network', message: `${label}: the dam area exponent must be above 0 and at most 3.` });
+		// At most 1 (engine ≥ 1.63.0): no basin's surface grows faster than its volume (model.md §2.7a).
+		if (!(n.damAreaExponent > 0 && n.damAreaExponent <= DAM_AREA_EXPONENT_MAX)) issues.push({ area: 'network', message: `${label}: the dam area exponent must be above 0 and at most ${DAM_AREA_EXPONENT_MAX}.` });
 		if (n.damAreaFullM2 !== null && !inRange(n.damAreaFullM2, 0, Infinity)) issues.push({ area: 'network', message: `${label}: the dam area can't be negative.` });
 		if (NON_NEG.some((k) => !inRange(n[k], 0, Infinity))) {
 			issues.push({ area: 'network', message: `${label}: areas and capacities can't be negative.` });

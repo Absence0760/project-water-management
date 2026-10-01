@@ -169,7 +169,7 @@ test('only a team admin edits the EWR traffic lights; a member reads which apply
 	await expect(page.getByRole('region', { name: 'Projects' })).toContainText('No projects yet.');
 	const panel = (await openTeamSettings(page)).getByRole('region', { name: 'EWR traffic lights' });
 	await expect(panel).toContainText('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
-	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
+	await expect(panel).toContainText('These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.');
 	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
 	await expect(panel.getByLabel('Amber below (%)')).toHaveValue('20');
 	const save = panel.getByRole('button', { name: 'Save thresholds' });
@@ -206,7 +206,7 @@ test('only a team admin edits the EWR traffic lights; a member reads which apply
 	await panel.getByRole('button', { name: 'Use the defaults' }).click();
 	await expect(panel.getByRole('status')).toHaveText('Saved. The team’s projects are judged by the default thresholds again.');
 	await expect(panel.getByLabel('Green below (%)')).toHaveValue('5');
-	await expect(panel).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
+	await expect(panel).toContainText('These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.');
 	await expectNoViolations(page, { tags: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] });
 });
 

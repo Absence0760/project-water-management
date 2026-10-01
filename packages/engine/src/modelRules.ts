@@ -45,7 +45,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		const n = byId.get(p.nodeId);
 		if (!n) add(`lcNode:${p.id}`, `land cover ${p.id} references an unknown node`);
 		else if (n.kind !== 'farm')
-			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
+			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a unit, not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
 	}
 	// Individual boreholes (WP-3.9): on a farm or other user; emergency mode and pumping into the dam need a farm dam.
 	dupes('borehole id', (m.boreholes ?? []).map((b) => b.id));
@@ -112,22 +112,22 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';
 		const hasPump = n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined;
-		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule; an other water user always takes from the river, up to its pump capacity`);
-		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
+		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule; an other water user always takes from the river, up to its pump capacity`);
+		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
 		// Hands-off flow and River to dam by month (engine ≥ 1.32.0): a farm's, 12 monthly values each.
 		const hasOps = (n.handsOffM3Day !== null && n.handsOffM3Day !== undefined) || n.handsOffEwr === true || (n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined);
-		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a farm has a hands-off flow and River to dam by month`);
+		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a unit has a hands-off flow and River to dam by month`);
 		else {
 			if (n.handsOffM3Day && n.handsOffM3Day.length !== 12) add(`handsOffMonths:${n.id}`, `"${n.name}": the hands-off flow needs 12 values (m³/day, Oct–Sep)`);
 			if (n.divertMonthlyM3Day && n.divertMonthlyM3Day.length !== 12) add(`divertMonths:${n.id}`, `"${n.name}": River to dam by month needs 12 values (m³/day, Oct–Sep)`);
 		}
-		// Dam survey curve (WP-3.5): only a farm has a dam, and the curve must be one the run can use.
+		// Dam survey curve (WP-3.5): only a unit has a dam, and the curve must be one the run can use.
 		if (n.damCurve && n.damCurve.length) {
-			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
+			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a unit has a dam`;
 			if (bad) add(`damCurve:${n.id}`, `"${n.name}": dam survey curve: ${bad}`);
 		}
 		// Development over the run (engine ≥ 1.30.0): the sediment rate, its survey date and the dates read.
@@ -165,7 +165,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			const at = t.lossReturnNodeId;
 			if (a && at !== null && at !== undefined) {
 				if (offtakeReturnAt(t, nodeIndex.get(a.id)!, m.nodes, nodeIndex) === undefined)
-					add(`trRiverReturnAt:${t.id}`, `river off-take ${t.id}: its seepage can rejoin the river only below "${a.name}" or a farm downstream of it`);
+					add(`trRiverReturnAt:${t.id}`, `river off-take ${t.id}: its seepage can rejoin the river only below "${a.name}" or a unit downstream of it`);
 			}
 		}
 	}
