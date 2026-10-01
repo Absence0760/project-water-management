@@ -638,7 +638,7 @@ const DayQuality = z
 		censoredDays: dayCount,
 		leftOutDays: dayCount,
 		suspectZeroDays: dayCount,
-		// Engine ≥ 1.61.0 (QF-3): zero flow held for a long stretch, scored. Absent on an older record.
+		// Engine ≥ 1.62.0 (QF-3): zero flow held for a long stretch, scored. Absent on an older record.
 		longZeroDays: dayCount.optional(),
 		rain: z.object({ observed: dayCount, infilled: dayCount, missing: dayCount, zeroRunDays: dayCount }).strict().nullable(),
 		notes: z.array(z.string().max(2000)).max(20)

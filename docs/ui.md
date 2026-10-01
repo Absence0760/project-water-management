@@ -3556,10 +3556,10 @@ which checks every catchment tab).
     over the same columns, with how to read it in its foot (judge by the
     validation columns; the model should clearly beat the mean flow, and in a
     seasonal catchment the climatology; `fit-benchmarks-note`, a note at the
-    panel's end until issue #174) and, from engine 1.61.0, a second foot row
+    panel's end until issue #174) and, from engine 1.62.0, a second foot row
     (`fit-benchmarks-source`) saying where the validation columns'
     benchmarks came from (the test's calibration period; a column on the
-    other record, or a report from before 1.61.0, its own flows; CR-5), and
+    other record, or a report from before 1.62.0, its own flows; CR-5), and
     a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report

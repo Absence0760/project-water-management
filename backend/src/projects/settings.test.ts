@@ -77,7 +77,7 @@ describe('SettingsPatch.dataQuality', () => {
 		expect(dataQualityPatchError(mergeSettings({}))).toBeNull();
 	});
 
-	it('a fit record takes engine 1.61.0’s benchmark source and long zero-flow count, and records without them (CR-5, QF-3)', () => {
+	it('a fit record takes engine 1.62.0’s benchmark source and long zero-flow count, and records without them (CR-5, QF-3)', () => {
 		const bench = FitRecord.shape.fit.shape.benchmarks.unwrap().unwrap();
 		const set = { kgePrime: 0.1, nse: 0, kgeLowHigh: null, kgeYearly: null, volumeErrorPct: null, logNse: null };
 		const base = { meanFlow: set, climatology: set, halfWindowDays: 7 };

@@ -10,7 +10,7 @@
 // - suspect: an outlier or a flat stretch by the Data checks (quality.ts
 //   seriesRowFlags, under the project's settings.dataQuality limits, the
 //   same the run warnings use), except a stretch of zero flow (engine ≥
-//   1.61.0, QF-3, provisional decision 2026-10-01): a river that stops is a
+//   1.62.0, QF-3, provisional decision 2026-10-01): a river that stops is a
 //   reading, not a fault, so a long zero stretch stays a scored day, as GSIM
 //   Part 2 flags only runs of one value *above zero* (Gudmundsson et al.
 //   2018, ESSD 10, 787). The Data checks still list the stretch, and the
@@ -283,11 +283,11 @@ export interface DayQuality {
 	censoredDays: number;
 	/** Days with a reading that the flags left out. */
 	leftOutDays: number;
-	/** Suspect days whose flow is zero: 0 from engine 1.61.0, which never calls a zero stretch suspect (QF-3); kept for older reports. */
+	/** Suspect days whose flow is zero: 0 from engine 1.62.0, which never calls a zero stretch suspect (QF-3); kept for older reports. */
 	suspectZeroDays: number;
 	/**
 	 * Days in the window that are zero flow held for at least `zeroFlatMinDays` (the flow flat-line cap, 90 by
-	 * default), and so scored as a river that stopped (engine ≥ 1.61.0, QF-3). Absent on an older report.
+	 * default), and so scored as a river that stopped (engine ≥ 1.62.0, QF-3). Absent on an older report.
 	 */
 	longZeroDays?: number;
 	/** The scored days' rain by class, and how many fall in a zero-rain run set aside as missing (CR-20); null without rain. */

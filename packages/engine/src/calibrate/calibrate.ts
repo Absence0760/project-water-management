@@ -554,7 +554,7 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
  * record by default), with the scores' bootstrap intervals and benchmarks
  * unless `bare` (a start's score, where only the objective is read). Given
  * `benchFrom` (a validation period's calibration days on the same record),
- * the benchmarks are built from those days' flows (engine ≥ 1.61.0, CR-5).
+ * the benchmarks are built from those days' flows (engine ≥ 1.62.0, CR-5).
  */
 function scored(
 	pb: CalibrationProblem,

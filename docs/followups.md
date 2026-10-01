@@ -212,7 +212,7 @@ EWR, planning and help-text questions (modelled area to D10) were answered
 from the literature, provisionally, so the app can be called
 production-ready: one row per question, with its source, in
 [calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01). They are **not** the hydrologist's sign-off; each item below
-stays open until they confirm it. Two change the engine (1.61.0):
+stays open until they confirm it. Two change the engine (1.62.0):
 validation benchmarks from the calibration period (CR-5, engine-audit C4)
 and zero-flow stretches scored (QF-3, C3). Rows marked "needs client data"
 (the modelled area, QF-4's ratings, which Reserve table, which zero-rain

@@ -5205,12 +5205,12 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     dry → wet *calibration* half and a validation on the other observed
     record, both are built from the scored period's own observations
     (`builtFrom: 'period'`). **On a split-sample or dry → wet validation
-    period (engine ≥ 1.61.0, CR-5, engine-audit C4)** both come from that
+    period (engine ≥ 1.62.0, CR-5, engine-audit C4)** both come from that
     test's calibration period and are applied to the validation days
     (`builtFrom: 'calibration'`; a calendar day the calibration period
     never saw takes its mean), as a forecast made without the validation
     flows would be: the published practice (Gründemann et al. 2026, HESS
-    30:3439). Up to 1.60.0 they were the validation days' own, a benchmark
+    30:3439). Up to 1.61.0 they were the validation days' own, a benchmark
     that already knew the flows. *Provisional decision 2026-10-01, to be
     confirmed by the client's hydrologist* ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)). In a strongly
     seasonal catchment climatology is hard to beat (Schaefli & Gupta 2007),
@@ -5580,7 +5580,7 @@ r / (0.01·Q) days, and a run is flagged once it lasts three such steps
 0.004 needs 75, and 0.002 or less the cap. Zero flow counts like any low value
 and gets the cap, so 90 days of a dry riverbed warn (expected in ephemeral
 rivers; the check never changes results). The per-day flags for calibration
-don't follow it there: from engine 1.61.0 a zero-flow stretch is never a
+don't follow it there: from engine 1.62.0 a zero-flow stretch is never a
 suspect day (§2.10h, QF-3). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
@@ -6632,10 +6632,10 @@ information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters.
 
-**Zero flow held for months (engine ≥ 1.61.0, QF-3, engine-audit C3).** A
+**Zero flow held for months (engine ≥ 1.62.0, QF-3, engine-audit C3).** A
 river that really stops trips the flat-stretch check after 90 days of zero
 flow (`settings.dataQuality.flatlineFlowMaxDays`, 90 by default). Up to
-1.60.0 those days were suspect, so the default left them out and hid the dry
+1.61.0 those days were suspect, so the default left them out and hid the dry
 spell from the fit. Now a zero-flow stretch is never suspect (`flowDayFlags`
 calls only a non-zero flat stretch and an outlier suspect), as GSIM's
 flat-line rule flags only values above zero (Gudmundsson et al. 2018). The
@@ -6643,7 +6643,7 @@ Data checks still list the stretch as a run warning, and the panel names the
 days (`DayQuality.longZeroDays`, counted over runs of consecutive zero
 readings at least the cap long) with the way out for a logger that failed
 reading zero: an exclusion period. `suspectZeroDays` stays for older
-reports and is 0 from 1.61.0. The run's `observed_flow_quality` column
+reports and is 0 from 1.62.0. The run's `observed_flow_quality` column
 follows.
 
 The defaults (censor above the rating; leave out below-rating, suspect and

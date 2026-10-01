@@ -144,7 +144,7 @@ describe('benchmarks (CR-5)', () => {
 	});
 });
 
-describe('benchmarks built from a calibration period (CR-5, engine 1.61.0)', () => {
+describe('benchmarks built from a calibration period (CR-5, engine 1.62.0)', () => {
 	it('applies the source’s mean and calendar-day climatology to the scored days', () => {
 		const { days, o, groups } = record(8);
 		const half = Math.floor(o.length / 2);

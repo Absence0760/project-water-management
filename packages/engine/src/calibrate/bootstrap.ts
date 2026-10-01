@@ -15,14 +15,14 @@
 //   seasonal catchment climatology is hard to beat (Schaefli & Gupta 2007;
 //   Knoben et al. 2020), and a model that doesn't beat it adds little
 //   beyond the seasonal cycle.
-// - Where the benchmarks come from (engine ≥ 1.61.0, CR-5, provisional
+// - Where the benchmarks come from (engine ≥ 1.62.0, CR-5, provisional
 //   decision 2026-10-01, to be confirmed by the client's hydrologist): on a
 //   validation period both are built from the flows of the test's own
 //   calibration period and applied to the validation days, as a forecast
 //   made with only the calibration data would be (Knoben et al. 2020;
 //   Gründemann et al. 2026, HESS 30, 3439, "the benchmarks are defined using
 //   data from a dedicated calibration period … and then used to predict the
-//   streamflow in an independent evaluation period"). Up to 1.60.0 they were
+//   streamflow in an independent evaluation period"). Up to 1.61.0 they were
 //   built from the validation days themselves, a benchmark that already knew
 //   the period's flows. A calibration period (and a validation on another
 //   record, whose flows the calibration period never saw) keeps its own.
@@ -74,7 +74,7 @@ export interface ScoreBenchmarks {
 	climatology: FitScores;
 	halfWindowDays: number;
 	/**
-	 * Whose flows built the two benchmarks (engine ≥ 1.61.0): 'period' the scored days' own,
+	 * Whose flows built the two benchmarks (engine ≥ 1.62.0): 'period' the scored days' own,
 	 * 'calibration' the test's calibration period's, applied to these days. Absent on an older
 	 * report, which always used the period's own.
 	 */
@@ -272,7 +272,7 @@ export interface BenchmarkSource {
 /**
  * The mean-flow and day-of-year climatology benchmarks for observed flows `o`
  * on the epoch days `days`. Built from `o` itself, or, given `from` (engine ≥
- * 1.61.0), from another period's flows (the test's calibration period) and
+ * 1.62.0), from another period's flows (the test's calibration period) and
  * applied to these days: the mean of `from`, and each day `from`'s
  * climatology on that calendar day. A calendar day `from` has no flow within
  * ±`halfWindow` of takes `from`'s mean.

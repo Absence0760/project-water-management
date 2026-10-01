@@ -38,7 +38,7 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 	await expect(bench.getByTestId('fit-benchmarks-note')).toHaveText(
 		'Judge the fit by the validation columns: they score days the parameters never saw. The model should clearly beat the mean flow every day, and in a strongly seasonal catchment the day-of-year climatology too.'
 	);
-	// CR-5 (engine 1.61.0): the split test's benchmarks come from its fitted half, as a forecast without the other half's flows would.
+	// CR-5 (engine 1.62.0): the split test's benchmarks come from its fitted half, as a forecast without the other half's flows would.
 	await expect(bench.getByTestId('fit-benchmarks-source')).toHaveText(
 		'On a validation column both benchmarks are built from that test’s calibration period and applied to the validation days, as a forecast made without the validation flows would be.'
 	);

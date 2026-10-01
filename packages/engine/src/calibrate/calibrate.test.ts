@@ -237,7 +237,7 @@ describe('calibrate', () => {
 			expect(p.benchmarks).not.toBeNull();
 			expect(p.intervals == null || p.intervals.years === p.waterYears.length).toBe(true);
 		}
-		// CR-5 (engine 1.61.0): a validation period's benchmarks come from its test's calibration period, the rest from their own days.
+		// CR-5 (engine 1.62.0): a validation period's benchmarks come from its test's calibration period, the rest from their own days.
 		expect(r.fit.benchmarks!.builtFrom).toBe('period');
 		expect(r.splitSample!.calibration.benchmarks!.builtFrom).toBe('period');
 		expect(r.splitSample!.validation.benchmarks!.builtFrom).toBe('calibration');

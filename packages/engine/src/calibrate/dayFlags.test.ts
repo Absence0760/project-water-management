@@ -59,7 +59,7 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(got[40]).toBe('inRange');
 	});
 
-	it('a long zero-flow stretch is scored as a river that stopped, not suspect (QF-3, engine 1.61.0); the same stretch at a non-zero value is', () => {
+	it('a long zero-flow stretch is scored as a river that stopped, not suspect (QF-3, engine 1.62.0); the same stretch at a non-zero value is', () => {
 		const values: (number | null)[] = varying(300);
 		for (let i = 20; i < 140; i++) values[i] = 0; // 120 days of zero flow: past the 90-day cap the Data checks list
 		for (let i = 200; i < 230; i++) values[i] = 0.75; // positive control: 30 days of one non-zero value

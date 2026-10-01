@@ -276,7 +276,7 @@ describe('score intervals and benchmarks (CR-5)', () => {
 	});
 });
 
-describe('where the validation benchmarks come from (CR-5, engine 1.61.0)', () => {
+describe('where the validation benchmarks come from (CR-5, engine 1.62.0)', () => {
 	const bench = (builtFrom?: 'period' | 'calibration') => ({ meanFlow: scores(-0.41), climatology: scores(0.3), halfWindowDays: 7, ...(builtFrom ? { builtFrom } : {}) });
 	const split = (builtFrom?: 'period' | 'calibration') => ({
 		params: {},
