@@ -456,7 +456,7 @@ the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 The tabs are grouped into three sections, in this order: **Outcomes**
 (Summary, River & reserve, Hydrological units, Runs & results, Dams,
-Compare runs, Scenarios, Allocations), **Build the model** (Network, Map, Crops &
+Compare runs, Scenarios, Allocations), **Build the model** (Network, Crops &
 demand, Transfers, Data, Settings & calibration) and **Review** (Project,
 Applications, History). Outcomes leads because the Summary is the tab a
 project opens on (issue #17's option A; moved last on 2026-09-27 and back to
@@ -2291,7 +2291,10 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 ## Map (`?tab=map`)
 
 Issue #288, roadmap WP-3.12 phases 1–2 (`lib/components/map/`, a lazy tab
-under *Build the model*, after the Network, labelled **Map**; [maps.md](./maps.md) has the
+opened from the Network header's **Map** link (and Settings → WR2012
+check), not listed in the sidebar (`LINKED_ONLY` in `lib/workspace/tabs.ts`:
+the sidebar is budgeted to fit every section with a row to spare); while it
+is open the sidebar shows it after the Network; [maps.md](./maps.md) has the
 tiles, uploads, areas and the quaternary lookup). A model-input tab: owners
 and editors see it, viewers behind "Show model inputs" (or from a link) and
 without edit tools. The Network's own picture (its "Catchment map" card) stays the schematic;

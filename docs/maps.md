@@ -1,6 +1,7 @@
 # Catchment map
 
-The **Map** tab (`?tab=map`, under *Build the model*; not the Network's
+The **Map** tab (`?tab=map`, opened from the Network header's **Map** link,
+not a sidebar row; not the Network's
 schematic, whose card is also called "Catchment map") draws a
 project's catchment boundary, farm parcels, dams, gauges and rivers over a
 self-hosted basemap, and proposes values from them that the hydrologist

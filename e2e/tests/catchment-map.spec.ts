@@ -21,7 +21,13 @@ test('an editor uploads a boundary and parcels, accepts an area into the model, 
 	const project = await seedRunnableProject(page.request, 'Catchment map golden path');
 	const before = await createRun(page.request, project.id, 'Before');
 
-	await page.goto(`/projects/${project.id}?tab=map`);
+	// The Map opens from the Network's header, not from a sidebar row of its own; open, the sidebar shows it after the Network.
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sections = page.getByRole('navigation', { name: 'Project sections' });
+	await expect(sections.getByRole('link', { name: 'Map', exact: true })).toHaveCount(0);
+	await page.getByTestId('section-header').getByRole('link', { name: 'Map', exact: true }).click();
+	await expect(page).toHaveURL(/\?tab=map$/);
+	await expect(sections.getByRole('link', { name: 'Map', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByTestId('map-no-boundary')).toContainText('No catchment boundary yet.');
 	await expect(page.getByTestId('map-no-tiles')).toBeVisible();
 

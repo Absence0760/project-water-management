@@ -202,6 +202,12 @@ beforeAll(async () => {
 		fileName: 'pd.csv',
 		text: 'registration_no,farm,authorisation,water_source,volume_m3_year\nPD-1,Farm Pd,licence,surface,500\n'
 	});
+	// A map import (146): who imported the file and made its feature is set null on deletion; the features stay with the project.
+	await call(subject, 'POST', `/projects/${projectId}/map/import`, {
+		fileName: 'pd.geojson',
+		kind: 'other',
+		text: JSON.stringify({ type: 'Feature', properties: { name: 'Pd feature' }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+	});
 	// An application, decided by the subject.
 	const [applicant, consultant] = (await Promise.all([`PdApplicant${tag}`, `PdConsultant${tag}`].map((n) => signUp(n)))) as [User, User];
 	for (const u of [applicant, consultant]) {
