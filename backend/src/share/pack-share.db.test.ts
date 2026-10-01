@@ -112,7 +112,11 @@ function report(mode: 'baseline' | 'application', assumptionsChanged = false) {
 		],
 		users: FARMS.map((name) => ({ name, nodeId: randomUUID() })),
 		allocations: { rows: [{ holder: HOLDER }] },
-		cumulative: { applications: [{ scenarioName: OTHER_APP }] },
+		// evidence-11: the combined run names the other applications and their conflicts; none of it leaves (allowlist).
+		cumulative: {
+			applications: [{ scenarioName: OTHER_APP }],
+			combined: { applications: [{ scenarioName: OTHER_APP }], conflicts: [`"${OTHER_APP}" op 1 (node.set) and "x" op 1 (node.set) both change node "Rooikloof": damCapacityM3`] }
+		},
 		appendix: { baselineInputs: { model: { nodes: FARMS.map((name) => ({ name })) } }, changes: [], series: [], warnings: { baseline: ['Kalkoenkrans has no crops'], application: null } },
 		verification: { methodology: { version: 'm1', sha256: 'a'.repeat(64) }, limitations: [], errata: [{ id: 'E1', summary: 'An erratum' }], disclaimerVersion: 'v3' },
 		applicantStatement: mode === 'application' ? { scenarioName: 'Raise the weir dam', description: STATEMENT, ownerName: OWNER_NAME, notes: STATEMENT, notesUpdatedAt: null, notesUpdatedBy: OWNER_NAME } : null,

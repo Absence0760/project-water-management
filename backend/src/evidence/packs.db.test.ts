@@ -255,7 +255,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-10');
+		expect(manifest.report.version).toBe('evidence-11');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -378,6 +378,47 @@ describe('drafting a pack', () => {
 		} finally {
 			// A signed draft is kept, never deleted: withdrawn, so nothing later meets it.
 			expect((await editor.call('POST', `${packPath(id)}/withdraw`, { reason: 'test: an old draft on an uncapped pump' })).status).toBe(200);
+		}
+	});
+
+	it('keeps a pack drafted before evidence-11 as it froze it: the summed row and its hash, never rebuilt with the combined run (C26)', async () => {
+		const template = await draft(editor, appRun);
+		const now = (await editor.call('GET', packPath(template.id))).body.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(template.id))).status).toBe(204);
+		// Positive control: today's draft carries the combined run and its row.
+		expect(now.report.cumulative.combined).toBeDefined();
+		expect(now.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('This and the other applications on this baseline, together');
+		const { combined: _combined, ...cumulative } = now.report.cumulative;
+		void _combined;
+		const summed = {
+			...now.report.rows.find((x) => x.id === 'otherApplications')!,
+			label: 'Other applications on this baseline, summed',
+			basis: 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)'
+		};
+		const id = crypto.randomUUID();
+		const old = {
+			...now,
+			pack: { ...now.pack, id },
+			report: { ...now.report, version: 'evidence-10', cumulative, rows: now.report.rows.map((x) => (x.id === 'otherApplications' ? summed : x)) }
+		} as unknown as PackManifest;
+		const sid = (await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [appRun]))[0]!.scenario_id as string;
+		const sha = sha256(packManifestText(old));
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-10', $8, $9)`,
+			[id, projectId, baseRun, sid, appRun, JSON.stringify(old), sha, now.engine.version, editor.id]
+		);
+		try {
+			const read = await viewer.call('GET', packPath(id));
+			expect(read.status).toBe(200);
+			expect(read.body.manifestMatches).toBe(true);
+			expect(read.body.pack.manifestSha256).toBe(sha);
+			const got = read.body.manifest as PackManifest;
+			expect(got).toEqual(old);
+			expect(got.report.cumulative).not.toHaveProperty('combined');
+			expect(got.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('Other applications on this baseline, summed');
+		} finally {
+			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
 		}
 	});
 
