@@ -39,6 +39,7 @@
 		type ApplicationFilter,
 		type ApplicationSort
 	} from './applications';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -177,7 +178,7 @@
 								<tr data-status={a.status}>
 									<th scope="row" class="c-name"><a href={scenarioHref(a.id)}>{a.name}</a></th>
 									<td class="c-who">
-										{a.owner ?? '—'}
+										{a.owner ?? FORMER_MEMBER}
 										{#if a.members.length}<span class="sub">shared with {a.members.length}</span>{/if}
 									</td>
 									<td class="c-status">

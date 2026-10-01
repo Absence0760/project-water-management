@@ -28,6 +28,7 @@
 	import { leavesScenariosTab } from './leaves';
 	import ScenarioEditor from './ScenarioEditor.svelte';
 	import { scenariosSummary } from './summary';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let {
 		projectId,
@@ -273,7 +274,7 @@
 							<button type="button" class="pick" aria-current={sc.id === selectedId || undefined} onclick={() => select(sc.id)}>
 								<span class="name">{sc.name}</span>
 								<span class="meta">
-									<span class="status status-{sc.status}">{STATUS[sc.status]}</span>{sc.origin === 'applicant' && !applicant ? ` application by ${sc.owner ?? 'an applicant'}` : ''} · {sc.ops.length} change{sc.ops.length === 1 ? '' : 's'} · on {sc.baseRun.label || 'Untitled run'}{sc.lastRun ? ` · run ${fmtDate(sc.lastRun.createdAt, true)}` : ''}
+									<span class="status status-{sc.status}">{STATUS[sc.status]}</span>{sc.origin === 'applicant' && !applicant ? ` application by ${sc.owner ?? FORMER_MEMBER}` : ''} · {sc.ops.length} change{sc.ops.length === 1 ? '' : 's'} · on {sc.baseRun.label || 'Untitled run'}{sc.lastRun ? ` · run ${fmtDate(sc.lastRun.createdAt, true)}` : ''}
 								</span>
 							</button>
 						</li>

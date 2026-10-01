@@ -1,6 +1,7 @@
 // Helpers for the nominated evidence run (010_run_nomination, docs/ui.md §
 // Evidence nomination). Pure: dates are formatted by the caller's `fmt`.
 import type { Nomination, RunEvidence, RunMeta } from '$lib/api';
+import { FORMER_MEMBER } from '$lib/format/maker';
 
 /** A runoff model id as people read it. */
 export function runoffModelName(id: string | undefined | null): string {
@@ -10,7 +11,8 @@ export function runoffModelName(id: string | undefined | null): string {
 }
 
 const quoted = (label: string | null | undefined) => `“${label || 'Untitled run'}”`;
-const by = (who: string | null) => (who ? ` by ${who}` : '');
+/** Who did it; a deleted account's nomination stays with the name gone (138). */
+const by = (who: string | null) => ` by ${who ?? FORMER_MEMBER}`;
 
 /** A withdrawal row (098): no run, only who, when and why. */
 export const isWithdrawal = (n: Pick<Nomination, 'withdrawn' | 'runId'>): boolean => !!n.withdrawn || n.runId === null;

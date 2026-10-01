@@ -809,7 +809,8 @@ as before and stores no report:
 
 **`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
 the newest import's report: the fields above plus `importedAt` (ISO time) and
-`importedBy` (the importer's display name). `200 { report: null }` when the
+`importedBy` (the importer's display name, `null` once their account is
+deleted, 138). `200 { report: null }` when the
 project wasn't imported through the dialog (made by hand, copied, or imported
 with no report): the Project page asks on every visit, so "none" is an answer,
 not an error. `404 not found` for a project you can't see.
@@ -1524,7 +1525,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
-  `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
+  `createdBy` is the maker's display name, `null` once their account is
+  deleted (138: the run stays, the name goes; the workspace says "a former
+  member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
   (`summary.forecast.from`), else `null`.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
@@ -1558,7 +1561,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
-  name. The history is append-only: nominating another run adds a row and
+  name (`null` once that account is deleted, 138). The history is append-only: nominating another run adds a row and
   keeps the earlier ones, and nothing can edit or remove a row. A nominated
   run (current or past) is never trimmed by the run cap and can't be deleted.
 - `run = RunMeta & { summary: RunSummary }`
@@ -1963,6 +1966,8 @@ the result is stored only after the server has checked it.
 | POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }`. From engine 1.33.0 a member's `metrics` must carry `noFlowDays`, `ewrSiteDaysNotMet`, `unitDemandM3Day`, `unitSuppliedM3Day` and `reserveFdc` (`400` without them: a result is stored only on the engine it was started on, which always computes them) | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
 
 - `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
+  `createdBy` and `createdById` are `null` once the starter's account is
+  deleted (138; a started ensemble goes with the account).
   `summary` is `EnsembleSummary` (`total`, `accepted`, `gated`,
   `referenceAccepted`, `rejected` by reason, `bands`, `coverage`,
   `coverageWarning`, `decisionRule`, `notes`) or, for a paired row,
@@ -2001,7 +2006,10 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 - `Scenario = { id, name, description, purposeAndNeed, mitigation, monitoring,
   baseRunId, baseRun: { id, label, createdAt }, ops: ScenarioOp[], opsSha256,
   ownedNodeIds, opNames, ownerUserId, owner, status, createdAt, updatedAt,
-  runCount, lastRun: { id, label, createdAt } | null }`. `purposeAndNeed`,
+  runCount, lastRun: { id, label, createdAt } | null }`. `ownerUserId` and
+  `owner` are `null` once the owner's account is deleted (138: a team scenario
+  and a submitted, withdrawn or decided application stay; a draft application
+  goes with the account). `purposeAndNeed`,
   `mitigation` and `monitoring` (129_scenario_statement) are the answers to the
   evidence report's fixed Appendix C prompts (engine `APPLICANT_PROMPTS`), `''`
   until answered; the API trims each (whitespace alone is `''`) and holds it to

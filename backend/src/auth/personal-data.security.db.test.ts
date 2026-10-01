@@ -20,6 +20,7 @@
 //
 // Positive controls: the same scan finds the person everywhere before the
 // deletion, and still finds the owner (who stays) afterwards.
+import { runEnsemble } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -54,7 +55,11 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 		// Keyed by the typed address, not the account: a day without attempts forgets it.
 		'login_throttle.email': 'sign-in attempts are keyed by the typed address, not linked to the account, gone after a day'
 	},
-	name: {},
+	name: {
+		// 138: a pack's manifest is the evidence report frozen under its hash, makers' names as printed; altering it would
+		// break the hash the verify lookup and the signatures rest on, so it is kept as the licence record, like a sign-off.
+		'evidence_pack.manifest': 'the evidence report a pack froze under its hash prints who made its runs, ensembles and nominations; kept as the licence record'
+	},
 	typedName: {
 		'signoff.full_name': 'the signature on a run: the typed name stays, the account is cleared',
 		'audit_event.subject': 'signoff.created and calibration_rules.signed_off record the signature as typed, like the sign-off itself',
@@ -129,7 +134,7 @@ beforeAll(async () => {
 	await db.connect();
 	[owner, subject, farmer] = (await Promise.all([OWNER_NAME, SUBJECT_NAME, `PdFarmer${tag}`].map((n) => signUp(n)))) as [User, User, User];
 
-	// The owner makes what the subject can't (a project, a team and a run are evidence: restrict).
+	// The owner makes the shared project and team; the subject's own evidence comes below (138: it stays, maker cleared).
 	projectId = (await call(owner, 'POST', '/projects', { name: `Personal data ${tag}` })).project.id;
 	await call(owner, 'PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [], landCover: [] });
 	await call(owner, 'PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150), ewrPragmaticM3PerDay: monthly(300) } });
@@ -205,8 +210,8 @@ beforeAll(async () => {
 	}
 	const sid = (await call(applicant, 'POST', `/projects/${projectId}/scenarios`, { name: 'Raise the weir', baseRunId: runId, ops: [] })).scenario.id;
 	await call(applicant, 'POST', `/projects/${projectId}/scenarios/${sid}/submit`);
-	// Only the applicant shares an application, and an application's owner blocks their deletion (restrict), so the
-	// share the subject made is arranged as the schema owner: the foreign key's SET NULL is what's under test.
+	// Only the applicant shares an application, and the subject is an editor here, so the share the subject made is
+	// arranged as the schema owner: the foreign key's SET NULL is what's under test.
 	await asOwner('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3)', [sid, projectId, consultant.id]);
 	await asOwner('UPDATE scenario_member SET added_by = $2 WHERE scenario_id = $1', [sid, subject.id]);
 	// A comment on the application, then edited by them (115): the text before the edit is a note_revision (edited_by).
@@ -253,12 +258,13 @@ beforeAll(async () => {
 		await tx.query('UPDATE auto_calibration SET applied_at = now() WHERE id = $1', [a.id]);
 	});
 	// An evidence pack they drafted and issued (112): created_by and issued_by. Planted as the drafting route makes it (the
-	// manifest names its own row), signed, then issued as the subject, whose id the guard stamps as issued_by.
+	// manifest names its own row, and the report it froze prints the subject as a run's maker), signed, then issued as
+	// the subject, whose id the guard stamps as issued_by.
 	const packId = crypto.randomUUID();
 	await asOwner(
 		`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
 		 VALUES ($1, $2, $3, 1, $4, $5, 'x', 'x', $6)`,
-		[packId, projectId, runId, JSON.stringify({ pack: { id: packId, version: 1 }, project: { id: projectId }, engine: { version: 'x' }, report: { version: 'x' } }), Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex'), subject.id]
+		[packId, projectId, runId, JSON.stringify({ pack: { id: packId, version: 1 }, project: { id: projectId }, engine: { version: 'x' }, report: { version: 'x', identity: { baseline: { createdBy: SUBJECT_NAME } } } }), Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex'), subject.id]
 	);
 	await asOwner(
 		`INSERT INTO signoff (project_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope,
@@ -273,6 +279,34 @@ beforeAll(async () => {
 		subject.id,
 		projectId
 	]);
+	// Evidence that names its maker (138, issue #112): a project they imported (with its import report) and a team they
+	// made, each with the owner as a second owner or admin; a run of theirs, nominated as evidence, with a completed
+	// ensemble; and a team scenario. All stay after the deletion, with the maker cleared.
+	const imported = await call(subject, 'POST', '/projects/import', {
+		format: 'water-management.project',
+		version: 1,
+		name: `Imported ${tag}`,
+		description: '',
+		settings: {},
+		model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
+		series: [],
+		importReport: { source: 'project-file', fileName: 'pd.json', importerVersion: 'test' }
+	});
+	await call(subject, 'POST', `/projects/${imported.project.id}/members`, { email: owner.email, role: 'owner' });
+	const ownTeam = (await call(subject, 'POST', '/teams', { name: `Own team ${tag}` })).team.id;
+	await call(subject, 'POST', `/teams/${ownTeam}/members`, { email: owner.email, role: 'admin' });
+	const flow = Array.from({ length: 60 }, (_, i) => 0.02 * (1 + 0.5 * Math.sin(i / 7)));
+	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-10-01', values: flow });
+	const ownRun = (await call(subject, 'POST', `/projects/${projectId}/runs`, { label: 'subject run' })).run.id;
+	await call(subject, 'POST', `/projects/${projectId}/evidence`, { runId: ownRun, reason: 'calibrated' });
+	const ens = (
+		await call(subject, 'POST', `/projects/${projectId}/runs/${ownRun}/uncertainty`, {
+			request: { members: 30, thresholds: { minSkill: -10, maxLowFlowBiasPct: null, wr2012MaxLevel: 'unusable' } }
+		})
+	).ensemble;
+	const { members, coverage } = runEnsemble((await call(subject, 'GET', `/projects/${projectId}/runs/${ownRun}/model-input`)).input, ens.options);
+	await call(subject, 'POST', `/projects/${projectId}/runs/${ownRun}/uncertainty/${ens.id}/result`, { members, coverage });
+	await call(subject, 'POST', `/projects/${projectId}/scenarios`, { name: `Team option ${tag}`, baseRunId: runId, ops: [] });
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);
@@ -351,7 +385,7 @@ describe('deleting the account leaves no copy of the person outside the document
 	let unreached: string[];
 
 	beforeAll(async () => {
-		// Every key deletion acts on (restrict keys block it, so the subject holds none: evidence stays with its maker).
+		// Every key deletion acts on (every key to app_user, since 138 made the evidence keys set null too).
 		const { rows: keys } = await db.query<{ tbl: string; col: string }>(
 			`SELECT c.conrelid::regclass::text AS tbl, a.attname AS col
 			 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
@@ -374,7 +408,7 @@ describe('deleting the account leaves no copy of the person outside the document
 	it('finds the person across the schema before the deletion (positive control on the scan)', () => {
 		expect(before.id).toEqual(expect.arrayContaining(['app_user.id', 'audit_event.subject', 'report.email_to', 'job.acting_user_id']));
 		expect(before.email).toEqual(expect.arrayContaining(['app_user.email', 'login_throttle.email']));
-		expect(before.name).toEqual(expect.arrayContaining(['app_user.display_name', 'audit_event.actor_label', 'audit_event.subject']));
+		expect(before.name).toEqual(expect.arrayContaining(['app_user.display_name', 'audit_event.actor_label', 'audit_event.subject', 'evidence_pack.manifest']));
 		expect(before.typedName).toEqual(expect.arrayContaining(['signoff.full_name']));
 	});
 
