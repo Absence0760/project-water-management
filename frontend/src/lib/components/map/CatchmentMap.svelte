@@ -7,19 +7,24 @@
 	told apart by shape); the canvas is focusable for MapLibre's keyboard pan
 	and zoom. Without WebGL the map says so and the list carries on; when the
 	basemap tiles can't be read, the features stay drawn on a plain background.
+	It follows the app's theme (appTheme.ts: data-theme, else the OS), redrawing
+	basemap and overlay with setStyle; the picked feature's name shows over the
+	map's top-left corner until the basemap has labels (#326 E9).
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
-	import { basemapLayerIds, basemapStyle, overlayData, overlayLayers } from './mapStyle';
+	import { appIsDark, watchAppTheme } from './appTheme';
+	import { basemapLayerIds, mapStyle, overlayColours, overlayData } from './mapStyle';
 
 	let {
 		features,
 		selectedId = null,
 		onselect,
 		tilesUrl,
-		label
+		label,
+		fills
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -28,6 +33,8 @@
 		tilesUrl: string | null;
 		/** The map region's accessible name. */
 		label: string;
+		/** Results colours by feature id (A1): a polygon listed here is filled with its colour instead of its kind's. */
+		fills?: Readonly<Record<string, string>>;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -37,7 +44,9 @@
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
 	const markers = new Map<string, { marker: InstanceType<Lib['Marker']>; button: HTMLButtonElement; key: string }>();
-	const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+	let dark = $state(typeof matchMedia === 'function' && typeof document !== 'undefined' && appIsDark());
+	const colours = $derived(overlayColours(dark));
+	const picked = $derived(selectedId ? features.find((f) => f.id === selectedId) : undefined);
 	const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 	/** South Africa, before there is anything to frame. */
 	const SA: [[number, number], [number, number]] = [
@@ -109,18 +118,20 @@
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
 		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
-		src?.setData?.(overlayData(features, selectedId));
+		src?.setData?.(overlayData(features, selectedId, fills));
 		syncMarkers();
 	}
 
 	onMount(() => {
 		let disposed = false;
+		let stopTheme: (() => void) | null = null;
 		(async () => {
 			try {
 				lib = await import('./maplibre');
 				if (tilesUrl) await lib.usePmtiles();
 				if (disposed) return;
-				const style = basemapStyle(tilesUrl, dark);
+				const styleNow = () => mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills));
+				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
 					// Plain objects matching the style spec (mapStyle.ts keeps MapLibre out of the tab's chunk).
@@ -147,9 +158,17 @@
 						status = 'failed';
 					}
 				});
+				// The app's theme changed: redraw basemap and overlay in it (the style carries the current features and selection).
+				let drawnDark = dark;
+				stopTheme = watchAppTheme(() => {
+					dark = appIsDark();
+					if (dark === drawnDark || disposed) return;
+					drawnDark = dark;
+					m.setStyle(styleNow() as never);
+				});
+				// A pick made while the new style loaded reaches it here.
+				m.on('style.load', () => syncOverlay());
 				m.on('load', () => {
-					m.addSource('features', { type: 'geojson', data: overlayData(features, selectedId) as never });
-					for (const layer of overlayLayers(dark)) m.addLayer(layer as never);
 					m.on('click', OVERLAY_CLICKABLE, (e: { features?: { properties?: { id?: string } }[] }) => {
 						const id = e.features?.[0]?.properties?.id;
 						if (id) onselect(id);
@@ -168,6 +187,7 @@
 		})();
 		return () => {
 			disposed = true;
+			stopTheme?.();
 			for (const m of markers.values()) m.marker.remove();
 			markers.clear();
 			map?.remove();
@@ -179,6 +199,7 @@
 	$effect(() => {
 		void features;
 		void selectedId;
+		void fills;
 		syncOverlay();
 	});
 
@@ -199,8 +220,23 @@
 	}
 </script>
 
-<div class="map-wrap" data-status={status}>
+<div
+	class="map-wrap"
+	data-status={status}
+	data-theme-drawn={dark ? 'dark' : 'light'}
+	style:--mk-casing={colours.casing}
+	style:--mk-other={colours.other}
+	style:--mk-water={colours.water}
+	style:--mk-selected={colours.selected}
+>
 	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map"></div>
+	{#if status === 'ready' && picked}
+		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
+		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
+			<span class="picked-kind">{KIND_LABEL[picked.kind]}</span>
+			<span class="picked-label">{picked.name || KIND_LABEL[picked.kind]}</span>
+		</p>
+	{/if}
 	{#if status === 'loading'}
 		<p class="map-state muted" role="status">Drawing the map…</p>
 	{:else if status === 'failed'}
@@ -257,19 +293,19 @@
 		display: block;
 		overflow: visible;
 	}
+	/* The marker colours come from mapStyle.ts (overlayColours) as custom properties on .map-wrap, so they follow the app's theme as the map does. */
 	.map :global(.mk-shape) {
-		stroke: #ffffff;
+		stroke: var(--mk-casing);
 		stroke-width: 2.5;
-		fill: #3a3d3a;
+		fill: var(--mk-other);
 	}
-	.map :global(.mk-gauge .mk-shape) {
-		fill: #0b4fa0;
-	}
+	/* Gauges and dams are water: the rivers' blue, told apart by shape (▲, ●). */
+	.map :global(.mk-gauge .mk-shape),
 	.map :global(.mk-dam .mk-shape) {
-		fill: #0b5a73;
+		fill: var(--mk-water);
 	}
 	.map :global(.map-marker[aria-pressed='true'] .mk-shape) {
-		stroke: #b0006e;
+		stroke: var(--mk-selected);
 		stroke-width: 4;
 	}
 	.map :global(.map-marker:focus-visible) {
@@ -277,19 +313,32 @@
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	@media (prefers-color-scheme: dark) {
-		.map :global(.mk-shape) {
-			stroke: #000000;
-			fill: #e0e0e0;
-		}
-		.map :global(.mk-gauge .mk-shape) {
-			fill: #8ec7ff;
-		}
-		.map :global(.mk-dam .mk-shape) {
-			fill: #7fd5e8;
-		}
-		.map :global(.map-marker[aria-pressed='true'] .mk-shape) {
-			stroke: #ff8fd0;
-		}
+	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right). */
+	.picked-name {
+		position: absolute;
+		top: 0.6rem;
+		left: 0.6rem;
+		max-width: calc(100% - 5rem);
+		margin: 0;
+		padding: 0.25rem 0.55rem;
+		display: flex;
+		flex-direction: column;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		box-shadow: var(--shadow);
+		pointer-events: none;
+		line-height: 1.3;
+	}
+	.picked-kind {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.picked-label {
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>
