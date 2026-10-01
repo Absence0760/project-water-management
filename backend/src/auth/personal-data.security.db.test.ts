@@ -84,14 +84,21 @@ const call = (u: User, method: string, path: string, body?: unknown) =>
 		return r.body;
 	});
 
-/** Every text-like column of every table, from the live catalogue. */
+/**
+ * Every text-like column of every table, from the live catalogue. An array
+ * counts only when its elements are text-like: a number array (run_series,
+ * series_blob, time_series "values") can't hold a name, an email or an id,
+ * and casting every one of them to text made each scan cost time in
+ * proportion to every run the earlier test files stored (seconds per needle
+ * late in CI's db suite, which timed out the deletion test's beforeAll).
+ */
 async function scannableColumns(): Promise<{ table: string; column: string }[]> {
 	const { rows } = await db.query<{ table: string; column: string }>(
 		`SELECT c.table_name AS "table", c.column_name AS "column"
 		 FROM information_schema.columns c
 		 JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
 		 WHERE c.table_schema = 'public'
-		   AND (c.data_type IN ('text', 'character varying', 'character', 'json', 'jsonb', 'uuid', 'ARRAY') OR c.udt_name = 'citext')
+		   AND (c.data_type IN ('text', 'character varying', 'character', 'json', 'jsonb', 'uuid') OR c.udt_name IN ('citext', '_text', '_varchar', '_bpchar', '_uuid', '_citext', '_json', '_jsonb'))
 		 ORDER BY 1, 2`
 	);
 	return rows;
