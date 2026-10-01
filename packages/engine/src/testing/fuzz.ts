@@ -743,7 +743,8 @@ function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
  * to more than the river carries, months without any, losses, profiles, any
  * return share (0 when piped out), any priority class; half the monthly
  * ones with people, so a domestic or municipal one has a basic-needs floor
- * from under to over its demand (engine ≥ 1.44.0).
+ * from under to over its demand (engine ≥ 1.44.0); and every source,
+ * sized as it says (engine ≥ 1.56.0).
  */
 function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 	if (!g.bool(0.25)) return [];
@@ -773,6 +774,8 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				// The basic-needs floor (engine ≥ 1.44.0): a per-unit object's count sets it; every other
 				// monthly one names people from its level, no draw, so the rest of the seed is unchanged.
 				population: !perUnit && k % 2 === 0 ? Math.round(level * 40) : null,
+				// Where its number comes from (engine ≥ 1.56.0), from k with no draw, one that fits the sizing: it changes no run.
+				source: ([null, perUnit ? 'perCapita' : 'meter', perUnit ? 'other' : 'aadd'] as const)[k % 3]!,
 				note: ''
 			});
 		}

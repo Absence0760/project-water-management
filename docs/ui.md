@@ -1718,8 +1718,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
     so the schematic's scroller carries `data-fit` (`<width>x<height>`, plus
     ` wide` from 900 px): the box the drawing on screen was laid out for. It
     is settled once that matches the box as it is now and `--map-top` matches
-    the layout's top; e2e waits on that (`waitForMapFit`, e2e/support/diagrams.ts)
-    before measuring the map (issue #138).
+    the layout's top, and the map card isn't `aria-busy` (set while the latest
+    run's results load: their status line sits in the card's head, which wraps
+    at 1280 px, so the map moves up when it goes); e2e waits on that
+    (`waitForMapFit`, e2e/support/diagrams.ts) before measuring the map (issue #138).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
@@ -2081,13 +2083,19 @@ note's link on the Summary, `notes.ts` `noteHref`).
   issue's research table (municipal: m³/day by month, first, 50 % returned;
   domestic: people × 230 l a day, first; livestock: head × 45 l a day, with
   the crops; external: piped out, nothing returned; the rest: m³/day by month,
-  with the crops). Each has a **Name**, **Category**, **Demand given as**
-  (m³/day by month, or a count × litres a day), **Priority** (first / with the
+  with the crops). Each has a **Name**, **Category**, **Source of the
+  number** (engine ≥ 1.56.0, issue #54 Q11, `demandObjectSource.ts`: Not
+  recorded, the default; Meter records; Reconciliation strategy's AADD;
+  Population × litres a day (a norm); Other), **Demand given as**
+  (m³/day by month, or a count × litres a day; picking meter records or an
+  AADD sets it to m³/day by month and a norm to a count × litres, and locks
+  it with "Set by the source." under it; Other and Not recorded leave it to
+  the modeller), **Priority** (first / with the
   crops / last), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
-  m³/day, or the per-unit profile, blank = 1), and **Where the number comes
-  from**. Per unit: **Number of** people / head / units, **Litres per** person
+  m³/day, or the per-unit profile, blank = 1), and **Source details** (the
+  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2124,7 +2132,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   floor** (the days, with the mean m³/day below it on a second line, stacked
   so the table keeps its width); "–" on an object without one, which the
   intro says means no floor (`HumanImpactTables.test.ts`,
-  `e2e/tests/demand-objects.spec.ts`).
+  `e2e/tests/demand-objects.spec.ts`). When an object records its source
+  (engine ≥ 1.56.0), a **Source** column after the name ("not recorded" on
+  the rest) and a line above the table giving each source's share of the
+  objects' demand, best source first ("Of their demand, 60% is from meter
+  records, 30% from a per-capita norm and 10% not recorded.",
+  `runs/demandSources.ts`, `e2e/tests/demand-source.spec.ts`); the summary
+  CSV's demand-objects block gains a Source column the same way.
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);

@@ -19,6 +19,7 @@ import {
 	CROP_SET_FIELDS,
 	DEMAND_OBJECT_CATEGORIES,
 	DEMAND_OBJECT_CATEGORY_LABEL,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_CLASSES,
 	LAND_COVER_SET_FIELDS,
@@ -47,6 +48,7 @@ import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
 import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
+import { SOURCE_OPTION_LABEL } from '$lib/components/network/demandObjectSource';
 
 export interface EnumOption {
 	value: string;
@@ -255,7 +257,9 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	enabled: { label: 'Modelled', spec: { t: 'bool' } },
 	// The basic-needs floor's people (engine ≥ 1.44.0): a domestic or municipal object is never cut below 25 l each a day.
 	population: { label: 'People served', spec: num('', { nullable: true, nullLabel: 'its count (per person), else none' }) },
-	note: { label: 'Where the number comes from', spec: { t: 'text', optional: true } }
+	// Where its number comes from (engine ≥ 1.56.0); its sizing must match (a model rule, so set both in one edit group).
+	source: { label: 'Source of the number', spec: { t: 'enum', options: plain(DEMAND_OBJECT_SOURCES, SOURCE_OPTION_LABEL), nullable: true, nullLabel: 'not recorded' } },
+	note: { label: 'Source details', spec: { t: 'text', optional: true } }
 };
 /** The schedule field's label, as the Network form heads it. */
 export const SCHEDULE_LABEL = 'On/off schedule';

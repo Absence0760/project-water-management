@@ -1283,12 +1283,23 @@ or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
 'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-note (≤ 1000 chars) }[]`,
+source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
+chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, ''. `PUT` refuses an object on a gauge, an other water
+internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
-without a count and litres, an external one with a return share above 0, and
-a negative population.
+without a count and litres, an external one with a return share above 0, a
+negative population, an unknown source, and a source whose sizing it doesn't
+have.
+
+A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
+[model.md §2.7f](./model.md)) is where its number comes from, by the rule
+agreed with the client: `meter` (meter records) and `aadd` (a reconciliation
+strategy's AADD) are volumes, so the object must be `monthly`; `perCapita`
+(population × litres a day) must be `perUnit`; `other` (a licence, an
+estimate, a workbook's typed-over demand) may be either. Null = not recorded
+(every object saved before it). It changes no number in the run; `note` keeps
+the detail (which meter, which strategy, which norm).
 
 A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
@@ -1717,10 +1728,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
-  name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  name, category, source?, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
-  the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  the days it switched the object off, never counted in `daysShort`;
+  `source`, engine ≥ 1.56.0, only on an object that records one: the model's
+  `source`, as a report grades the demand by). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
