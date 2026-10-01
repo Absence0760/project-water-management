@@ -282,11 +282,12 @@ produce the committed Python output:
 | `synthetic_b023.xlsx` | the workbook (about 85 KB) |
 | `synthetic_b023.project.json` / `.notes.txt` | `extract_project.py` output and its notes, one per line (a `WARNING: ` prefix kept) |
 | `synthetic_b023.gauge-reference.project.json` / `.notes.txt` | the same with `--gauge-as-reference --gauge-scaling-from 2021-10-01 --gauge-scale-factor 0.8` |
+| `synthetic_b023.run-of-river.project.json` / `.notes.txt` | the same with `--run-of-river` (Delta and India Farm converted) |
 
 `expected.json` isn't committed: the Element sheets hold only a week of
 invented values, enough for the reader to run.
 
-Regenerate after changing the generator or the importer, then commit all five
+Regenerate after changing the generator or the importer, then commit all seven
 files (the TypeScript port must follow an importer change):
 
 ```sh
@@ -403,7 +404,7 @@ generator, then commit both files:
 `frontend/src/lib/spreadsheet/import/` is a TypeScript port of
 `extract_project.py`'s project extraction and `calibration.py`, for the
 in-browser workbook import (roadmap WP-1.31): `await readWorkbook(bytes)` then
-`extractProject(wb, { fileName, gaugeAsReference })` gives `{ project, notes,
+`extractProject(wb, { fileName, gaugeAsReference, runOfRiver })` gives `{ project, notes,
 unmapped }`. Per decision D17 the **TypeScript port is the user path** (the
 import in the UI), and the Python scripts stay for the regression fixtures
 (`expected.json`), `pnpm seed:demo` and the
@@ -418,12 +419,13 @@ the other way round. Two tests hold it:
 
 - `fixture.test.ts` (CI) runs the port on `fixtures/synthetic_b023.xlsx` and
   compares it with the committed `.project.json` and `.notes.txt`, with and
-  without the gauge-reference options;
+  without the gauge-reference options, and with `--run-of-river`
+  (`runOfRiver: true`);
 - `sourceWorkbooks.test.ts` (local only) runs `extract_project.py` on every
   workbook in `$WBT_SOURCE_DIR/Original/` (default
   `../project-water-management-source/Original/`) into a temp directory
-  outside the repo and compares, with no options, `--gauge-as-reference`, and
-  the seed's scaling from `wbt-import.env`. It skips without the workbooks or
+  outside the repo and compares, with no options, `--gauge-as-reference`,
+  `--run-of-river`, and the seed's scaling from `wbt-import.env`. It skips without the workbooks or
   Python with openpyxl (`PYTHON`, else the checkout's `.venv`, else
   `python3`), and takes some seconds per workbook variant, most of it the
   Python.
@@ -461,7 +463,9 @@ comes out, then the project, notes and unmapped report), shows the review,
 and posts the project to `POST /projects/import`, the same route and
 validation as a `.json` file ([docs/ui.md](../../docs/ui.md#import-a-b023-workbook)).
 The review's gauge option is `gaugeAsReference` (a date and factor for the
-scaling). Nothing from the workbook but the project reaches the server.
+scaling), and its *River pumping units* option, shown only when a unit is
+flagged as probable run-of-river, is `runOfRiver` (`--run-of-river`, same
+conversion, same notes; `asRunOfRiver` in `farms.ts`). Nothing from the workbook but the project reaches the server.
 
 **Acceptance (the client workbook).** `sourceWorkbooks.test.ts` shows the
 port's `project.json` equals the Python's, with and without the gauge

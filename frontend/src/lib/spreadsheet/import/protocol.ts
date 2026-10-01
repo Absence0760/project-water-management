@@ -37,6 +37,7 @@ export async function handle<W>(m: ToWorker, state: WorkerState<W>, post: (m: Fr
 		const result = deps.extract(state.workbook, {
 			fileName: state.fileName,
 			gaugeAsReference: m.options.gaugeAsReference ?? false,
+			runOfRiver: m.options.runOfRiver ?? false,
 			onProgress: (sheet, step, steps) => post({ type: 'progress', progress: { stage: 'extract', sheet, step, steps } })
 		});
 		post({ type: 'result', result });

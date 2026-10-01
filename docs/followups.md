@@ -3598,12 +3598,14 @@ from the WP:
       hydrologist confirming a domestic demand isn't reduced by rain (the
       physical reading). Trigger: a workbook with a typed-over demand on a
       cropped farm.
-- [ ] **The browser importer has no run-of-river option.** Only the Python
-      importer (and so the seed) has `--run-of-river`; the in-app workbook
-      import keeps the flag-and-warn behaviour. Durable fix: the same option
-      in `spreadsheet/import/extract.ts` behind a checkbox in the import
-      dialog, with parity on the synthetic workbook. Trigger: a user
-      importing such a workbook in the app rather than through the seed.
+- [x] **The browser importer has no run-of-river option** (2026-10-01).
+      The in-app workbook import has the Python's `--run-of-river`:
+      `extractProject(…, { runOfRiver: true })` (`asRunOfRiver` in
+      `spreadsheet/import/farms.ts`, same units, fields and notes), behind
+      the review's *River pumping units* checkbox, off by default and shown
+      only when the importer flags a unit. Parity: `fixture.test.ts` against
+      the committed `synthetic_b023.run-of-river.*` output, and the local
+      `sourceWorkbooks.test.ts` on the client workbooks.
 
 ## Rain forcing, fitting at import and river off-takes (issue #54)
 

@@ -1590,6 +1590,15 @@ workbook part is `WorkbookReview.svelte`.
      read) and updates the counts, notes and report in place; a date without
      a factor (or the other way round) or a non-positive factor is flagged
      and blocks Import.
+   - **River pumping units** (only when the importer flags a unit as
+     probable run-of-river; issue #54, 2c/2d): *Import these N as run of
+     river, pumping from the river*, off by default, its hint naming the
+     flagged units. On, it converts them as the Python importer's
+     `--run-of-river` does: the run-of-river supply rule, the dummy dam
+     dropped and the river pump uncapped (`pumpCapacityM3Day` null) until
+     the capacities are entered under Network → Supply, with a warning per
+     unit; a unit an enabled transfer draws on keeps its dam, and says so.
+     Like the gauge option it re-extracts from the workbook the worker holds.
    - **CHIRPS column** (only when the workbook has one; issue #40 part c):
      which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
      b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The

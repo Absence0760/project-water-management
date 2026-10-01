@@ -9,6 +9,8 @@ Writes, into OUTDIR (default scripts/wbt-import/fixtures/):
   synthetic_b023.notes.txt                   extract_project.py's notes, one per line
   synthetic_b023.gauge-reference.project.json   the same with --gauge-as-reference
   synthetic_b023.gauge-reference.notes.txt      --gauge-scaling-from 2021-10-01 --gauge-scale-factor 0.8
+  synthetic_b023.run-of-river.project.json      the same with --run-of-river (the browser importer's
+  synthetic_b023.run-of-river.notes.txt         run-of-river option checks its parity against these)
 
 Everything in the workbook is made up: the farm, crop and gauge names, the
 areas, dams, crop factors and every daily value (a seeded random generator).
@@ -975,7 +977,7 @@ def dump_notes(notes: list[str]) -> str:
 def expected_outputs(workbook: Path) -> dict[str, str]:
     """The fixture text files for a workbook: {file name: content}."""
     out = {}
-    for suffix, kwargs in (("", {}), (".gauge-reference", GAUGE_REFERENCE_ARGS)):
+    for suffix, kwargs in (("", {}), (".gauge-reference", GAUGE_REFERENCE_ARGS), (".run-of-river", {"run_of_river": True})):
         project, _expected, notes = extract(workbook, **kwargs)
         out[f"{STEM}{suffix}.project.json"] = dump_project(project)
         out[f"{STEM}{suffix}.notes.txt"] = dump_notes(notes)

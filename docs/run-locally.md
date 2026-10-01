@@ -353,7 +353,9 @@ WBT_GAUGE_SCALE_FACTOR=F
 
 and, for a workbook with units that pump straight from the river, to
 import the units the importer flags as probable run-of-river with the
-run-of-river supply rule (issue #54, 2c/2d; off unless set):
+run-of-river supply rule (issue #54, 2c/2d; off unless set; the in-app
+**Import b023 workbook** review has the same option as its *River pumping
+units* checkbox, [ui.md](./ui.md#import-a-b023-workbook)):
 
 ```bash
 WBT_RUN_OF_RIVER=1
