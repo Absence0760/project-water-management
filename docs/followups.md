@@ -4567,19 +4567,37 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       compares their results digests. The bundle carries each run's own
       stored inputs rather than the project's `export.json`: those are what
       the runs used, where the export is the project as it is now.
-- [ ] **Re-run both runs on the server after issue.** Issue checks the
-      bundle's files, hashes and manifest but doesn't re-run the runs (it
-      takes as long as the runs, too long for a request); today the
-      assessor does that with `reproduce:pack`. Durable fix: a
-      `pack_reproduce` job queued at issue that runs `checkPackBundle` with
-      the re-run on the stored bundle and records the outcome and engine on
-      the pack (shown on the pack page, not on verify, since it is the
-      app's own claim). Trigger: with the pack view, or the first pack whose
-      runs don't reproduce. The same job is where the bundle's build would
-      move if a catchment's issue ever nears the API's 30 s (it is built in
-      the issue's transaction today, estimated 5–10 s at 300 outputs × 30
-      years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
-      trigger for that part, an issue slower than 15 s in the API's logs.
+- [x] **Re-run both runs on the server after issue.** Issue checks the
+      bundle's files, hashes and manifest but didn't re-run the runs (it
+      takes as long as the runs, too long for a request). Built
+      (154_pack_reproduce, 2026-10-01): the issue's transaction queues a
+      `pack_reproduce` job that reads the stored bundle back, checks it is
+      the recorded bytes, runs `checkPackBundle` with the re-run and the
+      pack's manifest hash, and records the outcome (`reproduced`,
+      `not_reproduced`, `other_engine`, `no_bundle`), the engine and every
+      check in `pack_reproduction`, through `app_record_pack_reproduction`
+      from that job only. The pack page's bar shows it; verify doesn't
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+- [ ] **Re-run a pack again on the server.** The `pack_reproduce` job runs
+      once, at issue (3 attempts). When it gives up (the packs bucket
+      unreachable for all three) the pack page says the re-run couldn't be
+      done, and nothing asks again; and after an engine upgrade nothing
+      re-runs older packs on the new engine (one outcome per pack and
+      engine is recorded, so the table already holds a second). Durable
+      fix: an editor's `POST …/packs/:packId/reproduce`, as
+      `POST …/packs/:packId/pdf` asks again for a PDF (queue
+      `queuePackReproduce` while no outcome is recorded for the server's
+      engine; route inventory, role ladder, mass-assignment and write-route
+      entries), with a "Try again" on the pack page. Trigger: the first
+      `pack_reproduce` job that goes dead in production, or an engine
+      version bump after the first pack is issued.
+- [ ] **Move the bundle's build to a job if issue nears the timeout.** The
+      bundle is built in the issue's transaction today, estimated 5–10 s at
+      300 outputs × 30 years a run
+      ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
+      If a catchment's issue ever nears the API's 30 s, the build moves to
+      a job (the `pack_reproduce` job's place, before its check). Trigger:
+      an issue slower than 15 s in the API's logs.
 - [x] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
       same engine version, isn't shown. Built: `app_verify_pack` (132) also

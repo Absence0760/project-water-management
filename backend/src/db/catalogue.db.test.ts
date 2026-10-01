@@ -150,9 +150,11 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * written by the migration runner from the engine's language table
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
- * no caller can choose a recipient.
+ * no caller can choose a recipient; and a pack's server re-run outcomes,
+ * written only by its pack_reproduce job through app_record_pack_reproduction
+ * (154_pack_reproduce), so no member can claim a pack reproduced.
  */
-const READ_ONLY = new Set(['language', 'pack_notice']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'pack_reproduction']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite

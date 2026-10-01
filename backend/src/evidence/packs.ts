@@ -42,6 +42,7 @@ import { wakeWorker } from '../jobs/wake.js';
 import { packBundleFileName, packDownloadUrl, packFileName } from '../reports/storage.js';
 import { toVerify } from '../share/links.js';
 import { issuePackBundle } from './bundle.js';
+import { packReproductionState, queuePackReproduce } from './packReproduce.js';
 import { errataFoundSince, type PackErratum, type PackRunEngines } from './errata.js';
 import { buildEvidenceReport } from './report.js';
 import { queuePackNotices } from './notices.js';
@@ -325,6 +326,8 @@ export const packRoutes = new Hono<AuthEnv>()
 					signoffs,
 					// The server-rendered PDF of an issued pack (119_pack_render): ready, rendering, failed or none.
 					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
+					// The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify.
+					reproduction: await packReproductionState(db, id, packId),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
 					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest, errataFoundSince) : null
 				});
@@ -434,6 +437,8 @@ export const packRoutes = new Hono<AuthEnv>()
 			if (pred) await recordAudit(db, id, 'pack.superseded', audit(pred, { byPackId: issued.id, byVersion: issued.version }));
 			// Its PDF, printed from the issued pack's own page (119_pack_render), in the same transaction as the issue.
 			const render = await queuePackRender(db, id, packId);
+			// The server's re-run of both runs from the stored bundle (154_pack_reproduce), queued with the issue too.
+			await queuePackReproduce(db, id, packId);
 			// "Pack issued" emails to the editors and the applicant (133_pack_notices), sent by the tick the render wakes.
 			await queuePackNotices(db, packId, 'issued');
 			return { pack: issued, jobId: render.jobId };

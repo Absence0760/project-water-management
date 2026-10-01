@@ -176,7 +176,10 @@ resource "aws_cloudfront_origin_access_control" "packs" {
 # hash (reports/storage.ts headPackPdf, jobs/handlers/pack-render.ts): a buggy
 # or compromised renderer can't fix a hash of bytes the bucket doesn't hold.
 # HeadObject needs s3:GetObject; the worker gets it on packs/* only (it never
-# reads a PDF's bytes: the code only HEADs).
+# reads a PDF's bytes: the code only HEADs). The same grant lets the
+# pack_reproduce job read an issued pack's reproduction bundle back
+# (packs/*.zip) to re-run its runs (reports/storage.ts getPackBundle,
+# jobs/handlers/pack-reproduce.ts, 154_pack_reproduce).
 #
 # The worker is in the private VPC with no internet, so it reaches S3 through
 # an S3 interface endpoint (network.tf: "add that service's VPC endpoint"),
@@ -241,7 +244,7 @@ resource "aws_vpc_endpoint" "s3" {
     private_dns_only_for_inbound_resolver_endpoint = false
   }
 
-  # Only the worker's read of packs/, and the API's put of a bundle
+  # Only the worker's read of packs/ (PDF checks, bundle re-runs), and the API's put of a bundle
   # (pack_bundles.tf), in the packs bucket.
   policy = data.aws_iam_policy_document.s3_endpoint.json
 

@@ -6753,6 +6753,16 @@ their own application's in [their own view](#the-applicants-pack-view).
   its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
   API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
+  Once issued, a line says what the server's re-run of both runs from the
+  stored bundle found (`reproduction`, 154_pack_reproduce;
+  [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction);
+  `packs/pack.ts` `reproductionNote`, `data-testid="pack-reproduction"`
+  with `data-state` the status): *Reproduced on the server* with the engine
+  and date (an info box), *Not reproduced* with each failed check listed (an
+  error), *Not re-run on the runs' own engine* when only the re-runs differ
+  on another engine (a warning), a quiet *re-running* line with **Check
+  again** while its job runs, or that it couldn't be done and why. It is
+  the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
   link shows (verify's fields, and while it stands the river's figures, never

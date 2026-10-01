@@ -265,6 +265,35 @@ export async function putPackBundle(key: string, body: Uint8Array, sha256: strin
 	assertStoredChecksum(key, checksum, stored.ChecksumSHA256);
 }
 
+/**
+ * Read a pack's reproduction bundle back from the packs bucket (the
+ * pack_reproduce job, jobs/handlers/pack-reproduce.ts; 154_pack_reproduce).
+ * Checksum mode is on, so the SDK checks the bytes against the SHA-256 they
+ * were stored with; the job also hashes them against the pack's recorded
+ * bundle_sha256. `null` when there is no object under the key; refused (an
+ * Error) when the object is larger than `maxBytes`, before its body is read.
+ */
+export async function getPackBundle(key: string, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | null> {
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	let res;
+	try {
+		res = await c.send(new sdk.GetObjectCommand({ Bucket: packsBucket(), Key: key, ChecksumMode: 'ENABLED' }));
+	} catch (err) {
+		const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+		if (e.name === 'NoSuchKey' || e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) return null;
+		throw err;
+	}
+	if (res.ContentLength !== undefined && res.ContentLength > maxBytes) {
+		res.Body?.transformToWebStream().cancel().catch(() => {});
+		throw new Error(`the stored bundle ${key} is ${res.ContentLength} bytes, more than a bundle holds (${maxBytes})`);
+	}
+	if (!res.Body) throw new Error(`the stored bundle ${key} has no body`);
+	const bytes = await res.Body.transformToByteArray();
+	if (bytes.length > maxBytes) throw new Error(`the stored bundle ${key} is more than a bundle holds (${maxBytes} bytes)`);
+	return new Uint8Array(bytes);
+}
+
 /** A conditional write refused because the object exists (HTTP 412). */
 export function isPreconditionFailed(err: unknown): boolean {
 	const e = err as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
