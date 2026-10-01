@@ -1,13 +1,14 @@
 <script lang="ts">
 	// The catchment's alert rules (WP-2.13; editors): which kinds send email,
 	// and at what level: catchment-wide kinds, a dam level per farm, and a
-	// staleness level per data feed (each past that feed's usual delay, 057).
+	// staleness level per data feed (each past that feed's usual delay, 057)
+	// and per series an API key writes (141).
 	// Loaded on demand by AlertsPanel. Saving evaluates the
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
 	import { onMount } from 'svelte';
 	import { api, type AlertRule } from '$lib/api';
-	import { feedRuleLabel, groupRules, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+	import { feedRuleLabel, groupRules, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 
 	let { projectId, onClose, onSaved }: { projectId: string; onClose: () => void; onSaved: () => void } = $props();
 
@@ -20,8 +21,8 @@
 	const toRows = (rules: AlertRule[]): Row[] => rules.map((r) => ({ ...r, input: thresholdToInput(r.kind, r.threshold) }));
 	const groups = $derived(rows ? groupRules(rows) : null);
 	const problems = $derived(rows ? rows.map((r) => (r.enabled ? thresholdProblem(r.kind, r.input) : null)) : []);
-	const key = (r: AlertRule) => `${r.kind}/${r.nodeId ?? ''}/${r.feedId ?? ''}`;
-	const idOf = (r: AlertRule) => `rule-${r.kind}-${r.nodeId ?? r.feedId ?? 'all'}`;
+	const key = (r: AlertRule) => `${r.kind}/${r.nodeId ?? ''}/${r.feedId ?? ''}/${r.seriesId ?? ''}`;
+	const idOf = (r: AlertRule) => `rule-${r.kind}-${r.nodeId ?? r.feedId ?? r.seriesId ?? 'all'}`;
 
 	onMount(async () => {
 		try {
@@ -42,6 +43,7 @@
 				kind: r.kind,
 				nodeId: r.nodeId,
 				feedId: r.feedId,
+				seriesId: r.seriesId,
 				threshold: r.kind === 'restriction_published' ? 0 : thresholdFromInput(r.kind, r.input),
 				enabled: r.enabled
 			}));
@@ -60,8 +62,8 @@
 	{@const i = rows!.indexOf(r)}
 	<div class="rule" data-rule={key(r)}>
 		<label class="check"><input type="checkbox" bind:checked={r.enabled} /> {label}</label>
-		{#if thresholdLabel(r.kind)}
-			<label class="level" for={idOf(r)}>{thresholdLabel(r.kind)}</label>
+		{#if thresholdLabel(r.kind, !!r.seriesId)}
+			<label class="level" for={idOf(r)}>{thresholdLabel(r.kind, !!r.seriesId)}</label>
 			<input
 				id={idOf(r)}
 				type="number"
@@ -105,6 +107,13 @@
 				<legend>Data feeds behind</legend>
 				<p class="muted hint">Each feed has its own level: the days past that feed’s usual delay before it alerts.</p>
 				{#each groups.feeds as r (key(r))}{@render rule(r, feedRuleLabel(r))}{/each}
+			</fieldset>
+		{/if}
+		{#if groups.series.length}
+			<fieldset>
+				<legend>{SERIES_STALE_NAME}</legend>
+				<p class="muted hint">Each series an API key sends has its own level: the whole days with no new reading before it alerts (today doesn’t count).</p>
+				{#each groups.series as r (key(r))}{@render rule(r, seriesRuleLabel(r))}{/each}
 			</fieldset>
 		{/if}
 		<div class="actions">

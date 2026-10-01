@@ -1603,7 +1603,11 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   advisory | restricted, restriction_pct numeric(5,2) NULL (0–100, NULL with
   none), notice jsonb (081; below), next_expected_on date NULL (E10),
   catchment_view jsonb, superseded_at, updated_at, updated_by → app_user SET
-  NULL)`. A partial unique index on `(project_id) WHERE superseded_at IS
+  NULL, auto boolean)`. `auto` (141) is true when an auto run published it
+  on its own (`publish/autoPublish.ts`), set on insert and in no UPDATE
+  grant; the `farms_short` alert watches only those (§ Alerts). 141
+  backfilled it from the `publication.published` audit events' `auto`. A
+  partial unique index on `(project_id) WHERE superseded_at IS
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
@@ -2819,7 +2823,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 
 | Table | Holds |
 | --- | --- |
-| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (057: the data feed, `data_stale` only; `ON DELETE CASCADE`), `threshold` (a per-kind CHECK: a dam fraction 0–1, whole days, failures or jobs, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`). 057 turned 051's catchment-wide `data_stale` rules into one per feed **in place**: the old row became the first feed's rule (keeping its events and deliveries, the 180-day history and the export's), and each other feed got a new rule at the same level, switch and creator. A catchment with no feed then kept its row with `feed_id` NULL, its pending choice: it never fires, the rule editor doesn't list it, the API never makes one, and `ensureFeedRules` gives it the first feed added (the one change of feed a rule may make; `migration-057.db.test.ts`) |
+| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`, `farms_short` (141)), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (057: the data feed, `data_stale` only; `ON DELETE CASCADE`), `series_id` (141: the series an API key writes, `data_stale` only, never with a `feed_id`; a composite foreign key `(project_id, series_id)` onto `time_series`, `ON DELETE CASCADE`), `threshold` (a per-kind CHECK `alert_rule_threshold`: a dam fraction 0–1, whole days, failures, jobs or farms, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id, series_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`), and a series an API key writes (a `series_key_days` row) gets one at 2 days (`ensureSeriesRules`, 141). Only key-fed series get a rule (a hand-uploaded series is stale by nature, issue #120); once made, it stays with the series even after a person writes over the key's days. 057 turned 051's catchment-wide `data_stale` rules into one per feed **in place**: the old row became the first feed's rule (keeping its events and deliveries, the 180-day history and the export's), and each other feed got a new rule at the same level, switch and creator. A catchment with no feed then kept its row with `feed_id` NULL, its pending choice: it never fires, the rule editor doesn't list it, the API never makes one, and `ensureFeedRules` gives it the first feed added (the one change of feed a rule may make; `migration-057.db.test.ts`) |
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
@@ -2827,10 +2831,11 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
     and the `restriction_published` rule; INSERT / UPDATE / DELETE for
-    editors. The `alert_rule_check` trigger (057, from 051's) requires a farm
+    editors. The `alert_rule_check` trigger (141, from 066's) requires a farm
     node and a feed of the same project, stamps the creator, and never lets a
-    rule's kind, farm or feed change (bar a pending feed-less rule getting its
-    feed once).
+    rule's kind, farm, feed or series change (bar a pending feed-less rule
+    getting its feed once); the series' composite foreign key keeps it in
+    the rule's project.
   - `alert_event`: SELECT for viewers; a farmer the events on their own farms
     and the restriction-notice events (not an applicant). INSERT and UPDATE
     for editors (the `alert_eval` job's acting user). `water_app` may update
@@ -2849,8 +2854,9 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
   default for that role, overridden by their farm-level choice, then their
   kind-level choice; a catchment-wide `all = off` mutes them. Defaults:
   `dam_below` that farm's farmers, editors and owners (viewers opt in);
-  `ewr_forecast_fail` editors and owners (viewers opt in); `data_stale`
-  editors and owners; `restriction_published` farmers, viewers and up;
+  `ewr_forecast_fail` and `farms_short` (141) editors and owners (viewers
+  opt in; never a farmer: the shortfall counts are the staff-only part of a
+  publication); `data_stale` editors and owners; `restriction_published` farmers, viewers and up;
   `job_dead` and `feed_failing` owners (editors opt in). Applicants never.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
   - `app_alert_recipients(project, kind, node)`: verified addresses whose

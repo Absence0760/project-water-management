@@ -7,7 +7,7 @@
 	import { onMount } from 'svelte';
 	import { api, type AlertEvent } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import { eventText, KIND_NAME } from './alerts';
+	import { eventKindName, eventText } from './alerts';
 
 	let {
 		projectId,
@@ -66,7 +66,7 @@
 	{:else}
 		<ul>
 			{#each events as e (e.id)}
-				<li data-alert-kind={e.kind}><strong>{KIND_NAME[e.kind]}.</strong> {eventText(e)}</li>
+				<li data-alert-kind={e.kind}><strong>{eventKindName(e)}.</strong> {eventText(e)}</li>
 			{/each}
 		</ul>
 	{/if}

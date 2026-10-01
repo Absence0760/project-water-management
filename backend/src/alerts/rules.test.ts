@@ -59,6 +59,12 @@ describe('the other kinds', () => {
 		expect(simulate('job_dead', 1, [0, 1, 2, 0]).steps).toEqual(['keep', 'open', 'keep', 'clear']);
 	});
 
+	it('farms_short fires at N farms short and re-arms only when none is (issue #120)', () => {
+		expect(simulate('farms_short', 2, [0, 1, 2, 3, 1, 0, 2]).steps).toEqual(['keep', 'keep', 'open', 'keep', 'keep', 'clear', 'open']);
+		// A person's publication has no value: a firing alert clears, a quiet one stays quiet.
+		expect(simulate('farms_short', 1, [3, null, null]).steps).toEqual(['open', 'clear', 'keep']);
+	});
+
 	it('restriction_published never fires on a value (each notice change is its own event)', () => {
 		expect(fires('restriction_published', 0, 100)).toBe(false);
 	});
@@ -73,6 +79,9 @@ describe('thresholds', () => {
 		expect(THRESHOLD.data_stale.safeParse(61).success).toBe(false);
 		expect(THRESHOLD.restriction_published.safeParse(0).success).toBe(true);
 		expect(THRESHOLD.restriction_published.safeParse(1).success).toBe(false);
+		expect(THRESHOLD.farms_short.safeParse(1).success).toBe(true);
+		expect(THRESHOLD.farms_short.safeParse(0).success).toBe(false);
+		expect(THRESHOLD.farms_short.safeParse(1.5).success).toBe(false);
 	});
 });
 
@@ -85,5 +94,10 @@ describe('defaultMode (mirrors 051 alert_audience; alerts.db.test.ts checks the 
 		expect(defaultMode('viewer', 'data_stale')).toBeNull();
 		expect(defaultMode('editor', 'job_dead')).toBe('off');
 		expect(defaultMode('owner', 'job_dead')).toBe('immediate');
+		// farms_short (issue #120): the WUA's staff; a viewer may opt in; a farmer never (neighbours' shortfalls).
+		expect(defaultMode('editor', 'farms_short')).toBe('immediate');
+		expect(defaultMode('owner', 'farms_short')).toBe('immediate');
+		expect(defaultMode('viewer', 'farms_short')).toBe('off');
+		expect(defaultMode('farmer', 'farms_short')).toBeNull();
 	});
 });

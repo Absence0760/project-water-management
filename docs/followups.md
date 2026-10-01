@@ -4516,6 +4516,16 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       `LANGUAGES` in `e2e/tests/alerts-mailpit.spec.ts` has its `af` entry:
       the Mailpit e2e checks the Afrikaans mail and the unsubscribe page on a
       phone set to Afrikaans.
+- [x] **Staleness for series an API key sends, and units short on an
+      automatic publication (issue #120).** Built (141): a `data_stale` rule
+      per series an API key writes (`alert_rule.series_id`, 2 days by
+      default, from the series' last non-blank day; listed under **API data
+      behind**, marked "(no API key sends it now)" once a person writes over
+      the key's days; a hand-uploaded series gets none), and the
+      `farms_short` kind, staff only, on publications an auto run made
+      (`run_publication.auto`). The one Afrikaans line not yet re-translated
+      after the rename, `mail.alert.stale.seriesWhat` ("API data behind"),
+      is on the translation sheet and goes out in English until it is.
 - [x] **Per-feed staleness levels.** Built (057 `alert_rule.feed_id`):
       one `data_stale` rule per feed, each at its own level past that
       feed's usual delay, with a default per source (CHIRPS 3 days,
