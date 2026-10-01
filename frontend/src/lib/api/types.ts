@@ -2390,6 +2390,7 @@ export interface QuaternaryLayer {
 	quaternaries: { code: string; dataset: string; synthetic: boolean; geometry: MapGeometry }[];
 	/** More met the bbox than one answer carries (the first by code are given). */
 	truncated: boolean;
+	datasets: { dataset: string; count: number }[];
 }
 
 /** A gauging station proposed as the observed-flow source (GET …/map/stations, issue #326 B-gauge). Never applied by the server. */
@@ -2426,6 +2427,7 @@ export interface GaugeStationLookup {
 	withinKm: number;
 	/** River gauges within withinKm, nearest first, at most 10. */
 	stations: GaugeStationProposal[];
+	datasets: { dataset: string; count: number }[];
 }
 
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
