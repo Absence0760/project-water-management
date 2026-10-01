@@ -15,6 +15,8 @@
 	const loadApiKeys = () => import('$lib/components/apiKeys/ApiKeysPanel.svelte');
 	// Its own chunk (issue #69): the Settings tab chunk sits at its size ceiling, and the feeds panel loads its list on mount anyway.
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
+	// Preview the unsaved settings against the last run (issue #284): its own chunk, fetched when first wanted.
+	const loadUnsavedPreview = () => import('$lib/components/preview/UnsavedPreviewDialog.svelte');
 </script>
 
 <script lang="ts">
@@ -65,7 +67,8 @@
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
-	import { api, type Project } from '$lib/api';
+	import { api, type Project, type RunMeta } from '$lib/api';
+	import type { UnsavedEdits } from '$lib/preview/overlay';
 	import CalibrationWindowFields from '$lib/components/calibration/CalibrationWindowFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -114,10 +117,13 @@
 		observedOrigins,
 		apanSeries,
 		readonly,
-		onProjectChange
+		onProjectChange,
+		runs = null
 	}: {
 		project: Project;
 		editor?: ModelEditor;
+		/** The project's runs, newest first (null while they load): the Preview starts from the last one. */
+		runs?: RunMeta[] | null;
 		/** Kinds of the project's input series, to limit the calibration flow choices. */
 		seriesKinds?: string[] | null;
 		/** The flow records attached to gauges inside the network (084_gauge_records), for the calibration site's choices; null = not known. */
@@ -334,6 +340,21 @@
 
 	/** The optional "why" of the save, kept with the change in the History tab. */
 	let reason = $state('');
+
+	// Preview (issue #284): the unsaved settings, and any unsaved model edits that have no problems, on the last run.
+	let previewOpen = $state(false);
+	let previewMounted = $state(false);
+	const previewModel = $derived(!!editor?.dirty && editor.issues.length === 0);
+	function previewEdits(): UnsavedEdits {
+		return {
+			settings: { saved: JSON.parse(saved), draft: $state.snapshot(s) as unknown as NonNullable<UnsavedEdits['settings']>['draft'] },
+			...(editor && previewModel ? { model: { saved: editor.savedModel(), draft: editor.snapshot() } } : {})
+		};
+	}
+	function openPreview() {
+		previewMounted = true;
+		previewOpen = true;
+	}
 
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
@@ -1357,6 +1378,10 @@
 					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
 				</label>
 			{/if}
+			<!-- The model's save bar hides its own Preview on this tab: this one takes the model's edits too. -->
+			{#if dirty || previewModel}
+				<button type="button" class="btn" disabled={saving || (dirty && blocked)} onclick={openPreview}>Preview</button>
+			{/if}
 			<button type="button" class="btn" disabled={!dirty || saving} onclick={discard}>Discard</button>
 			<button type="submit" class="btn btn-primary" disabled={!dirty || saving || blocked}>
 				{saving ? 'Saving…' : 'Save settings'}
@@ -1364,6 +1389,21 @@
 		</div>
 	{/if}
 </form>
+
+{#if previewMounted}
+	<Lazy load={loadUnsavedPreview}>
+		{#snippet children(UnsavedPreviewDialog)}
+			<UnsavedPreviewDialog
+				bind:open={previewOpen}
+				projectId={project.id}
+				{runs}
+				what={dirty && previewModel ? 'settings and model edits' : dirty ? 'settings' : 'model edits'}
+				edits={previewEdits}
+				left={editor?.dirty && !previewModel ? ['your unsaved model edits, which have problems to fix first'] : []}
+			/>
+		{/snippet}
+	</Lazy>
+{/if}
 
 <!-- Outside the form: feeds, keys and schedules save themselves, never through Save settings. -->
 {#if !readonly}

@@ -22,6 +22,8 @@
 		history: () => import('$lib/components/history/HistoryTab.svelte')
 	};
 	const loadAddData = () => import('$lib/components/series/AddDataDialog.svelte');
+	// The save bar's Preview of the unsaved model edits against the last run (issue #284).
+	const loadUnsavedPreview = () => import('$lib/components/preview/UnsavedPreviewDialog.svelte');
 	// One farm's planted areas over any tab (`farm=<nodeId>`, issue #17 step 4).
 	const loadFarmDrawer = () => import('$lib/components/crops/FarmCropsDrawer.svelte');
 	// An existing grid, unchanged, in a full-screen modal over any tab (`grid=<id>`, issue #17).
@@ -190,6 +192,14 @@
 		const t = rerunQueuedText(project?.rerunQueuedFor);
 		return `${t[0]!.toUpperCase()}${t.slice(1)}.`;
 	});
+	// The model edits' Preview (issue #284): fetched the first time it's wanted, then kept, with its worker.
+	// Not on Settings, whose own Preview takes the model's edits with the form's.
+	let previewOpen = $state(false);
+	let previewMounted = $state(false);
+	function openPreview() {
+		previewMounted = true;
+		previewOpen = true;
+	}
 	let addOpen = $state(false);
 	// The dialog's chunk is fetched the first time it's wanted; then it stays mounted.
 	let addMounted = $state(false);
@@ -752,6 +762,7 @@
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
 								readonly={!canEdit}
 								{onProjectChange}
+								{runs}
 							/>
 						{/snippet}
 					</Lazy>
@@ -882,7 +893,14 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<SaveBar {editor} {details} onsave={saveAll} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
+			<SaveBar {editor} {details} onsave={saveAll} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} onpreview={tab === 'settings' ? null : openPreview} />
+			{#if previewMounted}
+				<Lazy load={loadUnsavedPreview}>
+					{#snippet children(UnsavedPreviewDialog)}
+						<UnsavedPreviewDialog bind:open={previewOpen} {projectId} {runs} what="model edits" edits={() => ({ model: { saved: editor.savedModel(), draft: editor.snapshot() } })} />
+					{/snippet}
+				</Lazy>
+			{/if}
 			{#if canEdit}
 				{#if addMounted}
 					<Lazy load={loadAddData}>
