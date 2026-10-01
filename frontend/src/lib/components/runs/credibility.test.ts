@@ -46,6 +46,19 @@ describe('credibility', () => {
 		]);
 	});
 
+	it('counts the validation signatures (engine ≥ 1.55.0) among the plausibility findings', () => {
+		const plausibility = (withinLimit: boolean) => ({
+			naturalised: null,
+			rainSource: null,
+			flowDoubleMass: null,
+			lowFlow: { comparison: { withinFactor: true } },
+			signatures: { flowKind: 'flow_observed_m3s', baseflow: { withinLimit }, lowFlowFdc: null, recessionHoldout: null }
+		});
+		const item = (withinLimit: boolean) => credibility({ plausibility: plausibility(withinLimit) } as unknown as Parameters<typeof credibility>[0]).find((i) => i.label === 'Plausibility')!;
+		expect([item(false).text, item(false).tone]).toEqual(['1 of 2 checks found something', 'warn']);
+		expect([item(true).text, item(true).tone]).toEqual(['no findings (2 checked)', 'ok']);
+	});
+
 	it('says a failed self-check in red and leaves out what the run has no panel for', () => {
 		const items = credibility({ verification: checks(2) } as unknown as Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>);
 		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([['Self-checks', '2 of 5 failed', 'bad']]);
