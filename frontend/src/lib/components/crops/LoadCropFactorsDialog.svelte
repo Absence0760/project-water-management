@@ -1,12 +1,14 @@
 <script lang="ts">
 	// Load crop factors (issue #54 item 1; docs/ui.md § Load crop factors): from the
-	// reference library (./library.ts) or a b023 workbook's [Crop demand] (the
-	// browser importer, in its worker), with an optional pan coefficient,
+	// reference library (./library.ts), a b023 workbook's [Crop demand] or a
+	// node-based workbook's [Crop_Factors] (the browser importer, in its worker,
+	// with the crop-table warnings it gives), with a pan coefficient defaulted by the
+	// source's shape (1 for A-pan factors, 0.75 for FAO-56 Kc; issue #289),
 	// mapped onto the project's crops by name, a diff per crop and the demand
 	// difference. Nothing changes until Apply, which edits the model like any
 	// other edit: the save bar saves it, with a reason, and History records it.
 	// Its own chunk, loaded when the button is first pressed (CropsTab).
-	import { onDestroy } from 'svelte';
+	import { onDestroy, tick, untrack } from 'svelte';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -17,7 +19,25 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { ARC4_URL, citation, CROP_LIBRARY, LIBRARY_SYSTEMS, libraryCropFactor, type LibraryCrop } from './library';
-	import { applyChanges, cropChanges, demandDifference, matchByName, pctChange, withKp, type CropChoice } from './loadFactors';
+	import {
+		applyChanges,
+		b023CropWarnings,
+		cropChanges,
+		defaultKp,
+		demandDifference,
+		FAO56_TABLE5_URL,
+		isKp,
+		FACTOR_SHEET,
+		kpForShape,
+		matchByName,
+		nodeWarningText,
+		pctChange,
+		shapeOf,
+		SOURCE_KINDS,
+		withKp,
+		type CropChoice,
+		type SourceKind
+	} from './loadFactors';
 
 	let {
 		open = $bindable(false),
@@ -36,11 +56,33 @@
 	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 	type Source = { id: string; name: string; lib?: LibraryCrop; factors?: number[] };
 
-	let kind = $state<'library' | 'b023'>('library');
-	let kp = $state<number | null>(1);
-	let wb = $state<{ file: string; crops: Source[] } | null>(null);
+	let kind = $state<SourceKind>('library');
+	// Kp starts at the source's default (loadFactors.ts defaultKp: 1 for A-pan factors, 0.75 for FAO-56 Kc).
+	const shape = $derived(shapeOf(kind));
+	const kpDefault = $derived(defaultKp(shape));
+	let kp = $state<number | null>(defaultKp(shapeOf('library')));
+	// A change of shape re-applies its default unless the modeller set their own Kp (kpForShape).
+	let kpShape = shapeOf('library');
+	$effect(() => {
+		const next = shape;
+		if (next === kpShape) return;
+		kp = kpForShape(untrack(() => kp), defaultKp(kpShape), next);
+		kpShape = next;
+	});
+	// The button removes itself, so focus goes back to the input it reset, once
+	// the input shows the default (NumberInput doesn't follow its value while focused).
+	async function useDefaultKp() {
+		kp = kpDefault;
+		await tick();
+		document.getElementById('lcf-kp')?.focus();
+	}
+	// The workbook read for the current kind (a change of kind drops it), with the reader's crop warnings as text.
+	let wb = $state<{ file: string; sheet: string; crops: Source[]; warnings: string[] } | null>(null);
 	let reading = $state(false);
 	let wbError = $state<string | null>(null);
+	// The workbook's warnings: the first few, then all of them on request (a bad workbook can give 100).
+	const WARN_SHOWN = 5;
+	let allWarnings = $state(false);
 	let session: WorkbookImportSession | null = null;
 	let attempt = 0;
 	// Per project crop: the source crop ('' keeps the current factors), a planting for a staged crop, the system ('' keeps the efficiency), rejected.
@@ -103,6 +145,7 @@
 		session = null;
 		wb = null;
 		wbError = null;
+		allWarnings = false;
 		reading = true;
 		let s: WorkbookImportSession | null = null;
 		try {
@@ -110,8 +153,25 @@
 			if (mine !== attempt) return;
 			s = session = createWorkbookImport();
 			try {
-				const r = await s.parse(f, {});
-				if (mine === attempt) wb = { file: f.name, crops: r.project.model.crops.map((c) => ({ id: `wb:${c.id}`, name: c.name, factors: c.cropFactor })) };
+				if (kind === 'node') {
+					const set = await s.readNodeCrops(f);
+					if (mine === attempt)
+						wb = {
+							file: f.name,
+							sheet: set.sheets.factors ?? FACTOR_SHEET.node,
+							crops: set.crops.map((c) => ({ id: `nb:${c.name}`, name: c.name, factors: c.cropFactor })),
+							warnings: set.warnings.map(nodeWarningText)
+						};
+				} else {
+					const r = await s.parse(f, {});
+					if (mine === attempt)
+						wb = {
+							file: f.name,
+							sheet: FACTOR_SHEET.b023,
+							crops: r.project.model.crops.map((c) => ({ id: `wb:${c.id}`, name: c.name, factors: c.cropFactor })),
+							warnings: b023CropWarnings(r.notes)
+						};
+				}
 			} catch (err) {
 				if (mine !== attempt || err instanceof WorkbookImportCancelled) return;
 				const v = err instanceof WorkbookImportFailed ? describeFailure(err.failure) : null;
@@ -128,6 +188,18 @@
 		}
 	}
 	onDestroy(() => session?.cancel());
+
+	// Another kind of source: drop the workbook (and any read in flight) picked for the last one.
+	function pickKind(k: SourceKind) {
+		if (k === kind) return;
+		attempt++;
+		session?.cancel();
+		session = null;
+		wb = null;
+		wbError = null;
+		reading = false;
+		kind = k;
+	}
 
 	function apply() {
 		const names = accepted.map((c) => c.name || 'unnamed crop');
@@ -148,8 +220,9 @@
 	</p>
 	<fieldset class="row">
 		<legend>Source</legend>
-		<label><input type="radio" name="lcf-src" checked={kind === 'library'} onchange={() => (kind = 'library')} /> Reference library (ARC/SABI A-pan, winter rainfall)</label>
-		<label><input type="radio" name="lcf-src" checked={kind === 'b023'} onchange={() => (kind = 'b023')} /> A b023 workbook</label>
+		{#each SOURCE_KINDS as k (k.id)}
+			<label><input type="radio" name="lcf-src" checked={kind === k.id} onchange={() => pickKind(k.id)} /> {k.label}</label>
+		{/each}
 	</fieldset>
 	{#if kind === 'library'}
 		<p class="muted small">
@@ -157,18 +230,45 @@
 			(Tables 4.13–4.15, 1990; pecan from Table 4.10). Site-specific design values: an orchard cover crop raises them. The choice is the hydrologist’s.
 		</p>
 	{:else}
-		<label class="file">
-			Workbook (.xlsx, .xlsm) <input type="file" accept={WORKBOOK_ACCEPT} onchange={readWorkbook} disabled={reading} />
-		</label>
+		{#key kind}
+			<label class="file">
+				Workbook (.xlsx, .xlsm) <input type="file" accept={WORKBOOK_ACCEPT} onchange={readWorkbook} disabled={reading} />
+			</label>
+		{/key}
 		{#if reading}<p class="small" role="status">Reading the workbook…</p>{/if}
 		{#if wbError}<p class="alert alert-error small" role="alert">{wbError}</p>{/if}
-		{#if wb}<p class="muted small" role="status">{wb.crops.length} crops from [Crop demand] in {wb.file}.</p>{/if}
+		{#if wb}
+			<p class="muted small" role="status">{wb.crops.length} crops from [{wb.sheet}] in {wb.file}.</p>
+			{#if wb.warnings.length}
+				<div class="alert alert-warning small" role="group" aria-labelledby="lcf-wb-warn">
+					<p id="lcf-wb-warn"><strong>Check {wb.warnings.length === 1 ? 'this' : 'these'} in the workbook</strong></p>
+					<ul>
+						{#each allWarnings ? wb.warnings : wb.warnings.slice(0, WARN_SHOWN) as w, i (i)}<li>{w}</li>{/each}
+					</ul>
+					{#if wb.warnings.length > WARN_SHOWN}
+						<button type="button" class="btn btn-sm btn-ghost" aria-expanded={allWarnings} onclick={() => (allWarnings = !allWarnings)}>
+							{allWarnings ? 'Show the first ' + WARN_SHOWN : `Show all ${wb.warnings.length}`}
+						</button>
+					{/if}
+				</div>
+			{/if}
+		{/if}
 	{/if}
 	<div class="kp">
 		<label for="lcf-kp">Pan coefficient Kp</label>
-		<NumberInput id="lcf-kp" min={0.1} max={1.5} step={0.05} bind:value={kp} />
-		<span class="muted small">Multiplies the source factors. 1 for A-pan factors (the library, b023); about 0.75 for FAO-56 Kc values (against ET₀).</span>
+		<NumberInput id="lcf-kp" min={0.1} max={1.5} step={0.05} bind:value={kp} aria-describedby="lcf-kp-why" />
+		{#if !isKp(kp, kpDefault)}<button type="button" class="btn btn-sm btn-ghost" onclick={useDefaultKp}>Use the default, {kpDefault}</button>{/if}
 	</div>
+	<p class="muted small" id="lcf-kp-why" data-testid="kp-why">
+		{#if shape === 'fao-et0'}
+			Default 0.75: these are FAO-56 Kc values, set against reference ET₀, and the model multiplies crop factors by A-pan. Kp (ET₀ ÷ pan) is
+			0.35–0.85 for a Class A pan in <a href={FAO56_TABLE5_URL} target="_blank" rel="noopener noreferrer">FAO-56 Table 5</a>; 0.75 is a mid value.
+			Your site’s humidity, wind and pan surroundings set the real one.
+		{:else}
+			Default 1: these factors already multiply A-pan, as the model does (demand = A-pan × factor). An FAO-56 Kc set (against ET₀) would need
+			a Kp of 0.35–0.85 (<a href={FAO56_TABLE5_URL} target="_blank" rel="noopener noreferrer">FAO-56 Table 5</a>).
+		{/if}
+	</p>
 	{#if kp === null || !(kp > 0)}<p class="alert alert-warning small">Enter a pan coefficient above 0.</p>{/if}
 
 	{#if sources.length && crops.length}
@@ -227,7 +327,7 @@
 					<table class="data compact">
 						<caption>
 							<strong>{ch.name || '(unnamed)'}</strong>
-							{#if s}← {s.name}{#if kp !== 1} × Kp {kp}{/if}{/if}
+							{#if s}← {s.name}{#if kp !== 1}{' '}× Kp {kp}{/if}{/if}
 						</caption>
 						<thead>
 							<tr>
@@ -250,7 +350,7 @@
 						</tbody>
 					</table>
 				</div>
-				{#if s?.lib}<p class="muted small">{citation(s.lib)}. {s.lib.notes}</p>{:else if s}<p class="muted small">From [Crop demand] in {wb?.file}.</p>{/if}
+				{#if s?.lib}<p class="muted small">{citation(s.lib)}. {s.lib.notes}</p>{:else if s && wb}<p class="muted small">From [{wb.sheet}] in {wb.file}.</p>{/if}
 				{#if ch.differs}
 					<label class="small"><input type="checkbox" checked={!reject[ch.cropId]} onchange={(e) => (reject[ch.cropId] = !e.currentTarget.checked)} /> Apply to {ch.name || 'this crop'}</label>
 				{:else}

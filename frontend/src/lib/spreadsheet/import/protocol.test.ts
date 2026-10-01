@@ -8,10 +8,12 @@ import { describe, expect, it } from 'vitest';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnreadableWorkbookError, UnsupportedVersionError, WorkbookTooLargeError } from './errors';
 import { extractProject } from './extract';
 import { type FromWorker, type ToWorker, toFailure } from './messages';
+import { readNodeCropWorkbook } from './nodeCrops';
 import { handle, type WorkerDeps, type WorkerState } from './protocol';
 import { WorkbookImportCancelled, WorkbookImportFailed, createWorkbookImport, type WorkerLike } from './runner';
 import { sheetjsSource } from './sheetjsReference';
 import type { WorkbookSource } from './source';
+import { syntheticNodeBased } from './testWorkbook';
 import { readWorkbook } from './workbook';
 
 const FIXTURE = new URL('../../../../../scripts/wbt-import/fixtures/synthetic_b023.xlsx', import.meta.url);
@@ -19,8 +21,10 @@ const fixture = () => new Blob([readFileSync(FIXTURE)]);
 
 const deps: WorkerDeps<WorkbookSource> = {
 	read: async (file, onProgress) => readWorkbook(await file.arrayBuffer(), { onProgress }),
-	extract: extractProject
+	extract: extractProject,
+	readNodeCrops: async (file, fileName, onProgress) => readNodeCropWorkbook(await file.arrayBuffer(), fileName, { onProgress })
 };
+const nodeBased = () => new File([syntheticNodeBased().toFile()], 'node-based.xlsx');
 
 async function drive(messages: ToWorker[], d = deps): Promise<FromWorker[]> {
 	const out: FromWorker[] = [];
@@ -93,6 +97,31 @@ describe('handle: the worker protocol', () => {
 		expect(out.at(-1)).toMatchObject({ type: 'error', error: { code: 'invalid-options' } });
 	});
 
+	it('reads a node-based workbook’s crop sheets, with progress for just those two sheets', async () => {
+		const out = await drive([{ type: 'nodeCrops', file: nodeBased(), fileName: 'node-based.xlsx' }]);
+		expect(out.flatMap((m) => (m.type === 'progress' ? [`${m.progress.step}/${m.progress.steps} ${m.progress.sheet}`] : []))).toEqual(['1/2 Crop_Factors', '2/2 Crop_Areas']);
+		const last = out.at(-1)!;
+		expect(last.type).toBe('nodeCrops');
+		if (last.type !== 'nodeCrops') return;
+		expect(last.result).toMatchObject({ shape: 'fao-et0', fileName: 'node-based.xlsx', warnings: [] });
+		expect(last.result.crops).toHaveLength(3);
+	});
+
+	it('forgets the parsed b023 workbook after a node-based read, so extract fails', async () => {
+		const out = await drive([
+			{ type: 'parse', file: fixture(), fileName: 'synthetic_b023.xlsx', options: {} },
+			{ type: 'nodeCrops', file: nodeBased(), fileName: 'node-based.xlsx' },
+			{ type: 'extract', options: {} }
+		]);
+		expect(out.at(-1)).toEqual({ type: 'error', error: { code: 'internal', message: 'No workbook has been read yet.' } });
+	});
+
+	it('posts an unreadable error for a node-based read of a file that is not a workbook', async () => {
+		expect(await drive([{ type: 'nodeCrops', file: new Blob(['x']), fileName: 'x.xlsx' }])).toEqual([
+			{ type: 'error', error: expect.objectContaining({ code: 'unreadable', reason: 'not-zip' }) }
+		]);
+	});
+
 	it('refuses extract before any parse', async () => {
 		expect(await drive([{ type: 'extract', options: {} }])).toEqual([{ type: 'error', error: { code: 'internal', message: 'No workbook has been read yet.' } }]);
 	});
@@ -133,6 +162,28 @@ describe('createWorkbookImport: the page side', () => {
 		expect(w.posted.map((m) => m.type)).toEqual(['parse', 'extract']);
 		session.close();
 		expect(w.terminated).toBe(true);
+	});
+
+	it('readNodeCrops resolves with the crop set, with progress', async () => {
+		const w = fakeWorker();
+		const session = createWorkbookImport(() => w);
+		const seen: string[] = [];
+		const set = await session.readNodeCrops(nodeBased(), (p) => seen.push(`${p.stage} ${p.sheet}`));
+		expect(set.crops.map((c) => c.name)).toEqual(['Lucerne', 'Olives', 'Wine grapes']);
+		expect(seen).toEqual(['read Crop_Factors', 'read Crop_Areas']);
+		expect(w.posted).toEqual([expect.objectContaining({ type: 'nodeCrops', fileName: 'node-based.xlsx' })]);
+		const err = await session.readNodeCrops(new File(['nope'], 'x.xlsx')).catch((e: unknown) => e);
+		expect((err as WorkbookImportFailed).failure).toMatchObject({ code: 'unreadable' });
+		session.close();
+		expect(w.terminated).toBe(true);
+	});
+
+	it('readNodeCrops is refused while another read is pending', async () => {
+		const session = createWorkbookImport(() => fakeWorker());
+		const first = session.parse(file(), {});
+		await expect(session.readNodeCrops(nodeBased())).rejects.toThrow('The workbook reader is busy.');
+		await first;
+		session.close();
 	});
 
 	it('rejects with the typed failure', async () => {
