@@ -239,3 +239,12 @@ Tracked in issue #103.
   in any expedient way, answered as soon as reasonably practicable with what
   was done. A material change: `LEGAL_VERSION` 2026-09-30 (every account
   accepts again; nothing is in production yet).
+- 2026-10-01: two-step sign-in (issue #282, 144_mfa.sql). Privacy §3 lists
+  the authenticator key (stored encrypted), the recovery codes (one-way
+  hashes), wrong-code counts and the account's own record of turning it on
+  or off; §7 their retention; §8 a third strictly necessary cookie,
+  `wm_mfa` (the 5-minute sign-in challenge between the password and the
+  code); §9 says owners, team admins and assessors must use it. New
+  personal data kept: `LEGAL_VERSION` 2026-10-01. The re-acceptance
+  notice's "what changed" list now names this and the 2026-09-30 deletion
+  change (it still listed 2026-09-28's).

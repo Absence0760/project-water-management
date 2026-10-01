@@ -72,7 +72,7 @@ header (issue #17): **Account**, then who you are as its summary line, the
 initials avatar, display name, email and a Confirmed / Not confirmed badge
 (a region named by the heading). Below it the cards sit in **two columns**
 once the page itself is 52rem wide (a container query, so the 240 px
-sidebar counts): Profile and Password on the left; Language and units,
+sidebar counts): Profile, Password and Two-step sign-in on the left; Language and units,
 Alert emails and Your data on the right; one column below that. The page is
 capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
@@ -98,6 +98,24 @@ in an alert above the form, with the field it's about marked
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
+
+**Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
+`GET /auth/mfa`). Off: one line on what it does and **Set up two-step
+sign-in**, which asks for the current password (**Continue**), then shows
+two numbered steps: the QR code for the authenticator app, drawn in the page
+(`account/qr.ts`, uqr; black on white in both themes, with its quiet zone,
+220 px; the encoder loads only at that moment) with the key in groups of
+four to type instead, and **Enter the code the app shows** with **Turn on
+two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
+whose heading takes focus: **Download the codes** (a text file) and **I’ve
+saved them**. On: an **On** badge, how many recovery codes are left, a line
+when this browser signed in before it was set up, and **New recovery codes**
+/ **Turn off**, each opening one code field (the app's code; turning off
+also takes a recovery code). A project owner, team admin or assessor without
+it sees a warning that their actions need it. Errors are worded from their
+codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
+is under § Sign-in pages.
 
 ## Number style
 
@@ -342,6 +360,14 @@ under a dead-invitation warning).
   the same answer for any address). A taken address gets exactly the same
   pages. Sign-up through a live invitation link is still confirmed, joined and
   signed in at once.
+
+- **Two-step sign-in** (issue #282). For an account with an authenticator,
+  a right password turns the form into its second step: a **Two-step
+  sign-in** heading and **Code from your authenticator app** (numeric,
+  `autocomplete="one-time-code"`, focused), **Sign in**, and **Lost your
+  phone? Use a recovery code**, which swaps the field for **Recovery code**
+  (and back). A wrong code, the 5-minute challenge running out (back to the
+  password step) and the code lockout are alerts worded from their codes.
 
 - **The security check** (the WAF's sign-in CAPTCHA, issue #126;
   [security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)). Only when
