@@ -1727,6 +1727,8 @@ export interface PackDetail {
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
+	/** The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify. */
+	reproduction: PackReproductionState;
 	issue: PackIssueChecks | null;
 	/** Errata that apply now to its runs' engines (or their fits') and that the manifest didn't record (132): found since it was drafted. */
 	errataFoundSince: { id: string; summary: string }[];
@@ -1736,6 +1738,33 @@ export interface PackDetail {
 export interface PackPdfState {
 	status: 'ready' | 'rendering' | 'failed' | 'none';
 	/** Why the last render gave up (`failed`). */
+	error: string | null;
+}
+
+/** One check of a reproduction bundle (engine evidence/bundle.ts checkPackBundle), plus the server's `stored`. */
+export interface PackBundleCheck {
+	/** `stored`, `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `reproduce:<run>`. */
+	id: string;
+	ok: boolean;
+	detail: string;
+}
+
+/**
+ * The server's re-run of an issued pack from its stored bundle
+ * (backend/src/evidence/packReproduce.ts; docs/evidence-pack.md § Reproduction).
+ * A recorded outcome: `reproduced`, `not_reproduced`, `other_engine` (only the
+ * re-runs differ, and the runs were made with another engine) or `no_bundle`;
+ * else `checking` (its job is queued or running), `failed` (the job gave up:
+ * `error`) or `none` (a draft, or issued before re-runs).
+ */
+export interface PackReproductionState {
+	status: 'reproduced' | 'not_reproduced' | 'other_engine' | 'no_bundle' | 'checking' | 'failed' | 'none';
+	/** The engine that re-ran the runs (a recorded outcome only). */
+	engineVersion: string | null;
+	/** The engines the runs were made with. */
+	runEngines: string[];
+	checkedAt: string | null;
+	checks: PackBundleCheck[];
 	error: string | null;
 }
 

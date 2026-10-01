@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Issue #71, the server re-run of an evidence pack shown on the pack page (154_pack_reproduce): reproductionNote in packs/pack.ts and the pack page's reproduction line. Measured 1436 KB locally on origin/main @ 271b4489 + this change, 1 KB over the 1435 KB ceiling; the added code is ~1.3 KB gzipped as source. Headroom ~1 KB."
+}
