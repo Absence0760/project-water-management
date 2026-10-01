@@ -69,7 +69,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				damSedimentPctPerYear: z.number().min(0).max(DAM_SEDIMENT_MAX_PER_YEAR).nullable().default(null),
 				damInServiceFrom: isoDay.nullable().default(null),
 				abstractionFrom: isoDay.nullable().default(null),
-				// Supply rule and river pump (WP-3.8), farms only (a model rule); pump null = no limit.
+				// Supply rule and river pump (WP-3.8): the rule farms only, the pump farms and other water
+				// users (engine ≥ 1.58.0), both model rules; pump null = no limit.
 				supplyRule: z.enum(SUPPLY_RULES).default('damFirst'),
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),

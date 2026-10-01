@@ -1254,10 +1254,14 @@ export interface NetworkNode {
 	 */
 	supplyRule?: SupplyRule;
 	/**
-	 * Farms only: the river pump's capacity, m³/day (pumps × m³/h × 24). It
-	 * limits what the farm pumps from the river under 'riverFirst', 'trigger'
-	 * and 'runOfRiver'; inert under 'damFirst'. null / absent = no limit (the
-	 * run warns); 0 = no river pump.
+	 * Farms and other water users: the river pump's capacity, m³/day (pumps ×
+	 * m³/h × 24). On a farm it limits what the farm pumps from the river under
+	 * 'riverFirst', 'trigger' and 'runOfRiver'; inert under 'damFirst'. null /
+	 * absent = no limit (the run warns); 0 = no river pump. On an other water
+	 * user (engine ≥ 1.58.0, docs/model.md §2.7c) it limits what the user
+	 * takes from the river each day, and a senior user's claim on the farms
+	 * upstream to MIN(demand, capacity); null / absent = no limit (the
+	 * default, no warning), 0 = it takes nothing from the river. A gauge has none.
 	 */
 	pumpCapacityM3Day?: number | null;
 	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
@@ -2292,6 +2296,16 @@ export interface UserSummary {
 	avgGroundwaterM3Day?: number;
 	/** Mean stream depletion taken from the river below it (WP-1.34); only with boreholes. */
 	avgBaseflowDepletionM3Day?: number;
+	/** Mean taken from the river by its pump, part of supplied (engine ≥ 1.58.0, WP-3.8); only with a pump capacity. */
+	avgRiverAbstractionM3Day?: number;
+	/**
+	 * Mean demand its pump capacity left unmet although the river had it
+	 * (within its priority and allocation room; engine ≥ 1.58.0), part of the
+	 * deficit; only with a pump capacity.
+	 */
+	avgPumpLimitedM3Day?: number;
+	/** Days the pump capacity left demand unmet (engine ≥ 1.58.0); only with a pump capacity. */
+	daysPumpLimited?: number;
 }
 
 /**

@@ -472,6 +472,16 @@ describe('diffInputs', () => {
 		expect(texts(a, d)).toEqual([]);
 	});
 
+	it('lists an other water user’s pump capacity, added with it or changed (engine 1.58.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		b.model.nodes.push({ ...node('u', 'Town', { kind: 'user', downstreamNodeId: 'copy-g', damCapacityM3: 0 }), userDemandM3Day: new Array(12).fill(1200), pumpCapacityM3Day: 900 });
+		expect(texts(a, b)).toEqual(['Other water user "Town" added (senior, demand 1\u202f200 m³/day on average over the months, pump 900 m³/day, drains into Outlet)']);
+		const c = structuredClone(b);
+		c.model.nodes.find((n) => n.name === 'Town')!.pumpCapacityM3Day = null;
+		expect(texts(b, c)).toEqual(['Town: river pump capacity 900 m³/day → no limit']);
+	});
+
 	it('lists a farm’s boreholes added and their depletion changed (WP-1.34)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

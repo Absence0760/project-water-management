@@ -1307,7 +1307,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			subject: n.name,
 			text:
 				n.kind === 'user'
-					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${into ? `, drains into ${into}` : ''})`
+					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${typeof n.pumpCapacityM3Day === 'number' ? `, pump ${fmtValue(n.pumpCapacityM3Day, 0)} m³/day` : ''}${into ? `, drains into ${into}` : ''})`
 					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}

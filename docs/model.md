@@ -2885,9 +2885,12 @@ kind `user` runs exactly as before (no new series or summary fields).
 | `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
 | `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+| `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 
-It has no area, flow share, dam, crops, transfers or EWR share; the API
-refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+It has no area, flow share, dam, crops, transfers, EWR share or supply
+rule; the API refuses crop areas and transfers on it
+(`backend/src/model/validate.ts`) and a supply rule other than `damFirst`
+(`modelRuleIssues`; the run ignores one with a warning).
 A scenario's `demand.scale` with `category: 'user'` (engine ≥ 0.41.0)
 multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 
@@ -2895,8 +2898,8 @@ multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 Σ upstream senior requirement (below):
 
 ```
-G  = MIN(D, H)                    senior
-G  = MIN(D, MAX(0, H − Zs_in))    junior: leaves the senior users' water in the river
+G  = MIN(D, H, P)                 senior
+G  = MIN(D, MAX(0, H − Zs_in), P) junior: leaves the senior users' water in the river
 T  = r × G                        returned below it
 U  = H − G + T
 deficit = D − G
@@ -2910,9 +2913,10 @@ farms upstream of it must pass, fragmented to them by flow share the way the
 pragmatic EWR is (§2.5):
 
 ```
-Y_f  = Σ over senior users u downstream of f of D_u × share_f / Σ_{g upstream of u} share_g
+C_u  = MIN(D_u, P_u)                    the user's claim: its demand, up to its pump capacity (engine ≥ 1.58.0; = D_u without one)
+Y_f  = Σ over senior users u downstream of f of C_u × share_f / Σ_{g upstream of u} share_g
 Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
-Zs   = MAX(0, Σ upstream Zs − D_u)      below a senior user; junior users and gauges pass it on
+Zs   = MAX(0, Σ upstream Zs − C_u)      below a senior user; junior users and gauges pass it on
 ```
 
 A farm then keeps MIN(Zs, H + I) below its dam before it fills the dam:
@@ -2951,20 +2955,57 @@ their own rows (`CurtailmentSummary.otherUsers`):
   standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
   which would charge irrigators for the town's use.
 
+**The pump capacity (engine ≥ 1.58.0, roadmap WP-3.8, issue #54 item 2b;
+decided, pending the hydrologist).** Mirrors a farm's river pump (§2.7e)
+without its supply rules: a user always takes from the river where it sits,
+so it needs only the capacity P. The choices:
+
+- *The river take is capped, boreholes are not.* P limits what it takes from
+  the river (G above, before groundwater); its boreholes (§2.7d) are separate
+  pumps with their own capacities, and a supplemental one still fills what
+  the river pump leaves. With primary boreholes, the river is asked only for
+  what they leave.
+- *A senior user claims only what it can lift.* The farms upstream pass
+  C = MIN(D, P), not D: water it can't pump would only flow past it. So a
+  small pump on a senior town leaves the farms above it more, and the
+  requirement below it drops by C. Engine-audit L1's point (a new senior user
+  curtails the farms above) holds for the capped claim.
+- *No pump = no limit, silently.* Unlike a farm's river pump (which warns
+  when a river-pumping rule has no capacity), every user before 1.58.0 had
+  none, so null is the default and runs exactly as before (a test on random
+  networks: absent, null and a capacity above any flow give the same values
+  to the bit). A capacity that isn't a size ≥ 0 runs as no limit with a
+  warning; the API refuses it.
+- *Not cut by the drought restriction* (§2.7i): the rule cuts units only;
+  whether to cut other water users is open for the hydrologist
+  ([followups.md § Hydrologist](./followups.md#hydrologist)). The pump is a
+  physical limit, not a restriction: it applies every day.
+
 **Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
 `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
 `ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any senior user's
 demand is passed down, at every node, with the farms' `passed_for_senior`).
-`summary.users` has the whole-run means; the water balance gains
+With a pump capacity (engine ≥ 1.58.0) also `pump_limited` =
+MAX(0, MIN(what its priority leaves, its allocation room, D − GW) − Gr), with
+Gr = supplied − groundwater its river take (no `river_abstraction` series: that
+key is a farm's river pump, and run comparison reads its absence as 0), the
+demand its pump left unmet although the river had it (≤ deficit; 0 on a day
+the farms upstream passed only its capped claim and it took it all), with
+`UserSummary.avgRiverAbstractionM3Day`, `avgPumpLimitedM3Day` and
+`daysPumpLimited`. `summary.users` has the whole-run means; the water balance gains
 `otherUseM3` = Σ (taken − returned) and closes with it (§6).
 
 **Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
-U = H − G + T, deficit, shortfall), the farm keeps MIN(Zs, H + I) below its
+U = H − G + T, deficit, shortfall; with a pump, G − GW ≤ P, the
+`pump_limited` replay and the requirement below a senior user dropping by at
+most MIN(D, P), and the summary's pump means), the farm keeps MIN(Zs, H + I) below its
 dam and holds nothing back without a requirement, Zs never grows past a user,
 the attribution check counts users as contributors, and the summaries and
 curtailment rows are the means of the series. The fuzz generator adds up to
 three users (senior or junior, any return share, demand from none to far more
-than the river) to 30 % of networks.
+than the river) to 30 % of networks, and a pump capacity (0, a trickle, or up
+to more than any flow) to half the users of 30 % of seeds. Hand examples:
+`network/users.test.ts` and `network/userPump.test.ts`.
 
 ### 2.7d Groundwater abstraction and stream depletion (engine ≥ 0.23.0, roadmap WP-1.34, audit N5)
 
@@ -3340,15 +3381,16 @@ reading of this document where it didn't settle them):
   start-of-day storage, like the drought borehole rule, so it doesn't depend
   on the order nodes are listed in.
 - *Invalid combinations run and warn; the API refuses them on save*
-  (`modelRuleIssues`): a supply rule or pump on a gauge or other user
-  (ignored), `trigger` without a dam and `runOfRiver` with one (both run as
+  (`modelRuleIssues`): a supply rule or pump on a gauge, a supply rule on
+  an other user (ignored; its pump capacity is its own from engine 1.58.0), `trigger` without a dam and `runOfRiver` with one (both run as
   river first), a stop level below the trigger (clamped up to it). A
   scenario's `node.set` of any of the four fields (or of the dam capacity)
   that would break one of these is skipped with the rule as its problem
   ([scenarios.md](./scenarios.md)), so a licence what-if such as "river
   first at 1,200 m³/day" never produces a model the API would refuse.
-- *Other water users* keep taking MIN(what reaches them, demand) with no pump
-  limit (§2.7c); a pump capacity on them is a later step (issue #54 item 2b).
+- *Other water users* have a pump capacity of their own from engine 1.58.0
+  (§2.7c), with no supply rule: they always take from the river where they
+  sit, up to MIN(demand, what reaches them, capacity).
 
 **Outputs** (only on a farm with a rule other than `damFirst`): the series
 `river_abstraction` and `FarmSummary.avgRiverAbstractionM3Day`.

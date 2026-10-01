@@ -282,7 +282,11 @@ describe('applyScenario: each op', () => {
 		expect(err({ op: 'node.set', nodeId: 'G', field: 'supplyRule', value: 'riverFirst' })[0]).toMatch(/"supplyRule" can't be set on a gauge/);
 		const withUser = base();
 		withUser.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'B', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 4 }));
-		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)[0]).toMatch(/"pumpCapacityM3Day" can't be set on a user/);
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'supplyRule', value: 'riverFirst' }, withUser)[0]).toMatch(/"supplyRule" can't be set on a user/);
+		// A user's pump capacity is its own (engine 1.58.0): a licence what-if may cap it.
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)).toEqual([]);
+		expect(nodeOf(applyScenario(withUser, [{ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }]).input, 'U')?.pumpCapacityM3Day).toBe(500);
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: -1 }, withUser)[0]).toMatch(/pumpCapacityM3Day must be at least 0/);
 		// Values: a known rule, a pump ≥ 0 or null, levels 0–1.
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'always' } as unknown as ScenarioOp)[0]).toMatch(/supplyRule must be one of damFirst, riverFirst, trigger, runOfRiver/);
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'pumpCapacityM3Day', value: -1 })[0]).toMatch(/pumpCapacityM3Day must be at least 0/);

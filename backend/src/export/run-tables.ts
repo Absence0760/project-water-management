@@ -1568,9 +1568,33 @@ export function* columnGuideLines(): Generator<string> {
  */
 export function* otherUserLines(summary: RunSummary): Generator<string> {
 	yield csvRow(['Other water users (whole run)']);
-	yield csvRow(['User', 'Priority', 'Average demand (m³/day)', 'Average taken (m³/day)', 'Average deficit (m³/day)', 'Demand supplied (%)', 'Average returned (m³/day)', 'Average EWR charge (m³/day charged)', 'Days charged for the EWR']);
+	// A user's river pump (engine ≥ 1.58.0): its columns only when some user has a pump capacity, blank for one without.
+	const pump = (summary.users ?? []).some((u) => u.avgPumpLimitedM3Day !== undefined);
+	yield csvRow([
+		'User',
+		'Priority',
+		'Average demand (m³/day)',
+		'Average taken (m³/day)',
+		'Average deficit (m³/day)',
+		'Demand supplied (%)',
+		'Average returned (m³/day)',
+		'Average EWR charge (m³/day charged)',
+		'Days charged for the EWR',
+		...(pump ? ['Average pumped from the river (m³/day)', 'Average demand the pump capacity left unmet (m³/day)', 'Days the pump capacity left demand unmet'] : [])
+	]);
 	for (const u of summary.users ?? []) {
-		yield csvRow([u.name, u.priority, u.avgDemandM3Day, u.avgSuppliedM3Day, u.avgDeficitM3Day, pct(u.fractionSupplied) as Cell, u.avgReturnedM3Day, u.avgEwrChargeM3Day, u.daysEwrNotMet]);
+		yield csvRow([
+			u.name,
+			u.priority,
+			u.avgDemandM3Day,
+			u.avgSuppliedM3Day,
+			u.avgDeficitM3Day,
+			pct(u.fractionSupplied) as Cell,
+			u.avgReturnedM3Day,
+			u.avgEwrChargeM3Day,
+			u.daysEwrNotMet,
+			...(pump ? [u.avgRiverAbstractionM3Day ?? '', u.avgPumpLimitedM3Day ?? '', u.daysPumpLimited ?? ''] : [])
+		]);
 	}
 	const rows = summary.curtailment?.otherUsers ?? [];
 	if (!rows.length) return;

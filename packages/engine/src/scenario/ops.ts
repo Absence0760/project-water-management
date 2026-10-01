@@ -187,6 +187,8 @@ const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Da
 const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+/** An other water user's river pump (engine ≥ 1.58.0, WP-3.8, docs/model.md §2.7c): the farm's field, without a supply rule. */
+const USER_PUMP = ['pumpCapacityM3Day'] as const;
 /**
  * How a farm takes its water (engine ≥ 0.42.0, WP-3.8, docs/model.md §2.7e):
  * the supply rule, the river pump and the trigger rule's two dam levels.
@@ -211,7 +213,7 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  */
 export const NODE_SET_FIELDS = {
 	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
-	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
+	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 

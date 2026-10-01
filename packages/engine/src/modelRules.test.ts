@@ -142,7 +142,7 @@ describe('modelRuleIssues', () => {
 		]);
 	});
 
-	it('supply rules (WP-3.8): a farm’s; trigger needs a dam; run of river has none; stop ≥ trigger', () => {
+	it('supply rules (WP-3.8): a farm’s (a user’s pump its own); trigger needs a dam; run of river has none; stop ≥ trigger', () => {
 		const n = (id: string, kind: string, damCapacityM3: number, over: object = {}) => ({ id, name: id, kind, damCapacityM3, downstreamNodeId: id === 'g' ? null : 'g', ...over }) as ProjectModel['nodes'][number];
 		const m = {
 			nodes: [
@@ -151,7 +151,10 @@ describe('modelRuleIssues', () => {
 				n('ok2', 'farm', 0, { supplyRule: 'runOfRiver', pumpCapacityM3Day: 10 }),
 				n('ok3', 'farm', 100, { supplyRule: 'riverFirst', pumpCapacityM3Day: null }),
 				n('ok4', 'user', 0, { supplyRule: 'damFirst', pumpCapacityM3Day: null }),
-				n('u', 'user', 0, { pumpCapacityM3Day: 5 }),
+				// An other water user has a pump capacity (engine 1.58.0), but no supply rule; a gauge has neither.
+				n('ok5', 'user', 0, { pumpCapacityM3Day: 5 }),
+				n('u', 'user', 0, { supplyRule: 'riverFirst' }),
+				n('gp', 'gauge', 0, { downstreamNodeId: 'g', pumpCapacityM3Day: 5 }),
 				n('t', 'farm', 0, { supplyRule: 'trigger' }),
 				n('r', 'farm', 100, { supplyRule: 'runOfRiver' }),
 				n('s', 'farm', 100, { supplyRule: 'trigger', supplyTriggerPct: 0.5, supplyStopPct: 0.4 })
@@ -160,7 +163,7 @@ describe('modelRuleIssues', () => {
 			cropAreas: [],
 			transfers: []
 		} as unknown as ProjectModel;
-		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['supplyKind:gp', 'supplyKind:u', 'supplyRor:r', 'supplyStop:s', 'supplyTrigger:t']);
 	});
 
 	it('hands-off flow and River to dam by month (engine 1.32.0): a farm\'s, 12 values each', () => {

@@ -1997,7 +1997,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   into) with its **Priority** (senior: farms upstream pass its demand first;
   junior: takes what reaches it), **Share returned** (%) and **demand per
   month** (m³/day, Oct–Sep) with *Use October's demand for every month*
-  (`UserFields.svelte`, `users.ts`). The one-node form shows the same fields
+  (`UserFields.svelte`, `users.ts`). **Pump capacity** (m³/day, engine ≥
+  1.58.0, [model.md §2.7c](./model.md)): blank is no limit, 0 no river pump;
+  *Number of pumps* × *m³/h per pump* × 24 fills it, as on a unit's Supply
+  fields (only the m³/day is stored), and the note under it says what the
+  value means (for a senior user, that the units upstream pass no more than
+  it for the user). The one-line summary adds "pump N m³/day" when set. A
+  user's Supply group (a stale supply rule left from a farm) no longer shows
+  the river pump field: the user's own is under "Other water user". The one-node form shows the same fields
   under "Other water user" instead of the farm groups. The schematic draws a
   user as an open diamond (legend "Other water user"). The client check
   mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
@@ -4598,6 +4605,12 @@ read it before.
   supply draws it only for a run whose curtailment table doesn't list the
   users (`usersTableOnSupply`), so the page has one copy; the printable
   report keeps it.
+- **Other water users’ pumps** (engine ≥ 1.58.0, only when a user has a pump
+  capacity): each such user's demand, what it pumped from the river, the
+  demand its pump left unmet although the river had it (`pump_limited`) and
+  the days it did, whole-run means. Drawn on Units & supply too, beside the
+  curtailment table (which has no pump columns); the run Summary's Other uses
+  line names it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the

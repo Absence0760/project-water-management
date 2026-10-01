@@ -138,7 +138,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 	'element-user': {
 		long: 'Water taken by users that are not modelled hydrological units would otherwise be handed to the hydrological units and the EWR, over-stating both. An other user has a monthly demand (m³/day), a share of what it takes that comes back below it the same day (treated wastewater) and a priority.\n\nIt takes only from the river where it sits: what reaches it from upstream, after anything upstream has taken its share. It is charged for EWR shortfalls below it like a hydrological unit, by its net impact (what it takes less what it returns).\n\nOther users are outside the irrigation equitable-share benchmark. A senior user is not curtailed for the EWR; a junior one is (Curtailment tab, "Other water users").',
 		aliases: ['town', 'municipal', 'industry', 'unlisted user', 'abstraction'],
-		related: ['user-priority', 'user-return', 'element-farm', 'ewr'],
+		related: ['user-priority', 'user-return', 'user-pump', 'element-farm', 'ewr'],
 		source: 'docs/model.md §2.7c; roadmap WP-1.33'
 	},
 	'user-priority': {
@@ -152,6 +152,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		aliases: ['wastewater', 'return flow', 'effluent'],
 		related: ['element-user', 'return-flow'],
 		source: 'docs/model.md §2.7c'
+	},
+	'user-pump': {
+		long: 'The most an other water user can take from the river in a day, m³/day: pumps × m³/h per pump × 24. Each day it takes the least of its demand, what reaches it (for a junior user, what is left after the senior demand below it) and its pump capacity; the rest is a shortfall. Its boreholes are separate and still pump. Blank is no limit, the old behaviour; 0 means it has no river pump.\n\nA senior user’s claim on the hydrological units upstream is also capped: they pass no more than its pump can take, not its whole demand. The results show what it pumped from the river and, each day, the demand its pump left unmet although the river had it (its pump-limited part, within its shortfall). A drought restriction does not cut other water users.',
+		aliases: ['pump capacity', 'abstraction capacity', 'town pump', 'pump limited'],
+		related: ['element-user', 'user-priority', 'supply-rule'],
+		source: 'docs/model.md §2.7c; roadmap WP-3.8; issue #54 item 2b'
 	},
 	'borehole': {
 		long: 'Groundwater is a separate resource with its own licences, so it counts as supply without coming out of the dam or river. A hydrological unit or user can have a combined borehole capacity and any number of individual boreholes, each with its own capacity, annual cap, mode, target and depletion share.\n\n• Supplemental — only for the demand the dam and river leave unmet.\n• Primary — pumped first; the dam and river cover the rest.\n• Emergency (drought) — supplemental, but only while the dam holds less than its trigger level at the start of the day (a hydrological unit with a dam only).\n• None — kept on record, never pumps.\n\nA borehole can pump straight to the crop or into the hydrological unit’s dam (primary keeps the dam topped up, supplemental adds what the dam lacks for the day, emergency refills it while it is low; primary and emergency pump only on a day there is demand to irrigate from the dam); water pumped into the dam never makes it spill. An annual cap stops a borehole once it has pumped that much in a water year (October to September); it starts again on 1 October.\n\nThe results show each hydrological unit’s use per water year against its caps and, for context, the GN 538 general authorisation’s volume for the property: its area × the Table 2 rate, at most 40 000 m³/a (see GN 538 general authorisation). The app never decides whether a use is lawful.\n\nPart of the pumped water that is lost in irrigation returns to the river like any other return flow.',

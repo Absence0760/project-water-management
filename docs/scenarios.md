@@ -194,7 +194,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   reads them (level, area, volume, one row per line) and checks them the
   same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
-  `userPriority`, `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
+  `userPriority`, `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
+  = no limit, [model.md §2.7c](./model.md); the supply rule and trigger levels
+  stay a farm's), `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
   EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
   can't be taken off (a model rule), and the op is always a baseline

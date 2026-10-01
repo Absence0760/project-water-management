@@ -130,6 +130,19 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
 	});
 
+	it('a pump capacity on an other water user (engine 1.58.0): accepted, null by default, refused negative; a supply rule on it is refused', () => {
+		const out = node('Gauge', null);
+		const user = node('Town', out.id, { kind: 'user', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, userDemandM3Day: Array(12).fill(500) });
+		const parse = (over: object) => ModelBody.safeParse({ nodes: [out, { ...user, ...over }], crops: [], cropAreas: [], transfers: [] });
+		expect(parse({}).data!.nodes[1]).toMatchObject({ kind: 'user', pumpCapacityM3Day: null });
+		const capped = parse({ pumpCapacityM3Day: 1200 });
+		expect(capped.data!.nodes[1]).toMatchObject({ pumpCapacityM3Day: 1200 });
+		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 1200 } as never]))).toEqual([]);
+		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 0 } as never]))).toEqual([]);
+		expect(parse({ pumpCapacityM3Day: -1 }).success).toBe(false);
+		expect(modelProblems(model([out, { ...user, supplyRule: 'riverFirst' } as never])).join()).toMatch(/"Town": only a farm has a supply rule; an other water user always takes from the river/);
+	});
+
 	it('hands-off flow and River to dam by month (engine 1.32.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id, { damCapacityM3: 20_000 });

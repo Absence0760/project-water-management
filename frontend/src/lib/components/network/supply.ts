@@ -60,9 +60,10 @@ export function sharedPumpHint(
  * turned into a gauge or user keeps them): the supply rule, the river pump,
  * the hands-off flow and River to dam by month (engine ≥ 1.32.0).
  */
-export const hasSupplySettings = (n: Pick<NetworkNode, 'supplyRule' | 'pumpCapacityM3Day' | 'handsOffM3Day' | 'handsOffEwr' | 'divertMonthlyM3Day'>) =>
+export const hasSupplySettings = (n: Pick<NetworkNode, 'supplyRule' | 'pumpCapacityM3Day' | 'handsOffM3Day' | 'handsOffEwr' | 'divertMonthlyM3Day'> & Partial<Pick<NetworkNode, 'kind'>>) =>
 	(n.supplyRule ?? 'damFirst') !== 'damFirst' ||
-	(n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined) ||
+	// An other water user's pump capacity is its own (engine ≥ 1.58.0), edited with its user fields.
+	(n.kind !== 'user' && n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined) ||
 	(n.handsOffM3Day !== null && n.handsOffM3Day !== undefined) ||
 	n.handsOffEwr === true ||
 	(n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined);

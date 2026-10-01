@@ -38,6 +38,9 @@
 	const anyFloor = $derived(objects.some(({ o }) => o.basicNeedsM3Day !== undefined));
 	// Where each one's number comes from (engine ≥ 1.56.0): a column and a line only when one records it.
 	const sources = $derived(demandBySource(objects.map(({ o }) => o)));
+	// Other water users with a pump capacity (engine ≥ 1.58.0, WP-3.8): their own table, drawn even when the
+	// curtailment table lists the users (it has no pump columns), so Units & supply shows the pump's limit.
+	const pumpUsers = $derived((summary.users ?? []).filter((u) => u.avgPumpLimitedM3Day !== undefined));
 </script>
 
 {#if objects.length}
@@ -285,6 +288,37 @@
 						<td class="num" class:short>{fmtPct(u.fractionSupplied)}</td>
 						<td class="num">{fmtNum(u.avgReturnedM3Day)}</td>
 						<td class="num">{fmtNum(u.avgEwrChargeM3Day)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
+
+{#if pumpUsers.length}
+	<h3 id="user-pumps-h">Other water users’ pumps</h3>
+	<p class="muted small">
+		What each other water user with a pump capacity took from the river, and the demand its pump left unmet on days the river had it (daily averages over the run).
+	</p>
+	<div class="table-wrap">
+		<table class="data user-pumps" data-testid="user-pumps" aria-labelledby="user-pumps-h">
+			<thead>
+				<tr>
+					<th scope="col">User</th>
+					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Pumped from the river<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Left unmet by the pump<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Days the pump limited it</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each pumpUsers as u (u.nodeId)}
+					<tr>
+						<th scope="row">{u.name}</th>
+						<td class="num">{fmtNum(u.avgDemandM3Day)}</td>
+						<td class="num">{fmtNum(u.avgRiverAbstractionM3Day ?? 0)}</td>
+						<td class="num" class:neg={(u.avgPumpLimitedM3Day ?? 0) > 0.5}>{fmtNum(u.avgPumpLimitedM3Day ?? 0)}</td>
+						<td class="num">{fmtNum(u.daysPumpLimited ?? 0, 0)}</td>
 					</tr>
 				{/each}
 			</tbody>
