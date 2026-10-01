@@ -291,12 +291,18 @@ describe('an application', () => {
 
 	it('is submitted by its owner, frozen, then seen by the assessors (not viewers) with its runs', async () => {
 		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/submit`)).status).toBe(403);
+		// Where written objections go, as the notice gives them (166_public_participation): set while a draft…
+		const notice = await asA('PATCH', `${P()}/scenarios/${sid}`, { objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
+		expect(notice.status, JSON.stringify(notice.body)).toBe(200);
+		expect(notice.body.scenario).toMatchObject({ objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
 		const res = await asA('POST', `${P()}/scenarios/${sid}/submit`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.scenario.status).toBe('submitted');
 		expect(res.body.scenario.submittedAt).not.toBeNull();
-		// Frozen: the ops can't change, through the API or the table.
+		// Frozen: the ops can't change, through the API or the table; nor the notice's details (166).
 		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [] })).status).toBe(409);
+		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { objectionAddress: 'Elsewhere' })).status).toBe(409);
+		expect(res.body.scenario).toMatchObject({ objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
 		await expect(withUser(applicantA.id, (db) => db.query(`UPDATE scenario SET ops = '[]' WHERE id = $1`, [sid]))).rejects.toMatchObject({ code: '23514' });
 		// The assessors see it, and its run.
 		const list = await assessor.call('GET', `${P()}/applications`);
@@ -334,6 +340,8 @@ describe('an application', () => {
 			['scenario.unshared', null],
 			['scenario.shared', null],
 			['scenario.changed', null],
+			['scenario.changed', null],
+			// The notice's objection details (166).
 			['scenario.changed', null],
 			['scenario.submitted', null],
 			['scenario.decided', 'Raise Rooikloof']
