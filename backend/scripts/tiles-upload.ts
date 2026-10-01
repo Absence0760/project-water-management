@@ -3,6 +3,7 @@
 //
 //   tsx scripts/tiles-upload.ts <file.pmtiles>
 //   tsx scripts/tiles-upload.ts --fonts <dir>
+//   tsx scripts/tiles-upload.ts --env <file>
 //
 // It creates the `tiles` bucket, lets anyone read its objects (MinIO is
 // loopback-only; the map reads the file with HTTP Range from the browser) and
@@ -10,11 +11,14 @@
 // labels' glyph ranges instead (#326 A6, docs/maps.md § Labels): every
 // `<fontstack>/<range>.pbf` under <dir> to `fonts/<fontstack>/<range>.pbf`,
 // with the font licence (OFL.txt) beside them, so the map's glyphs URL is
-// `…/tiles/fonts/{fontstack}/{range}.pbf`. Local only: it refuses
+// `…/tiles/fonts/{fontstack}/{range}.pbf`. With --env it uploads nothing: it
+// sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in <file> (the frontend's
+// gitignored .env.development.local; `pnpm dev:tiles:up`), keeping every other
+// line, and prints whether it changed. Local only: it refuses
 // STORAGE=s3 (production's tiles go to S3 behind CloudFront, a deployment
 // step, docs/deployment.md).
 import { config } from 'dotenv';
-import { createReadStream, readdirSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const TILES_BUCKET = 'tiles';
@@ -61,11 +65,41 @@ export function fontObjects(dir: string): { path: string; key: string; contentTy
 	return out;
 }
 
+/**
+ * `text` (an env file) with each of `vars` set: a line `KEY=…` (the last, if
+ * repeated) gets the value, a missing key is appended, every other line is kept.
+ */
+export function withEnv(text: string, vars: Record<string, string>): { text: string; changed: boolean } {
+	const lines = text === '' ? [] : text.replace(/\n$/, '').split('\n');
+	for (const [key, value] of Object.entries(vars)) {
+		let at = -1;
+		lines.forEach((l, i) => {
+			if (l.replace(/^\s*(export\s+)?/, '').startsWith(`${key}=`)) at = i;
+		});
+		if (at >= 0) lines[at] = `${key}=${value}`;
+		else lines.push(`${key}=${value}`);
+	}
+	const out = lines.length ? `${lines.join('\n')}\n` : '';
+	return { text: out, changed: out !== text };
+}
+
 async function main(args: string[]): Promise<number> {
+	if (args[0] === '--env') {
+		if (!args[1]) {
+			console.error('usage: tsx scripts/tiles-upload.ts --env <file>');
+			return 2;
+		}
+		const path = resolve(process.env.INIT_CWD ?? process.cwd(), args[1]);
+		const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
+		const { text, changed } = withEnv(before, { PUBLIC_TILES_URL: tilesUrl(), PUBLIC_TILES_GLYPHS_URL: glyphsUrl() });
+		if (changed) writeFileSync(path, text);
+		console.log(changed ? `Set the tiles URLs in ${path}: restart pnpm dev.` : `${path} already has the tiles URLs.`);
+		return 0;
+	}
 	const fonts = args[0] === '--fonts';
 	const file = fonts ? args[1] : args[0];
 	if (!file) {
-		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --fonts <dir>');
+		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --fonts <dir> | --env <file>');
 		return 2;
 	}
 	if ((process.env.STORAGE ?? 'local').trim() === 's3') {

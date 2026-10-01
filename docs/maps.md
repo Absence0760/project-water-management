@@ -45,16 +45,20 @@ server and no tile CDN: the file is served from the app's own storage.
   glyphs are configured ([§ Labels](#labels)); it uses no sprites.
   Attribution ("© Protomaps © OpenStreetMap contributors") stays visible
   whenever the basemap is drawn.
-- **Locally**: `pnpm dev:s3:up`, then `pnpm dev:tiles:fetch`
-  (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
+- **Locally**: `pnpm dev:tiles:up` (`bin/tiles-dev.sh up`) does it all and
+  is safe to re-run: it starts MinIO, uploads the cached extract and fonts
+  when MinIO doesn't serve them (its volume wiped, or a new MinIO), runs `fetch` only when nothing is cached, and sets both
+  URLs in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
+  other line kept); restart `pnpm dev` after. `pnpm dev:tiles:fetch`
+  (`bin/tiles-dev.sh fetch`) re-downloads. It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
   Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
   anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
-  `pnpm dev:tiles:env >> frontend/.env.development.local` sets the URL
-  (`http://localhost:9002/tiles/south-africa.pmtiles`); restart `pnpm dev`.
+  `pnpm dev:tiles:env` prints the URL
+  (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
   defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
