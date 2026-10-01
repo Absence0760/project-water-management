@@ -232,4 +232,24 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.pack.why.editor': 'Jy kry hierdie e-pos omdat jy bewyspakkette in {project} kan uitreik en terugtrek.',
 	// You get this email because the application “{name}” is yours.
 	'mail.pack.why.applicant': 'Jy kry hierdie e-pos omdat die aansoek “{name}” joune is.',
+	// Your account has been deleted — {product}
+	'mail.deleted.subject': 'Jou rekening is uitgevee — {product}',
+	// Your account has been deleted
+	'mail.deleted.heading': 'Jou rekening is uitgevee',
+	// As you asked, we deleted the {product} account for {email}.
+	'mail.deleted.body': 'Soos jy gevra het, het ons die {product}-rekening vir {email} uitgevee.',
+	// Deleted with it: your name, email address and password, your memberships and hydrological unit links, your alert choices and the alert emails sent to you, your settings, and any uncertainty result you started and never finished or licence application still in draft.
+	'mail.deleted.gone': 'Saam daarmee uitgevee: jou naam, e-posadres en wagwoord, jou lidmaatskappe en koppelings aan hidrologiese eenhede, jou waarskuwingskeuses en die waarskuwings-e-posse wat aan jou gestuur is, jou instellings, en enige onsekerheidsresultaat wat jy begin en nooit voltooi het nie, of enige lisensieaansoek wat nog ’n konsep is.',
+	// You are no longer a member of {list}.
+	'mail.deleted.left': 'Jy is nie meer ’n lid van {list} nie.',
+	// Kept without your name: what you made for a project (the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes) and the project’s history. It now reads “a former member” or “Deleted user”, and is never put in someone else’s name.
+	'mail.deleted.kept': 'Behou sonder jou naam: wat jy vir ’n projek gemaak het (die projek of span self, modellopies, invoere, scenario’s, ’n lisensieaansoek wat jy ingedien het, notas) en die projek se geskiedenis. Dit wys nou “’n voormalige lid” of “Deleted user”, en word nooit op iemand anders se naam gesit nie.',
+	// Kept with your name: a sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.
+	'mail.deleted.signed': 'Behou met jou naam: ’n aftekening behou die naam en registrasie wat jy ingetik het, en ’n bewyspakket behou die name wat dit gedruk het, so lank as wat die lisensierekord wat hulle ondersteun, gehou word.',
+	// Copies in our backups are deleted as the backups expire, within 35 days.
+	'mail.deleted.backups': 'Kopieë in ons rugsteun word uitgevee soos die rugsteun verval, binne 35 dae.',
+	// Read the privacy notice
+	'mail.deleted.action': 'Lees die privaatheidskennisgewing',
+	// If you didn’t delete your account, contact us straight away: the privacy notice says how.
+	'mail.deleted.notYou': 'As jy nie jou rekening uitgevee het nie, kontak ons dadelik: die privaatheidskennisgewing sê hoe.',
 };

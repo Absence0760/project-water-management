@@ -152,8 +152,8 @@ test('a wrong current password and a too-short new password are shown as errors'
 });
 
 // Screen use (issue #17): the header says who you are; on a wide screen the
-// cards sit in two columns (Profile + Password, then Language and units +
-// Alert emails + Your data) and the page fits a 1440×960 window without
+// cards sit in two columns (Profile + Password + Delete my account, then
+// Language and units + Alert emails + Your data) and the page fits a 1440×960 window without
 // scrolling; on a phone they stack in one column; never a sideways scroll.
 test.describe('layout', () => {
 	const box = async (page: import('@playwright/test').Page, name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!;
@@ -171,9 +171,12 @@ test.describe('layout', () => {
 		const prefs = await box(page, 'Language and units');
 		const alerts = await box(page, 'Alert emails');
 		const data = await box(page, 'Your data');
-		// Left column: Profile over Password; right column: the other three.
+		const del = await box(page, 'Delete my account');
+		// Left column: Profile over Password over Delete my account; right column: the other three.
 		expect(Math.abs(password.x - profile.x)).toBeLessThan(1);
 		expect(password.y).toBeGreaterThan(profile.y);
+		expect(Math.abs(del.x - profile.x)).toBeLessThan(1);
+		expect(del.y).toBeGreaterThan(password.y);
 		expect(prefs.x).toBeGreaterThan(profile.x + profile.width);
 		expect(Math.abs(prefs.y - profile.y)).toBeLessThan(1);
 		expect(Math.abs(alerts.x - prefs.x)).toBeLessThan(1);
@@ -198,7 +201,7 @@ test.describe('layout', () => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/account');
 		await expect(page.getByLabel('Display name')).toHaveValue(owner.displayName);
-		const order = ['Profile', 'Password', 'Language and units', 'Alert emails', 'Your data'];
+		const order = ['Profile', 'Password', 'Delete my account', 'Language and units', 'Alert emails', 'Your data'];
 		const boxes = await Promise.all(order.map((n) => box(page, n)));
 		for (let i = 1; i < boxes.length; i++) {
 			expect(Math.abs(boxes[i]!.x - boxes[0]!.x)).toBeLessThan(1);

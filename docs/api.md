@@ -24,6 +24,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
+| DELETE | `/auth/me` | `{ password }` | "Delete my account" (issue #112): `204`, the account deleted and this browser's session and trusted-device cookies cleared, then an email to its address saying what was done; `403 wrong_current_password`; `429 signin_locked` + `Retry-After` while the address is locked; `409 account_sole_holder` with `details: { projects: [{ id, name }], teams: [{ id, name }] }`, the projects the person is the only owner of and the teams they are the only admin of (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -107,6 +108,33 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   understand" (`POST /auth/me/farm-notice`), and again after the version
   changes; the farm pages show the notice instead of the figures until then
   ([ui.md § Farmer view](./ui.md)).
+- **`DELETE /auth/me`** ("Delete my account", POPIA s24; issue #112;
+  `backend/src/auth/deleteAccount.ts`, 143_delete_my_account.sql) checks
+  the password through the **same lockout as `change-password`** (a wrong
+  one is a failed attempt, `403`; a locked address `429`, logged as
+  `login_failed` with `route: "/auth/me"`). Then, as the person under RLS:
+  the projects they are the only owner of (`project_member`) and the teams
+  they are the only admin of give `409 account_sole_holder`, naming them in
+  `details`, and nothing changes; hand them over first. The owner and admin
+  rows of those projects and teams are locked (`FOR UPDATE`) before the
+  check, so a co-owner deleting their account or leaving at the same moment
+  waits for this request rather than both passing. Otherwise it records
+  one audit event in each project and team they belonged to
+  (`member.removed` / `team_member.removed` with `self: true,
+  accountDeleted: true`, and a farmer's `farmer.unlinked` with cause
+  `member_removed`), deletes the account through
+  `app_delete_my_account()` (the same foreign keys and triggers as the
+  operator's deletion: keep the evidence, remove the name; [security.md §
+  Personal information](./security.md#personal-information-popia)), and
+  fires the deferred owner and admin checks inside the request (`SET
+  CONSTRAINTS ALL IMMEDIATE`), so a co-owner who left just before still
+  gets the `409`, not a deletion. The response clears both cookies;
+  the old session cookie is void anyway (its account is gone). The email
+  (`account_deleted`, in the account's language) lists the projects and
+  teams the person left, what was deleted, what stays without the name and
+  what keeps it (POPIA s24(4)); a failed send is logged and doesn't undo
+  the deletion. The log line `{"event":"account_deleted","via":"self"}`
+  names nobody.
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
@@ -227,12 +255,12 @@ the frontend catalogue (same contract: add, never rename):
 | `not_signed_in` | 401 | no valid session |
 | `wrong_credentials` | 401 | sign-in with a wrong email or password |
 | `email_unconfirmed` | 403 | sign-in with the right password to an account whose address was never confirmed |
-| `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
+| `signin_locked` | 429 | sign-in, a password change or deleting the account while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or `POST /auth/me/accept-terms` without `version`, or with a version that isn't the current one (a page loaded before the terms changed); `params.version` is the current one. On sign-up, checked before the sign-up throttle counts |
 | `farm_notice_changed` | 409 | `POST /auth/me/farm-notice` with a version that isn't the current one (a farm page loaded before the notice changed); `params.version` is the current one |
-| `wrong_current_password` | 403 | `POST /auth/change-password` |
+| `wrong_current_password` | 403 | `POST /auth/change-password`, `DELETE /auth/me` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
 | `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
@@ -250,6 +278,7 @@ the frontend catalogue (same contract: add, never rename):
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
+| `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`

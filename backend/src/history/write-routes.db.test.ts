@@ -762,6 +762,21 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 		},
 		projectsOf: (c) => [c.ingestProjectId as string]
 	},
+	{
+		// "Delete my account" (issue #112): the person leaves every project and team, recorded (as "Deleted user") on each.
+		route: 'DELETE /auth/me',
+		records: ['team_member.removed'],
+		call: async (c) => {
+			// A team of its own: the entries above may have deleted the shared one.
+			const teamId = (await c.admin.call('POST', '/teams', { name: 'Leaver WUA' })).body.team.id;
+			const pid = (await c.admin.call('POST', '/projects', { name: 'Leaver catchment', teamId })).body.project.id;
+			c.leaverProjects = [pid];
+			const leaver = await signUp('Tleaver');
+			expect((await c.admin.call('POST', `/teams/${teamId}/members`, { email: leaver.email, role: 'member' })).status).toBe(201);
+			return leaver.call('DELETE', '/auth/me', { password: 'correct horse' });
+		},
+		projectsOf: (c) => c.leaverProjects as string[]
+	},
 	// --- exempt: they change no project's inputs, results or access ---------------------
 	{ route: 'POST /projects', exempt: 'a new project has nothing to diff yet; its first change records a baseline revision (recordModelRevision)' },
 	{ route: 'POST /teams', exempt: 'a new team has no projects, so no project history; a project moved in records project.changed' },

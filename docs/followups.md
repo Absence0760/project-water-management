@@ -4687,13 +4687,21 @@ own. Loop in the CISO or security analyst before acting on any of them.
       scenario, import) with the maker cleared, deletes a started ensemble
       and draft applications, and refuses only the sole owner or admin until
       handed over (deployment.md § Runbooks, item 7; Privacy §7 rewritten,
-      `LEGAL_VERSION` 2026-09-30). **Still to build (#112):** `DELETE
-      /auth/me` (password again; 409 naming the projects and teams they solely
-      own or administer; audit event; a confirmation email of what was done,
-      s24(4)) and the Account page's **Delete my account** with its e2e and
-      the Afrikaans words. The information officer still confirms the rule
-      (#90). Trigger: before public registration opens, or the first deletion
-      request from a modeller.
+      `LEGAL_VERSION` 2026-09-30). **Self-service done (143, issue #112):**
+      `DELETE /auth/me` (the password again, through the sign-in lockout;
+      `409 account_sole_holder` naming the projects and teams they alone own
+      or administer; an audit event per project and team; an email of what
+      was done, s24(4)) and the Account page's **Delete my account** dialog,
+      in English and Afrikaans, with `account-delete.spec.ts`. What is left
+      of #112 waits on the information officer (#90): confirming the rule,
+      and the items below (deleted notes' bodies, backups after an erasure,
+      D12, the lawful bases). Trigger: the #90 answers.
+- [x] **Two owners leaving a project (or admins a team) at the same moment
+      can leave it with none** (2026-10-01, PR #320). The member routes lock
+      the owner (admin) rows before `assertNotLastOwner` /
+      `assertNotLastAdmin`, and migration 149 has the keep-owner and
+      keep-admin triggers take a per-project (per-team) lock before counting;
+      `last-owner-race.db.test.ts` forces both orders.
 - [ ] **A DWS or CMA responsible party may have to keep the maker's name**
       (National Archives Act, operator agreement notes for counsel, clause
       8.4). Durable fix: a per-team setting that keeps a snapshot of the name
@@ -4709,6 +4717,14 @@ own. Loop in the CISO or security analyst before acting on any of them.
       answer is that backups age out and are never restored into live use
       without re-applying erasures; confirm and put it in the notice. Who:
       operator + information officer. Trigger: with the privacy notice.
+      Since self-service deletion (143) the operator log no longer sees
+      every erasure: `DELETE /auth/me` logs `account_deleted` with no id, on
+      purpose. If the answer is "re-apply erasures after a restore", that
+      step needs a list of erased account ids that survives a restore (the
+      restore takes the database back, so not a table in it): for example
+      the id in that log line with log retention at least the backups', or
+      a write to a separate store. Decide it with the answer, in the same
+      change as the runbook step (deployment.md § Rollback).
 - [ ] **D12 confirmation.** The audit log is pseudonymised on account
       deletion ("Deleted user", 048) as the roadmap recommends; the
       information officer confirms it (or asks for full deletion of the

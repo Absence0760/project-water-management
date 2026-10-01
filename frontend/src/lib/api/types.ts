@@ -58,6 +58,12 @@ export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
 /** How a role reads (a `contributor` is an applicant, a team `admin` an owner): ./roleLabels.ts. */
 
+/** What a deletion would leave with no owner or admin: DELETE /auth/me's 409 `account_sole_holder` details (issue #112). */
+export interface SoleHoldings {
+	projects: { id: string; name: string }[];
+	teams: { id: string; name: string }[];
+}
+
 export interface User {
 	id: string;
 	email: string;

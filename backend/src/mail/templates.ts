@@ -358,3 +358,40 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 		tr
 	);
 }
+
+/** What a deletion did, for its confirmation: the catchments and teams the person left (their names, as they stood). */
+export type AccountDeletedFacts = { projects: string[]; teams: string[] };
+
+/**
+ * The account was deleted (issue #112, DELETE /auth/me): what was done, as
+ * POPIA s24(4) asks. Sent to the address the account had, after the row is
+ * gone, in the language it had chosen. It says what went, what stays
+ * without the name and what keeps it, and names the catchments and teams
+ * the person left (docs/security.md § Personal information (POPIA)). The
+ * button opens the privacy notice, which says how to reach the operator if
+ * the person didn't do it.
+ */
+export function accountDeletedMail(to: string, f: AccountDeletedFacts, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	const left = [...f.projects, ...f.teams];
+	return render(
+		'account_deleted',
+		to,
+		tr.t('mail.deleted.subject', v),
+		{
+			heading: tr.t('mail.deleted.heading'),
+			paragraphs: [
+				tr.t('mail.deleted.body', v),
+				tr.t('mail.deleted.gone'),
+				...(left.length ? [tr.t('mail.deleted.left', { list: listText(left, tr.t('mail.farmer.and')) })] : []),
+				tr.t('mail.deleted.kept'),
+				tr.t('mail.deleted.signed'),
+				tr.t('mail.deleted.backups')
+			],
+			action: { label: tr.t('mail.deleted.action'), url: sitePage('/privacy#retention') },
+			footer: [tr.t('mail.deleted.notYou')]
+		},
+		tr
+	);
+}
