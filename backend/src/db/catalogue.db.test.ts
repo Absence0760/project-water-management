@@ -151,9 +151,11 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
  * no caller can choose a recipient; the same for a person's erratum notices
- * and the record of which errata were swept (153_erratum_notices).
+ * and the record of which errata were swept (153_erratum_notices); and alert
+ * feedback, written only by 151_alert_feedback's, so no caller answers for
+ * someone else.
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'erratum_notice', 'erratum_sweep']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -189,6 +191,7 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
 	// A person's alert mails and choices are theirs (051_alerts.sql); a rule is the project's.
 	'alert_delivery.user_id': 'cascade',
+	'alert_feedback.user_id': 'cascade',
 	'pack_notice.user_id': 'cascade',
 	// A person's known-engine-bug emails (153_erratum_notices).
 	'erratum_notice.user_id': 'cascade',

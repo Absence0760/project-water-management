@@ -19,7 +19,8 @@ const FILES = [
 	'routes/forgot-password/+page.svelte',
 	'routes/reset-password/+page.svelte',
 	'routes/verify-email/+page.svelte',
-	'routes/alerts/unsubscribe/+page.svelte'
+	'routes/alerts/unsubscribe/+page.svelte',
+	'routes/alerts/feedback/+page.svelte'
 ];
 
 /** Each `font-size` under 14 px in a file's <style> (rem at the 14 px root, px as given; em and clamp() skipped). */

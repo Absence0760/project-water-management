@@ -64,6 +64,7 @@ export const SECTIONS: Record<string, string> = {
 	'alerts.kind': 'Alert emails page: the name of each kind of alert.',
 	unsubscribe: 'The page an alert email’s “Stop these emails” link opens. Works without signing in.',
 	'unsubscribe.kind': 'Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for {project} any more”.',
+	feedback: 'The page an alert email’s “Was this useful? Yes · No” links open: the reader confirms Yes or No, may add a comment, and presses Send. Works without signing in.',
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',

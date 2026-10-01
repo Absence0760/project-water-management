@@ -48,6 +48,11 @@ const PUBLIC = new Set([
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
 	// route exempt from the CSRF check (app.ts): a mail client form-posts it.
 	'POST /alerts/unsubscribe',
+	// "Was this useful?" on an alert email (151_alert_feedback): the token is
+	// the credential, and it can only answer its own mail, through
+	// app_alert_answer (alerts/feedback.db.test.ts). Same-origin from the
+	// feedback page, so the CSRF check applies.
+	'POST /alerts/feedback',
 	// Verify an evidence pack (WP-3.14): the code is printed on the pack, not
 	// a secret; app_verify_pack returns only a pack's printed fields, and
 	// nothing for a draft (evidence/packs.db.test.ts).
@@ -329,12 +334,21 @@ describe('route auth inventory', () => {
 
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	// Alerts (WP-2.13): preferences and rules need a session; only the unsubscribe is public.
-	it('inventories the alert routes as auth-gated, and the unsubscribe as public', () => {
-		for (const r of ['GET /me/alerts', 'PUT /me/alerts/:projectId', 'POST /me/alerts/resume', 'GET /projects/:id/alert-rules', 'PUT /projects/:id/alert-rules', 'GET /projects/:id/alert-events']) {
+	it('inventories the alert routes as auth-gated, and the unsubscribe and feedback answer as public', () => {
+		for (const r of [
+			'GET /me/alerts',
+			'PUT /me/alerts/:projectId',
+			'POST /me/alerts/resume',
+			'GET /projects/:id/alert-rules',
+			'PUT /projects/:id/alert-rules',
+			'GET /projects/:id/alert-events',
+			'GET /projects/:id/alert-feedback'
+		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
 		expect(routes).toContain('POST /alerts/unsubscribe');
+		expect(routes).toContain('POST /alerts/feedback');
 	});
 
 	it('exempts only POST /alerts/unsubscribe from the CSRF check: a form post with no Origin reaches it, and is refused elsewhere', async () => {
@@ -346,6 +360,8 @@ describe('route auth inventory', () => {
 		// Any other route: the CSRF check refuses the same form post.
 		expect((await app.request('/auth/login', form)).status).toBe(403);
 		expect((await app.request('/share/view', form)).status).toBe(403);
+		// The feedback answer too: only the feedback page (same origin) posts it.
+		expect((await app.request('/alerts/feedback', form)).status).toBe(403);
 	});
 
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {

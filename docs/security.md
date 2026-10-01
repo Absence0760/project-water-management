@@ -1228,6 +1228,37 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     narrow (the same form post to any other route is refused).
   - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
     can't be guessed.
+- **"Was this useful?" (issue #74, `151_alert_feedback`).**
+  - *No tracking.* Every alert email and digest carries two plain links,
+    Yes and No, to `/alerts/feedback#t=<token>&a=yes|no`. No email carries
+    an image, a pixel or a tracked link, SES open and click tracking is not
+    switched on, and opening the mail or a link records nothing: the page
+    preselects the link's answer and stores it only when the reader presses
+    **Send**, so a mail scanner that opens links answers nothing (Privacy
+    §3: "We do not use analytics, advertising or tracking tools"). Open
+    tracking was considered and dropped: it is tracking, and some mail apps
+    fetch images on their own, so it is unreliable too.
+  - *The token.* Single-purpose: HMAC-SHA256(`ALERTS_TOKEN_SECRET`,
+    `"wm-alert-feedback/v1/"` + a per-mail nonce), its own label beside the
+    unsubscribe token's, so neither works at the other's route
+    (`token-confusion.security.db.test.ts`). The worker makes the row as the
+    recipient, only for a delivery of theirs being sent
+    (`app_alert_answer_slot`); the row stores the nonce and the token's
+    SHA-256, and the API, which holds no secret, looks the token up by its
+    hash (`app_alert_answer`). It answers only its own email, without
+    signing in, for 30 days after the mail, and only while its person can
+    still open the catchment; a second answer replaces the first. Its worst
+    use, leaked: someone answers one email's question for that person.
+  - *Who reads it.* The person (their own rows, and in their data export)
+    and the project's editors and owners (RLS). The editors' route,
+    `GET …/alert-feedback`, sends counts per kind and comments, never who
+    gave them; a comment is shown as text, never as HTML. water_app has
+    SELECT only; every write is a SECURITY DEFINER function.
+  - *Retention.* Unanswered rows 30 days after the mail, answers 365 days
+    after they were given (`app_purge_alert_answers`, each tick); deleted
+    with the account (cascade).
+  - *CSRF.* The page posts it same-origin as JSON, so the `csrf()` check
+    applies (the unsubscribe stays the only exemption).
 - **Headers.** `List-Unsubscribe`, `List-Unsubscribe-Post:
   List-Unsubscribe=One-Click` and `Auto-Submitted: auto-generated` go out on
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
@@ -2394,7 +2425,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, evidence pack emails sent (`packNotices`, 133), known engine bug emails sent (`erratumNotices`, 153), their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, their "Was this useful?" answers and comments on alert emails (`alertFeedback`, 151), evidence pack emails sent (`packNotices`, 133), known engine bug emails sent (`erratumNotices`, 153), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
