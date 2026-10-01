@@ -2651,7 +2651,7 @@ never a farm's row, name or id.
 ## Catchment map
 
 The map's features, GeoJSON imports, areas accepted from polygons and the
-quaternary lookup (issue #288, roadmap WP-3.12, `146_catchment_map.sql`,
+quaternary lookup (issue #288, roadmap WP-3.12, `152_catchment_map.sql`,
 [maps.md](./maps.md)). Geometry is GeoJSON in WGS84 longitude/latitude, 2D;
 every geometry is checked and every area computed on the server
 (`backend/src/geo`). Nothing here changes the model except `area-from-map`,

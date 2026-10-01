@@ -2183,7 +2183,7 @@ database:
   (`allocations/water-use.db.test.ts`, the WUA's preview as positive
   control).
 
-### Map uploads (146_catchment_map.sql)
+### Map uploads (152_catchment_map.sql)
 
 The Map tab (issue #288, [maps.md](./maps.md)) takes GeoJSON files and
 placed points. The server never trusts the browser with geometry:

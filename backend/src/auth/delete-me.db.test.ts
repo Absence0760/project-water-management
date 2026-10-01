@@ -139,7 +139,7 @@ describe('DELETE /auth/me: a farmer and an owner who share a catchment and a tea
 		teamId = (await owner.call('POST', '/teams', { name: `Team ${tag}` })).body.team.id;
 		expect((await owner.call('POST', `/teams/${teamId}/members`, { email: leaver.email, role: 'admin' })).status).toBe(201);
 		teamProjectId = (await owner.call('POST', '/projects', { name: `Team catchment ${tag}`, teamId })).body.project.id;
-		// A map import by the leaver (146): its file record and feature are the project's and stay, without their name.
+		// A map import by the leaver (152): its file record and feature are the project's and stay, without their name.
 		const imported = await leaver.call('POST', `/projects/${projectId}/map/import`, {
 			fileName: `leaver-${tag}.geojson`,
 			kind: 'other',

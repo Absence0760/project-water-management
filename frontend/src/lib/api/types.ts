@@ -2191,7 +2191,7 @@ export interface YieldResult {
 
 // --- Catchment map (issue #288, WP-3.12; docs/api.md § Catchment map, docs/maps.md) ---
 
-/** Mirrors backend geo/routes.ts MAP_FEATURE_KINDS (and 146's CHECK). */
+/** Mirrors backend geo/routes.ts MAP_FEATURE_KINDS (and 152's CHECK). */
 export type MapFeatureKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
 export type MapPosition = [number, number];
 /** GeoJSON geometry as the server stores it: WGS84 longitude/latitude, 2D. */
@@ -2231,7 +2231,7 @@ export interface MapSource {
 	features: number;
 }
 
-/** A node and where its area came from (146 node.area_source). */
+/** A node and where its area came from (152 node.area_source). */
 export interface MapNodeArea {
 	id: string;
 	name: string;

@@ -3396,7 +3396,7 @@ from the WP:
 
 ## Catchment map (issue #288)
 
-Phases 1–2 of WP-3.12 landed (2026-10-01: migration 146, `backend/src/geo/`,
+Phases 1–2 of WP-3.12 landed (2026-10-01: migration 152, `backend/src/geo/`,
 the Map tab, Settings → WR2012 check → Propose from the map;
 [maps.md](./maps.md)). Left, from the WP and the issue:
 

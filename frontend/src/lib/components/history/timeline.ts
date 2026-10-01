@@ -277,7 +277,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const n = num(s.rows) ?? 0;
 			return `Imported ${plural(n, 'registered volume')} from ${str(s.fileName)}`;
 		}
-		// The Map tab (146, issue #288): what was placed or imported, by kind and name; never the geometry.
+		// The Map tab (152, issue #288): what was placed or imported, by kind and name; never the geometry.
 		case 'map.imported': {
 			const n = num(s.features) ?? 0;
 			return `Imported ${plural(n, 'map feature')} from ${str(s.fileName)}`;

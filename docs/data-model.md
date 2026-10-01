@@ -1317,7 +1317,7 @@ water-use volumes per farm or water user.
   inventories.
 
 
-### Catchment map (146_catchment_map.sql)
+### Catchment map (152_catchment_map.sql)
 
 Issue #288, roadmap WP-3.12, [maps.md](./maps.md). GeoJSON in `jsonb`, no
 PostGIS (areas and point-in-polygon are computed in `backend/src/geo`; room

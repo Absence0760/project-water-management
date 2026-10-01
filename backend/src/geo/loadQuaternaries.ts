@@ -1,4 +1,4 @@
-// Load a quaternary dataset into quaternary_reference (146; issue #288 phase
+// Load a quaternary dataset into quaternary_reference (152; issue #288 phase
 // 2, docs/maps.md § Quaternary dataset). The operator's tool, run as the
 // schema owner (`pnpm import:quaternaries`); the app only reads the table.
 //

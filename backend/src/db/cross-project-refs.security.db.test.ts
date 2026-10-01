@@ -362,7 +362,7 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [`INSERT INTO allocation (project_id, node_id, authorisation, water_source, volume_m3_year) VALUES ($1, $2, 'licence', 'surface', 1)`, [h.projectId, ref]]
 	},
-	// A map feature stands for a node of its project (146: assert_same_project on map_feature.node_id).
+	// A map feature stands for a node of its project (152: assert_same_project on map_feature.node_id).
 	'map_feature.node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [

@@ -214,7 +214,7 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
-	// The catchment map (146, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
+	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
 	| 'map.imported'
 	| 'map.feature_created'
 	| 'map.feature_changed'

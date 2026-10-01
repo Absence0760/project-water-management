@@ -203,7 +203,7 @@ beforeAll(async () => {
 		fileName: 'pd.csv',
 		text: 'registration_no,farm,authorisation,water_source,volume_m3_year\nPD-1,Farm Pd,licence,surface,500\n'
 	});
-	// A map import (146): who imported the file and made its feature is set null on deletion; the features stay with the project.
+	// A map import (152): who imported the file and made its feature is set null on deletion; the features stay with the project.
 	await call(subject, 'POST', `/projects/${projectId}/map/import`, {
 		fileName: 'pd.geojson',
 		kind: 'other',
