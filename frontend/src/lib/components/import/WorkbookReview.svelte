@@ -40,7 +40,7 @@
 </script>
 
 {#if report.hasGauge}
-	<fieldset class="gauge" {disabled}>
+	<fieldset class="option-group" {disabled}>
 		<legend>Gauge column</legend>
 		<label class="check">
 			<input type="checkbox" bind:checked={gaugeAsReference} onchange={onoptions} aria-describedby="wb-gauge-hint" />
@@ -77,7 +77,7 @@
 
 {#if report.runOfRiverUnits.length}
 	{@const n = report.runOfRiverUnits.length}
-	<fieldset class="gauge" {disabled}>
+	<fieldset class="option-group" {disabled}>
 		<legend>River pumping units</legend>
 		<label class="check">
 			<input type="checkbox" bind:checked={runOfRiver} onchange={onoptions} aria-describedby="wb-ror-hint" />
@@ -117,7 +117,7 @@
 	.chirps {
 		margin: 0.75rem 0;
 	}
-	.gauge {
+	.option-group {
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		padding: 0.5rem 0.75rem 0.25rem;
