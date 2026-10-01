@@ -240,6 +240,16 @@ Tracked in issue #103.
   in any expedient way, answered as soon as reasonably practicable with what
   was done. A material change: `LEGAL_VERSION` 2026-09-30 (every account
   accepts again; nothing is in production yet).
+- 2026-10-01: Privacy §3, §4, §5 and §7 (issue #74, 151): the "Was this
+  useful?" link on alert emails. §3 lists the feedback kept (yes or no, an
+  optional comment, the alert's kind; nothing until Send is pressed) and
+  says the emails carry no tracking pixels or tracked links; §4 adds its
+  lawful basis (the organisation's legitimate interest in useful alerts;
+  answering is optional); §5 says editors see the answers counted and the
+  comments without names; §7 gives its retention (an answer 1 year; an
+  unanswered link 30 days). A new kind of personal information, so a
+  material change: `LEGAL_VERSION` 2026-10-01 (every account accepts again;
+  nothing is in production yet).
 - 2026-10-01: Privacy §10 says a signed-in person can delete the account
   themselves (Account → Delete my account, issue #112, 143), and §7 that the
   account page says when they must hand a project or team over first. The

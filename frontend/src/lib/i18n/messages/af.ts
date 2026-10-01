@@ -197,6 +197,8 @@ export const af: Catalogue = {
 	'd14653a3': 'Jy sal nie meer waarskuwings-e-posse vir {project} kry nie.',
 	// You won’t get {kind} emails for {project} any more.
 	'fa614c6b': 'Jy sal nie meer e-posse oor {kind} vir {project} kry nie.',
+	// Thank you. Your answer goes to the people who run alerts for {project}, without your name.
+	'6bfb93ee': 'Dankie. Jou antwoord gaan sonder jou naam na die mense wat die waarskuwings vir {project} bestuur.',
 	// Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending.
 	'554605ea': 'Jou waarskuwings-e-posse is onderbreek. ’n E-pos wat ons na {email} gestuur het, is as gemorspos gemerk, daarom het ons opgehou om te stuur.',
 	// Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed.
@@ -223,8 +225,12 @@ export const af: Catalogue = {
 	'20707b22': 'Laai tans die raaisel…',
 	// If you turn on two-step sign-in, we keep the key your authenticator app uses (encrypted), your recovery codes (only as one-way hashes) and a record of when you turned it on or off or used a recovery code.
 	'd17f9391': 'As jy tweestap-intekening aanskakel, hou ons die sleutel wat jou verifikasie-app gebruik (geënkripteer), jou herstelkodes (net as eenrigting-hutswaardes) en ’n rekord van wanneer jy dit aan- of afgeskakel het of ’n herstelkode gebruik het.',
-	// When an account is deleted, what it made for a project stays as the project’s record, with the name removed.
-	'82fd7174': 'Wanneer ’n rekening uitgevee word, bly wat dit vir ’n projek gemaak het as die projek se rekord, met die naam daaruit verwyder.',
+	// When an account is deleted, what it made for a project stays as the project’s record with the name removed. A sign-off’s typed name and the names in an evidence pack are kept only as long as that record.
+	'71f9b9a7': 'Wanneer ’n rekening uitgevee word, bly wat dit vir ’n projek gemaak het as die projek se rekord, met die naam verwyder. ’n Aftekening se getikte naam en die name in ’n bewyspakket word net gehou solank daardie rekord bestaan.',
+	// Alert emails now ask “Was this useful?”. If you answer, your answer and any comment are kept for a year, and your WUA sees them without your name.
+	'521ccbcb': 'Waarskuwings-e-posse vra nou “Was dit nuttig?”. As jy antwoord, word jou antwoord en enige kommentaar ’n jaar lank gehou, en jou WGV sien dit sonder jou naam.',
+	// Our emails don’t track whether you open them or follow their links.
+	'dfb648c4': 'Ons e-posse hou nie dop of jy hulle oopmaak of hulle skakels volg nie.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -1641,20 +1647,40 @@ export const af: Catalogue = {
 	'50b26149': 'Aanvaar',
 	// Decline
 	'58eaef39': 'Wys af',
+	// Was this alert useful?
+	'406db233': 'Was hierdie waarskuwing nuttig?',
+	// Your answer
+	'212940e8': 'Jou antwoord',
+	// Yes, it was useful
+	'c7f43ae2': 'Ja, dit was nuttig',
+	// No, it wasn’t useful
+	'a92856c1': 'Nee, dit was nie nuttig nie',
+	// Choose Yes or No.
+	'6bfca88b': 'Kies Ja of Nee.',
+	// Anything to add? (optional)
+	'0e4aecaf': 'Iets om by te voeg? (opsioneel)',
+	// Your WUA reads your answer and comment without your name. Nothing is kept until you press Send.
+	'50a68d80': 'Jou WGV lees jou antwoord en kommentaar sonder jou naam. Niks word gehou voordat jy op Stuur druk nie.',
+	// Keep it to {max} characters.
+	'0c931d1c': 'Gebruik hoogstens {max} karakters.',
+	// One moment…
+	'cf936b69': 'Net ’n oomblik…',
+	// Send
+	'f28e14cf': 'Stuur',
+	// Manage alerts
+	'5ac110b9': 'Bestuur waarskuwings',
+	// This link doesn’t work any more: it lasts 30 days, and only while you are a member of the catchment.
+	'2c2ee394': 'Hierdie skakel werk nie meer nie: dit bly 30 dae geldig, en net solank jy ’n lid van die opvanggebied is.',
+	// This link is incomplete. Open it again from the email, or copy the whole link.
+	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// Stop alert emails
 	'ac585d38': 'Stop waarskuwings-e-posse',
 	// Stop getting these alert emails? You can turn them back on from your account at any time.
 	'72528562': 'Wil jy ophou om hierdie waarskuwings-e-posse te kry? Jy kan dit enige tyd weer vanaf jou rekening aanskakel.',
-	// One moment…
-	'cf936b69': 'Net ’n oomblik…',
 	// Stop these emails
 	'c156b4db': 'Stop hierdie e-posse',
-	// Manage alerts
-	'5ac110b9': 'Bestuur waarskuwings',
 	// This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment.
 	'd526c5e1': 'Hierdie skakel werk nie meer nie: ’n nuwer e-pos het dit dalk vervang, of jy is dalk nie meer ’n lid van die opvanggebied nie.',
-	// This link is incomplete. Open it again from the email, or copy the whole link.
-	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// {page} · My hydrological unit
 	'c1fd658c': '{page} · My hidrologiese eenheid',
 	// My hydrological units

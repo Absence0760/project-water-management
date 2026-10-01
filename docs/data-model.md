@@ -2993,6 +2993,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
+| `alert_feedback` | "Was this useful?" on an alert email (151, issue #74): one row per email a person got, made when the worker builds it (`app_alert_answer_slot`, as the recipient, only for a delivery of theirs being sent). `project_id`, `user_id` (`ON DELETE CASCADE`), `event_id` (the alert, a digest's first line; `SET NULL` when the alert is purged), `kind` (the alert's, or `digest`), `nonce` (32 random bytes), `token_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, `"wm-alert-feedback/v1/"` + nonce); unique), `sent_at`, then once answered `useful`, `comment` (1–500 characters, optional) and `answered_at`. Unique `(user_id, event_id)`: a retried mail reuses the row and its link. **Retention**: unanswered 30 days after `sent_at` (the link stops working then), an answer 365 days after `answered_at` (`app_purge_alert_answers`, from the tick). No open or click is ever recorded: a row says only that the email offered the question, which `alert_delivery` already holds |
 
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
@@ -3014,6 +3015,14 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     `node_id` must be one of their farms (`app_farm_nodes`).
   - `alert_delivery`: SELECT your own rows. No write policy: every write is a
     `SECURITY DEFINER` function below.
+  - `alert_feedback` (151): SELECT your own rows, and the project's editors
+    and owners every row of the project (the route sends them counts and
+    comments, never who gave them). `water_app` has SELECT only: the worker
+    writes through `app_alert_answer_slot`, the public answer through
+    `app_alert_answer(hash, useful, comment)` (no session; nothing for an
+    unknown hash, a link over 30 days old, or a person who can no longer
+    open the project), the purge through `app_purge_alert_answers()` (the
+    worker's own context only).
 - **Who gets an alert** (`alert_audience`, a plain SQL function run only
   inside the definer functions, not granted to `water_app`): each member's
   current role on the project, directly or through its team, then the kind's

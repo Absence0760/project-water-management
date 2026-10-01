@@ -172,8 +172,11 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, preferences,
-  reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
+  signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, preferences,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `alertFeedback`
+  is their "Was this useful?" rows on alert emails, answered or not,
+  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (151; never
+  the token's hash or nonce). `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
@@ -307,6 +310,7 @@ the frontend catalogue (same contract: add, never rename):
 | `note_comment_closed` | 403 | a public comment on a scenario that isn't open for comment (WP-3.15) |
 | `note_audience_denied` | 403 | a scenario note with an audience the caller may not post to, or a farmer commenting on a scenario (WP-3.15) |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
+| `feedback_link_gone` | 404 | an alert email's "Was this useful?" link that no longer works (unknown, more than 30 days old, or its person left the catchment) |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
@@ -1152,6 +1156,8 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
+| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
+| POST | `/alerts/feedback` *(public)* | `{ token, useful: boolean, comment?: string \| null }` (comment ≤ 500 characters) | `200 { kind, project: { name } }` | – |
 
 - Kinds, what fires them, and who gets them by default:
 
@@ -1224,6 +1230,23 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   catchment-wide `all`), without signing in; a repeat is harmless. `404`
   for a malformed or tampered token, one a later re-enable replaced, or one
   whose person is no longer a member; `400` without a token.
+- **"Was this useful?"** (issue #74, `151_alert_feedback`). Every alert
+  email and digest asks it, after the button, with two plain links, **Yes**
+  and **No**, to the site's `/alerts/feedback#t=<token>&a=yes|no` (token
+  and answer in the fragment, so neither reaches a server log). There is no
+  open or click tracking and no image or pixel in any alert email: opening
+  the mail or following a link records nothing. The page preselects the
+  link's answer and asks first; only **Send** posts `POST /alerts/feedback`,
+  so a mail scanner that opens links answers nothing. The token is
+  single-purpose (its own HMAC label beside the unsubscribe token's,
+  `alerts/tokens.ts`; neither works at the other's route) and answers only
+  its own email, without signing in; answering again replaces the answer.
+  `404 feedback_link_gone` for a malformed, tampered or unknown token, a
+  link more than 30 days old, or a person who is no longer a member of the
+  catchment; `400` for a missing answer or a comment over 500 characters.
+  Same-origin from the page, so the CSRF check applies (unlike the
+  unsubscribe). Editors see the answers in the rule editor
+  (`GET …/alert-feedback`).
 
 ### How alert mail is sent
 
