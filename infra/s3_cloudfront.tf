@@ -343,7 +343,10 @@ resource "aws_cloudfront_distribution" "frontend" {
       origin_protocol_policy = "https-only"
       origin_ssl_protocols   = ["TLSv1.2"]
       # Above the Lambda's 30 s timeout so a slow model run surfaces as the
-      # Lambda's own error rather than a CloudFront 504.
+      # Lambda's own error rather than a CloudFront 504. The Function URL
+      # streams (lambda.tf invoke_mode): CloudFront passes the chunked
+      # response through as it arrives, and this is also the longest wait
+      # between two of its packets.
       origin_read_timeout = 35
     }
     custom_header {

@@ -22,8 +22,9 @@
 //    nothing, and otherwise at most the in-force allocations' maximum rates
 //    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
 //    two.
-//  - 'fullAllocation': "what if every lawful user took their entitlement"
-//    (WP-3.11's background run): each unit's abstraction demand (crops and
+//  - 'fullAllocation': "what if every registered or licensed volume were
+//    taken in full" (a registration is not an entitlement; WP-3.11's
+//    background run): each unit's abstraction demand (crops and
 //    demand objects) is scaled, per water year, so it adds up to the
 //    registered volume in force over the run's days of that year (both
 //    sources together), keeping the unit's own seasonal pattern. A unit with
@@ -228,7 +229,9 @@ export function outsideMonths(allocs: readonly AllocationEntry[], source: Alloca
  * keep that factor, so the tail never changes a historical day's demand
  * (engine-audit.md K1); its registered volume is then factor × demand, as a
  * pinned year's. So a year with no demand on its historical days takes
- * nothing on its tail days either, as the run without the tail has it.
+ * nothing on its tail days either, as the run without the tail has it, and
+ * (engine ≥ 1.57.0) lists the volume registered over its historical days, as
+ * every other year with no demand lists the volume over its days.
  * A unit that abstracts only from run day `from` (NetworkNode.abstractionFrom,
  * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
  * it starts in asks for that part of the year's volume, a year wholly before
@@ -266,8 +269,10 @@ export function fullAllocationFactors(
 		let all = d;
 		for (let k = fit + 1; k <= last; k++) all += demand[k]!;
 		// A pinned year was scaled to the capture run's volume for the whole of it, and a year cut by
-		// the forecast tail to its historical days' volume: record what its days got.
-		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || fit < last ? f * all : reg });
+		// the forecast tail to its historical days' volume: record what its days got. A year with no
+		// demand to scale lists the volume registered over the days it would have been scaled on, the
+		// year the tail starts in too (engine ≥ 1.57.0; before, that year listed k × demand = 0).
+		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || (fit < last && d > 0) ? f * all : reg });
 		t = last + 1;
 	}
 	return { factor, years, unscaled };

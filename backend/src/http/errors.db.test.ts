@@ -30,7 +30,8 @@ describe('database errors in API responses', () => {
 	it.each([
 		['an unknown table (unhandled)', 'SELECT * FROM no_such_table_for_errors_test', 500, 'no_such_table_for_errors_test'],
 		['a syntax error (unhandled)', 'SELEC 1', 500, 'SELEC'],
-		['a row RLS refuses to insert', `INSERT INTO project (name) VALUES ('rls probe')`, 403, 'project'],
+		// Someone else as its maker: a missing one is now refused by app_maker_kept (138) before RLS runs.
+		['a row RLS refuses to insert', `INSERT INTO project (name, created_by) VALUES ('rls probe', gen_random_uuid())`, 403, 'project'],
 		['a failed cast', `SELECT 'not-a-uuid'::uuid`, 500, 'not-a-uuid']
 	])('%s: a fixed message, none of the database text', async (_, sql, status, word) => {
 		const u = await signUp('Errors');

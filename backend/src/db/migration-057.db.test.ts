@@ -19,6 +19,18 @@ const scratchUrl = OWNER_URL.replace(/\/[^/]+$/, `/${dbName}`);
 
 let admin: pg.Client;
 let db: pg.Client;
+let later: string[] = [];
+let upToDate: Promise<void> | undefined;
+/**
+ * The migrations after 057, applied once, before the first call into today's
+ * code (ensureFeedRules): it is written against the latest schema (141 gave
+ * alert_rule a series_id), as it runs on a deployed database that 057
+ * converted long ago.
+ */
+async function applyLater(): Promise<void> {
+	for (const f of later) await db.query(await readFile(join(DIR, f), 'utf8'));
+}
+const current = () => (upToDate ??= applyLater());
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const TWO_FEEDS = id(1); // a project with two feeds, its rule on
@@ -92,6 +104,7 @@ beforeAll(async () => {
 	await event(RULE_NONE, NO_FEEDS, 'cleared');
 
 	await db.query(await readFile(join(DIR, files.find((f) => f.startsWith('057_'))!), 'utf8'));
+	later = files.filter((x) => x >= '058');
 }, 120_000);
 
 afterAll(async () => {
@@ -144,6 +157,7 @@ describe('migration 057: data_stale rules become one per feed', () => {
 	it('keeps a feed-less catchment’s choice, which its first feed adopts (and the next gets its source’s default)', async () => {
 		expect(await rulesOf(NO_FEEDS)).toEqual([expect.objectContaining({ id: RULE_NONE, feed_id: null, threshold: 5, enabled: true, created_by: creator })]);
 		// Nothing to adopt yet: ensureFeedRules leaves it as it is.
+		await current();
 		await ensureFeedRules(db as unknown as Db, NO_FEEDS);
 		expect((await rulesOf(NO_FEEDS)).map((r) => r.feed_id)).toEqual([null]);
 		const first = id(24);
@@ -160,6 +174,7 @@ describe('migration 057: data_stale rules become one per feed', () => {
 	});
 
 	it('provisions no rule for a new feed where staleness alerts are off', async () => {
+		await current();
 		await feed(id(26), OFF, 'dws', 'Later');
 		await ensureFeedRules(db as unknown as Db, OFF);
 		expect((await rulesOf(OFF)).map((r) => r.feed_id)).toEqual([OFF_FEED]);

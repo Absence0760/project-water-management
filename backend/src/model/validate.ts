@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -205,6 +205,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.default(null),
 				// The people it serves, for the basic-needs floor (engine 1.44.0, issue #123). Null = a per-unit count.
 				population: nonNeg.nullable().default(null),
+				// Where its number comes from (engine 1.56.0, issue #54 Q11). Null = not recorded; its fit with
+				// the sizing is a model rule (the engine's modelRuleIssues).
+				source: z.enum(DEMAND_OBJECT_SOURCES).nullable().default(null),
 				note: z.string().max(1000).default('')
 			})
 		)

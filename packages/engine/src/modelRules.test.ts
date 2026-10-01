@@ -110,10 +110,36 @@ describe('modelRuleIssues', () => {
 				o('many', 'f', { schedule: Array.from({ length: 25 }, () => win()) }),
 				// The people it serves (engine 1.44.0): a number ≥ 0 or none.
 				o('people', 'f', { category: 'municipal', population: 2000 }),
-				o('noPeople', 'f', { category: 'municipal', population: -3 })
+				o('noPeople', 'f', { category: 'municipal', population: -3 }),
+				// Its source (engine 1.56.0): one of the four, sized as that source gives a volume; none = not recorded.
+				o('metered', 'f', { source: 'meter' }),
+				o('strategy', 'f', { source: 'aadd' }),
+				o('norm', 'f', { source: 'perCapita', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
+				o('otherMonthly', 'f', { source: 'other' }),
+				o('otherPerUnit', 'f', { source: 'other', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
+				o('unrecorded', 'f', { source: null }),
+				o('meterPerUnit', 'f', { source: 'meter', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
+				o('aaddPerUnit', 'f', { source: 'aadd', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
+				o('normMonthly', 'f', { source: 'perCapita' }),
+				o('badSource', 'f', { source: 'guess' })
 			]
 		} as unknown as ProjectModel;
-		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['doExternal:ext', 'doKind:onGauge', 'doKind:onUser', 'doMonthly:short', 'doNode:lost', 'doPerUnit:noCount', 'doPopulation:noPeople', 'doSchedule:sched:1', 'doScheduleCount:many', 'dup:demand object id:ok']);
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual([
+			'doExternal:ext',
+			'doKind:onGauge',
+			'doKind:onUser',
+			'doMonthly:short',
+			'doNode:lost',
+			'doPerUnit:noCount',
+			'doPopulation:noPeople',
+			'doSchedule:sched:1',
+			'doScheduleCount:many',
+			'doSource:badSource',
+			'doSourceSizing:aaddPerUnit',
+			'doSourceSizing:meterPerUnit',
+			'doSourceSizing:normMonthly',
+			'dup:demand object id:ok'
+		]);
 	});
 
 	it('supply rules (WP-3.8): a farm’s (a user’s pump its own); trigger needs a dam; run of river has none; stop ≥ trigger', () => {

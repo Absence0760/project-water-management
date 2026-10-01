@@ -20,6 +20,11 @@ import {
 	LOW_FLOW_MIN_DAYS,
 	LOW_FLOW_WARN_FACTOR,
 	RECESSION_MIN_SEGMENTS,
+	BFI_MIN_RUN_DAYS,
+	BFI_WARN_DIFF,
+	FDC_LOW_WARN_PCT,
+	HOLDOUT_SKILL_WARN,
+	SIGNATURE_MIN_DAYS,
 	GAUGE_COLUMNS,
 	OBSERVED_FLOW_COLUMNS,
 	USER_COLUMNS,
@@ -404,6 +409,8 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	yield* lowFlowLines(p.lowFlow);
 	yield '';
 	yield* recessionLines(p.recession);
+	yield '';
+	yield* signatureLines(p.signatures);
 	// Checks 1 and 4 at each gauge node with a record of its own (engine ≥ 1.4.0), against the simulated flow there.
 	for (const g of p.gauges ?? []) {
 		yield '';
@@ -570,6 +577,90 @@ function* recessionLines(r: Plausibility['recession']): Generator<string> {
 	yield csvRow([
 		'Simulated recession agrees (indicative)',
 		r.agrees === null ? `not judged (fewer than ${RECESSION_MIN_SEGMENTS} segments, or no observed fit)` : yesNo(r.agrees)
+	]);
+}
+
+/**
+ * The validation signatures (engine ≥ 1.55.0, model.md §2.10d, CR-16): the base-flow index by both filters,
+ * the low-flow FDC's slope and biases, and the skill on held-out recession segments, of the scored record.
+ */
+function* signatureLines(s: Plausibility['signatures']): Generator<string> {
+	yield csvRow(['Validation signatures (the scored record against the simulated outflow on the same days)']);
+	if (s === undefined) {
+		yield csvRow(['Run made before engine 1.55.0: no validation signatures']);
+		return;
+	}
+	if (s === null) {
+		yield csvRow(['Not computed: the run has no observed flow record']);
+		return;
+	}
+	yield csvRow(['Record', RECORD_TEXT[s.flowKind], 'at', s.siteName ? `gauge ${s.siteName}` : 'the outlet']);
+	const bf = s.baseflow;
+	if (!bf) {
+		yield csvRow([`Base-flow index: not computed (fewer than ${SIGNATURE_MIN_DAYS} scored days in stretches of ${BFI_MIN_RUN_DAYS}+)`]);
+	} else {
+		yield csvRow(['Base-flow index', 'Parameters', 'Days', 'Stretches', 'Observed', 'Simulated', 'Difference (simulated − observed)', `Within ±${BFI_WARN_DIFF}`]);
+		const h = bf.hughesFilter;
+		const e = bf.eckhardtFilter;
+		for (const [label, params, p] of [
+			['Hughes et al. (2003)', `α ${h.alpha}; β ${h.beta}; ${h.passes} pass${h.passes === 1 ? '' : 'es'}`, bf.hughes],
+			['Eckhardt (2005)', `a ${e.a}; BFImax ${e.bfiMax}`, bf.eckhardt]
+		] as const) {
+			yield csvRow(p ? [label, params, bf.days, bf.runs, p.observed, p.simulated, p.difference, yesNo(Math.abs(p.difference) <= BFI_WARN_DIFF)] : [label, params, bf.days, bf.runs, 'no flow']);
+		}
+	}
+	const f = s.lowFlowFdc;
+	if (!f) {
+		yield csvRow([`Low-flow FDC: not computed (fewer than ${SIGNATURE_MIN_DAYS} scored days)`]);
+	} else {
+		const [hi, lo] = f.range;
+		yield csvRow([
+			'Low-flow FDC',
+			'Days',
+			`Observed Q${hi} (m³/s)`,
+			`Observed Q${lo} (m³/s)`,
+			`Simulated Q${hi} (m³/s)`,
+			`Simulated Q${lo} (m³/s)`,
+			`Observed slope ln(Q${hi}/Q${lo})/${(lo - hi) / 100}`,
+			'Simulated slope',
+			'Slope bias (%)',
+			'%BiasFLV',
+			`Within ±${FDC_LOW_WARN_PCT} %`
+		]);
+		yield csvRow(['', f.days, f.observedQ70M3s, f.observedQ95M3s, f.simulatedQ70M3s, f.simulatedQ95M3s, f.observedSlope, f.simulatedSlope, f.slopeBiasPct, f.lowVolumeBiasPct, yesNo(f.withinLimit)]);
+	}
+	const r = s.recessionHoldout;
+	if (!r) {
+		yield csvRow(['Held-out recessions: not computed (no catchment rain)']);
+		return;
+	}
+	yield csvRow([
+		'Held-out recessions',
+		'Segments',
+		'Held out (every nth)',
+		'Held out',
+		'Days scored',
+		'Law a (other segments)',
+		'Law b',
+		'Skill, simulated',
+		'Skill, law',
+		'Log RMSE, simulated',
+		'Log RMSE, law',
+		`Simulated skill ≥ ${HOLDOUT_SKILL_WARN}`
+	]);
+	yield csvRow([
+		'',
+		r.segments,
+		r.every,
+		r.heldOut.length,
+		r.days,
+		r.law?.a ?? null,
+		r.law?.b ?? null,
+		r.modelSkill,
+		r.lawSkill,
+		r.modelLogRmse,
+		r.lawLogRmse,
+		r.agrees === null ? `not judged (fewer than ${RECESSION_MIN_SEGMENTS} segments)` : yesNo(r.agrees)
 	]);
 }
 
@@ -1522,19 +1613,23 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
  * switched one off (engine ≥ 1.17.0), and a domestic or municipal one's
  * basic-needs floor (engine ≥ 1.44.0, issue #123): the people it serves, the
  * floor, the days and the volume supplied below it (apart from the
- * shortfall) and what it got per person. Only in runs with objects; the
- * floor columns only when an object has one.
+ * shortfall) and what it got per person, and where each one's number comes
+ * from (engine ≥ 1.56.0: meter, aadd, perCapita, other, or "not recorded").
+ * Only in runs with objects; the floor columns only when an object has one,
+ * the source column only when an object has one.
  */
 export function* demandObjectLines(summary: RunSummary): Generator<string> {
 	const rows = (summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o })));
 	if (!rows.length) return;
 	const off = rows.some(({ o }) => o.daysOff !== undefined);
 	const floor = rows.some(({ o }) => o.basicNeedsM3Day !== undefined);
+	const source = rows.some(({ o }) => o.source !== undefined);
 	yield csvRow(['Demand objects (whole run)']);
 	yield csvRow([
 		'Hydrological unit',
 		'Demand object',
 		'Category',
+		...(source ? ['Source'] : []),
 		'Priority',
 		'Destination',
 		'Average demand (m³/day)',
@@ -1551,6 +1646,7 @@ export function* demandObjectLines(summary: RunSummary): Generator<string> {
 			unit,
 			o.name,
 			o.category,
+			...(source ? [o.source ?? 'not recorded'] : []),
 			o.priority,
 			o.destination,
 			o.avgDemandM3Day,

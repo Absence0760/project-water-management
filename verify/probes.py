@@ -184,9 +184,10 @@ def forecast_tail_warmup() -> dict:
 def scaled_no_demand_tail_year() -> dict:
     """A full allocation on a farm with no demand at all, over two water
     years, the second ending in a six-day forecast tail. Neither year can be
-    scaled; the summary's row for the ordinary year keeps the registered
-    volume over its run days, while the row for the year the tail starts in
-    is k × its demand, 0 (§2.12a; docs/followups.md § Verification)."""
+    scaled; the summary's row for each lists the volume registered over the
+    days it would have been scaled on: the ordinary year's run days, the
+    historical days of the year the tail starts in (§2.12a; engine ≥ 1.57.0,
+    before which that year listed k × its demand, 0)."""
     nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5, damCapacityM3=0)]
     alloc = [{
         "id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 36500, "storageM3": None,

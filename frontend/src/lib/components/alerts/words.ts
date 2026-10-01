@@ -18,7 +18,8 @@ const KINDS: Record<AlertChoice['kind'], Msg> = {
 	data_stale: msg('Data feed behind'),
 	restriction_published: msg('Restriction notices from the WUA'),
 	job_dead: msg('Failed background jobs'),
-	feed_failing: msg('Failing data feeds')
+	feed_failing: msg('Failing data feeds'),
+	farms_short: msg('Hydrological units short of water (automatic publications)')
 };
 
 const UNSUBSCRIBED: Record<Exclude<Unsubscribed['kind'], 'all'>, Msg> = {
@@ -28,7 +29,8 @@ const UNSUBSCRIBED: Record<Exclude<Unsubscribed['kind'], 'all'>, Msg> = {
 	data_stale: msg('missing data'),
 	restriction_published: msg('restriction notice'),
 	job_dead: msg('failed background job'),
-	feed_failing: msg('failing data feed')
+	feed_failing: msg('failing data feed'),
+	farms_short: msg('hydrological units short of water')
 };
 
 /** Immediate alert mails a person gets a day before the rest wait for the digest (the backend's ALERTS_DAILY_CAP default). */

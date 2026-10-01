@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
+import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
@@ -72,6 +72,21 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): a number ≥ 0, or none.
 		if (o.population !== null && o.population !== undefined && !(typeof o.population === 'number' && Number.isFinite(o.population) && o.population >= 0))
 			add(`doPopulation:${o.id}`, `demand object "${o.name}": the people it serves must be a number ≥ 0`);
+		// Where its number comes from (engine ≥ 1.56.0): one of the sources, sized the way that source gives a volume.
+		if (o.source !== null && o.source !== undefined) {
+			if (!(DEMAND_OBJECT_SOURCES as readonly unknown[]).includes(o.source))
+				add(`doSource:${o.id}`, `demand object "${o.name}": its source must be one of ${DEMAND_OBJECT_SOURCES.join(', ')}`);
+			else {
+				const sizing = DEMAND_OBJECT_SOURCE_SIZING[o.source];
+				if (sizing !== null && o.sizing !== sizing)
+					add(
+						`doSourceSizing:${o.id}`,
+						sizing === 'monthly'
+							? `demand object "${o.name}": ${o.source === 'meter' ? 'a meter record' : 'an AADD'} is a volume, so size it by month (m³/day)`
+							: `demand object "${o.name}": a demand from population × litres a day is sized per unit (a count and litres per unit per day)`
+					);
+			}
+		}
 		// Its schedule (engine ≥ 1.17.0): each window runs as entered, and not too many of them.
 		if (Array.isArray(o.schedule)) {
 			if (o.schedule.length > DEMAND_SCHEDULE_MAX_WINDOWS) add(`doScheduleCount:${o.id}`, `demand object "${o.name}": its schedule has ${o.schedule.length} windows, at most ${DEMAND_SCHEDULE_MAX_WINDOWS}`);

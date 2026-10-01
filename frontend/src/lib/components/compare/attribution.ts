@@ -3,13 +3,11 @@
 // naming who changed things between the runs. Pure, no DOM.
 import type { InputChange } from '@water-management/engine';
 import type { CompareAttribution, HistoryRevision } from '$lib/api/types';
+import { FORMER_MEMBER } from '$lib/format/maker';
 import { fmtDate } from '$lib/format/number';
 
 /** The project's History tab, from the compare page (standalone or in the workspace). */
 export const historyHref = (projectId: string) => `/projects/${encodeURIComponent(projectId)}?tab=history`;
-
-/** Name shown for a revision whose author's account is gone. */
-export const FORMER_MEMBER = 'a former member';
 
 /** For each change, the revision that set it; null when none recorded did, or there is no attribution. */
 export function lineAuthors(changes: readonly InputChange[], attribution: CompareAttribution | null | undefined): (HistoryRevision | null)[] {

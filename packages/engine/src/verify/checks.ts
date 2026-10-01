@@ -405,7 +405,7 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
 	const toDam = ks.filter((k) => units[k]!.toDam);
 	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
-	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity) => {
+	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity, dayD = D) => {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
 		let gLeft = gRoom;
 		const pump = (k: number, want: number) => {
@@ -422,8 +422,9 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
-			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
-			const drawn = left > D * 1e-12;
+			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0),
+			// beyond float noise of the day's full demand, off-take water used included (engine ≥ 1.57.0).
+			const drawn = left > dayD * 1e-12;
 			const want = u.mode === 1 ? (drawn ? room : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
 			dam += pump(k, Math.min(want, room));
 		}
@@ -1374,7 +1375,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
 			const sLeft = (RS?.[t] ?? Infinity) - xused;
-			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity);
+			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity, d);
 			let wantGs: number;
 			let wantGr = 0;
 			const dsl = Math.min(dl, sLeft);

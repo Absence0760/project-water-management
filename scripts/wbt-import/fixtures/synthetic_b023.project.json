@@ -371,16 +371,34 @@
         "cropFactor": [
           0.5,
           0.5,
+          0.0,
           0.5,
           0.5,
-          0.5,
-          0.5,
+          1.2,
           0.5,
           0.5,
           0.5,
           0.5,
           0.5,
           0.5
+        ]
+      },
+      {
+        "id": "d8bf80de-bdef-56e4-930e-4eaa3377113b",
+        "name": "Pasture F",
+        "cropFactor": [
+          0.7,
+          0.75,
+          0.8,
+          0.8,
+          0.8,
+          0.8,
+          0.7,
+          0.6,
+          0.5,
+          0.5,
+          0.5,
+          0.6
         ]
       }
     ],
@@ -574,6 +592,7 @@
         "priority": "shared",
         "destination": "internal",
         "enabled": true,
+        "source": "other",
         "note": "b023 [Farm demand]: the gross demand above what the crop areas give (typed over the crop formula)"
       }
     ]

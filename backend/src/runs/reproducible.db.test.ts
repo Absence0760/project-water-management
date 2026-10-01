@@ -8,7 +8,7 @@
 // before stored inputs says so. (Cited runs: scenarios/scenarios.db.test.ts.)
 import { canonicalJson, runModelChecked, withoutForecastTail, type SeriesKind } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
+import { buildExamples, inputOf, type ExampleProject } from '../../scripts/examples/catchments.js';
 import { importProjectData } from '../../scripts/import-project.js';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -17,6 +17,23 @@ import { loadModelInput, loadRunInput, RunInputError, seriesHash, trimRuns } fro
 type User = Awaited<ReturnType<typeof signUp>>;
 
 const examples = buildExamples({ fit: false });
+
+/**
+ * `ex` cut to its first `days` days: only the series that start with the
+ * record (so not Droëvlei's logger, from 2016; the byte-identical tests still
+ * round-trip it on the full record), each truncated. The tests
+ * below the byte-identical ones are about how a run's inputs are stored, not
+ * about the model, and on the full record each run spent ~0.6 s writing its
+ * daily outputs, so the garbage-collection test's three runs came within a
+ * slow CI runner of vitest's 5 s (docs/testing.md § Big or repeated fixtures
+ * in db tests: size the fixture, not the timeout).
+ */
+const shortened = (ex: ExampleProject, days: number): ExampleProject => {
+	const start = ex.series.find((s) => s.kind === 'rain_catchment_mm')!.startDate;
+	return { ...ex, series: ex.series.filter((s) => s.startDate === start).map((s) => ({ ...s, values: s.values.slice(0, days) })) };
+};
+/** A two-year Droëvlei, for the storage tests. */
+const small = shortened(examples[1]!, 731);
 
 const newRun = async (u: User, projectId: string, label = 'run') => {
 	const res = await u.call('POST', `/projects/${projectId}/runs`, { label });
@@ -78,7 +95,6 @@ describe('stored run inputs', () => {
 	let pid: string;
 	let otherPid: string;
 	let runId: string;
-	const small = examples[1]!;
 
 	beforeAll(async () => {
 		[owner, viewer, stranger] = await Promise.all([signUp('BlobOwner'), signUp('BlobViewer'), signUp('BlobStranger')]);
@@ -243,7 +259,7 @@ describe('stored run inputs', () => {
 describe('garbage collection of stored inputs', () => {
 	it("removes the blobs only trimmed runs used, and keeps those a kept run or a newer run still uses", async () => {
 		const u = await signUp('BlobGc');
-		const ex = examples[1]!;
+		const ex = small;
 		const p = await importProjectData(ex, u.email);
 		const rain = ex.series.find((s) => s.kind === 'rain_catchment_mm')!;
 		const put = (values: (number | null)[]) =>
@@ -284,7 +300,7 @@ describe('garbage collection of stored inputs', () => {
 describe('deleting a project with stored run inputs', () => {
 	it('cascades through series_blob and run_input_series (the NO ACTION key is checked at the end of the statement)', async () => {
 		const u = await signUp('BlobProjectDelete');
-		const p = await importProjectData(examples[1]!, u.email);
+		const p = await importProjectData(small, u.email);
 		await newRun(u, p, 'one');
 		await newRun(u, p, 'two');
 		const left = () =>
@@ -293,7 +309,7 @@ describe('deleting a project with stored run inputs', () => {
 				[p]
 			);
 		// Positive control: there is something to delete.
-		expect((await left())[0]).toEqual({ blobs: examples[1]!.series.length, refs: 2 * examples[1]!.series.length });
+		expect((await left())[0]).toEqual({ blobs: small.series.length, refs: 2 * small.series.length });
 		expect((await u.call('DELETE', `/projects/${p}`)).status).toBe(204);
 		expect((await left())[0]).toEqual({ blobs: 0, refs: 0 });
 	});

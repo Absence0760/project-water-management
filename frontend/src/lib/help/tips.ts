@@ -247,6 +247,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.population']
 	},
 	{
+		id: 'demand-source',
+		term: 'Demand source',
+		short: 'Where a demand object’s number comes from, by rule: meter records where they exist, else a strategy’s AADD, else population × litres a day.',
+		category: 'network',
+		fields: ['demandObject.source']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
@@ -939,7 +946,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'plausibility-checks',
 		term: 'Plausibility checks',
-		short: 'Five checks a reviewing hydrologist makes on a run (four before engine 1.19.0): they only warn, and never change a result.',
+		short: 'Six checks a reviewing hydrologist makes on a run (fewer on older runs): they only warn, and never change a result.',
 		category: 'results'
 	},
 	{
@@ -973,6 +980,13 @@ export const TIPS: HelpTipText[] = [
 		term: 'Recession diagnostics',
 		short: 'How fast flow falls in rain-free spells (−dQ/dt against Q), in the record and in the model on the same days.',
 		units: 'm³/s; m³/s per day',
+		category: 'results'
+	},
+	{
+		id: 'plausibility-signatures',
+		term: 'Validation signatures',
+		short: 'Base-flow index by two filters, the low-flow duration curve’s slope and bias, and skill on held-out recessions.',
+		units: 'ratio; %',
 		category: 'results'
 	},
 	{

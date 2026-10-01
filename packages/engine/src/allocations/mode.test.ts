@@ -218,7 +218,26 @@ describe("allocationMode 'fullAllocation'", () => {
 		// As the run without the tail: no demand in the year, factor 0, listed as unscaled; the tail keeps it.
 		expect([...new Set(f.factor)]).toEqual([0]);
 		expect(f.unscaled).toEqual([2001]);
-		expect(fullAllocationFactors(a, demand.subarray(0, 100), toEpochDay('2001-10-01'), 100).unscaled).toEqual([2001]);
+		const noTail = fullAllocationFactors(a, demand.subarray(0, 100), toEpochDay('2001-10-01'), 100);
+		expect(noTail.unscaled).toEqual([2001]);
+		// Its summary row lists the volume registered over the historical days (100 of 365 m³), as the run
+		// without the tail does, not k × demand = 0 (engine 1.57.0, verify/ probe scaled-no-demand-tail-year).
+		expect(f.years).toEqual([{ waterYear: 2001, demandM3: 2 * 265, registeredM3: registeredOver(a, 2001, toEpochDay('2001-10-01'), toEpochDay('2001-10-01') + 99) }]);
+		expect(f.years[0]!.registeredM3).toBeCloseTo(100, 9);
+		expect(noTail.years[0]!.registeredM3).toBe(f.years[0]!.registeredM3);
+	});
+
+	it('a year with no demand lists the volume registered over its run days, with a tail or without (engine 1.57.0)', () => {
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
+		// Two water years, the second all zero demand; the tail starts 100 days into the second.
+		const demand = Float64Array.from({ length: 730 }, (_, t) => (t < 365 ? 1 : 0));
+		const f = fullAllocationFactors(a, demand, toEpochDay('2001-10-01'), 730, undefined, 465);
+		expect(f.unscaled).toEqual([2002]);
+		expect(f.years[0]!.registeredM3).toBeCloseTo(365, 9);
+		expect(f.years[1]!.demandM3).toBe(0);
+		expect(f.years[1]!.registeredM3).toBeCloseTo(100, 9);
+		// Positive control: without the tail the same year lists its whole volume.
+		expect(fullAllocationFactors(a, demand, toEpochDay('2001-10-01'), 730).years[1]!.registeredM3).toBeCloseTo(365, 9);
 	});
 });
 
@@ -664,6 +683,10 @@ describe("allocationMode 'cap': the days the licence limit bound (engine 1.40.0)
 		expect(limitBoundKind(1e-3, 0, true, 0, 150, 150, 1000)).toBe('monthsDays');
 		// Not short, or took less than its room: didn't bind.
 		expect(limitBoundKind(100, 0, true, 0, 0, 0, 1000)).toBeNull();
+		// A noise-level deficit doesn't count: below 10⁻⁹ of the demand, and below 10⁻⁹ m³ on a demand
+		// under 1 m³ (verify random seed 145: a 1.4e-12 m³ demand; engine 1.57.0 no longer makes one).
+		expect(limitBoundKind(0, 0, false, 0, 1.4e-12, 1.4e-12, 1000)).toBeNull();
+		expect(limitBoundKind(0, 0, false, 0, 0.5, 2e-9, 1000)).toBe('volumeDays');
 		expect(limitBoundKind(100, 40, false, 30, 150, 120, 1000)).toBeNull();
 		const start = toEpochDay('2003-09-30');
 		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, months: [10] }];

@@ -11,8 +11,10 @@
 //   - which packs: issued, superseded and withdrawn after issue (with their
 //     standing), never a draft or a pack withdrawn before issue, never another
 //     application's or the baseline's;
-//   - the projection: their own units by name, every other unit only as
-//     "Farm n" with a whole-point change; no other unit's name, id or
+//   - the projection: their own units by name; the other units only when
+//     the application run's base is still a published run (here it isn't:
+//     the runs are planted, so `others` is null; the downstream set and the
+//     results view's names are applicant-pack-units.db.test.ts'); no other unit's name, id or
 //     figures, no holder, statement or other application; no units at all
 //     when a baseline assumption changed; volumes past the k rule;
 //   - the database: still no pack row for a contributor, the anonymiser not
@@ -308,27 +310,30 @@ describe('reading a pack as its applicant', () => {
 			['My new dam', 'application']
 		]);
 		expect(v.units.own[0]).toMatchObject({ kind: 'farm', suppliedA: 0.8, suppliedB: 0.9, change: { run: 10, band: { n: 30, p5: 8, p50: 10, p95: 12 }, worse: { k: 0, n: 30 } } });
-		// Every other unit in both runs, anonymous, whole points; Klipfontein (baseline only) isn't compared.
-		expect(v.units.others.map((o: { kind: string; n: number }) => `${o.kind} ${o.n}`).sort()).toEqual(['farm 1', 'farm 2', 'user 1']);
-		expect(v.units.others.map((o: { changePts: number }) => o.changePts).sort((a: number, b: number) => a - b)).toEqual([-4, 0, 3]);
-		for (const o of v.units.others) expect(Object.keys(o).sort()).toEqual(['changePts', 'kind', 'n']);
+		// The planted runs have no published base to name the other units after, so none are shown (the page says why).
+		expect(v.units.others).toBeNull();
 		const text = JSON.stringify(v);
 		for (const leak of LEAKS) expect(text, leak).not.toContain(leak);
 		for (const id of [berg.id, doorn.id, water.id, klip.id, outlet.id, gauge.id, kalk.id, ADDED, assessor.id, applicantB.id]) expect(text).not.toContain(id);
 		expect(text).not.toMatch(/@example\.com/);
 	});
 
-	it('numbers the anonymous units by a hash of their ids, not by the report’s order (the same set, reordered, numbers alike)', async () => {
-		// v1 and v2 hold the same units; the ranks come from md5(node id), so they agree. And the report's order doesn't matter (below).
-		const a = (await read(applicantA, appA, v1)).body.units.others;
-		const b = (await read(applicantA, appA, v2)).body.units.others;
-		expect(a).toEqual(b);
-		const users = (n: string[]) => n.map((id, i) => ({ nodeId: id, name: `U${i}`, kind: 'farm', onlyIn: null, change: { run: i } }));
-		const ids = [berg.id, doorn.id, klip.id];
-		const [fwd] = await asOwner('SELECT app_applicant_pack_units($1::jsonb, $2) AS u', [JSON.stringify({ users: users(ids) }), []]);
-		const [rev] = await asOwner('SELECT app_applicant_pack_units($1::jsonb, $2) AS u', [JSON.stringify({ users: users([...ids].reverse()).map((u, i) => ({ ...u, change: { run: 2 - i } })) }), []]);
-		expect(fwd.u.others).toEqual(rev.u.others);
-		expect(JSON.stringify(fwd.u)).not.toMatch(/U\d/);
+	it('gives the server the other units in both runs by id, kind and whole points, never a name (the route names them)', async () => {
+		const users = [
+			{ nodeId: berg.id, name: 'Bergvliet', kind: 'farm', onlyIn: null, change: { run: -4.4 } },
+			{ nodeId: water.id, name: 'Waterval', kind: 'user', onlyIn: null, change: { run: 2.6 } },
+			{ nodeId: klip.id, name: 'Klipfontein', kind: 'farm', onlyIn: 'baseline', change: null },
+			{ nodeId: kalk.id, name: 'Kalkoenkrans', kind: 'farm', onlyIn: null, change: { run: 10 } }
+		];
+		const [r] = await asOwner('SELECT app_applicant_pack_units($1::jsonb, $2) AS u', [JSON.stringify({ users }), [kalk.id]]);
+		const byId = (x: { nodeId: string }, y: { nodeId: string }) => (x.nodeId < y.nodeId ? -1 : 1);
+		expect([...r.u.others].sort(byId)).toEqual(
+			[
+				{ nodeId: berg.id, kind: 'farm', changePts: -4 },
+				{ nodeId: water.id, kind: 'user', changePts: 3 }
+			].sort(byId)
+		);
+		expect(JSON.stringify(r.u.others)).not.toMatch(/Bergvliet|Waterval|Klipfontein/);
 	});
 
 	it('shows the consultant the same, without the share right', async () => {
@@ -438,5 +443,24 @@ describe("share links to an applicant's pack", () => {
 		const [theirs] = await asOwner('SELECT revoked_at FROM share_link WHERE id = $1', [assessors]);
 		expect(theirs.revoked_at).toBeNull();
 		expect((await assessor.call('DELETE', `${P()}/share-links/${assessors}`)).status).toBe(204);
+	});
+
+	it('hides a link from an editor demoted since they made it, who is no party: they neither read nor revoke it (control: as an editor they do)', async () => {
+		const made = await link(assessor, v2, 'Before the demotion');
+		expect(made.status).toBe(201);
+		const id = made.body.link.id as string;
+		// Positive control: as an editor, they read it.
+		expect(await rowsAs(assessor, 'SELECT id::text FROM share_link WHERE id = $1', [id])).toEqual([{ id }]);
+		await asOwner(`UPDATE project_member SET role = 'contributor' WHERE project_id = $1 AND user_id = $2`, [projectId, assessor.id]);
+		try {
+			expect(await rowsAs(assessor, 'SELECT id FROM share_link WHERE id = $1', [id])).toEqual([]);
+			expect((await assessor.call('DELETE', `${P()}/share-links/${id}`)).status).toBe(403);
+			const [row] = await asOwner('SELECT revoked_at FROM share_link WHERE id = $1', [id]);
+			expect(row.revoked_at).toBeNull();
+			// The applicant, a party, still reads the links they made (the demotion rule is party-or-editor, not a blanket ban).
+			expect((await applicantA.call('GET', `${P()}/share-links?packId=${v2}`)).status).toBe(200);
+		} finally {
+			await asOwner(`UPDATE project_member SET role = 'editor' WHERE project_id = $1 AND user_id = $2`, [projectId, assessor.id]);
+		}
 	});
 });

@@ -88,6 +88,24 @@ describe('farmDailyDemand: effective rain carried over through the soil-water st
 		expect(Array.from(f.storeMm)).toEqual([7, 4, 0, 0]);
 	});
 
+	it('rain an ulp short of the need covers it: no noise-level requirement (engine 1.57.0, verify random seed 1343)', () => {
+		// Day 0: 0.3 m³ of effective rain (1000 m² × 1 ÷ 1000 × 0.3 mm) against 0.1 m³; the store keeps
+		// 0.3 − 0.1 = 0.19999999999999998 m³, an ulp below 0.2. Day 1: dry, 0.2 m³ wanted. Before 1.57.0
+		// that left a crop requirement of 2.8e-17 m³, which as a demand switched on a dam-filling
+		// borehole (verify random seed 1343: 1.4e-14 m³ beside a 35 m³ need, 495 m³ pumped).
+		const f = farmDailyDemand(Float64Array.from([0.1, 0.2]), 1000, Float64Array.from([0.3, 0]), 1, 1000);
+		expect(0.3 - 0.1).toBeLessThan(0.2);
+		expect(f.net[1]).toBe(0);
+		expect(f.used[1]).toBe(0.2);
+		expect(f.storeMm[1]).toBe(0);
+		expect(netDailyDemandM3(0.2, 1000, 0.19999999999999998, 1)).toBe(0);
+		// Positive control: a real shortfall (5 × 10⁻⁷ of the need) is still a requirement.
+		const g = farmDailyDemand(Float64Array.from([0.1, 0.2000001]), 1000, Float64Array.from([0.3, 0]), 1, 1000);
+		expect(g.net[1]).toBeCloseTo(1e-7, 15);
+		expect(g.used[1]).toBe(0.3 - 0.1);
+		expect(netDailyDemandM3(0.2000001, 1000, 0.19999999999999998, 1)).toBeCloseTo(1e-7, 15);
+	});
+
 	it('covers the day of a big rain first and loses what overflows the store', () => {
 		// 60 mm → 300 m³: today's 30 m³ first (even with a 1 mm store), then 1 mm kept, the rest lost.
 		const f = run([30, 30, 30], [60, 0, 0], 1);

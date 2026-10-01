@@ -537,6 +537,18 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
 	});
 
+	it('engine 1.56.0: a Source column when an object records one, "not recorded" for the rest', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [{ ...object, source: 'meter' as const }, { ...object, id: 't', name: 'Town' }] }] })];
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Source,Priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,meter,first,internal,25,20,5,80,0,1');
+		expect(lines[3]).toBe('"Farm, upper",Town,domestic,not recorded,first,internal,25,20,5,80,0,1');
+		// No object records one (every run before engine 1.56.0): no column.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Source/);
+	});
+
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
 		const lines = [...curtailmentLines(c)];
 		expect(lines.some((l) => l.startsWith('Equitable share of supply (fairness benchmark) [K total] (%),'))).toBe(true);
@@ -1390,6 +1402,79 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
+	it('writes the validation signatures of the scored record (engine ≥ 1.55.0)', () => {
+		expect([...plausibilityLines(checks)]).toContain('Not computed: the run has no observed flow record');
+		const obs = Array.from({ length: days }, (_, t) => 0.05 + 0.04 * Math.sin(t / 20) ** 2);
+		const { checks: scored } = plausibilityChecks({
+			start,
+			days,
+			runoffModel: 'gr4j',
+			naturalM3Day: new Array(days).fill(10_000),
+			simulatedM3Day: new Array(days).fill(6_000),
+			observed: { flow_observed_m3s: obs },
+			calibrationKind: 'flow_observed_m3s',
+			excluded: new Uint8Array(days),
+			damsM3Day: new Array(days).fill(1_000),
+			landCoverM3Day: [],
+			rainMm: null,
+			station,
+			hasStation: false,
+			ewrShortfall: new Array(days).fill(0),
+			reserve: [],
+			areaKm2: 10,
+			scored: { flowKind: 'flow_observed_m3s', site: { nodeId: 'H', name: 'Upper weir' }, observedM3s: obs, simulatedM3Day: obs.map((q) => q * 86_400), segmentMask: new Uint8Array(days) }
+		});
+		const lines = [...plausibilityLines(scored)];
+		expect(lines).toContain('Validation signatures (the scored record against the simulated outflow on the same days)');
+		expect(lines).toContain('Record,observed gauge,at,gauge Upper weir');
+		expect(lines).toContain('Base-flow index,Parameters,Days,Stretches,Observed,Simulated,Difference (simulated − observed),Within ±0.15');
+		const h = scored.signatures!.baseflow!.hughes!;
+		expect(lines).toContain(`Hughes et al. (2003),α 0.995; β 0.5; 1 pass,730,1,${h.observed},${h.simulated},0,yes`);
+		expect(lines.some((l) => l.startsWith('Eckhardt (2005),a 0.98; BFImax 0.25,730,1,'))).toBe(true);
+		expect(lines.some((l) => l.startsWith('Low-flow FDC,Days,Observed Q70 (m³/s),Observed Q95 (m³/s)'))).toBe(true);
+		expect(lines.some((l) => l.startsWith(',730,') && l.endsWith(',0,0,yes'))).toBe(true);
+		expect(lines).toContain('Held-out recessions: not computed (no catchment rain)');
+	});
+
+	it('writes the held-out recessions, and says why a signature is not computed', () => {
+		const heldOut: [number, number][] = [
+			[20, 27],
+			[50, 58]
+		];
+		const signatures = {
+			flowKind: 'flow_logger_m3s' as const,
+			baseflow: null,
+			lowFlowFdc: null,
+			recessionHoldout: {
+				every: 3,
+				segments: 7,
+				heldOut,
+				law: { a: 0.08, b: 1.1, points: 30, segments: 5, minQM3s: 0.01, maxQM3s: 2 },
+				days: 15,
+				modelSegments: 2,
+				modelDays: 15,
+				modelSkill: -0.25,
+				lawSkill: 0.9,
+				modelLogRmse: 0.4,
+				lawLogRmse: 0.1,
+				agrees: null
+			}
+		} as NonNullable<NonNullable<RunSummary['plausibility']>['signatures']>;
+		const lines = [...plausibilityLines({ ...checks, signatures })];
+		expect(lines).toContain('Record,logger,at,the outlet');
+		expect(lines).toContain('Base-flow index: not computed (fewer than 365 scored days in stretches of 30+)');
+		expect(lines).toContain('Low-flow FDC: not computed (fewer than 365 scored days)');
+		expect(lines).toContain(
+			'Held-out recessions,Segments,Held out (every nth),Held out,Days scored,Law a (other segments),Law b,"Skill, simulated","Skill, law","Log RMSE, simulated","Log RMSE, law",Simulated skill ≥ 0'
+		);
+		// Seven segments: under the eight the recession checks judge from, so not judged, whatever the skill.
+		expect(lines).toContain(',7,3,2,15,0.08,1.1,-0.25,0.9,0.4,0.1,not judged (fewer than 8 segments)');
+		const judged = [...plausibilityLines({ ...checks, signatures: { ...signatures, recessionHoldout: { ...signatures.recessionHoldout!, segments: 9, agrees: false, law: null } } })];
+		expect(judged).toContain(',9,3,2,15,,,-0.25,0.9,0.4,0.1,no');
+		// A run from engines 1.50.0–1.54.0 has no signatures key at all: the gate is its absence, not a version compare.
+		expect([...plausibilityLines({ ...checks, signatures: undefined })]).toContain('Run made before engine 1.55.0: no validation signatures');
+	});
+
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
 		const without = [...plausibilityLines(checks)];
 		expect(without.some((l) => l.startsWith('At gauge'))).toBe(false);
@@ -1412,6 +1497,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
 		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
+		expect(none).toContain('Run made before engine 1.55.0: no validation signatures');
 		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
 			'Not checked: needs an observed flow record and catchment rain'
 		);

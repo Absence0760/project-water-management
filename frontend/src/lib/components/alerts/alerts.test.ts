@@ -1,7 +1,7 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
-import { eventText, feedRuleLabel, groupRules, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+import { eventKindName, eventText, feedRuleLabel, groupRules, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '$lib/api/client';
 import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
@@ -16,6 +16,7 @@ const event = (over: Partial<AlertEvent> = {}): AlertEvent => ({
 	nodeId: 'n1',
 	nodeName: 'Farm One',
 	feedId: null,
+	seriesId: null,
 	openedAt: '2026-09-26T08:00:00Z',
 	clearedAt: null,
 	detail: { source: 'latest', pct: 0.08, date: '2026-09-20' },
@@ -54,17 +55,18 @@ describe('the preferences page’s words', () => {
 	});
 
 	it('names every kind of alert, and each in an unsubscribe sentence', () => {
-		const kinds = ['dam_below', 'ewr_forecast_fail', 'data_stale', 'restriction_published', 'job_dead', 'feed_failing'] as const;
+		const kinds = ['dam_below', 'ewr_forecast_fail', 'data_stale', 'restriction_published', 'job_dead', 'feed_failing', 'farms_short'] as const;
 		expect(kinds.map((kind) => choiceLabel({ kind, nodeName: null }))).toEqual([
 			'Dam running low',
 			'River flow at risk in the forecast',
 			'Data feed behind',
 			'Restriction notices from the WUA',
 			'Failed background jobs',
-			'Failing data feeds'
+			'Failing data feeds',
+			'Hydrological units short of water (automatic publications)'
 		]);
 		expect(kinds.map((kind) => unsubscribedText({ kind, project: { name: 'R' }, farm: null }))).toEqual(
-			['dam level', 'river flow forecast', 'missing data', 'restriction notice', 'failed background job', 'failing data feed'].map(
+			['dam level', 'river flow forecast', 'missing data', 'restriction notice', 'failed background job', 'failing data feed', 'hydrological units short of water'].map(
 				(k) => `You won’t get ${k} emails for R any more.`
 			)
 		);
@@ -105,7 +107,15 @@ describe('the workspace’s Active alerts', () => {
 			'EWR at the outlet at risk on 5 of 14 forecast days (alert at 3)'
 		);
 		expect(eventText(event({ kind: 'data_stale', detail: { feeds: [{ label: 'DWS gauge flow', overdue: 10 }] } }))).toBe('Late: DWS gauge flow (10 days)');
+		expect(eventText(event({ kind: 'data_stale', seriesId: 's', detail: { series: true, feeds: [] } }))).toBe('A series sent by API key is behind');
+		// One name for a series' staleness alert (the editor's group and its email say the same), another for a feed's.
+		expect(eventKindName({ kind: 'data_stale', seriesId: 's' })).toBe('API data behind');
+		expect(eventKindName({ kind: 'data_stale', seriesId: null })).toBe('Data feed behind');
+		expect(eventKindName({ kind: 'farms_short', seriesId: null })).toBe('Hydrological units short (automatic publications)');
 		expect(eventText(event({ kind: 'job_dead', detail: { count: 1 } }))).toBe('1 background job failed in the last 24 hours');
+		expect(eventText(event({ kind: 'farms_short', nodeId: null, nodeName: null, threshold: 1, detail: { farmsShort7: 3, of: 14, from: '2026-09-20', to: '2026-09-26' } }))).toBe(
+			'3 of 14 hydrological units short from 20 Sep 2026 to 26 Sep 2026, in figures an auto run published (alert at 1)'
+		);
 		expect(eventText(event({ kind: 'feed_failing', detail: {} }))).toBe('A data feed is failing');
 		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 2', pct: 20.4 } }))).toBe(
 			'Restriction in place: Level 2, a 20 % cut in registered water use'
@@ -127,9 +137,11 @@ describe('the rule editor', () => {
 		expect(thresholdProblem('ewr_forecast_fail', 2.5)).toBe('Enter a whole number.');
 		expect(thresholdProblem('data_stale', Number.NaN)).toBe('Enter a number.');
 		expect(thresholdProblem('restriction_published', 0)).toBeNull();
+		expect(thresholdProblem('farms_short', 1000)).toBeNull();
+		expect(thresholdProblem('farms_short', 1001)).toBe('Between 1 and 1000.');
 	});
 
-	it('puts the catchment’s rules first, then the farms’ dam rules, then a staleness rule per data feed', () => {
+	it('puts the catchment’s rules first, then the farms’ dam rules, then a staleness rule per data feed, then per ingest-key series', () => {
 		const r = (kind: AlertRule['kind'], enabled = false): AlertRule => ({
 			id: null,
 			kind,
@@ -138,14 +150,19 @@ describe('the rule editor', () => {
 			feedId: kind === 'data_stale' ? 'f' : null,
 			feedName: kind === 'data_stale' ? 'DWS gauge flow (gauge)' : null,
 			feedEnabled: kind === 'data_stale' ? true : null,
+			seriesId: null,
+			seriesName: null,
+			seriesKeyFed: null,
 			threshold: 1,
 			enabled,
 			firing: false
 		});
-		const g = groupRules([r('dam_below'), r('data_stale'), r('ewr_forecast_fail'), r('dam_below', true)]);
-		expect(g.catchment.map((x) => x.kind)).toEqual(['ewr_forecast_fail']);
+		const logger: AlertRule = { ...r('data_stale'), feedId: null, feedName: null, feedEnabled: null, seriesId: 's', seriesName: 'Weir', seriesKeyFed: true };
+		const g = groupRules([r('dam_below'), r('data_stale'), logger, r('ewr_forecast_fail'), r('farms_short'), r('dam_below', true)]);
+		expect(g.catchment.map((x) => x.kind)).toEqual(['ewr_forecast_fail', 'farms_short']);
 		expect(g.farms).toHaveLength(2);
 		expect(g.feeds.map((x) => x.feedId)).toEqual(['f']);
+		expect(g.series.map((x) => x.seriesId)).toEqual(['s']);
 		expect(g.anyOn).toBe(true);
 	});
 
@@ -153,6 +170,10 @@ describe('the rule editor', () => {
 		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: true })).toBe('CHIRPS daily rainfall (Upper)');
 		expect(feedRuleLabel({ feedName: 'CHIRPS daily rainfall (Upper)', feedEnabled: false })).toBe('CHIRPS daily rainfall (Upper) (feed switched off)');
 		expect(thresholdLabel('data_stale')).toBe('Alert after (days later than usual for this feed)');
+		expect(thresholdLabel('data_stale', true)).toBe('Alert after (days with no new reading)');
+		expect(seriesRuleLabel({ seriesName: 'Weir', seriesKeyFed: true })).toBe('Weir');
+		expect(seriesRuleLabel({ seriesName: 'Flow — logger', seriesKeyFed: false })).toBe('Flow — logger (no API key sends it now)');
+		expect(thresholdLabel('farms_short')).toBe('Alert at (units short in the last 7 days)');
 	});
 });
 

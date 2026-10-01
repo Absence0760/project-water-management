@@ -8,6 +8,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
+	import { demandBySource, sourceLabel, sourceLine } from './demandSources';
 
 	let {
 		summary,
@@ -35,6 +36,8 @@
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
 	// The basic-needs floor (engine ≥ 1.44.0, issue #123): its columns only when an object has one.
 	const anyFloor = $derived(objects.some(({ o }) => o.basicNeedsM3Day !== undefined));
+	// Where each one's number comes from (engine ≥ 1.56.0): a column and a line only when one records it.
+	const sources = $derived(demandBySource(objects.map(({ o }) => o)));
 	// Other water users with a pump capacity (engine ≥ 1.58.0, WP-3.8): their own table, drawn even when the
 	// curtailment table lists the users (it has no pump columns), so Units & supply shows the pump's limit.
 	const pumpUsers = $derived((summary.users ?? []).filter((u) => u.avgPumpLimitedM3Day !== undefined));
@@ -50,12 +53,18 @@
 			serves; the days and volume supplied below it are counted apart from the days short. – = no floor (another category, or no people entered).
 		{/if}
 	</p>
+	{#if sources.length}
+		<p class="muted small" data-testid="demand-objects-sources">
+			{sourceLine(sources)} The rule: meter records where they exist, else the reconciliation strategy’s AADD, else population × litres a person a day.
+		</p>
+	{/if}
 	<div class="table-wrap">
 		<table class="data demand-objects" data-testid="demand-objects-table">
 			<thead>
 				<tr>
 					<th scope="col">Hydrological unit</th>
 					<th scope="col">Demand object</th>
+					{#if sources.length}<th scope="col">Source</th>{/if}
 					<th scope="col">Priority</th>
 					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
@@ -75,6 +84,7 @@
 					<tr class:short={o.fractionSupplied < SUPPLY_TARGET}>
 						<td>{unit}</td>
 						<th scope="row">{o.name} <span class="muted small">{DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category}</span></th>
+						{#if sources.length}<td class:muted={!o.source}>{sourceLabel(o.source)}</td>{/if}
 						<td>{PRIORITY[o.priority] ?? o.priority}</td>
 						<td class="num">{fmtNum(o.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(o.avgSuppliedM3Day)}</td>
