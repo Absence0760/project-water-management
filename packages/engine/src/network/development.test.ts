@@ -8,7 +8,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { modelRuleIssues } from '../modelRules';
 import { checkWorkings } from '../verify/checks';
-import { abstractionStartDay, capacityScaleOf, damCapacityFactor, damCapacityOn, developmentProblem, DAM_CAPACITY_SERIES } from './development';
+import { abstractionStartDay, capacityScaleOf, damCapacityFactor, damCapacityOn, damPresence, developmentProblem, DAM_CAPACITY_SERIES } from './development';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -123,6 +123,29 @@ describe('the capacity factor', () => {
 		expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2020-01-01' }), d0, 60, w)).toBe(0);
 		expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2030-01-01' }), d0, 60, w)).toBe(60);
 		expect(w).toEqual([]);
+	});
+});
+
+describe('damPresence: is the dam there on every day of a span, and on any', () => {
+	const span = { start: toEpochDay('2021-01-01'), end: toEpochDay('2021-12-31') };
+	const farm = (over: Partial<NetworkNode>) => node('A', 'farm', 'G', { damCapacityM3: 1e5, ...over });
+	it('a dam there throughout, none entered, and a gauge', () => {
+		expect(damPresence(farm({}), span)).toEqual({ always: true, ever: true });
+		expect(damPresence(farm({ damCapacityM3: 0 }), span)).toEqual({ always: false, ever: false });
+		expect(damPresence(node('G', 'gauge', null, { damCapacityM3: 1e5 }), span)).toEqual({ always: false, ever: false });
+	});
+	it('in service inside the span: there on some days; before it: throughout; after it: never', () => {
+		expect(damPresence(farm({ damInServiceFrom: '2021-06-01' }), span)).toEqual({ always: false, ever: true });
+		expect(damPresence(farm({ damInServiceFrom: '2020-06-01' }), span)).toEqual({ always: true, ever: true });
+		expect(damPresence(farm({ damInServiceFrom: '2022-06-01' }), span)).toEqual({ always: false, ever: false });
+	});
+	it('silted empty inside the span: there on some days; silted before it: never; a slow rate: throughout', () => {
+		expect(damPresence(farm({ damSurveyDate: '2016-06-01', damSedimentPctPerYear: 0.2 }), span)).toEqual({ always: false, ever: true });
+		expect(damPresence(farm({ damSurveyDate: '2010-01-01', damSedimentPctPerYear: 0.2 }), span)).toEqual({ always: false, ever: false });
+		expect(damPresence(farm({ damSurveyDate: '2016-06-01', damSedimentPctPerYear: 0.01 }), span)).toEqual({ always: true, ever: true });
+	});
+	it('without a span, the entered capacity alone decides', () => {
+		expect(damPresence(farm({ damInServiceFrom: '2022-06-01' }))).toEqual({ always: true, ever: true });
 	});
 });
 

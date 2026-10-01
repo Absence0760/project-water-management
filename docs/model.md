@@ -2253,7 +2253,10 @@ question 20):
   the rule says so (`handsOffEwr`) or a hands-off flow is set, as the river
   pump and River to dam don't unless their farm has a hands-off flow
   (§2.7h, engine ≥ 1.32.0) and the dam doesn't (§2.7b); the default
-  hands-off flow is none, so a model states its bypass explicitly.
+  hands-off flow is none, so a model states its bypass explicitly. An
+  off-take an application adds or changes must keep one (its own hands-off
+  flow or `handsOffEwr`) for its evidence pack to be issued (`evidence-10`,
+  [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river)).
 - *Several rules into one unit* split its need pro rata to their capacity
   that day, fixed before the day runs, so the split never depends on which
   source is simulated first; their priorities order them only at their own
@@ -2975,7 +2978,11 @@ so it needs only the capacity P. The choices:
   none, so null is the default and runs exactly as before (a test on random
   networks: absent, null and a capacity above any flow give the same values
   to the bit). A capacity that isn't a size ≥ 0 runs as no limit with a
-  warning; the API refuses it.
+  warning; the API refuses it. Silent in a run, but not in licensing
+  evidence: an evidence pack isn't issued on a run with a user that has
+  demand and no capacity, and a user an application adds can't keep a
+  hands-off flow, so it stops that application's pack too (`evidence-10`,
+  [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river)).
 - *Not cut by the drought restriction* (§2.7i): the rule cuts units only;
   whether to cut other water users is open for the hydrologist
   ([followups.md § Hydrologist](./followups.md#hydrologist)). The pump is a
@@ -3371,6 +3378,24 @@ reading of this document where it didn't settle them):
   The EWR is **not** protected by the pump unless the farm has a hands-off
   flow (§2.7h, engine ≥ 1.32.0): a m³/day by month and/or, with
   `handsOffEwr`, the EWR required at the farm. Neither is set by default.
+- *Licensing evidence requires both* (report format `evidence-10`, issue #54,
+  #90 Q15 and Q16; [evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
+  Exploring runs either way, but an evidence pack isn't issued while either
+  run it cites has a river pump with no capacity (or a dam-less unit taking
+  the river routed to its absent dam, which no capacity limits), nor on an
+  application whose own new or changed river pump or River to dam leaves
+  neither the EWR nor a hands-off flow in the river in every month it takes.
+  The baseline's existing users aren't held to the second.
+- *A dam-less farm under river first or trigger still routes to its dam*
+  (engine ≥ 1.60.0 says so): only run of river zeroes the dam split and
+  River to dam (K, M, O), so on a farm with no dam the other rules irrigate
+  what they route straight from the river, past the pump and its capacity,
+  as dam only does. The run warns, naming the farm; run of river sends it
+  all through the pump. Both this warning and dam only's judge "no dam" over
+  the run's own days (engine ≥ 1.60.0, `network/development.ts`
+  `damPresence`, as the evidence check does): a dam not in service yet when
+  the run starts, or silted empty by its end (§2.7g), leaves days without
+  one, and the warning says so.
 - *Run of river takes a transfer in first.* A transfer into a farm is sized
   to its demand (§2.6), so a run-of-river farm uses it before the river and
   it never becomes a "spill". The dam split fields (`pctUpstreamToDam`,
@@ -3721,6 +3746,10 @@ farm without the fields (every stored project) runs to the bit as before; a
 test asserts it on random networks (fields absent, at their defaults, a
 hands-off flow of 0 every month, and River to dam by month equal to the one
 value every month), and the client catchment regression suite is unchanged.
+Off by default for exploring only: an application whose own new or changed
+river abstraction keeps neither stops its evidence pack (`evidence-10`,
+[evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river)); the
+baseline's existing users are current use and aren't held to it.
 
 **Fields** (farms only, a model rule; engine `NetworkNode`):
 

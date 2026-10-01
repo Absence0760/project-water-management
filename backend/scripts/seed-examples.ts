@@ -28,6 +28,7 @@ import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
 import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
+import { applicationOf, APPLICATION_FARM } from './examples/application.js';
 import { buildExamples } from './examples/catchments.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
@@ -46,7 +47,7 @@ export const FARMERS = [
 ] as const;
 
 // DEV-ONLY demo applicant (WP-3.3): a contributor on Sandspruit, linked to one farm.
-export const APPLICANT = { email: 'applicant@example.com', password: 'demo-password', displayName: 'Demo Applicant', catchment: 'Sandspruit', farm: 'Klipdrift' } as const;
+export const APPLICANT = { email: 'applicant@example.com', password: 'demo-password', displayName: 'Demo Applicant', catchment: 'Sandspruit', farm: APPLICATION_FARM } as const;
 
 /** A verified demo account, created once (a re-seed finds it). */
 async function ensureUser(u: { email: string; password: string; displayName: string }) {
@@ -189,8 +190,9 @@ export async function seedExamples(): Promise<string[]> {
 
 /**
  * The demo applicant's submitted application (WP-3.3, docs/scenarios.md
- * § Applications): double their dam on the published baseline, run it, submit
- * it, as the applicant would through the API.
+ * § Applications): double their dam on the published baseline, keeping the
+ * EWR in the river (examples/application.ts), run it, submit it, as the
+ * applicant would through the API.
  */
 async function seedApplication(project: { id: string; owner: string }) {
 	const applicant = await ensureUser(APPLICANT);
@@ -202,8 +204,7 @@ async function seedApplication(project: { id: string; owner: string }) {
 			`SELECT (n->>'damCapacityM3')::float8 AS capacity FROM app_published_run_input($1, $2) r, jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $3`,
 			[project.id, pub[0]!.run_id, own[0]!.id]
 		);
-		const ops = [{ op: 'node.set' as const, nodeId: own[0]!.id, field: 'damCapacityM3' as const, value: dam[0]!.capacity * 2 }];
-		const name = `Raise the ${APPLICANT.farm} dam`;
+		const { name, description, ops } = applicationOf(own[0]!.id, dam[0]!.capacity);
 		const { rows } = await db.query<{ id: string }>(
 			// Appendix C's prompts (129): two answered, mitigation left for the demo to show "Not given".
 			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, purpose_need, monitoring)
@@ -211,7 +212,7 @@ async function seedApplication(project: { id: string; owner: string }) {
 			[
 				project.id,
 				name,
-				'Demo application: double the farm dam (invented).',
+				description,
 				pub[0]!.run_id,
 				JSON.stringify(ops),
 				opsSha256(ops),

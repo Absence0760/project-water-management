@@ -6506,6 +6506,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
 - **Board 1, the checks** (screen only, open by default): every check the
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Among them (`evidence-10`) *Every river pump has a capacity* and, for an
+  application, *The application's own river abstraction leaves the EWR in
+  the river*, each naming the units it found
+  ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
   Then **Expect questions about:** what an assessor will ask for, with the
   way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).
