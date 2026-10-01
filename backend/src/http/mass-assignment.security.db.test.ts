@@ -24,7 +24,8 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
-import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
 
@@ -191,6 +192,18 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 			[nonce, hash, ctx.owner.id, ctx.projectId]
 		);
 		return { as: null, body: { token: unsubscribeToken(nonce) } };
+	},
+	'POST /alerts/feedback': async () => {
+		// A "Was this useful?" row's token, as its alert email would carry it (147_alert_feedback).
+		const nonce = newNonce();
+		const token = feedbackToken(nonce);
+		await db.query(`INSERT INTO alert_feedback (project_id, user_id, kind, nonce, token_hash) VALUES ($1, $2, 'data_stale', $3, $4)`, [
+			ctx.projectId,
+			ctx.owner.id,
+			nonce,
+			hashToken(token)
+		]);
+		return { as: null, body: { token, useful: true } };
 	},
 	'POST /share/view': () => ({ as: null, body: { token: ctx.shareToken } }),
 	'POST /share/series': () => ({ as: null, body: { token: ctx.shareToken, key: 'simulated_outflow' } }),

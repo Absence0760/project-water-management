@@ -174,7 +174,8 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 /** Reads that need editor, and why. */
 const EDITOR_READS = new Map<string, string>([
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
-	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules']
+	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
+	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (147)']
 ]);
 
 type Ctx = LadderCtx;
