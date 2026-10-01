@@ -27,7 +27,8 @@
 		"fit-sweep": "tsx scripts/fit-sweep.ts",
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
-		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts"
+		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
+		"import:dam-register": "tsx scripts/import-dam-register.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1141.0",

@@ -8,7 +8,7 @@ self-hosted basemap, and proposes values from them that the hydrologist
 accepts one by one. Issue #288, phases 1–2 of roadmap
 [WP-3.12](./roadmap/step-3-licensing.md#wp-312-catchment-map). This page
 covers the tiles and labels, measuring, the GeoJSON download, uploads, areas, the quaternary lookup, outlines and dataset, the
-nearest gauging stations, the sources table and
+nearest gauging stations, the dam proposals from the register of dams and the map, the sources table and
 the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
 [data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
@@ -19,7 +19,9 @@ Two rules hold throughout:
   model by itself. A polygon's area enters a hydrological unit only through
   **Use … km²** and a confirmation (a model revision naming the feature); a
   quaternary's values enter the WR2012 check only through **Use**, value by
-  value, and then **Save**.
+  value, and then **Save**; a dam's capacity (from the register of dams) or
+  full-supply area (from its polygon) enters the model only through **Use**
+  on the Dams page and a confirmation.
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
   placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
@@ -752,6 +754,66 @@ loads as the schema owner; the app never writes it.
 - **Production loading** has the quaternary dataset's gap: no path yet into
   the private database (followups.md).
 
+## Dams from the register and the map
+
+Dams → **Proposed from the register and the map** (issue #326 Part B,
+"B-dams"; the box under the dam cards, [ui.md § Dams](./ui.md#dams))
+proposes two values for a hydrological unit's dam, each with its source,
+from the dam on the map linked to that unit (a polygon first, else a point;
+the earliest when there are several):
+
+- **Capacity, from the register of dams.** The registered dams within
+  **1 km** of the dam's place on the map (a polygon's centroid, or the
+  point), nearest first, at most five, each with its register number,
+  distance, capacity, wall height, completion year, river and farm, and
+  the dataset's source line. Matching is by great-circle distance only:
+  names on the register rarely match a farm's dam name. The wall height
+  and completion year are shown for reference; the model has no field for
+  them.
+- **Full-supply area, from the dam polygon** (followups.md "Dam polygons →
+  the area–volume curve", first half): the polygon's geodesic area
+  (`map_feature.area_m2`, [§ Areas](#areas)) as the dam's area when full
+  (`damAreaFullM2`), which the run uses for evaporation instead of the
+  capacity ÷ 3 m estimate. A point has no area to propose.
+
+**Use** asks first, then saves that one value to the model straight away
+(`POST …/dam-capacity-from-register` with the register number, or
+`POST …/dam-area-from-map` with the feature; [api.md § Catchment
+map](./api.md#catchment-map)), as a model revision whose reason names the
+source ("Dam capacity of Upper farm from the register of dams: Bo-dam
+(Z100/07, 140000 m³, 250 m from “Upper dam”; SYNTHETIC …)", "Dam full-supply
+area of Upper farm from the map: “Upper dam” (39012 m², computed from its
+polygon)"), so History and the run comparison show where it came from. The
+server re-derives each value: a register number that isn't within 1 km of
+this unit's dam, a dam point, a dam linked to another unit, or a unit with
+no dam capacity (for the area) is refused. While the model has unsaved
+changes, Use waits. Viewers see the proposals but not Use.
+
+### The register of dams
+
+`dam_register_reference` (154) is global reference data, like the quaternary
+dataset: the **operator** loads it as the schema owner and the app only
+reads it.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/dam-register.synthetic.json`
+  is eight invented dams with register numbers in region **Z**
+  (`Z100/01`–`Z100/08`), most within a few hundred metres of the seeded
+  Sandspruit dams (Bosrand's 1.5 km off, so never proposed) and one beside
+  the e2e and DB tests' dam. Every source says "SYNTHETIC".
+  `pnpm import:dam-register` with no argument loads it (`pnpm setup` does),
+  as dataset `synthetic`, and every proposal from it carries a "Synthetic
+  test data" warning.
+- **Real data: the operator's own download, once the licence allows it**
+  (§ Sources: blocked today). The list (XLS) has the capacities in
+  thousands of m³ but no coordinates; the Google Earth overlay (KMZ) has the
+  positions. Save the list as CSV, unzip the KMZ to its `doc.kml`, and
+  `pnpm import:dam-register list.csv doc.kml --dataset DSO-2025-07 --source "DWS Dam Safety Office, List of Registered Dams, July 2025"`.
+  The loader joins them by register number ("No of dam" / `No_of_dam`),
+  converts the capacity to m³, takes a year from "Completion date", and
+  lists every dam it skipped (no position, no name). A load replaces every
+  row of its dataset in one transaction. Production loading has the same
+  missing path as the quaternaries (followups.md).
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -769,3 +831,5 @@ fixtures only.
 | Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
+| List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
+| Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |

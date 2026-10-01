@@ -2335,7 +2335,12 @@ placed points. The server never trusts the browser with geometry:
   there is no archive to bomb), no external references.
 - Every **area is computed on the server** (`geo/area.ts`); a client's figure
   is never accepted. An area reaches the model only through
-  `area-from-map`, an editor's explicit action recorded as a model revision.
+  `area-from-map`, an editor's explicit action recorded as a model revision;
+  a dam's capacity and full-supply area only through `dam-capacity-from-register`
+  and `dam-area-from-map` (issue #326 B-dams), which take a register number or
+  a feature id, never a value: the server re-derives the value (the register
+  entry must be within 1 km of the unit's own dam on the map; the polygon must
+  be a dam linked to that unit).
 - **Properties are allowlisted** (`name`, `description`, `ref`; capped):
   a GIS attribute table can carry owners' names, ID numbers or phone numbers,
   and anything else is dropped before storage (POPIA minimisation, as the
@@ -2357,7 +2362,7 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference` is public reference data, readable by any
+  orientation kinds only). `quaternary_reference` and `dam_register_reference` (154) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
