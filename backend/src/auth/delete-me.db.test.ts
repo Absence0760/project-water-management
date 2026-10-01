@@ -139,9 +139,24 @@ describe('DELETE /auth/me: a farmer and an owner who share a catchment and a tea
 		teamId = (await owner.call('POST', '/teams', { name: `Team ${tag}` })).body.team.id;
 		expect((await owner.call('POST', `/teams/${teamId}/members`, { email: leaver.email, role: 'admin' })).status).toBe(201);
 		teamProjectId = (await owner.call('POST', '/projects', { name: `Team catchment ${tag}`, teamId })).body.project.id;
+		// A map import by the leaver (146): its file record and feature are the project's and stay, without their name.
+		const imported = await leaver.call('POST', `/projects/${projectId}/map/import`, {
+			fileName: `leaver-${tag}.geojson`,
+			kind: 'other',
+			text: JSON.stringify({ type: 'Feature', properties: { name: `Leaver pin ${tag}` }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+		});
+		expect(imported.status).toBe(201);
 		res = await deleteMe(leaver);
 		farmerRes = await deleteMe(farmer);
 	}, 60_000);
+
+	it('keeps the map features and the import they made, with who made them cleared (as the operator’s deletion does)', async () => {
+		const kept = await asOwner(
+			`SELECT s.imported_by, f.created_by FROM geo_source s JOIN map_feature f ON f.source_id = s.id WHERE s.project_id = $1 AND s.file_name = $2`,
+			[projectId, `leaver-${tag}.geojson`]
+		);
+		expect(kept).toEqual([{ imported_by: null, created_by: null }]);
+	});
 
 	it('answers 204 and clears this browser’s session and trusted-device cookies', () => {
 		expect(res.status).toBe(204);
