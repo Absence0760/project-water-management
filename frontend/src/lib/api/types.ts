@@ -1748,7 +1748,14 @@ export interface SignoffRequest {
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
 
-export type AllocationAuthorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+/** Mirrors backend allocations/parse.ts `Authorisation` (and 136's CHECK); a registration is not an entitlement (issue #281). */
+export type AllocationAuthorisation =
+	| 'registration'
+	| 'licence'
+	| 'general_authorisation'
+	| 'schedule_1'
+	| 'existing_lawful_use_claimed'
+	| 'existing_lawful_use';
 export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';
