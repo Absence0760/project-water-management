@@ -2325,60 +2325,109 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
 
 ## Map (`?tab=map`)
 
-Issue #288, roadmap WP-3.12 phases 1–2 (`lib/components/map/`, a lazy tab
-opened from the Network header's **Map** link (and Settings → WR2012
-check), not listed in the sidebar (`LINKED_ONLY` in `lib/workspace/tabs.ts`:
-the sidebar is budgeted to fit every section with a row to spare); while it
-is open the sidebar shows it after the Network; [maps.md](./maps.md) has the
-tiles, uploads, areas and the quaternary lookup). A model-input tab: owners
-and editors see it, viewers behind "Show model inputs" (or from a link) and
-without edit tools. The Network's own picture (its "Catchment map" card) stays the schematic;
-this is the geography.
+Issue #288, roadmap WP-3.12 phases 1–2, laid out as a Network-style
+workspace in #326 (E3–E6, D3) (`lib/components/map/`, a lazy tab;
+[maps.md](./maps.md) has the tiles, uploads, areas and the quaternary
+lookup). It has its own sidebar row under **Build the model**, after the
+Network (`lib/workspace/tabs.ts`; it was `LINKED_ONLY` until #326 D3, and the
+sidebar's rows went to 32 px to keep a row to spare at 1440×960), and the
+Network header's **Map** link and Settings → WR2012 check still open it. A
+core tab: owners, editors and viewers see it (it becomes a results view with
+A1); viewers get no edit tools. The Network's own picture (its "Catchment
+map" card) stays the schematic; this is the geography.
 
-- **Map** (left; full width under 900 px, 50 vh on a phone): the catchment
-  boundary (long dashes, the thickest line), farm parcels (solid outline,
-  light fill), dams (blue), rivers (blue lines), other features (dotted), and
-  points as 28 px buttons told apart by shape (▲ gauge, ● dam, ◆ other), each
-  with a casing that keeps it at least 3:1 against the basemap in light and
-  dark (mapStyle.test.ts checks the colours). Clicking a feature selects it.
-  The canvas is focusable (arrow keys pan, + and − zoom) with a visible focus
-  ring; zoom buttons top right; attribution always expanded when there is a
-  basemap. **Show everything** frames every feature. MapLibre loads only when
-  the map is drawn (`CatchmentMap.svelte`, its own chunk, then
-  `maplibre.ts`). Without WebGL the map says it can't be drawn and that the
-  list does everything; with no basemap configured (`PUBLIC_TILES_URL`
-  empty, the default) a line says the features are on a plain background;
-  when the tiles can't be read, the map drops them and says so.
-- **Features** (right, or below on a phone): every feature by name, kind and
-  size or position, and the node it stands for. Selecting one frames it on
-  the map (instantly under `prefers-reduced-motion`) and marks it in the list
-  and the table.
-- **Every feature** (table): name (selects it), kind, area or position,
-  **Stands for** (a select of the nodes of fitting kinds, editors), **Area
-  into the model** (editors; farm parcels and `other` polygons only, never a
-  dam or the boundary): a hydrological unit (the linked farm
-  by default) and **Use 9.257 km²**, which asks first ("Set Upper farm’s area
-  from the map?", the old and new area) and then saves the area to the model,
-  recorded in History with the feature named; disabled while the model has
-  unsaved edits (a line says why) and reading **In use** when that feature's
-  area is the unit's. **Delete** asks first.
-- **Where each hydrological unit’s area came from**: each farm's area,
-  *typed* or **From the map** with the feature (or "a feature since
-  deleted"), and a link to Settings → WR2012 check.
-- **Upload a GeoJSON file** (editors): what the file holds (catchment
-  boundary, farm parcels, dams, gauges, rivers, other, each with what it
-  takes), the file (WGS84, at most 5 MB; a `.zip`/`.shp` is turned away with
-  how to export GeoJSON from QGIS), **Upload**. A refused file lists every
-  problem by feature ("Feature 1 has a coordinate … the file looks projected
-  …; reproject it to WGS84 (EPSG:4326).") and imports nothing.
-- **Place a point** (editors): kind (gauge, dam, other), name, latitude and
-  longitude in decimal degrees ("-33.61" or "33.61 S", a decimal comma
-  taken), and what it stands for. Errors show under each field on submit.
-- **Imported files**: each file with its feature count, date, who imported
-  it and its SHA-256.
-- Empty state: "No catchment boundary yet. Upload a catchment boundary
-  (GeoJSON, in WGS84) below …". Axe-scanned light, dark and on a phone
-  (`e2e/tests/catchment-map.spec.ts`).
+- **Section header** (`fillHeader`; the header's "Map" is the page's only
+  title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
+  areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
+  when empty, "no boundary" without one), and the actions **Show everything**
+  (frames every feature; with features), and for editors **Upload GeoJSON**
+  and **Place a point**, each a link that opens its sheet. Slim notices
+  under it: what an upload or a placed point did (Dismiss), the no-basemap
+  note (owners and editors only), and "No catchment boundary yet" when there
+  are features but no boundary.
+- **Layout.** The map on the left and a side column on the right
+  (`clamp(18rem, 30%, 24rem)`) once the page's container
+  (`container: map-page`) is 56rem wide (784 px at the 14 px root);
+  narrower, everything stacks: the map, the card, the list. With the side
+  column and a window at least 620 px high the layout is a dashboard: exactly
+  the height left below its measured top, less the 1rem gutter and the save
+  bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
+  and the page doesn't scroll. Without WebGL the map says it can't be drawn
+  and the list does everything; when the tiles can't be read the map drops
+  them and says so.
+- **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
+  boundary (long dashes), parcels, dams, rivers, other features (dotted),
+  points as 28 px buttons told apart by shape; clicking a feature picks it.
+  Under it one key line grouped **Areas** (catchment boundary, parcel, dam,
+  other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
+  drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
+  (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
+  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live). A1's
+  measure picker goes in the key's row.
+- **The picked feature's card** (top of the side column): its name, Kind,
+  Area (or Position, or Shape for a line), **Stands for** (a select of the
+  nodes of fitting kinds for editors, else the node's name), **Unit’s
+  area** for a parcel or "other" polygon that stands for a hydrological unit
+  (its area *typed*, **From the map** this feature, or from another feature
+  by name), **Area into the model** (editors; parcels and `other` polygons
+  only, never a dam or the boundary): a unit (the linked one by default; the
+  select stops at ~16rem) and **Use 9.257 km²**, which asks first ("Set
+  Upper farm’s area from the map?", the old and new area) and then saves the
+  area to the model, recorded in History with the feature named; disabled
+  while the model has unsaved edits (a line says why) and reading **In use**
+  when that feature's area is the unit's. **From**: the file it came in.
+  **Delete** (editors) asks first. With nothing picked: "Select a feature on
+  the map or in the list to see it here."; with nothing on the map, the one
+  empty-state line ("Nothing on the map yet. Upload a catchment boundary …
+  or place a point."; D4 makes it lead with drawing).
+- **Features** (under the card): every feature grouped by kind, parcels
+  first, then dams, gauges, rivers, other and the boundary, each group
+  largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
+  button (`aria-pressed`) with the name and, under it, the size or
+  position, what it stands for ("linked" when that's its own name) and, for
+  a parcel, its unit's area source ("area typed", "area from the map"). A
+  pick far down is kept in view inside the list, never by scrolling the page;
+  stacked on a phone, a pick from the list brings the card into view. The
+  head's **Every feature** opens the grid. A Checks panel (A4) goes under the
+  list.
+- **Every feature** (`grid=map-features`, a full modal drawn by the tab:
+  `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
+  one rather than through the model's save row): a table in the list's order
+  with Feature (picks it and closes the modal), Kind, Area or position,
+  Stands for, Unit’s area, and for editors Area into the model and Delete
+  (the same controls as the card); "Areas are computed on the server from
+  each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
+  came from** (every unit, including those with no parcel, with the count
+  "n of N from the map", and the link to Settings → WR2012 check); and
+  **Imported files**. In a narrow modal each row becomes a labelled card.
+  `?tab=network&grid=map-features` (any other tab) lands on the Map with
+  it open.
+- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors): what the
+  file holds (each kind with what it takes), the file (WGS84, at most 5 MB;
+  a `.zip`/`.shp` is turned away with how to export GeoJSON from QGIS),
+  **Upload**. A refused file lists every problem by feature and imports
+  nothing, and the sheet stays open; a taken one closes the sheet and picks
+  its first feature. Under the form, **Imported files**: each file with its
+  feature count, date, who imported it and its SHA-256 cut to 12
+  characters (the full hash in the tooltip) with **Copy**. D2's review table
+  goes here.
+- **Place a point** (`place=1`, a side sheet, editors): kind (gauge, dam,
+  other), name, latitude and longitude in decimal degrees ("-33.61" or
+  "33.61 S", a decimal comma taken), and what it stands for. Errors show
+  under each field on submit; a saved point closes the sheet and is picked.
+  (D1 replaces this form with click-to-place.)
+- **URL.** `feature=<id>` picks a feature; `node=<nodeId>` picks that
+  node's farm parcel (the largest), else its first linked feature
+  (`mapList.ts` `pickedFeature`), so the Network and results can link "Show
+  on map". A pick is a history entry (Back undoes it) and replaces `node`;
+  saves in a sheet and picks from the grid replace in place. Closing a
+  sheet or the grid drops its parameter in place; a viewer's `upload=1` or
+  `place=1` is dropped. Old aliases `?tab=gis` and `?tab=catchment-map`
+  still open the tab.
+- Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
+  picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
+  its card, a linked pick in view, the phone stacks with no sideways
+  scroll), axe light and dark, wide and phone, with the grid open too.
 
 ## Crops & demand
 
@@ -2646,6 +2695,11 @@ Network is a map and Crops & demand cards and bars), so they open anywhere
 but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
+A tab's own grid (`TAB_GRIDS`: the Map's `grid=map-features`, which isn't
+the model's) uses the same parameter but is drawn by its tab, not this
+modal: the page leaves the parameter to the tab, and over any other tab
+the link goes to that tab with it open (`movedGridHref`;
+[§ Map](#map-tabmap)).
 
 - **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify

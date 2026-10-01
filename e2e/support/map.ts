@@ -5,8 +5,10 @@
 // real place.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { createProject, node, putModel } from './api.ts';
 import { withSetupLock } from './db.ts';
-import { OWNER_E2E_URL } from './env.ts';
+import { API_URL, OWNER_E2E_URL } from './env.ts';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Advisory lock key for loading the dataset (distinct from the examples' seed). */
@@ -51,4 +53,58 @@ export async function loadSyntheticQuaternaries(): Promise<void> {
 			stdio: 'pipe'
 		});
 	});
+}
+
+/**
+ * The big case (ui-playbook § 1.3): a project with `n` hydrological units, a
+ * parcel for each (linked by name, sizes all different), a boundary round
+ * them, a dam polygon, two gauges and a river. Invented names and places.
+ */
+export async function seedBigMap(request: APIRequestContext, name: string, n = 30): Promise<{ id: string; farms: string[] }> {
+	const project = await createProject(request, name);
+	const gauge = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	const farms = Array.from({ length: n }, (_, i) => node(`Hydrological unit with a long name ${i + 1}`, 'farm', gauge.id, i + 2, { areaKm2: 5 + i }));
+	await putModel(request, project.id, { nodes: [gauge, ...farms], crops: [], cropAreas: [], transfers: [] } as unknown as Parameters<typeof putModel>[2]);
+	const post = async (fileName: string, kind: string, features: unknown[]) => {
+		const res = await request.post(`${API_URL}/projects/${project.id}/map/import`, { data: { fileName, kind, text: JSON.stringify({ type: 'FeatureCollection', features }) } });
+		expect(res.status(), await res.text()).toBe(201);
+	};
+	const poly = (nm: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name: nm }, geometry: { type: 'Polygon', coordinates: [ring] } });
+	await post('big-boundary.geojson', 'catchment_boundary', [poly('Big catchment', box(21.0, -34.0, 0.7))]);
+	await post(
+		'big-parcels.geojson',
+		'farm_parcel',
+		farms.map((f, i) => poly(f.name, box(21.02 + (i % 6) * 0.11, -33.98 + Math.floor(i / 6) * 0.13, 0.03 + (i % 7) * 0.008)))
+	);
+	await post('big-dams.geojson', 'dam', [poly('Big dam', box(21.05, -33.95, 0.004))]);
+	await post('big-gauges.geojson', 'gauge', [
+		{ type: 'Feature', properties: { name: 'Outflow gauge' }, geometry: { type: 'Point', coordinates: [21.69, -33.31] } },
+		{ type: 'Feature', properties: { name: 'Upper weir' }, geometry: { type: 'Point', coordinates: [21.2, -33.8] } }
+	]);
+	await post('big-river.geojson', 'river', [{ type: 'Feature', properties: { name: 'Big river' }, geometry: { type: 'LineString', coordinates: [[21.05, -33.95], [21.4, -33.6], [21.69, -33.31]] } }]);
+	return { id: project.id, farms: farms.map((f) => f.id) };
+}
+
+/** The Map tab, once its features have loaded (`data-ready`): the header line and the list are final. */
+export async function openMap(page: Page, projectId: string, query = ''): Promise<void> {
+	await page.goto(`/projects/${projectId}?tab=map${query}`);
+	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+}
+
+export const geoFile = (name: string, text: string) => ({ name, mimeType: 'application/geo+json', buffer: Buffer.from(text) });
+
+/** Upload a file through the header's Upload GeoJSON sheet; `expectImported` waits for the notice (the sheet closes). */
+export async function uploadThroughSheet(page: Page, kind: string | null, name: string, text: string, expectImported = true): Promise<void> {
+	const sheet = page.getByRole('dialog', { name: 'Upload a GeoJSON file' });
+	if (!(await sheet.isVisible())) {
+		await page.getByTestId('section-header').getByRole('link', { name: 'Upload GeoJSON' }).click();
+		await expect(sheet).toBeVisible();
+	}
+	if (kind) await sheet.getByLabel('The file holds').selectOption(kind);
+	await sheet.getByLabel(/^GeoJSON file/).setInputFiles(geoFile(name, text));
+	await sheet.getByRole('button', { name: 'Upload', exact: true }).click();
+	if (expectImported) {
+		await expect(page.getByTestId('map-notice')).toContainText(`from ${name}.`);
+		await expect(sheet).toBeHidden();
+	}
 }
