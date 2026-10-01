@@ -4886,10 +4886,15 @@ read it before.
   record."; a run made before 1.55.0 shows neither. The help article
   *Validation signatures* (`plausibility-signatures`) explains BFI, the two
   filters, the low-flow slope and %BiasFLV and the held-out recession skill
-  in plain words. The Compare page sets the first four checks and the
-  gauges side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
-  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
+  in plain words. The Compare page sets all six checks and the
+  gauges side by side (`compare/PlausibilityCompare.svelte`, rows from
+  `compare/plausibility.ts`; the recessions' rate ratio and b difference,
+  and the BFI by both filters, the low-flow slope bias, %BiasFLV and the
+  held-out skill), each run's stored numbers with a change only between two
+  runs that scored the same record, and a note above the table on a run
+  that has none (made before the engine that added the check, or no
+  observed record) or on two runs that scored different records
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
