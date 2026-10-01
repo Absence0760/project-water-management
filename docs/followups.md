@@ -4315,6 +4315,17 @@ assume, the questions for counsel); these are the actions, with triggers.
 
 ## Housekeeping
 
+- [ ] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
+      (found 2026-10-01, issue #326 round 3). "loads the committed env file and
+      points both URLs at the checkout database" fails on any machine whose
+      `backend/.env.development.local` sets `DATABASE_URL` to another database
+      (an override to run a preview database), since `loadDevEnv` reads that
+      file and it wins. The code is right; the test isn't isolated. Durable fix:
+      give `loadDevEnv` the directory to read (or the file list) and point the
+      test at a temp directory holding only a copy of the committed file.
+      Trigger: the next change to `config/devEnv.ts`, or a second report of
+      the failure.
+
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
       tests only; the email-first sign-up (2026-09-27) changed the shared

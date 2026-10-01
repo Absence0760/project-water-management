@@ -485,7 +485,8 @@ describe('§ 1’s locality map (evidence-12, issue #326 A5)', () => {
 			]);
 			// Another unit's parcel and an "other" feature leave nothing that names them.
 			for (const hidden of ['Neighbour block', 'Pump house', 'Upper block', 'Sand River']) expect(JSON.stringify(loc)).not.toContain(hidden);
-			expect(loc.drawnInApp).toBe(5);
+			// Drawn in the app counts what may be named: the boundary, the applicant's parcel, the river and the gauge, not the neighbour's parcel.
+			expect(loc.drawnInApp).toBe(4);
 			expect(loc.sources).toEqual([]);
 			expect(loc.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 			// The SHA-256 is the figure's, drawn from the report as served.
