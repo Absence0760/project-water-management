@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Issue #74, the alert feedback page (/alerts/feedback) and the editors' Was it useful? summary under the alert rules. Measured 1420 KB on main @ 67214e0e and 1424 KB with this branch merged (+4 KB). Headroom 0 KB on its own; entries add up with other PRs'."
+}
