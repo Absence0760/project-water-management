@@ -375,10 +375,19 @@ pieces:
 
 ```bash
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
-pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, hundreds of MB at maxzoom 13):
-pnpm dev:tiles:fetch
-pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
+pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
+pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
+pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
+pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL; restart pnpm dev
 ```
+
+The fonts come from the Protomaps `basemaps-assets` repository at a pinned
+commit (`TILES_FONTS_REF` overrides it), cached in
+`~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under
+`tiles/fonts/` with their licence (`OFL.txt`). With
+`PUBLIC_TILES_GLYPHS_URL` empty (the committed default) the map draws no
+names and fetches no fonts. The **Quaternary catchments** layer works with
+neither: it draws the synthetic outlines and lists their codes beside the map.
 
 The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a

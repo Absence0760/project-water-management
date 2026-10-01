@@ -2379,7 +2379,12 @@ map" card) stays the schematic; this is the geography.
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
   when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), and for editors **Draw a shape**
+  (frames every feature; with features), **Measure** (anyone, while the map
+  draws; below), **Download GeoJSON** (anyone, with features: the features
+  as a `.geojson` file named after the project and the day, built from the
+  list; the notice says "Downloaded 23 features as
+  example-sandspruit-map-2026-10-01.geojson."; [maps.md §
+  Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
   while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
@@ -2469,6 +2474,30 @@ map" card) stays the schematic; this is the geography.
   GeoJSON-or-WKT field, an example for the shape being drawn and the error
   in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
   is picked.
+- **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
+  Measure](./maps.md#measure)): the drawing mode with nothing saved. A
+  **measure bar** over the map: "Measuring", how ("Click the map to add each
+  point (or press Enter at the crosshair); click the first point, or Close
+  the shape, for its area."), the result in a live region ("Distance: 1.24
+  km (3 points)." while adding; "Area: 52.3 ha. Perimeter: 3.10 km." once
+  closed), the points by coordinates under **The 3 points** (a disclosure),
+  and **Undo**, **Close the shape**, **Start again** and **Done**. Escape (on
+  the map or in the bar) ends it at once: a measurement has nothing to lose.
+  Drawing, placing or editing ends a measurement; Measure is off while a
+  drawing is open. Not in the URL.
+- **Layers** (#326 A6, a small box under the list): **Quaternary
+  catchments**, a checkbox in the URL (`layers=quaternaries`; a history
+  entry, so Back undoes it and a reload keeps it) with a dashed swatch in the
+  layer's colour. On, the map draws the loaded quaternaries around the
+  features as dashed purple outlines under the features, and the box lists
+  them: "6 quaternaries around the catchment, from synthetic." (with
+  **Synthetic test data, never real outlines.** for the repo's dataset;
+  "(the first by code; there are more)" past 100) and their codes as toggle
+  buttons; a code picked there, or a click inside a quaternary on the map
+  where no feature is, draws its outline heavier. The codes are labels on
+  the map only when glyphs are configured. No features: "Nothing on the map
+  yet to show the quaternaries around."; none near: "No quaternary catchment
+  in the loaded dataset is near this catchment." (or that none is loaded).
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a

@@ -16,6 +16,10 @@
 	in drawing mode (draw/attachDrawing.ts): clicks and keys shape the draft,
 	the features underneath stop taking clicks, and a crosshair marks the
 	middle while the map has the keyboard focus (Enter adds a corner there).
+	Measuring (#326 A7) is the same mode with a MeasureDraft. With a glyphs
+	URL the basemap draws place and water names (#326 A6), and `quaternaries`
+	(the tab's layer toggle) draws the quaternary outlines under the features,
+	a click inside one (with no feature there) picking it (`onquaternary`).
 -->
 <script module lang="ts">
 	import type { MapFeatureKind } from '$lib/api/types';
@@ -39,7 +43,7 @@
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
-	import { basemapLayerIds, mapStyle, overlayColours, overlayData } from './mapStyle';
+	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, type QuaternaryOutline } from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
@@ -62,7 +66,11 @@
 		fill = false,
 		words = ENGLISH,
 		draft = null,
-		onstatus
+		onstatus,
+		glyphs = null,
+		quaternaries = null,
+		pickedQuaternary = null,
+		onquaternary
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -81,6 +89,14 @@
 		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
 		/** What the map says, for a translated page (the farm view); English by default. */
 		words?: MapWords;
+		/** The glyphs URL, absolute (mapStyle.ts glyphsUrl): place and water names and the quaternaries' codes. Null: no labels, no glyphs fetched. */
+		glyphs?: string | null;
+		/** The quaternary outlines to draw (#326 A6); null or empty: none. */
+		quaternaries?: readonly QuaternaryOutline[] | null;
+		/** The quaternary picked in the tab's list, drawn heavier. */
+		pickedQuaternary?: string | null;
+		/** A click inside a quaternary where no feature is: its code. */
+		onquaternary?: (code: string) => void;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -183,6 +199,8 @@
 		if (!map || status !== 'ready') return;
 		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
 		src?.setData?.(overlayData(features, selectedId, fills));
+		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
+		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
 		syncMarkers();
 	}
 
@@ -194,7 +212,8 @@
 				lib = await import('./maplibre');
 				if (tilesUrl) await lib.usePmtiles();
 				if (disposed) return;
-				const styleNow = () => mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills));
+				const styleNow = () =>
+					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary) });
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
@@ -243,6 +262,13 @@
 						const id = e.features?.[0]?.properties?.id;
 						if (id) onselect(id);
 					});
+					// A click inside a quaternary picks it, unless a feature (or a marker, which stops the click) is there.
+					m.on('click', (e: { point: { x: number; y: number } }) => {
+						if (draft?.active || !onquaternary || !m.getLayer(QUATERNARY_HIT_LAYER)) return;
+						if (m.queryRenderedFeatures(e.point as never, { layers: OVERLAY_CLICKABLE.filter((l) => m.getLayer(l)) }).length) return;
+						const code = m.queryRenderedFeatures(e.point as never, { layers: [QUATERNARY_HIT_LAYER] })[0]?.properties?.code;
+						if (typeof code === 'string') onquaternary(code);
+					});
 					for (const id of OVERLAY_CLICKABLE) {
 						m.on('mouseenter', id, () => {
 							if (!draft?.active) m.getCanvas().style.cursor = 'pointer';
@@ -278,6 +304,8 @@
 		void features;
 		void selectedId;
 		void fills;
+		void quaternaries;
+		void pickedQuaternary;
 		syncOverlay();
 	});
 
@@ -326,11 +354,13 @@
 	const keysHelp = $derived(
 		!draft?.active
 			? `${label}: ${words.keys}`
-			: draft.shape === 'point'
-				? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
-				: draft.phase === 'drawing'
-					? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
-					: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
+			: 'measuring' in draft
+				? `${label}, measuring: the arrow keys move the map under the crosshair, Enter adds a point there, Backspace removes the last, Escape ends the measurement`
+				: draft.shape === 'point'
+					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
+					: draft.phase === 'drawing'
+						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
+						: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
 	);
 	$effect(() => {
 		const help = keysHelp;

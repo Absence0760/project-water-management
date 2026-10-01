@@ -3448,7 +3448,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       forwarded, long cache), `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles`
       in the web release, and `infra/scripts/check-csp.mjs` run on it. Until
       then production draws the plain background. Decide D7 (maxzoom, by the
-      measured extract size) first.
+      measured extract size) first. With it, the labels' glyphs (#326 A6):
+      the `fonts/` tree from `bin/tiles-dev.sh fonts` under `tiles/fonts/`,
+      and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
+      (maps.md § Labels); no CSP change.
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading

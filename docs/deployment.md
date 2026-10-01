@@ -1528,6 +1528,10 @@ they are. Two pieces are not deployed yet, each in
   in S3 under `tiles/`, a same-origin CloudFront behaviour `/tiles/*` (Range
   and `ETag` forwarded, long cache) and the URL in the web release; the CSP
   needs no change (`connect-src 'self'`, `worker-src 'self'`).
+  The labels' glyph ranges (#326 A6) ride the same behaviour: the
+  `fonts/` tree `bin/tiles-dev.sh fonts` builds, in S3 under
+  `tiles/fonts/`, and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
+  (empty until then: no names on the map).
 - **Quaternary dataset**: `quaternary_reference` is empty in production
   until the operator loads one, so the lookup says no dataset is loaded.
   There is no production loading path yet, and WR2012's licence terms are a
