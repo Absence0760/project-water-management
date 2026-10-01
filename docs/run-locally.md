@@ -448,6 +448,25 @@ an application). It never updates a project either: to reload one from a
 changed workbook, delete it in the app (or `pnpm dev:db:reset` for a clean
 database) and seed again.
 
+**The fixed workbooks.** The source repo also keeps a fixed copy of each client
+workbook, in `../project-water-management-source/Fixed/workbooks/`: the
+original with the review's formula fixes applied (the findings this repo's
+[engine-audit.md](./engine-audit.md) and [model.md §3](./model.md) describe),
+recalculated, and checked column by column against the engine (that repo's
+`Fixed/README.md` and `Fixed/VERIFICATION.md`). Load them with
+
+```bash
+pnpm seed:demo:fixed
+```
+
+which imports each `*_FIXED_recalculated.xlsx` there as `<Name> (fixed)`, into
+`data/client-<name>-fixed-app/`, beside the original's project; the
+per-workbook settings below apply to both. Expect the two to load almost the
+same model: the app reads only a workbook's inputs (the network, areas, crops,
+rain and flow records, transfer rules) and computes everything itself with
+the corrected methods, so formula fixes don't reach it. What does reach it is
+a fix to an input, such as a client's decision to start the record later.
+
 A b023 gauge column need not measure the modelled catchment itself, so by
 default the seed imports it as a reference gauge (`--gauge-as-reference`)
 rather than as observed flow. Per-workbook settings live beside the workbooks, in
