@@ -20,7 +20,8 @@ export const TAB_GROUP = {
 	overview: 'core',
 	network: 'inputs',
 	// The catchment map (issue #288, WP-3.12): the boundary, parcels, dams and gauges on a basemap, and areas from polygons.
-	map: 'inputs',
+	// Core since #326 (D3): it becomes a results view too (A1, where each unit is short), read by viewers; its edit tools stay editors'.
+	map: 'core',
 	crops: 'inputs',
 	transfers: 'inputs',
 	series: 'core',
@@ -77,14 +78,14 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
 
 /**
- * Tabs reached from a link on another page rather than listed in the sidebar:
- * the Map (issue #288), opened from the Network's header and from Settings →
- * WR2012 check. The sidebar is budgeted to fit every section at 1440 × 960
- * with one row to spare (app-sidebar.spec.ts), and the Map is a view of the
- * network, not a step of its own. While one is open the sidebar shows it in
- * its place (stripTabs), so you can see where you are.
+ * Tabs reached from a link on another page rather than listed in the sidebar.
+ * None now: the Map was one (issue #288, opened from the Network's header and
+ * Settings → WR2012 check) until it got a sidebar row of its own with the
+ * results on the map (#326 D3), taking the row the sidebar's budget had to
+ * spare (app-sidebar.spec.ts). Kept for the next linked-only view: while one
+ * is open the sidebar shows it in its place (stripTabs).
  */
-export const LINKED_ONLY: readonly TabId[] = ['map'];
+export const LINKED_ONLY: readonly TabId[] = [];
 
 /** The tab that can never be hidden: the project's landing page. */
 export const ALWAYS_SHOWN: TabId = 'overview';
