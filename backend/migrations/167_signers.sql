@@ -35,7 +35,8 @@
 --
 --  3. The registration check. A signer types their SACNASP or ECSA
 --     registration in; the host checks it against the public register and an
---     owner of the project records that check in the app
+--     owner of the project, or a member acting for the responsible authority,
+--     records that check in the app
 --     (app_record_registration_check; registration_check is insert-only, no
 --     water_app write grant). The operator never becomes the checker: that
 --     would be an assurance the Terms disclaim. At issue,
@@ -54,8 +55,9 @@
 --         (registration_check.user_id SET NULL; a bound check stays, as the
 --         sign-off's typed name does; one no pack rests on is removed,
 --         registration_check_forget).
---       - Recording a check is an owner's for now; an authority-flagged
---         member (project_member.acts_for_authority) gets it once that lands.
+--       - Recorded by an owner, or by an editor an owner marked as acting
+--         for the responsible authority (project_member.acts_for_authority,
+--         163_licensing_authority).
 
 -- ---------------------------------------------------------------------------
 -- 1. The applicant's specialist
@@ -65,6 +67,9 @@ ALTER TABLE project_member
 	ADD CONSTRAINT project_member_specialist_party CHECK (NOT specialist OR party IS NOT NULL);
 COMMENT ON COLUMN project_member.specialist IS
 	'The applying party''s appointed specialist (167): signs the draft evidence packs of the applications made in their party. Set by the project owner; needs a party.';
+-- water_app's UPDATE on project_member is column by column since 163_licensing_authority: add this one
+-- (member_update keeps every change to owners).
+GRANT UPDATE (specialist) ON project_member TO water_app;
 
 -- A party change ends the appointment, unless the same update makes it again.
 CREATE FUNCTION project_member_specialist_party() RETURNS trigger
@@ -237,12 +242,12 @@ CREATE TABLE registration_check (
 	-- When the register was consulted.
 	checked_at            timestamptz NOT NULL CHECK (checked_at <= recorded_at + interval '1 minute'),
 	note                  text NOT NULL DEFAULT '' CHECK (char_length(note) <= 1000),
-	-- The member who recorded it (an owner of the project). SET NULL with the account.
+	-- The member who recorded it (an owner, or a member acting for the authority). SET NULL with the account.
 	recorded_by           uuid REFERENCES app_user(id) ON DELETE SET NULL,
 	recorded_at           timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE registration_check IS
-	'A check of a member''s SACNASP or ECSA registration against the public register, done by the project''s host and recorded in the app by an owner (167, app_record_registration_check). Insert-only; a later check of the same registration supersedes it.';
+	'A check of a member''s SACNASP or ECSA registration against the public register, done by the project''s host and recorded in the app by an owner or a member acting for the responsible authority (167, app_record_registration_check). Insert-only; a later check of the same registration supersedes it.';
 CREATE INDEX registration_check_project_idx ON registration_check (project_id, user_id, registration_body, checked_at DESC);
 CREATE INDEX registration_check_user_idx ON registration_check (user_id);
 CREATE INDEX registration_check_recorded_by_idx ON registration_check (recorded_by);
@@ -314,8 +319,10 @@ CREATE POLICY signoff_registration_check_select ON signoff_registration_check FO
 GRANT SELECT ON signoff_registration_check TO water_app;
 
 -- Record a check (POST /projects/:id/members/:userId/registration-checks): an
--- owner of the project, of a member's registration. The host's check, done
--- against the public register; never the operator's.
+-- owner of the project, or an editor an owner marked as acting for the
+-- responsible authority (app_acts_for_authority, 163), of a member's
+-- registration. The host's check, done against the public register; never
+-- the operator's.
 CREATE FUNCTION app_record_registration_check(
 	p_project uuid, p_user uuid, p_body text, p_category text, p_no text, p_register_name text,
 	p_outcome text, p_org text, p_checked_at timestamptz, p_note text
@@ -325,8 +332,8 @@ CREATE FUNCTION app_record_registration_check(
 	DECLARE
 		v_id bigint;
 	BEGIN
-		IF app_current_user_id() IS NULL OR NOT app_has_role(p_project, 'owner') THEN
-			RAISE EXCEPTION 'app_record_registration_check: only an owner of the project records a registration check' USING ERRCODE = '42501';
+		IF app_current_user_id() IS NULL OR NOT (app_has_role(p_project, 'owner') OR app_acts_for_authority(p_project)) THEN
+			RAISE EXCEPTION 'app_record_registration_check: only an owner of the project, or a member acting for the responsible authority, records a registration check' USING ERRCODE = '42501';
 		END IF;
 		IF NOT EXISTS (SELECT 1 FROM project_member m WHERE m.project_id = p_project AND m.user_id = p_user) THEN
 			RAISE EXCEPTION 'app_record_registration_check: not a member of the project' USING ERRCODE = 'no_data_found';
@@ -338,7 +345,7 @@ CREATE FUNCTION app_record_registration_check(
 	END
 	$$;
 COMMENT ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) IS
-	'Records the host''s check of a member''s registration against the public SACNASP or ECSA register (167): an owner of the project only, the only writer of registration_check.';
+	'Records the host''s check of a member''s registration against the public SACNASP or ECSA register (167): an owner of the project or a member acting for the responsible authority (163), the only writer of registration_check.';
 REVOKE ALL ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_record_registration_check(uuid, uuid, text, text, text, text, text, text, timestamptz, text) TO water_app;
 

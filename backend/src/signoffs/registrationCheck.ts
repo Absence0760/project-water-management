@@ -2,7 +2,8 @@
 // sign-off → Registration check; licensing positions item 9, provisional
 // position, pre-counsel research, 2026-10-01). A signer types their SACNASP
 // or ECSA registration in; the project's host checks it against the public
-// register and an owner records that check in the app
+// register and an owner, or an editor an owner marked as acting for the
+// responsible authority (163_licensing_authority), records that check in the app
 // (POST /projects/:id/members/:userId/registration-checks,
 // app_record_registration_check), never the operator. Issuing a pack binds
 // each sign-off to its signer's current check in the project
@@ -19,7 +20,8 @@ import { withUser, type Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
-import { requireRole, UUID } from '../projects/access.js';
+import { rank, requireRole, UUID } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 
 /**
  * Whether the deployment lets a project require the check: always in
@@ -49,7 +51,7 @@ export const registrationNotChecked = (names: readonly string[]) =>
 	ApiError.coded(
 		409,
 		'registration_not_checked',
-		`the registration of ${names.join(', ')} hasn’t been checked against the professional register yet: an owner of the project checks it and records the check on the Members page, then issue the pack`,
+		`the registration of ${names.join(', ')} hasn’t been checked against the professional register yet: an owner of the project, or a member acting for the responsible authority, records the check (Project tab, Registration checks), then issue the pack`,
 		undefined,
 		{ signers: [...names] }
 	);
@@ -99,7 +101,8 @@ const SELECT = `SELECT c.id::text AS id, c.user_id AS "userId", c.registration_b
 
 /**
  * GET  /projects/:id/registration-checks: the project's checks, newest first (editor).
- * POST /projects/:id/members/:userId/registration-checks: record the host's check of a member's registration (owner).
+ * POST /projects/:id/members/:userId/registration-checks: record the host's check of a member's registration (owner, or a member
+ *   acting for the responsible authority).
  * PUT  /projects/:id/registration-check-required { required }: whether issue waits for it (owner).
  */
 export const registrationCheckRoutes = new Hono<AuthEnv>()
@@ -122,7 +125,13 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 		const checkedAt = new Date(body.checkedAt);
 		if (Number.isNaN(checkedAt.getTime()) || checkedAt.getTime() > Date.now() + 60_000) throw new ApiError(400, 'checkedAt must be a date that has passed');
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'owner');
+			// An owner (stepped up by requireRole), or an editor an owner marked as acting for the responsible authority (163).
+			const role = await requireRole(db, id, 'editor');
+			if (rank[role] < rank.owner) {
+				const { rows: auth } = await db.query<{ ok: boolean }>('SELECT app_acts_for_authority($1) AS ok', [id]);
+				if (!auth[0]?.ok) throw new ApiError(403, 'requires owner role, or a member acting for the responsible authority');
+				await requireStepUp(db);
+			}
 			if (!UUID.test(userId)) throw notFound();
 			const { rows: member } = await db.query<{ displayName: string }>(
 				`SELECT u.display_name AS "displayName" FROM project_member m JOIN app_user u ON u.id = m.user_id WHERE m.project_id = $1 AND m.user_id = $2`,

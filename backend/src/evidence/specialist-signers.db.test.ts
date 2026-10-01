@@ -242,8 +242,26 @@ describe('the registration check', () => {
 		expect(audit).toHaveLength(1);
 	});
 
+	it('is recorded by an editor once an owner marks them as acting for the responsible authority (163; control: unmarked, 403 above)', async () => {
+		expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+		try {
+			const r = await record(assessor, specialistB);
+			expect(r.status, JSON.stringify(r.body)).toBe(201);
+			expect(r.body.check).toMatchObject({ userId: specialistB.id, recordedBy: 'Sgassessor' });
+		} finally {
+			expect((await owner.call('PATCH', `${P()}/members/${assessor.id}`, { actsForAuthority: false })).status).toBe(200);
+		}
+		// Unmarked again: refused again, in the API and the database.
+		expect((await record(assessor, specialistB)).status).toBe(403);
+		await expect(
+			withUser(assessor.id, (db) =>
+				db.query("SELECT app_record_registration_check($1, $2, 'sacnasp', 'pr_sci_nat', '1', 'x', 'registered', 'x', now(), '')", [projectId, specialistB.id])
+			)
+		).rejects.toMatchObject({ code: '42501' });
+	});
+
 	it('is read by the editors and the person, never by a viewer or another member', async () => {
-		expect((await assessor.call('GET', `${P()}/registration-checks`)).body.checks).toHaveLength(1);
+		expect((await assessor.call('GET', `${P()}/registration-checks`)).body.checks).toHaveLength(2);
 		expect((await viewer.call('GET', `${P()}/registration-checks`)).status).toBe(403);
 		const own = (u: User) => withUser(u.id, async (db) => (await db.query('SELECT id FROM registration_check WHERE project_id = $1', [projectId])).rows);
 		expect(await own(specialistA)).toHaveLength(1);
@@ -270,8 +288,8 @@ describe('the registration check', () => {
 		const listed = (await assessor.call('GET', `${P()}/packs/${draftA}/signoffs`)).body.signoffs as { kind: string; registrationCheck: unknown }[];
 		expect(listed[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Rooikloof WUA', bound: false } });
 		expect(await bind(assessor, draftA)).toEqual([]);
-		// B's specialist has a sign-off and no check: named (control: A's is not).
-		await arrange((q) => plantSignoff(q, draftB, specialistB));
+		// A sign-off whose registration has no check: named (control: A's is not). B's check above is of 400123/10.
+		await arrange((q) => plantSignoff(q, draftB, specialistB, 'specialist', '400999/99'));
 		expect(await bind(assessor, draftB)).toEqual([expect.stringMatching(/sgspecialistb/i)]);
 		// A review sign-off without a check doesn't hold an issue up.
 		await arrange((q) => plantSignoff(q, draftA, assessor, 'review'));
