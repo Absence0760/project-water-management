@@ -200,7 +200,9 @@ application and issuing or withdrawing an evidence pack answer
 demo accounts (`pnpm seed:examples`) start without one: set one up on the
 Account page, or, to try those actions without a phone, put
 `MFA_REQUIRED=false` in `backend/.env.development.local` and restart the
-backend (Lambda refuses that setting). The DB tests and the e2e API server
+backend (Lambda refuses that setting). With it on, an owner without one sees
+a banner on the workspace pages linking to the Account page; with it off,
+neither that banner nor the Account page's warning shows. The DB tests and the e2e API server
 set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
 the feature with it on and off.
 

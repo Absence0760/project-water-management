@@ -178,13 +178,13 @@ Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
 sign-in, `amr` in the session, and the requirement for project owners, team
 admins and assessors at the route (security.md § Two-step sign-in). Open:
 
-- [ ] **No app-wide prompt yet.** An owner, team admin or assessor without an
-      authenticator learns of the requirement on the Account page (its
-      warning) or from the `403 mfa_required` of the action they tried; the
-      workspace shows that message, with no link. A banner in the app shell
-      (from `GET /auth/mfa` `required && !enrolled`) and, for `mfa_step_up`,
-      a "sign in again" button are the durable fix. Trigger: before the
-      first production deploy with client data (#62).
+- [x] **No app-wide prompt yet** (done 2026-10-01). A banner on the
+      workspace (`layout/MfaBanner.svelte`, from `GET /auth/mfa`
+      `required && !enrolled`, and from any `403 mfa_required`) links to the
+      Account page's panel; a password-only session of a role that needs it,
+      or any `403 mfa_step_up`, gets **Sign in again** (security.md §
+      Two-step sign-in, § The prompt). `required` now reads false while
+      `MFA_REQUIRED=false`.
 - [ ] **The requirement is checked at the route, not in RLS.** Every owner
       route goes through `requireRole(…, 'owner')`, so a new one is covered
       without a decision, but a route that checks the owner role some other

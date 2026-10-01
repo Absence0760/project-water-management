@@ -113,7 +113,9 @@ saved them**. On: an **On** badge, how many recovery codes are left, a line
 when this browser signed in before it was set up, and **New recovery codes**
 / **Turn off**, each opening one code field (the app's code; turning off
 also takes a recovery code). A project owner, team admin or assessor without
-it sees a warning that their actions need it. Errors are worded from their
+it sees a warning that their actions need it (and, on the workspace, the
+two-step sign-in banner, § Invitations below, which links here:
+the panel is `#two-step`). Errors are worded from their
 codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
 is under § Sign-in pages.
 
@@ -7454,6 +7456,20 @@ then.
   invitations**, on every signed-in page but the invitations page, while any
   wait. The count is read once per account, again after an accept or
   decline, and when the tab comes back into view (`auth-extras/inviteCount.svelte.ts`).
+- **The two-step sign-in banner** (`layout/MfaBanner.svelte`, issue #282,
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
+  `routes/+layout.svelte` beside the other banners, on the workspace's
+  pages only, English: not on the account, farm, alert or sign-in pages).
+  For a project owner, team admin or assessor without an authenticator
+  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
+  `403 mfa_required`: what their role needs it for and **Set up two-step
+  sign-in**, linking to the Account page's panel (`/account#two-step`).
+  With an authenticator but a password-only session (`!sessionVerified`),
+  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
+  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  **Dismiss** hides it until the next refusal and moves focus to the page's
+  title. Its own chunk, loaded only while there is something to say
+  (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
   it should have access already.
