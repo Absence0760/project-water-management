@@ -450,6 +450,70 @@ passing its words in the reader's language (`words`, `farmMap.ts`
 `mapWords`), since the shared component imports no catalogue. The screen is
 in [ui.md § Farmer view](./ui.md#farmer-view-farm).
 
+## Rain from the boundary
+
+Issue #326 B-rain (WP-2.10 × WP-3.12): the catchment's CHIRPS rain feed set
+up from the map's boundary in one action, averaging the rain over the
+boundary itself rather than over a box around it.
+
+- **Where.** Settings → Data feeds → **Use the catchment boundary**
+  (`feeds/BoundaryRain.svelte`), for editors and owners. The Map tab shows one
+  line, for editors, while a boundary exists and no CHIRPS feed reads it, or
+  one read it before it was redrawn (`map/MapRainLink.svelte`); its link
+  opens the proposal (`?tab=settings&rain=boundary#set-feeds`).
+- **The proposal** (`GET /projects/:id/feeds/chirps/from-boundary`, editor):
+  the boundary (name, area, when it was last changed), the CHIRPS v3 cells
+  it covers with how much of them lies inside, the method ("area-weighted
+  over N CHIRPS v3 cells (0.05°), each by the share of it inside the
+  boundary"), the source, what Apply will do, and each cell (latitude,
+  longitude, share inside, weight) in a table.
+- **Apply** (`POST …/from-boundary`, owner, as every feed change): attaches a
+  CHIRPS daily feed into the CHIRPS reference series (`rain_chirps_mm`), or
+  gives the cells to a CHIRPS feed whose series holds no days yet. It names
+  the boundary version it was shown (`updatedAt`), so a boundary redrawn in
+  between is refused (409) instead of applied unseen. The feed's config keeps
+  the boundary it came from (`config.boundary`: id, name, version, area),
+  which only this route writes; the History says "Set up the CHIRPS feed …
+  from the catchment boundary “…” (N cells)".
+- **No splicing.** A feed's existing days were averaged over its old cells,
+  so new cells never go to a feed whose series already holds a record (409).
+  The proposal then attaches a new feed into a separate series ("CHIRPS
+  boundary") to compare beside the old one. Switch the old feed off once
+  satisfied.
+- **The weights** (`backend/src/feeds/boundaryCells.ts`, pure). Each 0.05°
+  cell gets *share of the cell inside the boundary × cos(cell-centre
+  latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
+  exactly a box's cells and weights. Holes are subtracted and the parts of a
+  MultiPolygon add up. The share is computed by **exact clipping**, not
+  sampling: each ring is clipped to its row of cells, then to each cell
+  (Sutherland–Hodgman; clipping to a convex cell is exact in area even for a
+  concave ring), and the share is the clipped area over the cell's in degrees.
+  Exact to floating point, and cheaper than a sampling grid fine enough to
+  match it; the degree-space share and the ellipsoidal one differ by under
+  1e-4 within a cell. A cell with under 0.1 % of its area inside is left out
+  (its weight moves the mean by less than that share of one cell's rain).
+- **Limits.** One feed reads at most 100 cells in 25 grid rows (the box's
+  limits, now also the limit for listed cells), about 2,500 km² at South
+  African latitudes; a larger boundary is refused with its cell count, and
+  feeds for parts of it are attached by hand.
+- **The engine is unchanged.** The cells only change which CHIRPS values the
+  feed averages into its series; runs read the series as before.
+- **Local-first.** With `FEED_SOURCE=fixtures` the synthetic CHIRPS and
+  CHIRPS-GEFS files cover 21.0–25.4° E, 20.0–34.0° S (the invented 8 × 6 grid
+  repeated around it, with no sea), so a feed over the seeded Sandspruit
+  boundary fetches offline (`boundaryCells.test.ts`, `fromBoundary.db.test.ts`).
+
+## Data sources
+
+Every open dataset the map proposes values from (decision D-B in issue #326:
+loaded only once its licence is confirmed to allow commercial use;
+attribution is fine, non-commercial or share-alike-on-output is not).
+
+| Dataset | Publisher | Licence | Attribution | Version | Update cadence | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
+| DWS quaternary catchments + WR2012 values: the quaternary lookup | DWS; WRC | See § Quaternary dataset: WR2012's redistribution terms are unpublished | — | WR2012 | — | Operator's own download; synthetic fixture committed |
+
 ## Quaternary lookup
 
 Settings → WR2012 check → **Propose from the map** looks up the quaternary

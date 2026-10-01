@@ -3429,9 +3429,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       so an applicant places their own scenario's features, with the RLS
       the WP describes. Today only editors write; farmers and applicants
       read (RLS) but no route serves them.
-- [ ] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): polygon-based
-      CHIRPS extraction from the `catchment_boundary` feature in place of the
-      bounding box (`backend/src/feeds/`).
+- [x] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): done in issue
+      #326 B-rain (2026-10-01): Settings → Data feeds → **Use the catchment
+      boundary** proposes the CHIRPS cells the boundary covers, weighted by
+      the share of each inside (exact clipping), and an owner applies it
+      ([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
+- [ ] **Re-read a feed's record over new cells** (WP-2.10, M; found in #326
+      B-rain): new cells (from the boundary, or a redrawn one) go only to a
+      feed whose series is empty, else to a new feed in a separate series,
+      because a feed's existing days were averaged over its old cells and it
+      never splices two areas. Durable fix: a staged same-product
+      replacement, like the version replacement of issue #40c (backfill the
+      whole record over the new cells in `feed_stage`, swap it in whole),
+      so the boundary feed can take over the default series. Trigger: a
+      hydrologist wanting the boundary's rain in an existing CHIRPS series
+      without comparing two series.
 - [x] **Drawing polygons on the map** (D9 (b)): superseded by issue #326
       C1 (2026-10-01): editors draw polygons and lines, place points by
       click, and reshape them, with paste-a-shape and keyboard placement as
