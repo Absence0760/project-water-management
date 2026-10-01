@@ -61,3 +61,19 @@ describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', (
 		expect(body).not.toContain('Per person');
 	});
 });
+
+describe('the demand-objects table and where each number comes from (engine 1.56.0)', () => {
+	it('adds a Source column and the demand by source when an object records one', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object({ source: 'meter', avgDemandM3Day: 75 }), object({ id: 'm', name: 'Mill', category: 'industrial' })]) } }).body);
+		expect(body).toContain('Hydrological unit Demand object Source Priority');
+		expect(body).toContain('Village Domestic Meter records first 75');
+		expect(body).toContain('Mill Industrial not recorded first 25');
+		expect(body).toContain('Of their demand, 75% is from meter records and 25% not recorded.');
+	});
+
+	it('has neither when no object records a source (every run before engine 1.56.0)', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object()]) } }).body);
+		expect(body).not.toContain('Source');
+		expect(body).not.toContain('Of their demand');
+	});
+});

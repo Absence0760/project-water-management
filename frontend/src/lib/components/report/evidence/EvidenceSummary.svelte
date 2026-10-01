@@ -12,6 +12,7 @@
 	import LicenceImpactBoard from '../LicenceImpactBoard.svelte';
 	import type { BoardView } from '../licenceImpact';
 	import { changeText, signed, valueText, worseText } from './format';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let {
 		report,
@@ -50,7 +51,7 @@
 		<dt>Baseline</dt>
 		<dd>
 			{#if id.baseline.nomination}
-				Nominated evidence run, {fmtDate(id.baseline.nomination.nominatedAt)}{id.baseline.nomination.nominatedBy ? ` by ${id.baseline.nomination.nominatedBy}` : ''}
+				Nominated evidence run, {fmtDate(id.baseline.nomination.nominatedAt)} by {id.baseline.nomination.nominatedBy ?? FORMER_MEMBER}
 			{:else}
 				<strong>Not the nominated evidence run</strong>
 			{/if}
@@ -66,7 +67,7 @@
 			<dd>
 				{id.application.scenarioName}{id.application.scenarioStatus ? ` (${id.application.scenarioStatus})` : ''}
 				<span class="sub">{id.application.proposals} proposal{id.application.proposals === 1 ? '' : 's'}, {id.application.assumptions} baseline assumption{id.application.assumptions === 1 ? '' : 's'}</span>
-				<span class="sub">Run {fmtDate(id.application.createdAt)}{id.application.createdBy ? ` by ${id.application.createdBy}` : ''}</span>
+				<span class="sub">Run {fmtDate(id.application.createdAt)} by {id.application.createdBy ?? FORMER_MEMBER}</span>
 			</dd>
 		</div>
 	{/if}

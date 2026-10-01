@@ -1283,7 +1283,8 @@ must build WP-2.15 Phase B.
   [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to
   modelled use: over-use, under-use, and a **full-allocation** scenario
-  ("if every lawful user took their entitlement").
+  ("if every registered or licensed volume were taken in full"; a
+  registration is not an entitlement).
 - **Background.**
   - Water use is registered in WARMS under the registration regulations
     (GN R1352 of 1999) [R1352]. Registration is required above 50 m³/day

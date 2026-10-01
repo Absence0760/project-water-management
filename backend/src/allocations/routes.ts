@@ -10,11 +10,12 @@
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
 import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations } from '@water-management/engine';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
-import { attachment, collectCsv, csvRow, exportFilename } from '../export/csv.js';
+import { csvRow, exportFilename } from '../export/csv.js';
+import { csvDownload } from '../export/download.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -286,14 +287,6 @@ async function prepareImport(db: Db, projectId: string, body: z.infer<typeof Imp
 	};
 }
 
-function csvResponse(c: Context, body: string, filename: string) {
-	return c.body(body, 200, {
-		'Content-Type': 'text/csv; charset=utf-8',
-		'Content-Disposition': attachment(filename),
-		'Cache-Control': 'no-store'
-	});
-}
-
 export const allocationRoutes = new Hono<AuthEnv>()
 	.get('/:id/allocations', async (c) => {
 		const id = c.req.param('id');
@@ -524,9 +517,12 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					]);
 				})
 			];
-			const body = collectCsv(lines);
-			if (body === null) throw new ApiError(413, 'the allocations export is too large');
-			return csvResponse(c, body, exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE));
+			return csvDownload(
+				c,
+				() => lines,
+				exportFilename(proj[0]?.name ?? 'project', ['allocations'], 'csv', proj[0]?.timeZone ?? DEFAULT_TIME_ZONE),
+				new ApiError(413, 'the allocations export is too large')
+			);
 		});
 	})
 	// A run's modelled use against the registered volumes, per farm or water

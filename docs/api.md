@@ -132,7 +132,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `byYou: true`, or that names them as its subject; newest first, at most
   50 000, `auditEventsTruncated` past that) come from `app_subject_export()`,
   which reads only the caller's own rows, including in projects they have
-  left. Never a secret: no password or token hash, unsubscribe nonce, key or
+  left. A `publication.published` event comes without its `perFarm` figures
+  (other people's farms, issue #119; `publish/decision.ts`
+  `withoutFarmFigures`); the project's history keeps them. Never a secret: no password or token hash, unsubscribe nonce, key or
   link material. One export a minute per account
   (`app_user.data_exported_at`); a render session is refused (403).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
@@ -185,7 +187,7 @@ path" }` on any route for a path with an escaped unreserved character
 (`%61`), an escaped `/`, `\` or `%`, a malformed escape or a dot segment
 (`backend/src/http/rawPath.ts`; `%20` and non-ASCII escapes are fine); `409` = conflict (duplicate name or email,
 already a member, last owner/admin); `413` = request body over 4 MB (5 MB
-for `POST /projects/import`), a series over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
+for `POST /projects/import`), a series over 60 000 days, or an export over its cap (50 MB for a CSV, 5 MB for `export.json`); `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
 `Retry-After`). Database errors are mapped to fixed messages and anything
 unexpected is `500 { error: "Internal server error" }`; raw database error
@@ -807,7 +809,8 @@ as before and stores no report:
 
 **`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
 the newest import's report: the fields above plus `importedAt` (ISO time) and
-`importedBy` (the importer's display name). `200 { report: null }` when the
+`importedBy` (the importer's display name, `null` once their account is
+deleted, 138). `200 { report: null }` when the
 project wasn't imported through the dialog (made by hand, copied, or imported
 with no report): the Project page asks on every visit, so "none" is an answer,
 not an error. `404 not found` for a project you can't see.
@@ -1280,12 +1283,23 @@ or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
 'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-note (≤ 1000 chars) }[]`,
+source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
+chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, ''. `PUT` refuses an object on a gauge, an other water
+internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
-without a count and litres, an external one with a return share above 0, and
-a negative population.
+without a count and litres, an external one with a return share above 0, a
+negative population, an unknown source, and a source whose sizing it doesn't
+have.
+
+A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
+[model.md §2.7f](./model.md)) is where its number comes from, by the rule
+agreed with the client: `meter` (meter records) and `aadd` (a reconciliation
+strategy's AADD) are volumes, so the object must be `monthly`; `perCapita`
+(population × litres a day) must be `perUnit`; `other` (a licence, an
+estimate, a workbook's typed-over demand) may be either. Null = not recorded
+(every object saved before it). It changes no number in the run; `note` keeps
+the detail (which meter, which strategy, which norm).
 
 A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
@@ -1522,7 +1536,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
 - `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
-  `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
+  `createdBy` is the maker's display name, `null` once their account is
+  deleted (138: the run stays, the name goes; the workspace says "a former
+  member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
   (`summary.forecast.from`), else `null`.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
@@ -1556,7 +1572,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - **Evidence nomination** (010_run_nomination, [data-model.md](./data-model.md)):
   `Nomination = { id, runId, runLabel, runCreatedAt, runoffModel,
   engineVersion, reason, nominatedAt, nominatedBy }`, `nominatedBy` a display
-  name. The history is append-only: nominating another run adds a row and
+  name (`null` once that account is deleted, 138). The history is append-only: nominating another run adds a row and
   keeps the earlier ones, and nothing can edit or remove a row. A nominated
   run (current or past) is never trimmed by the run cap and can't be deleted.
 - `run = RunMeta & { summary: RunSummary }`
@@ -1712,10 +1728,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
-  name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  name, category, source?, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
-  the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  the days it switched the object off, never counted in `daysShort`;
+  `source`, engine ≥ 1.56.0, only on an object that records one: the model's
+  `source`, as a report grades the demand by). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
@@ -1961,6 +1979,8 @@ the result is stored only after the server has checked it.
 | POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }`. From engine 1.33.0 a member's `metrics` must carry `noFlowDays`, `ewrSiteDaysNotMet`, `unitDemandM3Day`, `unitSuppliedM3Day` and `reserveFdc` (`400` without them: a result is stored only on the engine it was started on, which always computes them) | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
 
 - `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
+  `createdBy` and `createdById` are `null` once the starter's account is
+  deleted (138; a started ensemble goes with the account).
   `summary` is `EnsembleSummary` (`total`, `accepted`, `gated`,
   `referenceAccepted`, `rejected` by reason, `bands`, `coverage`,
   `coverageWarning`, `decisionRule`, `notes`) or, for a paired row,
@@ -1999,7 +2019,10 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 - `Scenario = { id, name, description, purposeAndNeed, mitigation, monitoring,
   baseRunId, baseRun: { id, label, createdAt }, ops: ScenarioOp[], opsSha256,
   ownedNodeIds, opNames, ownerUserId, owner, status, createdAt, updatedAt,
-  runCount, lastRun: { id, label, createdAt } | null }`. `purposeAndNeed`,
+  runCount, lastRun: { id, label, createdAt } | null }`. `ownerUserId` and
+  `owner` are `null` once the owner's account is deleted (138: a team scenario
+  and a submitted, withdrawn or decided application stay; a draft application
+  goes with the account). `purposeAndNeed`,
   `mitigation` and `monitoring` (129_scenario_statement) are the answers to the
   evidence report's fixed Appendix C prompts (engine `APPLICANT_PROMPTS`), `''`
   until answered; the API trims each (whitespace alone is `''`) and holds it to
@@ -2339,7 +2362,9 @@ whether a use is lawful.
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
   holder?, authorisation: 'registration' | 'licence' | 'general_authorisation'
-  | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
+  | 'schedule_1' | 'existing_lawful_use_claimed' | 'existing_lawful_use'
+  (claimed = not verified; only `existing_lawful_use` is verified under s35;
+  issue #281), purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
   reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
@@ -2407,8 +2432,8 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
-| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
-| PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
+| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
+| PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`, and records `publication.notice_changed` with the whole notice as it then stands (issue #119). `409` for a superseded publication | editor |
 | GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
@@ -2697,7 +2722,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
 | GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
-| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 50 MB; streamed like every CSV, [Export](#export)) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
@@ -3247,7 +3272,7 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
@@ -3538,21 +3563,29 @@ Runs are not included (re-run after importing, or pass `run=1` / `--run`),
 nor is the import report ([why](#import-report)). The importer gives every row
 a fresh id.
 
-**Size cap — 413.** Production serves the API through Lambda's *buffered*
-response mode, which fails any response over **6 MB**. Every export body is
-built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
-once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
-a 60 000-day series is ≈ 1 MB, and the catchment table fits, but a **farm's
-daily CSV over a multi-decade record does not**: a farm has ~32 columns at
-full precision (≈ 12–13 bytes a value on average), so a 40-year record
-(≈ 14 600 days) is ≈ 5.8 MB and gets the 413; download it in windows of about
-30 years or less, or take the `.xlsx` workbook, whose bulk fetch pages under the
-cap ([below](#bulk-run-series)). WP-1.29 (Lambda response streaming) removes
-the limit for the CSVs ([followups.md](./followups.md)). The durable fix if exports grow (many long series, multi-node
-workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or
-writing the file to S3 and returning a pre-signed URL. Gzip is not a clean win
-here: a gzipped body is binary, so the Lambda adapter base64-encodes it (+33 %),
-and CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress either.
+**Size caps — 413, and streaming.** Every CSV download is **streamed**
+(WP-1.29a, issue #283): production's Function URL is in `RESPONSE_STREAM`
+mode, so a response is no longer stopped at Lambda's 6 MB buffered limit, and
+the local Node server streams the same body the same way
+(`backend/src/export/download.ts`, `backend/src/http/lambdaStream.ts`,
+[deployment.md § Response streaming](./deployment.md#response-streaming)). The
+route measures the file first and answers
+`413 { error: "export larger than 50 MB — …" }` before sending a byte when it
+passes **50 MB**, with a hint to narrow the window (`from`/`to`); otherwise the
+file is written from memory as the client reads it, with no `Content-Length`
+(chunked). For scale: a farm's daily CSV has ~32 full-precision columns,
+≈ 400 KB a year, so a 60-year record is ≈ 24 MB and a century fits; a
+60 000-day series is ≈ 1 MB. Past Lambda's first 6 MB a stream runs at about
+2 MB/s, so a 50 MB file takes ~25 s (inside the API's 30 s timeout, which is
+why the cap isn't higher). A download that fails partway is cut off, never
+ended short: the client sees a failed download, not a complete-looking file.
+
+`export.json` is the exception: it is built in memory and keeps a **5 MB**
+cap (`413 { error: "export larger than 5 MB — …" }`), because a project file
+must import back and `POST /projects/import` can't take more (a Lambda
+request can't be streamed or pass 6 MB). The [bulk series](#bulk-run-series)
+pages stay under the same 5 MB, since the browser holds a page whole. Gzip is
+not used: CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress.
 
 ### Bulk run series
 

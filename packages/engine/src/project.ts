@@ -1772,6 +1772,39 @@ export const DEMAND_OBJECT_SIZINGS = ['monthly', 'perUnit'] as const;
 export type DemandObjectSizing = (typeof DEMAND_OBJECT_SIZINGS)[number];
 
 /**
+ * Where a demand object's number comes from (engine ≥ 1.56.0, issue #54 Q11,
+ * confirmed in issue #90; docs/model.md §2.7f), best first: the client's
+ * rule is meter records where they exist, else the reconciliation
+ * strategy's AADD, else population × litres per person per day.
+ * 'meter' — metered abstraction (sized 'monthly');
+ * 'aadd' — a reconciliation strategy's annual average daily demand (sized 'monthly');
+ * 'perCapita' — a count × a norm in litres per person (or head) per day (sized 'perUnit');
+ * 'other' — anything else (a licence, an estimate, a workbook's typed-over demand), either sizing.
+ */
+export const DEMAND_OBJECT_SOURCES = ['meter', 'aadd', 'perCapita', 'other'] as const;
+export type DemandObjectSource = (typeof DEMAND_OBJECT_SOURCES)[number];
+
+/** Each source in plain words (the node form, run results, the summary CSV). */
+export const DEMAND_OBJECT_SOURCE_LABEL: Record<DemandObjectSource, string> = {
+	meter: 'Meter records',
+	aadd: 'Strategy AADD',
+	perCapita: 'Per-capita norm',
+	other: 'Other'
+};
+
+/**
+ * The sizing a source fixes (the volume is derived that way): a meter
+ * record and an AADD are an abstraction in m³/day ('monthly'), a per-capita
+ * norm is count × litres ('perUnit'); 'other' fixes none.
+ */
+export const DEMAND_OBJECT_SOURCE_SIZING: Record<DemandObjectSource, DemandObjectSizing | null> = {
+	meter: 'monthly',
+	aadd: 'monthly',
+	perCapita: 'perUnit',
+	other: null
+};
+
+/**
  * When a demand object is supplied against the unit's crops on a short day
  * (docs/model.md §2.7f): 'first' before them, 'shared' pro rata with them,
  * 'last' after them. Within one class, objects share pro rata.
@@ -1857,7 +1890,14 @@ export interface DemandObject {
 	 * has no floor. Read only for the BASIC_NEEDS_CATEGORIES.
 	 */
 	population?: number | null;
-	/** Where the number comes from (meter records, a reconciliation strategy, a norm, the workbook), for the report. */
+	/**
+	 * Where its number comes from, by rule (engine ≥ 1.56.0, issue #54 Q11,
+	 * docs/model.md §2.7f): 'meter', 'aadd', 'perCapita' or 'other', each
+	 * with the sizing DEMAND_OBJECT_SOURCE_SIZING gives it. Null or absent =
+	 * not recorded (every object saved before it); the run is the same.
+	 */
+	source?: DemandObjectSource | null;
+	/** The detail of where the number comes from (which meter, which strategy and year, which norm), for the report. */
 	note: string;
 }
 
@@ -2177,6 +2217,8 @@ export interface DemandObjectSummary {
 	id: string;
 	name: string;
 	category: DemandObjectCategory;
+	/** Where its number comes from (engine ≥ 1.56.0); absent = not recorded, and on older runs. */
+	source?: DemandObjectSource;
 	priority: DemandObjectPriority;
 	destination: DemandObjectDestination;
 	avgDemandM3Day: number;

@@ -543,6 +543,16 @@ lazy chunk, where gzip already folds them).
 6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
    and anything unexpected to a generic 500; raw database error text never
    reaches the client ([api.md § Errors](./api.md#errors)).
+7. The response is **streamed** in both runtimes (WP-1.29a, issue #283):
+   the Node server writes a `ReadableStream` body as it is read, and in
+   Lambda the Function URL is in `RESPONSE_STREAM` mode with the app behind
+   `backend/src/http/lambdaStream.ts` (status, headers and `Set-Cookie` in
+   the stream's prelude). Most routes answer one JSON chunk; the CSV
+   downloads (`export/download.ts`) measure the file inside the transaction
+   (`413` past 50 MB), then write it from memory after the transaction has
+   ended, so no database connection waits on a slow client. A body that
+   fails partway cuts the response off instead of ending it
+   ([deployment.md § Response streaming](./deployment.md#response-streaming)).
 
 ## Data flow of a model run
 

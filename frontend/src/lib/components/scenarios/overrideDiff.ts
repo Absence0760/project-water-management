@@ -287,6 +287,8 @@ function objectField(o: DemandObject, f: DemandObjectSetField): unknown {
 		return o.schedule?.length ? o.schedule.map((w) => ({ label: w.label.trim(), span: w.span, from: w.from, to: w.to, easterFrom: w.easterFrom, easterTo: w.easterTo, weekdays: w.weekdays, factor: w.factor })) : null;
 	if (f === 'note' || f === 'name') return (o[f] ?? '').trim();
 	if (f === 'population') return o.population ?? null;
+	// Likewise no source and null (not recorded, engine ≥ 1.56.0).
+	if (f === 'source') return o.source ?? null;
 	return o[f];
 }
 

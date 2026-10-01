@@ -163,9 +163,10 @@ section it belongs to, with the example that taught it.
   on the text column (`help-pages.spec.ts` checks the page and the column).
 - **A reading page spans its column; the measure is on the text.** Help's
   guides and glossary sat in a 42rem article with the "On this page" rail
-  beside it, leaving 200–350 px empty at 1440 (issue #162). Cap body text,
-  notes and lists at a reading measure (44rem) and let figures, diagrams and
-  tables take the column; pin a side rail to the column's right edge.
+  beside it, leaving 200–350 px empty at 1440 (issue #162). A 44rem measure
+  on the text then left half the column empty beside full-width figures
+  (operator, 2026-09-30), so the text takes the column too, bounded by the
+  Help layout's 1480 px; pin a side rail to the column's right edge.
 - **Navigation groups are headings, not items; a menu doesn't change as you
   scroll.** A group name styled like its links reads as one of them; make
   it a heading with its links indented under a rule. A contents list that

@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
+import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
 
 const comparison = () =>
 	compareAllocations({
@@ -17,6 +17,16 @@ const comparison = () =>
 	});
 
 describe('allocation wording', () => {
+	it('labels a claimed existing lawful use as not verified, and Schedule 1 as permissible use (#281)', () => {
+		expect(Object.keys(AUTHORISATION_LABEL)).toEqual(['registration', 'licence', 'general_authorisation', 'schedule_1', 'existing_lawful_use_claimed', 'existing_lawful_use']);
+		expect(AUTHORISATION_LABEL.existing_lawful_use_claimed).toBe('Existing lawful use (claimed, not verified)');
+		expect(AUTHORISATION_LABEL.existing_lawful_use).toBe('Existing lawful use (verified under s35)');
+		expect(AUTHORISATION_LABEL.schedule_1).toBe('Schedule 1 (permissible use)');
+		// Only the s35-verified value says "verified" without a "not".
+		const verified = Object.entries(AUTHORISATION_LABEL).filter(([, l]) => /verified/i.test(l) && !/not verified/i.test(l));
+		expect(verified.map(([k]) => k)).toEqual(['existing_lawful_use']);
+	});
+
 	it('never uses a legal finding', () => {
 		const words = [...Object.values(STATUS_LABEL), ...(['over', 'under', 'within', 'unregistered', 'none'] as const).map((status) => statusSentence({ status, ratio: 1.2, modelledM3: 10, registeredM3: 5 }, 0.1))].join(' ');
 		expect(words).not.toMatch(/lawful|unlawful|illegal|legal|complian|violat|breach/i);
@@ -202,7 +212,7 @@ describe('licence conditions (issue #72)', () => {
 	it('says what a run’s allocation mode did, and nothing for compare only', () => {
 		expect(MODE_NOTE.none).toBeNull();
 		expect(MODE_NOTE.cap).toMatch(/capped each unit’s use at its registered volume/);
-		expect(MODE_NOTE.fullAllocation).toMatch(/every registered user took their entitlement/);
+		expect(MODE_NOTE.fullAllocation).toMatch(/every registered or licensed volume were taken in full \(a registration is not an entitlement\)/);
 		for (const t of [MODE_NOTE.cap!, MODE_NOTE.fullAllocation!]) expect(t).not.toMatch(/lawful|unlawful|illegal|compliant/i);
 	});
 });
