@@ -2311,7 +2311,10 @@ The background job queue's source of truth ([architecture.md § Background work]
     lease (a stale worker gets `NULL` and rolls back); `done`, `failed` with
     backoff, or `dead`.
   - `app_purge_jobs(age)`: deletes `done`/`dead` jobs finished longer ago
-    than `age` (at least a day; the tick passes 30 days).
+    than `age` (at least a day; the tick passes 30 days). Every key to `job`
+    is ON DELETE SET NULL, so the rows that named a purged job stay with
+    `job_id` cleared; a table whose UPDATE trigger guards its outcome lets
+    that update through ([§ The job purge clears links](#the-job-purge-clears-links-148_job_purge_clears_linkssql)).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
@@ -2634,6 +2637,25 @@ functions and changes no table, policy or grant:
   exists, instead of putting the old creator back;
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
+
+### The job purge clears links (148_job_purge_clears_links.sql)
+
+The tick's `app_purge_jobs` deletes jobs finished more than 30 days ago,
+and every key to `job` clears the row's `job_id` (SET NULL). Until 148,
+`scenario_sweep_complete` and `seasonal_outlook_complete` refused that
+update (a complete row is "completed once and never changed"; a pending one,
+its job dead, is changed only by whoever asked, and the purge runs with no
+user), so the purge's DELETE rolled back once any sweep's or outlook's job
+was 30 days old, and from then on no job was cleaned up. 148 redefines both
+from 066 and changes no table, policy or grant: an update that only clears
+`created_by` or `job_id` (each unchanged or going to NULL, every other
+column unchanged) passes; water_app holds UPDATE on neither column, so only
+a key (or the schema owner) makes it, and any change to the outcome still
+meets the guard. `auto_calibration_update` (108) already let a cleared
+`job_id` through; `report` and `yield_result` have no UPDATE trigger.
+`catalogue.db.test.ts` `JOB_REFERENCES` lists every key to `job`, and each
+table with an UPDATE trigger names the DB test that ages its job past 30
+days and runs the purge.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 
