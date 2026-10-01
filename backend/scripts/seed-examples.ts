@@ -21,7 +21,6 @@
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
 // (several seconds). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
-import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { actAsUser, type Db, withoutUser, withUser } from '../src/db/tx.js';
 import { publishRun } from '../src/publish/publish.js';
@@ -33,6 +32,7 @@ import { buildExamples } from './examples/catchments.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { loadDevEnv } from '../src/config/devEnv.js';
 
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
@@ -234,8 +234,8 @@ async function seedApplication(project: { id: string; owner: string }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	// CLI only: importing this module must not load dev env (see scripts/migrate.ts).
-	config({ path: ['.env.development.local', '.env.development'] });
+	// CLI only: importing this module must not load dev env (the DB tests once ran against the dev database that way).
+	loadDevEnv();
 	seedExamples()
 		.then(() =>
 			console.log(

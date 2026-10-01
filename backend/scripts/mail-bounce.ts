@@ -11,9 +11,9 @@
 // (DATABASE_URL, as water_app, in the worker's own context). The person with
 // that address then sees the banner on their account and alert pages, and
 // their alert emails pause until they turn mail back on there.
-import { config } from 'dotenv';
 import { closePool } from '../src/db/pool.js';
 import { acceptMailEvent } from '../src/mail/suppression.js';
+import { loadDevEnv } from '../src/config/devEnv.js';
 
 /** The SES event-publishing record for one recipient, as the mail-events queue delivers it (SNS raw delivery). */
 export function simulatedSesEvent(email: string, kind: 'bounce' | 'complaint' | 'transient', now = new Date()): Record<string, unknown> {
@@ -57,7 +57,7 @@ async function main(argv: string[]): Promise<number> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	try {
 		process.exitCode = await main(process.argv.slice(2));
 	} finally {

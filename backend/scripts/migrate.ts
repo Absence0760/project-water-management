@@ -13,9 +13,10 @@
 // before checksums existed get theirs backfilled from the current file.
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), never as water_app.
-//   pnpm dev:db:migrate                     — dev database
-//   MIGRATION_DATABASE_URL=… tsx scripts/migrate.ts
-import { config } from 'dotenv';
+// The CLI is scripts/migrate-cli.ts, so this module (bundled into the migrate
+// Lambda) never reaches the dev env loader or dotenv:
+//   pnpm dev:db:migrate                     — this checkout's dev database
+//   MIGRATION_DATABASE_URL=… tsx scripts/migrate-cli.ts
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -245,22 +246,4 @@ export async function syncLanguages(client: pg.ClientBase, codes: readonly strin
 	if (!exists[0]?.ok) return [];
 	const { rows } = await client.query<{ code: string }>('INSERT INTO language (code) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING RETURNING code', [codes]);
 	return rows.map((r) => r.code);
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-	// Only the CLI loads dev env files. Importing this module (tests, the
-	// migrate Lambda) must never touch process.env — the DB tests once ran
-	// against the dev database because this lived at module top level.
-	config({ path: ['.env.development.local', '.env.development'] });
-	const url = process.env.MIGRATION_DATABASE_URL;
-	if (!url) {
-		console.error('MIGRATION_DATABASE_URL is not set');
-		process.exit(1);
-	}
-	migrate(url)
-		.then((applied) => console.log(applied.length ? `${applied.length} migration(s) applied` : 'schema up to date'))
-		.catch((err) => {
-			console.error(err.message);
-			process.exit(1);
-		});
 }

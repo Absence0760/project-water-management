@@ -174,7 +174,6 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'The runtime role password the migrate Lambda sets (sops db_app_password), from its runtime secret.',
 		checks: { migrate: appPassword }
 	},
-	MIGRATION_DATABASE_URL: { why: 'Read only by scripts/migrate.ts run as a CLI; the migrate Lambda passes its own URL.' },
 
 	// --- Email -----------------------------------------------------------------------------
 	MAIL_TRANSPORT: { why: 'log (the default) sends nothing; smtp is Mailpit.', checks: { api: oneOf('ses'), worker: oneOf('ses') } },
