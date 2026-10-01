@@ -17,7 +17,8 @@ browser ──HTTPS──► CloudFront (+ WAF rate limit) ── water-manageme
                      ├─ /*      → S3 (private, OAC)       static SvelteKit build
                      └─ /api/*  → Lambda Function URL      Hono backend
                                    (+ X-CloudFront-Shared-Secret header,
-                                    CachingDisabled, all methods, cookies forwarded)
+                                    CachingDisabled, all methods, cookies forwarded;
+                                    invoke mode RESPONSE_STREAM)
                                         │
                                         ├─► RDS PostgreSQL 17 (private subnets; migrate Lambda applies migrations)
                                         ├─► SES API via VPC endpoint (verification / reset / invite email)
@@ -839,6 +840,75 @@ only where the package is installed. A static import would crash the Lambda
 at load (issue #126: the first version checked only the inputs, so it could
 never fire). Each guard first checks the metafile names the bundle's entry
 point and an output, so a missing or reshaped metafile fails the build.
+
+### Response streaming
+
+The API's Function URL is in **`RESPONSE_STREAM`** mode (`infra/lambda.tf`,
+WP-1.29a, issue #283), and `backend/src/lambda.ts` exports the matching
+streaming handler (`backend/src/http/lambdaStream.ts`). A buffered URL stops
+every response at 6 MB, which a farm's daily CSV (≈ 400 KB a year) passes at
+about 15 years; a streamed one goes to 200 MB. The CSV downloads stream,
+capped at 50 MB ([api.md § Export](./api.md#export)); every other route
+answers one JSON chunk as before. Locally the Node server streams the same
+`Response` the same way, so there is no mode to switch in dev.
+
+- **The handler and the URL change together.** A streaming handler behind a
+  `BUFFERED` URL, or the old buffered one behind a streaming URL, breaks
+  every API request (the prelude, or the result object, is read as the
+  body). On the first deploy both arrive together. Anywhere already running
+  the buffered pair, apply the Terraform change and run the backend deploy
+  back to back, and expect the API to be down between them. The same holds
+  in reverse: see § Rollback. `backend/src/http/lambdaStream.test.ts` fails
+  if `lambda.ts` and `lambda.tf` disagree, and `infra/tests/edge.tftest.hcl`
+  pins the mode.
+- **What doesn't change.** The CloudFront shared-secret check is the app's
+  first middleware, so a direct call to the URL still gets `403`
+  (`postapply-check.sh` checks it). The WAF inspects requests, not
+  responses. CloudFront passes a chunked origin response through on
+  `/api/*` (`CachingDisabled`, so nothing is stored or compressed), and its
+  35 s origin read timeout, also the longest wait between packets, stays
+  above the Lambda's 30 s. Status, headers and each `Set-Cookie` travel in
+  the stream's prelude, and a body-less response (sign-out's `204`) still
+  writes once, since a streamed URL response with nothing written stays
+  open until the function times out.
+- **Pacing.** Past its first 6 MB a stream runs at about 2 MB/s, so a 50 MB
+  CSV takes ~25 s, inside the 30 s timeout. That is why the cap isn't
+  higher; raise the timeout with it. The CSV is measured and loaded inside
+  the route's transaction and written after it ends, so a slow download
+  holds no database connection, but it does hold one of the API's reserved
+  concurrent executions (10 by default) while it runs. Lambda keeps
+  streaming, and billing, even if the client goes away.
+- **A failure partway** fails the invocation (the `Errors` alarm counts it)
+  and cuts the response off, so the browser reports a failed download
+  rather than saving a short file. Hono's own `streamHandle` writes
+  "Internal Server Error" after the bytes sent and ends normally, which is
+  why the adapter is the app's own.
+- **Why the whole API, not a separate export function.** A second function
+  with its own streaming URL, and CloudFront behaviours routing the export
+  paths to it, would keep sign-in and every JSON route on the buffered path
+  and give exports their own concurrency. It was not taken: it doubles the
+  API's infrastructure (function, role, runtime secret, log group, alarms,
+  deploy step, a second public URL behind the shared secret), its
+  CloudFront path patterns become a second router that can drift from
+  Hono's (a new export route would silently stay buffered), and it would
+  still be a VPC function with the same database connections. The cost of
+  one streamed API is the adapter, which `lambdaStream.test.ts` runs every
+  route shape through (the shared secret, cookies, empty bodies, error JSON,
+  a CSV past 6 MB). If exports ever need their own concurrency, or files
+  past what 30 s carries, the next step is WP-1.29 option (b): write the
+  file to S3 and hand out a signed URL, the reports' pattern (§ Reports).
+- **Check it after the first deploy** (WP-1.29's acceptance criteria, open
+  in [followups.md](./followups.md)): sign in and out through the site;
+  download a farm's daily CSV of over 12 MB through CloudFront (a long run's
+  farm, Runs tab, Download, with no window) and check its last row is the
+  run's last day; then `curl -sS -o /dev/null -w '%{http_code}\n'` the
+  Function URL directly and expect `403`. AWS's streaming page says
+  function URLs "do not support response streaming within a VPC
+  environment"; read with its example (a client inside a VPC), that is about
+  the caller, not a VPC-attached function behind a public URL, but only this
+  check settles it. If the download fails, put the URL back to `BUFFERED`
+  and `lambda.ts` back to a buffered adapter in one release, and build
+  option (b).
 
 ### Releasing
 
@@ -1704,7 +1774,10 @@ Every step is an ordinary app action by an owner unless it says "operator".
   preflight (without the "newer than" rule) and the same approval:
   `gh workflow run deploy-backend.yml -f tag=backend@0.1.0`, or
   `gh workflow run deploy-frontend.yml -f tag=web@0.1.0`. The artifacts that
-  shipped are also attached to each Release.
+  shipped are also attached to each Release. A backend tag from before
+  response streaming (WP-1.29a) exports a buffered handler, so rolling back
+  past it also needs the Function URL put back to `BUFFERED` in Terraform,
+  applied back to back with the deploy (§ Response streaming).
 - **Database:** migrations are forward-only, so a backend rollback runs old
   API code against the current schema. That is safe only because migrations
   are expand/contract. To undo a migration, ship a new one. For data loss,

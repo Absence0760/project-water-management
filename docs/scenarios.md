@@ -214,8 +214,9 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
 (`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`), and
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
-`fullAllocation`: a full-allocation scenario on a base run is the "every
-registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
+`fullAllocation`: a full-allocation scenario on a base run is the "if every
+registered or licensed volume were taken in full" background (a registration
+is not an entitlement), [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
 and from engine 1.54.0 (WP-3.8) `droughtRestriction`: the drought
 restriction rule, whole (review and lift dates, levels with a threshold and
 a % cut per part of demand), or `null` for off, checked by the engine's

@@ -5535,8 +5535,9 @@ volume to match it"), or matched to a unit the run doesn't have. A run made
 with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
 says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
-full allocation ("… what the river would look like if every registered user
-took their entitlement, not what they take").
+full allocation ("… what the river would look like if every registered or
+licensed volume were taken in full (a registration is not an entitlement), not
+what the units take").
 In a cap run the picked unit's card says, per capped source under its water
 years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
 days the cap held use back and by which limit (the volume used up, the
@@ -6631,9 +6632,10 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail pinned to the column's right edge instead). A
-  guide spans the Help column like the overview (issue #162): body text,
-  notes and lists keep a 44rem reading measure, while diagrams, picture
-  tours, formulas and the terms table take the column's whole width (a
+  guide spans the Help column like the overview (issue #162), and so do
+  its body text, notes and lists (no 44rem measure since 2026-09-30, which
+  left half the column empty beside the figures), along with diagrams,
+  picture tours, formulas and the terms table (a
   diagram is drawn at most 1.3 times its viewBox width, centred, so a small
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
