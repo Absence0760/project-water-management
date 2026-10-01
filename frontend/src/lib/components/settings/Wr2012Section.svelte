@@ -4,11 +4,17 @@
 	how runs compare with it. Bind `value` (settings.wr2012); `error` is set
 	while anything would be rejected, so the parent form can block saving.
 -->
+<script module lang="ts">
+	// "Propose from the map" (issue #288) is its own chunk, fetched when asked for: the Settings tab's chunk stays as it was.
+	const loadProposal = () => import('./QuaternaryProposal.svelte');
+</script>
+
 <script lang="ts">
 	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, wr2012Errors, type Wr2012Draft } from './wr2012';
@@ -17,16 +23,20 @@
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
+		projectId = null,
 		modelAreaKm2
 	}: {
 		value: Wr2012Settings;
 		error?: string | null;
 		readonly?: boolean;
+		/** For "Propose from the map" (the quaternary lookup, issue #288); without it the form is typed only. */
+		projectId?: string | null;
 		/** The modelled catchment's area (km²), for the scaling preview. */
 		modelAreaKm2: number;
 	} = $props();
 
 	const uid = $props.id();
+	let proposing = $state(false);
 	// The form edits a draft whose numbers may still be blank.
 	const ref = $derived(value.reference as Wr2012Draft | null);
 	const errors = $derived(wr2012Errors(value));
@@ -72,7 +82,7 @@
 	<p class="hint muted">
 		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
 		<strong>simulated natural flow</strong> (before hydrological units and dams take any water) with it, scaled to the modelled catchment. The numbers are
-		yours to enter; the app doesn’t ship WR2012 data.
+		yours to enter (or to take, one by one, from the quaternary under a point on the map, when a quaternary dataset is loaded); the app doesn’t ship WR2012 data.
 	</p>
 	<label class="check">
 		<input type="checkbox" disabled={readonly} checked={ref !== null} onchange={(e) => setEnabled(e.currentTarget.checked)} />
@@ -80,6 +90,20 @@
 	</label>
 
 	{#if ref}
+		{#if projectId && !readonly}
+			{#if proposing}
+				<Lazy load={loadProposal}>
+					{#snippet children(QuaternaryProposal)}
+						<QuaternaryProposal {projectId} bind:ref={() => ref!, (v) => (value.reference = v as unknown as Wr2012Settings['reference'])} />
+					{/snippet}
+				</Lazy>
+			{:else}
+				<p class="propose">
+					<button type="button" class="btn btn-sm" onclick={() => (proposing = true)}>Propose from the map</button>
+					<span class="hint muted">Look up the quaternary under a point and use its reference values one by one.</span>
+				</p>
+			{/if}
+		{/if}
 		<div class="fields">
 			<div class="field">
 				<label for="{uid}-q">Quaternary catchment</label>
@@ -375,6 +399,13 @@
 	.err {
 		color: var(--danger);
 		font-size: 0.8rem;
+	}
+	.propose {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+		margin: 0.75rem 0;
 	}
 	h2 :global(.helptip),
 	legend :global(.helptip) {

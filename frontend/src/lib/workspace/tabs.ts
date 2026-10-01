@@ -19,6 +19,8 @@ export type TabGroup = 'core' | 'inputs' | 'assess';
 export const TAB_GROUP = {
 	overview: 'core',
 	network: 'inputs',
+	// The catchment map (issue #288, WP-3.12): the boundary, parcels, dams and gauges on a basemap, and areas from polygons.
+	map: 'inputs',
 	crops: 'inputs',
 	transfers: 'inputs',
 	series: 'core',
@@ -54,6 +56,7 @@ export type TabId = keyof typeof TAB_GROUP;
 export const TAB_LABELS: Record<TabId, string> = {
 	overview: 'Summary',
 	network: 'Network',
+	map: 'Map',
 	crops: 'Crops & demand',
 	transfers: 'Transfers',
 	series: 'Data',
@@ -72,6 +75,16 @@ export const TAB_LABELS: Record<TabId, string> = {
 
 /** Every known tab, in workflow order. */
 export const ALL_TABS = Object.keys(TAB_GROUP) as TabId[];
+
+/**
+ * Tabs reached from a link on another page rather than listed in the sidebar:
+ * the Map (issue #288), opened from the Network's header and from Settings →
+ * WR2012 check. The sidebar is budgeted to fit every section at 1440 × 960
+ * with one row to spare (app-sidebar.spec.ts), and the Map is a view of the
+ * network, not a step of its own. While one is open the sidebar shows it in
+ * its place (stripTabs), so you can see where you are.
+ */
+export const LINKED_ONLY: readonly TabId[] = ['map'];
 
 /** The tab that can never be hidden: the project's landing page. */
 export const ALWAYS_SHOWN: TabId = 'overview';
@@ -124,6 +137,7 @@ function groupOf(id: string): TabGroup {
  * The tabs to show, in the order of `rendered` (the tabs the page renders,
  * all known tabs by default). Owners and editors see every tab. A viewer sees
  * the core tabs, plus the model inputs when `prefs.showModelInputs` is on.
+ * A LINKED_ONLY tab is never in the list (it opens from its links).
  * Anyone else (a farmer, whom the workspace redirects to the farm view, an
  * applicant, whom it shows the Applicant view, or no role yet) sees Overview
  * only. Then the sections the person hid themselves (`prefs.hidden`) go.
@@ -143,6 +157,7 @@ export function visibleTabs<T extends string = TabId>(
 	const hidden = prefs.hidden ?? [];
 	return rendered.filter((id) => {
 		if (id === ALWAYS_SHOWN) return true;
+		if ((LINKED_ONLY as readonly string[]).includes(id)) return false;
 		if (hidden.includes(id)) return false;
 		const g = groupOf(id);
 		return g === 'inputs' ? seesInputs : g === 'assess' ? assesses : seesCore;
@@ -199,7 +214,7 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
  */
 export const NAV_SECTIONS = [
 	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
-	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+	{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
 	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 

@@ -124,7 +124,10 @@ The checklist for these is issue #62; the history scrub is #63.
       [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
       changed, why, and § 6: what stays open for a lawyer, tracked in
       [legal-status.md](./legal-status.md) under Counsel review; the go-live
-      gates and pre-fee items are issue #103).
+      gates and pre-fee items are issue #103; its known-defect procedure is
+      built, 2026-10-01:
+      [legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+      awaiting counsel review with the rest).
 
 - [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
@@ -3432,6 +3435,46 @@ from the WP:
       phone, the first ten rows until Show all), and both charts carry a
       screen-reader description counting the whole years above the band
       ([ui.md § Allocations](./ui.md#allocations-taballocations)).
+
+## Catchment map (issue #288)
+
+Phases 1–2 of WP-3.12 landed (2026-10-01: migration 152, `backend/src/geo/`,
+the Map tab, Settings → WR2012 check → Propose from the map;
+[maps.md](./maps.md)). Left, from the WP and the issue:
+
+- [ ] **Shapefile import** (zipped `.shp`/`.dbf`/`.prj`, parsed in the browser
+      with `shpjs`, reprojected from the `.prj` with proj4, Hartebeesthoek94
+      Lo zones; an unknown projection refused). Today the form turns a
+      `.zip`/`.shp` away with how to export GeoJSON in EPSG:4326 from QGIS.
+      Needs the zip-bomb test and the "Lo projection within 0.5 % of a
+      reference area" acceptance test. Trigger: a client holding only
+      shapefiles.
+- [ ] **Production basemap**: the PMTiles file in S3 under `tiles/`, a
+      same-origin CloudFront behaviour `/tiles/*` (Range and `ETag`
+      forwarded, long cache), `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles`
+      in the web release, and `infra/scripts/check-csp.mjs` run on it. Until
+      then production draws the plain background. Decide D7 (maxzoom, by the
+      measured extract size) first.
+- [ ] **Loading the quaternary dataset in production**: the loader runs as
+      the schema owner from a workstation; the database is in a private VPC.
+      Add a one-off path (a migrate-Lambda-style invocation, or a job reading
+      the operator's file from the private bucket). Blocked on the WR2012
+      licence decision below.
+- [ ] **Decision: WR2012's licence terms** (operator; maps.md § Quaternary
+      dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
+      WR2012 values are loaded only from the operator's own registered
+      download, never committed or shipped.
+- [ ] **Contributor-owned features** (WP-3.3 × WP-3.12): `map_feature.scenario_id`
+      so an applicant places their own scenario's features, with the RLS
+      the WP describes. Today only editors write; farmers and applicants
+      read (RLS) but no route serves them.
+- [ ] **Feeds from the boundary** (WP-2.10 × WP-3.12, S): polygon-based
+      CHIRPS extraction from the `catchment_boundary` feature in place of the
+      bounding box (`backend/src/feeds/`).
+- [ ] **Drawing polygons on the map** (D9 (b)): only upload and point
+      placement now; full drawing if hydrologists ask.
+- [ ] **Dam polygons → the area–volume curve**: a dam polygon's area is
+      measured but not proposed to the dam's full-supply area yet.
 
 ## Crop factors (issue #54 item 1)
 

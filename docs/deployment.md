@@ -1525,6 +1525,25 @@ first deploy):
 - **Cost:** a PDF is ~1 MB kept for 10 years, ≈ $0.0003/month each at S3
   Standard (orphans included); the S3 interface endpoint ~$7.30/month idle.
 
+## The Map tab
+
+The Map tab (issue #288, [maps.md](./maps.md)) needs nothing deployed to
+work: features, uploads, areas and the lookup run on the API and RDS as
+they are. Two pieces are not deployed yet, each in
+[followups.md § Catchment map](./followups.md#catchment-map-issue-288):
+
+- **Basemap**: `PUBLIC_TILES_URL` is empty in `frontend/.env.production`, so
+  production draws the plain background. Serving one means the PMTiles file
+  in S3 under `tiles/`, a same-origin CloudFront behaviour `/tiles/*` (Range
+  and `ETag` forwarded, long cache) and the URL in the web release; the CSP
+  needs no change (`connect-src 'self'`, `worker-src 'self'`).
+- **Quaternary dataset**: `quaternary_reference` is empty in production
+  until the operator loads one, so the lookup says no dataset is loaded.
+  There is no production loading path yet, and WR2012's licence terms are a
+  decision to check first. Never load the synthetic dataset into
+  production: its values are invented (the app marks them, but they have no
+  place there).
+
 ## Runbooks
 
 Step 2 operations (roadmap [step-2 § 8](./roadmap/step-2-shared-catchment.md#8-cost-and-operations)).

@@ -2355,6 +2355,62 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   capacity marked "this dam"). A curve whose yield falls somewhere as the dam
   grows carries a warning saying why that can be real.
 
+## Map (`?tab=map`)
+
+Issue #288, roadmap WP-3.12 phases 1–2 (`lib/components/map/`, a lazy tab
+opened from the Network header's **Map** link (and Settings → WR2012
+check), not listed in the sidebar (`LINKED_ONLY` in `lib/workspace/tabs.ts`:
+the sidebar is budgeted to fit every section with a row to spare); while it
+is open the sidebar shows it after the Network; [maps.md](./maps.md) has the
+tiles, uploads, areas and the quaternary lookup). A model-input tab: owners
+and editors see it, viewers behind "Show model inputs" (or from a link) and
+without edit tools. The Network's own picture (its "Catchment map" card) stays the schematic;
+this is the geography.
+
+- **Map** (left; full width under 900 px, 50 vh on a phone): the catchment
+  boundary (long dashes, the thickest line), farm parcels (solid outline,
+  light fill), dams (blue), rivers (blue lines), other features (dotted), and
+  points as 28 px buttons told apart by shape (▲ gauge, ● dam, ◆ other), each
+  with a casing that keeps it at least 3:1 against the basemap in light and
+  dark (mapStyle.test.ts checks the colours). Clicking a feature selects it.
+  The canvas is focusable (arrow keys pan, + and − zoom) with a visible focus
+  ring; zoom buttons top right; attribution always expanded when there is a
+  basemap. **Show everything** frames every feature. MapLibre loads only when
+  the map is drawn (`CatchmentMap.svelte`, its own chunk, then
+  `maplibre.ts`). Without WebGL the map says it can't be drawn and that the
+  list does everything; with no basemap configured (`PUBLIC_TILES_URL`
+  empty, the default) a line says the features are on a plain background;
+  when the tiles can't be read, the map drops them and says so.
+- **Features** (right, or below on a phone): every feature by name, kind and
+  size or position, and the node it stands for. Selecting one frames it on
+  the map (instantly under `prefers-reduced-motion`) and marks it in the list
+  and the table.
+- **Every feature** (table): name (selects it), kind, area or position,
+  **Stands for** (a select of the nodes of fitting kinds, editors), **Area
+  into the model** (editors, polygons): a hydrological unit (the linked farm
+  by default) and **Use 9.257 km²**, which asks first ("Set Upper farm’s area
+  from the map?", the old and new area) and then saves the area to the model,
+  recorded in History with the feature named; disabled while the model has
+  unsaved edits (a line says why) and reading **In use** when that feature's
+  area is the unit's. **Delete** asks first.
+- **Where each hydrological unit’s area came from**: each farm's area,
+  *typed* or **From the map** with the feature (or "a feature since
+  deleted"), and a link to Settings → WR2012 check.
+- **Upload a GeoJSON file** (editors): what the file holds (catchment
+  boundary, farm parcels, dams, gauges, rivers, other, each with what it
+  takes), the file (WGS84, at most 5 MB; a `.zip`/`.shp` is turned away with
+  how to export GeoJSON from QGIS), **Upload**. A refused file lists every
+  problem by feature ("Feature 1 has a coordinate … the file looks projected
+  …; reproject it to WGS84 (EPSG:4326).") and imports nothing.
+- **Place a point** (editors): kind (gauge, dam, other), name, latitude and
+  longitude in decimal degrees ("-33.61" or "33.61 S", a decimal comma
+  taken), and what it stands for. Errors show under each field on submit.
+- **Imported files**: each file with its feature count, date, who imported
+  it and its SHA-256.
+- Empty state: "No catchment boundary yet. Upload a catchment boundary
+  (GeoJSON, in WGS84) below …". Axe-scanned light, dark and on a phone
+  (`e2e/tests/catchment-map.spec.ts`).
+
 ## Crops & demand
 
 The answers first, the crop grids one click away (issue #17, option A · A3;
@@ -3713,6 +3769,16 @@ which checks every catchment tab).
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
   inverted band) show next to the field and block Save; the save bar links
   to the WR2012 group.
+  **Propose from the map** (editors; issue #288, [maps.md § Quaternary
+  lookup](./maps.md#quaternary-lookup); `QuaternaryProposal.svelte`, its own
+  chunk) looks up the quaternary at a point (the catchment boundary's centre,
+  a gauge on the map, or typed coordinates) in the loaded quaternary dataset
+  and lists its values (code, area, MAP, MAR, period, monthly means, source)
+  beside what the form holds, each with **Use** (or *Same* / *Used*, or *Not
+  in the data*). A used value goes into the form only; Save keeps it. A
+  proposal from the committed synthetic dataset carries a warning that its
+  values are invented; with no dataset loaded, or no quaternary at the point,
+  it says so.
 - **Flow share between hydrological units**: the method, and the **High/low
   MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
   is *High/low MAP split*, the one method that reads it (issue #174); under
@@ -4363,7 +4429,11 @@ read it before.
   together sit together:
   1. **Summary**. The run header carries the evidence line and a one-line
      preview of the run's notes (`notesPreview`), each a link to the Record
-     group. The summary opens with the run's warnings in two parts
+     group, and, for a run a known engine bug may affect (issue #103), an
+     amber **May be affected by a known bug** (or *by n known bugs*) badge
+     that opens its validation statement (also when loaded as a
+     `#res-validation` link), whose errata table says when each bug
+     changes results. The summary opens with the run's warnings in two parts
      (`runs/credibility.ts` `warningGroups`): **things to check before relying
      on this run** (a warning box; any warning not known to be a data note
      lands here, so a new engine warning is never hidden), then, collapsed,
@@ -4437,7 +4507,10 @@ read it before.
   ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
-  can't be re-run from them, Workbook comparison). Pin and
+  can't be re-run from them, **May be affected** for a run whose engine (or
+  its fit's) had a known bug, its errata ids in the tooltip (mouse only, as
+  the other tags; the header badge says it in words), Workbook
+  comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -7537,7 +7610,7 @@ the catalogue, [§ Language](#language)); both unit-tested.
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing. Under the rules, **Was it
-  useful?** (`alerts/AlertFeedbackSummary.svelte`, 147, issue #74): what
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
   people answered to "Was this alert useful?" over the last year, one line
   per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
   most answered first), then **Comments** (the newest 50, each with its

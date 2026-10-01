@@ -674,6 +674,15 @@ export interface RunMeta {
 	 * from an older API (= manual).
 	 */
 	trigger?: RunTrigger;
+	/** The engine of the automatic fit its parameters came from (settings.fitRecord); null for entered parameters. Absent from an older API. */
+	fitEngineVersion?: string | null;
+	/**
+	 * The known engine bugs that may affect it (issue #103, docs/engine-errata.md):
+	 * the ids of the errata whose range holds its engine, or its fit's for a `fit`
+	 * erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
+	 * from an older API.
+	 */
+	errata?: string[];
 }
 
 export type RunTrigger = 'manual' | 'auto' | 'forecast';
@@ -2261,4 +2270,102 @@ export interface YieldResult {
 	engineVersion: string;
 	createdBy: string | null;
 	createdAt: string;
+}
+
+// --- Catchment map (issue #288, WP-3.12; docs/api.md § Catchment map, docs/maps.md) ---
+
+/** Mirrors backend geo/routes.ts MAP_FEATURE_KINDS (and 152's CHECK). */
+export type MapFeatureKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
+export type MapPosition = [number, number];
+/** GeoJSON geometry as the server stores it: WGS84 longitude/latitude, 2D. */
+export type MapGeometry =
+	| { type: 'Point'; coordinates: MapPosition }
+	| { type: 'LineString'; coordinates: MapPosition[] }
+	| { type: 'MultiLineString'; coordinates: MapPosition[][] }
+	| { type: 'Polygon'; coordinates: MapPosition[][] }
+	| { type: 'MultiPolygon'; coordinates: MapPosition[][][] };
+
+/** One feature on the map (GET /projects/:id/map/features). */
+export interface MapFeature {
+	id: string;
+	kind: MapFeatureKind;
+	name: string;
+	nodeId: string | null;
+	nodeName: string | null;
+	geometry: MapGeometry;
+	properties: Record<string, string>;
+	/** Geodesic area of a polygon, m², computed on the server; null for points and lines. */
+	areaM2: number | null;
+	/** A point at its middle (lon, lat). */
+	center: MapPosition;
+	sourceId: string | null;
+	createdBy: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface MapSource {
+	id: string;
+	fileName: string;
+	sha256: string;
+	crs: string;
+	importedAt: string;
+	importedBy: string | null;
+	features: number;
+}
+
+/** A node and where its area came from (152 node.area_source). */
+export interface MapNodeArea {
+	id: string;
+	name: string;
+	kind: 'farm' | 'gauge' | 'user';
+	areaKm2: number;
+	areaSource: 'typed' | 'map';
+	areaFeatureId: string | null;
+}
+
+export interface MapFeatureList {
+	features: MapFeature[];
+	sources: MapSource[];
+	nodes: MapNodeArea[];
+	/** The quaternary datasets loaded (empty: the lookup has nothing to propose from). */
+	quaternaryDatasets: { dataset: string; count: number }[];
+}
+
+/** POST/PATCH …/map/features: a point from the coordinates form, or a geometry. */
+export interface MapFeatureInput {
+	kind?: MapFeatureKind;
+	name?: string;
+	nodeId?: string | null;
+	lon?: number;
+	lat?: number;
+	geometry?: MapGeometry;
+}
+
+/** One problem in an imported file (422 `details`): the feature's place from 1, or null for the file. */
+export interface MapImportProblem {
+	feature: number | null;
+	message: string;
+}
+
+/** The reference values the quaternary at a point proposes (GET …/map/quaternary). Never applied by the server. */
+export interface QuaternaryProposal {
+	code: string;
+	dataset: string;
+	/** The repo's invented dataset: never real values. */
+	synthetic: boolean;
+	areaKm2: number | null;
+	mapMm: number | null;
+	marMm3: number | null;
+	monthlyMm3: number[] | null;
+	periodStart: number | null;
+	periodEnd: number | null;
+	source: string;
+	loadedAt: string;
+}
+
+export interface QuaternaryLookup {
+	point: MapPosition;
+	quaternary: QuaternaryProposal | null;
+	datasets: { dataset: string; count: number }[];
 }

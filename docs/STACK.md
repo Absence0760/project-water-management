@@ -40,7 +40,9 @@ sides share.
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot
-  charts, vitest. No spreadsheet library ships: the `.xlsx` run export
+  charts, vitest. The Map tab draws with MapLibre GL (`maplibre-gl`, BSD-3) and
+  reads its self-hosted PMTiles basemap with `pmtiles`, both dynamic imports
+  that load only when the map is drawn ([maps.md](./maps.md)). No spreadsheet library ships: the `.xlsx` run export
   writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
   import reads workbooks with its own streaming reader
   (`lib/spreadsheet/import/`). SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) is a
@@ -89,7 +91,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic quaternaries, start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:run:frontend       # one side only
@@ -110,6 +112,7 @@ pnpm dev:mail:down | dev:mail:status | dev:mail:logs | dev:mail:open
 pnpm dev:mail:bounce <email> [--complaint | --transient]   # stand in for an SES bounce: pauses that account's alert emails (run-locally.md § Alerts)
 pnpm dev:s3:up              # MinIO: report PDFs (API :9002, console :9003, minioadmin / minioadmin)
 pnpm dev:s3:down | dev:s3:status | dev:s3:logs
+pnpm dev:tiles:fetch        # optional basemap for the Map tab: SA extract (pmtiles CLI) into MinIO; dev:tiles:status | dev:tiles:env (maps.md)
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
@@ -124,6 +127,8 @@ pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 ×
 pnpm test:backend:v8-osr    # does this Node still miscompile the pre-fix assurance loop (issue #232)? [--rev <rev>] [--node <bin>] [-- <V8 flags>]; alone, minutes, not in CI
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
+pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm setup runs it);
+                             # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
@@ -238,12 +243,13 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/engine-audit.md`: where and why the engine departs from the workbook (finding IDs); `docs/engine-review.md`: the earlier faithfulness review
 - `docs/upstream/`: bug reports drafted for upstream projects (the V8 Maglev OSR miscompile behind engine-audit.md V1, issue #232)
 - `docs/legal/disclaimer-review.md`: the report disclaimer, sign-off statement and farmer liability lines, quoted for the client's legal review (issue #47)
-- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
+- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
 - `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
+- `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, CSP
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)

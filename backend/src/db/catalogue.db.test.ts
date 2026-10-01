@@ -150,13 +150,16 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * written by the migration runner from the engine's language table
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
- * no caller can choose a recipient; alert feedback, written only by
- * 151_alert_feedback's, so no caller answers for someone else; and a pack's
- * server re-run outcomes, written only by its pack_reproduce job through
- * app_record_pack_reproduction (154_pack_reproduce), so no member can claim a
- * pack reproduced.
+ * no caller can choose a recipient; the same for a person's erratum notices
+ * and the record of which errata were swept (153_erratum_notices); alert
+ * feedback, written only by 151_alert_feedback's, so no caller answers for
+ * someone else; and a pack's server re-run outcomes, written only by its
+ * pack_reproduce job through app_record_pack_reproduction (154_pack_reproduce),
+ * so no member can claim a pack reproduced. The quaternary reference dataset is
+ * loaded by the operator as the schema owner (152_catchment_map.sql,
+ * `pnpm import:quaternaries`); the app only proposes from it.
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'pack_reproduction']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -194,6 +197,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'alert_delivery.user_id': 'cascade',
 	'alert_feedback.user_id': 'cascade',
 	'pack_notice.user_id': 'cascade',
+	// A person's known-engine-bug emails (153_erratum_notices).
+	'erratum_notice.user_id': 'cascade',
 	'alert_rule.created_by': 'set null',
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
@@ -208,6 +213,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'evidence_pack.created_by': 'set null',
 	'evidence_pack.issued_by': 'set null',
 	'farm_link.added_by': 'set null',
+	// A map feature and its import are the project's; who placed or imported them is cleared (152_catchment_map.sql).
+	'geo_source.imported_by': 'set null',
+	'map_feature.created_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',
@@ -395,7 +403,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice)', async () => {
+	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice, erratum_notice, erratum_sweep)', async () => {
 		for (const table of READ_ONLY) {
 			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
