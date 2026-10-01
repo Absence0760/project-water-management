@@ -3,7 +3,8 @@
 // § Share page): an editor makes a read-only link from an issued pack's own
 // page; someone outside opens it signed out on a phone and reads what the
 // verify page says plus the pack's own river figures, and no hydrological
-// unit's name; an NGO member signs in from the page and comments; the pack
+// unit's name; an NGO officer signs in from the page and comments (no role in
+// the project: a link participant, 166_public_participation); the pack
 // is then withdrawn, and the same link says so, and why, with no figure and
 // commenting closed, while the comment stays. The editor sees the comment in
 // the pack's notes. axe on the Share dialog, the shared pack (issued and
@@ -14,7 +15,7 @@
 // why; in CI it never skips.
 import type { APIRequestContext } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, nominateRun, PASSWORD, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { createRun, nominateRun, PASSWORD, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
@@ -77,7 +78,7 @@ test('an editor shares an issued pack; an NGO reads it signed out and comments; 
 	await updateSettings(page.request, project.id, { runoffModel: 'gr4j', ewrRules: [TABLE], evidenceUncertaintyRule: RULE });
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 	await nominateRun(page.request, project.id, baseline, 'Calibrated baseline for the pack share test');
-	await addMember(page.request, project.id, ngo.user.email, 'viewer');
+	// Not a member of the project: they comment through the link alone (166_public_participation).
 
 	// The ensemble the pack cites, run to the declared rule on River & reserve.
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
@@ -124,7 +125,7 @@ test('an editor shares an issued pack; an NGO reads it signed out and comments; 
 	await expectNoSidewaysScroll(shared);
 	await expectNoViolations(shared);
 
-	// A member signs in from the page, comes back to the same pack, and comments for public participation.
+	// They sign in from the page, come back to the same pack, and comment for public participation, with no role in the project.
 	await shared.getByTestId('share-sign-in').click();
 	await expect(shared).toHaveURL(/\/login/);
 	await shared.getByLabel('Email').fill(ngo.user.email);

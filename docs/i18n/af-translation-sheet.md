@@ -18,7 +18,34 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-2 strings: 0 on the site, 2 in emails, 0 in the glossary.
+13 strings: 11 on the site, 2 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### share.comments
+
+Shared application and shared evidence pack: the public comments box. Anyone with an account comments through the link (an NGO, a neighbour), without joining the catchment. A comment here is not a “written objection” under the National Water Act: only a written objection sent to the address in the application’s notice before its closing date keeps the right to appeal (s148(1)(f)); keep that force exactly. The tick box hands the commenter’s name and email to the applicant for the “register of interested and affected parties” the regulations (GN R267 reg 18) make the applicant keep. Keep “GN R267 reg 18”, “reg 19” and “s148(1)(f)” as they are. {date} is a date like “1 Dec 2026”.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `8f3489cb` | This link no longer takes comments. |  |  |
+| `ebaaeca5` | A comment here is not a written objection. |  |  |
+| `09aa1077` | To object, and to keep the right to appeal (National Water Act s148(1)(f)), write to the address in the application’s notice before its closing date. |  |  |
+| `6204d35f` | Written objections go to: |  |  |
+| `ccf63ea7` | Closing date for objections: {date} | Keep: {date} |  |
+| `9abf2b4d` | Shown with your name to everyone this page is shared with. Plain text. |  |  |
+| `51d2288c` | The applicant, the responsible authority that decides the application, and the public participation report the applicant gives it (GN R267 reg 19) receive your comment and your name. |  |  |
+| `333a2d46` | Give my name and email to the applicant for the register of interested and affected parties (GN R267 reg 18) |  |  |
+| `5c2fec15` | The applicant keeps that register while the application is considered and for two years after a licence is granted. Without the tick, the applicant gets your name and comment, not your email. |  |  |
+| `9ee9f497` | Commenting needs an account, so every comment has a name. You don’t need to be a member of the project: the account reads only what this link shows. |  |  |
+
+### error
+
+A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `2ae5aea1` | You have posted 10 comments in the last hour. Wait a while, then try again. |  |  |
 
 ## Emails
 

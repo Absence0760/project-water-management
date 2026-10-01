@@ -286,6 +286,8 @@ export interface Member {
 	role: Role;
 	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
 	party: string | null;
+	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
+	specialist: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -954,6 +956,12 @@ export interface Scenario {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/**
+	 * Where written objections go and by when, as the application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
+	 * 166_public_participation); null: not given. Set while a draft, frozen once submitted.
+	 */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -1440,7 +1448,23 @@ export interface ShareScenario {
 	base: SharedRun | null;
 	run: SharedRun | null;
 	/** Comments posted for public participation, oldest first; plain text. */
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** Where written objections go, when the applicant gave it (166). */
+	objection: ShareObjection | null;
+}
+
+/** A public comment as a share page shows it. */
+export interface SharedComment {
+	body: string;
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+}
+
+/** The application's notice details on a share page (166_public_participation); null fields when not given. */
+export interface ShareObjection {
+	address: string | null;
+	closingDate: string | null;
 }
 
 /** A band as a pack link shows it (backend share/links.ts SharedBand). */
@@ -1500,7 +1524,19 @@ export interface SharePack {
 		byMonth: { month: number; run: number | null; band: SharedBand | null }[] | null;
 		disclaimerVersion: string | null;
 	} | null;
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** For an application's pack, where written objections go, when given (166). */
+	objection: ShareObjection | null;
+}
+
+/** A draft pack the caller may sign as the application's appointed specialist (167_signers). */
+export interface SpecialistDraft {
+	id: string;
+	title: string;
+	version: number;
+	manifestSha256: string;
+	createdAt: string;
+	signoffs: number;
 }
 
 /** One pack of an application as its party sees it (131_applicant_packs; backend evidence/applicantPacks.ts). */
@@ -1647,6 +1683,8 @@ export interface NoteCreate {
 	/** An evidence pack: `team` or `public_participation` only (128). */
 	packId?: string;
 	visibility?: NoteVisibility;
+	/** A public comment only: give my name and email to the applicant for the I&AP register (GN R267 reg 18; 166). */
+	registerConsent?: boolean;
 }
 
 /** GET …/notes/:noteId/revisions: each earlier text of a scenario note, oldest first. */
@@ -1689,7 +1727,13 @@ export interface Signoff {
 	signedAt: string;
 	/** The caller signed it. */
 	mine: boolean;
+	/** `specialist`: the professional statement of whoever is responsible for the evidence; `review`: an authority-side reviewer's (167). */
+	kind: SignoffKind;
+	/** The host's check of the registration against the public register (167): bound at issue, else the current one; null: self-declared. */
+	registrationCheck: { checkedAt: string; checkedByOrg: string; bound: boolean } | null;
 }
+
+export type SignoffKind = 'specialist' | 'review';
 
 /** GET /projects/:id/runs/:runId/signoffs. */
 export interface SignoffList {
@@ -1705,6 +1749,8 @@ export interface SignoffList {
 /** GET /projects/:id/packs/:packId/signoffs: the pack statement in place of the run's (docs/api.md § Evidence packs). */
 export interface PackSignoffList extends Omit<SignoffList, 'statement'> {
 	statement: PackSignoffStatement;
+	/** The kinds the caller may sign as: an editor both, the applicant's specialist `specialist` only, anyone else none (167). */
+	kinds: SignoffKind[];
 }
 
 // --- Evidence packs (WP-3.14, issue #71, docs/evidence-pack.md, docs/api.md § Evidence packs) ---
@@ -1752,6 +1798,10 @@ export interface PackIssueChecks {
 	runsVerified: boolean;
 	/** No erratum found since the draft was made applies to its runs (errataFoundSince is empty); issue refuses otherwise (pack_errata_since_draft). */
 	errataRecorded: boolean;
+	/** The specialist signers of the current statement whose registration has no current check (167). */
+	registrationUnchecked?: string[];
+	/** Whether issue waits for those checks (the project's setting; 409 registration_not_checked otherwise). */
+	registrationCheckRequired?: boolean;
 }
 
 /** GET /projects/:id/packs/:packId. */
@@ -1835,6 +1885,10 @@ export interface PackVerification {
 		registrationField: string | null;
 		registrationNo: string;
 		signedAt: string;
+		/** Who signed as what (167); absent from an answer older than it. */
+		kind?: SignoffKind;
+		/** The check bound when the pack was issued; null or absent: the registration is self-declared (167). */
+		registrationCheck?: { checkedAt: string; checkedByOrg: string } | null;
 	}[];
 }
 
@@ -1850,6 +1904,67 @@ export interface SignoffRequest {
 	/** Every confirmation id of the statement. */
 	confirmed: string[];
 	statementSha256: string;
+	/** A pack only: `review` for an editor signing as the authority's reviewer (167); default `specialist`. */
+	kind?: SignoffKind;
+}
+
+/** The host's check of a member's registration against the public register (167; GET /projects/:id/registration-checks). */
+export interface RegistrationCheck {
+	id: string;
+	userId: string | null;
+	registrationBody: string;
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note: string;
+	/** The display name of the owner who recorded it. */
+	recordedBy: string | null;
+	recordedAt: string;
+}
+
+export interface RegistrationCheckRequest {
+	registrationBody: 'sacnasp' | 'ecsa';
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note?: string;
+}
+
+/** GET …/scenarios/:sid/participation-export (166): the reg 19 record of one application. */
+export interface ParticipationExport {
+	application: {
+		id: string;
+		name: string;
+		status: string;
+		submittedAt: string | null;
+		decidedAt: string | null;
+		outcome: string | null;
+		objectionAddress: string | null;
+		objectionClosingDate: string | null;
+	};
+	links: { target: 'application' | 'pack'; packVersion: number | null; createdAt: string; expiresAt: string; revokedAt: string | null }[];
+	comments: {
+		id: string;
+		target: 'application' | 'pack';
+		packVersion: number | null;
+		author: string | null;
+		email: string | null;
+		registerConsent: boolean;
+		viaLink: boolean;
+		createdAt: string;
+		editedAt: string | null;
+		state: 'shown' | 'withdrawn' | 'removed';
+		deletedAt: string | null;
+		body: string | null;
+		revisions: { body: string; writtenAt: string; editedAt: string }[];
+	}[];
+	register: { name: string; email: string }[];
 }
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---

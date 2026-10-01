@@ -115,6 +115,11 @@ import type {
 	ShareView,
 	ShareScenario,
 	SharePack,
+	SharedComment,
+	SpecialistDraft,
+	ParticipationExport,
+	RegistrationCheck,
+	RegistrationCheckRequest,
 	NoteRevision,
 	Team,
 	TeamMember,
@@ -483,6 +488,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Put an applicant in an applying party, or take them out (null); owners only. */
 			setParty: (id: string, userId: string, party: string | null) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
+			/** Appoint a party member its specialist, who signs its applications' packs, or end it (167); owners only, 409 without a party. */
+			setSpecialist: (id: string, userId: string, specialist: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { specialist }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -671,6 +679,17 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			report: (id: string, runId: string) =>
 				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
 		},
+		/** The host's checks of members' registrations against the public register (167, docs/api.md § Sign-offs). */
+		registrationChecks: {
+			/** The project's checks, newest first, and whether issuing waits for them (editor). */
+			list: (id: string) => request<{ checks: RegistrationCheck[]; required: boolean }>('GET', `${p(id)}/registration-checks`),
+			/** Record a check of a member's registration (owner). */
+			record: (id: string, userId: string, body: RegistrationCheckRequest) =>
+				request<{ check: RegistrationCheck }>('POST', `${p(id)}/members/${enc(userId)}/registration-checks`, body).then((r) => r.check),
+			/** Whether issuing a pack waits for each specialist signer's check (owner). */
+			setRequired: (id: string, required: boolean) =>
+				request<{ required: boolean }>('PUT', `${p(id)}/registration-check-required`, { required }).then((r) => r.required)
+		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
 			list: (id: string, runId: string) => request<SignoffList>('GET', `${p(id)}/runs/${enc(runId)}/signoffs`),
@@ -821,7 +840,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** A scenario link (WP-3.15), signed out; 404 for any dead link. */
 			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token }),
 			/** An evidence pack link (128): its figures while issued, else its standing; 404 for any dead link. */
-			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token })
+			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token }),
+			/**
+			 * A public comment through an application's or a pack's link, signed in, with no project role (166). 401 signed
+			 * out, 404 for a dead or closed link, 429 comment_throttled past 10 an hour.
+			 */
+			comment: (token: string, body: string, registerConsent: boolean) =>
+				request<{ comment: SharedComment }>('POST', '/share/comment', { token, body, registerConsent }).then((r) => r.comment)
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */
@@ -846,6 +871,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			list: (id: string) => request<{ scenarios: Scenario[] }>('GET', `${p(id)}/scenarios`).then((r) => r.scenarios),
 			/** An application's issued packs, newest first, for its parties (131; an applicant reads no pack row). */
 			packs: (id: string, sid: string) => request<{ packs: ApplicantPackMeta[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => r.packs),
+			/** The same, with the drafts the caller may sign as the application's appointed specialist (167; empty for anyone else). */
+			packsAndDrafts: (id: string, sid: string) =>
+				request<{ packs: ApplicantPackMeta[]; toSign?: SpecialistDraft[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => ({ packs: r.packs, toSign: r.toSign ?? [] })),
+			/**
+			 * The application's public comments for the applicant's reg 19 report (166): its owner and the editors; 404 for
+			 * anyone else. `csvUrl` is the same as a CSV download, one row per text.
+			 */
+			participationExport: (id: string, sid: string) => request<ParticipationExport>('GET', `${p(id)}/scenarios/${enc(sid)}/participation-export`),
+			participationCsvUrl: (id: string, sid: string) => `${base}${p(id)}/scenarios/${enc(sid)}/participation-export?format=csv`,
 			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
 			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
@@ -862,6 +896,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					purposeAndNeed?: string;
 					mitigation?: string;
 					monitoring?: string;
+					/** Where written objections go and by when, as the notice gives them (166): a draft application's only; null clears. */
+					objectionAddress?: string | null;
+					objectionClosingDate?: string | null;
 					ops?: ScenarioOp[];
 					ownedNodeIds?: string[];
 					status?: ScenarioStatus;
