@@ -133,7 +133,8 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 
 - farm: `name`; land `areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`;
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
-  `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent`,
+  `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
+  from engine 1.63.0),
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
   `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
@@ -167,15 +168,18 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   applicant's proposal on their own farm. "Pump only above 300 m³/day" is
   `handsOffM3Day` → twelve 300s.
 
-  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md), pending
-  the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
+  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
+  provisional decision 2026-10-01, to be confirmed by the client's
+  hydrologist, issue #90). A `damCapacityM3` op that resizes an existing dam (from
   and to a capacity above 0) resizes its geometry along the dam's own
   area–volume relation, as the storage–yield curve does: a power-law dam's
-  `damAreaFullM2` (as entered, or the capacity ÷ 3 m estimate) becomes
+  `damAreaFullM2` (as entered, or the 7.2 × capacity^0.77 estimate, engine
+  ≥ 1.63.0; capacity ÷ 3 m before) becomes
   A_full × (new ÷ old)^b with its own `damAreaExponent`; a survey curve is
   cut at its top × the ratio, or extrapolated beyond the survey to it
   (a power law through its top two rows). The op's note says what changed
-  (`dam area when full 33333 → 54150 m² …`, or that the curve was
+  (`dam area when full 50972 → 82804 m² …` for an unknown-area
+  100 000 m³ dam doubled, or that the curve was
   extrapolated); it is left out for a node the caller can't see. A later
   `damAreaFullM2` op on the node sets the enlarged dam's own area; one before
   the capacity op describes the dam at its old size and is resized with it.
@@ -837,12 +841,22 @@ cumulativeImpact(baseline, singles, combined): CumulativeReport
   the dry run, drafts and other bases refused, RLS with a positive control,
   copied ops, write-once, a deleted team scenario).
 
+### The evidence report reads it
+
+Page 1's row over the other applications (C26, report format
+`evidence-11`) reads a completed assessment of exactly the report's
+application and every other submitted or approved one on its baseline, with
+their current ops, made on the baseline run's engine (so its baseline
+figure is the report's own; one on another engine is named with why it
+isn't read): the combined change and the interaction at the outlet.
+Without one the report checks the combination itself (`checkCombination`,
+no model run) and names any conflict, or says the applications haven't been
+assessed together ([evidence-pack.md § The other applications
+together](./evidence-pack.md#the-other-applications-together)). Tests:
+`evidence/report-combined.db.test.ts`.
+
 ### Not yet
 
-- The **evidence report's cumulative row** (C26, `evidence/report.ts`
-  `cumulativeOf`) still sums other applications' separate runs and says so;
-  reading a combined run instead (its trigger was this work package) is
-  tracked in [followups.md](./followups.md).
 - **Yield and reliability per dam** together (WP-3.6's yield on the combined
   input), and a **full-allocation background** (WP-3.10) as the baseline
   column, are not in the report yet ([followups.md](./followups.md)).

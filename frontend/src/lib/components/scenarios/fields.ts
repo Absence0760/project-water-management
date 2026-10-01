@@ -134,7 +134,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damCapacityM3: { label: 'Dam capacity', spec: num('m³') },
 	damInitialPct: { label: 'Dam level at the start', spec: pct() },
 	damMinPct: { label: 'Dam minimum operating level', spec: pct() },
-	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (capacity ÷ 3 m)' }) },
+	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (7.2 × capacity^0.77)' }) },
 	damAreaExponent: { label: 'Dam area exponent', spec: num('') },
 	damSeepagePerDay: { label: 'Dam seepage per day', spec: pct() },
 	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/day') },

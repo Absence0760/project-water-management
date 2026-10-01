@@ -412,7 +412,7 @@ describe('diffInputs', () => {
 		f.damAreaFullM2 = null;
 		f.damSeepagePerDay = 0.002;
 		expect(texts(a, b)).toEqual([
-			'Rooikloof: dam area when full 0 m² → estimated (capacity ÷ 3 m)',
+			'Rooikloof: dam area when full 0 m² → estimated (7.2 × capacity^0.77)',
 			'Rooikloof: dam seepage per day 0% → 0.2%',
 			'Dam evaporation factor (× A-pan): 0.75 → 0.6'
 		]);

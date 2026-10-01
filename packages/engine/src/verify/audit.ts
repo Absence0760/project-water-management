@@ -163,6 +163,8 @@ export interface AuditRun {
 	days: number;
 	/** Run days whose A-pan came from a daily series (RunSummary.apanDaily.dailyDays); 0 or absent without one. */
 	apanDailyDays?: number;
+	/** The engine that saved the run (an unknown dam's estimated area changed in 1.63.0); absent = this engine. */
+	engineVersion?: string;
 	/** The farm's stored series by key. */
 	farm: ReadonlyMap<string, ArrayLike<number | null>>;
 	/** The catchment's stored series by key (rain_final). */
@@ -249,7 +251,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	const days = run.days;
 	const series = (k: string) => run.farm.get(k)!;
 	const day0 = toEpochDay(run.startDate);
-	const { areaFull, b, seep, seepReturn } = damWorkings(n);
+	const { areaFull, b, seep, seepReturn } = damWorkings(n, run.engineVersion);
 	const e = runEfficiency({ settings: run.settings, model }, n);
 	const lostShare = seepReturn < 1;
 

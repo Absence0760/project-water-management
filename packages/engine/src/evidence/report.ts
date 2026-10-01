@@ -32,6 +32,9 @@ import {
 	type EvidenceAllocationYear,
 	type EvidenceChange,
 	type EvidenceCheck,
+	type EvidenceCombined,
+	type EvidenceCombinedInput,
+	type EvidenceCombinedMeasure,
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
 	type EvidenceDemandObject,
@@ -391,9 +394,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired, change));
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
-	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
+	const cumulative: EvidenceCumulative = { ...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated), combined: combinedOf(a, input.combined) };
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
-	if (a) rows.push(cumulativeRow(cumulative));
+	if (a) rows.push(combinedRow(cumulative.combined!));
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : [])
@@ -1110,14 +1113,25 @@ export function driestMonth(site: Pick<EwrAssuranceSite, 'months' | 'byMonth'>):
 // § 4 Other users
 // ---------------------------------------------------------------------------
 
-/** What the cumulative row and table say they are (licensing authority: never read a sum as a combined run). */
-export const CUMULATIVE_BASIS = 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)';
+/** § 4's table of each other application's own run: what it says when there is none. */
 export const CUMULATIVE_NONE = 'None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.';
+
+/** What page 1's combined row is (evidence-11, finding C26): one run of every application together, never a sum. */
+export const COMBINED_BASIS =
+	'Days below the pragmatic EWR at the outlet: this application and every other submitted or approved one on this baseline, run together (a cumulative assessment, WP-3.11)';
+export const COMBINED_LABEL = 'This and the other applications on this baseline, together';
+export const COMBINED_NO_BAND = 'no band: one combined run, not an ensemble';
+export const COMBINED_NONE = 'None: no other submitted or approved application on this baseline is visible to the account that built this report.';
+export const COMBINED_CONFLICT = (conflicts: readonly string[]) =>
+	`Not assessed: these applications conflict, so they are not run together (a conflict is never merged): ${conflicts.join('; ')}.`;
+export const COMBINED_PROBLEMS = (problems: readonly string[]) => `Not assessed: an op doesn’t apply with these applications together: ${problems.join('; ')}.`;
+export const COMBINED_PENDING = 'Not assessed yet: an assessment of these applications together is under way on this baseline; build the report again once it has completed.';
+export const COMBINED_NOT_RUN = (n: number) =>
+	`Not assessed: these ${n} applications have not been assessed together on this baseline with their current ops. An editor runs Applications › Assess together with them, and the report reads that assessment.`;
+export const COMBINED_ONE = 'Not combined: one application on this baseline; its own run is in the table above.';
+export const COMBINED_NO_OUTLET = 'Not assessed: the assessment has no pragmatic EWR at the outlet.';
 /** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
-const CUMULATIVE_NAMED = 3;
-export const CUMULATIVE_TRUNCATED = (n: number) =>
-	`Not assessed: more than ${n} other applications have runs on this baseline; § 4 lists the newest ${n}, and a sum of part of them would understate it.`;
-export const CUMULATIVE_NO_BAND = 'no band: a sum of other runs’ own differences';
+const COMBINED_NAMED = 3;
 
 /** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
 function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
@@ -1161,25 +1175,83 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 	return { applications, counted: counted.length, truncated, total, withThis };
 }
 
-/** Page 1's row over the other applications (application reports only). */
-function cumulativeRow(c: EvidenceCumulative): EvidenceRow {
-	const all = c.applications.filter((x) => x.comparable).map((x) => `“${x.scenarioName}”`);
-	const names = all.length > CUMULATIVE_NAMED ? [...all.slice(0, CUMULATIVE_NAMED), `${all.length - CUMULATIVE_NAMED} more in § 4`] : all;
-	const left = c.applications.length - c.counted;
+/**
+ * Every application on the baseline together (evidence-11, finding C26): read
+ * from a completed cumulative assessment of exactly this application and the
+ * others with their current ops, which ran the baseline, each alone and all
+ * together on one engine. A conflict, or an op that doesn't apply together,
+ * makes it not assessed with the reason named: never a silent merge.
+ */
+function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): EvidenceCombined {
+	const report = c.assessment?.report ?? null;
+	const outletRow = (metric: 'ewr_days_not_met' | 'reserve_months_met') => report?.rows.find((r) => r.metric === metric && r.isOutlet) ?? null;
+	const ewrRow = outletRow('ewr_days_not_met');
+	const reserveRow = outletRow('reserve_months_met');
+	const position = new Map((report?.scenarios ?? []).map((x, i) => [x.id, i]));
+	const single = (row: typeof ewrRow, id: string) => {
+		const i = position.get(id);
+		return row && i !== undefined ? (row.singleChanges[i] ?? null) : null;
+	};
+	const others = [...c.others].sort((x, y) => (x.scenarioName < y.scenarioName ? -1 : x.scenarioName > y.scenarioName ? 1 : x.scenarioId < y.scenarioId ? -1 : 1));
+	const applications: EvidenceCombined['applications'] = [
+		...(a
+			? [{ scenarioId: a.scenario.id, scenarioName: a.scenario.name, status: a.scenario.status, outcome: null, isThis: true }]
+			: []),
+		...others.map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome, isThis: false }))
+	].map((x) => ({ ...x, ewrDays: single(ewrRow, x.scenarioId), reserveMonths: single(reserveRow, x.scenarioId) }));
+	const measure = (row: typeof ewrRow): EvidenceCombinedMeasure | null =>
+		row ? { baseline: row.baseline, combined: row.combined, change: row.combinedChange, sumOfSingles: row.sumOfSingles, interaction: row.interaction } : null;
+	const notAssessed = !others.length
+		? COMBINED_NONE
+		: applications.length < 2
+			? COMBINED_ONE
+			: c.unavailable
+			? `Not assessed: ${c.unavailable}`
+			: c.conflicts.length
+				? COMBINED_CONFLICT(c.conflicts)
+				: c.problems.length
+					? COMBINED_PROBLEMS(c.problems)
+					: c.assessment
+						? ewrRow
+							? null
+							: COMBINED_NO_OUTLET
+						: c.pending
+							? COMBINED_PENDING
+							: COMBINED_NOT_RUN(applications.length);
+	const assessed = notAssessed === null;
+	return {
+		applications: assessed ? applications : applications.map((x) => ({ ...x, ewrDays: null, reserveMonths: null })),
+		assessment: c.assessment && assessed ? { id: c.assessment.id, name: c.assessment.name, createdAt: c.assessment.createdAt, createdBy: c.assessment.createdBy, engineVersion: c.assessment.engineVersion } : null,
+		conflicts: [...c.conflicts],
+		problems: [...c.problems],
+		ewrDays: assessed ? measure(ewrRow) : null,
+		reserveMonths: assessed ? measure(reserveRow) : null,
+		warnings: assessed ? [...(report?.warnings ?? [])] : [],
+		notAssessed
+	};
+}
+
+/** Page 1's row over every application together (application reports only). */
+function combinedRow(c: EvidenceCombined): EvidenceRow {
+	const m = c.ewrDays;
+	const all = c.applications.map((x) => (x.isThis ? `“${x.scenarioName}” (this one)` : `“${x.scenarioName}”`));
+	const names = all.length > COMBINED_NAMED ? [...all.slice(0, COMBINED_NAMED), `${all.length - COMBINED_NAMED} more in § 4`] : all;
+	const at = c.assessment;
 	return {
 		id: 'otherApplications',
-		label: 'Other applications on this baseline, summed',
-		basis: CUMULATIVE_BASIS,
+		label: COMBINED_LABEL,
+		basis: COMBINED_BASIS,
 		subject: null,
 		unit: 'days',
 		higherIsWorse: true,
-		baseline: null,
-		application: null,
-		change: c.counted && !c.truncated ? { run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null } : null,
-		notAssessed: c.truncated ? CUMULATIVE_TRUNCATED(c.applications.length) : !c.applications.length ? CUMULATIVE_NONE : !c.counted ? `Not assessed: none of the ${c.applications.length} other applications ran on this baseline’s engine, period and runoff model (§ 4).` : null,
-		note: c.counted && !c.truncated
-			? `${c.counted} application${c.counted === 1 ? '' : 's'}: ${names.join(', ')}${left ? `; ${left} more not counted (§ 4)` : ''}.${c.withThis?.ewrDays != null ? ` With this one: ${signed(fixed(c.withThis.ewrDays, 0))} days.` : ''}`
-			: null
+		baseline: m?.baseline ?? null,
+		application: m?.combined ?? null,
+		change: m ? { run: m.change, band: null, bandNote: COMBINED_NO_BAND, worse: null } : null,
+		notAssessed: c.notAssessed,
+		note:
+			m && at
+				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} ${Math.abs(Math.round(m.interaction)) === 1 ? 'day' : 'days'}: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
+				: null
 	};
 }
 
@@ -1622,14 +1694,14 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
-		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a provisional rule (2026-10-01) not yet confirmed by the hydrologist.
 		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
 		if (below) {
 			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
 			add(
 				`belowTable-${s.key}`,
 				'caution',
-				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a provisional rule not yet confirmed by the catchment’s hydrologist.${
 					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
 				}`,
 				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'

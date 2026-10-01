@@ -151,15 +151,17 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
  * no caller can choose a recipient; the same for a person's erratum notices
- * and the record of which errata were swept (153_erratum_notices); and alert
+ * and the record of which errata were swept (153_erratum_notices); alert
  * feedback, written only by 151_alert_feedback's, so no caller answers for
- * someone else. The quaternary reference dataset is loaded by the operator as
- * the schema owner (152_catchment_map.sql, `pnpm import:quaternaries`); the
- * app only proposes from it. So is the gauging-station list
- * (156_gauge_stations.sql, `pnpm import:gauge-stations`) and the register of
- * dams (157_dam_register.sql, `pnpm import:dam-register`).
+ * someone else; and a pack's server re-run outcomes, written only by its
+ * pack_reproduce job through app_record_pack_reproduction (154_pack_reproduce),
+ * so no member can claim a pack reproduced. The quaternary reference dataset is
+ * loaded by the operator as the schema owner (152_catchment_map.sql,
+ * `pnpm import:quaternaries`); the app only proposes from it. So is the
+ * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
+ * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'gauge_station_reference', 'dam_register_reference']);
+const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction', 'gauge_station_reference', 'dam_register_reference']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite

@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
-| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
+| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
@@ -50,7 +50,7 @@ doubling to 15, right codes included. The session JWT carries `amr`:
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor; `sessionVerified`, this session signed in with a code (signed in) |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor (false while `MFA_REQUIRED=false`); `sessionVerified`, this session signed in with a code (signed in) |
 | POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
 | POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
 | DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
@@ -64,8 +64,10 @@ deleting a project), any that needs team admin (and removing someone else
 from a team; removing someone else from a project; an owner making or
 revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
 `POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
-deciding an application (`POST …/scenarios/:sid/decide`) and issuing or
-withdrawing an evidence pack. Checked after the role, so an outsider still
+deciding an application (`POST …/scenarios/:sid/decide`), issuing or
+withdrawing an evidence pack, and signing a run or a pack (`POST
+…/runs/:runId/signoffs`, `POST …/packs/:packId/signoffs`: every signer, since
+any editor may sign). Checked after the role, so an outsider still
 gets `404` and a viewer `403` without a code: `403 mfa_required` (no
 authenticator yet: set one up) or `403 mfa_step_up` (one is set up, but this
 session signed in with the password only: sign in again).
@@ -322,7 +324,7 @@ the frontend catalogue (same contract: add, never rename):
 | `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
 | `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
 | `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
-| `mfa_required` | 403 | an owner's, team admin's or assessor's action without an authenticator set up |
+| `mfa_required` | 403 | an owner's, team admin's or assessor's action, or a sign-off, without an authenticator set up |
 | `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
 | `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
@@ -940,7 +942,8 @@ account with that address is already a member (change a farmer's farms with
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
   displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
   applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
-  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale }`
+  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale,
+  senderLapsed }` (`senderLapsed` as on an `Invite`, [§ Invites](#invites))
   (farmer invites, and applicant invites that carry farms; an applicant
   invite without farms is only in `GET /invites`). An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
@@ -1008,8 +1011,11 @@ A window is 24 hours from its first add.
 | GET | `/projects/:id/invites` | – | `{ invites: Invite[] }` (newest first, expired ones included) | owner |
 | DELETE | `/projects/:id/invites/:inviteId` | – | `204` (revoke; the link stops working) | owner |
 
-- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired }` —
-  `invitedBy` is the display name of whoever last sent it.
+- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired,
+  senderLapsed }` — `invitedBy` is the display name of whoever last sent
+  it. `senderLapsed`: they no longer own the project (administer the team),
+  so nobody can accept it, nor sign up through its link, until an owner
+  re-sends it, which makes them its sender (155_invite_sender_role.sql).
 - Farmer invites ([§ Farmers](#farmers)) are listed here too, with `role:
   "farmer"`; `GET /projects/:id/farmers` lists them with their farms. The
   Members panel leaves them to the Farmers panel.
@@ -1022,8 +1028,8 @@ teams alike. Any signed-in account; each call sees only its own.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only, newest first; empty for an unverified address |
-| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired or doesn't exist |
+| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only (unexpired, and their sender still owns the project or administers the team, 155), newest first; empty for an unverified address |
+| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired, its sender lost the right to send it (155) or doesn't exist |
 | DELETE | `/me/invites/:inviteId` | – | `204` (decline: the invite is deleted; a project's History records `invite.declined` with the masked address and no actor); `404` as above |
 
 - `MyInvite = { id, kind: 'project' | 'team', targetId, name, role,
@@ -1205,7 +1211,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   `seriesName` the series as the Data page names it, its name else its kind's label, e.g. "Weir" or
   "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
   key's days).
-- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail }`.
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail, forecastOutOfDate }`.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
@@ -1221,6 +1227,17 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   forecast's `madeOn` is the day the run was made, and "still current" (its
   `to` not yet past) is judged against today, both in the project's time
   zone.
+- `forecastOutOfDate` is `{ madeOn, observedTo, rainUntil }` on a **firing**
+  `ewr_forecast_fail` event while the project's newest forecast run is
+  behind the recorded rain (its `lastObserved`, `observedTo` here, before
+  `rainUntil`, the last day with a catchment or CHIRPS rain value; read at
+  request time, `alerts/evaluate.ts` `newestForecast`), and `null`
+  otherwise (a current forecast, a cleared event, every other kind). Such a
+  forecast neither opens nor clears the event, so without a newer forecast
+  (the forecast feed failing, which `feed_failing` reports) the event keeps
+  the figures of the last current one; this says so. A mail of the event
+  sent meanwhile (a digest line the next morning) adds the same in a
+  sentence (`mail.alert.ewr.outOfDate`).
 - **Unsubscribe.** Every alert email links to the site's
   `/alerts/unsubscribe#t=<token>` (the token in the fragment, so it reaches
   no server log), and carries `List-Unsubscribe: <API/alerts/unsubscribe?token=…>`
@@ -1310,7 +1327,9 @@ each rule's `transfer_rule@<id>` (what it took, before losses), and
 `summary.waterBalance` and the water account gain `conveyanceLossM3` (what
 was lost, net of the seepage returned);
 nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
-(nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
+(nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
+with a larger value from before loads and runs, with a warning, and must be
+brought to 1 or below to save) and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
 
 Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)):
@@ -2265,7 +2284,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-12`: § 1's locality map, `localityMap` `{ version: 'locality-1', applicant, features: [{ layer, label, geometry }], asOf, sources: [{ fileName, sha256, importedAt }], drawnInApp, svgSha256 }` (the project's map features as the reader reads them now, `layer` one of `boundary`, `parcel`, `dam`, `applicantParcel`, `applicantDam`, `river`, `gauge`, `ewrSite`; another unit's parcel or dam has `label: null` and no node; geometries at 6 decimals, simplified to the figure; `svgSha256` the SHA-256 of the engine's `localityMapSvg` of it; null with no map features; absent from a pack's report drafted before `evidence-12`; [evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)) (`evidence-12`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-12`: § 1's locality map, `localityMap` `{ version: 'locality-1', applicant, features: [{ layer, label, geometry }], asOf, sources: [{ fileName, sha256, importedAt }], drawnInApp, svgSha256 }` (the project's map features as the reader reads them now, `layer` one of `boundary`, `parcel`, `dam`, `applicantParcel`, `applicantDam`, `river`, `gauge`, `ewrSite`; another unit's parcel or dam has `label: null` and no node; geometries at 6 decimals, simplified to the figure; `svgSha256` the SHA-256 of the engine's `localityMapSvg` of it; null with no map features; absent from a pack's report drafted before `evidence-12`; [evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)) (`evidence-12`); page 1's row over the other applications reads one combined run from a cumulative assessment, `cumulative.combined` (below; absent from a pack's report drafted before `evidence-11`, whose row is the sum) (`evidence-11`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2284,8 +2303,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
-- **Other applications on the baseline** (`cumulative`, § 4 and page 1's
-  *Other applications on this baseline, summed*): every other scenario that is
+- **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
   submitted, or decided `approved` / `approved_with_conditions`, with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
   scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
@@ -2294,7 +2312,25 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   outlet's Reserve `overall` leave the database, not the runs. The engine
   lists each one's own change against the baseline and sums those of the same
   engine, period and runoff model (any other difference is the application's own ops): a sum of separate runs, not one combined
-  run (WP-3.11).
+  run. A document since `evidence-11` doesn't print that sum.
+- **All of them together** (`cumulative.combined`, `evidence-11`, page 1's
+  *This and the other applications on this baseline, together*, row id
+  `otherApplications`): `{ applications: { scenarioId, scenarioName, status,
+  outcome, isThis, ewrDays, reserveMonths }[], assessment: { id, name,
+  createdAt, createdBy, engineVersion } | null, conflicts, problems, ewrDays,
+  reserveMonths, warnings, notAssessed }`, each measure `{ baseline,
+  combined, change, sumOfSingles, interaction }` at the outlet. The
+  applications are this one and every other the reader sees that is
+  submitted or decided with approval and based on this baseline (no run
+  needed); the figures come from the newest complete assessment (editors
+  only, RLS) of exactly those scenarios with their current ops
+  (`assessment_member.ops_sha256`; this application's by the ops its run
+  recorded) on this baseline. Without one the backend checks the
+  combination (`checkCombination`, no model run): conflicts and ops that
+  don't apply together make it *Not assessed*, naming each; else it says an
+  assessment is under way, or that none exists. More than 8, or this
+  application not submitted, is *Not assessed* too
+  ([evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
 - **Always answers.** A run that isn't evidence still gets `200` with
   `refused: true` and the failed checks (`checks[]`: nominated, legacy,
   forecast, base, engine, period, runoff model refuse; baseline assumptions,
@@ -2318,11 +2354,12 @@ reproduction bundle).
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails (among them, since `evidence-10`, `pumpCapacity` and `protectsEwr`); `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, reproduction: PackReproductionState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `reproduction`: what the server's re-run of its runs from the stored bundle found (below; not on verify). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
-| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
+| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s, `403`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), as is the server's re-run of its runs from the bundle (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
+| POST | `/projects/:id/packs/:packId/reproduce` | none, or `{}` (strict) | `202 { jobId, reproduction: PackReproductionState }`: re-runs an issued pack on the server again from its stored bundle, as the caller (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): after the last re-run gave up, or on a newer engine than the recorded outcome's, which is kept and the new engine's recorded beside it. Idempotent while one is pending: the pending job's id comes back and nothing more is queued. `409` for a pack never issued, and once an outcome is recorded on the server's engine (one per pack and engine stands). Contributors and farmers `403`, a stranger `404` | editor |
 | GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
 | POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
@@ -2345,6 +2382,17 @@ reproduction bundle).
   job is queued, running, retrying or waiting for the renderer's answer;
   `failed` when the last render gave up (`error` says why; an editor asks
   again with `POST …/pdf`); `none` for a pack never issued.
+- `PackReproductionState = { status, engineVersion, runEngines, checkedAt,
+  checks: { id, ok, detail }[], error, serverEngine, canRerun }`
+  (154_pack_reproduce): a recorded outcome, `reproduced`, `not_reproduced`,
+  `other_engine` (only the re-runs differ, on another engine than the runs')
+  or `no_bundle`, with the engine that re-ran the runs, theirs, when, and
+  every check; else `checking` while a job is queued, running or retrying,
+  `failed` when the newest job gave up after the newest outcome (`error`
+  says why), or `none` (a draft, or a pack issued before re-runs). The
+  newest outcome stands. `serverEngine` is the engine this server re-runs
+  with; `canRerun`, whether an editor may ask again (`POST …/reproduce`):
+  issued, none pending, and no outcome on `serverEngine` yet.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.
@@ -2416,7 +2464,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps); `403 mfa_required` / `mfa_step_up` without two-step sign-in (§ Two-step sign-in) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
@@ -2839,7 +2887,7 @@ CORS (gateways aren't browsers), JSON bodies only.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
-| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null, autoPublishHeld: boolean }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist (only when the
@@ -2876,6 +2924,13 @@ CORS (gateways aren't browsers), JSON bodies only.
   re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
   waits, doing nothing, until a person runs the model
   ([security.md § API keys](./security.md#api-keys)).
+- `autoPublishHeld`: `true` when the push changed days, wasn't held, and
+  no outlier limit could be taken (`limitFrom` would be `null`: the series
+  is too short to judge by, so only negatives were checked). The automatic
+  re-run is queued as usual, but it isn't **published** by itself (even with
+  `publish: 'if_no_new_warnings'`) until a person runs the model; the merge
+  records `series.unchecked` as the key ([security.md § API
+  keys](./security.md#api-keys)).
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in

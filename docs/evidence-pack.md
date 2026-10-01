@@ -31,7 +31,9 @@ to an issued pack with public comments on it
 applicant's own copy of their application's issued packs, with share links
 ([§ Applicants](#applicants), 131_applicant_packs, 2026-09-30); and the
 "pack issued" and "pack withdrawn" emails to the editors and the applicant
-([§ Notices](#notices), 133_pack_notices, 2026-09-30); and § 1's site
+([§ Notices](#notices), 133_pack_notices, 2026-09-30); the server's
+re-run of both runs from the stored bundle after issue, shown on the pack's
+page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
 locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
 report format `evidence-12`, 2026-10-01). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
@@ -192,6 +194,64 @@ it). Issuing it checks the live report as well, which has both, so a draft
 made on an uncapped pump can't be issued after this change (`409`, naming
 the two checks; `packs.db.test.ts` pins it); an issued pack stays as it
 was, and its verify and re-render read its frozen document.
+
+## The other applications together
+
+Report format `evidence-11` (finding C26, WP-3.11, issue #287) makes page 1's
+row over the other applications, now *This and the other applications on
+this baseline, together*, read **one combined run** instead of adding up
+the other applications' separate runs: this application with every other
+one the reader can see that is submitted, or decided with approval, and
+based on this baseline (`cumulative.combined`; engine
+`evidence/report.ts` `combinedOf`, backend `evidence/report.ts`
+`loadCombined`).
+
+- **Where the run comes from.** A completed cumulative assessment of exactly
+  these applications with their current ops on this baseline
+  ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)):
+  the `assessment` job already ran the baseline, each alone and all together
+  on one engine, and stored the table. The report reads its outlet rows (days
+  below the pragmatic EWR, Reserve months met): the combined change, the sum
+  of each alone and the **interaction** (combined − Σ each alone). It does
+  not run the model itself: a combination is up to 8 + 2 runs, which a
+  report request (a viewer's GET, a pack draft, the issue route's live
+  check) must not carry. The note names the assessment, its date and engine.
+- **Only one on the baseline run's engine** (operator decision,
+  2026-10-01). The assessment's baseline column is its own run of the
+  baseline, so the row reads only an assessment made on the engine the
+  baseline run used: its baseline figure is then the report's own. One of
+  exactly these applications made on another engine isn't read; the row is
+  *Not assessed* and says why (*they were assessed together on engine X, but
+  the baseline ran on engine Y, …: assess them together again*). An
+  assessment runs on the server's current engine, so while that isn't the
+  baseline's, no new one can match either, and the row says to run the
+  baseline again on the current engine and assess on that run
+  (`staleAssessment`).
+- **A conflict is never merged.** Without a matching assessment the backend
+  still checks the combination (`checkCombination`, pure, no model run), so
+  two applications that change the same thing make the row *Not assessed*
+  with each conflict named (and an op that applies alone but not together
+  likewise), whether or not anyone has asked for an assessment.
+- **Otherwise it says why there is no figure:** no other application
+  (*None*), one under way (*Not assessed yet*), none of exactly these
+  (*an editor runs Applications › Assess together*), more than an assessment
+  takes (8), or this application still a draft. Assessments are an editor's
+  (RLS), so a viewer's report finds none (and a viewer sees no submitted
+  application at all, so their row has no others to put together).
+- **Confirmed (operator, 2026-10-01).** Assessments, and so the combined
+  figure, stay editor-only; and a **team scenario counts as an
+  application** once it is submitted, as § 4 always counted it: the s27
+  question is the cumulative effect of every proposed use on the baseline,
+  whoever proposed it.
+
+§ 4 still lists each other application with its own run's change, without
+the old sum, and prints the combined table (each alone, the sum, all
+together, the interaction) under it. A pack drafted before `evidence-11`
+keeps its frozen sum row and § 4 (no `combined`); its stored manifest still
+hashes to its recorded hash, since nothing rebuilds it (`packs.db.test.ts`
+pins it). The reproduction bundle doesn't carry the assessment's runs yet,
+so `reproduce:pack` re-runs the baseline and the application but not the
+combined row ([followups.md § Cumulative impact](./followups.md#cumulative-impact-wp-311)).
 
 ## The locality map
 
@@ -358,8 +418,10 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   In the same transaction it builds the pack's reproduction bundle, checks
   it, stores it and records its hash ([§ Reproduction](#reproduction)); if
   that fails, nothing is issued. Re-running both runs to prove they
-  reproduce is not done at issue: it takes as long as the runs, and the
-  bundle lets anyone do it (`pnpm reproduce:pack`).
+  reproduce takes as long as the runs, so it isn't done in the request: the
+  issue queues a `pack_reproduce` job that does it on the server from the
+  stored bundle ([§ Reproduction](#reproduction), "Re-run on the server"),
+  and the bundle lets anyone do it again (`pnpm reproduce:pack`).
 - **One issued at a time.** An application (or the project's baseline
   evidence) has at most one issued pack: a second is refused at issue
   (`409`), and the database holds it at commit (`evidence_pack_one_issued`).
@@ -592,6 +654,63 @@ engine to check out. Tests: `packages/engine/src/evidence/bundle.test.ts`
 MinIO, `backend/src/evidence/packs.db.test.ts` (issue, download, reproduce
 both a baseline and an application pack; the setter's refusals).
 
+**Re-run on the server** (154_pack_reproduce, 2026-10-01). Issue checks the
+bundle as `--no-run` would; the re-run takes as long as the runs, so the
+issue's transaction queues a `pack_reproduce` job instead
+(`backend/src/jobs/handlers/pack-reproduce.ts`, as the issuer, one pending
+per pack, 3 attempts). The worker runs it as that editor, under RLS:
+
+1. It reads the bundle back from the packs bucket under the pack's
+   `bundle_key` (`getPackBundle`, checksum mode on) and hashes it against the
+   pack's `bundle_sha256`, as an assessor checks the download against
+   verify's `bundleSha256`. That is the `stored` check.
+2. It runs the engine's `checkPackBundle` with the re-run and the pack's
+   manifest hash as `--expect`: what `pnpm reproduce:pack --expect <hash>`
+   prints, check for check.
+3. It records the outcome through `app_record_pack_reproduction` in the
+   job's transaction: `reproduced` (every check passed), `not_reproduced`
+   (any check failed: the stored bytes, a file, the manifest, the inputs,
+   the stored results or a re-run), `other_engine` (only the re-runs
+   differ, and a run was made with another engine version than the one the
+   server runs: expected, not a fault; check out that engine to reproduce
+   it), or `no_bundle` (a pack issued without one). With it go the engine
+   that re-ran the runs, the runs' own engines, the bundle's hash and every
+   check (`pack_reproduction`,
+   [data-model.md](./data-model.md#evidence-packs-112_evidence_packsql)). Once per engine version:
+   the first outcome for an engine stands.
+
+A bundle that doesn't reproduce is an outcome, recorded, and the job is
+done; only what another attempt can fix (the store unreachable) fails the
+job, which retries and then gives up. The pack's page says what it found, in
+its bar (never printed): reproduced, with the engine and date; not
+reproduced, with each failed check; another engine; still re-running; or
+that the re-run couldn't be done, with why (`reproduction` on
+`GET …/packs/:packId`, [api.md § Evidence packs](./api.md#evidence-packs)).
+It is **not on verify**: it is the app's own claim about its own stored
+bytes, not something the pack's hash covers, and an assessor repeats it
+with the bundle rather than trusting it. Tests:
+`jobs/handlers/pack-reproduce.test.ts` (each outcome, against a real bundle
+of the engine's synthetic pack), `evidence/packs.db.test.ts` (queued at
+issue, recorded as reproduced; a stored bundle replaced by other bytes
+recorded as not reproduced; the writer's refusals), and the pack PDF e2e
+(`e2e/tests/evidence-pack-pdf.spec.ts`, the page showing it).
+
+**Re-run again** (operator decision, 2026-10-01). An editor asks for the
+re-run again from the pack's bar (`POST …/packs/:packId/reproduce`,
+[api.md § Evidence packs](./api.md#evidence-packs)) when the last one gave
+up (**Try again**), when the recorded outcome is an older engine's than the
+server's (**Re-run on engine X**, after an engine upgrade), or for a pack
+issued before re-runs. It queues the same `pack_reproduce` job, as the
+caller; while one is pending the request is idempotent (the pending job
+comes back). On a newer engine the new outcome is recorded **beside** the
+older engine's, never in place of it (one per pack and engine), and the
+newest shows. Once the server's engine has an outcome it stands, and the
+request is refused (`409`). Tests: `evidence/packs.db.test.ts` (refused on
+its own engine, queued once on a newer one, recorded beside the old; a
+re-run that gave up asked for again), `packs/pack.test.ts`
+(`reproductionNote`'s button) and the pack PDF e2e (the button after an
+engine upgrade).
+
 ## Sharing and comments
 
 An editor shares an **issued** pack by a read-only link, so an NGO, a
@@ -773,7 +892,11 @@ mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
 recipient's language, English where a key has no translation.
 
 There is no opt-out: like a report-ready email, it goes to the few people
-who act on packs, once per issue or withdrawal. The rows are the person's
+who act on packs, once per issue or withdrawal. And a rare **duplicate** is
+accepted: if SES accepts an email but the call times out, the retry can
+send a second copy, as the alert emails can. Both decided by the operator
+(2026-10-01): these are service messages to the people accountable for the
+pack, and a second copy costs less than a lost one. The rows are the person's
 (in their data export as `packNotices`, deleted with the account) and are
 purged 30 days after they are settled.
 

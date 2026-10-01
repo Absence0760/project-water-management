@@ -8,6 +8,7 @@
 // ensemble and recomputes the paired Reserve share, lists every start, and
 // refuses what isn't evidence.
 import {
+	COMBINED_CONFLICT,
 	declaredRuleRequest,
 	licenceImpactSection,
 	localityMapSvg,
@@ -328,8 +329,12 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect(second.ewrDays).toBe((await days(teamSubmittedNewest)) - base);
 		expect(c.total.ewrDays).toBe(c.applications.reduce((t, x) => t + x.ewrDays!, 0));
 		expect(c.withThis?.ewrDays).toBe(c.total.ewrDays! + (await days(appRun)) - base);
+		// Page 1's row reads one combined run, not this sum (evidence-11): these all set Upper's dam, so they conflict and it isn't assessed, naming each conflict.
 		const r = (await report(owner, appRun)).body.report as EvidenceReport;
-		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: null, change: { run: c.total.ewrDays, band: null } });
+		expect(r.cumulative.combined!.applications.map((x) => x.scenarioName)).toEqual(['Upper dam', 'Applicant dam', 'Approved weir', 'Second dam']);
+		expect(r.cumulative.combined!.conflicts.length).toBeGreaterThan(0);
+		expect(r.cumulative.combined!.conflicts[0]).toMatch(/both change node "Upper": damCapacityM3$/);
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT(r.cumulative.combined!.conflicts), change: null });
 	});
 
 	it('hides from a viewer the submitted application only editors may read, and lists no draft (RLS)', async () => {

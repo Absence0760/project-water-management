@@ -15,6 +15,6 @@ export function resolveCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }
 /** resolveCatchmentAreaKm2, refusing a catchment with no area (rain can't become flow). */
 export function requireCatchmentAreaKm2(cal: { catchmentAreaKm2: number | null }, input: ModelInput): number {
 	const area = resolveCatchmentAreaKm2(cal, input);
-	if (!(area > 0)) throw new Error('catchment area is 0 — give the farms an area (km²) or set calibration.catchmentAreaKm2');
+	if (!(area > 0)) throw new Error('catchment area is 0 — give the units an area (km²) or set calibration.catchmentAreaKm2');
 	return area;
 }

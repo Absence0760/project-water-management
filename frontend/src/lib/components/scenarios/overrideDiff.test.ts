@@ -259,7 +259,7 @@ describe('diffModel', () => {
 		e.removeNode(UP);
 		const ops = roundTrips(b, e.snapshot());
 		expect(ops.map((o) => o.op)).toEqual(['node.remove', 'node.add', 'node.add']);
-		expect(ops[1]).toMatchObject({ op: 'node.add', node: { id: added.id, name: 'Farm 3', downstreamNodeId: G, damCapacityM3: 40_000 } });
+		expect(ops[1]).toMatchObject({ op: 'node.add', node: { id: added.id, name: 'Unit 3', downstreamNodeId: G, damCapacityM3: 40_000 } });
 		expect(ops[2]).toMatchObject({ op: 'node.add', node: { id: user.id, kind: 'user', userDemandM3Day: new Array(12).fill(250) } });
 	});
 

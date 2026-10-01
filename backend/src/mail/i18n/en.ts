@@ -107,6 +107,8 @@ export const en = {
 	'mail.alert.ewr.what': 'River flow at risk in the forecast',
 	'mail.alert.ewr.body':
 		'On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.',
+	'mail.alert.ewr.outOfDate':
+		'This forecast is out of date: it used the rain recorded to {observedTo}, rain has since been recorded to {rainUntil}, and no newer forecast has been made yet. Check the forecast data feed.',
 	'mail.alert.stale.what': 'Data feed behind',
 	'mail.alert.stale.body.one': 'These data feeds are more than {threshold} day later than usual:',
 	'mail.alert.stale.body.other': 'These data feeds are more than {threshold} days later than usual:',

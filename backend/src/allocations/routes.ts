@@ -227,7 +227,7 @@ async function matchNodes(db: Db, projectId: string): Promise<MatchNode[]> {
 async function checkNode(db: Db, projectId: string, nodeId: string | null | undefined) {
 	if (!nodeId) return;
 	const { rows } = await db.query('SELECT 1 FROM node WHERE project_id = $1 AND id = $2 AND kind IN (\'farm\', \'user\')', [projectId, nodeId]);
-	if (!rows[0]) throw new ApiError(400, 'nodeId is not a farm or water user of this project');
+	if (!rows[0]) throw new ApiError(400, 'nodeId is not a unit or water user of this project');
 }
 
 async function countAllocations(db: Db, projectId: string): Promise<number> {
@@ -286,7 +286,7 @@ async function prepareImport(db: Db, projectId: string, body: z.infer<typeof Imp
 		let matchedBy: PreviewRow['matchedBy'] = auto.matchedBy;
 		if (Object.hasOwn(manual, line)) {
 			const m = manual[line]!;
-			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen node is not a farm or water user of this project`);
+			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen node is not a unit or water user of this project`);
 			nodeId = m;
 			matchedBy = m === null ? null : 'manual';
 		}

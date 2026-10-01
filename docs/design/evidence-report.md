@@ -193,7 +193,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C23 | Sign-off by a registered natural scientist, bound to a statement hash | Professional responsibility (evidence: roadmap WP-3.13, [SACNASP]) | WP-3.13 | Appendix B.2 |
 | C24 | Reproducibility: input series hashes, ops hash, manifest hash and short code, verify link, reproduction bundle, page count | Verify an unaltered, reproducible report (evidence: roadmap WP-3.1, WP-3.14) | partial: series hashes (Appendix A.3) and stored values built; manifest WP-3.14 | Every footer; Appendix A.3, B.4 |
 | C25 | Registered water use: each unit's registered volumes (WARMS registrations, licences) against its modelled use per water year, baseline and application; units by name, never the holder (D3) | s27 "existing lawful water uses"; the licence applicant persona asked for a registered-vs-modelled row (judgement) | built (WP-3.10 comparison per run, each run's own volumes; no band) | Page 1 row "Registered vs modelled use" and flag; § 5 |
-| C26 | What else is proposed on the baseline: every other submitted or approved application's own change, and their sum | s27 "other water users" (licensing authority persona); a true cumulative run is WP-3.11 | built (`cumulative`, evidence-3): a sum of separate runs, said so, no band | Page 1 row "Other applications on this baseline, summed"; § 4 |
+| C26 | What else is proposed on the baseline: every other submitted or approved application's own change, and all of them with this one in one combined run, with the interaction | s27 "other water users" and the cumulative effect (licensing authority persona; WP-3.11) | built: each one's own run (`cumulative`, evidence-3); the combined run from a cumulative assessment of exactly these applications (`cumulative.combined`, evidence-11), a conflict *Not assessed* with the conflicts named, no band | Page 1 row "This and the other applications on this baseline, together"; § 4 |
 
 ## 4. Information architecture
 
@@ -257,7 +257,7 @@ manifest, and that is when it moves into `evidenceReport`.
 | 1 | The river | Per EWR site: the site strip (C9); month × water-year heat maps, baseline and application side by side, changed months outlined; extra days below the EWR by month of the year (paired interval plot); the flow-duration curve against the EWR curve for the month with the largest change and, beside it, the river's driest month; the compliance table; the application's EWR charge (C16) | C9–C13, C16 |
 | 2 | Uncertainty | The coverage warning if any; the cited ensemble; the ledger of every start on the baseline; the baseline's bands against the nominated run; the paired bands against zero; R1 and R2 | C18 |
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
-| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change and their sum | C14, C15, C26 |
+| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change, and all of them together (each alone, their sum, the combined change, the interaction) | C14, C15, C26 |
 | 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
 | 6 | The applicant's demand objects | Application only (`evidence-9`): each demand object on the applicant's units, or that the application adds, changes or removes, with its sizing, its source and the note on it, its demand in both runs and its share supplied; the share of that demand by source; *Not assessed* when the applicant has none | – |
 
@@ -409,6 +409,19 @@ before `evidence-10` keeps its frozen checks; issuing it checks the live
 report, which has both ([evidence-pack.md § What stops issue on the
 river](../evidence-pack.md#what-stops-issue-on-the-river)).
 
+**Report version `evidence-11`** (finding C26, WP-3.11): page 1's row over
+the other applications reads one combined run of this application and every
+other submitted or approved one on the baseline, from a completed cumulative
+assessment of exactly those applications and ops, instead of a sum of their
+separate runs; § 4 adds the combined table with the interaction. A conflict
+makes the row *Not assessed*, naming each conflict: never a silent merge.
+Judgement: the report reads a stored assessment rather than running the
+combination itself, since that is up to ten model runs inside a report
+request; it checks the combination for conflicts itself (no model run), so
+a conflict is named before anyone assesses. A pack drafted before
+`evidence-11` keeps its frozen sum ([evidence-pack.md § The other
+applications together](../evidence-pack.md#the-other-applications-together)).
+
 **Report version `evidence-12`** (issue #326 A5): § 1 opens with a site
 locality map, as a licence application normally carries one. It is drawn
 from the project's map features (152 `map_feature`) as they are when the
@@ -426,7 +439,6 @@ change table; a figure, not a section, so the section list doesn't move.
 With no map features § 1 says *No locality map: the project has no map
 features*; a pack drafted before `evidence-12` says the figure isn't part of
 it ([evidence-pack.md § The locality map](../evidence-pack.md#the-locality-map)).
-(`evidence-11` is the combined cumulative row's, PR #330.)
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.

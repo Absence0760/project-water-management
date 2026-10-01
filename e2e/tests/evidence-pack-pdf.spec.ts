@@ -5,12 +5,18 @@
 // render session that reads that pack only, stores the PDF in MinIO under its
 // SHA-256, and records the hash on the pack once. The download is those very
 // bytes: their SHA-256 is what the pack and the public verify lookup answer.
+// The same tick re-runs the pack's runs from its stored reproduction bundle
+// (pack_reproduce, 154_pack_reproduce), and the pack's page says they
+// reproduced; verify doesn't (it is the app's own claim). After an engine
+// upgrade an editor re-runs it on the new engine from the same bar, and the
+// new outcome is recorded beside the old.
 // The pack has a map, so its § 1 prints the locality map (evidence-12).
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it). Locally, without it the spec
 // is skipped and says why; in CI it never skips.
 import { createHash } from 'node:crypto';
 import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { ageReproductionEngine } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -74,8 +80,17 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	// The background worker's tick: prints the pack's page, stores it, records its hash.
 	await runJobsTick({ projects: [project.id], schedule: false });
 
-	const read = (await (await page.request.get(`${at}/${pack.id}`)).json()) as { pack: { pdfSha256: string | null; pdfPages: number | null }; pdf: { status: string } };
+	const read = (await (await page.request.get(`${at}/${pack.id}`)).json()) as {
+		pack: { pdfSha256: string | null; pdfPages: number | null };
+		pdf: { status: string };
+		reproduction: { status: string; engineVersion: string | null; checks: { id: string; ok: boolean }[] };
+	};
 	expect(read.pdf).toEqual({ status: 'ready', error: null });
+	// The same tick re-ran the baseline run from the stored bundle: reproduced, every check passing.
+	expect(read.reproduction.status).toBe('reproduced');
+	expect(read.reproduction.engineVersion).toBeTruthy();
+	expect(read.reproduction.checks.map((c) => c.id)).toContain('reproduce:baseline');
+	expect(read.reproduction.checks.every((c) => c.ok)).toBe(true);
 	expect(read.pack.pdfSha256).toMatch(/^[0-9a-f]{64}$/);
 	expect(read.pack.pdfPages).toBeGreaterThanOrEqual(1);
 
@@ -89,16 +104,41 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 	expect(createHash('sha256').update(pdf).digest('hex')).toBe(read.pack.pdfSha256);
 	expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length).toBe(read.pack.pdfPages);
 
-	// What anyone holding the printed code sees: the same hash.
+	// What anyone holding the printed code sees: the same hash, and nothing of the server's re-run.
 	const verified = await page.request.get(`${API_URL}/verify/${pack.shortCode}`);
-	expect(((await verified.json()) as { pack: { pdfSha256: string } }).pack.pdfSha256).toBe(read.pack.pdfSha256);
+	const verifiedBody = (await verified.json()) as { pack: { pdfSha256: string } };
+	expect(verifiedBody.pack.pdfSha256).toBe(read.pack.pdfSha256);
+	expect(JSON.stringify(verifiedBody)).not.toMatch(/reproduc/i);
 
 	// The pack's page offers the server PDF (not the browser's print), and no longer says it is printing.
 	await page.goto(`/projects/${project.id}/packs/${pack.id}`);
 	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
 	await expect(page.getByTestId('pack-pdf-download')).toHaveAttribute('href', `${API_URL}/projects/${project.id}/packs/${pack.id}/pdf`);
 	await expect(page.getByTestId('pack-pdf-state')).toHaveCount(0);
+	// And what the server's re-run found, in the bar (never printed).
+	const reproduced = page.getByTestId('pack-reproduction');
+	await expect(reproduced).toHaveAttribute('data-state', 'reproduced');
+	await expect(reproduced).toContainText(`re-run with engine ${read.reproduction.engineVersion} from the stored reproduction bundle, its run gave the same results`);
 
 	// Printed once: a second request is refused.
 	expect((await page.request.post(`${at}/${pack.id}/pdf`, { data: {} })).status()).toBe(409);
+
+	// On the engine it ran with, the outcome stands: no re-run is offered.
+	await expect(page.getByTestId('pack-reproduce-again')).toHaveCount(0);
+	// After an engine upgrade (the recorded outcome now an older engine's), the editor re-runs it on the server's.
+	await ageReproductionEngine(pack.id, '0.0.1-older');
+	await page.reload();
+	await expect(reproduced).toHaveAttribute('data-state', 'reproduced');
+	await expect(reproduced).toContainText(`The server now runs engine ${read.reproduction.engineVersion}`);
+	const again = page.getByTestId('pack-reproduce-again');
+	await expect(again).toHaveText(`Re-run on engine ${read.reproduction.engineVersion}`);
+	await again.click();
+	await expect(reproduced).toHaveAttribute('data-state', 'checking');
+	await expect(again).toHaveCount(0);
+	await runJobsTick({ projects: [project.id], schedule: false });
+	await reproduced.getByRole('button', { name: 'Check again' }).click();
+	await expect(reproduced).toHaveAttribute('data-state', 'reproduced');
+	await expect(reproduced).toContainText(`re-run with engine ${read.reproduction.engineVersion} from the stored reproduction bundle`);
+	await expect(reproduced).not.toContainText('now runs engine');
+	await expect(again).toHaveCount(0);
 });

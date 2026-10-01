@@ -126,7 +126,7 @@ export class ModelEditor {
 		const outlet = nodes.find((n) => n.downstreamNodeId === null);
 		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
 		const node = newNode(sort, nodes.length === 0 ? null : (outlet?.id ?? nodes[0]!.id));
-		node.name = nodes.length === 0 ? 'Outflow gauge' : `Farm ${nodes.length}`;
+		node.name = nodes.length === 0 ? 'Outflow gauge' : `Unit ${nodes.length}`;
 		nodes.push(node);
 		return node;
 	}

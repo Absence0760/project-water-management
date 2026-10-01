@@ -98,8 +98,8 @@ erDiagram
 | `dam_initial_pct` | Initial dam volume (%) | |
 | `dam_min_pct` | (not imported; the workbook's "Min dam volume" is the transfer minimum) | The dam's **minimum operating level** (dead storage, engine ≥ 0.16.0, Q5): irrigation draws only above `capacity × dam_min_pct`, and transfers keep `capacity × MAX(rule min, dam_min_pct)`. Migration 006 reset every stored value to 0; the importer writes 0 |
 | `divert_capacity_m3_day` | Downstream diversion back to dam | The workbook enters m³/s and converts it. We store m³/day. |
-| `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate capacity ÷ 3 m and warn (W6). The importer writes NULL |
-| `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3, default 0.7 (Liebe et al. 2005) |
+| `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate 7.2 × capacity^0.77 m² (Maaren & Moolman 1985; capacity ÷ 3 m before engine 1.63.0) and warn (W6). The importer writes NULL |
+| `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3 in the column (the API takes 0 < b ≤ 1 from engine 1.63.0: no basin has b > 1), default 0.7 (Liebe et al. 2005) |
 | `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow (less the share lost, below) |
 | `dam_curve` | (none: b023 has no survey) | Migration 041, engine ≥ 0.35.0 ([model.md §2.7a](./model.md), "Dam geometry, losses and releases"): the dam's survey rows `[{levelM, areaM2, volumeM3}]` as `jsonb` (an array of at most 200, CHECK); NULL = the power-law area. On the node rather than a child table: always read and written with the node, so the node's RLS covers it (members, and a farmer's own linked nodes). The API checks each row's shape and the engine's save rule the monotonicity |
 | `dam_release_rule` | (none) | `none` (default), `passInflow` or `fixed` (CHECK): a release before irrigation |
@@ -1207,6 +1207,37 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
 
+**The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
+
+- `job.kind` accepts `pack_reproduce`: issuing a pack queues one in the
+  issue's transaction, as the issuer, deduplicated per pack
+  (`pack_reproduce:<pack>`, 3 attempts).
+- **`pack_reproduction`**: what the job found, one row per pack and engine
+  version (`UNIQUE (pack_id, engine_version)`, which covers `pack_id` →
+  `evidence_pack`, cascade; `project_id` → `project`, cascade, indexed;
+  `pack_reproduction_same_project`). `outcome` is `reproduced`,
+  `not_reproduced`, `other_engine` (only the re-runs differ, and a run was
+  made with another engine than the one that re-ran it) or `no_bundle`;
+  `engine_version` is the engine that re-ran the runs, `run_engines` theirs,
+  `bundle_sha256` the bundle checked (the pack's; NULL only for
+  `no_bundle`), `checks` every check as `[{ id, ok, detail }]` (the job's
+  `stored`, then the engine's `checkPackBundle`), `checked_at`. RLS: read by
+  whoever reads the pack (`evidence_pack_select` through the policy's
+  subquery); `water_app` has `SELECT` only (catalogue `READ_ONLY`). Not on
+  verify: it is the app's own claim.
+- **`app_record_pack_reproduction(pack, outcome, engine, run_engines,
+  bundle_sha256, checks)`** (`SECURITY DEFINER`, `water_app` only): the one
+  writer. It needs a signed-in caller with a *running* `pack_reproduce` job
+  of that pack, in its project, as its acting user (`42501` otherwise), a
+  pack that was issued, and the bundle the pack records (`no_bundle` only
+  for a pack without one; `23514` otherwise); a second outcome for the same
+  engine changes nothing and returns false.
+- Guards: `evidence/packs.db.test.ts` (queued at issue, recorded as
+  reproduced, a stored bundle replaced by other bytes recorded as not
+  reproduced, the writer's refusals), `jobs/handlers/pack-reproduce.test.ts`,
+  `jobs/trust.security.db.test.ts` (a `pack_reproduce` job naming another
+  project's pack touches nothing of it), the catalogue.
+
 **Notices (133_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
 
 - **`pack_notice`**: one "pack issued" or "pack withdrawn" email per pack,
@@ -2286,7 +2317,15 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   another role keeps it and gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
   sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
-  never overwritten), and deletes those invites. Invites cascade away with their project or team,
+  never overwritten), and deletes those invites. Each of those functions,
+  and `app_my_invites` / `app_accept_invite` (109), takes an invite only
+  while its `invited_by` still holds owner on the project (directly or as
+  the team's admin) or admin on the team (155_invite_sender_role.sql,
+  `app_invite_sender_holds`, SECURITY INVOKER, not granted to `water_app`):
+  an invite whose sender lost that role is kept, accepted by nobody, and
+  flagged for the owners by `app_invite_sender_lapsed(invite)` (SECURITY
+  DEFINER; NULL to anyone who can't see the invite) until one of them re-sends
+  it (becoming its sender) or revokes it. Invites cascade away with their project or team,
   and with the account that sent them (`invited_by` cascade). An invite that
   lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
   the job tick deletes it with its `invite_node` rows

@@ -325,6 +325,8 @@ export interface InvitedFarmer {
 	invitedBy: string;
 	expiresAt: string;
 	locale: InviteLocale;
+	/** Its sender no longer owns the project: nobody can accept it until an owner re-sends it (155); absent from servers before it. */
+	senderLapsed?: boolean;
 }
 
 /** A row of GET /projects/:id/farmers: a farmer, or (owners only) a pending farmer invite. */
@@ -519,6 +521,12 @@ export interface AlertEvent {
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
 	detail: Record<string, unknown>;
+	/**
+	 * A firing ewr_forecast_fail event whose forecast is behind the recorded
+	 * rain, with no newer forecast made since: the day it was made, its last
+	 * recorded rain day, and the recorded rain's last day now. null otherwise.
+	 */
+	forecastOutOfDate: { madeOn: string; observedTo: string; rainUntil: string } | null;
 }
 
 /** POST /alerts/unsubscribe (the landing page's JSON form). */
@@ -565,6 +573,12 @@ export interface Invite {
 	createdAt: string;
 	expiresAt: string;
 	expired: boolean;
+	/**
+	 * Its sender no longer owns the project (administers the team), so nobody
+	 * can accept it until an owner re-sends it (155_invite_sender_role); absent
+	 * from servers before it.
+	 */
+	senderLapsed?: boolean;
 }
 
 /** What an invite link is for (POST /auth/invite-info). */
@@ -1749,6 +1763,8 @@ export interface PackDetail {
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
+	/** The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify. */
+	reproduction: PackReproductionState;
 	issue: PackIssueChecks | null;
 	/** Errata that apply now to its runs' engines (or their fits') and that the manifest didn't record (132): found since it was drafted. */
 	errataFoundSince: { id: string; summary: string }[];
@@ -1759,6 +1775,37 @@ export interface PackPdfState {
 	status: 'ready' | 'rendering' | 'failed' | 'none';
 	/** Why the last render gave up (`failed`). */
 	error: string | null;
+}
+
+/** One check of a reproduction bundle (engine evidence/bundle.ts checkPackBundle), plus the server's `stored`. */
+export interface PackBundleCheck {
+	/** `stored`, `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `reproduce:<run>`. */
+	id: string;
+	ok: boolean;
+	detail: string;
+}
+
+/**
+ * The server's re-run of an issued pack from its stored bundle
+ * (backend/src/evidence/packReproduce.ts; docs/evidence-pack.md § Reproduction).
+ * A recorded outcome: `reproduced`, `not_reproduced`, `other_engine` (only the
+ * re-runs differ, and the runs were made with another engine) or `no_bundle`;
+ * else `checking` (its job is queued or running), `failed` (the job gave up:
+ * `error`) or `none` (a draft, or issued before re-runs).
+ */
+export interface PackReproductionState {
+	status: 'reproduced' | 'not_reproduced' | 'other_engine' | 'no_bundle' | 'checking' | 'failed' | 'none';
+	/** The engine that re-ran the runs (a recorded outcome only). */
+	engineVersion: string | null;
+	/** The engines the runs were made with. */
+	runEngines: string[];
+	checkedAt: string | null;
+	checks: PackBundleCheck[];
+	error: string | null;
+	/** The engine this server re-runs with. */
+	serverEngine: string;
+	/** An editor may ask for a re-run now (POST …/reproduce): issued, none pending, no outcome on serverEngine yet. */
+	canRerun: boolean;
 }
 
 /** GET /verify/:code (public): only what the pack prints (app_verify_pack). */

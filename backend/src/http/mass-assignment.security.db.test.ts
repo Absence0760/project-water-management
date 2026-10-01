@@ -335,6 +335,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/packs/:packId/withdraw': async () => ({ params: { packId: await plantedPack() }, body: { reason: 'mass withdrawal' } }),
 	// An empty body only (strict); a pack that was issued, with no PDF yet, so the legit call queues its render (202).
 	'POST /projects/:id/packs/:packId/pdf': async () => ({ params: { packId: await plantedIssuedPack() } }),
+	// The same: an issued pack never re-run, so the legit call queues its re-run (202).
+	'POST /projects/:id/packs/:packId/reproduce': async () => ({ params: { packId: await plantedIssuedPack() } }),
 	'POST /projects/:id/series/:seriesId/revisions/:revId/restore': async () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i % 5 === 0 ? 10 + Math.random() : 0));
 		await ok(ctx.owner.call('PUT', `${at()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain }));

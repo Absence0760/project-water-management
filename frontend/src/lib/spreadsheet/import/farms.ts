@@ -191,6 +191,25 @@ export function runOfRiverNote(name: string, pctUpstream: number, capacity: numb
 	);
 }
 
+// A probable placeholder pool (issue #90 Q18): extract_project.py
+// placeholder_pool_note, whose comment has the reasoning. A farm dam that takes
+// less than 100 % of the upstream inflow (so runOfRiverNote never flags it) and
+// holds under 100 m³ (less than a day of one hectare's peak irrigation) or under
+// 1 % of a day of its diversion capacity stores nothing across a daily step.
+const PLACEHOLDER_POOL_MAX_M3 = 100;
+
+/** placeholder_pool_note(): a WARNING for a near-empty dam runOfRiverNote leaves alone (same text). */
+export function placeholderPoolNote(name: string, pctUpstream: number, capacity: number, divert: number): string | null {
+	if (capacity <= 0 || pctUpstream >= RUN_OF_RIVER_PCT_UPSTREAM) return null;
+	if (!(capacity < PLACEHOLDER_POOL_MAX_M3 || capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert)) return null;
+	return (
+		`WARNING: farm ${name}: probable placeholder pool, for the modeller to confirm: its dam holds ${pyFormatG(capacity)} m³, ` +
+		`less than a day's peak irrigation of one hectare, and takes ${pyFormatG(pctUpstream * 100)} % of the upstream inflow, ` +
+		'so it stores nothing from one day to the next. If it is a placeholder, set the dam capacity to 0; if the unit ' +
+		'pumps from the river, set its supply rule to run of river with a pump capacity (issue #90 Q18)'
+	);
+}
+
 /**
  * as_run_of_river(): with the run-of-river option (--run-of-river), turn a
  * unit runOfRiverNote() flags into a run-of-river unit, in place, and say so

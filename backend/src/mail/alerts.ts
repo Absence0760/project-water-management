@@ -31,7 +31,17 @@ export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 /** What one alert says: the event's figures, from the recipient's own scope. */
 export type AlertFacts =
 	| { kind: 'dam_below'; farm: string; pct: number; threshold: number; source: 'latest' | 'forecast'; date: string; madeOn?: string | null }
-	| { kind: 'ewr_forecast_fail'; days: number; of: number; from: string; to: string; madeOn: string; threshold: number }
+	| {
+			kind: 'ewr_forecast_fail';
+			days: number;
+			of: number;
+			from: string;
+			to: string;
+			madeOn: string;
+			threshold: number;
+			/** The forecast is behind the recorded rain and no newer one was made (alerts/evaluate.ts newestForecast). */
+			outOfDate?: { observedTo: string; rainUntil: string } | null;
+	  }
 	| {
 			kind: 'data_stale';
 			threshold: number;
@@ -159,7 +169,10 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			return {
 				what: tr.t('mail.alert.ewr.what'),
 				body: [
-					tr.t('mail.alert.ewr.body', { madeOn: dateText(f.madeOn, lang), days: f.days, of: f.of, from: dateText(f.from, lang), to: dateText(f.to, lang), threshold: f.threshold })
+					tr.t('mail.alert.ewr.body', { madeOn: dateText(f.madeOn, lang), days: f.days, of: f.of, from: dateText(f.from, lang), to: dateText(f.to, lang), threshold: f.threshold }),
+					...(f.outOfDate
+						? [tr.t('mail.alert.ewr.outOfDate', { observedTo: dateText(f.outOfDate.observedTo, lang), rainUntil: dateText(f.outOfDate.rainUntil, lang) })]
+						: [])
 				]
 			};
 		case 'data_stale':

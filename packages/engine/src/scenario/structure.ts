@@ -23,7 +23,7 @@ export function structureIssues(input: ModelInput): StructureIssues {
 	const s = input.settings as Record<string, unknown>;
 	const cal = (s.calibration ?? {}) as { catchmentAreaKm2?: number | null };
 	if (m.nodes.length && !(resolveCatchmentAreaKm2({ catchmentAreaKm2: cal.catchmentAreaKm2 ?? null }, input) > 0))
-		add('area', 'the catchment has no area left: no farm has land and calibration.catchmentAreaKm2 is not set');
+		add('area', 'the catchment has no area left: no unit has land and calibration.catchmentAreaKm2 is not set');
 
 	// Flow shares over 100 % make water from nowhere: runModel refuses them (network/shares.ts).
 	const over = overAllocationError(inputFlowShares(input).sum);

@@ -305,6 +305,10 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 	'pack_notice.pack_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_pack_notice_queue, SECURITY DEFINER, copies the project from the pack (133)',
 		premise: 'not writable'
+	},
+	'pack_reproduction.pack_id': {
+		reason: 'water_app writes none of it (SELECT only); app_record_pack_reproduction, SECURITY DEFINER, copies the project from the pack (154), and pack_reproduction_same_project checks it',
+		premise: 'not writable'
 	}
 };
 
@@ -935,6 +939,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',

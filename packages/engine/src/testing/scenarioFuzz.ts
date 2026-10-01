@@ -29,7 +29,7 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 		case 'damAreaFullM2':
 			return g.pick([null, 0, g.logFloat(1, 1e6)]);
 		case 'damAreaExponent':
-			return g.float(0.05, 3);
+			return g.float(0.05, 1);
 		case 'irrigationEfficiency':
 			return g.bool(0.2) ? 1 : g.float(0.05, 1);
 		case 'boreholeCapacityM3Day':

@@ -166,8 +166,12 @@ decide a licence application.
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
-  deciding an application (`…/decide`) and issuing or withdrawing an
-  evidence pack. The owner and admin checks a route makes by hand are
+  deciding an application (`…/decide`), issuing or withdrawing an
+  evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
+  needs an authenticator: a sign-off is the professional record an
+  authority relies on, and without it is only as strong as the signer's
+  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
   stepped up too: removing someone else from a project or a team (leaving
   isn't), and an owner making or revoking a share link of any kind. A guard
   (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
@@ -181,7 +185,28 @@ decide a licence application.
   outside a request (the job runner) isn't stepped up: no job kind needs
   more than editor, and the request that queued it was checked. Everyone
   else may turn it on, and is asked for a code at sign-in once they have.
-  `GET /auth/mfa` says whether the person's roles need it (`required`).
+  `GET /auth/mfa` says whether the person's roles need it (`required`,
+  false while the switch below is off, so the prompts say what the routes
+  do).
+- **The prompt.** A person whose role needs it learns so before an action
+  is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
+  its own chunk, mounted by `routes/+layout.svelte`; the state is
+  `lib/auth/mfaPrompt.svelte.ts`) from `GET /auth/mfa`, read once per
+  account and again when the tab comes back into view. `required &&
+  !enrolled`: **Set up two-step sign-in**, a link to the Account page's
+  panel (`/account#two-step`). `required && enrolled && !sessionVerified`:
+  **Sign in again**, which signs out and returns to the page after the
+  password and the code. A `403 mfa_required` or `mfa_step_up` from any
+  request shows the same two (the API client's `onError`), for an editor
+  publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
+  own error message stays where the page shows it. The banner is English
+  and stays off the translated pages (the Account page has its own warning,
+  the farm view's roles never need it). Dismissable until the next refusal
+  (kept so by the operator's decision, 2026-10-01: every refused action
+  brings it back, so a person who needs it can't miss it for long); signing
+  out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
+  so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
   the same person signed in with a code as the positive control; outsiders
   and viewers still get their 404 and 403).
@@ -265,6 +290,27 @@ decide a licence application.
   Tests: `auth/account-tokens.security.db.test.ts` "adding someone by
   email doesn't reveal whether the address has an account",
   `invites/invites.db.test.ts`.
+- **An invite is good only while its sender may still send it**
+  (`155_invite_sender_role.sql`). RLS checks the sender only when the
+  invite is written, so every function that lists, describes or accepts one
+  (`app_my_invites`, `app_accept_invite`, `app_invite_for_token`,
+  `app_accept_invites`: the invitations page, a sign-up through the link, a
+  confirmation or password-reset link) takes it only while its `invited_by`
+  still owns the project (directly, or as an admin of the team that owns it)
+  or administers the team (`app_invite_sender_holds`). An owner removed or
+  demoted, or a team admin demoted, leaves invites nobody can accept, at
+  any role; a lapsed invite's link is invalid like an expired one. Checked
+  where the invite is used rather than by deleting invites when a role
+  changes, because a role can be lost in more ways than a trigger list
+  keeps up with: the check fails closed on all of them. The remaining
+  owners see such an invite flagged (`senderLapsed`) and re-send it (which
+  makes them its sender) or revoke it; a deleted sender's invites cascade
+  away with the account. A lapsed invite **revives** if its sender regains
+  the role (owner, or team admin): accepted by the operator (2026-10-01),
+  since they could re-send it anyway, so keeping it dead would protect
+  nothing. Tests: `invites/invites.db.test.ts` "an invite is
+  good only while its sender may still send it", `farms/invites.db.test.ts`
+  (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -1023,7 +1069,22 @@ and nothing else.
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a short
     series is checked for negatives only (a new one a key creates is held
-    whatever its days, below);
+    whatever its days, below). Such a push **pauses automatic publishing**
+    (operator decision, 2026-10-01, #93: option (b) for auto-publish, (a)
+    for automatic runs): when no outlier limit could be taken at all, the
+    merge records `series.unchecked` as the key and answers
+    `autoPublishHeld: true`; the automatic run still runs, so a new
+    logger's figures stay current in the workspace, but
+    `publish/autoPublish.ts` publishes no automatic run while such an event
+    is newer than the project's latest manual run
+    (`uncheckedSinceLastRun`). So a leaked key's absurd value in a short
+    series can reach an automatic run, which only staff see, and never
+    farmers until a person has run the model on it. Holding the runs too
+    was rejected: a new logger's automatic runs would wait for a manual run
+    every day, for months on a dry rain record. A ceiling per kind was
+    rejected: it works for rain, but flow has none. Editors seed a series
+    with its record so far, not one day (the `409` below says so), which
+    shortens the paused stretch;
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -1079,7 +1140,9 @@ and nothing else.
   key pushing in batches held by the limit without its own days, another
   key's and a person's days counting, the guard's directions; a key that
   alone fills a series held by the accepted values, a genuine value passing,
-  the `own` bootstrap before a manual run), `series/hold.test.ts`.
+  the `own` bootstrap before a manual run; a push into a short series
+  running automatically but not published until a person runs the model,
+  with a long-enough record as the positive control), `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
@@ -2993,6 +3056,12 @@ nothing else.
   transaction, never a route's), under the key it derives itself
   (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
   only once: a second recording changes nothing and returns false.
+  The server's re-run outcome isn't a pack column: it is
+  `pack_reproduction` (154_pack_reproduce), which `water_app` only reads,
+  written by `app_record_pack_reproduction` from a *running*
+  `pack_reproduce` job of that pack as its acting user, for the bundle the
+  pack records, once per engine, so no member can mark a pack reproduced.
+  It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in
   the same transaction* (`issued_at = now()`), so only the issue route

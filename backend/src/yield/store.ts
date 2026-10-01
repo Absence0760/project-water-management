@@ -119,7 +119,7 @@ export async function yieldInputFor(db: Db, projectId: string, role: Role, userI
 export function checkYieldNode(input: ModelInput, nodeId: string, kind: 'firm' | 'curve'): void {
 	const n = input.model.nodes.find((x) => x.id === nodeId);
 	if (!n) throw new ApiError(400, 'that node is not in this run or scenario');
-	if (n.kind !== 'farm') throw new ApiError(400, 'a yield is for a farm or dam node, not a gauge or other water user');
+	if (n.kind !== 'farm') throw new ApiError(400, 'a yield is for a unit or dam node, not a gauge or other water user');
 	if (kind === 'curve' && !(n.damCapacityM3 > 0)) throw new ApiError(400, 'a storage–yield curve needs a dam with a capacity above 0');
 }
 

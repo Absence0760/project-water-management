@@ -51,7 +51,7 @@ export function resolveLandCover(model: Pick<ProjectModel, 'nodes' | 'landCover'
 			continue;
 		}
 		if (n.kind !== 'farm' || !(n.areaKm2 > 0)) {
-			warnings.push(`land cover on "${n.name}" skipped: it needs a farm with an area to reduce the runoff of`);
+			warnings.push(`land cover on "${n.name}" skipped: it needs a unit with an area to reduce the runoff of`);
 			continue;
 		}
 		const cls = LAND_COVER_CLASSES.find((c) => c.id === p.coverClass) ?? LAND_COVER_CLASSES.find((c) => c.id === 'other')!;

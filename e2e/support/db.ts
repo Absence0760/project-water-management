@@ -386,6 +386,39 @@ export async function plantFiringAlert(projectId: string): Promise<void> {
 }
 
 /**
+ * Make a run the project's newest forecast run, continuing from recorded rain
+ * to `lastObserved`, and open its EWR forecast alert (a rule and a firing
+ * event), as the alert evaluator leaves it (WP-2.13). A `lastObserved` before
+ * the project's last recorded rain day makes it a forecast behind the rain
+ * (alerts/evaluate.ts newestForecast), which Active alerts marks out of date.
+ * Called again, it only moves `lastObserved`. The evaluator's own decisions
+ * are covered by backend/src/alerts/alerts.db.test.ts.
+ */
+export async function plantEwrForecastAlert(projectId: string, runId: string, lastObserved: string): Promise<void> {
+	await withDb(async (db) => {
+		const forecast = { from: '2026-09-25', to: '2026-10-10', days: 16, outletEwrDaysAtRisk: 5, lastObserved, perFarm: [] };
+		const r = await db.query(`UPDATE model_run SET trigger = 'forecast', summary = jsonb_set(summary, '{forecast}', $2::jsonb) WHERE id = $1`, [runId, JSON.stringify(forecast)]);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+		const { rows } = await db.query<{ id: string }>(`SELECT id FROM alert_rule WHERE project_id = $1 AND kind = 'ewr_forecast_fail'`, [projectId]);
+		if (rows.length) return;
+		const { rows: rule } = await db.query<{ id: string }>(`INSERT INTO alert_rule (project_id, kind, threshold, enabled) VALUES ($1, 'ewr_forecast_fail', 3, true) RETURNING id`, [projectId]);
+		await db.query(
+			`INSERT INTO alert_event (rule_id, project_id, kind, state, value, detail, run_id) VALUES ($1, $2, 'ewr_forecast_fail', 'firing', 5, $3, $4)`,
+			[rule[0]!.id, projectId, JSON.stringify({ days: 5, of: 16, from: forecast.from, to: forecast.to, madeOn: '2026-09-24' }), runId]
+		);
+	});
+}
+
+/**
+ * Make a pack's recorded server re-runs (154_pack_reproduce) an older engine's
+ * than the server's, as after an engine upgrade: the pack's page then offers
+ * an editor a re-run on the server's engine (POST …/packs/:packId/reproduce).
+ */
+export async function ageReproductionEngine(packId: string, engine: string): Promise<void> {
+	await withDb((db) => db.query('UPDATE pack_reproduction SET engine_version = $2 WHERE pack_id = $1', [packId, engine]));
+}
+
+/**
  * Make a run look as if an older engine made it (issue #103, the known-defect
  * flag): only its recorded engine_version changes, so the API flags the errata
  * of that version (docs/engine-errata.md).

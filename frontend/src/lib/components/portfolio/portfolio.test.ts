@@ -156,7 +156,7 @@ describe('the thresholds (D11)', () => {
 	});
 	it('says whose they are, and that the defaults still wait for the hydrologist', () => {
 		expect(thresholdsSource({ source: 'team' })).toBe('These are the team’s own thresholds.');
-		expect(thresholdsSource({ source: 'default' })).toBe('These are the default thresholds, still to be confirmed by the hydrologist.');
+		expect(thresholdsSource({ source: 'default' })).toBe('These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.');
 	});
 	it('checks the team page form as the API does: numbers, 0–100 %, green below amber', () => {
 		expect(thresholdsError(5, 20)).toBeNull();

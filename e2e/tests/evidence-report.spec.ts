@@ -154,15 +154,18 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await expect(page.getByTestId('evidence-users').getByRole('row', { name: /^Lower farm/ })).toContainText(/\d+ of \d+ sets/);
 	await expect(page.getByTestId('evidence-served').first().getByRole('rowheader', { name: /^Upper farm \(the applicant’s\)/ })).toBeVisible();
 
-	// The other application, summed on page 1 and listed in § 4 (a sum of runs, not one combined run).
-	const others = table.getByRole('row', { name: /^Other applications on this baseline, summed/ });
-	await expect(others).toContainText('1 application: “Second dam 150 000 m³”.');
-	await expect(others).toContainText('not one combined run (WP-3.11)');
-	await expect(others).toContainText('no band: a sum of other runs’ own differences');
+	// The other application: page 1's row reads one combined run of both (evidence-11, C26), never a sum. Both
+	// set the upper farm's dam, so they conflict: not assessed, the conflict named. § 4 lists its own run.
+	const others = table.getByRole('row', { name: /^This and the other applications on this baseline, together/ });
+	await expect(others).toContainText('run together (a cumulative assessment, WP-3.11)');
+	await expect(others).toContainText('Not assessed: these applications conflict, so they are not run together (a conflict is never merged)');
+	await expect(others).toContainText('both change node "Upper farm": damCapacityM3');
+	await expect(page.getByTestId('evidence-combined-na')).toContainText('both change node "Upper farm": damCapacityM3');
 	const cumulative = page.getByTestId('evidence-cumulative');
 	await expect(cumulative.getByRole('rowheader', { name: /^“Second dam 150 000 m³”/ })).toBeVisible();
 	await expect(cumulative.getByRole('row', { name: /^“Second dam/ })).toContainText('submitted');
-	await expect(cumulative.getByRole('rowheader', { name: 'With this application' })).toBeVisible();
+	// No sum of separate runs in a document since evidence-11.
+	await expect(cumulative.getByRole('rowheader', { name: 'With this application' })).toHaveCount(0);
 
 	// Licence impact by year class on page 1 (issue #53 R7), the application beside the baseline.
 	const board = page.getByTestId('evidence-impact-board');

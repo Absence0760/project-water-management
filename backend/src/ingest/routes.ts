@@ -116,5 +116,6 @@ export const ingestRoutes = new Hono<IngestEnv>()
 		await wakeForRerun(r.rerun);
 		c.header('Cache-Control', 'no-store');
 		// rerunHeld: the pushed days the data-quality rules flag; the automatic re-run waits for a person (series/hold.ts).
-		return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor, rerunHeld: r.held });
+		// autoPublishHeld: the series is too short for the outlier limit, so the automatic run goes on but isn't published by itself until a person runs the model.
+		return c.json({ series: r.meta, daysChanged: r.daysChanged, rerunQueuedFor: r.rerunQueuedFor, rerunHeld: r.held, autoPublishHeld: r.unchecked });
 	});

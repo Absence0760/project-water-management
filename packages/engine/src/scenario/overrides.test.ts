@@ -114,13 +114,13 @@ describe('applyScenario: each op', () => {
 
 	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {
 		const set = (id: string, field: string, value: unknown) => ({ op: 'node.set', nodeId: id, field, value }) as ScenarioOp;
-		// Estimated area (capacity ÷ 3 m): doubling 100 000 m³ gives 33 333 × 2^0.7 = 54 150 m², not 66 667.
+		// Estimated area (7.2 × C^0.77, engine ≥ 1.63.0): doubling 100 000 m³ gives 50 972 × 2^0.7 = 82 804 m², not 101 944.
 		const b = base();
 		nodeOf(b, 'A')!.damCapacityM3 = 100_000;
 		const r = applyScenario(b, [set('A', 'damCapacityM3', 200_000)]);
 		expect(r.problems).toEqual([]);
-		expect(nodeOf(r.input, 'A')!.damAreaFullM2).toBeCloseTo((100_000 / 3) * 2 ** 0.7, 6);
-		expect(r.applied[0]!.notes[0]).toMatch(/33333 → 54150 m² .*from the capacity ÷ 3 m estimate/);
+		expect(nodeOf(r.input, 'A')!.damAreaFullM2).toBeCloseTo(7.2 * 100_000 ** 0.77 * 2 ** 0.7, 6);
+		expect(r.applied[0]!.notes[0]).toMatch(/50972 → 82804 m² .*from the 7\.2 × capacity\^0\.77 estimate/);
 		// An entered area and exponent: A_full × ratio^b; the same capacity changes nothing.
 		const e = base();
 		Object.assign(nodeOf(e, 'A')!, { damAreaFullM2: 50_000, damAreaExponent: 0.8 });
@@ -204,6 +204,9 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
 		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);
 		expect(one({ op: 'node.set', nodeId: 'A', field: 'damInitialPct', value: 1.5 }).problems[0]).toMatch(/at most 1/);
+		// No basin has a dam area exponent above 1 (engine ≥ 1.63.0, issue #90); 1 itself is allowed.
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'damAreaExponent', value: 1.5 }).problems[0]).toMatch(/damAreaExponent.*at most 1/);
+		expect(one({ op: 'node.set', nodeId: 'A', field: 'damAreaExponent', value: 1 }).problems).toEqual([]);
 		// Not a field at all (a caller bypassing the types): refused, not written.
 		const r = one({ op: 'node.set', nodeId: 'A', field: 'downstreamNodeId', value: 'B' } as unknown as ScenarioOp);
 		expect(r.problems).toHaveLength(1);
@@ -401,7 +404,7 @@ describe('applyScenario: each op', () => {
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 1 }).input.model.cropAreas[0]).toEqual({ nodeId: 'A', cropId: 'c1', areaM2: 1 });
 		expect(one({ op: 'cropArea.set', nodeId: 'B', cropId: 'c1', areaM2: 5 }).input.model.cropAreas).toHaveLength(3);
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'c1', areaM2: 0 }).input.model.cropAreas.map((a) => a.nodeId)).toEqual(['C']);
-		expect(one({ op: 'cropArea.set', nodeId: 'G', cropId: 'c1', areaM2: 5 }).problems[0]).toMatch(/crops grow on farms/);
+		expect(one({ op: 'cropArea.set', nodeId: 'G', cropId: 'c1', areaM2: 5 }).problems[0]).toMatch(/crops grow on units/);
 		expect(one({ op: 'cropArea.set', nodeId: 'A', cropId: 'zz', areaM2: 5 }).problems[0]).toMatch(/crop zz not found/);
 	});
 
@@ -445,7 +448,7 @@ describe('applyScenario: each op', () => {
 	it('landCover.add / remove', () => {
 		const p = { id: 'lc2', nodeId: 'A', coverClass: 'invasive' as const, areaKm2: 0.5, densityPct: 1, factors: null };
 		expect(one({ op: 'landCover.add', patch: p }).input.model.landCover).toHaveLength(2);
-		expect(one({ op: 'landCover.add', patch: { ...p, nodeId: 'G' } }).problems[0]).toMatch(/lies on a farm/);
+		expect(one({ op: 'landCover.add', patch: { ...p, nodeId: 'G' } }).problems[0]).toMatch(/lies on a unit/);
 		expect(one({ op: 'landCover.add', patch: { ...p, id: 'lc1' } }).problems[0]).toMatch(/already in use/);
 		expect(one({ op: 'landCover.remove', patchId: 'lc1' }).input.model.landCover).toEqual([]);
 		expect(one({ op: 'landCover.remove', patchId: 'zz' }).problems[0]).toMatch(/not found/);
@@ -1176,7 +1179,7 @@ describe('later ops (engine ≥ 1.35.0): moving and inserting nodes', () => {
 		expect(ok.problems).toEqual([]);
 		expect(ok.input.model.transfers[0]).toMatchObject({ lossReturnPct: 0.5, lossReturnNodeId: 'A' });
 		// B is not below C on the river: skipped, with the rule as its problem.
-		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a farm downstream of it/);
+		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'B' }]).problems[0]).toMatch(/^op 1 \(transfer\.set\): river off-take r1: its seepage can rejoin the river only below "Farm C" or a unit downstream of it/);
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnNodeId', value: 'Z' }]).problems[0]).toMatch(/node Z not found/);
 		expect(applyScenario(b, [{ op: 'transfer.set', transferId: 'r1', field: 'lossReturnPct', value: 1.5 }]).problems[0]).toMatch(/lossReturnPct/);
 		const gone = applyScenario(ok.input, [{ op: 'node.remove', nodeId: 'A' }]);
@@ -1416,7 +1419,7 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 	});
 
 	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
-		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a farm or other water user; "Outlet gauge" is a gauge']);
+		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a unit or other water user; "Outlet gauge" is a gauge']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ volumeM3PerYear: -1 }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be a number of m³ from 0 to below 10¹²"]);
 		expect(one({ op: 'allocation.set', allocation: alloc({ validFrom: '2022-01-01', validTo: '2021-01-01' }) }).problems).toEqual(["op 1 (allocation.set): the registered volume isn't usable: validTo is before valid from (2022-01-01)"]);

@@ -67,6 +67,7 @@ import type {
 	RestoreResult,
 	SeriesRevisionMeta,
 	PackPdfState,
+	PackReproductionState,
 	Signoff,
 	SignoffList,
 	Pack,
@@ -221,6 +222,18 @@ function describeDetails(details: unknown): string {
 
 export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(...a)) {
 	const base = baseUrl.replace(/\/+$/, '');
+	/** Told of every error answer before it is thrown (onError below). */
+	const errorListeners = new Set<(err: ApiError) => void>();
+	function failed(err: ApiError): ApiError {
+		for (const fn of errorListeners) {
+			try {
+				fn(err);
+			} catch {
+				// A listener's bug never changes what the caller sees.
+			}
+		}
+		return err;
+	}
 
 	async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
@@ -254,7 +267,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			const msg = typeof obj.error === 'string' && obj.error ? obj.error : statusText(res.status);
 			const code = typeof obj.code === 'string' && obj.code ? obj.code : null;
 			const params = obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params) ? (obj.params as Record<string, string | number>) : {};
-			throw new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params);
+			throw failed(new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params));
 		}
 		return data as T;
 	}
@@ -265,6 +278,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 
 	return {
 		request,
+		/**
+		 * Be told of every error the API answers (not network failures), before
+		 * the caller sees it: the app-wide two-step sign-in prompt notes its
+		 * 403s this way ($lib/auth/mfaPrompt.svelte). Returns the unsubscribe.
+		 */
+		onError(fn: (err: ApiError) => void): () => void {
+			errorListeners.add(fn);
+			return () => errorListeners.delete(fn);
+		},
 		auth: {
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			/**
@@ -656,7 +678,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
 			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
 			renderPdf: (id: string, packId: string) =>
-				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf)
+				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf),
+			/**
+			 * Re-run an issued pack on the server again (editor): after the last re-run gave up, or on a newer engine.
+			 * The pending re-run comes back while one is queued; 409 once this engine's outcome is recorded.
+			 */
+			reproduce: (id: string, packId: string) =>
+				request<{ jobId: string; reproduction: PackReproductionState }>('POST', `${p(id)}/packs/${enc(packId)}/reproduce`, {}).then((r) => r.reproduction)
 		},
 		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
 		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),

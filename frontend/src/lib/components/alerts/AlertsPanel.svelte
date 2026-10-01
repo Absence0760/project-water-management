@@ -7,7 +7,7 @@
 	import { onMount } from 'svelte';
 	import { api, type AlertEvent } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
-	import { eventKindName, eventText } from './alerts';
+	import { eventKindName, eventText, outOfDateText } from './alerts';
 
 	let {
 		projectId,
@@ -66,7 +66,12 @@
 	{:else}
 		<ul>
 			{#each events as e (e.id)}
-				<li data-alert-kind={e.kind}><strong>{eventKindName(e)}.</strong> {eventText(e)}</li>
+				{@const stale = outOfDateText(e)}
+				<li data-alert-kind={e.kind}>
+					<strong>{eventKindName(e)}.</strong>
+					{eventText(e)}
+					{#if stale}<span class="stale" data-forecast-out-of-date>{stale}</span>{/if}
+				</li>
 			{/each}
 		</ul>
 	{/if}
@@ -84,6 +89,11 @@
 <style>
 	.alerts {
 		margin-bottom: 1rem;
+	}
+	.stale {
+		display: block;
+		color: var(--warning);
+		font-size: 0.85rem;
 	}
 	ul {
 		margin: 0 0 0.75rem;

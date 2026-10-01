@@ -239,6 +239,9 @@
 									{:else}
 										<span title="Expires {fmtDate(inv.expiresAt, true)}">{expiryText({ expiresAt: inv.expiresAt, expired: false })}</span>
 									{/if}
+									{#if inv.senderLapsed}
+										<span class="badge badge-warn" title="Whoever sent it can no longer add people here, so it can’t be accepted. Resend it to renew it.">Sender can no longer invite</span>
+									{/if}
 								</span>
 							</div>
 							{#if isOwner}

@@ -75,6 +75,8 @@ export interface InvitedFarmer {
 	invitedBy: string;
 	expiresAt: string;
 	locale: Locale;
+	/** Its sender no longer owns the project: nobody can accept it until an owner re-sends it (155_invite_sender_role). */
+	senderLapsed: boolean;
 }
 
 export type FarmerEntry = ActiveFarmer | InvitedFarmer;
@@ -100,8 +102,9 @@ async function activeFarmers(db: Db, projectId: string): Promise<ActiveFarmer[]>
  * invite_node shows them to owners only; anyone else gets none.
  */
 async function invitedFarmers(db: Db, projectId: string, inviteId?: string): Promise<InvitedFarmer[]> {
-	const { rows } = await db.query<{ inviteId: string; email: string; role: FarmRole; nodeIds: string[]; invitedBy: string; expires_at: Date; locale: Locale }>(
+	const { rows } = await db.query<{ inviteId: string; email: string; role: FarmRole; nodeIds: string[]; invitedBy: string; expires_at: Date; locale: Locale; sender_lapsed: boolean | null }>(
 		`SELECT i.id AS "inviteId", i.email, i.project_role::text AS role, u.display_name AS "invitedBy", i.expires_at, i.locale,
+			app_invite_sender_lapsed(i.id) AS sender_lapsed,
 			coalesce(array_agg(n.node_id ORDER BY n.node_id) FILTER (WHERE n.node_id IS NOT NULL), '{}') AS "nodeIds"
 		 FROM invite i
 		 JOIN app_user u ON u.id = i.invited_by
@@ -112,8 +115,9 @@ async function invitedFarmers(db: Db, projectId: string, inviteId?: string): Pro
 		 ORDER BY i.created_at, i.email`,
 		[projectId, inviteId ?? null]
 	);
-	return rows.map(({ expires_at, ...r }) => ({
+	return rows.map(({ expires_at, sender_lapsed, ...r }) => ({
 		...r,
+		senderLapsed: sender_lapsed === true,
 		status: expires_at.getTime() <= Date.now() ? 'expired' : 'invited',
 		expiresAt: expires_at.toISOString()
 	}));
@@ -130,7 +134,7 @@ async function assertFarms(db: Db, projectId: string, nodeIds: string[]) {
 		`SELECT count(*)::int AS n FROM node WHERE project_id = $1 AND kind = 'farm' AND id = ANY($2::uuid[])`,
 		[projectId, unique]
 	);
-	if (rows[0]!.n !== unique.length) throw new ApiError(400, 'every node must be a farm in this project');
+	if (rows[0]!.n !== unique.length) throw new ApiError(400, 'every node must be a hydrological unit in this project');
 	return unique;
 }
 

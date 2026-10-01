@@ -1,7 +1,7 @@
 // The alert pages' words and parsing (WP-2.13): the workspace's (./alerts.ts) and the translated pages' (./words.ts).
 import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
-import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
+import { eventKindName, eventText, feedbackKindName, feedbackRows, feedbackShare, feedRuleLabel, groupRules, outOfDateText, seriesRuleLabel, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '$lib/api/client';
 import { choiceLabel, farmAlertText, feedbackThanks, fragmentAnswer, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
@@ -20,6 +20,7 @@ const event = (over: Partial<AlertEvent> = {}): AlertEvent => ({
 	openedAt: '2026-09-26T08:00:00Z',
 	clearedAt: null,
 	detail: { source: 'latest', pct: 0.08, date: '2026-09-20' },
+	forecastOutOfDate: null,
 	...over
 });
 
@@ -154,6 +155,15 @@ describe('the workspace’s Active alerts', () => {
 			'Restriction in place: Level 2, a 20 % cut in registered water use'
 		);
 		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 1' } }))).toBe('Restriction in place: Level 1');
+	});
+
+	it('says an EWR forecast alert is out of date while its forecast is behind the recorded rain, and nothing while it is current', () => {
+		const ewr = event({ kind: 'ewr_forecast_fail', nodeId: null, nodeName: null, threshold: 3, detail: { days: 5, of: 14 } });
+		// Positive control: a current forecast gets no line.
+		expect(outOfDateText(ewr)).toBeNull();
+		expect(outOfDateText({ ...ewr, forecastOutOfDate: { madeOn: '2026-09-20', observedTo: '2026-09-19', rainUntil: '2026-09-24' } })).toBe(
+			'Forecast out of date: made 20 Sep 2026 on the rain recorded to 19 Sep 2026, but rain is now recorded to 24 Sep 2026 and no newer forecast has been made. Check the forecast data feed.'
+		);
 	});
 });
 

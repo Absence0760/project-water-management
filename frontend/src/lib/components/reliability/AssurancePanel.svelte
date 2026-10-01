@@ -132,7 +132,7 @@
 					{@render stressGrid(g, `${uid}-sh-${gi}`, gi === 0)}
 				{/each}
 				<p class="note muted">
-					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (pending the hydrologist's review). The whole run
+					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (a provisional default, not yet confirmed by the catchment's hydrologist). The whole run
 					is shown, not only the reporting window.
 				</p>
 			{:else}
@@ -149,7 +149,7 @@
 				</div>
 				{@render stressGrid(grid, `${uid}-sh`, true)}
 				<p class="note muted">
-					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (pending the hydrologist's review). The whole run
+					The class is set by the month's supplied ÷ demand, with the node-based model's thresholds (a provisional default, not yet confirmed by the catchment's hydrologist). The whole run
 					is shown, not only the reporting window. Use the arrow keys to move between months.
 				</p>
 			{/if}

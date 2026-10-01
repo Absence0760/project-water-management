@@ -544,7 +544,7 @@ const ScoredPeriod = z
 			.nullable()
 			.optional(),
 		benchmarks: z
-			.object({ meanFlow: scoreSet, climatology: scoreSet, halfWindowDays: z.number().int().min(0).max(183) })
+			.object({ meanFlow: scoreSet, climatology: scoreSet, halfWindowDays: z.number().int().min(0).max(183), builtFrom: z.enum(['period', 'calibration']).optional() })
 			.strict()
 			.nullable()
 			.optional(),
@@ -638,6 +638,8 @@ const DayQuality = z
 		censoredDays: dayCount,
 		leftOutDays: dayCount,
 		suspectZeroDays: dayCount,
+		// Engine ≥ 1.62.0 (QF-3): zero flow held for a long stretch, scored. Absent on an older record.
+		longZeroDays: dayCount.optional(),
 		rain: z.object({ observed: dayCount, infilled: dayCount, missing: dayCount, zeroRunDays: dayCount }).strict().nullable(),
 		notes: z.array(z.string().max(2000)).max(20)
 	})

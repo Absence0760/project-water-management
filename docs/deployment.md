@@ -1471,6 +1471,15 @@ first deploy):
   worker's `s3:GetObject` on `packs/*`) and holds that one grant. The renderer
   and the worker both need `PACKS_BUCKET` (Terraform sets it; each refuses to
   start without it).
+- **The re-run** (154_pack_reproduce). Issuing also queues a
+  `pack_reproduce` job: the worker reads the pack's bundle
+  (`packs/<project>/<pack>/<sha256>.zip`) back with that same
+  `s3:GetObject` grant, re-runs both runs from it and records the outcome
+  (`pack_reproduced` in the worker's log, `warn` unless it reproduced, with
+  the failed checks' ids and how long it took). It runs the engine twice in
+  the worker (each run as long as it took in the API), well inside the
+  worker's 300 s; 3 attempts when the bucket can't be read, then the pack
+  page says the re-run couldn't be done. No infrastructure of its own.
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
   Lock**: every object is retained from its upload for `pack_retention_days`
