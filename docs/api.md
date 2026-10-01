@@ -50,7 +50,7 @@ doubling to 15, right codes included. The session JWT carries `amr`:
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor; `sessionVerified`, this session signed in with a code (signed in) |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor (false while `MFA_REQUIRED=false`); `sessionVerified`, this session signed in with a code (signed in) |
 | POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
 | POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
 | DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
