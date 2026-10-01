@@ -194,6 +194,11 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
 - [x] **Signing a run or a pack doesn’t require it** (below,
       "Two-step sign-in on sign-off"). **Done** (operator decision,
       2026-10-01): every signer needs it.
+- [x] **The two-step sign-in banner can be dismissed** (from #282). Like the
+      confirm-email banner, it hides until the next refused action or
+      sign-in. **Decided (operator, 2026-10-01): keep it dismissable**,
+      since every refused action brings it back (security.md § Two-step
+      sign-in, The prompt). No change.
 - [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
       "verifikasie-app" and "herstelkode" (§ Afrikaans).
 
@@ -2540,6 +2545,9 @@ role and not before it.
       it fails closed on every way a role is lost; owners see a lapsed invite
       flagged (`senderLapsed`) to re-send or revoke. Tests:
       `invites/invites.db.test.ts`, `farms/invites.db.test.ts`.
+      A lapsed invite revives if its sender regains the role: **accepted
+      (operator, 2026-10-01)**, since they could re-send it anyway
+      (security.md § Invites).
 
 ## Features left half-way
 
@@ -3966,6 +3974,13 @@ Left:
       again), and while the server runs another engine than the baseline's
       it says to run the baseline again (`staleAssessment`). Tests:
       `evidence/report-combined.db.test.ts`.
+- [x] **Who sees the combined row** (from #71, C26; operator, #93).
+      Assessments are visible to editors only, so a viewer's report never
+      shows the combined figure (viewers don't see submitted applications
+      at all), and a team scenario counts as an application once it is
+      submitted, as § 4 always did. **Confirmed (operator, 2026-10-01):
+      both stay as built** ([evidence-pack.md § The other applications
+      together](./evidence-pack.md#the-other-applications-together)).
 - [ ] **The reproduction bundle carries the combined row's runs.** An
       `evidence-11` pack's combined row cites an assessment, whose runs (the
       baseline, each alone, all together, on the assessment's engine) the
@@ -4701,6 +4716,12 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The
       Afrikaans words went through the i18n translator and checker (the
       native speaker's review is pending with the rest, § Afrikaans).
+- [x] **"Pack issued" emails: no opt-out, and a rare duplicate** (from #71;
+      operator, #93). They have no opt-out, like report-ready emails, and
+      if SES accepts an email but the call times out the retry can send a
+      second copy, as the alert emails can. **Accepted (operator,
+      2026-10-01)**: they are service messages to the people accountable
+      for the pack ([evidence-pack.md § Notices](./evidence-pack.md#notices)).
 
 ## Alerts (WP-2.13)
 

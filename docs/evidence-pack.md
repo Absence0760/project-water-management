@@ -225,7 +225,13 @@ based on this baseline (`cumulative.combined`; engine
   (*None*), one under way (*Not assessed yet*), none of exactly these
   (*an editor runs Applications › Assess together*), more than an assessment
   takes (8), or this application still a draft. Assessments are an editor's
-  (RLS), so a viewer's report finds none.
+  (RLS), so a viewer's report finds none (and a viewer sees no submitted
+  application at all, so their row has no others to put together).
+- **Confirmed (operator, 2026-10-01).** Assessments, and so the combined
+  figure, stay editor-only; and a **team scenario counts as an
+  application** once it is submitted, as § 4 always counted it: the s27
+  question is the cumulative effect of every proposed use on the baseline,
+  whoever proposed it.
 
 § 4 still lists each other application with its own run's change, without
 the old sum, and prints the combined table (each alone, the sum, all
@@ -785,7 +791,11 @@ mail catalogue (`mail.pack.*`, `backend/src/mail/i18n/en.ts`) and follow the
 recipient's language, English where a key has no translation.
 
 There is no opt-out: like a report-ready email, it goes to the few people
-who act on packs, once per issue or withdrawal. The rows are the person's
+who act on packs, once per issue or withdrawal. And a rare **duplicate** is
+accepted: if SES accepts an email but the call times out, the retry can
+send a second copy, as the alert emails can. Both decided by the operator
+(2026-10-01): these are service messages to the people accountable for the
+pack, and a second copy costs less than a lost one. The rows are the person's
 (in their data export as `packNotices`, deleted with the account) and are
 purged 30 days after they are settled.
 

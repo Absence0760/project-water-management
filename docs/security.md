@@ -201,8 +201,10 @@ decide a licence application.
   publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
   own error message stays where the page shows it. The banner is English
   and stays off the translated pages (the Account page has its own warning,
-  the farm view's roles never need it). Dismissable until the next refusal;
-  signing out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  the farm view's roles never need it). Dismissable until the next refusal
+  (kept so by the operator's decision, 2026-10-01: every refused action
+  brings it back, so a person who needs it can't miss it for long); signing
+  out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
@@ -303,7 +305,10 @@ decide a licence application.
   keeps up with: the check fails closed on all of them. The remaining
   owners see such an invite flagged (`senderLapsed`) and re-send it (which
   makes them its sender) or revoke it; a deleted sender's invites cascade
-  away with the account. Tests: `invites/invites.db.test.ts` "an invite is
+  away with the account. A lapsed invite **revives** if its sender regains
+  the role (owner, or team admin): accepted by the operator (2026-10-01),
+  since they could re-send it anyway, so keeping it dead would protect
+  nothing. Tests: `invites/invites.db.test.ts` "an invite is
   good only while its sender may still send it", `farms/invites.db.test.ts`
   (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
