@@ -193,6 +193,12 @@ beforeAll(async () => {
 		subject.id,
 		projectId
 	]);
+	// Their "Was this useful?" answer to it, with a comment (147_alert_feedback).
+	await asOwner(
+		`INSERT INTO alert_feedback (project_id, user_id, event_id, kind, nonce, token_hash, useful, comment, answered_at)
+		 VALUES ($1, $2, $3, 'dam_below', sha256(gen_random_uuid()::text::bytea), sha256(gen_random_uuid()::text::bytea), true, 'Helpful, thanks', now())`,
+		[projectId, subject.id, event.id]
+	);
 	// A series replaced (a revision), a reset link, a render token, an allocation import.
 	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-10-01', values: rain.map((v) => v + 1) });
 	expect((await anon('POST', '/auth/forgot-password', { email: subject.email })).status).toBe(202);

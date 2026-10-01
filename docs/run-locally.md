@@ -55,7 +55,7 @@ No env files to write. `backend/.env.development` and
 | `PACKS_BUCKET` | `water-packs` | Issued evidence packs' files: the reproduction bundle, stored when a pack is issued (created on first use; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)) |
 | `REPORT_DOWNLOADS` | `presigned` | How the download route signs a PDF link: `presigned` = a 60 s MinIO GET; production uses `cloudfront` (a CloudFront signed URL on the site's `/reports/*`, with `CLOUDFRONT_KEY_PAIR_ID` / `CLOUDFRONT_PUBLIC_KEY` from Terraform and `CLOUDFRONT_PRIVATE_KEY` from sops; security.md § Reports) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
-| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
+| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe and "Was this useful?" links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
 | `API_PUBLIC_URL` | `http://localhost:3001` | Where a mail client posts an alert's one-click unsubscribe (production: `SITE_URL/api`, the default) |
 | `ALERTS_ENABLED` / `ALERTS_DAILY_CAP` | `true` / `5` | The alert kill switch, and immediate alert emails per person per day |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
@@ -174,7 +174,11 @@ go to Mailpit like every other email, sent by the worker, so run
    farmer2@example.com) and the editors and owners.
 2. Mailpit shows the mail with its *Stop these emails* link
    (`/alerts/unsubscribe#t=…`) and its `List-Unsubscribe` headers; the
-   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`.
+   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`. Under
+   the button, *Was this alert useful? Yes · No* opens
+   `/alerts/feedback#t=…&a=yes|no`: pick an answer, add a comment and press
+   **Send** (opening the link records nothing). The answers show under the
+   rule editor as **Was it useful?**.
 3. Lower the level below the dam (plus 5 points) and save to clear it; raise
    it again for a second crossing and a second mail.
 4. Each person's choices are at `/account/alerts`. More than 5 immediate

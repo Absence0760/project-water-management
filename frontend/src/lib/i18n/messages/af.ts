@@ -79,6 +79,8 @@ export const af: Catalogue = {
 	'd14653a3': 'Jy sal nie meer waarskuwings-e-posse vir {project} kry nie.',
 	// You won’t get {kind} emails for {project} any more.
 	'fa614c6b': 'Jy sal nie meer e-posse oor {kind} vir {project} kry nie.',
+	// Thank you. Your answer goes to the people who run alerts for {project}, without your name.
+	'6bfb93ee': 'Dankie. Jou antwoord gaan sonder jou naam na die mense wat die waarskuwings vir {project} bestuur.',
 	// Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending.
 	'554605ea': 'Jou waarskuwings-e-posse is onderbreek. ’n E-pos wat ons na {email} gestuur het, is as gemorspos gemerk, daarom het ons opgehou om te stuur.',
 	// Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed.
@@ -103,12 +105,12 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
-	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
-	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
-	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit in geheel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
-	// The Terms now start with a short version of the main points.
-	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
+	// When an account is deleted, what it made for a project stays as the project’s record with the name removed. A sign-off’s typed name and the names in an evidence pack are kept only as long as that record.
+	'71f9b9a7': 'Wanneer ’n rekening uitgevee word, bly wat dit vir ’n projek gemaak het as die projek se rekord, met die naam verwyder. ’n Aftekening se getikte naam en die name in ’n bewyspakket word net gehou solank daardie rekord bestaan.',
+	// Alert emails now ask “Was this useful?”. If you answer, your answer and any comment are kept for a year, and your WUA sees them without your name.
+	'521ccbcb': 'Waarskuwings-e-posse vra nou “Was dit nuttig?”. As jy antwoord, word jou antwoord en enige kommentaar ’n jaar lank gehou, en jou WGV sien dit sonder jou naam.',
+	// Our emails don’t track whether you open them or follow their links.
+	'dfb648c4': 'Ons e-posse hou nie dop of jy hulle oopmaak of hulle skakels volg nie.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -1005,6 +1007,8 @@ export const af: Catalogue = {
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
 	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
 	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
+	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
 	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// Your comment is posted.
@@ -1111,12 +1115,12 @@ export const af: Catalogue = {
 	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
 	// Print a summary for members
 	'ff85468b': 'Druk ’n opsomming vir lede',
-	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
-	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// Period
 	'87248424': 'Tydperk',
 	// Print or save as PDF
 	'80a077b4': 'Druk of stoor as PDF',
+	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
+	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// The mean flow was above the reserve in every month.
 	'bb92196c': 'Die gemiddelde vloei was elke maand bo die reserwe.',
 	// The mean flow was below the reserve in every month.
@@ -1517,20 +1521,40 @@ export const af: Catalogue = {
 	'50b26149': 'Aanvaar',
 	// Decline
 	'58eaef39': 'Wys af',
+	// Was this alert useful?
+	'406db233': 'Was hierdie waarskuwing nuttig?',
+	// Your answer
+	'212940e8': 'Jou antwoord',
+	// Yes, it was useful
+	'c7f43ae2': 'Ja, dit was nuttig',
+	// No, it wasn’t useful
+	'a92856c1': 'Nee, dit was nie nuttig nie',
+	// Choose Yes or No.
+	'6bfca88b': 'Kies Ja of Nee.',
+	// Anything to add? (optional)
+	'0e4aecaf': 'Iets om by te voeg? (opsioneel)',
+	// Your WUA reads your answer and comment without your name. Nothing is kept until you press Send.
+	'50a68d80': 'Jou WGV lees jou antwoord en kommentaar sonder jou naam. Niks word gehou voordat jy op Stuur druk nie.',
+	// Keep it to {max} characters.
+	'0c931d1c': 'Gebruik hoogstens {max} karakters.',
+	// One moment…
+	'cf936b69': 'Net ’n oomblik…',
+	// Send
+	'f28e14cf': 'Stuur',
+	// Manage alerts
+	'5ac110b9': 'Bestuur waarskuwings',
+	// This link doesn’t work any more: it lasts 30 days, and only while you are a member of the catchment.
+	'2c2ee394': 'Hierdie skakel werk nie meer nie: dit bly 30 dae geldig, en net solank jy ’n lid van die opvanggebied is.',
+	// This link is incomplete. Open it again from the email, or copy the whole link.
+	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// Stop alert emails
 	'ac585d38': 'Stop waarskuwings-e-posse',
 	// Stop getting these alert emails? You can turn them back on from your account at any time.
 	'72528562': 'Wil jy ophou om hierdie waarskuwings-e-posse te kry? Jy kan dit enige tyd weer vanaf jou rekening aanskakel.',
-	// One moment…
-	'cf936b69': 'Net ’n oomblik…',
 	// Stop these emails
 	'c156b4db': 'Stop hierdie e-posse',
-	// Manage alerts
-	'5ac110b9': 'Bestuur waarskuwings',
 	// This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment.
 	'd526c5e1': 'Hierdie skakel werk nie meer nie: ’n nuwer e-pos het dit dalk vervang, of jy is dalk nie meer ’n lid van die opvanggebied nie.',
-	// This link is incomplete. Open it again from the email, or copy the whole link.
-	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// {page} · My hydrological unit
 	'c1fd658c': '{page} · My hidrologiese eenheid',
 	// My hydrological units
@@ -1743,8 +1767,6 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
-	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.
 	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// We’ve sent a new link to {email}.

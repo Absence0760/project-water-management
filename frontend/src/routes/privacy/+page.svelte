@@ -74,6 +74,10 @@
 			<strong>What you write in a project:</strong> notes, the reason you give for a change, a sign-off (the name and professional
 			registration you type), and any data or model you upload or edit.
 		</li>
+		<li>
+			<strong>Feedback on alert emails:</strong> if you use the “Was this useful?” link in an alert email and press Send, your yes or
+			no and any comment you add, with which kind of alert it was about. Opening the email or the link records nothing.
+		</li>
 	</ul>
 	<h3>Information others give us about you</h3>
 	<ul>
@@ -88,7 +92,10 @@
 	<ul>
 		<li><strong>Activity record:</strong> who changed what in a project, and when (the project’s history, kept as an audit trail).</li>
 		<li><strong>Security records:</strong> sign-in attempts per email address, the number of account emails sent, and your network address as seen by our servers, used to stop password guessing and abuse.</li>
-		<li><strong>Emails we send you:</strong> which alert emails went out, and whether an address bounced.</li>
+		<li>
+			<strong>Emails we send you:</strong> which alert emails went out, and whether an address bounced. We don’t track whether you open
+			an email or follow its links: our emails carry no tracking pixels or tracked links.
+		</li>
 		<li><strong>Server logs:</strong> requests and errors, kept briefly to run and fix the service.</li>
 	</ul>
 	<p>
@@ -106,6 +113,7 @@
 				<tr><td>Creating your account, signing you in, confirming your email address, resetting your password</td><td>Needed to provide the service you signed up for</td></tr>
 				<tr><td>Showing you the projects, farms and results you have access to</td><td>Needed to provide the service; for farmers, the water user association’s legitimate interest in managing its members’ water use</td></tr>
 				<tr><td>Alert emails (a dam running low, a restriction notice)</td><td>Needed to provide the service; you choose how often, and every email has a one-click unsubscribe</td></tr>
+				<tr><td>Your answer to “Was this useful?” on an alert email, so the organisation can make its alerts better</td><td>The organisation’s legitimate interest in useful alerts; answering is up to you</td></tr>
 				<tr><td>The project’s history, sign-offs and published results</td><td>The organisation’s legitimate interest in, and duty to keep, a reproducible record of its decisions</td></tr>
 				<tr><td>Stopping password guessing, spam and abuse; keeping the service running</td><td>Our legitimate interest in a secure service</td></tr>
 			</tbody>
@@ -124,7 +132,8 @@
 	<ul>
 		<li>
 			<strong>Other people in your projects,</strong> according to their role: owners and editors see the members, their roles and
-			the project’s history; a farmer sees only their own farm, and never a neighbour’s name.
+			the project’s history; a farmer sees only their own farm, and never a neighbour’s name. Editors see the answers to “Was this
+			useful?” on the project’s alert emails, counted, and the comments, without the name of who gave them.
 		</li>
 		<li>
 			<strong>Anyone with a share link</strong> sees only what that link opens: a catchment’s published results, a submitted
@@ -162,6 +171,10 @@
 		<li><strong>Links in emails:</strong> a password-reset link lasts 1 hour, a confirmation link 48 hours, an invitation 7 days (then it is kept, marked expired, for 90 days and deleted).</li>
 		<li><strong>Sign-in attempts:</strong> forgotten after a day without attempts. <strong>Account-email counts:</strong> 24 hours.</li>
 		<li><strong>Alert emails sent:</strong> 180 days. <strong>Report files:</strong> 7 days. <strong>Server logs:</strong> 30 days.</li>
+		<li>
+			<strong>Feedback on alert emails:</strong> an answer and its comment, 1 year after you gave it. A “Was this useful?” link works
+			for 30 days, and the record that it was sent to you is deleted then if you didn’t answer.
+		</li>
 		<li>
 			<strong>A project’s content and history</strong> (notes, sign-offs, published results, the record of changes): for as long
 			as the project exists, as its audit trail. Deleting a project deletes them, except that a project that has put a run forward

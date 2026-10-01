@@ -3,11 +3,13 @@
 	// and at what level: catchment-wide kinds, a dam level per farm, and a
 	// staleness level per data feed (each past that feed's usual delay, 057)
 	// and per series an API key writes (141).
+	// Under it, what people answered to "Was this useful?" (147_alert_feedback).
 	// Loaded on demand by AlertsPanel. Saving evaluates the
 	// rules at once, so a kind switched on over a figure already past its
 	// line alerts now (once: it re-arms only after the figure recovers).
 	import { onMount } from 'svelte';
 	import { api, type AlertRule } from '$lib/api';
+	import AlertFeedbackSummary from './AlertFeedbackSummary.svelte';
 	import { feedRuleLabel, groupRules, SERIES_STALE_NAME, seriesRuleLabel, KIND_NAME, THRESHOLD_INPUT, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 
 	let { projectId, onClose, onSaved }: { projectId: string; onClose: () => void; onSaved: () => void } = $props();
@@ -123,6 +125,7 @@
 		</div>
 	{/if}
 </form>
+<AlertFeedbackSummary {projectId} />
 
 <style>
 	.rules {

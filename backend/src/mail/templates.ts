@@ -40,6 +40,12 @@ export type Body = {
 	footer: string[];
 	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
 	links?: { label: string; url: string }[];
+	/**
+	 * A question with answer links, after the action and before the footer
+	 * (an alert's "Was this useful? Yes · No", 147_alert_feedback): plain
+	 * links, never an image or a pixel, in HTML; "label: url" in text.
+	 */
+	ask?: { question: string; answers: { label: string; url: string }[] };
 };
 
 /** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
@@ -52,6 +58,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 		...b.paragraphs.flatMap((p) => [paraText(p), '']),
 		`${b.action.label}: ${b.action.url}`,
 		'',
+		...(b.ask ? [b.ask.question, ...b.ask.answers.map((a) => `${a.label}: ${a.url}`), ''] : []),
 		...b.footer.flatMap((p) => [p, '']),
 		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
@@ -67,7 +74,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 ${b.paragraphs.map(p).join('\n')}
 <p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
 <p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
-${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
+${b.ask ? `<p style="margin:0 0 16px">${escapeHtml(b.ask.question)} ${b.ask.answers.map((a) => `<a href="${escapeHtml(a.url)}" style="color:#1d4e89;font-weight:600">${escapeHtml(a.label)}</a>`).join(' · ')}</p>\n` : ''}${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
 <p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
 </main>
 </body>

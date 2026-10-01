@@ -1,7 +1,7 @@
 // Unsubscribe tokens (WP-2.13): stable per nonce, bound to the secret, stored as a hash.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { hashToken, parseToken } from '../auth/tokens.js';
-import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
+import { alertsTokenSecret, feedbackPageUrl, feedbackToken, newNonce, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
 
 const SECRET = 'test-only-alerts-secret-000000000000000';
 
@@ -39,5 +39,23 @@ describe('unsubscribe tokens', () => {
 		expect(oneClickUrl('abc')).toBe('https://wm.example.org/api/alerts/unsubscribe?token=abc');
 		vi.stubEnv('API_PUBLIC_URL', 'http://localhost:3001');
 		expect(oneClickUrl('abc')).toBe('http://localhost:3001/alerts/unsubscribe?token=abc');
+	});
+});
+
+describe('feedback tokens (147_alert_feedback)', () => {
+	it('are stable per nonce, in the emailed tokens’ format, and never the unsubscribe token of the same nonce', () => {
+		const nonce = newNonce();
+		const t = feedbackToken(nonce, SECRET);
+		expect(feedbackToken(nonce, SECRET)).toBe(t);
+		expect(t).toMatch(/^[A-Za-z0-9_-]{43}$/);
+		// Single-purpose: its own label, so a feedback token can't unsubscribe, nor the reverse.
+		expect(t).not.toBe(unsubscribeToken(nonce, SECRET));
+		expect(feedbackToken(nonce, 'another-secret-that-is-long-enough-000')).not.toBe(t);
+	});
+
+	it('puts the token and the chosen answer in the page’s fragment, never the query', () => {
+		vi.stubEnv('SITE_URL', 'https://wm.example.org/');
+		expect(feedbackPageUrl('abc', true)).toBe('https://wm.example.org/alerts/feedback#t=abc&a=yes');
+		expect(feedbackPageUrl('abc', false)).toBe('https://wm.example.org/alerts/feedback#t=abc&a=no');
 	});
 });

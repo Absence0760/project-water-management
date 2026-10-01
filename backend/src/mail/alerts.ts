@@ -8,6 +8,9 @@
 //   - a one-click unsubscribe: a link to the landing page (token in the
 //     fragment) and the RFC 8058 headers pointing at POST /alerts/unsubscribe;
 //   - "why you got this" and a link to manage alerts;
+//   - "Was this useful? Yes · No" (147_alert_feedback): two plain links to a
+//     page that asks before it records anything, never an image or a pixel;
+//     opening the mail or a link records nothing (Privacy §3);
 //   - the liability line for its kind and reader (liabilityKey): a dam alert
 //     says it is the model's estimate from the published figures, not a
 //     measurement or an instruction (a farmer's words "your dam", "your WUA";
@@ -56,6 +59,23 @@ export interface Recipient {
 	/** Where "Open …" goes: a farmer to their farm page, everyone else to the workspace. */
 	farmer: boolean;
 }
+
+/** The "Was this useful?" links of one mail (alerts/tokens.ts feedbackPageUrl). */
+export interface Feedback {
+	yesUrl: string;
+	noUrl: string;
+}
+
+const ask = (tr: MailTranslator, f: Feedback | undefined, digest: boolean) =>
+	f
+		? {
+				question: tr.t(digest ? 'mail.alert.feedback.digestQuestion' : 'mail.alert.feedback.question'),
+				answers: [
+					{ label: tr.t('mail.alert.feedback.yes'), url: f.yesUrl },
+					{ label: tr.t('mail.alert.feedback.no'), url: f.noUrl }
+				]
+			}
+		: undefined;
 
 export interface Unsubscribe {
 	/** The landing page (token in the fragment). */
@@ -244,7 +264,7 @@ function translator(locale: string | null): { tr: MailTranslator; lang: Locale }
 }
 
 /** One alert, as its own email. */
-export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts, unsubscribe: Unsubscribe): Mail {
+export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts, unsubscribe: Unsubscribe, feedback?: Feedback): Mail {
 	const { tr, lang } = translator(to.locale);
 	const { what, body } = alertLines(facts, tr, project.name, lang, project.timeZone);
 	const mail = render(
@@ -255,6 +275,7 @@ export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts
 			heading: what,
 			paragraphs: [...body, ...liabilityLines([facts.kind], to.farmer, tr)],
 			action: openAction(tr, to, project.id),
+			ask: ask(tr, feedback, false),
 			footer: [tr.t('mail.alert.why', { kind: tr.t(`mail.alert.kind.${facts.kind}` as MailKey), project: project.name })],
 			links: [
 				{ label: tr.t('mail.alert.unsubscribe'), url: unsubscribe.pageUrl },
@@ -271,7 +292,7 @@ export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts
  * alerts left out past the digest's line limit (alerts/send.ts
  * DIGEST_MAX_LINES), said as "and N more" pointing at the app.
  */
-export function digestMail(to: Recipient, project: MailProject, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0): Mail {
+export function digestMail(to: Recipient, project: MailProject, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0, feedback?: Feedback): Mail {
 	const { tr, lang } = translator(to.locale);
 	const paragraphs: Para[] = [tr.t('mail.alert.digest.intro')];
 	for (const f of items) {
@@ -291,6 +312,7 @@ export function digestMail(to: Recipient, project: MailProject, items: AlertFact
 			heading: tr.t('mail.alert.digest.heading', { project: project.name }),
 			paragraphs,
 			action: openAction(tr, to, project.id),
+			ask: ask(tr, feedback, true),
 			footer: [tr.t('mail.alert.digest.why', { project: project.name, cap })],
 			links: [
 				{ label: tr.t('mail.alert.digest.unsubscribe'), url: unsubscribe.pageUrl },

@@ -1,7 +1,7 @@
 // Alert emails on the translated pages (WP-2.13, docs/ui.md § Alerts): the
 // alert emails page, the unsubscribe page and the farm view's alert card,
 // from the message catalogue. Pure, so it is unit-tested apart from the pages.
-import type { AlertChoice, AlertEvent, AlertMode, Unsubscribed, User } from '$lib/api/types';
+import type { AlertChoice, AlertEvent, AlertMode, FeedbackAnswered, Unsubscribed, User } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
 import { fmtPct } from '$lib/components/farm/numbers';
 import { msg, t, type Msg } from '$lib/i18n/locale.svelte';
@@ -67,6 +67,23 @@ export function unsubscribedText(u: Unsubscribed): string {
 	// i18n-section: unsubscribe
 	if (u.kind === 'all') return t('You won’t get any alert emails for {project} any more.', { project: u.project.name });
 	return t('You won’t get {kind} emails for {project} any more.', { kind: t(UNSUBSCRIBED[u.kind]), project: u.project.name });
+}
+
+// ---- "Was this useful?" (147_alert_feedback) ----------------------------------
+
+/** The answer a feedback link chose (`#t=…&a=yes|no`), or null when it names none. */
+export function fragmentAnswer(hash: string): boolean | null {
+	const m = /^#?(?:.*&)?a=(yes|no)(?:&|$)/.exec(hash);
+	return m ? m[1] === 'yes' : null;
+}
+
+/** The longest comment the server takes (backend FeedbackBody). */
+export const FEEDBACK_COMMENT_MAX = 500;
+
+/** The thanks once an answer is sent. */
+export function feedbackThanks(f: FeedbackAnswered): string {
+	// i18n-section: feedback
+	return t('Thank you. Your answer goes to the people who run alerts for {project}, without your name.', { project: f.project.name });
 }
 
 // ---- Paused: SES suppressed the address (the account and alert pages' banner) ----

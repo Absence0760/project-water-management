@@ -11,11 +11,13 @@
 // a title that stays). A save that fails puts the switch back where the
 // server has it, and a muted catchment's note turns its alert emails back on,
 // focusing the card's title. An editor sets a
-// staleness level per data feed on Overview's rule editor.
+// staleness level per data feed on Overview's rule editor. An alert email's
+// "Was this useful?" link asks first and records only on Send; the editors
+// see the answer, unnamed, under the rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
 import { acceptInvites, addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { words } from '../support/lang.ts';
-import { plantAlertSubscription } from '../support/db.ts';
+import { plantAlertFeedback, plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { simulateBounce } from '../support/jobs.ts';
@@ -306,6 +308,72 @@ test('an alert email’s unsubscribe link works signed out, asks first, and a de
 	} finally {
 		await context.close();
 	}
+});
+
+// "Was this useful?" (147_alert_feedback, issue #74): the link opens a page
+// that asks first, with the link's answer chosen; only Send records it. The
+// editors see the answers counted and the comment, without a name, under the
+// rule editor.
+test('an alert email’s “Was this useful?” link asks first, records the answer on Send, and the editors see it without a name', async ({ page, owner, signIn, browser }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Feedback catchment');
+	const farm = project.model.nodes.find((n) => n.name === 'Lower farm')!;
+	const farmer = await signIn('Feedback farmer');
+	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+	const token = await plantAlertFeedback(farmer.user.email, project.id, 'dam_below');
+
+	// Signed out, on a phone, as from the email's No link.
+	const context = await browser.newContext({ viewport: PHONE });
+	const p = await context.newPage();
+	try {
+		await p.goto(`/alerts/feedback#t=${token}&a=no`);
+		await expect(p.locator('[data-state="ask"]')).toBeVisible();
+		await expect(p.getByRole('heading', { level: 1, name: 'Was this alert useful?' })).toBeVisible();
+		// Token and answer read, then taken out of the address bar; nothing is recorded yet.
+		await expect(p).toHaveURL(/\/alerts\/feedback$/);
+		await expect(p.getByRole('radio', { name: 'No, it wasn’t useful' })).toBeChecked();
+		const before = await page.request.get(`${API_URL}/projects/${project.id}/alert-feedback`);
+		expect(((await before.json()) as { kinds: unknown[] }).kinds).toEqual([]);
+		await expectNoViolations(p);
+		await expectNoSidewaysScroll(p);
+
+		await p.getByLabel('Anything to add? (optional)').fill('Came after I had already checked the dam');
+		await p.getByRole('button', { name: 'Send' }).click();
+		await expect(p.getByRole('status')).toHaveText('Thank you. Your answer goes to the people who run alerts for Feedback catchment, without your name.');
+		await expect(p.getByRole('heading', { level: 1 })).toBeFocused();
+		await expect(p.getByRole('link', { name: 'Manage alerts' })).toHaveCount(1);
+		await expectNoViolations(p);
+
+		// A tampered link says it no longer works; one without its token is incomplete.
+		const tampered = token.slice(0, -1) + (token.endsWith('A') ? 'B' : 'A');
+		await p.goto('/');
+		await p.goto(`/alerts/feedback#t=${tampered}`);
+		// No answer in the link: Send asks for one first.
+		await p.getByRole('button', { name: 'Send' }).click();
+		await expect(p.getByText('Choose Yes or No.')).toBeVisible();
+		await p.getByRole('radio', { name: 'Yes, it was useful' }).check();
+		await p.getByRole('button', { name: 'Send' }).click();
+		await expect(p.getByRole('alert')).toHaveText(/This link doesn’t work any more/);
+		await p.goto('/');
+		await p.goto('/alerts/feedback');
+		await expect(p.locator('[data-state="incomplete"]')).toBeVisible();
+	} finally {
+		await context.close();
+	}
+
+	// The owner (an editor) sees it under the rule editor, counted, with the comment and no name.
+	await page.goto(`/projects/${project.id}`);
+	const panel = page.getByRole('region', { name: 'Active alerts' });
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await panel.getByRole('button', { name: 'Set up alert emails' }).click();
+	const answers = panel.getByRole('region', { name: 'Was it useful?' });
+	await expect(answers).toHaveAttribute('data-ready', 'true');
+	await expect(answers.locator('[data-feedback-kind="dam_below"]')).toHaveText('Dam low: 0 of 1 said useful');
+	await expect(answers.getByText('Came after I had already checked the dam')).toBeVisible();
+	await expect(answers).not.toContainText('Feedback farmer');
+	await expectNoViolations(page, { include: '.alerts' });
 });
 
 test('a bounced address pauses the alert emails behind a banner, which turns them back on', async ({ signIn }) => {

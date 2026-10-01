@@ -36,6 +36,7 @@ describe('errorText', () => {
 		note_author_only: 'Only the person who wrote a note can change it.',
 		note_delete_denied: 'Only the person who wrote a note, or the WUA, can delete it.',
 		unsubscribe_link_gone: 'This link doesn’t work any more.',
+		feedback_link_gone: 'This link doesn’t work any more.',
 		export_throttled: 'You downloaded your data a moment ago. Try again in 1 minute.',
 		alerts_resume_throttled:
 			'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.',
