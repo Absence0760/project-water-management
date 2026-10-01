@@ -9,7 +9,7 @@
 // helpers load nothing else.
 
 /** The terms and privacy notice in force: the date they took effect, `YYYY-MM-DD`. */
-export const LEGAL_VERSION = '2026-09-28';
+export const LEGAL_VERSION = '2026-09-30';
 
 /**
  * The farm view's "Before you look at your farm" notice and its estimate line

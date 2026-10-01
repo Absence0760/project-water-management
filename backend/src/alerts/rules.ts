@@ -10,6 +10,10 @@
 //   dam_below              the farm's dam, ÷ capacity           < t               ≥ t + 5 points
 //   ewr_forecast_fail      forecast days the outlet EWR fails   ≥ t               ≤ max(0, t − 2)
 //   data_stale (per feed)  days the feed is past its usual delay > t               < t
+//   data_stale (per series) days since an ingest-key series'     > t               < t
+//                          last value, past one (today's)
+//   farms_short            farms short in the last 7 days of an  ≥ t               0
+//                          automatic publication
 //   feed_failing           fetches in a row that failed         ≥ t               0
 //   job_dead               jobs dead in the last 24 hours       ≥ t               0
 //   restriction_published  (no value: every change of the WUA's notice is one event)
@@ -18,7 +22,7 @@
 // current forecast) clears a firing rule.
 import { z } from 'zod';
 
-export const ALERT_KINDS = ['dam_below', 'ewr_forecast_fail', 'data_stale', 'restriction_published', 'job_dead', 'feed_failing'] as const;
+export const ALERT_KINDS = ['dam_below', 'ewr_forecast_fail', 'data_stale', 'restriction_published', 'job_dead', 'feed_failing', 'farms_short'] as const;
 export type AlertKind = (typeof ALERT_KINDS)[number];
 
 /** Kinds that watch one farm each (a rule and a subscription carry its node). */
@@ -31,8 +35,17 @@ export const DEFAULT_THRESHOLDS: Readonly<Record<AlertKind, number>> = Object.fr
 	data_stale: 3,
 	restriction_published: 0,
 	job_dead: 1,
-	feed_failing: 3
+	feed_failing: 3,
+	farms_short: 1
 });
+
+/**
+ * An ingest-key series' data_stale rule (141): its default level, in days
+ * past its usual delay, and that delay. A logger pushes daily, so its newest
+ * day is yesterday at best (today's reading isn't whole yet): one day.
+ */
+export const SERIES_STALE_ALERT_DAYS = 2;
+export const SERIES_USUAL_DELAY_DAYS = 1;
 
 /** dam_below re-arms this far above its threshold (a fraction: 5 percentage points). */
 export const DAM_MARGIN = 0.05;
@@ -44,7 +57,8 @@ export const THRESHOLD: Readonly<Record<AlertKind, z.ZodType<number>>> = {
 	data_stale: z.number().int().min(1).max(60),
 	restriction_published: z.literal(0),
 	job_dead: z.number().int().min(1).max(100),
-	feed_failing: z.number().int().min(1).max(20)
+	feed_failing: z.number().int().min(1).max(20),
+	farms_short: z.number().int().min(1).max(1000)
 };
 
 /** Whether `value` is past the threshold (the rule would open an event). */
@@ -106,6 +120,7 @@ export function defaultMode(role: AudienceRole, kind: AlertKind): AlertMode | nu
 		case 'dam_below':
 			return role === 'farmer' || up ? 'immediate' : 'off';
 		case 'ewr_forecast_fail':
+		case 'farms_short':
 			return up ? 'immediate' : role === 'viewer' ? 'off' : null;
 		case 'data_stale':
 			return up ? 'immediate' : null;

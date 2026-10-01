@@ -5,7 +5,6 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { queueAlertEval } from '../alerts/queue.js';
 import { withUser } from '../db/tx.js';
-import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
@@ -38,14 +37,8 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// publishRun records it in the decision log (publication.published, decision.ts).
 			const published = await publishRun(db, id, body);
-			const p = published.publication;
-			await recordAudit(db, id, 'publication.published', {
-				publicationId: p.id,
-				runId: p.runId,
-				restriction: { level: p.restriction.level, pct: p.restriction.pct },
-				farms: published.farms
-			});
 			return { published, alertJob: await queueAlertEval(db, id, 'publish') };
 		}).then(async ({ published, alertJob }) => {
 			if (alertJob?.created) await wakeWorker(alertJob.id);
@@ -58,15 +51,8 @@ export const publicationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(pubId)) throw new ApiError(404, 'not found');
+			// patchPublication records it in the decision log (publication.notice_changed, decision.ts).
 			const publication = await patchPublication(db, id, pubId, body);
-			// Which parts were sent, not their text: the notice is on the publication itself.
-			const fields = (['note', 'restriction', 'nextExpectedOn'] as const).filter((k) => body[k] !== undefined);
-			await recordAudit(db, id, 'publication.notice_changed', {
-				publicationId: publication.id,
-				runId: publication.runId,
-				fields,
-				restriction: { level: publication.restriction.level, pct: publication.restriction.pct }
-			});
 			return { publication, alertJob: body.restriction ? await queueAlertEval(db, id, 'publish') : null };
 		}).then(async ({ publication, alertJob }) => {
 			if (alertJob?.created) await wakeWorker(alertJob.id);

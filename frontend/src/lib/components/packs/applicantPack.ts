@@ -126,14 +126,17 @@ export function ownUnitLines(own: ApplicantPackOwnUnit[]): OwnUnitLine[] {
 	}));
 }
 
-/** Every other unit, anonymous: "Farm 3", and its change in share supplied in whole points. */
-export function otherUnitLines(others: NonNullable<ApplicantPack['units']>['others']): { name: string; change: string }[] {
-	return others.map((o) => ({ name: `${KIND[o.kind]} ${o.n}`, change: o.changePts === 0 ? 'no change' : signed(o.changePts, (n) => `${n} points`) }));
+type Others = NonNullable<NonNullable<ApplicantPack['units']>['others']>;
+
+/** Every other unit downstream, under the anonymous name the results view gives it ("Farm 3"), and its change in share supplied in whole points. */
+export function otherUnitLines(others: Others | null): { name: string; change: string }[] {
+	return (others ?? []).map((o) => ({ name: o.name, change: o.changePts === 0 ? 'no change' : signed(o.changePts, (n) => `${n} points`) }));
 }
 
-/** How many other units lose supply, and how many gain, in whole points. */
-export function othersSummary(others: NonNullable<ApplicantPack['units']>['others']): string {
-	if (!others.length) return 'No other farm or water user is in both runs.';
+/** How many other units downstream lose supply, and how many gain, in whole points; or why none are shown. */
+export function othersSummary(others: Others | null): string {
+	if (others === null) return 'Not shown: this pack’s base is no longer a published run, so the other units can’t be given the names your application’s results use.';
+	if (!others.length) return 'No other farm or water user downstream of your application is in both runs.';
 	const worse = others.filter((o) => o.changePts < 0).length;
 	const better = others.filter((o) => o.changePts > 0).length;
 	const total = `${fmtNum(others.length)} other ${others.length === 1 ? 'unit' : 'units'}`;

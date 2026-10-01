@@ -119,22 +119,24 @@ CROPS: list[tuple[str, list[float]]] = [
     ("Vegetables B", [0.7, 0.85, 1.0, 0.3, 0.5, 0.75, 0.9, 1.0, 0, 0, 0.35, 0.5]),
     ("Pasture C", [0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.5, 0.5, 0.6]),
     ("Vines D", [0.25, 0.35, 0.45, 0.5, 0.45, 0.3, 0.15, 0, 0, 0, 0.1, 0.2]),
-    ("Fodder E", [0.5] * 12),  # a crop no farm grows
+    # A crop no farm grows, with a lone 0 (Dec) and a spike above 1 (Mar): the crop-table check warns (issue #289).
+    ("Fodder E", [0.5, 0.5, 0, 0.5, 0.5, 1.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
+    ("Pasture F", [0.7, 0.75, 0.8, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.5, 0.5, 0.6]),  # Pasture C's row pasted: warned as copied
 ]
-# [Farm demand] crop columns: the five crops plus one that [Crop demand] doesn't define.
+# [Farm demand] crop columns: the six crops plus one that [Crop demand] doesn't define.
 FARM_DEMAND_CROPS = [c[0] for c in CROPS] + ["Hops X"]
 # Farm (as typed in [Farm demand]) -> area m2 per FARM_DEMAND_CROPS column. None = a blank row.
 FARM_DEMAND: list[tuple[str, list[float | None]] | None] = [
-    ("Alpha Farm", [120000, 0, 80000, 0, 0, 0]),
-    ("Bravo Farm", [0, 150000, None, 60000, 0, 0]),
-    ("Charlie Farm", [0, 0, 0, 0, 0, 0]),
+    ("Alpha Farm", [120000, 0, 80000, 0, 0, 0, 0]),
+    ("Bravo Farm", [0, 150000, None, 60000, 0, 0, 0]),
+    ("Charlie Farm", [0, 0, 0, 0, 0, 0, 0]),
     None,
-    ("Echo Farm ", [200000, 50000, 0, 0, 0, 25000]),  # trailing space; grows the undefined crop
-    ("Foxtrot Farm", [0, 0, 90000, 0, 0, 0]),
-    (" Golf Farm", [30000, 0, 0, 45000, 0, 0]),
-    ("Hotel Farm", [0, 70000, 0, 0, 0, 0]),
-    ("India Farm", [0, 0, 0, 40000, 0, 0]),
-    ("Kilo Farm", [50000, 0, 0, 0, 0, 0]),  # not in [Network]
+    ("Echo Farm ", [200000, 50000, 0, 0, 0, 0, 25000]),  # trailing space; grows the undefined crop
+    ("Foxtrot Farm", [0, 0, 90000, 0, 0, 0, 0]),
+    (" Golf Farm", [30000, 0, 0, 45000, 0, 0, 0]),
+    ("Hotel Farm", [0, 70000, 0, 0, 0, 0, 0]),
+    ("India Farm", [0, 0, 0, 40000, 0, 0, 0]),
+    ("Kilo Farm", [50000, 0, 0, 0, 0, 0, 0]),  # not in [Network]
 ]
 # [Farm demand] gross demand typed over the formula (m³/day, every month), as a
 # workbook does for a town's potable demand: the importer warns (issue #54).

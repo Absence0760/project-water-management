@@ -100,6 +100,8 @@ class NonCropDemand(unittest.TestCase):
         self.assertEqual(town["returnPct"], 0.2)
         self.assertEqual((town["sizing"], town["priority"], town["destination"], town["enabled"]), ("monthly", "shared", "internal", True))
         self.assertEqual(town["id"], "id:demand-object:Town dam")
+        # The workbook's number is 'other' by the demand-source rule (engine 1.56.0).
+        self.assertEqual(town["source"], "other")
         self.assertEqual(non_crop_demand_object(uid, "Farm", "n2", [1.0] * 12, cropped=True, return_pct=0)["category"], "other")
 
 

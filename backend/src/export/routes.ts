@@ -1,9 +1,11 @@
 // Download endpoints (docs/api.md § Export). Read-only, viewer role, RLS-bound
-// through withUser like every other project route. Bodies are built in memory
-// and size-capped (MAX_EXPORT_BYTES) because Lambda's buffered responses stop
-// at 6 MB.
+// through withUser like every other project route. The CSVs are streamed
+// (download.ts csvDownload, capped at MAX_CSV_EXPORT_BYTES; WP-1.29a): the
+// route loads what it needs inside its transaction, and the body is written
+// from memory as the client reads it. export.json is built in memory and
+// keeps the JSON cap (MAX_JSON_EXPORT_BYTES), so it always imports back.
 import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSummary } from '@water-management/engine';
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
@@ -15,17 +17,17 @@ import { seriesHash } from '../runs/execute.js';
 import { mergeSettings } from '../projects/settings.js';
 import {
 	attachment,
-	collectCsv,
 	dailyCsvLines,
 	dayRange,
 	exportFilename,
 	forecastColumn,
-	MAX_EXPORT_BYTES,
+	MAX_JSON_EXPORT_BYTES,
 	withResultComments,
 	withRunComments,
 	type DailyColumn,
 	type RunProvenance
 } from './csv.js';
+import { csvDownload, csvTooLarge } from './download.js';
 import { loadDailyScope } from './daily-columns.js';
 import { RUN_CATCHMENT_KEYS, seriesExportColumns, type ExportSeries, type ReadingRun, type RunColumn } from './series-columns.js';
 import { loadFlowDuration } from './fdc.js';
@@ -50,16 +52,8 @@ const WindowQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
 
-const MB = (MAX_EXPORT_BYTES / 1024 / 1024).toFixed(0);
-const tooLarge = (hint: string) => new ApiError(413, `export larger than ${MB} MB — ${hint}`);
-
-function csvResponse(c: Context, body: string, filename: string) {
-	return c.body(body, 200, {
-		'Content-Type': 'text/csv; charset=utf-8',
-		'Content-Disposition': attachment(filename),
-		'Cache-Control': 'no-store'
-	});
-}
+const JSON_MB = (MAX_JSON_EXPORT_BYTES / 1024 / 1024).toFixed(0);
+const NARROW = 'narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD';
 
 /** The project's name and time zone (the date in a download's file name is the project's, 058_project_time_zone). */
 async function projectInfo(db: Db, id: string): Promise<{ name: string; timeZone: string }> {
@@ -239,10 +233,13 @@ export const exportRoutes = new Hono<AuthEnv>()
 
 			// A farm's file also says how big its dam was in the run's model (it bounds the storage columns).
 			const dam = daily.kind === 'farm' && q.nodeId ? ((await loadDamCapacities(db, runId))[q.nodeId] ?? null) : undefined;
-			const body = collectCsv(withRunComments(run.legacy, provenance(run, dam), dailyCsvLines(run.startDate, columns, range)));
-			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const parts = [run.label || 'run', scope, 'daily'];
-			return csvResponse(c, body, exportFilename(name, parts, 'csv', timeZone));
+			return csvDownload(
+				c,
+				() => withRunComments(run.legacy, provenance(run, dam), dailyCsvLines(run.startDate, columns, range)),
+				exportFilename(name, parts, 'csv', timeZone),
+				csvTooLarge(NARROW)
+			);
 		});
 	})
 	// One farm series for every farm side by side (date + a column per farm, in
@@ -274,9 +271,12 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const range = dayRange(run.startDate, length, q.from, q.to);
 			if (!range) throw new ApiError(400, `the window is outside the run (${run.startDate} … ${run.endDate})`);
 
-			const body = collectCsv(withRunComments(run.legacy, provenance(run), dailyCsvLines(run.startDate, columns, range)));
-			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
-			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv', timeZone));
+			return csvDownload(
+				c,
+				() => withRunComments(run.legacy, provenance(run), dailyCsvLines(run.startDate, columns, range)),
+				exportFilename(name, [run.label || 'run', 'all-farms', q.key, 'daily'], 'csv', timeZone),
+				csvTooLarge(NARROW)
+			);
 		});
 	})
 	// Per-farm summary table + catchment + calibration, as one sheet.
@@ -307,9 +307,14 @@ export const exportRoutes = new Hono<AuthEnv>()
 				},
 				run.summary
 			);
-			const body = collectCsv(withResultComments(run.legacy, lines));
-			if (body === null) throw tooLarge('the run summary is unexpectedly large');
-			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv', timeZone));
+			// A few hundred lines: kept, since the download walks them twice (csvDownload).
+			const rows = [...withResultComments(run.legacy, lines)];
+			return csvDownload(
+				c,
+				() => rows,
+				exportFilename(name, [run.label || 'run', 'summary'], 'csv', timeZone),
+				csvTooLarge('the run summary is unexpectedly large')
+			);
 		});
 	})
 	// One input series (rain, flow …): date, the value, its checks and, from the latest run that read it, how the model used it.
@@ -332,10 +337,14 @@ export const exportRoutes = new Hono<AuthEnv>()
 			if (!range) throw new ApiError(400, 'the window is outside the series');
 			const series: ExportSeries = { ...s, label: s.name ? `${s.kind} – ${s.name}` : s.kind };
 			const reading = await loadReadingRun(db, id, seriesId, s);
-			const lines = dailyCsvLines(s.startDate, seriesExportColumns(series, mergeSettings(s.settings), reading?.columns ?? null), range);
-			const body = collectCsv(reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines)) : lines);
-			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
-			return csvResponse(c, body, exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone));
+			const columns = seriesExportColumns(series, mergeSettings(s.settings), reading?.columns ?? null);
+			const lines = () => dailyCsvLines(s.startDate, columns, range);
+			return csvDownload(
+				c,
+				() => (reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines())) : lines()),
+				exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone),
+				csvTooLarge(NARROW)
+			);
 		});
 	})
 	// The whole project as a document `pnpm import:project` accepts.
@@ -346,8 +355,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 			const doc = await loadProjectDocument(db, id);
 			if (!doc) throw new ApiError(404, 'not found');
 			const body = JSON.stringify(doc);
-			if (Buffer.byteLength(body, 'utf8') > MAX_EXPORT_BYTES) {
-				throw tooLarge('export the series one by one as CSV, or delete unused series');
+			if (Buffer.byteLength(body, 'utf8') > MAX_JSON_EXPORT_BYTES) {
+				throw new ApiError(413, `export larger than ${JSON_MB} MB — export the series one by one as CSV, or delete unused series`);
 			}
 			return c.body(body, 200, {
 				'Content-Type': 'application/json; charset=utf-8',

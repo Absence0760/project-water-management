@@ -8,7 +8,8 @@
 	// Its standing, code, hashes and signers (verify's fields, with the errata
 	// found since issue as verify lists them, 132); the river's
 	// rows and sites a pack link shows; their own units by name; every other
-	// farm or water user only as "Farm n" with its change in whole points.
+	// farm or water user downstream of the application under the anonymous
+	// name the results view gives it ("Farm 3"), with its change in whole points.
 	// The PDF, manifest and reproduction bundle aren't offered: each is the
 	// assessors' copy, which names every unit. The application's owner makes
 	// read-only share links to it while it is issued (the same ShareLinksPanel
@@ -196,7 +197,7 @@
 				{:else}
 					<p class="muted">None: the application names no hydrological unit linked to its applicant.</p>
 				{/if}
-				<h3>Everyone else</h3>
+				<h3>Everyone else downstream</h3>
 				<p data-testid="applicant-pack-others-summary">{othersSummary(view.units.others)}</p>
 				{#if others.length}
 					<div class="table-wrap">
@@ -211,7 +212,7 @@
 							</tbody>
 						</table>
 					</div>
-					<p class="muted small">Numbered within this pack only: a number says nothing about a unit’s name or where it is, and “Farm 1” here need not be “Farm 1” in another version.</p>
+					<p class="muted small">The farms and water users downstream of your application, under the same names as in your application’s results and on its map.</p>
 				{/if}
 			{/if}
 		</section>

@@ -16,9 +16,10 @@ const ONE_OF_EACH: Record<AlertFacts['kind'], AlertFacts> = {
 	data_stale: { kind: 'data_stale', threshold: 3, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 10 }] },
 	feed_failing: { kind: 'feed_failing', threshold: 3, feeds: [{ label: 'CHIRPS', failures: 4 }] },
 	job_dead: { kind: 'job_dead', count: 2 },
+	farms_short: { kind: 'farms_short', count: 3, of: 14, from: '2026-09-20', to: '2026-09-26', publishedAt: '2026-09-27T04:00:00Z', threshold: 2 },
 	restriction_published: { kind: 'restriction_published', level: 'advisory', pct: null, notice: null, publishedAt: '2026-09-26T08:00:00Z', lifted: false }
 };
-const LIABILITY = [en['mail.alert.model'], en['mail.alert.model.dam.staff'], en['mail.alert.model.staff'], en['mail.alert.restriction.wua']];
+const LIABILITY = [en['mail.alert.model'], en['mail.alert.model.dam.staff'], en['mail.alert.model.staff'], en['mail.alert.model.short.staff'], en['mail.alert.restriction.wua']];
 
 describe('alertMail', () => {
 	it('says what the model estimates, below which line, with the liability line and where to go', () => {
@@ -108,6 +109,26 @@ describe('alertMail', () => {
 		expect(digestMail(farmer, project, [dam], unsub, 5, 1).text).toContain('…and 1 more alert. Open the catchment to see it.');
 		expect(alertMail(wua, project, { kind: 'job_dead', count: 2 }, unsub).subject).toBe('Background jobs failed — Rustenvrede WUA');
 	});
+
+	it('names an ingest-key series as data sent by API key, not a data feed (issue #120)', () => {
+		const m = alertMail(staff, project, { kind: 'data_stale', series: true, threshold: 2, feeds: [{ label: 'Weir', newest: '2026-09-20', overdue: 5 }] }, unsub);
+		expect(m.subject).toBe('API data behind — Rustenvrede WUA');
+		expect(m.text).toContain('No new readings have come in through the API key for this series for more than 2 days:');
+		expect(m.text).toContain('Weir: newest day 20 Sept 2026, 5 days late');
+		expect(m.text).not.toContain('data feed');
+		const one = alertMail(staff, project, { kind: 'data_stale', series: true, threshold: 1, feeds: [{ label: 'S', newest: '2026-09-20', overdue: 1 }] }, unsub).text;
+		expect(one).toContain('for more than 1 day:');
+	});
+
+	it('words farms_short as counts from an automatic publication, never a farm’s name (issue #120)', () => {
+		const m = alertMail(staff, project, ONE_OF_EACH.farms_short, unsub);
+		expect(m.subject).toBe('Hydrological units short of water — Rustenvrede WUA');
+		// 04:00 UTC on the 27th is the 27th in South Africa (the catchment's day).
+		expect(m.text).toContain(
+			'An auto run published new figures on 27 Sept 2026. Hydrological units short of water on at least one day from 20 Sept 2026 to 26 Sept 2026: 3 of 14. The alert is set at 2.'
+		);
+		expect(m.text).toContain('You get this email because you get hydrological units short of water alerts for Rustenvrede WUA.');
+	});
 });
 
 describe('the liability line, per kind', () => {
@@ -117,6 +138,7 @@ describe('the liability line, per kind', () => {
 	const expected: Record<AlertFacts['kind'], string | null> = {
 		dam_below: en['mail.alert.model.dam.staff'],
 		ewr_forecast_fail: en['mail.alert.model.staff'],
+		farms_short: en['mail.alert.model.short.staff'],
 		restriction_published: en['mail.alert.restriction.wua'],
 		data_stale: null,
 		feed_failing: null,
@@ -153,7 +175,7 @@ describe('the liability line, per kind', () => {
 	it('gives a digest each distinct line once, and none for operational alerts alone', () => {
 		const ops = digestMail(staff, project, [ONE_OF_EACH.data_stale, ONE_OF_EACH.feed_failing, ONE_OF_EACH.job_dead], unsub, 5);
 		for (const line of LIABILITY) expect(ops.text).not.toContain(line);
-		const all = digestMail(staff, project, [dam, dam, ONE_OF_EACH.ewr_forecast_fail, ONE_OF_EACH.restriction_published, ONE_OF_EACH.job_dead], unsub, 5);
+		const all = digestMail(staff, project, [dam, dam, ONE_OF_EACH.ewr_forecast_fail, ONE_OF_EACH.farms_short, ONE_OF_EACH.farms_short, ONE_OF_EACH.restriction_published, ONE_OF_EACH.job_dead], unsub, 5);
 		for (const line of LIABILITY.filter((l) => l !== en['mail.alert.model'])) expect(all.text.split(line)).toHaveLength(2);
 		expect(all.text).not.toContain(en['mail.alert.model']);
 		const mine = digestMail(farmer, project, [dam, ONE_OF_EACH.restriction_published], unsub, 5);

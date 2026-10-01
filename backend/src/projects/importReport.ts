@@ -100,7 +100,7 @@ export async function latestImportReport(db: Db, projectId: string) {
 		`SELECT i.imported_at AS "importedAt", u.display_name AS "importedBy", i.source, i.file_name AS "fileName",
 			i.importer_version AS "importerVersion", i.notes, i.unmapped,
 			i.notes_omitted AS "notesOmitted", i.unmapped_omitted AS "unmappedOmitted"
-		 FROM project_import i JOIN app_user u ON u.id = i.imported_by
+		 FROM project_import i LEFT JOIN app_user u ON u.id = i.imported_by
 		 WHERE i.project_id = $1 ORDER BY i.imported_at DESC, i.id LIMIT 1`,
 		[projectId]
 	);

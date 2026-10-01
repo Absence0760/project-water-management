@@ -151,7 +151,8 @@ export async function waitForMapFit(page: Page) {
 					height: el.clientHeight,
 					wide: matchMedia('(min-width: 900px)').matches,
 					mapTop: layout instanceof HTMLElement ? layout.style.getPropertyValue('--map-top') || null : null,
-					top: layout ? layout.getBoundingClientRect().top + window.scrollY : null
+					top: layout ? layout.getBoundingClientRect().top + window.scrollY : null,
+					busy: el.closest('.map-card')?.getAttribute('aria-busy') === 'true'
 				};
 			}).then(mapFitSettled),
 			{ message: 'the map is laid out for the current window' }

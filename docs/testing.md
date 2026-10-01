@@ -167,7 +167,13 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   rows under RLS). The 413 export test and the 12-publication cap test were
   close to vitest's 5 s default under load until they did (8 × 60 000-value
   PUTs → one INSERT; 13 runs → 3 runs published 13 times). Size the fixture,
-  not the timeout.
+  not the timeout. A test about how a run's inputs are stored, not about the
+  model, cuts its example catchment to two years (`runs/reproducible`,
+  `series/apanDaily`). The DB tests share one database that grows as the
+  suite runs, so a test that scans the whole schema scans only columns that
+  could hold what it looks for: `auth/personal-data.security` skips number
+  arrays, whose text casts of every stored run timed out its deletion check
+  late in CI's suite.
 - **Long e2e journeys**: Playwright gives each test 30 s. A UI step (a
   click, a fill, an expect) is ~30 ms of Playwright's own work on an idle
   laptop and three to four times that beside five other workers, so a test of

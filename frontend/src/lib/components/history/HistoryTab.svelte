@@ -37,6 +37,7 @@
 		localTime,
 		parseKind,
 		pickEntry,
+		publicationRecord,
 		revisionTitle,
 		seriesRestore,
 		type HistoryEntry
@@ -339,7 +340,54 @@
 			{#if i.reason}<p class="reason"><span class="muted">Reason:</span> {i.reason}</p>{/if}
 		{:else}
 			{@const sr = canEdit ? seriesRestore(i) : null}
+			{@const record = publicationRecord(i)}
 			<p class="event">{itemLines(i)[0]}</p>
+			{#if record}
+				<!-- The season decision log (issue #119): what was announced, over which window, from which figures. -->
+				<div class="record" data-testid="publication-record">
+					{#if record.lines.length}
+						<ul class="lines">
+							{#each record.lines as line, n (n)}<li>{line}</li>{/each}
+						</ul>
+					{/if}
+					{#each record.notices as nt (nt.language)}
+						<p class="notice-text"><span class="muted">Notice ({nt.language}):</span> {nt.text}</p>
+					{/each}
+					{#if record.farms.length}
+						<details class="as-table">
+							<summary>Figures per hydrological unit ({record.farms.length})</summary>
+							<!-- Focusable: on a phone the columns can scroll sideways, and a keyboard has to reach it. -->
+							<div class="table-wrap" tabindex="0" role="region" aria-label="Figures per hydrological unit">
+								<table class="data compact">
+									<caption class="visually-hidden">Each hydrological unit’s season figures in this publication, least supplied first</caption>
+									<thead>
+										<tr>
+											<th scope="col">Hydrological unit</th>
+											<th scope="col" class="num">Share supplied</th>
+											<th scope="col" class="num">Supplied / demand m³</th>
+											<th scope="col" class="num">Short days</th>
+											<th scope="col" class="num">Dam</th>
+											<th scope="col">Model band</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each record.farms as f (f.key)}
+											<tr>
+												<th scope="row">{f.name}</th>
+												<td class="num">{f.supplied}</td>
+												<td class="num">{f.volumes}</td>
+												<td class="num">{f.shortDays}</td>
+												<td class="num">{f.dam}</td>
+												<td>{f.band}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						</details>
+					{/if}
+				</div>
+			{/if}
 			{#if sr}
 				<button type="button" class="btn btn-sm restore" onclick={() => askSeriesRestore({ ...sr, at: i.createdAt })}>Restore the earlier values</button>
 			{/if}
@@ -798,6 +846,22 @@
 	.event {
 		overflow-wrap: anywhere;
 	}
+	.record {
+		margin-top: 0.3rem;
+		font-size: 0.9rem;
+	}
+	.notice-text {
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+	}
+	.as-table summary {
+		cursor: pointer;
+		min-height: 24px;
+	}
+	/* The detail pane scrolls; the table grows with it rather than scrolling inside it. */
+	.as-table .table-wrap {
+		max-height: none;
+	}
 	.restore {
 		display: block;
 		margin-top: 0.5rem;
@@ -847,8 +911,13 @@
 			grid-column: 1 / -1;
 		}
 		.restore,
-		.more-btn {
+		.more-btn,
+		.as-table summary {
 			min-height: 44px;
+		}
+		.as-table summary {
+			display: flex;
+			align-items: center;
 		}
 	}
 </style>

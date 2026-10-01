@@ -94,7 +94,7 @@
 			{/if}
 			<p class="muted small">
 				Gross irrigation need (mm) = A-pan × crop factor. It is <strong>× A-pan, not an FAO Kc</strong>: FAO-56 Kc values multiply
-				reference ET₀, about 0.7–0.85 × pan, so multiply a published Kc by the pan coefficient first. Use 0 for months the crop isn't
+				reference ET₀, about 0.6–0.85 × pan (0.35–0.85 in FAO-56 Table 5), so multiply a published Kc by the pan coefficient first. Use 0 for months the crop isn't
 				irrigated.
 			</p>
 			<p class="small" data-testid="crop-planted-on">

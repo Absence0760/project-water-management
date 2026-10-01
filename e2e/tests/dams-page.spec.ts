@@ -34,7 +34,7 @@ test('a card per dam, emptiest first, with % full, its change, a sparkline and i
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedThreeDams(page, 'Dams cards');
-	const run = await createRun(page.request, project.id, 'Baseline');
+	await createRun(page.request, project.id, 'Baseline');
 	await openDams(page, project.id);
 
 	await expect(strip(page).getByRole('link', { name: 'Dams', exact: true })).toHaveAttribute('aria-current', 'page');

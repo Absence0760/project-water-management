@@ -239,3 +239,32 @@ export function syntheticB023(opts: SyntheticOptions = {}): WorkbookBuilder {
 export function isoAdd(iso: string, days: number): string {
 	return new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
 }
+
+/**
+ * A small node-based workbook's crop sheets, laid out as that design lays
+ * them out (issue #289; ./nodeCrops.ts): [Crop_Factors] with an A-pan,
+ * rainfall and effective-rainfall block under a month header, then the crop
+ * table (header "Crops", Oct..Sep, an irrigation-efficiency column and the
+ * derived columns after it); [Crop_Areas] with a farm per row and a crop per
+ * column up to the total. Invented crops, farms and values; no named ranges.
+ */
+export function syntheticNodeBased(): WorkbookBuilder {
+	const b = new WorkbookBuilder();
+	const cf = 'Crop_Factors';
+	b.row(cf, 'A1', ['Crop Demand', ...MONTHS]);
+	b.row(cf, 'A2', ['WR90 A-pan evaporation', 160, 200, 240, 250, 210, 180, 125, 90, 70, 75, 100, 125]);
+	b.row(cf, 'A3', ['Monthly rainfall for net demand', 30, 20, 15, 10, 12, 18, 35, 50, 60, 55, 45, 35]);
+	b.row(cf, 'A4', ['Effective rainfall fraction', 0.6, 0.6, 0.5, 0.5, 0.5, 0.6, 0.65, 0.7, 0.7, 0.7, 0.65, 0.6]);
+	b.set(cf, 'A6', 'Crop Factors').set(cf, 'O6', 'Irrigation Efficiency').set(cf, 'Q6', 'Crop Water Requirement (mm/month)');
+	b.row(cf, 'A7', ['Crops', ...MONTHS, null, 'Column1', null, ...MONTHS]);
+	b.row(cf, 'A8', ['Lucerne', 0.8, 0.95, 1.05, 1.05, 1, 0.9, 0.75, 0.6, 0.5, 0.5, 0.6, 0.7, null, 0.8, null, 128]);
+	b.row(cf, 'A9', ['Olives', 0.55, 0.6, 0.65, 0.7, 0.7, 0.65, 0.6, 0.5, 0.45, 0.45, 0.5, 0.55, null, 0.9, null, 88]);
+	b.row(cf, 'A10', ['Wine grapes', 0.3, 0.5, 0.7, 0.75, 0.7, 0.5, 0.35, 0, 0, 0, 0, 0.15, null, 0.85, null, 48]);
+	const ca = 'Crop_Areas';
+	b.set(ca, 'A1', 'Farm Areas').set(ca, 'M1', 'Average Daily Irrigation Demand (m3/day)');
+	b.row(ca, 'A2', ['Farm name', 'Lucerne', 'Olives', 'Wine grapes', 'Total area m²', null, ...MONTHS]);
+	b.row(ca, 'A3', ['Farm North', 120000, 0, 45000, 165000]);
+	b.row(ca, 'A4', ['Farm South', 0, 80000, 30000, 110000]);
+	b.row(ca, 'A5', ['Farm East', 25000, 15000, 0, 40000]);
+	return b;
+}
