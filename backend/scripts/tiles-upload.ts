@@ -18,7 +18,7 @@
 // STORAGE=s3 (production's tiles go to S3 behind CloudFront, a deployment
 // step, docs/deployment.md).
 import { config } from 'dotenv';
-import { createReadStream, existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 export const TILES_BUCKET = 'tiles';
@@ -90,7 +90,13 @@ async function main(args: string[]): Promise<number> {
 			return 2;
 		}
 		const path = resolve(process.env.INIT_CWD ?? process.cwd(), args[1]);
-		const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
+		// Read it straight away (no exists-then-read race): a missing file is an empty one.
+		let before = '';
+		try {
+			before = readFileSync(path, 'utf8');
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+		}
 		const { text, changed } = withEnv(before, { PUBLIC_TILES_URL: tilesUrl(), PUBLIC_TILES_GLYPHS_URL: glyphsUrl() });
 		if (changed) writeFileSync(path, text);
 		console.log(changed ? `Set the tiles URLs in ${path}: restart pnpm dev.` : `${path} already has the tiles URLs.`);
