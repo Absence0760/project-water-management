@@ -4,25 +4,32 @@
 	// per site, the outlet then each gauge with a record of its own, the water
 	// years that fail "natural ≥ observed + abstraction" and the dry-season Q90
 	// ratio, each with pass or fail; then the catchment-wide rain-source split
-	// and double-mass breaks. Each run's own result, as its Plausibility checks
-	// panel showed it.
+	// and double-mass breaks; then the recession diagnostics and the validation
+	// signatures, with a note on a run that has none (and why) or on two runs
+	// that scored different records. Each run's own result, as its
+	// Plausibility checks panel showed it.
 	import type { PlausibilityComparison } from '@water-management/engine';
-	import { plausibilityRows } from './plausibility';
+	import { plausibilityNotes, plausibilityRows } from './plausibility';
 
 	let { comparison }: { comparison: PlausibilityComparison } = $props();
 
 	const rows = $derived(plausibilityRows(comparison));
 	const mark = (ok: boolean | null) => (ok === null ? 'none' : ok ? 'good' : 'bad');
 	const onlyIn = $derived(comparison.sites.filter((s) => s.onlyIn));
+	const notes = $derived(plausibilityNotes(comparison));
 </script>
 
 <p class="muted small intro">
 	Each run’s own checks: before and after a refit or new data, which water years stopped (or started) failing, and whether the simulated dry-season
-	low flows moved inside the factor of 2 that low-flow gauging error allows. A gauge inside the network is checked only when its own observed record is
-	attached to it (Data page).
+	low flows moved inside the factor of 2 that low-flow gauging error allows, and whether the recessions and the validation signatures (base-flow index,
+	low-flow curve, held-out recessions) moved inside their provisional limits. A gauge inside the network is checked only when its own observed record
+	is attached to it (Data page).
 </p>
 {#each onlyIn as s (s.nodeId ?? 'outlet')}
 	<p class="note small" role="note">Only run {s.onlyIn!.toUpperCase()} has checks at {s.isOutlet ? 'the outlet' : `gauge ${s.name}`}.</p>
+{/each}
+{#each notes as n (n)}
+	<p class="note small" role="note">{n}</p>
 {/each}
 
 {#if rows.length}

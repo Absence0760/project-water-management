@@ -14,6 +14,7 @@ export type { WorkbookSource } from './source';
 export { ZIP_LIMITS } from './zip';
 export { extractProject, projectName, type ExtractOptions, type ImportResult, type ImportedSettings, type ProjectFile } from './extract';
 export type { ImportedSeries } from './flowData';
+export { readNodeCrops, readNodeCropWorkbook, type NodeCrop, type NodeCropSet, type NodeCropWarning, type NodeCropWarningCode, type NodeFarmAreas } from './nodeCrops';
 export type { GaugeScaling } from './gauge';
 export type { ImportNote, ImportNoteCode, UnmappedCode, UnmappedItem } from './report';
 export {

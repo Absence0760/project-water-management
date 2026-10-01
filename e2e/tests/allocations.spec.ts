@@ -163,3 +163,33 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	// before the months end, so the volume binds.
 	await expect(page.getByTestId('allocation-cap-years')).toHaveText('The cap held use back on 80 days in 1 water year: 80 with the volume used up. The registered volume was used up in 2021/22.');
 });
+
+// Issue #72: a dam's registered storage (s21b) is its own row, never a take. Typed in by hand it
+// has no volume field; the list shows it as storage, and the picked unit compares its dam with it.
+test('a storage-only (s21b) row is entered as storage and compared with the dam', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Allocations storage');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=allocations`);
+	await expect(page.getByTestId('allocations-empty')).toBeVisible();
+
+	await page.getByTestId('section-header').getByRole('link', { name: '+ Add volume' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Add a registered volume' });
+	await sheet.getByLabel('Unit or water user').selectOption({ label: 'Upper farm' });
+	await sheet.getByLabel('Water use', { exact: true }).selectOption({ label: 'Storing water in a dam (s21b)' });
+	await expect(sheet.getByLabel('Volume (m³ per year)')).toHaveCount(0);
+	await expect(sheet.getByLabel('Water source')).toBeDisabled();
+	// It shows what will be saved: a dam stores surface water.
+	await expect(sheet.getByLabel('Water source')).toHaveValue('surface');
+	await sheet.getByLabel('Storage (m³)').fill('100000');
+	await sheet.getByLabel('Registration or licence number').fill('E2E-DAM');
+	await expectNoViolations(page);
+	await sheet.getByRole('button', { name: 'Save' }).click();
+	await expect(sheet).toBeHidden();
+	const row = page.getByTestId('allocation-list').getByRole('row', { name: /Upper farm/ });
+	await expect(row).toContainText('Storage only (s21b)');
+	// Upper farm's dam is 150 000 m³ in the model: 50 000 m³ larger than the storage registered for it.
+	await expect(page.getByTestId('allocation-storage')).toHaveText(
+		`Registered storage ${grouped(100000)} m³ · dam capacity in the run ${grouped(150000)} m³: the dam is ${grouped(50000)} m³ larger than the storage registered for it (outside the ±10 % band).`
+	);
+});

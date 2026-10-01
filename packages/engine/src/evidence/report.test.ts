@@ -11,7 +11,8 @@ import { ENGINE_ERRATA } from '../liability/errata.generated';
 import { KNOWN_LIMITATIONS } from '../liability/limitations.generated';
 import { METHODOLOGY } from '../liability/methodology.generated';
 import { canonicalJson } from '../manifest';
-import type { ModelInput, ModelOutput, NetworkNode } from '../project';
+import { demandSourceShares } from '../network/demandSources';
+import type { DemandObject, ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { ENGINE_VERSION } from '../version';
 import { blankEwrRuleTable } from '../reserve/rules';
@@ -31,6 +32,7 @@ import {
 	CUMULATIVE_NO_BAND,
 	CUMULATIVE_NONE,
 	CUMULATIVE_TRUNCATED,
+	DEMAND_OBJECTS_NONE,
 	driestMonth,
 	evidenceChecks,
 	evidenceReport,
@@ -320,7 +322,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-8');
+		expect(r.version).toBe('evidence-9');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -542,9 +544,9 @@ describe('errata', () => {
 		const ids16 = r.verification.errata.map((e) => e.id);
 		expect(ids16).toContain('ER-3');
 		expect(new Set(ids16).size).toBe(ids16.length);
-		// The fixture's runs are engine 1.30.0: inside ER-10 (engine-audit.md V1, 1.34.0) and ER-11 (N6, 0.16.0 until
-		// 1.36.0), and no other run erratum.
-		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run').map((e) => e.id)).toEqual(['ER-10', 'ER-11']);
+		// The fixture's runs are engine 1.30.0: inside ER-10 (engine-audit.md V1, 1.34.0), ER-11 (N6, 0.16.0 until
+		// 1.36.0) and ER-12 (a noise demand switching on a dam-target borehole, 1.8.0 until 1.57.0), and no other run erratum.
+		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run').map((e) => e.id)).toEqual(['ER-10', 'ER-11', 'ER-12']);
 		// Runs by the current engine carry none.
 		const now = evidenceReport(input({ baseline: { ...i.baseline, engineVersion: ENGINE_VERSION }, application: { ...i.application!, engineVersion: ENGINE_VERSION } }));
 		expect(now.verification.errata.filter((e) => e.keyedOn === 'run')).toEqual([]);
@@ -674,7 +676,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-8');
+		expect(got.version).toBe('evidence-9');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1105,7 +1107,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-8');
+		expect(r.version).toBe('evidence-9');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1113,5 +1115,130 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 	it('says the board wasn’t built without its inputs, and has none for baseline evidence', () => {
 		expect(evidenceReport(input()).licenceImpact?.result).toEqual({ status: 'unavailable', reason: 'notBuilt', detail: null });
 		expect(evidenceReport(input({ application: null, changes: [], impact })).licenceImpact).toBeNull();
+	});
+});
+
+describe('§ 6 the applicant’s demand objects and their sources (evidence-9)', () => {
+	const obj = (id: string, nodeId: string, over: Partial<DemandObject> = {}): DemandObject => ({
+		id,
+		nodeId,
+		name: id,
+		category: 'other',
+		sizing: 'monthly',
+		monthlyM3Day: new Array(12).fill(20),
+		count: null,
+		litresPerUnitDay: null,
+		lossPct: 0,
+		monthlyFactor: null,
+		returnPct: 0,
+		priority: 'first',
+		destination: 'internal',
+		enabled: true,
+		note: '',
+		...over
+	});
+	// The baseline: on Farm two (the applicant's) a village sized per capita, a packshed with no source and an old dip; on Farm one a metered town.
+	const village = obj('d1', 'F2', { name: 'Farm village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 200, litresPerUnitDay: 230, source: 'perCapita', note: 'Census 2022' });
+	const packshed = obj('d2', 'F2', { name: 'Packshed', category: 'industrial' });
+	const dip = obj('d3', 'F2', { name: 'Old dip', category: 'livestock', source: 'other', note: 'Estimate' });
+	const town = obj('d4', 'F1', { name: 'Town', category: 'municipal', source: 'meter', note: 'Bulk meter' });
+	const wash = obj('d5', 'F2', { name: 'Citrus washing', monthlyM3Day: new Array(12).fill(50), source: 'meter', note: 'Meter 7, 2024–25' });
+	const withObjects = (i: ModelInput, objects: DemandObject[]): ModelInput => ({ ...i, model: { ...i.model, demandObjects: objects } });
+	const b6 = withObjects(base, [village, packshed, dip, town]);
+	// The application doubles the village, keeps the packshed, removes the dip and adds the washing line.
+	const a6 = withObjects(app, [{ ...village, count: 400 }, packshed, town, wash]);
+	const bOut = runModel(b6);
+	const aOut = runModel(a6);
+	const ops = [
+		{ op: 'demandObject.set', demandObjectId: 'd1', field: 'count', value: 400 },
+		{ op: 'demandObject.remove', demandObjectId: 'd3' },
+		{ op: 'demandObject.add', demandObject: wash }
+	];
+	const input6 = (aModel: ModelInput = a6, aSummary = aOut) => {
+		const i = input({ baseline: stored('base', b6, bOut) });
+		return { ...i, application: { ...i.application!, ...stored('app', aModel, aSummary), scenario: { ...i.application!.scenario, ops: ops as never, classified: ['proposal', 'proposal', 'proposal'] as never } } };
+	};
+	const r = evidenceReport(input6());
+	const d = r.demandObjects!;
+	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
+
+	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
+		expect(r.version).toBe('evidence-9');
+		expect(d.notAssessed).toBeNull();
+		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
+			['d1', 'changed'],
+			['d2', 'unchanged'],
+			['d5', 'added'],
+			['d3', 'removed']
+		]);
+		expect(d.objects.every((o) => o.unit === 'Farm two' && o.nodeId === 'F2')).toBe(true);
+	});
+
+	it('carries each one’s sizing, source and note verbatim, as the application ran it (the baseline, for one it removes)', () => {
+		const [v, p, w, x] = d.objects;
+		expect(v).toMatchObject({ name: 'Farm village', category: 'domestic', sizing: 'perUnit', count: 400, litresPerUnitDay: 230, lossPct: 0, monthlyM3Day: null, source: 'perCapita', note: 'Census 2022' });
+		expect(p).toMatchObject({ sizing: 'monthly', monthlyM3Day: new Array(12).fill(20), count: null, litresPerUnitDay: null, source: null, note: '' });
+		expect(w).toMatchObject({ source: 'meter', note: 'Meter 7, 2024–25', monthlyM3Day: new Array(12).fill(50) });
+		expect(x).toMatchObject({ name: 'Old dip', source: 'other', note: 'Estimate' });
+	});
+
+	it('gives each run’s mean demand from its own summary, and null where the run hasn’t the object', () => {
+		for (const o of d.objects) {
+			expect(o.demandA, o.id).toBe(o.change === 'added' ? null : result(bOut, o.id).avgDemandM3Day);
+			expect(o.demandB, o.id).toBe(o.change === 'removed' ? null : result(aOut, o.id).avgDemandM3Day);
+			expect(o.suppliedB, o.id).toBe(o.change === 'removed' ? null : result(aOut, o.id).fractionSupplied);
+		}
+		// A village of 400 at 230 l a day is 92 m³/day.
+		expect(d.objects[0]!.demandB).toBeCloseTo(92, 6);
+		expect(d.objects[0]!.demandA).toBeCloseTo(46, 6);
+	});
+
+	it('shares their demand in the application by source, as the run’s table does, not recorded last', () => {
+		const live = d.objects.filter((o) => o.demandB !== null);
+		expect(d.bySource).toEqual(demandSourceShares(live.map((o) => ({ source: o.source, avgDemandM3Day: o.demandB! }))));
+		expect(d.bySource.map((s) => s.source)).toEqual(['meter', 'perCapita', null]);
+		expect(d.bySource.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1, 12);
+		expect(d.demandM3Day).toBeCloseTo(50 + 92 + 20, 6);
+	});
+
+	it('flags most of the demand not metered, with the share not recorded, and asks for the missing source', () => {
+		const f = r.flags.find((x) => x.id === 'demandSource');
+		expect(f?.level).toBe('caution');
+		expect(f?.text).toBe('Most of the applicant’s demand objects’ demand isn’t from meter records: 31 % is, and 12 % has no source recorded (§ 6).');
+		expect(r.questions.some((q) => q.startsWith('1 of the applicant’s demand objects has no source recorded (§ 6)'))).toBe(true);
+	});
+
+	it('keeps the sources’ notes off page 1: they print in § 6 only', () => {
+		const page1 = JSON.stringify({ identity: r.identity, flags: r.flags, rows: r.rows, questions: r.questions });
+		for (const note of ['Census 2022', 'Meter 7', 'Estimate']) expect(page1).not.toContain(note);
+	});
+
+	it('positive control: all of it metered, no flag and no question', () => {
+		const metered = withObjects(a6, a6.model.demandObjects!.map((o) => ({ ...o, source: 'meter' as const })));
+		const m = evidenceReport(input6(metered));
+		expect(m.demandObjects!.bySource.map((s) => [s.source, s.share])).toEqual([['meter', 1]]);
+		expect(m.flags.some((x) => x.id === 'demandSource')).toBe(false);
+		expect(m.questions.some((q) => q.includes('(§ 6)'))).toBe(false);
+	});
+
+	it('leaves a disabled object out of the shares, with no demand', () => {
+		const off = withObjects(a6, a6.model.demandObjects!.map((o) => (o.id === 'd2' ? { ...o, enabled: false } : o)));
+		const m = evidenceReport(input6(off, runModel(off))).demandObjects!;
+		expect(m.objects.find((o) => o.id === 'd2')).toMatchObject({ enabled: false, change: 'changed', demandB: null, suppliedB: null });
+		expect(m.bySource.map((s) => s.source)).toEqual(['meter', 'perCapita']);
+	});
+
+	it('counts an object on a unit the application adds as the applicant’s', () => {
+		const added = { ...a6, model: { ...a6.model, nodes: [...a6.model.nodes, node({ id: 'N', name: 'New farm', downstreamNodeId: 'G' })], demandObjects: [...a6.model.demandObjects!, obj('d6', 'N', { name: 'Lodge', source: 'aadd' })] } };
+		const m = evidenceReport(input6(added, runModel(added))).demandObjects!;
+		expect(m.objects.find((o) => o.id === 'd6')).toMatchObject({ unit: 'New farm', change: 'added', source: 'aadd' });
+		expect(m.objects.some((o) => o.id === 'd4')).toBe(false);
+	});
+
+	it('says so when the applicant has none, never flags it, and has no section for baseline evidence', () => {
+		const none = evidenceReport(input());
+		expect(none.demandObjects).toEqual({ notAssessed: DEMAND_OBJECTS_NONE, objects: [], bySource: [], demandM3Day: 0 });
+		expect(none.flags.some((x) => x.id === 'demandSource')).toBe(false);
+		expect(evidenceReport(input({ application: null, changes: [] })).demandObjects).toBeNull();
 	});
 });

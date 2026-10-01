@@ -70,7 +70,7 @@ erDiagram
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
-| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
+| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
@@ -119,8 +119,8 @@ erDiagram
 | `stream_depletion_frac` | (none) | Share d (0–1, default 0) of the pumping taken from the river at the node |
 | `stream_depletion_lag_days` | (none) | Lag time constant k (0–36 500 days, default 0 = same day) |
 | `user_priority` | (none) | Kind `user` only: `senior` (default) or `junior` (CHECK). The API refuses crop areas and transfers on a user node |
-| `supply_rule` | (none: b023 irrigates from the dam only) | Farms only (migration 060, engine ≥ 0.42.0, WP-3.8, [model.md §2.7e](./model.md)): `damFirst` (default, every existing row: the dam only), `riverFirst`, `trigger` or `runOfRiver` (CHECK). The API refuses a rule other than `damFirst` or a pump capacity on a gauge or user, `trigger` without a dam and `runOfRiver` with one |
-| `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; inert under `damFirst`. Stored per day, not as pumps × m³/h (the form's calculator) |
+| `supply_rule` | (none: b023 irrigates from the dam only) | Farms only (migration 060, engine ≥ 0.42.0, WP-3.8, [model.md §2.7e](./model.md)): `damFirst` (default, every existing row: the dam only), `riverFirst`, `trigger` or `runOfRiver` (CHECK). The API refuses a rule other than `damFirst` on a gauge or user, a pump capacity on a gauge, `trigger` without a dam and `runOfRiver` with one |
+| `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; on a farm inert under `damFirst`. On an other water user (engine ≥ 1.58.0, no migration: 060's column has no kind check) its own river pump, [model.md §2.7c](./model.md); the column comment from 060 still says farms only. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
 | `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 114, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
@@ -501,12 +501,13 @@ any row keeps the project, withdrawn or not.
   withdrawal is ever added, since a withdrawn nomination is still history.
   There is no un-nominate; a nomination can only be replaced. Cascades into
   `project`: none. `project.team_id` is `ON DELETE SET NULL` (deleting a team
-  keeps its projects) and `project.created_by` is `NO ACTION` (there is no
-  account deletion). The operator's out-of-band removal is in
+  keeps its projects) and `project.created_by` is `ON DELETE SET NULL`
+  (138: an account's deletion keeps the project, its maker cleared). The
+  operator's out-of-band removal is in
   [security.md](./security.md) § Authorization, "Tamper evidence".
-- No `ON DELETE` on `nominated_by`, the same as `model_run.created_by`: there
-  is no account deletion yet. When there is, it must keep the history (for
-  example a tombstone user), not cascade it away.
+- `nominated_by` is `ON DELETE SET NULL` (138), the same as
+  `model_run.created_by`: deleting the account keeps the history, with who
+  nominated cleared (never reassigned, never cascaded away).
 - Migration 009 was reserved for pinned runs (issue #7), which landed as
   015 instead. 009 is an unused gap; the runner applies every unapplied file
   in name order, so the gap is harmless.
@@ -649,7 +650,21 @@ the result change?", and put back any earlier version.
   `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
   flag, which would say whether the address has an account; `declined`,
   109, has no actor, so the owner never learns who declined),
-  `publication.published/notice_changed`, `outlook.published/unpublished`
+  `publication.published/notice_changed` (the season decision log, issue
+  #119, `publish/decision.ts`: `published` holds the publication and run
+  ids, the run's `engineVersion`, `runoffModel` and `inputsSha256` (SHA-256
+  of `model_run.inputs::text`, the hash `app_run_digest` folds in, 077), the
+  `window` (`runStart`, `dataUntil`, `season` and `last30` from/to), the
+  whole notice (`restriction` level, % and `notice` text in every language,
+  `nextExpectedOn`, the modeller's `note`), the number of `farms`, `perFarm`
+  (each farm's own figures as its farm history reads them: id, name,
+  `dataUntil`, season demand, supply, fraction and short days, `damPct`,
+  the model's headline and band; never the even share) and `auto` for an
+  auto run published by itself; `notice_changed` holds the ids, the
+  `fields` sent and the whole notice as it then stands. So the record of
+  what was announced, and from which figures, outlives the 12 publications
+  `run_publication` keeps and the run itself; events from before it hold
+  only the level, % and farm count), `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
@@ -700,9 +715,33 @@ the result change?", and put back any earlier version.
   `author` in every `note.deleted` about their note; then the foreign key
   clears `actor_user_id`. The events, kinds and times stay (the project's
   audit trail). What every other foreign key to `app_user` does is
-  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade, set
-  null, or restrict for evidence that names its maker);
+  classified in `catalogue.db.test.ts` (`APP_USER_ON_DELETE`: cascade or
+  set null; none restricts since 138);
   `auth/account-deletion.db.test.ts` checks the outcome.
+- **Evidence that names its maker (138, issue #112).** `project.created_by`,
+  `team.created_by`, `model_run.created_by`, `run_uncertainty.created_by`,
+  `run_nomination.nominated_by`, `project_import.imported_by` and
+  `scenario.owner_user_id` were `RESTRICT`, so an account that had made any of
+  them couldn't be deleted. They are `ON DELETE SET NULL` and nullable now:
+  the evidence stays, the name goes ("keep the evidence, remove the name";
+  never reassigned, which would make the record false). The maker is still
+  required where it was: `app_maker_kept` (BEFORE INSERT OR UPDATE OF
+  `created_by` on `project`, `team` and `model_run`) refuses an insert
+  without one (`not_null_violation`) and any change but clearing it once its
+  account is gone (`check_violation`); the other four are stamped from the
+  session by their insert triggers. `run_uncertainty_complete` and
+  `scenario_guard` let the key's SET NULL through (an update whose only
+  change is that column going to NULL, for an account that no longer
+  exists), as 052 and 066 did for their keys. Before the row goes,
+  `app_user_pseudonymise` also deletes the person's still-`started`
+  ensembles and their **draft applications** (`origin = 'applicant'`,
+  `status = 'draft'`) with those drafts' runs; a draft the project keeps
+  (public comments, an evidence pack, or a pinned, nominated or cited run)
+  stays, its applicant cleared. Deletion is still refused, at commit, for
+  the only owner of a project or the only admin of a team
+  (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
+  joined `app_user` on these columns left-join it, and the API answers
+  `null` for the maker's name.
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -1211,7 +1250,9 @@ water-use volumes per farm or water user.
   project_id)`, cascade, so a source is always the same project's), `node_id`
   (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
   `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
-  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `general_authorisation` | `schedule_1` | `existing_lawful_use_claimed` |
+  `existing_lawful_use`; the last is verified under s35, the claimed value
+  isn't; 136, issue #281), `purpose` (`irrigation` |
   `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
   `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
   `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
@@ -1221,7 +1262,12 @@ water-use volumes per farm or water user.
   none stated), `max_rate_m3s` (≥ 0, < 10⁶; NULL = none stated) and
   `conditions jsonb` (an array of at most 20 strings, `[]` by default; the API
   checks each is 1–500 characters). Recorded and shown; the engine doesn't
-  apply them yet.
+  apply them yet. `water_use` (142, issue #72): the NWA s21 water use, `21a`
+  (taking water, the default and every row before 142) or `21b` (storing
+  water: a dam's registered storage only); `allocation_storage_only_check`
+  holds a `21b` row to `volume_m3_year = 0`, a `storage_m3` and `surface`
+  water, so it can never be read as a take. WARMS registers per water use, so
+  a dam arrives as its own 21(b) row.
 - **`allocation_holder`**: `allocation_id` (primary key; composite key
   `(allocation_id, project_id)` → `allocation`, cascade), `project_id`,
   `user_display` (1–200). The registered user's name, in its own table so RLS
@@ -1241,15 +1287,21 @@ water-use volumes per farm or water user.
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`
   `allocationsForRun`): a project with allocations adds them to the model a
   run reads (`model.allocations`: id, node, source, volume, storage, validity,
-  months and maximum rate; never `registration_no`, `property_ref` or the
-  holder), read under the caller's RLS. So the stored run carries them, and a
+  months and maximum rate, and `waterUse: '21b'` on a storage-only row only,
+  so a take's input is as before 137; never `registration_no`, `property_ref`
+  or the holder), read under the caller's RLS. The farm view sums a farmer's
+  own farm's rows (`FarmView.registered`, issue #72). So the stored run carries them, and a
   write that changes what a run reads (create, delete, an import or its undo,
-  a change to the node, source, volume, storage or dates) stamps
+  a change to the node, source, volume, storage, water use or dates) stamps
   `project.updated_at`, as a model save does, so the Runs tab says the latest
   run is out of date.
-- Guards: `backend/src/allocations/allocations.db.test.ts` and
+- Guards: `backend/src/allocations/allocations.db.test.ts`,
   `conditions.db.test.ts` (the conditions' CHECKs with a positive control, a
-  PATCH changing only what it sends, the run input without names) (positive
+  PATCH changing only what it sends, the run input without names) and
+  `water-use.db.test.ts` (142: 21(b) rows import and store as storage only,
+  ambiguous rows are refused, the CHECKs, the run input, the export round
+  trip, a farmer's own registered totals with the WUA's preview as positive
+  control) (positive
   controls: an editor reads names, the owner reads the rows a stranger can't,
   a farmer reads their own farm's), the catalogue tests and the route
   inventories.
@@ -1265,8 +1317,8 @@ assessor, needs it long after the import. `POST /projects/import` stores it in
 the import's own transaction ([api.md § Import report](./api.md#import-report)).
 
 - **Columns:** `project_id` (→ `project`, cascade), `imported_at`,
-  `imported_by` (→ `app_user`; no `ON DELETE`, like `model_run.created_by`:
-  there is no account deletion yet, and WP-1.13 makes both `SET NULL`),
+  `imported_by` (→ `app_user`, `ON DELETE SET NULL` since 138, like
+  `model_run.created_by`: the record stays with who imported it cleared),
   `source` (`b023-workbook` | `project-file`), `file_name` (≤ 255),
   `importer_version` (≤ 100, e.g. `b023 browser importer (web build …)`),
   `notes jsonb` (`ImportNote[]`), `unmapped jsonb` (`UnmappedItem[]`), and
@@ -1562,7 +1614,11 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   advisory | restricted, restriction_pct numeric(5,2) NULL (0–100, NULL with
   none), notice jsonb (081; below), next_expected_on date NULL (E10),
   catchment_view jsonb, superseded_at, updated_at, updated_by → app_user SET
-  NULL)`. A partial unique index on `(project_id) WHERE superseded_at IS
+  NULL, auto boolean)`. `auto` (141) is true when an auto run published it
+  on its own (`publish/autoPublish.ts`), set on insert and in no UPDATE
+  grant; the `farms_short` alert watches only those (§ Alerts). 141
+  backfilled it from the `publication.published` audit events' `auto`. A
+  partial unique index on `(project_id) WHERE superseded_at IS
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
@@ -2778,7 +2834,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 
 | Table | Holds |
 | --- | --- |
-| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (057: the data feed, `data_stale` only; `ON DELETE CASCADE`), `threshold` (a per-kind CHECK: a dam fraction 0–1, whole days, failures or jobs, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`). 057 turned 051's catchment-wide `data_stale` rules into one per feed **in place**: the old row became the first feed's rule (keeping its events and deliveries, the 180-day history and the export's), and each other feed got a new rule at the same level, switch and creator. A catchment with no feed then kept its row with `feed_id` NULL, its pending choice: it never fires, the rule editor doesn't list it, the API never makes one, and `ensureFeedRules` gives it the first feed added (the one change of feed a rule may make; `migration-057.db.test.ts`) |
+| `alert_rule` | What a project alerts on: `kind` (`dam_below`, `ewr_forecast_fail`, `data_stale`, `restriction_published`, `job_dead`, `feed_failing`, `farms_short` (141)), `node_id` (the farm, `dam_below` only; `ON DELETE CASCADE`), `feed_id` (057: the data feed, `data_stale` only; `ON DELETE CASCADE`), `series_id` (141: the series an API key writes, `data_stale` only, never with a `feed_id`; a composite foreign key `(project_id, series_id)` onto `time_series`, `ON DELETE CASCADE`), `threshold` (a per-kind CHECK `alert_rule_threshold`: a dam fraction 0–1, whole days, failures, jobs or farms, 0 for a notice), `enabled`, `created_by` (`SET NULL`), `created_at`, `updated_at`. Unique `(project_id, kind, node_id, feed_id, series_id) NULLS NOT DISTINCT`. Alerts are **opt-in**: no row, or `enabled = false`, and nothing is evaluated or sent. Once dam alerts are on for any farm, a farm added later gets a rule at the threshold last set (`alerts/evaluate.ts` `ensureFarmRules`); once staleness alerts are on for any feed, a feed added later gets a rule at its source's default (`ensureFeedRules`, `SOURCES[source].staleAlertDays`), and a series an API key writes (a `series_key_days` row) gets one at 2 days (`ensureSeriesRules`, 141). Only key-fed series get a rule (a hand-uploaded series is stale by nature, issue #120); once made, it stays with the series even after a person writes over the key's days. 057 turned 051's catchment-wide `data_stale` rules into one per feed **in place**: the old row became the first feed's rule (keeping its events and deliveries, the 180-day history and the export's), and each other feed got a new rule at the same level, switch and creator. A catchment with no feed then kept its row with `feed_id` NULL, its pending choice: it never fires, the rule editor doesn't list it, the API never makes one, and `ensureFeedRules` gives it the first feed added (the one change of feed a rule may make; `migration-057.db.test.ts`) |
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
@@ -2786,10 +2842,11 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
     and the `restriction_published` rule; INSERT / UPDATE / DELETE for
-    editors. The `alert_rule_check` trigger (057, from 051's) requires a farm
+    editors. The `alert_rule_check` trigger (141, from 066's) requires a farm
     node and a feed of the same project, stamps the creator, and never lets a
-    rule's kind, farm or feed change (bar a pending feed-less rule getting its
-    feed once).
+    rule's kind, farm, feed or series change (bar a pending feed-less rule
+    getting its feed once); the series' composite foreign key keeps it in
+    the rule's project.
   - `alert_event`: SELECT for viewers; a farmer the events on their own farms
     and the restriction-notice events (not an applicant). INSERT and UPDATE
     for editors (the `alert_eval` job's acting user). `water_app` may update
@@ -2808,8 +2865,9 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
   default for that role, overridden by their farm-level choice, then their
   kind-level choice; a catchment-wide `all = off` mutes them. Defaults:
   `dam_below` that farm's farmers, editors and owners (viewers opt in);
-  `ewr_forecast_fail` editors and owners (viewers opt in); `data_stale`
-  editors and owners; `restriction_published` farmers, viewers and up;
+  `ewr_forecast_fail` and `farms_short` (141) editors and owners (viewers
+  opt in; never a farmer: the shortfall counts are the staff-only part of a
+  publication); `data_stale` editors and owners; `restriction_published` farmers, viewers and up;
   `job_dead` and `feed_failing` owners (editors opt in). Applicants never.
 - **`SECURITY DEFINER` helpers** (`water_app` only, revoked from `PUBLIC`):
   - `app_alert_recipients(project, kind, node)`: verified addresses whose

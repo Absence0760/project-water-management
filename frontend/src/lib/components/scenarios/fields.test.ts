@@ -46,7 +46,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 		expect(nodeFields('farm').map((f) => f.field)).toEqual([...NODE_SET_FIELDS.farm]);
 	});
 
-	it('offers a farm its supply rule and river pump (WP-3.8), never a user or gauge', () => {
+	it('offers a farm its supply rule and river pump (WP-3.8); a user only its pump capacity (engine 1.58.0); a gauge neither', () => {
 		const supply = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'];
 		expect(nodeFields('farm').filter((f) => supply.includes(f.field))).toEqual([
 			{ field: 'supplyRule', label: 'Supply rule' },
@@ -54,7 +54,8 @@ describe('field specs cover the engine’s op catalogue', () => {
 			{ field: 'supplyTriggerPct', label: 'Supply switch-to-river level' },
 			{ field: 'supplyStopPct', label: 'Supply switch-back level' }
 		]);
-		expect(nodeFields('user').some((f) => supply.includes(f.field))).toBe(false);
+		expect(nodeFields('user').filter((f) => supply.includes(f.field))).toEqual([{ field: 'pumpCapacityM3Day', label: 'River pump capacity' }]);
+		expect(nodeFields('gauge').some((f) => supply.includes(f.field))).toBe(false);
 		// The rule's words are run comparison's (engine compare.ts).
 		const rule = NODE_FIELD_SPECS.supplyRule.spec;
 		expect(rule.t === 'enum' && rule.options).toEqual([

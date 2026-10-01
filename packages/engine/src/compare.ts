@@ -224,8 +224,10 @@ export interface RunComparison {
 	 * The hydrologist plausibility checks side by side (./plausibility/compare.ts):
 	 * per site (the outlet, then each gauge with a record of its own) the failing
 	 * water years of check 1 and the Q90 ratio of check 4, with pass or fail,
-	 * and the catchment-wide checks 2 and 3. null when neither run has them
-	 * (both before engine 0.25.0).
+	 * the catchment-wide checks 2 and 3, the recession diagnostics (rate ratio
+	 * and b difference) and the validation signatures (BFI by both filters,
+	 * the low-flow slope bias and %BiasFLV, the held-out recession skill).
+	 * null when neither run has them (both before engine 0.25.0).
 	 */
 	plausibility: PlausibilityComparison | null;
 	/** The WR2012 check (engine ≥ 0.6.0); null when neither run has one. Ratios are simulated natural ÷ scaled WR2012. */
@@ -1305,7 +1307,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			subject: n.name,
 			text:
 				n.kind === 'user'
-					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${into ? `, drains into ${into}` : ''})`
+					? `Other water user "${n.name}" added (${n.userPriority ?? 'senior'}, demand ${fmtValue(meanOf(n.userDemandM3Day), 0)} m³/day on average over the months${typeof n.pumpCapacityM3Day === 'number' ? `, pump ${fmtValue(n.pumpCapacityM3Day, 0)} m³/day` : ''}${into ? `, drains into ${into}` : ''})`
 					: `${cap(n.kind)} "${n.name}" added (${fmtValue(n.areaKm2)} km²${dam}${into ? `, drains into ${into}` : ''})`
 		});
 	}
@@ -1449,8 +1451,9 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			x.sizing === 'perUnit'
 				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
+		const sourceWords = (v: string) => ({ meter: 'meter records', aadd: 'a strategy’s AADD', perCapita: 'count × litres a day', other: 'another source' } as Record<string, string>)[v] ?? v;
 		const describe = (x: DemandObject) =>
-			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.enabled ? '' : ', off'}`;
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.source ? `, from ${sourceWords(x.source)}` : ''}${x.enabled ? '' : ', off'}`;
 		// No schedule, null and an empty one all run the same (engine ≥ 1.17.0). Each window in a fixed
 		// key order, since a model read back from jsonb has its keys in Postgres's order, not the editor's.
 		const scheduleOf = (x: DemandObject) =>
@@ -1464,10 +1467,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
 			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
 			const populationChanged = (x.population ?? null) !== (y.population ?? null);
+			// Where the number comes from (engine ≥ 1.56.0): absent and null alike are not recorded.
+			const sourceChanged = (x.source ?? null) !== (y.source ?? null);
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
 			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.45.0).
 			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();
-			if (moved || scheduleChanged || populationChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
+			if (moved || scheduleChanged || populationChanged || sourceChanged || noteChanged || fields.some((f) => !same(x[f], y[f])))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}${noteChanged ? `, note "${(x.note ?? '').trim()}" → "${(y.note ?? '').trim()}"` : ''}` });
 		}
 	}
@@ -1480,12 +1485,12 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 		const allocs = matchByIdThenName(a.allocations ?? [], b.allocations ?? [], (x) => x.id, (x) => `${(b.allocations ?? []).includes(x) ? ownerB(x) : ownerA(x)}\u0000${x.waterSource}`);
 		// Registered storage and the licence conditions (months, the maximum rate) are part of it: a run stores them, so a change is listed.
 		const describe = (x: AllocationEntry) =>
-			`${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}${x.storageM3 != null ? `, storage ${fmtValue(x.storageM3, 0)} m³` : ''}${x.months?.length ? `, months ${[...x.months].sort((p, q) => p - q).join(' ')}` : ''}${x.maxRateM3s != null ? `, at most ${fmtValue(x.maxRateM3s, 4)} m³/s` : ''}`;
+			`${x.waterUse === '21b' ? `${x.waterSource} storage only (s21b)` : `${x.waterSource} ${fmtValue(x.volumeM3PerYear, 0)} m³/a`}${x.validFrom || x.validTo ? `, valid ${x.validFrom ?? '…'} to ${x.validTo ?? '…'}` : ''}${x.storageM3 != null ? `, storage ${fmtValue(x.storageM3, 0)} m³` : ''}${x.months?.length ? `, months ${[...x.months].sort((p, q) => p - q).join(' ')}` : ''}${x.maxRateM3s != null ? `, at most ${fmtValue(x.maxRateM3s, 4)} m³/s` : ''}`;
 		for (const x of allocs.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Registered volume removed from ${ownerA(x)} (was ${describe(x)})` });
 		for (const y of allocs.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Registered volume added to ${ownerB(y)} (${describe(y)})` });
 		for (const [x, y] of allocs.pairs) {
 			const moved = ownerA(x) !== ownerB(y);
-			const fields = ['waterSource', 'volumeM3PerYear', 'validFrom', 'validTo', 'storageM3', 'maxRateM3s'] as const;
+			const fields = ['waterSource', 'volumeM3PerYear', 'waterUse', 'validFrom', 'validTo', 'storageM3', 'maxRateM3s'] as const;
 			const months = (v: AllocationEntry) => (v.months?.length ? [...v.months].sort((p, q) => p - q) : null);
 			if (moved || fields.some((f) => !same(x[f] ?? null, y[f] ?? null)) || !same(months(x), months(y)))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: registered volume ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}` });

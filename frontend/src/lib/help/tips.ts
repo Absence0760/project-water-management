@@ -200,6 +200,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.userReturnPct']
 	},
 	{
+		id: 'user-pump',
+		term: 'Pump capacity (other user)',
+		short: 'The most an other water user takes from the river in a day. Blank is no limit; a senior user’s claim upstream is capped to it too.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['run.pump_limited']
+	},
+	{
 		id: 'borehole',
 		term: 'Boreholes (groundwater)',
 		short: 'Groundwater a hydrological unit or other user pumps up to a daily capacity and annual cap, by mode: supplemental, primary or emergency.',
@@ -237,6 +245,13 @@ export const TIPS: HelpTipText[] = [
 		units: 'm³/day',
 		category: 'network',
 		fields: ['demandObject.population']
+	},
+	{
+		id: 'demand-source',
+		term: 'Demand source',
+		short: 'Where a demand object’s number comes from, by rule: meter records where they exist, else a strategy’s AADD, else population × litres a day.',
+		category: 'network',
+		fields: ['demandObject.source']
 	},
 	{
 		id: 'supply-rule',

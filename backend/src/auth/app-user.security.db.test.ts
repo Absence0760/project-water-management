@@ -387,20 +387,17 @@ describe('the SECURITY DEFINER lookups', () => {
 // decision here: a LEFT JOIN, or a case app_user_visible covers. Three
 // spellings: `JOIN app_user x ON …`, and `FROM app_user x` (an UPDATE's
 // FROM, or a comma join, `FROM t, app_user x`) keyed by its `x.id = …`
-// condition. A farmer runs only the ones whose account is themself.
+// condition. A farmer runs only the ones whose account is themself. The
+// makers of evidence (runs, ensembles, scenarios, imports) are left joins
+// since 138: their account may be deleted, and the row stays with no name.
 const INNER_JOINS = new Map<string, string>([
 	['projects/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
-	['projects/importReport.ts JOIN app_user u ON u.id = i.imported_by', 'project_import.imported_by is in app_user_visible'],
 	['farms/routes.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['farms/routes.ts JOIN app_user u ON u.id = i.invited_by', 'invite.invited_by is in app_user_visible'],
 	['history/record.ts JOIN app_user u ON u.id = fl.user_id', 'a linked farmer is a current member'],
 	['history/record.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
-	['compare/routes.ts JOIN app_user u ON u.id = r.created_by', 'model_run.created_by is in app_user_visible'],
 	['teams/routes.ts JOIN app_user u ON u.id = m.user_id', 'current team members'],
 	['scenarios/execute.ts JOIN app_user mu ON mu.id = m.user_id', 'scenario_member.user_id is in app_user_visible'],
-	['scenarios/execute.ts JOIN app_user u ON u.id = s.owner_user_id', 'scenario.owner_user_id is in app_user_visible'],
-	['runs/routes.ts JOIN app_user u ON u.id = r.created_by', 'model_run.created_by is in app_user_visible'],
-	['runs/uncertainty.ts JOIN app_user au ON au.id = u.created_by', 'run_uncertainty.created_by is in app_user_visible'],
 	['reports/routes.ts JOIN app_user ru ON ru.id = r.user_id', 'a schedule recipient is a current member'],
 	['reports/store.ts JOIN app_user u ON u.id = m.user_id', 'current project members'],
 	['reports/store.ts JOIN app_user u ON u.id = $3', 'the requester, whose job transaction this is'],
@@ -449,8 +446,9 @@ describe('inner joins to app_user', () => {
 				found.add(`${at} ${isComma ? ', ' : 'FROM '}app_user ${q} WHERE ${cond ? `${q}.id = ${cond[1]}` : '?'}`);
 			}
 		}
-		// Not vacuous: the scan finds the run list's join and an UPDATE's FROM.
-		expect(found.has('runs/routes.ts JOIN app_user u ON u.id = r.created_by')).toBe(true);
+		// Not vacuous: the scan finds the members list's join and an UPDATE's FROM, and skips a left join (the run list's, 138).
+		expect(found.has('projects/routes.ts JOIN app_user u ON u.id = m.user_id')).toBe(true);
+		expect([...found].some((j) => j.startsWith('runs/routes.ts JOIN app_user u ON u.id = r.created_by'))).toBe(false);
 		expect(found.has('projects/routes.ts FROM app_user u WHERE u.id = m.user_id')).toBe(true);
 		expect([...found].filter((j) => !INNER_JOINS.has(j))).toEqual([]);
 		expect([...INNER_JOINS.keys()].filter((j) => !found.has(j))).toEqual([]);

@@ -139,7 +139,8 @@ pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
-pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
+pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings in scripts/guards/check_web_bundle_budget.mjs
+pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new entry file in scripts/guards/bundle-budget/ (never edit BUDGET.totalCodeKb)
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned; bump them together as backend/renderer.Dockerfile's header says
@@ -148,6 +149,7 @@ pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNA
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
+pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
 pnpm gen:e2e:timings       # refresh e2e/shard-timings.json (CI's e2e shards are packed by it) from the newest green main run; needs gh (e2e/README.md § CI)

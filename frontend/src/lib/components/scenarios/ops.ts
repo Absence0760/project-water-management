@@ -318,7 +318,8 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const what = o ? `${nodeName(o.nodeId)}, demand object “${o.name}”` : 'A demand object';
 			if (op.field === 'schedule') return `${what}: ${SCHEDULE_LABEL} ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
 			const f = DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField];
-			const was = o ? (o as unknown as Record<string, unknown>)[op.field] : undefined;
+			// No source has a meaning, not recorded (engine ≥ 1.56.0): show it as the "was".
+			const was = o ? ((o as unknown as Record<string, unknown>)[op.field] ?? (op.field === 'source' ? null : undefined)) : undefined;
 			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'demandObject.remove': {
@@ -393,7 +394,7 @@ function scheduleText(w: DemandObject['schedule']): string {
 
 /** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
 export function volumeText(a: AllocationEntry): string {
-	const parts = [`${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
+	const parts = [a.waterUse === '21b' ? `${a.waterSource} storage only (s21b)` : `${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
 	if (a.validFrom || a.validTo) parts.push(`valid ${a.validFrom ?? '…'} to ${a.validTo ?? '…'}`);
 	if (a.storageM3 != null) parts.push(`storage ${fmtNum(a.storageM3)} m³`);
 	if (a.months?.length) parts.push(`${monthsText(a.months)} only`);

@@ -259,6 +259,7 @@ manifest, and that is when it moves into `evidenceReport`.
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
 | 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change and their sum | C14, C15, C26 |
 | 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
+| 6 | The applicant's demand objects | Application only (`evidence-9`): each demand object on the applicant's units, or that the application adds, changes or removes, with its sizing, its source and the note on it, its demand in both runs and its share supplied; the share of that demand by source; *Not assessed* when the applicant has none | – |
 
 § 5 was added in report version `evidence-2`. Its page-1 row fits the
 fixed-rows rule (G6) because it is always printed: the unit-years above a
@@ -369,6 +370,26 @@ The description and run notes stay after them: the description is often the
 one line that names the works, and the run notes carry the modeller's reason
 next to a WR2012 query. A pack drafted before `evidence-8` says the prompts
 aren't part of it.
+
+**Report version `evidence-9`** (issue #259, after engine 1.56.0 gave
+demand objects a structured source): § 6, the applicant's demand objects.
+The report didn't list them at all, so an application whose change is a
+town's or a packhouse's demand showed its effect on the river with nothing
+saying how solid the number behind it was. § 6 lists each object on the
+applicant's units (their own, or one the application adds) in either run,
+by what the application does to it, with the model's sizing, source and
+note verbatim, and above the table the same by-source line the run's
+demand-objects table prints (the engine's `demandSourceShares`; the run
+table's `demandBySource` moved to the engine with it). Page 1 gets a
+caution when less than half of that demand is from meter records (the
+client's rule puts meter records first: issue #54 Q11), and the checks'
+*Expect questions about* names the objects with no source. The notes are
+one line of model data each, printed in § 6 only, never on page 1 (G13).
+Judgement: a numbered section, not a page-1 row, since it holds a list
+whose length is the application's; the caution carries it to page 1. A
+pack drafted before `evidence-9` has no `demandObjects`, and its report has
+no § 6 at all, rather than a § 6 saying it wasn't part of the pack: the
+section is new, not a changed one, so the old pack prints as it did.
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.

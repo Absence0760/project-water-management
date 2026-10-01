@@ -282,7 +282,11 @@ describe('applyScenario: each op', () => {
 		expect(err({ op: 'node.set', nodeId: 'G', field: 'supplyRule', value: 'riverFirst' })[0]).toMatch(/"supplyRule" can't be set on a gauge/);
 		const withUser = base();
 		withUser.model.nodes.push(node('U', { name: 'Town', kind: 'user', downstreamNodeId: 'B', areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, sortOrder: 4 }));
-		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)[0]).toMatch(/"pumpCapacityM3Day" can't be set on a user/);
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'supplyRule', value: 'riverFirst' }, withUser)[0]).toMatch(/"supplyRule" can't be set on a user/);
+		// A user's pump capacity is its own (engine 1.58.0): a licence what-if may cap it.
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }, withUser)).toEqual([]);
+		expect(nodeOf(applyScenario(withUser, [{ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: 500 }]).input, 'U')?.pumpCapacityM3Day).toBe(500);
+		expect(err({ op: 'node.set', nodeId: 'U', field: 'pumpCapacityM3Day', value: -1 }, withUser)[0]).toMatch(/pumpCapacityM3Day must be at least 0/);
 		// Values: a known rule, a pump ≥ 0 or null, levels 0–1.
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'supplyRule', value: 'always' } as unknown as ScenarioOp)[0]).toMatch(/supplyRule must be one of damFirst, riverFirst, trigger, runOfRiver/);
 		expect(err({ op: 'node.set', nodeId: 'B', field: 'pumpCapacityM3Day', value: -1 })[0]).toMatch(/pumpCapacityM3Day must be at least 0/);
@@ -1396,6 +1400,21 @@ describe('later ops (engine ≥ 1.35.0): crops, land cover, rule tables, registe
 		expect(texts(b, one({ op: 'allocation.set', allocation: alloc({ maxRateM3s: 0.02 }) }, withAllocations()).input)).toEqual(['Farm A: registered volume surface 120 000 m³/a → surface 120 000 m³/a, at most 0.02 m³/s']);
 	});
 
+	it('allocation.set keeps a storage-only (s21b) row’s water use and refuses an unknown one (engine 1.59.0, issue #72)', () => {
+		const b = deepFreeze(withAllocations());
+		const dam = alloc({ id: 'al4', volumeM3PerYear: 0, waterUse: '21b', storageM3: 80_000 });
+		const r = one({ op: 'allocation.set', allocation: dam }, b);
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.allocations).toContainEqual(dam);
+		expect(texts(b, r.input)).toContain('Registered volume added to Farm A (surface storage only (s21b), storage 80 000 m³)');
+		expect(one({ op: 'allocation.set', allocation: alloc({ waterUse: '21b', volumeM3PerYear: 120_000 }) }).problems).toEqual([
+			"op 1 (allocation.set): the registered volume isn't usable: volumeM3PerYear must be 0 on a storage-only (21b) row: it registers no take; storageM3 is needed on a storage-only (21b) row"
+		]);
+		expect(one({ op: 'allocation.set', allocation: alloc({ waterUse: '21c' as never }) }).problems).toEqual([
+			expect.stringMatching(/^op 1 \(allocation\.set\): the registered volume isn't usable: waterUse must be one of/)
+		]);
+	});
+
 	it('allocation.set refuses a gauge, a missing node, a bad entry; allocation.remove a missing id', () => {
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'G' }) }).problems).toEqual(['op 1 (allocation.set): a registered volume is held for a farm or other water user; "Outlet gauge" is a gauge']);
 		expect(one({ op: 'allocation.set', allocation: alloc({ nodeId: 'Z' }) }).problems).toEqual(['op 1 (allocation.set): node Z not found']);
@@ -1526,6 +1545,22 @@ describe('demand-object ops (engine ≥ 1.45.0)', () => {
 		expect(applyScenario(b, [set('sizing', 'perUnit'), set('count', 10, 'do2'), set('count', 10), set('litresPerUnitDay', 100)]).problems).toHaveLength(1);
 		// A last group still breaking a rule is what a next op meets (scenarioSteps' after), so a form can finish it.
 		expect(scenarioSteps(withObject(), [set('sizing', 'perUnit')]).after.model.demandObjects![0]!.sizing).toBe('perUnit');
+	});
+
+	it('demandObject.set source (engine ≥ 1.56.0): one of the sources, fitting the sizing, or null', () => {
+		const r = one(set('source', 'meter'), withObject());
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.demandObjects![0]!.source).toBe('meter');
+		// Clearing a source the object hasn't got leaves it as it is (not recorded either way).
+		expect('source' in one(set('source', null), withObject()).input.model.demandObjects![0]!).toBe(false);
+		expect(one(set('source', 'guess'), withObject()).problems).toEqual(['op 1 (demandObject.set): source must be one of meter, aadd, perCapita, other']);
+		// A per-capita source on a monthly object breaks the model rule; with the sizing switched in the same group it doesn't.
+		expect(one(set('source', 'perCapita'), withObject()).problems).toEqual([expect.stringMatching(/^op 1 \(demandObject\.set\): demand object "Town": a demand from population × litres a day is sized per unit/)]);
+		const toNorm = [set('source', 'perCapita'), set('sizing', 'perUnit'), set('count', 2000), set('litresPerUnitDay', 230), set('monthlyM3Day', null)];
+		expect(applyScenario(withObject(), toNorm).problems).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.set', demandObjectId: 'do1', field: 'source', value: 'aadd' }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), source: 'meter' } }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), source: 'survey' } }]).errors).toEqual(['ops[0].demandObject.source: must be one of meter, aadd, perCapita, other']);
 	});
 
 	it('demandObject.remove takes the object out; a removed node takes its objects with it', () => {

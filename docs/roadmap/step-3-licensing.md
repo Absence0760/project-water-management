@@ -1045,10 +1045,26 @@ must build WP-2.15 Phase B.
 > target ([model.md §2.7e](../model.md), which lists the decisions taken).
 > Default output is byte-identical (tests on random networks and an example;
 > the examples and the client catchment regression suite unchanged).
-> **Still to do:** a pump capacity on other water users (issue #54
-> item 2b), and moving an imported workbook's probable run-of-river units
+> **Still to do:** moving an imported workbook's probable run-of-river units
 > (issue #54 item 2d) once the hydrologist confirms. Drought restrictions
-> are built (below).
+> and a pump on other water users are built (below).
+>
+> **A pump capacity on other water users built 2026-09-30 (engine 1.58.0),
+> off by default; pending the hydrologist.** Issue #54 item 2b's remainder.
+> The farm's `pumpCapacityM3Day` on a user node (no migration: 060's column
+> has no kind check), with no supply rule: the user takes MIN(demand, what
+> its priority leaves, capacity) from the river; its boreholes are separate;
+> a senior user's claim on the farms upstream is MIN(demand, capacity), so
+> they pass no more than it can lift. Null = no limit, the default, running
+> to the bit as before (a test on random networks). Series
+> `pump_limited` (the demand the pump left unmet although the river had
+> it), `UserSummary.avgRiverAbstractionM3Day`,
+> `avgPumpLimitedM3Day` and `daysPumpLimited`; the summary CSV's user block,
+> the Other uses table "Other water users’ pumps", the node form's Pump
+> capacity (pumps × m³/h calculator), a scenario `node.set` on a user and
+> the run comparison's input diff ([model.md §2.7c](../model.md), which lists
+> the decisions). The drought rule still doesn't cut users (a question for
+> the hydrologist, [followups.md § Hydrologist](../followups.md#hydrologist)).
 >
 > **Drought restrictions built 2026-09-30 (engine 1.54.0), off by default;
 > pending the hydrologist.** One rule per project,
@@ -1277,13 +1293,19 @@ must build WP-2.15 Phase B.
   engine 1.37.0, 2026-09-30). Deviations: `fullAllocation` keeps the unit's
   own demand shape rather than a monthly pattern of the allocation (it
   doesn't apply the licence's months), and `conditions` is a list of texts.
-  Left: XLSX and column mapping, the
-  farm view and the chart
+  Third slice (2026-09-30, issue #72, migration 142, engine 1.59.0): the
+  importer reads each row's s21 water use (21(a) a take, 21(b) a dam's
+  storage) and its unit and frequency, refusing ambiguous rows; a farmer's
+  farm view shows their own registered volumes and storage; the comparison
+  bands dam capacity against registered storage. The chart landed with
+  issue #71. Left: XLSX and column mapping (a real extract), share views per
+  D3 (c), and whether dam filling is a s21(a) take (#90)
   ([followups.md § Allocations](../followups.md#allocations-wp-310),
   [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to
   modelled use: over-use, under-use, and a **full-allocation** scenario
-  ("if every lawful user took their entitlement").
+  ("if every registered or licensed volume were taken in full"; a
+  registration is not an entitlement).
 - **Background.**
   - Water use is registered in WARMS under the registration regulations
     (GN R1352 of 1999) [R1352]. Registration is required above 50 m³/day

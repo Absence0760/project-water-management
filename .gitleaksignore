@@ -3,6 +3,10 @@
 #   - generic-api-key on object keys named after m³/day fields;
 #   - fixed fake tokens in emailAuth.test.ts / templates.test.ts;
 #   - placeholder secrets in infra/tests/guardrails.tftest.hcl (mocked providers).
+#   - generic-api-key on a node field named after an m³/day value (nodePaste.ts).
+# Reviewed 2026-09-30:
+#   - vault-service-token on a user-summary field read in the engine self-check
+#     (the rule reads a one-letter variable, a dot and a 24-letter name as a Vault token).
 # Add a line only after checking the match is not a real secret.
 05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:202
 05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:217
@@ -32,3 +36,5 @@ f08c99dc08324e539f3cbdf6093d8282aea04752:frontend/src/lib/components/network/Net
 frontend/src/lib/components/network/NetworkTab.svelte:generic-api-key:585
 frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:187
 frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:192
+5068aeb36ca5932d5debae988821d89b7b53afd4:frontend/src/lib/components/network/nodePaste.ts:generic-api-key:24
+1e469efcfd8a2555954977dd19eb33b2723c2525:packages/engine/src/verify/checks.ts:vault-service-token:1021

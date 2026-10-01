@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #118 (#310): the shared catchment view printed as a member summary over a chosen period. Measured 1416 locally against main @ the #305 merge's 1413 (+3 KB)."
+}

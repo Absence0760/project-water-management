@@ -591,9 +591,11 @@ buys a **render session** that can read one report and nothing else.
   GET instead, so no cloud account is needed; production's config check
   refuses anything but `cloudfront` (§ Production configuration). The
   alternative, streaming the PDF through the API, was not taken: the API's
-  Function URL is in buffered mode (a 6 MB response cap, less after base64,
-  that a long report could pass), and streaming would hold a VPC Lambda open
-  and billed for every transfer. **Emails carry no PDF and no download link**:
+  Function URL does stream since WP-1.29a (the CSV exports, deployment.md
+  § Response streaming), but past its first 6 MB a stream is paced at about
+  2 MB/s, holding a VPC Lambda open, billed and counted against the API's
+  reserved concurrency for every transfer, where a signed URL costs the API
+  one request. **Emails carry no PDF and no download link**:
   they link to the app's `/projects/:id/reports/:jobId` page, which needs the
   reader signed in and still a member, so a forwarded email opens nothing.
   Recipients must be direct project members with viewer or above, checked
@@ -1080,6 +1082,10 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   mail for every other farm's name (`alerts.db.test.ts`, `mail/alerts.test.ts`).
   The dam figure is the **published** projection's, never an unpublished
   run's: a farmer is told only what the WUA stands behind.
+  The `farms_short` alert (141, issue #120) carries **counts only** (farms
+  short, of how many, the dates), never a farm's name, and goes only to the
+  WUA's staff (editors and owners; viewers by choice; never a farmer): the
+  shortfall counts are the staff-only part of a publication.
 - **The unsubscribe token.**
   - Each subscription has a random 32-byte nonce; its token is
     HMAC-SHA256(`ALERTS_TOKEN_SECRET`, nonce), base64url (43 characters),
@@ -1456,10 +1462,12 @@ In short:
     included, and on every path: the route (which answers `409` first,
     naming the run), a direct `DELETE` as `water_app`, and any cascade into
     `project` (there is none today: deleting a team sets `project.team_id` to
-    `NULL`, and there is no account deletion; an `app_user` row that created a
-    project or a nomination can't be deleted anyway). The history can't be
-    withdrawn, so once a project nominates it is kept for good; a copy starts
-    afresh without its runs.
+    `NULL`, and deleting an account clears `project.created_by` and
+    `run_nomination.nominated_by` rather than cascading, 138). The history
+    can't be withdrawn, so once a project nominates it is kept as the licence
+    record, until the operator removes it out of band (below) at the end of
+    that record's life ([§ Personal information](#personal-information-popia),
+    sign-offs); a copy starts afresh without its runs.
   - The operator can still remove such a project out of band (a court order,
     a test project that nominated by mistake), deliberately and visibly: as
     the schema owner, in one transaction, `ALTER TABLE project DISABLE
@@ -1886,7 +1894,9 @@ In short:
     size first;
   - only the parts the import reads are ever unpacked (content types,
     relationships, the workbook, shared strings, styles, the b023 config
-    sheets). The VBA project, the per-farm result sheets, drawings and
+    sheets; for the Load crop factors dialog's node-based reader,
+    `nodeCrops.ts`, only `[Crop_Factors]` and `[Crop_Areas]`, under the same
+    caps). The VBA project, the per-farm result sheets, drawings and
     embedded objects are never inflated;
   - those parts are parsed by the import's own streaming reader, not a
     general XML or spreadsheet library (`xml.ts`, `sheet.ts`,
@@ -2015,6 +2025,11 @@ In short:
   names, run label, notes, notes author, series name and allocation fields: no
   text cell may start with a trigger, the quoting must parse strictly, and an
   ordinary name must round-trip unchanged.
+- **The grids' CSV templates too.** The node table's and planted-areas grid's
+  **Download the table as CSV** (issue #285) is built in the browser
+  (`frontend/src/lib/spreadsheet/paste/grid.ts` `csvCell`): names go through
+  the same `defuse` and RFC 4180 quoting, numbers are written as numbers, and
+  pasting the file back drops the apostrophe again before matching a name.
 - **The `.xlsx` workbook treats names the same way.** It is built in the
   browser from the same API data (`frontend/src/lib/spreadsheet/export/`):
   the summary sheets are the summary CSV's cells, already defused; names the
@@ -2115,7 +2130,7 @@ database:
 - **Run inputs** (engine ≥ 1.18.0, issue #72): every run's stored input
   carries the project's allocations so the run replays, but only what the
   engine reads (id, unit, source, volume, storage, validity, months, maximum
-  rate), never the holder's name, the registration number or the property
+  rate, and `waterUse: '21b'` on a storage-only row, issue #72), never the holder's name, the registration number or the property
   (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
   appears). A viewer reads a run's input and could read the volumes anyway;
   an applicant's projection of a published base keeps only the allocations on
@@ -2133,6 +2148,13 @@ database:
   person another's registration. A registered user without a linked farm
   has no account to export to; their name is the WUA's record, answered by
   the WUA.
+- The **farm view** (issue #72, `farms/view.ts farmRegistered`) shows a
+  farmer their own farm's registered water: the allocations on that farm in
+  force today, summed per source plus the storage, read under their RLS
+  (`allocation_select_farmer`). No holder name, registration number or
+  property, and a farm they aren't linked to answers `404`
+  (`allocations/water-use.db.test.ts`, the WUA's preview as positive
+  control).
 
 ## Personal information (POPIA)
 
@@ -2211,6 +2233,7 @@ PDF someone else asked for kept the person as a recipient
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
+| A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
 | A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
@@ -2223,9 +2246,9 @@ PDF someone else asked for kept the person as a recipient
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
 | Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
-| Sign-offs: typed name and registration | `signoff` | Kept (the signature on a run or an evidence pack) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
-| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Kept for good once issued (the licence record) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off | Refused while a pack is past draft (`project_pack_guard`, 112) |
-| Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
+| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), for the life of that record: the licence or decision it supports and any appeal or review of it, after which the operator removes the project on the client's confirmation (§ Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b)) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, for the life of the licence record (as sign-offs) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
+| Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
 | Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down; a manual snapshot, kept until the operator deletes it (the privacy notice says so and promises the period with the shutdown notice) | Stays in it | Stays in it |
@@ -2251,12 +2274,19 @@ PDF someone else asked for kept the person as a recipient
   audit events. The project exports (`export.json`, CSV, the farm CSV)
   remain project data, not a data-subject export
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
-- **Deletion: an operator act.** There is no self-service deletion. On a
-  request the operator deletes the `app_user` row as the schema owner
-  ([deployment.md § Runbooks](./deployment.md#runbooks), item 7): the table
-  above is what happens. An account that made evidence (the last row but
-  two) can't be deleted until the operator and the client decide what
-  happens to it.
+- **Deletion: an operator act.** There is no self-service deletion yet
+  (issue #112). On an emailed request (POPIA s24 and Regulation 3's Form 2,
+  which may come in any expedient way) the operator deletes the `app_user`
+  row as the schema owner ([deployment.md § Runbooks](./deployment.md#runbooks),
+  item 7), as soon as reasonably practicable, and tells the person what was
+  done (s24(4)): the table above is what happens. The rule for evidence
+  (138): **keep the evidence, remove the name**. The one refusal is an
+  account that is the only owner of a project or the only admin of a team
+  (checked at commit): ownership is handed to someone else first, by the
+  person or the project's other members. A responsible party that is DWS or
+  a CMA may need the name kept under the National Archives Act; that waits
+  on counsel and on D1 (#50), and would be a per-team setting in its own
+  migration ([followups.md § POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
 
@@ -2689,7 +2719,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     signing yet (Step 4), so a sign-off is as strong as the signer's
     password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
-    with the account cleared ([§ Personal information](#personal-information-popia)).
+    with the account cleared, for the life of the licence record it supports
+    ([§ Personal information](#personal-information-popia)).
 
 ## Evidence packs
 
@@ -2936,8 +2967,8 @@ nothing else.
   should be invite-only (plan question 11).
 - Any editor may sign off the calibration rules; restricting it to a role
   waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
-- POPIA: no privacy notice and no self-service account deletion yet
-  (Phase 7); what exists today and the open items are in
+- POPIA: no self-service account deletion yet (the operator deletes on an
+  emailed request, issue #112); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook

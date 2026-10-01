@@ -1,7 +1,8 @@
 // Web Worker: the preview engine (roadmap WP-1.17). Runs the engine on
 // inputs the page already holds, off the main thread, for an answer that is
-// never stored. So far one kind of request: a dam's firm yield, the Yield
-// panel's instant preview (WP-3.6, ./compute.ts). It is an entry of the page
+// never stored. Two kinds of request (./compute.ts): a dam's firm yield, the
+// Yield panel's instant preview (WP-3.6), and what unsaved edits do to the
+// last run, the Preview on Settings and the model's save bar (issue #284). It is an entry of the page
 // build (frontend/vite.config.ts, workerChunks), so it shares the engine
 // chunks instead of carrying its own copy. One request at a time; the page
 // replaces or cancels one by terminating the worker (the engine is

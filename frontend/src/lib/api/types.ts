@@ -249,8 +249,8 @@ export interface ImportReport {
 /** GET /projects/:id/import-report: the newest import's report, with who imported it and when. */
 export interface StoredImportReport extends ImportReport {
 	importedAt: string;
-	/** The importer's display name. */
-	importedBy: string;
+	/** The importer's display name; null once their account is deleted (138). */
+	importedBy: string | null;
 }
 
 export interface Member {
@@ -406,7 +406,7 @@ export interface PortfolioProject {
 
 // ---- Alerts (WP-2.13, docs/api.md § Alerts) --------------------------------
 
-export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing';
+export type AlertKind = 'dam_below' | 'ewr_forecast_fail' | 'data_stale' | 'restriction_published' | 'job_dead' | 'feed_failing' | 'farms_short';
 export type AlertMode = 'immediate' | 'daily_digest' | 'off';
 
 /** One choice on /account/alerts. */
@@ -455,6 +455,12 @@ export interface AlertRule {
 	/** That feed as the feeds page names it, and whether it is enabled (null for other kinds). */
 	feedName: string | null;
 	feedEnabled: boolean | null;
+	/** data_stale: the ingest-key series it watches instead of a feed (one rule per series an API key writes); null otherwise. */
+	seriesId: string | null;
+	/** That series as the Data page names it (its name, else its kind's label). */
+	seriesName: string | null;
+	/** Whether an API key still writes it; false once a person wrote over the key's days (null for other rules). */
+	seriesKeyFed: boolean | null;
 	/** dam_below: a fraction of capacity (0.3 = 30 %); the others whole days, failures or jobs; restriction_published 0. */
 	threshold: number;
 	enabled: boolean;
@@ -465,6 +471,7 @@ export interface AlertRuleChange {
 	kind: AlertKind;
 	nodeId?: string | null;
 	feedId?: string | null;
+	seriesId?: string | null;
 	threshold: number;
 	enabled: boolean;
 }
@@ -480,6 +487,8 @@ export interface AlertEvent {
 	nodeName: string | null;
 	/** data_stale: the feed it is about; null for every other kind. */
 	feedId: string | null;
+	/** data_stale: the ingest-key series it is about; null otherwise. */
+	seriesId: string | null;
 	openedAt: string;
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
@@ -692,7 +701,8 @@ export interface Ensemble {
 	summary: EnsembleSummary | PairedSummary | null;
 	createdAt: string;
 	createdBy: string | null;
-	createdById: string;
+	/** Null once the starter's account is deleted (138). */
+	createdById: string | null;
 	completedAt: string | null;
 }
 
@@ -896,7 +906,8 @@ export interface Scenario {
 	 * rebase dropped still reads by name. Sorted by id.
 	 */
 	opNames: { id: string; name: string }[];
-	ownerUserId: string;
+	/** Null once the owner's account is deleted (138): the scenario stays, the name goes. */
+	ownerUserId: string | null;
 	/** The owner's display name. */
 	owner: string | null;
 	status: ScenarioStatus;
@@ -1748,10 +1759,19 @@ export interface SignoffRequest {
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
 
-export type AllocationAuthorisation = 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+/** Mirrors backend allocations/parse.ts `Authorisation` (and 136's CHECK); a registration is not an entitlement (issue #281). */
+export type AllocationAuthorisation =
+	| 'registration'
+	| 'licence'
+	| 'general_authorisation'
+	| 'schedule_1'
+	| 'existing_lawful_use_claimed'
+	| 'existing_lawful_use';
 export type AllocationPurpose = 'irrigation' | 'domestic' | 'livestock' | 'industry' | 'mining' | 'municipal' | 'other';
 export type AllocationWaterSourceKind = 'surface' | 'groundwater';
 export type AllocationImportKind = 'warms_extract' | 'csv';
+/** The NWA s21 water use (142, issue #72): 21a a take per year, 21b a dam's storage only (volume 0). */
+export type AllocationWaterUse = '21a' | '21b';
 
 /**
  * A cap run's water years for one unit and source (GET …/runs/:runId/allocations
@@ -1789,6 +1809,7 @@ export interface Allocation {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	waterUse: AllocationWaterUse;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -1831,6 +1852,8 @@ export interface AllocationInput {
 	months?: number[] | null;
 	maxRateM3s?: number | null;
 	conditions?: string[];
+	/** Default '21a'. A '21b' row has volume 0, a storage and surface water. */
+	waterUse?: AllocationWaterUse;
 }
 
 /** One row of an import preview. */
@@ -1851,6 +1874,7 @@ export interface AllocationPreviewRow {
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
+	waterUse: AllocationWaterUse;
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

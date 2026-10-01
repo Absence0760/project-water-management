@@ -405,7 +405,7 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
 	const toDam = ks.filter((k) => units[k]!.toDam);
 	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
-	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity) => {
+	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity, dayD = D) => {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
 		let gLeft = gRoom;
 		const pump = (k: number, want: number) => {
@@ -422,8 +422,9 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
-			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
-			const drawn = left > D * 1e-12;
+			// Primary and emergency top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0),
+			// beyond float noise of the day's full demand, off-take water used included (engine ≥ 1.57.0).
+			const drawn = left > dayD * 1e-12;
 			const want = u.mode === 1 ? (drawn ? room : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? room : 0) : left - (avail + dam - dead);
 			dam += pump(k, Math.min(want, room));
 		}
@@ -467,6 +468,11 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	// An allocation cap (engine ≥ 1.18.0): what the river and the boreholes may still give this water year.
 	const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 	const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
+	// Its river pump (engine ≥ 1.58.0): the river gives it at most the capacity; the take and what the cap left unmet are published.
+	const pump = typeof n.pumpCapacityM3Day === 'number' && Number.isFinite(n.pumpCapacityM3Day) && n.pumpCapacityM3Day >= 0 ? n.pumpCapacityM3Day : null;
+	const PL = g('pump_limited');
+	if ((pump !== null) !== !!PL) return `${n.id}: user pump_limited ${pump !== null ? 'missing for a pump capacity' : 'without a pump capacity'}`;
+	if (g('river_abstraction')) return `${n.id}: a user has no river_abstraction series (its river take is supplied − groundwater_used)`;
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
@@ -475,7 +481,8 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const d = D[t]!;
 		const gw = GW?.[t] ?? 0;
 		const dep = DEP?.[t] ?? 0;
-		const river = senior ? h : Math.max(0, h - zIn);
+		const avail = senior ? h : Math.max(0, h - zIn);
+		const river = pump === null ? avail : Math.min(avail, pump);
 		// Primary boreholes pump first; otherwise the river goes first and groundwater tops it up.
 		const rp = replay(t, d, 0, river, 0, 0, 0, 1, RS?.[t] ?? Infinity, RG?.[t] ?? Infinity);
 		const wantGw = rp.direct;
@@ -488,6 +495,14 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const noise = 1e-12 * Math.max(Math.abs(U[t]!), Math.abs(Z[t]!));
 		if (AA[t]! > 0 || Math.abs(AA[t]! - Math.min(U[t]! - Z[t]!, 0)) > tol(U[t]!) + noise) return `${where}: EWR shortfall ${AA[t]}`;
 		if (Zs && (Zs[t]! < 0 || Zs[t]! > zIn + tol(zIn))) return `${where}: senior requirement ${Zs[t]} below the user outside [0, ${zIn}]`;
+		if (pump !== null) {
+			const take = G[t]! - gw;
+			if (take > pump + tol(pump)) return `${where}: user took ${take} from the river, above its pump capacity ${pump}`;
+			const wantPl = Math.max(0, Math.min(avail, RS?.[t] ?? Infinity, d - gw) - take);
+			if (Math.abs(PL![t]! - wantPl) > tol(Math.max(h, d)) || PL![t]! > W[t]! + tol(d)) return `${where}: user pump_limited ${PL![t]} ≠ ${wantPl} (or above the deficit ${W[t]})`;
+			// A senior user's claim was MIN(demand, capacity): what passes below it drops by at most that.
+			if (Zs && senior && Zs[t]! < zIn - Math.min(d, pump) - tol(zIn)) return `${where}: senior requirement ${Zs[t]} below the user dropped by more than MIN(demand, pump capacity)`;
+		}
 	}
 	return null;
 }
@@ -1002,6 +1017,15 @@ function checkUserReports(input: ModelInput, out: ModelOutput, get: SeriesMap, f
 		if (!close(s.avgDemandM3Day, sum(D!) / out.days) || !close(s.avgSuppliedM3Day, sum(G!) / out.days) || !close(s.avgReturnedM3Day, sum(T!) / out.days) || !close(s.avgEwrChargeM3Day, -sum(C!) / out.days))
 			return `user summary ${u.id}: means differ from the daily series`;
 		if (s.fractionSupplied < 0 || s.fractionSupplied > 1 + 1e-12) return `user summary ${u.id}: fraction supplied ${s.fractionSupplied}`;
+		// Its pump (engine ≥ 1.58.0): the means of pump_limited and of the river take (supplied − groundwater_used), present exactly with the series.
+		const PL = get.get(`${u.id}|pump_limited`);
+		if (!!PL !== (s.avgPumpLimitedM3Day !== undefined) || !!PL !== (s.avgRiverAbstractionM3Day !== undefined)) return `user summary ${u.id}: pump means ${PL ? 'missing' : 'without a pump'}`;
+		if (PL) {
+			const GW = get.get(`${u.id}|groundwater_used`);
+			const river = sum(G!) - (GW ? sum(GW as number[]) : 0);
+			if (!close(s.avgPumpLimitedM3Day!, sum(PL as number[]) / out.days) || Math.abs(s.avgRiverAbstractionM3Day! - river / out.days) > 1e-9 * Math.max(1, sum(G!) / out.days) || !(s.daysPumpLimited! >= 0 && s.daysPumpLimited! <= out.days))
+				return `user summary ${u.id}: pump means differ from the daily series`;
+		}
 		const w = `curtailment user ${u.id}`;
 		if (!close(row.demandM3Day, sum(D!, from, to) / n) || !close(row.suppliedM3Day, sum(G!, from, to) / n) || !close(row.ewrChargeM3Day, sum(C!, from, to) / n)) return `${w}: window means differ from the daily series`;
 		if (row.suppliedM3Day > row.demandM3Day || row.ewrChargeM3Day > 0) return `${w}: supplied ${row.suppliedM3Day} > demand or charge ${row.ewrChargeM3Day} > 0`;
@@ -1351,7 +1375,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
 			const sLeft = (RS?.[t] ?? Infinity) - xused;
-			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity);
+			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity, d);
 			let wantGs: number;
 			let wantGr = 0;
 			const dsl = Math.min(dl, sLeft);

@@ -37,8 +37,10 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 	const rule = n.supplyRule ?? 'damFirst';
 	const pump = n.pumpCapacityM3Day;
 	if (n.kind !== 'farm') {
-		if (rule !== 'damFirst' || (pump !== null && pump !== undefined))
-			warnings.push(`${n.kind === 'user' ? 'user' : 'gauge'} "${n.name}": only a farm has a supply rule and river pump; ignored`);
+		// An other water user's pump is its own (userPumpOf, engine ≥ 1.58.0); only the supply rule is a farm's.
+		if (n.kind === 'user') {
+			if (rule !== 'damFirst') warnings.push(`user "${n.name}": only a farm has a supply rule; ignored (a user always takes from the river, up to its pump capacity)`);
+		} else if (rule !== 'damFirst' || (pump !== null && pump !== undefined)) warnings.push(`gauge "${n.name}": only a farm has a supply rule and river pump; ignored`);
 		return {};
 	}
 	if (rule === 'damFirst') {
@@ -79,6 +81,24 @@ export function supplyOf(n: NetworkNode, warnings: string[]): { supply?: PlanSup
 	const trigger = clamp(n.supplyTriggerPct, 0, 0.4, 'supply trigger');
 	const stop = clamp(n.supplyStopPct, trigger, 0.6, 'supply stop level');
 	return { supply: { rule: 2, pumpM3Day, triggerM3: trigger * cap, stopM3: stop * cap } };
+}
+
+/**
+ * An other water user's river pump (engine ≥ 1.58.0, WP-3.8, issue #54 item
+ * 2b, docs/model.md §2.7c): its `pumpCapacityM3Day`, the most it takes from
+ * the river in a day (m³). {} for null / absent (no limit: every user before
+ * 1.58.0, which took MIN(demand, what reaches it)) and on any node that isn't
+ * a user. A user has no supply rule, so, unlike a farm's, a null capacity is
+ * the default and doesn't warn. A value that isn't a size ≥ 0 runs as no
+ * limit with a warning (the API refuses it on save).
+ */
+export function userPumpOf(n: NetworkNode, warnings: string[]): { userPumpM3Day?: number } {
+	if (n.kind !== 'user') return {};
+	const pump = n.pumpCapacityM3Day;
+	if (pump === null || pump === undefined) return {};
+	if (finite(pump) && pump >= 0) return { userPumpM3Day: pump };
+	warnings.push(`user "${n.name}": pump capacity ${String(pump)} m³/day is not a size ≥ 0; no limit`);
+	return {};
 }
 
 /**

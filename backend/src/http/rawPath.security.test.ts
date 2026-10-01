@@ -7,8 +7,8 @@
 import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
-import { handle } from 'hono/aws-lambda';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { invokeStreamed, urlEvent } from '../__tests__/lambdaRuntime.js';
 import { createApp } from '../app.js';
 
 const app = createApp();
@@ -81,18 +81,8 @@ describe('through the Node server', () => {
 	});
 });
 
-describe('through the Lambda adapter (a Function URL event)', () => {
-	const handler = handle(app);
-	const event = (rawPath: string) => ({
-		version: '2.0',
-		rawPath,
-		rawQueryString: '',
-		headers: { host: 'example.lambda-url.af-south-1.on.aws' },
-		requestContext: { domainName: 'example.lambda-url.af-south-1.on.aws', http: { method: 'GET', path: rawPath, sourceIp: '192.0.2.1' } },
-		isBase64Encoded: false
-	});
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const status = async (rawPath: string) => ((await handler(event(rawPath) as any, {} as any)) as { statusCode: number }).statusCode;
+describe('through the Lambda adapter (a Function URL event, streamed as production runs it: http/lambdaStream.ts)', () => {
+	const status = async (rawPath: string) => (await invokeStreamed(app, urlEvent(rawPath))).metadata?.statusCode;
 
 	it('refuses an escaped letter and an encoded dot segment', async () => {
 		expect(await status('/%61uth/me')).toBe(400);

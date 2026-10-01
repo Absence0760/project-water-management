@@ -101,7 +101,7 @@ describe('GET /auth/me/export', () => {
 		expect(doc.farms).toHaveLength(1);
 		const farm = doc.farms[0];
 		expect(farm).toMatchObject({ projectId, nodeId: farmA.id, farmName: 'Farm Alpha', linkedBy: 'XOwner' });
-		expect(farm.allocations).toEqual([expect.objectContaining({ holderName: 'Holder Alpha', registrationNo: 'REG-ALPHA', volumeM3Year: 12_000 })]);
+		expect(farm.allocations).toEqual([expect.objectContaining({ holderName: 'Holder Alpha', registrationNo: 'REG-ALPHA', volumeM3Year: 12_000, waterUse: '21a' })]);
 		expect(farm.publication?.figures?.name).toBe('Farm Alpha');
 		expect(farm.publication.restriction.level).toEqual(expect.any(String));
 	});
@@ -163,6 +163,12 @@ describe('GET /auth/me/export', () => {
 		// The owner invited the farmers; the farm links are the farmers' own, made by accepting (issue #136).
 		expect((doc.auditEvents as Doc[]).some((e) => e.byYou && e.kind === 'invite.sent')).toBe(true);
 		expect((doc.auditEvents as Doc[]).some((e) => e.byYou && e.kind === 'farmer.linked')).toBe(false);
+		// Their publication, with its notice and window but not the per-farm figures (the decision log, issue #119), which the log itself keeps.
+		const published = (doc.auditEvents as Doc[]).find((e) => e.byYou && e.kind === 'publication.published');
+		expect(published?.subject).toMatchObject({ farms: expect.any(Number), restriction: { level: 'none' }, window: { dataUntil: expect.any(String) } });
+		expect(published?.subject).not.toHaveProperty('perFarm');
+		const [kept] = await asOwner(`SELECT subject FROM audit_event WHERE id = $1`, [published!.id]);
+		expect(kept.subject.perFarm).toHaveLength(published!.subject.farms);
 		expect(doc.farms).toEqual([]);
 		expect(doc.invites).toEqual([]);
 	});

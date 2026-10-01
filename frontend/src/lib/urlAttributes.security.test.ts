@@ -107,8 +107,10 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte']
 	},
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
+	FAO56_TABLE5_URL: { why: 'crops/loadFactors.ts constant https:// link to FAO-56 ch. 3 (Table 5)', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	glossaryPath: { why: 'help glossary: "/help/glossary/<slug>#<id>", the slug from TOPIC_SLUGS and the id from the static help text (lib/help/glossaryLinks.ts)', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/RichText.svelte', 'routes/help/glossary/+page.svelte', 'routes/help/glossary/[topic]/+page.svelte', 'routes/help/guides/[id]/+page.svelte', 'routes/help/search/+page.svelte'] },
 	topicPath: { why: 'help glossary: "/help/glossary/<slug>" from the TOPIC_SLUGS table (lib/help/glossaryLinks.ts)', in: ['routes/help/glossary/+page.svelte'] },
+	'unrun.path': { why: 'GetStarted: projects/example.ts startFromExample\'s "/projects/" + encodeURIComponent(the new project\'s id), after {base}', in: ['lib/components/projects/GetStarted.svelte'] },
 	'l.href': { why: 'HelpNav: "/help…" paths built in the component from guide ids (lib/help/guides.ts) and topicPath', in: ['lib/components/help/HelpNav.svelte'] },
 	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },
 	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },
@@ -137,6 +139,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
 	exampleHref: { why: 'EWR editors: `data:text/csv;charset=utf-8,` + encodeURIComponent(synthetic CSV)', in: ['lib/components/settings/EwrHighFlowsEditor.svelte', 'lib/components/settings/EwrRuleTablesEditor.svelte'] },
+	csvHref: { why: 'GridPasteDialog: `data:text/csv;charset=utf-8,` + encodeURIComponent(the grid as CSV, names defused by csvCell; empty while closed)', in: ['lib/components/model/GridPasteDialog.svelte'] },
 	templateHref: { why: 'AllocationImport: `data:text/csv;charset=utf-8,` + encodeURIComponent(the template CSV)', in: ['lib/components/allocations/AllocationImport.svelte'] }
 };
 

@@ -100,6 +100,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.model': 'Dit is ’n skatting van die opvanggebied se model, bereken uit die syfers wat jou WGV gepubliseer het. Dit is nie ’n meting van jou dam nie, en nie ’n opdrag nie. Kyk self na jou dam, en vra jou WGV as jy onseker is. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
 	// This is the catchment model’s estimate, worked out from the figures the WUA published. It is not a measurement of the dam and not an instruction. Only a notice from the WUA or from DWS is a restriction.
 	'mail.alert.model.dam.staff': 'Dit is ’n skatting van die opvanggebied se model, bereken uit die syfers wat die WGV gepubliseer het. Dit is nie ’n meting van die dam nie, en nie ’n opdrag nie. Net ’n kennisgewing van die WGV of van die DWS is ’n beperking.',
+	// This is the catchment model’s estimate, from figures an auto run published by itself, without a person checking them first. It is not a measurement and not a restriction.
+	'mail.alert.model.short.staff': 'Dit is ’n skatting van die opvanggebied se model, uit syfers wat ’n outomatiese lopie self gepubliseer het, sonder dat iemand dit eers nagegaan het. Dit is nie ’n meting nie, en nie ’n beperking nie.',
 	// This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.
 	'mail.alert.model.staff': 'Dit kom uit die nuutste voorspellingslopie van die opvanggebied se model, wat dalk nog nie gepubliseer is nie. Dit is ’n skatting, nie ’n meting nie, en nie ’n beperking nie.',
 	// You get this email because you get {kind} alerts for {project}.
@@ -134,6 +136,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.kind.job_dead': 'mislukte agtergrondtake',
 	// failing data feed
 	'mail.alert.kind.feed_failing': 'datavoere wat misluk',
+	// hydrological units short of water
+	'mail.alert.kind.farms_short': 'hidrologiese eenhede met ’n watertekort',
 	// Dam low on {farm}
 	'mail.alert.dam.what': 'Dam laag op {farm}',
 	// The model puts the dam on {farm} at about {pct} of capacity on {date}, below the alert level of {threshold}.
@@ -154,6 +158,14 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.stale.line.one': '{feed}: nuutste dag {newest}, {overdue} dag laat',
 	// {feed}: newest day {newest}, {overdue} days late
 	'mail.alert.stale.line.other': '{feed}: nuutste dag {newest}, {overdue} dae laat',
+	// No new readings have come in through the API key for this series for more than {threshold} day:
+	'mail.alert.stale.seriesBody.one': 'Daar het al meer as {threshold} dag lank geen nuwe lesings vir hierdie datareeks deur die API-sleutel ingekom nie:',
+	// No new readings have come in through the API key for this series for more than {threshold} days:
+	'mail.alert.stale.seriesBody.other': 'Daar het al meer as {threshold} dae lank geen nuwe lesings vir hierdie datareeks deur die API-sleutel ingekom nie:',
+	// Hydrological units short of water
+	'mail.alert.short.what': 'Hidrologiese eenhede met ’n watertekort',
+	// An auto run published new figures on {publishedAt}. Hydrological units short of water on at least one day from {from} to {to}: {count} of {of}. The alert is set at {threshold}.
+	'mail.alert.short.body': '’n Outomatiese lopie het op {publishedAt} nuwe syfers gepubliseer. Hidrologiese eenhede met ’n watertekort op minstens een dag van {from} tot {to}: {count} van {of}. Die waarskuwing is op {threshold} gestel.',
 	// Data feed failing
 	'mail.alert.failing.what': 'Datavoer misluk',
 	// These data feeds have failed {threshold} or more times in a row:

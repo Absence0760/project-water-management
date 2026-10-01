@@ -8,7 +8,7 @@
 	import { api, type AllocationImportKind, type AllocationPreview } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fmtNum } from '$lib/format/number';
-	import { AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV } from './allocations';
+	import { AUTHORISATION_LABEL, MATCHED_BY_LABEL, previewOrder, SOURCE_LABEL, TEMPLATE_CSV, volumeCell } from './allocations';
 
 	let { projectId, open = $bindable(false), onimported }: { projectId: string; open?: boolean; onimported: (message: string) => void } = $props();
 
@@ -160,7 +160,8 @@
 								<td>{r.registrationNo || '–'}{#if r.alreadyInProject}<span class="note" title="A volume with this registration number is already in the project; importing adds another.">already in project</span>{/if}</td>
 								<td>{r.farm || r.propertyRef || '–'}</td>
 								<td>{r.authorisation ? AUTHORISATION_LABEL[r.authorisation] : '–'}<span class="note">{r.waterSource ? SOURCE_LABEL[r.waterSource] : '–'}</span></td>
-								<td class="num">{fmtNum(r.volumeM3PerYear)}</td>
+								<!-- A 21(b) row is a dam's storage, never a take (issue #72). -->
+								<td class="num">{#if r.waterUse === '21b' && !r.errors.length}{volumeCell(r)}<span class="note">storage {fmtNum(r.storageM3)} m³</span>{:else}{fmtNum(r.volumeM3PerYear)}{/if}</td>
 								<td>
 									{#if r.errors.length}
 										<span class="err">{r.errors.join('; ')}</span>

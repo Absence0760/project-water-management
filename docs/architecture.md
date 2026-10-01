@@ -90,6 +90,10 @@ The same `runModel` runs:
   (`frontend/src/lib/preview/engine.worker.ts`, WP-1.17's worker) on a run's
   own input, never stored; the `yield` job's result is the stored one
   ([ui.md § Yield](./ui.md#yield-wp-36)).
+  **Preview** on Settings and the model save bar (issue #284) runs the model
+  in the same worker twice, on the last run's own input and on it with the
+  unsaved edits laid over it (`lib/preview/overlay.ts`), and shows the
+  difference; nothing is stored ([ui.md § Project workspace](./ui.md#project-workspace)).
 - **in the backend**, for `POST /projects/:id/runs`. The backend loads the
   project as `water_app`, runs the engine, and stores the input snapshot,
   summary and output series, and the input series themselves, once per
@@ -123,7 +127,10 @@ water users). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
 room for the section header, issue #17). The compare page loads its daily overlay and, only when a side
-is a scenario run, its Scenario overrides section the same way. uPlot and the
+is a scenario run, its Scenario overrides section the same way. The project list's empty state loads
+the example catchment it can start from (`projects/example.ts`, ~25 KB gzip of
+invented rainfall and flow, issue #286) only on hover, focus or press of
+**Start from an example**. uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 
@@ -274,13 +281,17 @@ holds only what no page runs (the run, the fit, the ensemble: 33 KB); starting
 a fit from Settings fetches 45 KB of worker code where it used to fetch 62, and
 the total bundle dropped 919 → 899 KB.
 
-The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17; so far
-the Yield panel's in-browser firm yield, issue #73) is a second entry of the
+The preview worker (`lib/preview/engine.worker.ts`, roadmap WP-1.17: the
+Yield panel's in-browser firm yield, issue #73, and the Preview of unsaved
+edits against the last run, issue #284) is a second entry of the
 page build in the same way (`virtual:preview-worker-url`, one `workerChunks`
 plugin for both, `_app/immutable/workers/preview.worker-<hash>.js`). The
 network run code both workers use then sits in a chunk of its own that only
 the workers load, so the calibration worker's own file is 17 KB and the
-preview worker's 2.6 KB (the yield search). Its runner
+preview worker's 4.3 KB (the yield search, and the read of two runs for the
+unsaved-edits preview, which deliberately doesn't import `compareRuns`:
+that module would put a second copy of every run comparison in a chunk of
+its own). Its runner
 (`lib/preview/runner.ts`) is a dynamic import of the panel, and only the
 worker imports `lib/preview/compute.ts`, the module that calls the engine
 (`compute.test.ts` scans for other importers). One request at a time, latest
@@ -288,7 +299,7 @@ wins: a newer one terminates the worker mid-search, since the engine loop is
 synchronous. The bundle guard checks both workers import from `chunks/`.
 The worker treats its message as untrusted data: `compute.ts` `parseMessage`
 checks it strictly before the engine sees it (known keys only; the yield
-parameters in the backend's `YieldParams` ranges; the input's outline; a
+parameters in the backend's `YieldParams` ranges; each input's outline; a
 scenario's ops through `validateScenarioOps`), and answers a malformed
 request with an error carrying its id.
 
@@ -370,7 +381,11 @@ extracts the project, posting progress per sheet; `extract` builds the project
 again with other options (the gauge as a reference) from the workbook the
 worker still holds, in milliseconds; a failure comes back as a plain object
 with the typed error's code and fields (the missing named ranges, sheet and
-cell). Cancel, closing the dialog and a finished import terminate the worker.
+cell). `nodeCrops` reads a node-based workbook's [Crop_Factors] and
+[Crop_Areas] instead (`nodeCrops.ts`, for the Load crop factors dialog):
+only those two sheets are parsed, and it posts a crop set whose content
+problems are warnings, not failures. Cancel, closing the dialog and a
+finished import terminate the worker.
 The reader is the import's own, not SheetJS: `zip.ts` inflates only the
 parts the importer reads, with the browser's
 `DecompressionStream('deflate-raw')` and hard caps ([security.md § Input
@@ -539,6 +554,16 @@ lazy chunk, where gzip already folds them).
 6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
    and anything unexpected to a generic 500; raw database error text never
    reaches the client ([api.md § Errors](./api.md#errors)).
+7. The response is **streamed** in both runtimes (WP-1.29a, issue #283):
+   the Node server writes a `ReadableStream` body as it is read, and in
+   Lambda the Function URL is in `RESPONSE_STREAM` mode with the app behind
+   `backend/src/http/lambdaStream.ts` (status, headers and `Set-Cookie` in
+   the stream's prelude). Most routes answer one JSON chunk; the CSV
+   downloads (`export/download.ts`) measure the file inside the transaction
+   (`413` past 50 MB), then write it from memory after the transaction has
+   ended, so no database connection waits on a slow client. A body that
+   fails partway cuts the response off instead of ending it
+   ([deployment.md § Response streaming](./deployment.md#response-streaming)).
 
 ## Data flow of a model run
 
@@ -846,7 +871,10 @@ Settings → Automatic runs.
   self-checks failed and it raises no warning the published run didn't (the
   same sentence with other numbers or dates is the same warning), carrying
   the WUA's notice and next-update date over; the audit event says `auto:
-  true`. There is no "always".
+  true`, and so does the publication (`run_publication.auto`, 141), which
+  is what the `farms_short` alert watches: a publication no person made
+  mails the WUA's staff when farms went short in its last week of data
+  (issue #120). There is no "always".
 - **Waking the worker**: a route wakes it after commit only when the re-run
   is due at once (a debounce of 0, handy in dev); a debounced one is found
   by the next poll (15 s locally) or the production tick (5 minutes) once
@@ -1163,7 +1191,9 @@ merges into:
   `disabled`. A feed not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
   `data_stale` or `feed_failing` alert on emails its owners and editors
-  ([§ Alert emails](#alert-emails)).
+  ([§ Alert emails](#alert-emails)); `data_stale` also watches each series
+  an API key sends (a logger pushing to `/ingest`, which has no feed):
+  days with no new value, from its last non-blank day (141, issue #120).
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 

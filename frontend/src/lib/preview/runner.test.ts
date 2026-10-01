@@ -4,7 +4,7 @@
 // a worker crash rejects with its words.
 import type { YieldPoint } from '@water-management/engine';
 import { describe, expect, it, vi } from 'vitest';
-import type { FromWorker, ToWorker, YieldPreviewRequest } from './messages';
+import type { FromWorker, PreviewEffect, ToWorker, YieldPreviewRequest } from './messages';
 
 vi.mock('virtual:preview-worker-url', () => ({ default: '/preview.worker.js' }));
 const { createPreviewEngine, PreviewSuperseded } = await import('./runner');
@@ -61,7 +61,7 @@ describe('createPreviewEngine', () => {
 		await expect(first).rejects.toBeInstanceOf(PreviewSuperseded);
 		expect(workers).toHaveLength(2);
 		expect(workers[0]!.terminated).toBe(true);
-		expect(workers[1]!.posted[0]!.request.assurance).toBe(0.9);
+		expect((workers[1]!.posted[0] as Extract<ToWorker, { type: 'yield' }>).request.assurance).toBe(0.9);
 		workers[1]!.reply({ type: 'yield-done', id: workers[1]!.posted[0]!.id, point: point(9) });
 		await expect(second).resolves.toEqual(point(9));
 	});
@@ -108,6 +108,19 @@ describe('createPreviewEngine', () => {
 		expect(workers[0]!.terminated).toBe(false);
 		workers[0]!.reply({ type: 'yield-done', id: workers[0]!.posted.at(-1)!.id, point: point(4) });
 		await expect(next).resolves.toEqual(point(4));
+	});
+
+	it('asks for an effect and resolves with it; an effect request supersedes a yield one', async () => {
+		const { engine, workers } = setup();
+		const y = engine.firmYield(req);
+		const effectReq = { baseKey: 'p/r', base: {} as YieldPreviewRequest['input'], edited: {} as YieldPreviewRequest['input'] };
+		const e = engine.effect(effectReq);
+		await expect(y).rejects.toBeInstanceOf(PreviewSuperseded);
+		const sent = workers[1]!.posted[0]!;
+		expect(sent).toEqual({ type: 'effect', id: sent.id, request: effectReq });
+		const effect = { engineVersion: '1.0.0' } as PreviewEffect;
+		workers[1]!.reply({ type: 'effect-done', id: sent.id, effect });
+		await expect(e).resolves.toBe(effect);
 	});
 
 	it('cancel() stops the request in flight; close() leaves no worker', async () => {

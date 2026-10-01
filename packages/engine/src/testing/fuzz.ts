@@ -381,6 +381,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addOfftakeReturns(new Rng(seed ^ 0x3f1a7c2d), nodes, transfers);
 	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8), from its own stream, last of all.
 	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
+	// A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8), from its own stream, last of all.
+	addUserPumps(new Rng(seed ^ 0x4f1bbcdc), nodes);
 	return {
 		settings,
 		model: {
@@ -630,6 +632,21 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 }
 
 /**
+ * A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8, docs/model.md
+ * §2.7c) in 30 % of seeds, on each user half the time: 0 (no pump), a trickle,
+ * or anything up to more than any flow, so the cap binds some days, every day
+ * or never, senior and junior, with and without boreholes (addBoreholes ran
+ * before).
+ */
+function addUserPumps(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.3)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'user' || !g.bool(0.5)) continue;
+		n.pumpCapacityM3Day = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	}
+}
+
+/**
  * Hands-off flows and River to dam by month (engine ≥ 1.32.0, issue #204) in
  * 25 % of seeds, on each farm half the time: a hands-off flow by month (some
  * months 0, from a trickle to more than any flow, now and then 0 in every
@@ -743,7 +760,8 @@ function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
  * to more than the river carries, months without any, losses, profiles, any
  * return share (0 when piped out), any priority class; half the monthly
  * ones with people, so a domestic or municipal one has a basic-needs floor
- * from under to over its demand (engine ≥ 1.44.0).
+ * from under to over its demand (engine ≥ 1.44.0); and every source,
+ * sized as it says (engine ≥ 1.56.0).
  */
 function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 	if (!g.bool(0.25)) return [];
@@ -773,6 +791,8 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				// The basic-needs floor (engine ≥ 1.44.0): a per-unit object's count sets it; every other
 				// monthly one names people from its level, no draw, so the rest of the seed is unchanged.
 				population: !perUnit && k % 2 === 0 ? Math.round(level * 40) : null,
+				// Where its number comes from (engine ≥ 1.56.0), from k with no draw, one that fits the sizing: it changes no run.
+				source: ([null, perUnit ? 'perCapita' : 'meter', perUnit ? 'other' : 'aadd'] as const)[k % 3]!,
 				note: ''
 			});
 		}

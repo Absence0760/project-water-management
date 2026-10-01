@@ -53,7 +53,7 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 };
 const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
 	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
-	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, schedule: true, population: true, note: true
+	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, schedule: true, population: true, source: true, note: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -94,8 +94,8 @@ const RUN_KEYS = [
 	'groundwater_used', 'baseflow_depletion', 'depletion_unmet', 'depletion_deficit', 'depletion_store',
 	// Boreholes that pump into the dam (engine 0.36.0, WP-3.9)
 	'groundwater_to_dam',
-	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8)
-	'river_abstraction',
+	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8); an other water user's pump (engine 1.58.0)
+	'river_abstraction', 'pump_limited',
 	// The drought restriction rule (engine 1.54.0, WP-3.8)
 	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)

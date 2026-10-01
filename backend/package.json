@@ -20,6 +20,7 @@
 		"db:migrate": "tsx scripts/migrate.ts",
 		"import:project": "tsx scripts/import-project.ts",
 		"seed:examples": "tsx scripts/seed-examples.ts",
+		"gen:example": "tsx scripts/example-file.ts",
 		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts",
 		"fit-sweep": "tsx scripts/fit-sweep.ts",
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts"

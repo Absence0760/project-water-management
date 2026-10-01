@@ -78,6 +78,17 @@ manifest: its Appendix C says they aren't part of the pack, rather than
 printing *Not given* for answers it never asked, and a new version carries
 them.
 
+§ 6, the applicant's demand objects with their sources (report format
+`evidence-9`, issue #259), is `report.demandObjects`: each object on the
+applicant's units with its sizing, source, note and each run's demand, and
+the share of that demand by source, read from the two runs' stored inputs
+and summaries when the draft is made. So the manifest freezes it and its
+hash covers it, and no manifest version changed, as for `evidence-8`. A
+pack drafted before `evidence-9` has no `demandObjects` in its manifest:
+its stored manifest still hashes to its recorded hash (nothing rebuilds
+it; `packs.db.test.ts` pins one), and its report prints without § 6,
+exactly as it did.
+
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
 hash (set at issue), and room for the PDF's (not built yet).

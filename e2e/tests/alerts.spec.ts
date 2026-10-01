@@ -378,3 +378,46 @@ test('an editor sets a staleness level per data feed, starting from its source�
 	const rule = ((await saved.json()).rules as { kind: string; feedId: string | null; threshold: number; enabled: boolean }[]).find((r) => r.kind === 'data_stale')!;
 	expect(rule).toMatchObject({ feedId, threshold: 5, enabled: true });
 });
+
+// Issue #120: a series an API key sends gets its own staleness rule, named as
+// the Data page names it, under its own group in the editor.
+test('an editor sets a staleness level for a series an API key sends, starting from 2 days', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Keyed series catchment');
+	const day = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+	// A person adds the series (a key writes only into one that exists), then a key pushes a reading.
+	const put = await page.request.put(`${API_URL}/projects/${project.id}/series`, { data: { kind: 'flow_logger_m3s', name: 'Weir', unit: 'm³/s', startDate: day, values: [null] } });
+	expect(put.status(), await put.text()).toBe(200);
+	const seriesId = ((await put.json()) as { id: string }).id;
+	const key = await page.request.post(`${API_URL}/projects/${project.id}/api-keys`, { data: { name: 'Weir logger' } });
+	expect(key.status(), await key.text()).toBe(201);
+	const secret = ((await key.json()) as { secret: string }).secret;
+	const pushed = await page.request.post(`${API_URL}/ingest/v1/series/merge`, {
+		headers: { authorization: `Bearer ${secret}` },
+		data: { kind: 'flow_logger_m3s', name: 'Weir', unit: 'm³/s', startDate: day, values: [0.42] }
+	});
+	expect(pushed.status(), await pushed.text()).toBe(200);
+
+	await page.goto(`/projects/${project.id}`);
+	const panel = page.getByRole('region', { name: 'Active alerts' });
+	await expect(panel).toHaveAttribute('data-ready', 'true');
+	await panel.getByRole('button', { name: 'Set up alert emails' }).click();
+	const group = panel.getByRole('group', { name: 'API data behind' });
+	await expect(group.getByText('Each series an API key sends has its own level: the whole days with no new reading before it alerts (today doesn’t count).')).toBeVisible();
+	const on = group.getByRole('checkbox', { name: 'Weir' });
+	const level = group.getByRole('spinbutton', { name: 'Alert after (days with no new reading)' });
+	await expect(on).not.toBeChecked();
+	await expect(level).toHaveValue('2');
+	await expect(level).toBeDisabled();
+	// The catchment group has the units-short kind, off.
+	await expect(panel.getByRole('group', { name: 'Catchment' }).getByRole('checkbox', { name: 'Hydrological units short (automatic publications)' })).not.toBeChecked();
+	await expectNoViolations(page, { include: '.alerts' });
+
+	await on.check();
+	await level.fill('4');
+	await panel.getByRole('button', { name: 'Save alert rules' }).click();
+	await expect(panel.getByRole('status').filter({ hasText: 'Saved.' })).toBeVisible();
+	const saved = await page.request.get(`${API_URL}/projects/${project.id}/alert-rules`);
+	const rule = ((await saved.json()).rules as { kind: string; seriesId: string | null; threshold: number; enabled: boolean }[]).find((r) => r.seriesId === seriesId)!;
+	expect(rule).toMatchObject({ kind: 'data_stale', threshold: 4, enabled: true });
+});
