@@ -332,7 +332,7 @@
 			</div>
 			<div class="panel" id="res-outlook">
 				{#key shownRun.id}
-					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} />
+					<OutlookPanel {projectId} run={shownRun} outlook={project.settings.outlook} canEdit={canEdit} droughtRestriction={project.settings.droughtRestriction ?? null} {onProjectChange} />
 				{/key}
 			</div>
 			<div class="panel" id="res-water-account">

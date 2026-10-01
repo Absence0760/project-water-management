@@ -2,7 +2,7 @@
 // in words, from a table the engine drew on its invented test catchment.
 import { describe, expect, it } from 'vitest';
 import type { OutlookTriggerTable, OutlookTriggers } from '$lib/api/types';
-import { buildTriggersView } from './triggers';
+import { buildTriggersView, triggerRuleView } from './triggers';
 
 const lvl = (levelId: string, yearsMet: number, meets: boolean) => ({ levelId, label: `${levelId} %`, yearsMet, nYears: 12, meets, seasonEndStorageM3: null, demandMet: null });
 /** A hand-made table in the engine's shape: three bands over 90 000 m³, fullest first (invented). */
@@ -60,5 +60,26 @@ describe('buildTriggersView', () => {
 		// Its own season isn't listed as left out: it never was an analogue.
 		expect(v.excluded).toEqual([]);
 		expect(JSON.stringify(v)).not.toMatch(/recommend|likely|should|best|optimal/i);
+	});
+});
+
+describe('triggerRuleView (engine 1.54.0, WP-3.8)', () => {
+	const levels = [
+		{ id: '100', label: '100 %', ops: [{ op: 'demand.scale' as const, factor: 1 }] },
+		{ id: '70', label: '70 %', ops: [{ op: 'demand.scale' as const, factor: 0.7 }] }
+	];
+	it('is null without a table', () => {
+		expect(triggerRuleView({ triggers: null, levels })).toBeNull();
+		expect(triggerRuleView({ triggers: { ...stored, table: null }, levels })).toBeNull();
+	});
+	it('turns the table into the rule: reviewed on the review date, lifted the day after the season, a level per band that cuts', () => {
+		const v = triggerRuleView({ triggers: stored, levels })!;
+		expect(v.rule!.reviewDates).toEqual(['01-01']);
+		expect(v.rule!.liftDates).toEqual(['05-01']);
+		// 70 % below 60 000 of 90 000 m³ (two thirds); the band where no level met the rule keeps it, for the WUA to decide.
+		expect(v.rule!.levels).toHaveLength(1);
+		expect(v.rule!.levels[0]!.belowPct).toBeCloseTo(2 / 3, 12);
+		expect(v.words).toMatch(/^reviewed 1 Jan, lifted 1 May; 70 % \(below 66\.7 %\): crops 30 %/);
+		expect(v.notes.join('\n')).toMatch(/no demand level met the planning rule/);
 	});
 });

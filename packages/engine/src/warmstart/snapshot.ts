@@ -105,6 +105,15 @@ export interface ModelState {
 	 */
 	columns: { nodeId: string | null; key: string; label: string; unit: string; after: { nodeId: string | null; key: string } | null }[];
 	/**
+	 * The drought restriction level each node held the day before (engine ≥
+	 * 1.54.0, settings.droughtRestriction; model order, 0 = none), so a
+	 * resumed run keeps the levels decided at the last review, and whether the
+	 * rule's EWR trigger site failed the day before (absent = no). Absent
+	 * without the rule.
+	 */
+	restrictionLevels?: number[];
+	restrictionEwrFailed?: boolean;
+	/**
 	 * The scored flow record had readings before the snapshot's day (engine ≥ 1.48.0): its per-day quality flags'
 	 * suspect class reads the whole record, so a resumed input without that history can't reproduce them
 	 * (../run.ts leaves the class out and warns). Absent = no such history.

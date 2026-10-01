@@ -204,16 +204,30 @@ async function packErrataFoundSince(db: Db, pack: PackMeta, manifest: PackManife
 	return errataFoundSince(manifest.report.verification.errata ?? [], runs);
 }
 
-/** What still stands between a draft and its issue, from what is stored (the issue route checks the live report as well). */
-async function issueChecks(db: Db, projectId: string, pack: PackMeta, manifest: PackManifest) {
+/**
+ * What still stands between a draft and its issue, from what is stored (the
+ * issue route checks the live report as well). `errataRecorded`: no erratum
+ * found since the draft was made applies to its runs (`found`, from
+ * packErrataFoundSince), so the manifest lists every one that does.
+ */
+async function issueChecks(db: Db, projectId: string, pack: PackMeta, manifest: PackManifest, found: readonly PackErratum[]) {
 	const { sha256: current, unverified } = await packStatementFor(db, projectId, pack);
 	const { rowCount } = await db.query('SELECT 1 FROM signoff WHERE pack_id = $1 AND statement_sha256 = $2 LIMIT 1', [pack.id, current]);
 	return {
 		issuable: manifest.report.issuable && !manifest.report.refused,
 		signed: !!rowCount,
-		runsVerified: !unverified
+		runsVerified: !unverified,
+		errataRecorded: found.length === 0
 	};
 }
+
+/** Issue refuses a draft whose manifest misses an erratum that applies to its runs now: it would be issued without it, for good. */
+const errataSinceDraft = (found: readonly PackErratum[]) =>
+	ApiError.coded(
+		409,
+		'pack_errata_since_draft',
+		`errata were found since this draft was made (${found.map((e) => e.id).join(', ')}): they apply to its runs but its manifest doesn’t record them, so it can’t be issued. Draft the pack again to record them, then sign and issue that draft`
+	);
 
 const audit = (p: Pick<PackMeta, 'id' | 'version' | 'manifestSha256' | 'scenarioId'>, extra: Record<string, unknown> = {}) => ({
 	packId: p.id,
@@ -299,18 +313,19 @@ export const packRoutes = new Hono<AuthEnv>()
 				const pack = await loadPack(db, id, packId);
 				const { manifest, matches } = await storedManifest(db, packId);
 				const { rows: signoffs } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
+				const errataFoundSince = await packErrataFoundSince(db, pack, manifest);
 				return c.json({
 					pack,
 					manifest,
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					// Errata that apply to its runs now and that the manifest didn't record (132): shown beside the pack, never printed in it.
-					errataFoundSince: await packErrataFoundSince(db, pack, manifest),
+					errataFoundSince,
 					signoffs,
 					// The server-rendered PDF of an issued pack (119_pack_render): ready, rendering, failed or none.
 					pdf: await packPdfState(db, id, packId, pack.pdfSha256 !== null),
 					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
-					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest) : null
+					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest, errataFoundSince) : null
 				});
 			},
 			{ readOnly: true }
@@ -379,11 +394,14 @@ export const packRoutes = new Hono<AuthEnv>()
 			if (pack.status !== 'draft') throw new ApiError(409, `only a draft pack is issued; this one is ${pack.status}`);
 			const { manifest, matches } = await storedManifest(db, packId);
 			if (!matches) throw new ApiError(409, 'the stored manifest no longer matches its hash, so this pack can’t be issued');
-			const checks = await issueChecks(db, id, pack, manifest);
+			const found = await packErrataFoundSince(db, pack, manifest);
+			const checks = await issueChecks(db, id, pack, manifest, found);
 			if (!checks.issuable) throw notIssuable(manifest.report, 'this pack can’t be issued');
 			if (!checks.signed)
 				throw new ApiError(409, 'the pack has no sign-off of its current statement (none yet, or the statement changed since): sign it, then issue it');
 			if (!checks.runsVerified) throw runUnverified();
+			// An erratum found since the draft was made, for its runs' engines or their fits': the manifest would never list it.
+			if (!checks.errataRecorded) throw errataSinceDraft(found);
 			// The live report too: what was issuable when drafted (a nomination, the declared rule, the cited ensemble) must still be.
 			const live = await buildEvidenceReport(db, id, pack.scenarioRunId ?? pack.baselineRunId);
 			if (live.refused || !live.issuable) throw notIssuable(live, 'this pack can’t be issued, since its draft was made');
