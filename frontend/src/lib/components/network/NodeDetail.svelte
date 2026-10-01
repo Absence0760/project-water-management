@@ -35,7 +35,8 @@
 		onadddemand,
 		onremovedemand,
 		farmersNote = null,
-		previewHref = null
+		previewHref = null,
+		mapHref = null
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -60,6 +61,8 @@
 		farmersNote?: string | null;
 		/** A farm's page as its farmer sees it (WP-2.6); null for other nodes. */
 		previewHref?: string | null;
+		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
+		mapHref?: string | null;
 	} = $props();
 
 	const groups = $derived.by(() => {
@@ -127,6 +130,7 @@
 	</div>
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
+	{#if mapHref}<p class="hint gauge-note"><a href={mapHref} data-testid="node-detail-map">Show on map</a>: the features linked to this node on the catchment map.</p>{/if}
 	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this hydrological unit’s page in the farmer view, as its farmer sees it, from the current publication.</p>{/if}
 	{#if showEwrSite}
 		<div class="field ewr-site">

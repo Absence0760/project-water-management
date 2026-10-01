@@ -24,7 +24,7 @@ async function sectionNames(page: Page) {
 	return (await nav(page).getByRole('link').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim());
 }
 
-const EVERY = ['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History'];
+const EVERY = ['Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations', 'Network', 'Map', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History'];
 // Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS), and again after Reset to default.
 const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
 const DEFAULTS = EVERY.filter((t) => !DEFAULT_HIDDEN.includes(t));

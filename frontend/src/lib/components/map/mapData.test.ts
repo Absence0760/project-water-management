@@ -2,7 +2,7 @@
 // form's parsing and an import refusal's problems.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapNodeArea } from '$lib/api/types';
-import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText } from './mapData';
+import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea } from './mapData';
 
 const feature = (over: Partial<MapFeature>): MapFeature => ({
 	id: 'f1',
@@ -94,5 +94,13 @@ describe('area targets', () => {
 		expect(alreadyAccepted(nodes[0]!, feature({}))).toBe(true);
 		expect(alreadyAccepted(nodes[0]!, feature({ areaM2: 13e6 }))).toBe(false);
 		expect(alreadyAccepted({ ...nodes[0]!, areaSource: 'typed' }, feature({}))).toBe(false);
+	});
+
+	it('offers a catchment area only from a farm parcel or an “other” polygon, never a dam or the boundary', () => {
+		expect(takesArea(feature({}))).toBe(true);
+		expect(takesArea(feature({ kind: 'other' }))).toBe(true);
+		expect(takesArea(feature({ kind: 'dam' }))).toBe(false);
+		expect(takesArea(feature({ kind: 'catchment_boundary' }))).toBe(false);
+		expect(takesArea(feature({ kind: 'other', geometry: { type: 'Point', coordinates: [21.5, -33.5] } }))).toBe(false);
 	});
 });

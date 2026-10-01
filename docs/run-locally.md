@@ -145,7 +145,7 @@ feature of the current engine:
 | --- | --- |
 | **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
 | **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
-| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. |
+| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. It is the one example with a catchment map (Map tab): boundary, parcels, dams, gauges and streams, all invented. |
 
 Every dam has a surveyed full-supply area, so dam evaporation and rain on the
 dam are not estimated. The only run warnings are the ones each example is built
@@ -378,9 +378,18 @@ pnpm dev:tiles:fetch
 pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL; restart pnpm dev
 ```
 
-The synthetic quaternaries are six invented cells in region Z around 21.0–21.75° E,
-33.25–33.75° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
-proposal; anywhere else says no quaternary contains the point. Real DWS/WR2012
+The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
+33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
+proposal; anywhere else says no quaternary contains the point.
+
+To see a map without uploading anything, open the **Sandspruit** example
+(`pnpm seed:examples`; analyst@ owns it, demo@ views it; a database seeded before the map existed keeps its map-less examples until `pnpm dev:db:reset` and a re-seed) and its **Map** tab: an
+invented boundary, a parcel and a dam for each farm (linked to its
+hydrological unit, each parcel drawn to the unit's modelled area), the two
+gauges and the four streams, all inside the synthetic quaternaries
+(`backend/scripts/examples/map.ts`). As analyst@, **Use … km²** on a parcel
+proposes the area the model already has, and the WR2012 check's **Propose
+from the map** finds a quaternary. Real DWS/WR2012
 data is loaded the same way from your own download ([maps.md § Quaternary
 dataset](./maps.md#quaternary-dataset)); never commit it.
 
