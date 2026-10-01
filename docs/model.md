@@ -3381,7 +3381,7 @@ regression suite is unchanged.
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
 | `name`, `note` | a label, and the detail of where the number comes from (which meter and years, which strategy, which norm) |
-| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 136; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
+| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 139; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |

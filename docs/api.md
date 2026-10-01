@@ -1289,7 +1289,7 @@ without a count and litres, an external one with a return share above 0, a
 negative population, an unknown source, and a source whose sizing it doesn't
 have.
 
-A demand object's `source` (engine ≥ 1.56.0, migration 136, issue #54 Q11,
+A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
 [model.md §2.7f](./model.md)) is where its number comes from, by the rule
 agreed with the client: `meter` (meter records) and `aadd` (a reconciliation
 strategy's AADD) are volumes, so the object must be `monthly`; `perCapita`

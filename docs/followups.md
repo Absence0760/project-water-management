@@ -3465,7 +3465,7 @@ from the WP:
       reading it the same way. Trigger: a client supplying such a record for
       a demand whose pattern windows can't describe.
 - [x] **Demand objects: a structured demand source** (engine 1.56.0,
-      2026-09-30, migration 136; issue #54 Q11, confirmed in issue #90). A
+      2026-09-30, migration 139; issue #54 Q11, confirmed in issue #90). A
       `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
       not recorded, the note kept for the detail); `meter` and `aadd` must be
       sized `monthly`, `perCapita` `perUnit` (modelRules `doSourceSizing`).
