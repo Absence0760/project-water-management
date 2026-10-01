@@ -100,6 +100,8 @@ class SyntheticWorkbook(unittest.TestCase):
             "is missing from [Farm spec]",
             "dam(s) have no surface area",
             "crop Hops X is not in [Crop demand]",
+            "WARNING: [Crop demand] crop Fodder E: Dec factor is 0 between Nov 0.5 and Jan 0.5 (a lone month out of the ground)",
+            "WARNING: [Crop demand] crop Pasture F: its 12 factors are the same as Pasture C's",
             "farm Kilo Farm is not in [Network]",
             "names an unknown element; skipped",
             "run(s) of zero rain",

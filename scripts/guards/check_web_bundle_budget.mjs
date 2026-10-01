@@ -1629,7 +1629,12 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
-// 2026-09-30  total 1362 → 1388 KB (issue #286, Start from an example on the
+// 2026-09-30  total 1362 → 1365 KB (CR-16, engine 1.55.0: the validation
+//             signatures of the scored record, BFI, low-flow FDC slope and
+//             held-out recession skill, with the drought rule's 1.54.0 now on
+//             main @ the #273 merge). Measured 1360 locally; CI ~2 KB above.
+//             Headroom ~3 KB.
+// 2026-09-30  total 1365 → 1392 KB (issue #286, Start from an example on the
 //             empty project list): the invented Kleinberg example catchment
 //             as a project document (projects/exampleCatchment.generated.json,
 //             a lazy chunk of its own, 84 KB raw, ~25 KB gzip: 15 years of
@@ -1639,7 +1644,8 @@
 //             it counts here; it loads only on hover, focus or press of the
 //             button, never with a page, and the largest-chunk ceiling (42 KB)
 //             still holds it. Measured 1383 locally on main @ 4a17d615 plus
-//             this; CI ~2 KB above. Headroom ~3 KB.
+//             this; CI ~2 KB above. Re-measured with main @ 11b181da merged
+//             (engine 1.55.0): 1387 locally, CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1650,7 +1656,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1388,
+	totalCodeKb: 1392,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,

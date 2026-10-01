@@ -157,6 +157,27 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    demand by roughly a quarter. The Crops tab says so and points out any factor
    above 1.0 (a hint, not an error).
 
+   **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
+   demand]` table has rows pasted from another crop and one-month slips (issue
+   #54 item 1). Both importers (`crops.ts` `cropTableNotes`,
+   `extract_project.py` `crop_table_notes`) import every factor as it is and
+   add one import-report warning per crop that trips a check, on the `Crop
+   demand` sheet with the crop as its element:
+
+   | Check | Rule | Why this line |
+   | --- | --- | --- |
+   | Copied row (`crop-factors-copied`) | the 12 factors equal an earlier, differently named crop's, exactly; a row of zeros (an unused crop) isn't compared | a pasted row is exact; two crops may share a curve (apples and pears, #54), so it is for the modeller to confirm, not an error. The copy's months aren't checked again, the first crop's warning covers them |
+   | Negative factor (`crop-factors-suspect`) | below 0 | a crop can't give water back to the pan |
+   | Lone month out of the ground | 0, with both neighbouring months above 0 | no crop in the ARC/SABI tables (item 8) leaves the ground for one month between two in it |
+   | Lone spike or dip | more than 0.3 above, or below, both neighbouring months | 0.3 is the largest step between adjacent months in those tables (table grapes Mar → Apr, pecan into and out of dormancy), and no month there stands off both neighbours by more than 0.15 |
+   | Above 1.0 | above 1.0 | the Crops tab's hint: a factor is Kp × Kc, FAO-56 Kc mid-season is at most about 1.2 ([Table 12](https://www.fao.org/4/x0490e/x0490e0b.htm)) and Class A pan Kp at most 0.85 ([Table 5](https://www.fao.org/4/x0490e/x0490e08.htm)), about 1.0; the ARC/SABI tables peak at 0.7 |
+
+   The year wraps (Oct's neighbours are Sep and Nov). A difference exactly at
+   0.3 isn't flagged (a 10⁻⁹ allowance absorbs float noise). The checks read
+   the table, not the farms, so a crop no farm grows is checked too. A number
+   cell holding text is already its own unmapped item (`non-numeric-value`,
+   imported as 0).
+
    Demand always reads A-pan: `apanMm`, or on the days it covers the daily
    A-pan series (§2.3a, engine ≥ 0.38.0). GR4J's own PE input (`settings.pe`,
    §2.4a, engine ≥ 0.31.0) never reaches it, so a monthly PE for GR4J leaves
@@ -4435,7 +4456,8 @@ rule table has no such dependence.
 *Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
 Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
-aside) · Nathan & McMahon
+aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
+validation signatures' BFI, §2.10d) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
@@ -5601,7 +5623,7 @@ question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
-Not in the workbook. Five checks (four before engine 1.19.0) a reviewing hydrologist makes by hand
+Not in the workbook. Six checks (four before engine 1.19.0, five before 1.55.0) a reviewing hydrologist makes by hand
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
@@ -5858,6 +5880,149 @@ fits. The summary CSV has a *Recession diagnostics* block
 ([api.md](./api.md#export)). The check stays at the outlet: it doesn't run at
 gauges inside the network. Per-segment fits, bootstrap bands and seasonal
 tags are CR-15.
+
+#### Validation signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
+
+A sixth check (`packages/engine/src/plausibility/signatures.ts`, kept in
+`RunSummary.plausibility.signatures`; absent on older runs, null without an
+observed record). It follows the **scored record**: the calibration site's
+record when `settings.calibrationSiteNodeId` scores a gauge inside the
+network (§2.10k), with the simulated flow there, else the outlet's
+calibration record against the simulated outflow; the summary names the site
+(`siteNodeId`, `siteName`). Three signatures of that record against the
+simulated flow on the same days. Like the other checks it only reports and
+warns: nothing it computes reaches a simulated flow (tested: the flows are
+bit-identical whichever record is scored).
+
+**Days.** The base-flow index and the low-flow curve use every recorded day
+(≥ 0 m³/s) the calibration exclusions leave in, over the whole run, as the
+Q90 check does. They keep the days the record's quality flags mark
+(extrapolated above or below the rating, infilled, suspect): a digital
+filter needs the continuous hydrograph (an extrapolated flood is still a
+flood, and cutting it out would split the record at every storm), and the
+days below the lowest gauging are the low end of the curve being measured.
+The recession segments leave flagged days out, as the recession check does
+(CR-18): the mask is the exclusions and the days the scored record's
+per-day classes flag, the classes the run stores as `observed_flow_quality`
+(§2.10h, `recordFlowFlags`; at a calibration site without a gauged range or
+gap fill, as there).
+
+**1. Base-flow index** (BFI = Σ base flow ÷ Σ flow), by two filters on the
+§2.9d plumbing (`filterBaseflow` in `reserve/baseflow.ts`, the series
+reflected by 30 days at each end, as there):
+
+| Filter | Formula | Parameters | Source |
+| --- | --- | --- | --- |
+| Hughes, Hannart & Watkins (2003) | q_t = α·q_t−1 + β·(1 + α)·(Q_t − Q_t−1), 0 ≤ q_t ≤ Q_t, b_t = Q_t − q_t, q_0 = 0 | α **0.995**, β **0.5**, **one forward pass** | their eq. 1; β fixed at 0.5 for daily data ("no reason to change the β parameter from the fixed value of 0.5"); α 0.995 for South African daily flows (Smakhtin & Watkins 1997; up to 0.997 in some catchments); Nathan & McMahon's repeated passes set aside as a further parameter |
+| Eckhardt (2005) | b_t = ((1 − BFImax)·a·b_t−1 + (1 − a)·BFImax·Q_t) ÷ (1 − a·BFImax), b_t ≤ Q_t, b_0 = BFImax·Q_0 | a **0.98**, BFImax **0.25** | Eckhardt 2005's BFImax 0.25 for perennial streams on hard-rock aquifers (0.80 perennial on porous aquifers, 0.50 ephemeral on porous); most South African rivers drain fractured hard-rock aquifers. a 0.98 is the usual daily recession constant; Eckhardt (2008) derives it from the record's own recessions instead |
+
+β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter
+with one pass instead of three (`lyneHollickBaseflow` is now the β = 0.5 case
+of `filterBaseflow`, bit for bit; tested). b_0 = BFImax·Q_0 is Eckhardt's
+steady state for a constant flow, so a flat record needs no start-up.
+Eckhardt's index can't exceed BFImax much, so its absolute value says more
+about the parameter than the river; read it as a comparison between record
+and model, and the Hughes index as the South African figure. A filter needs
+consecutive days: each runs over every stretch of **30 or more** consecutive
+scored days (`BFI_MIN_RUN_DAYS`; a shorter stretch is mostly start-up), the
+record and the simulated flow over the **same** stretches, and the BFI sums
+over all of them. It needs **365** such days (`SIGNATURE_MIN_DAYS`, a year,
+so every season is in) or is null. For both filters 0 ≤ b_t ≤ Q_t every day,
+so 0 ≤ BFI ≤ 1 (tested on random series and parameters).
+
+**2. The low-flow duration curve.** On the same scored days (365 or more),
+the flow duration curve of the record and of the simulated flow (Weibull
+positions, as check 4, `exceedanceFlow` in `lowFlow.ts`), its **slope**
+between Q70 and Q95 on log flow:
+
+```
+slope = (ln Q70 − ln Q95) ÷ (0.95 − 0.70)          flows floored at 0.001 m³/s
+slope bias = 100 × (slope_sim − slope_obs) ÷ slope_obs    (null when slope_obs = 0, or either curve's Q95 ≤ 0.001 m³/s)
+```
+
+The bias is Yilmaz, Gupta & Wagener's (2008) %BiasFMS form; their segment is
+20–70 % (the fit reports that one, §2.10b), and this is the low segment the
+Reserve's low flows sit on. Beside it, their **%BiasFLV** (the bottom 30 %'s
+volume in log space) from `fdcSignatures` in `calibrate/objective.ts`, the
+definition the fit report and the ensemble's low-flow filter (§2.10e)
+already use. A positive slope bias is a model whose low flows fall away
+faster than the river's. The slope bias needs both curves to flow at Q95:
+where either is at or below the 0.001 m³/s floor there (an intermittent
+river, or a model that dries out), the floored slope measures the floor,
+not the river (two curves that both stop flowing by Q95, with Q70 either
+side of the floor, read −100 % apart; the example Sandspruit catchment
+did), so it is null and %BiasFLV alone judges those low flows.
+
+**3. Skill on withheld recession segments.** The scored record's recession
+segments, found as the recession check finds them (TOSSH defaults and the
+1 mm rain rule, the day mask above). **Every third segment in date order is
+held out** (`HOLDOUT_EVERY` 3: the 3rd, 6th, 9th …, a third of them): a
+deterministic split, the same on every run of the same record, spread
+through the record's seasons and years rather than one period (a date split
+would put every held-out recession in one climate). The power law
+−dQ/dt = a·Q^b is fitted to the **other** segments (ETS, as the check). On
+each held-out segment from its first day s to its last e:
+
+```
+observed fall     y_t = ln(Q_obs(t) ÷ Q_obs(s))
+simulated fall    m_t = ln(Q_sim(t) ÷ Q_sim(s))
+law's fall        l_t = ln(L(t − s) ÷ Q_obs(s)),  L(τ) solved exactly from −dQ/dt = a·Q^b, Q(0) = Q_obs(s)
+                    b = 1: Q_obs(s)·e^(−aτ);  else (Q_obs(s)^(1−b) + (b − 1)·a·τ)^(1/(1−b)), 0 once that base is ≤ 0,
+                    floored at 10⁻⁶ × Q_obs(s)
+skill = 1 − Σ (m_t − y_t)² ÷ Σ y_t²     over every held-out day t > s   (the same for l_t)
+```
+
+The skill is against **no recession at all** (a flat line scores 0; the same
+fall scores 1; tested by hand: a flow that rises as the river falls by
+halves scores −3). Both falls start from their own first day, so the score
+is the recession's shape, not its level (the low-flow curve and the
+calibration statistics judge the level). The simulated flow is scored on
+the held-out segments where it is above zero every day (`modelSegments`); the
+law on all of them. The log RMSEs are reported too. **What is withheld:**
+the segments are withheld from the recession law, which the check compares
+the model with; the model's parameters were fitted to every scored day
+(§2.10b), these included, so for the model the score is on recessions it was
+not fitted to separately, not on unseen days. The fit's split-sample tests
+(§2.10b) are the out-of-sample check of the parameters.
+
+**Warnings** (provisional thresholds, engine constants, pending the
+hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
+
+| Signature | Warns when | Reasoning |
+| --- | --- | --- |
+| BFI | \|simulated − observed\| > **0.15** by either filter (`BFI_WARN_DIFF`) | a house default: separation methods and parameters differ in BFI on the same record (Eckhardt 2008 compares seven), so a small gap is method noise, and 0.15 is meant to sit beyond it |
+| Low-flow FDC | \|slope bias\| or \|%BiasFLV\| > **50 %** (`FDC_LOW_WARN_PCT`) | the ensemble's default low-flow limit (§2.10e); low-flow gauging error runs to ±50–100 % (McMillan, Krueger & Freer 2012) |
+| Held-out recessions | simulated skill < **0** (`HOLDOUT_SKILL_WARN`) with **8** or more segments (`RECESSION_MIN_SEGMENTS`), or a simulated flow that reaches zero on every held-out segment | worse than assuming the river doesn't fall at all; below 8 segments not judged, as the recession check |
+
+Each warning starts "Validation signatures (provisional limits): …", names the
+record (and the gauge, at a site) and points at the GR4J parameters to look
+at. The Plausibility checks panel lists them under **Validation signatures**
+([ui.md](./ui.md)), the summary CSV has a *Validation signatures* block
+([api.md](./api.md#export)), and the check list a *Validation signatures*
+line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
+%BiasFMS, and the BFI and the held-out recessions are signatures of a run,
+not of the objective.
+
+*Tests* (`plausibility/signatures.test.ts`, `reserve/baseflow.test.ts`):
+each filter by hand on three-day series and on a step from 1 to 2 m³/s
+(Hughes' quick flow 0.9975·α^k after the step, Eckhardt's base flow
+2B − B·c1^(k+1) with c1 = (1 − B)·a ÷ (1 − a·B)); a steady river gives
+BFI 1 by Hughes and BFImax by Eckhardt; zero flow gives no BFI rather than a
+pass or a fail; gaps split the stretches and a stretch under 30 days drops
+out, 365 days in stretches being the least; the low-flow slope by hand
+(a doubled flow has no slope bias, Q^0.4 −60 %, Q² +100 %; none where either
+curve is at the floor at Q95, a model that dries out or an intermittent river); the held-out skill by hand (1, 0, −3), pooled over the held-out
+days rather than averaged per segment, with the log RMSE and the law's score;
+no segments, nothing judged. `run.invariants.test.ts` checks on random
+networks that both indices stay in [0, 1], Q70 ≥ Q95, the held-out count is
+a third of the segments, a skill never exceeds 1, and that removing the
+observed records leaves the simulated outflow bit-identical.
+
+*Sources:* Hughes, Hannart & Watkins 2003, *Water SA* 29(1):43–48 ·
+Eckhardt 2005, *Hydrological Processes* 19:507–515 · Eckhardt 2008,
+*J. Hydrology* 352:168 (a from recession analysis) · Smakhtin & Watkins 1997,
+WRC 494/1/97 · Yilmaz, Gupta & Wagener 2008, *WRR* 44:W09417 · Gnann et
+al. 2021 (TOSSH) · Klemeš 1986 (split-sample testing).
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
