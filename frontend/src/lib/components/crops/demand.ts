@@ -92,7 +92,7 @@ export const DAILY_APAN_NO_MEANS =
 /**
  * Crops with a factor above 1.0 in any month, with those months (water-year
  * labels). The engine multiplies the factor by A-pan evaporation, not by FAO
- * reference ET₀ (about 0.7–0.85 × pan), so a factor above 1 means the crop
+ * reference ET₀ (about 0.6–0.85 × pan; 0.35–0.85 in FAO-56 Table 5), so a factor above 1 means the crop
  * uses more water than an open pan loses: possible, but more likely an FAO-56
  * Kc entered as it is. A hint for the Crops tab, never an error.
  */

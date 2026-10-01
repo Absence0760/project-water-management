@@ -3363,9 +3363,10 @@ from the WP:
       spike or dip of more than 0.3 and a factor above 1.0 each give an
       import-report warning (`crop-factors-copied`, `crop-factors-suspect`),
       both importers alike; the factors import unchanged ([model.md §2.3
-      item 3](./model.md)).
-- [ ] **A node-based workbook's crop sheets can't be loaded** (partly done,
-      issue #289). Done: the reader, `spreadsheet/import/nodeCrops.ts`. It
+      item 3](./model.md)). Load crop factors lists them under a b023
+      workbook source too ([ui.md § Load crop factors](./ui.md#load-crop-factors)).
+- [x] **A node-based workbook's crop sheets** (2026-09-30, issue #289).
+      The reader, `spreadsheet/import/nodeCrops.ts`, reads them. It
       finds [Crop_Factors] and [Crop_Areas] by name (ignoring case, spaces
       and underscores) and their tables by header row (twelve month names in
       any order, then "Crop(s)"; "Farm …" then a column per crop). It returns
@@ -3376,9 +3377,11 @@ from the WP:
       `shape: 'fao-et0'`. It runs in the import worker
       (`createWorkbookImport().readNodeCrops(file)`), parses only those two
       sheets and is tested on a synthetic workbook of that layout
-      (`testWorkbook.ts` `syntheticNodeBased`). Left: offer it as the
-      dialog's third source, with Kp defaulting to 0.75 (#289). Until then
-      a modeller enters its values by hand.
+      (`testWorkbook.ts` `syntheticNodeBased`). Load crop factors
+      offers it as its third source, with Kp defaulting to 0.75
+      (`SOURCE_KINDS`, `defaultKp` in `crops/loadFactors.ts`) and the
+      reader's warnings listed ([ui.md § Load crop
+      factors](./ui.md#load-crop-factors)).
 - [x] **One table of irrigation efficiencies; drip the new-farm default**
       (2026-09-28, issue #90 answering #54 Q10). The engine's
       `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values

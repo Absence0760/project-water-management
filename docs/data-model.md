@@ -1211,7 +1211,9 @@ water-use volumes per farm or water user.
   project_id)`, cascade, so a source is always the same project's), `node_id`
   (→ `node`, `SET NULL`; NULL = not matched yet), `registration_no` (≤ 100),
   `property_ref` (≤ 200), `authorisation` (`registration` | `licence` |
-  `general_authorisation` | `existing_lawful_use`), `purpose` (`irrigation` |
+  `general_authorisation` | `schedule_1` | `existing_lawful_use_claimed` |
+  `existing_lawful_use`; the last is verified under s35, the claimed value
+  isn't; 136, issue #281), `purpose` (`irrigation` |
   `domestic` | `livestock` | `industry` | `mining` | `municipal` | `other`),
   `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
   `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),

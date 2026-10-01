@@ -2339,7 +2339,9 @@ whether a use is lawful.
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
   holder?, authorisation: 'registration' | 'licence' | 'general_authorisation'
-  | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
+  | 'schedule_1' | 'existing_lawful_use_claimed' | 'existing_lawful_use'
+  (claimed = not verified; only `existing_lawful_use` is verified under s35;
+  issue #281), purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
   reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)

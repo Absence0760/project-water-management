@@ -19,7 +19,7 @@ export interface AllocationBody {
 	registrationNo?: string;
 	propertyRef?: string;
 	holder?: string;
-	authorisation: 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+	authorisation: 'registration' | 'licence' | 'general_authorisation' | 'schedule_1' | 'existing_lawful_use_claimed' | 'existing_lawful_use';
 	purpose?: string;
 	waterSource: 'surface' | 'groundwater';
 	volumeM3PerYear: number;
