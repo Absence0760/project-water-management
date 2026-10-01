@@ -181,7 +181,26 @@ decide a licence application.
   outside a request (the job runner) isn't stepped up: no job kind needs
   more than editor, and the request that queued it was checked. Everyone
   else may turn it on, and is asked for a code at sign-in once they have.
-  `GET /auth/mfa` says whether the person's roles need it (`required`).
+  `GET /auth/mfa` says whether the person's roles need it (`required`,
+  false while the switch below is off, so the prompts say what the routes
+  do).
+- **The prompt.** A person whose role needs it learns so before an action
+  is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
+  its own chunk, mounted by `routes/+layout.svelte`; the state is
+  `lib/auth/mfaPrompt.svelte.ts`) from `GET /auth/mfa`, read once per
+  account and again when the tab comes back into view. `required &&
+  !enrolled`: **Set up two-step sign-in**, a link to the Account page's
+  panel (`/account#two-step`). `required && enrolled && !sessionVerified`:
+  **Sign in again**, which signs out and returns to the page after the
+  password and the code. A `403 mfa_required` or `mfa_step_up` from any
+  request shows the same two (the API client's `onError`), for an editor
+  publishing to farmers too, whose role alone doesn't need it; the action's
+  own error message stays where the page shows it. The banner is English
+  and stays off the translated pages (the Account page has its own warning,
+  the farm view's roles never need it). Dismissable until the next refusal;
+  signing out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
+  so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
   the same person signed in with a code as the positive control; outsiders
   and viewers still get their 404 and 403).
