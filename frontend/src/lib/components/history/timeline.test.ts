@@ -129,6 +129,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('pack.withdrawn', { version: 2, shortCode: 'ffff-0000-1111', reason: 'the application lapsed' }))).toBe(
 			'Withdrew evidence pack version 2 (ffff-0000-1111): the application lapsed'
 		);
+		expect(eventLine(ev('pack.sent', { version: 1, shortCode: 'a1b2-c3d4-e5f6', recipients: ['u1', 'u2'], authority: 'Breede-Olifants CMA' }))).toBe(
+			'Sent evidence pack version 1 (a1b2-c3d4-e5f6) to 2 members acting for Breede-Olifants CMA'
+		);
+		expect(eventLine(ev('pack.sent', { version: 1, recipients: ['u1'], authority: null }))).toBe('Sent evidence pack version 1 to 1 member acting for the responsible authority');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the hydrological unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the hydrological unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(

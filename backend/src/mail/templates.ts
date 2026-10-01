@@ -366,6 +366,49 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 	);
 }
 
+export type PackSentFacts = {
+	projectId: string;
+	packId: string;
+	projectName: string;
+	/** The pack's title as its report gives it (the application's name, or the baseline's). */
+	title: string;
+	version: number;
+	/** `xxxx-xxxx-xxxx` (engine packShortCode). */
+	shortCode: string;
+	/** Who sent it (their display name). */
+	sentBy: string;
+	/** settings.responsibleAuthority's name (163), or null when the project names none. */
+	authority: string | null;
+	/** The sender's note, or null. */
+	note: string | null;
+};
+
+/**
+ * The full evidence pack sent to a member acting for the responsible
+ * authority (165, licensing build item 13; provisional position, pre-counsel
+ * research, 2026-10-01; docs/evidence-pack.md § Sending it to the authority).
+ * The pack's PDF and bundle name every water user, so the mail carries
+ * neither and no download link: it links the pack's page, which needs the
+ * reader signed in and still an editor of the project before it hands out a
+ * one-minute signed download, and the public verify page. A forwarded mail
+ * opens nothing. English, as the workspace is.
+ */
+export function packSentMail(to: string, f: PackSentFacts): Mail {
+	const authority = f.authority ?? 'the responsible authority';
+	return render('pack_sent', to, `Evidence pack v${f.version} ${f.shortCode} sent to you for ${authority} — ${PRODUCT}`, {
+		heading: 'An evidence pack was sent to you',
+		paragraphs: [
+			`${f.sentBy} sent you version ${f.version} of the evidence pack “${f.title}” in ${f.projectName}, for ${authority}.`,
+			...(f.note ? [`Their note: “${f.note}”`] : []),
+			'Sign in to download its PDF and its reproduction bundle from the pack’s page. They name every water user in the catchment, so they are for the authority’s assessment: don’t pass them on.',
+			`Anyone holding a copy checks it on the verify page, with the code ${f.shortCode}.`
+		],
+		action: { label: 'Open the pack', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}/packs/${encodeURIComponent(f.packId)}`) },
+		footer: [`You get this because the owner of ${f.projectName} marked you as acting for the responsible authority. This email grants nothing by itself: the pack opens only for you, signed in.`],
+		links: [{ label: 'Verify page', url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) }]
+	});
+}
+
 export type ErratumNoticeFacts = {
 	projectId: string;
 	projectName: string;

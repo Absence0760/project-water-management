@@ -7151,7 +7151,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
   **Verify page** once issued, **Share link…** (an editor, once it was
-  issued) and **Notes**, and the version, code, manifest hash, PDF hash
+  issued), **Send to the authority…** (an editor, while it is issued:
+  `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
+  the authority and not through the applicant, the members acting for the
+  responsible authority as ticked checkboxes, an optional note and
+  **Send**, then "Sent to …"; with none, it says the owner marks them in
+  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,

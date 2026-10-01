@@ -608,6 +608,19 @@ const WRITE_ROUTES: Entry[] = [
 		needsMinio: true
 	},
 	{
+		// The issued pack sent to a member acting for the responsible authority (licensing build item 13).
+		route: `POST ${P}/packs/:packId/send`,
+		records: ['pack.sent'],
+		call: async (c) => {
+			const assessor = await signUp('Gauthority');
+			expect((await c.owner.call('POST', `/projects/${c.packProjectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+			expect((await c.owner.call('PATCH', `/projects/${c.packProjectId}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/send`, {});
+		},
+		projectOf: (c) => c.packProjectId as string,
+		needsMinio: true
+	},
+	{
 		route: `POST ${P}/packs/:packId/withdraw`,
 		records: ['pack.withdrawn'],
 		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/withdraw`, { reason: 'Guard withdrawal' }),

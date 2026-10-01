@@ -101,6 +101,8 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/pdf',
 			// Re-running an issued pack on the server again (154_pack_reproduce's job).
 			'POST /projects/:id/packs/:packId/reproduce',
+			// Sending the issued pack to the members acting for the responsible authority (licensing build item 13).
+			'POST /projects/:id/packs/:packId/send',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
 			'GET /projects/:id/scenarios/:sid/packs/:packId',

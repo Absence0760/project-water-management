@@ -212,6 +212,8 @@ export type AuditKind =
 	| 'pack.issued'
 	| 'pack.superseded'
 	| 'pack.withdrawn'
+	// The issued pack sent to the members acting for the responsible authority (licensing build item 13): ids, the authority's name, whether a note went.
+	| 'pack.sent'
 	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
 	| 'calibration_rules.signed_off'
 	| 'calibration_rules.sign_off_withdrawn'

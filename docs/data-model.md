@@ -1183,7 +1183,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   already); returns the key ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **Audit**: `pack.drafted`, `pack.deleted`, `pack.issued`,
   `pack.superseded`, `pack.withdrawn` (ids, version, short code and hash; a
-  withdrawal its reason; an issue the bundle's hash), and `signoff.created`
+  withdrawal its reason; an issue the bundle's hash), `pack.sent` (the
+  issued pack sent to the members acting for the responsible authority,
+  licensing build item 13: the recipients' ids, the authority's name and
+  whether a note went, never the note), and `signoff.created`
   with `packId`.
 - Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
   role-ladder, mass-assignment and cross-project sweeps.

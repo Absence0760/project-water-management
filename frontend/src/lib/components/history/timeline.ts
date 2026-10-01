@@ -287,6 +287,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${packName(s, true)} was superseded${num(s.byVersion) ? ` by version ${num(s.byVersion)}` : ''}`;
 		case 'pack.withdrawn':
 			return `Withdrew ${packName(s)}${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
+		// Licensing build item 13: the recipients by count only (their ids are in the subject).
+		case 'pack.sent': {
+			const n = Array.isArray(s.recipients) ? s.recipients.length : 0;
+			return `Sent ${packName(s)} to ${plural(n, 'member')} acting for ${str(s.authority) || 'the responsible authority'}`;
+		}
 		case 'calibration_rules.signed_off':
 			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
 		case 'calibration_rules.sign_off_withdrawn':

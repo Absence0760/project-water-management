@@ -680,6 +680,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
 			sign: (id: string, packId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff),
+			/**
+			 * Send the issued pack to the members acting for the responsible authority (editor; licensing build item 13):
+			 * all of them but the sender, or `userIds`. They get a link to the pack's page, never a file.
+			 */
+			send: (id: string, packId: string, body: { userIds?: string[]; note?: string }) =>
+				request<{ recipients: { userId: string; displayName: string }[]; sent: number; failed: number }>('POST', `${p(id)}/packs/${enc(packId)}/send`, body),
 			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready; viewer). */
 			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
 			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */

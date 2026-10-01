@@ -376,6 +376,31 @@ the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
 A pack drafted before `evidence-13` has neither field; its identity block
 says nothing about the authority and it has no such flag.
 
+### Sending it to the authority
+
+Licensing build item 13 (provisional position, pre-counsel research,
+2026-10-01). The pack's PDF and reproduction bundle name every water user,
+so they go where s41(2) says the evidence goes, to the authority that
+decides, not through the applicant (whose printable copy withholds the
+others' figures, [§ Applicants](#applicants)). On an issued pack's page an
+editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
+members the project's owner marked as acting for the responsible authority
+(editors and owners with `acts_for_authority`, 163), all of them or those
+picked, never the sender, each get an email (`pack_sent`) naming the pack,
+its version, code and the authority, with the editor's note. The email
+holds **no file and no download link**: it links the pack's page, where
+the member, signed in and still an editor, downloads the PDF and bundle
+through the usual one-minute signed GET, and the public verify page, so a
+forwarded email opens nothing. Only an issued pack is sent (a superseded or
+withdrawn one is `409`), and an id that isn't a member acting for the
+authority is one refusal (`422`). The history records `pack.sent` with the
+recipients' ids, the authority's name and whether a note went (never the
+note). An address outside the app (the authority's general inbox) is not
+offered: settings.responsibleAuthority holds none, and a link that works
+without signing in would be a new way out of the app for every unit's
+figures ([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+Tests: `backend/src/evidence/pack-send.db.test.ts`, `e2e/tests/evidence-pack.spec.ts`.
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text

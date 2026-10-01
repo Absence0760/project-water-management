@@ -4896,6 +4896,19 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner
       link their own issued pack and list and revoke the links they made.
+- [ ] **Send a pack to the authority's own address, not only its members.**
+      `POST …/packs/:packId/send` (licensing build item 13, 2026-10-01)
+      emails only members marked as acting for the responsible authority,
+      with a link to the pack's page that needs them signed in.
+      `settings.responsibleAuthority` (163) holds no address, and a link that
+      opened the PDF and bundle without signing in would be a new way out of
+      the app for every unit's figures. Durable fix: an
+      `authority.email` in the settings, set by the owner, and a single-use,
+      time-limited delivery token (stored as its hash, like a render token)
+      that downloads exactly that pack's PDF and bundle once, recorded in
+      the history; the operator agreement then names the authority as a
+      recipient. Trigger: an authority whose assessors won't hold accounts,
+      or counsel's answer on the D1 hosting question.
 - [x] **An anonymised printable copy of the pack for its applicant.**
       Built 2026-10-01 (165_applicant_copy; licensing build item 12,
       provisional position, pre-counsel research, 2026-10-01): a party of

@@ -422,6 +422,10 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 		{ why: 'takes an empty body only (strict); a pack is issued only from an issuable report, which the ladder has none of (evidence/packs.db.test.ts)', legit: 404 }
 	],
 	[
+		'POST /projects/:id/packs/:packId/send',
+		{ why: 'a strict body; the ladder has no pack, so a legit send is 404 (evidence/pack-send.db.test.ts sends an issued one)', legit: 404 }
+	],
+	[
 		'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
 		{ why: 'an empty body only (strict); the owner is no party of an application with an issued pack in the ladder, so a legit call is 404 (evidence/applicant-copy.db.test.ts asks for one)', legit: 404 }
 	],

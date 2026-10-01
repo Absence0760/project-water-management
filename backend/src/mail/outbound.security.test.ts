@@ -89,6 +89,12 @@ const builders: Record<string, () => Mail[]> = {
 				)
 			)
 		),
+	packSentMail: () =>
+		[EVIL, null].flatMap((authority) =>
+			[EVIL, null].map((note) =>
+				templates.packSentMail(TO, { projectId: 'p1', packId: 'k1', projectName: EVIL, title: EVIL, version: 2, shortCode: 'ab12-cd34-ef56', sentBy: EVIL, authority, note })
+			)
+		),
 	accountDeletedMail: () =>
 		templates.LOCALES.map((l) => templates.accountDeletedMail(TO, { projects: [EVIL, EVIL], teams: [EVIL] }, l)),
 	erratumNoticeMail: () =>
@@ -126,6 +132,7 @@ describe('every email template, against hostile names', () => {
 			alertMail: 'alert',
 			digestMail: 'alert_digest',
 			packNoticeMail: 'pack_notice',
+			packSentMail: 'pack_sent',
 			accountDeletedMail: 'account_deleted',
 			erratumNoticeMail: 'erratum_notice'
 		};
