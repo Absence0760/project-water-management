@@ -76,6 +76,8 @@ erDiagram
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
+| `assessment` | A cumulative impact assessment (145, WP-3.11): several scenarios on one base run, each alone and all together, run as one `assessment` job; `status` (`pending` / `complete` / `refused` / `failed`), `problems`, `report` (the `CumulativeReport`); editors only; see [Assessments](#assessments-145_assessmentsql) | none |
+| `assessment_member` | One scenario of an assessment (145): its `name`, `origin`, `ops` and own nodes copied from the scenario at insert, then once its run alone (`summary`) or its `problems` | none |
 | `scenario_sweep` | A scenario sweep (062, issue #53 R2): a base run × named op sets, run as one `sweep` job; `base_run_id`, `job_id`, `name`, `status` (`pending` / `complete`), `engine_version`; see [Scenario sweeps](#scenario-sweeps-062_scenario_sweepssql) | none (the workbook is copied by hand for each what-if) |
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `seasonal_outlook` | A seasonal outlook (063, issue #53 R5): a base run × a season (`decision_date`, `season_end`) × demand `levels`, over the record's analogue years, run as one `outlook` job; `planning_share`, `analogue_years`, `status`, `result` (the engine's summary), `engine_version`; see [Seasonal outlooks](#seasonal-outlooks-063_seasonal_outlooksql) | none (the sketch S3 was worked by hand) |
@@ -742,6 +744,14 @@ the result change?", and put back any earlier version.
   (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
   joined `app_user` on these columns left-join it, and the API answers
   `null` for the maker's name.
+- **Deleting your own account (143, issue #112).** `app_delete_my_account()`
+  (`SECURITY DEFINER`, `search_path` pinned, `EXECUTE` for `water_app`
+  only, no arguments) deletes the `app_user` row of `app_current_user_id()`
+  and nobody else's, and refuses a transaction with no user (`42501`).
+  `DELETE /auth/me` calls it under `withUser`, after recording the audit
+  events, so everything above (the keys, `app_user_pseudonymise`, the
+  owner and admin checks) runs exactly as for the operator's deletion.
+  water_app still has no `DELETE` on `app_user` (068).
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -2061,7 +2071,7 @@ records nothing (nothing it holds changed).
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040; `scenario_sweep` and `scenario_sweep_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 062; `seasonal_outlook`: the same, 063; `seasonal_outlook_member`: `SELECT/INSERT/DELETE`, no `UPDATE`, 063). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040; `scenario_sweep` and `scenario_sweep_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 062; `seasonal_outlook`: the same, 063; `seasonal_outlook_member`: `SELECT/INSERT/DELETE`, no `UPDATE`, 063; `assessment` and `assessment_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 145). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -2488,6 +2498,50 @@ project. `job` holds status, progress and errors.
   key), `base_run_id`, `job_id`, `created_by`; on members the unique
   `(sweep_id, position)` and `(sweep_id, lower(name))`, and `project_id`.
 
+### Assessments (145_assessment.sql)
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311), [api.md §
+Assessments](./api.md#assessments)): several scenarios on one base run,
+each alone and all together, run as one `assessment` job. The sweep's
+pattern: written at the start with everything the result depends on, then
+completed once by whoever asked and never changed after. Derived, not
+evidence: an editor may delete one; the API keeps the newest 20 per project.
+
+`assessment`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `base_run_id` | The run every member's scenario is based on. `ON DELETE CASCADE`. Never a scenario or forecast run (`assessment_guard`) |
+| `job_id` | The `assessment` job (`ON DELETE SET NULL` when the 30-day purge deletes it) |
+| `name` | 1–200 characters |
+| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input) |
+| `problems` | Why it was refused or failed (non-empty exactly then) |
+| `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport`, and the combined run's summary and window, when `complete` |
+| `engine_version`, `completed_at` | Set when it leaves `pending` |
+| `created_by`, `created_at` | Stamped by the insert trigger; `created_by` is `ON DELETE SET NULL` |
+
+`assessment_member`:
+
+| Column | Holds |
+| --- | --- |
+| `assessment_id`, `project_id` | Its assessment (`ON DELETE CASCADE`) and project |
+| `scenario_id` | The scenario it was copied from (`ON DELETE SET NULL`: a team scenario can be deleted; the copy stays). `UNIQUE (scenario_id, assessment_id)` |
+| `position` | 0–7: at most 8 (`ASSESSMENT_SCENARIOS_MAX`). `UNIQUE (assessment_id, position)` |
+| `name`, `origin`, `ops`, `ops_sha256`, `owned_node_ids` | **Copied from the scenario** by `assessment_member_guard` (SECURITY INVOKER: RLS hides a draft application, so it can't be named), which also checks it is this project's, on the assessment's base run, and a team scenario or a submitted or decided application. The job runs these, never the live scenario |
+| `status`, `problems`, `summary`, `start_date`, `end_date`, `finished_at` | Its run alone: `pending`, then `done` (`summary` its `RunSummary`), `problems` or `failed`, once |
+
+- **RLS: editors only, read and write.** Contributors never (an assessment
+  reveals other applications), and viewers neither (it names submitted
+  applications, which a viewer reads only once decided).
+- **Grants:** `SELECT, INSERT, DELETE`, and `UPDATE` of the outcome columns
+  only. The completion triggers (`assessment_complete`,
+  `assessment_member_outcome`) fire only on those columns, so the foreign
+  keys' own `SET NULL`s (the job purge, an account deletion, a team scenario
+  deleted) pass, and water_app can't write those columns.
+- `job.kind` accepts `assessment`.
+
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 
 A base run × a season × demand levels over the record's analogue years,
@@ -2652,7 +2706,9 @@ from 066 and changes no table, policy or grant: an update that only clears
 column unchanged) passes; water_app holds UPDATE on neither column, so only
 a key (or the schema owner) makes it, and any change to the outcome still
 meets the guard. `auto_calibration_update` (108) already let a cleared
-`job_id` through; `report` and `yield_result` have no UPDATE trigger.
+`job_id` through, and `assessment_complete` (145) fires only on its outcome
+columns (`BEFORE UPDATE OF …`), so a cleared `job_id` never reaches it;
+`report` and `yield_result` have no UPDATE trigger.
 `catalogue.db.test.ts` `JOB_REFERENCES` lists every key to `job`, and each
 table with an UPDATE trigger names the DB test that ages its job past 30
 days and runs the purge.
@@ -2995,7 +3051,10 @@ ids are rejected.
   checked. `001` may still be edited until the first production deploy: the
   test and e2e setups rebuild their schema from scratch every run, so they
   pick an edit up; a dev database refuses it, and `pnpm dev:db:reset`
-  rebuilds it. Production recovery: [deployment.md § Migration
+  rebuilds it. Each checkout migrates its own dev database (`water`, or a
+  worktree's `water_w<n>`; [run-locally.md](./run-locally.md)), so a
+  branch's migration never reaches the main checkout's before it merges
+  under its final number. Production recovery: [deployment.md § Migration
   integrity](./deployment.md#migration-integrity).
 - **Timeouts.** Each migration's transaction runs with `lock_timeout = 5s`
   (so it fails instead of queueing behind live traffic, with every later

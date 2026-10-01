@@ -2,6 +2,7 @@
 // §2.7e): hand-worked cases on a fixed natural flow, one per rule, and the
 // default (no supply fields) running exactly as before.
 import { describe, expect, it } from 'vitest';
+import { toEpochDay } from '../calendar';
 import { SUPPLY_DEFAULTS, type ModelInput, type NetworkNode } from '../project';
 import { runModel, runModelWith, withVerification } from '../run';
 import { randomInput } from '../testing/fuzz';
@@ -197,6 +198,57 @@ describe('supplyOf (WP-3.8)', () => {
 		expect(warned({ damCapacityM3: 50_000, pctUpstreamToDam: 1 })).toEqual([]); // a real dam
 		expect(warned({ damCapacityM3: 0 })).toEqual([]); // nothing routed to it
 		expect(warned({ damCapacityM3: 0, pctUpstreamToDam: 1, supplyRule: 'runOfRiver', pumpCapacityM3Day: 500 })).toEqual([]); // capped
+	});
+
+	// Engine 1.60.0: river first and trigger keep the dam split and River to dam, so on a dam-less farm they bypass the pump.
+	it('warns about a river-first or trigger farm with no dam that has river routed to it, past its pump; not run of river', () => {
+		const warned = (over: Partial<NetworkNode>) => {
+			const w: string[] = [];
+			supplyOf(farm({ damCapacityM3: 0, pumpCapacityM3Day: 500, ...over }), w);
+			return w.filter((x) => x.includes('past the river pump'));
+		};
+		const text =
+			'farm "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river';
+		for (const supplyRule of ['riverFirst', 'trigger'] as const)
+			for (const over of [{ pctUpstreamToDam: 1 }, { pctRunoffToDam: 0.3 }, { divertCapacityM3Day: 8640 }, { divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100] }])
+				expect(warned({ supplyRule, ...over }), `${supplyRule} ${JSON.stringify(over)}`).toEqual([text]);
+		expect(warned({ supplyRule: 'riverFirst', pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 0 })).toEqual([]); // nothing routed to it
+		expect(warned({ supplyRule: 'riverFirst', pctUpstreamToDam: 1, damCapacityM3: 50_000 })).toEqual([]); // a real dam
+		expect(warned({ supplyRule: 'runOfRiver', pctUpstreamToDam: 1 })).toEqual([]); // run of river routes nothing to a dam
+	});
+
+	// Engine 1.60.0: "no dam" is judged over the run's own days (development.ts damPresence, §2.7g), as the evidence check does.
+	it('warns when the dam isn’t there on some days of the run: not in service yet, or silted empty; not when it is there throughout', () => {
+		const span = { start: toEpochDay('2021-01-01'), end: toEpochDay('2021-01-03') };
+		const warned = (over: Partial<NetworkNode>) => {
+			const w: string[] = [];
+			supplyOf(farm({ damCapacityM3: 10_000, pctRunoffToDam: 0.5, ...over }), w, span);
+			return w.filter((x) => x.includes('irrigated straight from the river'));
+		};
+		const partly = 'its dam isn’t there on some days of the run (not in service yet, or silted empty), so on those days what is routed';
+		for (const rule of [{}, { supplyRule: 'riverFirst' as const, pumpCapacityM3Day: 500 }, { supplyRule: 'trigger' as const, pumpCapacityM3Day: 500 }]) {
+			// In service from the run's second day; the control: in service before the run.
+			expect(warned({ ...rule, damInServiceFrom: '2021-01-02' })[0], JSON.stringify(rule)).toContain(partly);
+			expect(warned({ ...rule, damInServiceFrom: '2020-06-01' }), JSON.stringify(rule)).toEqual([]);
+			// Silted empty on the run's second day (20 % a year since a survey 1826 days before its first); the control: 1 % a year.
+			expect(warned({ ...rule, damSurveyDate: '2016-01-02', damSedimentPctPerYear: 0.2 })[0], JSON.stringify(rule)).toContain(partly);
+			expect(warned({ ...rule, damSurveyDate: '2016-01-02', damSedimentPctPerYear: 0.01 }), JSON.stringify(rule)).toEqual([]);
+			// Not in service until after the run: no dam on any of its days.
+			expect(warned({ ...rule, damInServiceFrom: '2022-01-01' })[0], JSON.stringify(rule)).toMatch(/: it has no dam, so what is routed/);
+		}
+		// Run of river routes nothing to a dam; without a span the entered capacity alone decides.
+		expect(warned({ supplyRule: 'runOfRiver', pumpCapacityM3Day: 500, damCapacityM3: 0, damInServiceFrom: '2021-01-02' })).toEqual([]);
+		const w: string[] = [];
+		supplyOf(farm({ damCapacityM3: 10_000, pctRunoffToDam: 0.5, damInServiceFrom: '2021-01-02' }), w);
+		expect(w).toEqual([]);
+	});
+
+	it('says so in a run: a dam in service from the run’s second day is warned about, one in service before it isn’t', () => {
+		const natural = [1000, 1000, 1000];
+		const later = run(input({ ...dam, supplyRule: 'riverFirst', pumpCapacityM3Day: 500, damInServiceFrom: '2021-01-02' }, 2000, 3), natural);
+		expect(later.summary.warnings.some((x) => x.includes('its dam isn’t there on some days of the run'))).toBe(true);
+		const before = run(input({ ...dam, supplyRule: 'riverFirst', pumpCapacityM3Day: 500, damInServiceFrom: '2020-06-01' }, 2000, 3), natural);
+		expect(before.summary.warnings.some((x) => x.includes('irrigated straight from the river'))).toBe(false);
 	});
 
 	it('trigger without a dam and run of river with one run as river first, with a warning', () => {

@@ -43,8 +43,9 @@ client goes live. Not customer-facing.
   record they support, defended under s14(1)(b) and s14(6)(b) (pre-counsel
   research, fact-check of 2026-09-30 on #112). The only refusal left is the
   only owner of a project or admin of a team, until it is handed over.
-  Self-service deletion is the convenience still to build (#112); POPIA
-  doesn't require it.
+  Self-service deletion (Account → Delete my account, 143, #112) is the
+  convenience on top; POPIA doesn't require it. It runs the same deletion
+  and emails the person what was done.
 - **Assent:** directly above the sign-up button, a box with the four main
   points of the Terms in the reader's language ("The main things you agree
   to", `lib/components/legal/termsSummary.ts`; the same points open the
@@ -239,3 +240,10 @@ Tracked in issue #103.
   in any expedient way, answered as soon as reasonably practicable with what
   was done. A material change: `LEGAL_VERSION` 2026-09-30 (every account
   accepts again; nothing is in production yet).
+- 2026-10-01: Privacy §10 says a signed-in person can delete the account
+  themselves (Account → Delete my account, issue #112, 143), and §7 that the
+  account page says when they must hand a project or team over first. The
+  right, what deletion does and the answer (an email of what was done) are
+  unchanged: a clarification, not a material change, so it brings no
+  `LEGAL_VERSION` bump of its own (it shares the 2026-10-01 text with any
+  bump made that day).

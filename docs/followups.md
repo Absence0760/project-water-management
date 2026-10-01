@@ -286,7 +286,9 @@ collected as a checklist in issue #46; tick it there as they answer.
       is MIN(demand, capacity), so they pass no more than its pump can lift
       (the alternative, passing the whole demand, leaves water flowing past
       a pump that can't take it); **no capacity is silent** (a farm's
-      river-pumping rule without one warns; a user never had one); and the
+      river-pumping rule without one warns; a user never had one), though
+      an evidence pack isn't issued on a user with demand and no capacity
+      (`evidence-10`); and the
       reported **pump-limited** demand counts only what the river had within
       the user's priority and allocation room, so a day the farms upstream
       passed only the capped claim shows 0. Trigger: the client's pump
@@ -3483,8 +3485,10 @@ from the WP:
       short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
       ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
       meaning: no demand, so no supply and nothing returned.
-- [ ] **Demand objects: the off reason.** Not built, because the client
-      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+- [ ] **Demand objects: the off reason (parked 2026-10-01).** Not built.
+      The hydrology holds up, but no catchment we hold has an on/off schedule,
+      so building it now would be guessing at a need (issue #54). Open
+      (issue #90 Q12, parked): what causes
       off days (occupancy, works downtime, load-shedding, switching to a
       borehole), whether an off period can mean "supplied from elsewhere"
       (no river take, the return goes on) or "curtailed" (counted as a
@@ -3495,19 +3499,12 @@ from the WP:
       the return as a per-day override (an `elsewhere` day keeps its return,
       from a set discharge or the recent mean) and into the summary
       (curtailed days as short, elsewhere days as met elsewhere). Trigger:
-      the client's answer to the rest of Q12.
-- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
-      meter or works record of which days a demand ran, uploaded through Add
-      data as a daily factor on one object (the design's second source
-      beside the windows). Left out of the schedule PR because it isn't
-      bounded like the windows: it needs a series kind scoped to an object
-      (today's series are project- or node-scoped), its storage and
-      provenance, the Add data flow and preview, and a rule for days the
-      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
-      stored like the node series, multiplied after the schedule in
-      `planObjects` (a gap runs at the schedule's factor), with the checks
-      reading it the same way. Trigger: a client supplying such a record for
-      a demand whose pattern windows can't describe.
+      a real demand object whose off days aren't "not needed".
+- [x] **Demand objects: an uploaded daily factor series: dropped
+      (2026-10-01, issue #54).** The date-window schedules cover recurring
+      patterns, common practice (WEAP) uses monthly profiles plus windows,
+      and no record we hold needs a daily series. Reopen only if a client
+      brings a record the windows can't describe.
 - [x] **Demand objects: a structured demand source** (engine 1.56.0,
       2026-09-30, migration 139; issue #54 Q11, confirmed in issue #90). A
       `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
@@ -3589,8 +3586,40 @@ from the WP:
       form); and resumed runs, bit-identical to the uninterrupted one and
       self-checked. Cutting the other water users is a question for the
       hydrologist (§ Hydrologist), not built.
+- [x] **The licensing gate on river pumps and the EWR** (2026-10-01, report
+      format `evidence-10`, engine 1.60.0 for the run warning, issue #54,
+      built on #90 Q15 and Q16's recommendations). Two checks that stop an
+      evidence pack's issue, read from the runs' stored models: every river
+      pump, other water user and off-take either run rests on has a
+      capacity, and an application's own new or changed river abstraction
+      leaves the EWR or a hands-off flow in the river in every month it
+      takes. Model saves and runs stay unrestricted. A dam-less farm under
+      river first or trigger now warns that its dam route bypasses the pump
+      ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
+- [ ] **The licensing gate's choices to confirm** (`evidence-10`; to put to
+      the hydrologist through #90 / #46). Built on these, each confirmable:
+      the baseline's existing users are exempt from the EWR check (Q15's
+      recommendation read "any project used for a licence application"); a
+      hands-off flow must cover every month the works take; any change to
+      the applicant's unit puts its river take under the check; the EWR
+      kept counts as protection even in a model whose EWR is 0 (the
+      Reserve rows then say *Not assessed*, so nothing is hidden). Trigger:
+      the hydrologist's answer to Q15 and Q16.
+- [ ] **A dam-less unit under river first or trigger bypasses its pump**
+      (engine 1.60.0 warns, model.md §2.7e). Only run of river zeroes the
+      dam split and River to dam, so on a unit with no dam the other rules
+      irrigate what is routed to the absent dam straight from the river,
+      past the pump capacity. The evidence check counts it as unbounded,
+      and the run warns, judging "no dam" over the run's days as the check
+      does (a dam not in service yet or silted empty inside the run
+      included; `damPresence`). Durable fix: send K, M and O through the
+      pump under those rules when there is no dam (a change to the model's
+      numbers: an engine-audit.md finding, *needs hydrologist*, then
+      `pnpm gen:liability`). Trigger: the hydrologist confirming how a
+      dam-less river-first unit should take its routed water.
 - [ ] **Pump capacities for the run-of-river units.** The importer leaves
-      them uncapped (b023 has none) and every run warns. Enter them in the
+      them uncapped (b023 has none) and every run warns; an evidence pack
+      can't be issued on such a run until they are entered (`evidence-10`). Enter them in the
       Network tab's Supply section once the capacities are known.
       Trigger: the capacities being supplied.
 - [ ] **Effective rain on a typed-over demand beside crops.** b023 takes
@@ -3601,12 +3630,14 @@ from the WP:
       hydrologist confirming a domestic demand isn't reduced by rain (the
       physical reading). Trigger: a workbook with a typed-over demand on a
       cropped farm.
-- [ ] **The browser importer has no run-of-river option.** Only the Python
-      importer (and so the seed) has `--run-of-river`; the in-app workbook
-      import keeps the flag-and-warn behaviour. Durable fix: the same option
-      in `spreadsheet/import/extract.ts` behind a checkbox in the import
-      dialog, with parity on the synthetic workbook. Trigger: a user
-      importing such a workbook in the app rather than through the seed.
+- [x] **The browser importer has no run-of-river option** (2026-10-01).
+      The in-app workbook import has the Python's `--run-of-river`:
+      `extractProject(…, { runOfRiver: true })` (`asRunOfRiver` in
+      `spreadsheet/import/farms.ts`, same units, fields and notes), behind
+      the review's *River pumping units* checkbox, off by default and shown
+      only when the importer flags a unit. Parity: `fixture.test.ts` against
+      the committed `synthetic_b023.run-of-river.*` output, and the local
+      `sourceWorkbooks.test.ts` on the client workbooks.
 
 ## Rain forcing, fitting at import and river off-takes (issue #54)
 
@@ -3854,6 +3885,38 @@ from the WP:
       #67). Left: the hydrologist's confirmation of the resize (#90).
       Trigger: the hydrologist's review, or a licence application for a dam
       raise.
+
+## Cumulative impact (WP-3.11)
+
+Built (issue #287, migration 145): `combineScenarios` / `cumulativeImpact`
+in the engine, `backend/src/assessments/` with the `assessment` job, and
+the assessors' **Assess together** view
+([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)).
+Left:
+
+- [ ] **The evidence report's cumulative row reads a combined run.** C26
+      (`packages/engine/src/evidence/report.ts` `cumulativeOf`, § 4 and
+      page 1's *Other applications on this baseline, summed*) still adds up
+      other applications' separate runs and says so. The durable fix: the
+      report's backend (`backend/src/evidence/report.ts`) combines this
+      application with every other submitted or approved one on the baseline
+      (`combineScenarios`), runs it, and the row shows the combined change
+      and the interaction; a conflict makes the row *Not assessed* with the
+      conflicts named, never a silent merge. It changes the report's
+      content, so `REPORT_VERSION` and the evidence pack's manifest move with
+      it. Trigger: now (WP-3.11 landed); needs the report version decision.
+- [ ] **Yield and reliability per dam, together.** The report covers the EWR
+      sites, the Reserve, the outlet and existing users' supply; a firm
+      yield of each dam on the combined input (WP-3.6) is not in it. Durable
+      fix: the job runs `yield` for the dams the applications touch on the
+      baseline, alone and together, and adds rows. Trigger: an assessor
+      asks for yield in a cumulative assessment.
+- [ ] **A full-allocation baseline column** (WP-3.10): the baseline run as it
+      is today; making it *existing authorised use* means assessing on a
+      full-allocation run. Durable fix: the assessment takes an optional
+      `backgroundRunId` (a full-allocation run of the same model) as the
+      baseline. Trigger: the first assessment on a catchment with WARMS
+      volumes imported.
 
 ## Applicants (WP-3.3)
 
@@ -4323,7 +4386,9 @@ Left, from the design and the persona review (§11), each with its trigger.
       whose basis says it is a sum of separate runs. The durable fix, a
       combined run of every application's ops, is WP-3.11
       (`combineScenarios`, with its conflict rules); the row then reads that
-      run instead. Trigger: WP-3.11.
+      run instead. Trigger: WP-3.11, which has now landed (engine, backend
+      and the Assess together view, issue #287): the switch is the open item
+      under [§ Cumulative impact](#cumulative-impact-wp-311).
 - [x] **Cancelled ensembles' interim results.** Finding: there are none to
       print. The browser runs an ensemble and stores it only when every set
       has run; a `started` row of `run_uncertainty` holds no summary or result
@@ -4656,13 +4721,21 @@ own. Loop in the CISO or security analyst before acting on any of them.
       scenario, import) with the maker cleared, deletes a started ensemble
       and draft applications, and refuses only the sole owner or admin until
       handed over (deployment.md § Runbooks, item 7; Privacy §7 rewritten,
-      `LEGAL_VERSION` 2026-09-30). **Still to build (#112):** `DELETE
-      /auth/me` (password again; 409 naming the projects and teams they solely
-      own or administer; audit event; a confirmation email of what was done,
-      s24(4)) and the Account page's **Delete my account** with its e2e and
-      the Afrikaans words. The information officer still confirms the rule
-      (#90). Trigger: before public registration opens, or the first deletion
-      request from a modeller.
+      `LEGAL_VERSION` 2026-09-30). **Self-service done (143, issue #112):**
+      `DELETE /auth/me` (the password again, through the sign-in lockout;
+      `409 account_sole_holder` naming the projects and teams they alone own
+      or administer; an audit event per project and team; an email of what
+      was done, s24(4)) and the Account page's **Delete my account** dialog,
+      in English and Afrikaans, with `account-delete.spec.ts`. What is left
+      of #112 waits on the information officer (#90): confirming the rule,
+      and the items below (deleted notes' bodies, backups after an erasure,
+      D12, the lawful bases). Trigger: the #90 answers.
+- [x] **Two owners leaving a project (or admins a team) at the same moment
+      can leave it with none** (2026-10-01, PR #320). The member routes lock
+      the owner (admin) rows before `assertNotLastOwner` /
+      `assertNotLastAdmin`, and migration 149 has the keep-owner and
+      keep-admin triggers take a per-project (per-team) lock before counting;
+      `last-owner-race.db.test.ts` forces both orders.
 - [ ] **A DWS or CMA responsible party may have to keep the maker's name**
       (National Archives Act, operator agreement notes for counsel, clause
       8.4). Durable fix: a per-team setting that keeps a snapshot of the name
@@ -4678,6 +4751,14 @@ own. Loop in the CISO or security analyst before acting on any of them.
       answer is that backups age out and are never restored into live use
       without re-applying erasures; confirm and put it in the notice. Who:
       operator + information officer. Trigger: with the privacy notice.
+      Since self-service deletion (143) the operator log no longer sees
+      every erasure: `DELETE /auth/me` logs `account_deleted` with no id, on
+      purpose. If the answer is "re-apply erasures after a restore", that
+      step needs a list of erased account ids that survives a restore (the
+      restore takes the database back, so not a table in it): for example
+      the id in that log line with log retention at least the backups', or
+      a write to a separate store. Decide it with the answer, in the same
+      change as the runbook step (deployment.md § Rollback).
 - [ ] **D12 confirmation.** The audit log is pseudonymised on account
       deletion ("Deleted user", 048) as the roadmap recommends; the
       information officer confirms it (or asks for full deletion of the

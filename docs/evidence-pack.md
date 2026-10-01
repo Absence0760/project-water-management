@@ -93,6 +93,95 @@ Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
 hash (set at issue), and room for the PDF's (not built yet).
 
+## What stops issue on the river
+
+Report format `evidence-10` (issue #54, #90 Q15 and Q16) adds two checks
+that stop issue (`blocksIssue`, never `refuses`: the report still previews,
+with each failing check, its detail naming the units, and its fix under
+*Expect questions about*). Both read the runs' **stored models**
+(`inputs.model`), not the live project, so they judge exactly what the pack
+cites; engine `evidence/riverWorks.ts`, called by `evidenceChecks`.
+Exploring stays unrestricted: a model with an uncapped pump or no hands-off
+flow still saves and runs (a farm's uncapped river pump and a dam-less unit's
+route past its pump are warned about in the run), only a pack can't be
+issued on it.
+
+- **`pumpCapacity`: every river pump has a capacity**, in the baseline and,
+  for an application, the application run too (baseline evidence included).
+  It fails on any of these, each named in the detail:
+  - a unit whose supply rule pumps from the river (river first, trigger, run
+    of river) for demand (a crop area or an enabled demand object) with no
+    pump capacity: `null`, or a value the run reads as no limit; 0 means no
+    river pump (model.md §2.7e);
+  - a unit with no dam, under any supply rule but run of river, whose dam
+    split routes the upstream river or its own runoff to its demand: the run
+    irrigates that straight from the river, past any pump and its capacity
+    (model.md §2.7e, §2.7h). "No dam" is read over the run's own days
+    (§2.7g): a dam not yet in service when the run starts, or silted empty by
+    its end, leaves days without one;
+  - an other water user with demand and no pump capacity (model.md §2.7c);
+  - a river off-take whose rate isn't a number and has no daily cap. Its
+    capacity is the month's rate × 86 400, capped by the daily cap (§2.6a),
+    so a stored off-take normally passes.
+
+  River to dam always has its capacity. A unit whose abstraction starts after
+  the run ends (§2.7g) takes nothing in it. Without a cap, only the river's
+  flow limits the take, which is no basis for licensing a volume. The fix
+  names what to enter for each kind (a pump capacity under Network › the
+  unit › Supply, run of river for a dam-less unit, the user's pump capacity,
+  the off-take's rate), then run the model again and nominate that run (or,
+  for the application's own units only, run the application again).
+- **`protectsEwr`: the application's own river abstraction leaves the EWR in
+  the river** (applications only). The ops the scenario classifies as
+  proposals ([scenarios.md](./scenarios.md)) that add, change or may raise
+  a unit's or an off-take's take (a new unit, any field of the applicant's
+  unit but its name, its crop areas or demand objects, a crop the scenario
+  added, demand raised on it, its abstraction point moved, a borehole or a
+  dam transfer into it removed, its registered volume set or removed, an
+  off-take added or changed) name the river
+  abstractions to judge, as the application ran them: a river pump, River
+  to dam, a dam-less unit's take, an off-take, an other water user. Each
+  must leave the EWR, or a set flow, in the river in **every month it can
+  take**: the EWR kept (`handsOffEwr`), or a hands-off flow above 0 in each
+  of those months (all twelve for a pump, the months River to dam runs for
+  River to dam). A farm's binds its pump and River to dam (model.md §2.7h),
+  an off-take's (one value for every month) its own take (§2.6a), and a
+  pass-inflow dam release counts for the river pump, which keeps the
+  release's target (§2.7e). An other water user can't keep one in the
+  model, so the fix says to model the new take as a unit that pumps from
+  the river. Under the NWA the Reserve comes first and a new licence
+  normally carries a hands-off condition.
+
+**Decided, pending the hydrologist** (#90 Q15 and Q16 recommended requiring
+both for licensing; this is built on that recommendation):
+
+- *The baseline's users are not judged by `protectsEwr`.* The baseline
+  represents current use, and modelling a protection existing users may not
+  honour would misstate the river the application is measured against. Q15's
+  recommendation reads wider ("required on any project used for a licence
+  application"); the narrower rule keeps the baseline honest, and an op on
+  another's unit is a baseline assumption, which the `assumptions` check
+  already stops.
+- *A hands-off flow must cover every month the works take*, not only some:
+  one month's leaves the rest of the year unprotected.
+- *Over-inclusion is on the safe side.* Any change to the applicant's unit
+  (its dam, its crops, its efficiency) puts its river take under the check,
+  since a licence for the unit would carry the condition; a pump on a unit
+  with no demand takes nothing and isn't named.
+
+Not covered: water an on-channel dam catches (the upstream-to-dam share into
+a dam that is there) isn't an abstraction a hands-off flow binds (model.md
+§2.7h); passing inflow through a dam is a release rule. A borehole's stream
+depletion is a lagged share of what it pumps (§2.7d), bounded by the
+borehole's own capacity.
+
+A pack drafted before `evidence-10` lists neither check in its frozen report,
+and its stored manifest still hashes to its recorded hash (nothing rebuilds
+it). Issuing it checks the live report as well, which has both, so a draft
+made on an uncapped pump can't be issued after this change (`409`, naming
+the two checks; `packs.db.test.ts` pins it); an issued pack stays as it
+was, and its verify and re-render read its frozen document.
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text
@@ -140,8 +229,9 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   (baseline evidence). Only a report that may be issued becomes a pack: not
   refused, and no check that blocks issue failing (the baseline is the
   current nominated run, the declared uncertainty rule is set, the cited
-  ensemble and, for an application, the paired band exist, and no baseline
-  assumption changed). A draft cites both runs, so they are kept.
+  ensemble and, for an application, the paired band exist, no baseline
+  assumption changed, and the two river checks pass,
+  [§ What stops issue on the river](#what-stops-issue-on-the-river)). A draft cites both runs, so they are kept.
 - **Sign.** A registered professional signs the draft: the pack statement
   (`packSignoffStatement`, version `pack-signoff-1`) is the run statement's
   ten confirmations (the works one worded for the application or the
@@ -161,7 +251,8 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   naming them: the manifest would never list them, so the pack is drafted
   again, which records them, and that draft is signed and issued); and the
   live report may still be issued (the nomination, the declared rule and the
-  cited ensemble haven't moved since the draft). Then it stamps the issue (`issued_at`,
+  cited ensemble haven't moved since the draft, and a draft made before
+  `evidence-10` meets the two river checks its frozen report doesn't list). Then it stamps the issue (`issued_at`,
   `issued_by`, set by the database, never the caller) and, for a new
   version, marks the predecessor superseded, naming the successor.
   In the same transaction it builds the pack's reproduction bundle, checks

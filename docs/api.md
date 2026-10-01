@@ -24,6 +24,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
+| DELETE | `/auth/me` | `{ password }` | "Delete my account" (issue #112): `204`, the account deleted and this browser's session and trusted-device cookies cleared, then an email to its address saying what was done; `403 wrong_current_password`; `429 signin_locked` + `Retry-After` while the address is locked; `409 account_sole_holder` with `details: { projects: [{ id, name }], teams: [{ id, name }] }`, the projects the person is the only owner of and the teams they are the only admin of (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -107,6 +108,33 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   understand" (`POST /auth/me/farm-notice`), and again after the version
   changes; the farm pages show the notice instead of the figures until then
   ([ui.md § Farmer view](./ui.md)).
+- **`DELETE /auth/me`** ("Delete my account", POPIA s24; issue #112;
+  `backend/src/auth/deleteAccount.ts`, 143_delete_my_account.sql) checks
+  the password through the **same lockout as `change-password`** (a wrong
+  one is a failed attempt, `403`; a locked address `429`, logged as
+  `login_failed` with `route: "/auth/me"`). Then, as the person under RLS:
+  the projects they are the only owner of (`project_member`) and the teams
+  they are the only admin of give `409 account_sole_holder`, naming them in
+  `details`, and nothing changes; hand them over first. The owner and admin
+  rows of those projects and teams are locked (`FOR UPDATE`) before the
+  check, so a co-owner deleting their account or leaving at the same moment
+  waits for this request rather than both passing. Otherwise it records
+  one audit event in each project and team they belonged to
+  (`member.removed` / `team_member.removed` with `self: true,
+  accountDeleted: true`, and a farmer's `farmer.unlinked` with cause
+  `member_removed`), deletes the account through
+  `app_delete_my_account()` (the same foreign keys and triggers as the
+  operator's deletion: keep the evidence, remove the name; [security.md §
+  Personal information](./security.md#personal-information-popia)), and
+  fires the deferred owner and admin checks inside the request (`SET
+  CONSTRAINTS ALL IMMEDIATE`), so a co-owner who left just before still
+  gets the `409`, not a deletion. The response clears both cookies;
+  the old session cookie is void anyway (its account is gone). The email
+  (`account_deleted`, in the account's language) lists the projects and
+  teams the person left, what was deleted, what stays without the name and
+  what keeps it (POPIA s24(4)); a failed send is logged and doesn't undo
+  the deletion. The log line `{"event":"account_deleted","via":"self"}`
+  names nobody.
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
@@ -227,12 +255,12 @@ the frontend catalogue (same contract: add, never rename):
 | `not_signed_in` | 401 | no valid session |
 | `wrong_credentials` | 401 | sign-in with a wrong email or password |
 | `email_unconfirmed` | 403 | sign-in with the right password to an account whose address was never confirmed |
-| `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
+| `signin_locked` | 429 | sign-in, a password change or deleting the account while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or `POST /auth/me/accept-terms` without `version`, or with a version that isn't the current one (a page loaded before the terms changed); `params.version` is the current one. On sign-up, checked before the sign-up throttle counts |
 | `farm_notice_changed` | 409 | `POST /auth/me/farm-notice` with a version that isn't the current one (a farm page loaded before the notice changed); `params.version` is the current one |
-| `wrong_current_password` | 403 | `POST /auth/change-password` |
+| `wrong_current_password` | 403 | `POST /auth/change-password`, `DELETE /auth/me` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
 | `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
@@ -250,6 +278,7 @@ the frontend catalogue (same contract: add, never rename):
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
+| `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
@@ -2164,7 +2193,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-9`: § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-10`: the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2215,7 +2244,7 @@ reproduction bundle).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
+| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails (among them, since `evidence-10`, `pumpCapacity` and `protectsEwr`); `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
 | GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
@@ -3017,6 +3046,59 @@ kept fit is the server's too.
   (`trigger: 'new_data'`, one pending per project, debounced like the
   automatic re-run); with `apply` and signed-off rules, its job applies the
   kept fit and makes an `auto` run.
+
+## Assessments
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)): several scenarios on one
+base run, each alone and all together, run by one background `assessment`
+job on the base run's stored input. **Editors only**: an assessment names
+submitted applications, which neither contributors nor viewers read.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
+| GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+
+- Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
+  distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).
+- Each scenario must be one the caller reads in this project (`404`: an
+  application still a draft is its applicant's alone), a team scenario or a
+  submitted or decided application (`409` for a withdrawn one), and all on
+  one base run (`422 these scenarios are based on different runs …`). The
+  base run is rebuilt from its stored input as for a scenario (`409` when it
+  can't be).
+- **Refused, never merged:** `422` when the scenarios don't combine, with
+  `details: { conflicts, problems }`. A conflict is
+  `{ reason: 'same_target' | 'removed_in_use', target, a, b, message }`,
+  `a`/`b` = `{ scenario, scenarioId, opIndex, op }`; `problems` are lines
+  naming the scenario (`"App B" alone: op 2 …`, or `"App B": op 1 …` for an
+  op that applies alone but not on top of the others). The message says how
+  many conflicts. Nothing is written.
+- **At most 2 assessment jobs queued or running per user** (`429`; a dry run
+  doesn't count). A job gets 2 attempts. A project keeps its newest **20**
+  assessments; one goes with its base run.
+- `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  status, problems, report?, engineVersion, job, createdBy, createdAt,
+  completedAt, members: AssessmentMember[] }`. `status`: `pending`, then
+  `complete` (`report` is the engine's `CumulativeReport`), `refused` (the
+  job found the scenarios no longer combine, or one doesn't apply alone;
+  `problems` says why) or `failed` (the engine refused an input). `job` as
+  for a sweep.
+- `AssessmentMember = { id, position, scenarioId, name, origin, opsSha256,
+  opCount, status, problems, startDate, endDate }`: the scenario's ops are
+  **copied** when the assessment is written (by the database, never from the
+  request), so a team scenario edited or deleted later (`scenarioId` then
+  `null`) doesn't change it. `status`: `pending`, `done` (its run alone is
+  stored), `problems` or `failed`.
+- `CumulativeReport = { scenarios: [{ id, name }], rows: CumulativeRow[],
+  warnings }`; a row is one measure at one EWR site (`siteNodeId` null = the
+  outlet) or of the catchment (`site` null): `{ metric, siteNodeId, site,
+  isOutlet, unit, higherIsWorse, baseline, singles[], combined,
+  singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
+  value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
+  lists the measures).
 
 ## Seasonal outlooks
 

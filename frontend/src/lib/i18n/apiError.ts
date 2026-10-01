@@ -43,6 +43,7 @@ const CODES: Record<string, Msg> = {
 	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'),
 	body_refused: msg('Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.'),
 	run_unverified: msg('This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.'),
+	account_sole_holder: msg('You are the only owner of a project or the only admin of a team. Hand it to someone else first.'),
 	// Not from the API: the WAF's sign-in CAPTCHA (client.ts CAPTCHA_REQUIRED), on a page that can't show the puzzle.
 	captcha_required: msg('Too many sign-in attempts from your network. Wait a few minutes, then try again.')
 };

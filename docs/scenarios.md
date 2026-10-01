@@ -12,7 +12,8 @@ Status: built end to end: the **engine part** (`packages/engine/src/scenario/`),
 the **backend and data model** (`backend/src/scenarios/`, migration 024), the
 frontend's API client, and the **UI** (the Scenarios tab, its override
 editor and scenario-vs-base comparison, and the compare page's Scenario
-overrides section; § UI below).
+overrides section; § UI below). Several scenarios assessed together
+(cumulative impact, WP-3.11) are § Cumulative impact.
 
 ## Engine: `applyScenario`
 
@@ -739,6 +740,112 @@ API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 ([api.md § Sweeps](./api.md#sweeps)). Tests: `backend/src/sweeps/schema.test.ts`
 (the body) and `sweeps.db.test.ts` (the job end to end, problems per member,
 RLS with a positive control, write-once outcomes, limits, cascade).
+
+## Cumulative impact (WP-3.11)
+
+Several scenarios (in practice the submitted applications) on one base run,
+**each on its own and all together**, so an assessor sees what they do
+together that one application at a time hides (NWA s27(1): the cumulative
+effect on the resource and the Reserve). Build plan:
+[roadmap WP-3.11](./roadmap/step-3-licensing.md#wp-311-cumulative-impact-assessment),
+issue #287.
+
+### Engine: `combineScenarios` and `cumulativeImpact`
+
+`packages/engine/src/scenario/combine.ts`, `cumulative.ts`. Pure; neither
+runs the model, and `runModel` is unchanged, so `ENGINE_VERSION` is too (a
+combination is new input, as a scenario is).
+
+```ts
+combineScenarios(base, [{ id, name?, ops, mask? }]): { input | null, conflicts, problems, renamed, reIds }
+scenarioConflicts(base, scenarios): ScenarioConflict[]
+cumulativeImpact(baseline, singles, combined): CumulativeReport
+```
+
+- **Conflicts are refused, never merged.** Each op says what it *writes*
+  (an element's field, or the whole element for an add), *removes* and
+  *uses* (a node a new farm drains into, a crop a crop area plants, a
+  transfer's ends). Two scenarios conflict when they write the same field of
+  the same element (`same_target`, also both removing one thing) or one
+  removes what the other writes or uses (`removed_in_use`). Read against the
+  base: a `node.remove` re-links the nodes draining into it, so it writes
+  their downstream link too; an op on a transfer, patch, borehole, demand
+  object or registered volume uses its node(s); a `demand.scale` without
+  `nodeIds` writes every farm's (or user's) demand; a `series.scale` writes
+  the series (two scalings stack, and whose climate assumption it is isn't
+  for either to settle). Conservative by design: what can't be told apart is
+  a conflict the assessor sees. One conflict per pair of scenarios and
+  target, with a readable message naming both ops (`"App A" op 1 (node.set)
+  and "App B" op 1 (node.set) both change node "Upper farm":
+  damCapacityM3`). Ops within one scenario never conflict: they apply in
+  their own order, as alone.
+- **Then in order.** Without conflicts each scenario's ops apply to the
+  result of the ones before (`applyScenario`, an application under its
+  applicant's mask, as its own runs are). An op that applies alone but not
+  on top of the others (two new dams given one name, flow shares past 100 %
+  together) is a `problem` naming its scenario, and also refuses the
+  combination: a result with an op skipped would not be the scenarios it
+  names.
+- **Invariants** (`combine.invariants.test.ts`, random networks): disjoint
+  scenarios combined in either order give the same run (every daily series
+  to the bit, the summary within float noise, `orderFreeDifference`, the
+  order-invariance check's comparison); one scenario combined is that
+  scenario alone, to the bit; a scenario with a copy of itself always
+  conflicts; the conflicts found don't depend on the order the scenarios
+  are given. `combine.test.ts` has the crafted pairs (each conflict kind,
+  two fields of one node not a conflict, apply-alone-not-together, the base
+  never mutated). Soak: `SCENARIO_FUZZ_CASES=1500` (passes).
+- **The report.** Per EWR site (the outlet first, then gauges by id): days
+  the EWR is not met and the mean EWR shortfall over the reporting window
+  (`curtailment.ewrSites`); per Reserve rule-table site: months met and the
+  deficit (`ewrAssurance.overall`); for the catchment: mean flow at the
+  outlet, supplied to existing users (the baseline's farms and other
+  users, summed in id order; a unit a scenario adds is its own proposal and
+  left out of every column) and their share of demand met. Each row holds
+  the baseline, each scenario alone, all together, each change from the
+  baseline, their sum, the combined change and the **interaction** =
+  combined change − Σ single changes (0 when the effects simply add).
+  `warnings` names a run over another window than the baseline's.
+  `cumulative.test.ts` checks the arithmetic on real runs, an empty scenario
+  changing nothing, existing users excluding an added farm, and the
+  Reserve rows.
+
+### Backend
+
+`backend/src/assessments/` and the `assessment` job
+(`jobs/handlers/assessment.ts`); migration `145_assessment.sql`
+([data-model.md § Assessments](./data-model.md#assessments-145_assessmentsql),
+[api.md § Assessments](./api.md#assessments)).
+
+- `POST /projects/:id/assessments { name, scenarioIds }` loads each
+  scenario as the caller reads it (a draft application is invisible),
+  requires one base run, rebuilds it (`loadBaseInput`), checks each alone
+  and all together (`checkCombination`) and **refuses with `422 { conflicts,
+  problems }`** before anything is written. `dryRun` stops there. Otherwise
+  it writes the assessment, one member per scenario (the database copies
+  each scenario's ops; the request never supplies them) and the job.
+- The job (as the editor who asked, under RLS) runs the baseline, each
+  member alone and all together on **the current engine**, so every column
+  is one engine's (the published run's stored summary may be an older
+  engine's), then stores `cumulativeImpact`'s report. It checks the
+  combination again and marks the assessment `refused` if it no longer
+  holds. No `model_run` rows: like a sweep, an assessment never counts
+  against the 20-run cap. Editors only (RLS and the routes).
+- Tests: `assessments.db.test.ts` (two applications end to end, the single
+  equal to the application's own run and the baseline to the published
+  run, the interaction, a conflicting pair refused with nothing written,
+  the dry run, drafts and other bases refused, RLS with a positive control,
+  copied ops, write-once, a deleted team scenario).
+
+### Not yet
+
+- The **evidence report's cumulative row** (C26, `evidence/report.ts`
+  `cumulativeOf`) still sums other applications' separate runs and says so;
+  reading a combined run instead (its trigger was this work package) is
+  tracked in [followups.md](./followups.md).
+- **Yield and reliability per dam** together (WP-3.6's yield on the combined
+  input), and a **full-allocation background** (WP-3.10) as the baseline
+  column, are not in the report yet ([followups.md](./followups.md)).
 
 ## UI
 

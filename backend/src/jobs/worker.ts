@@ -22,8 +22,8 @@
 //
 // A local Node entry, like server.ts: it loads the dev env files. The
 // production worker is lambda-worker.ts, which must never import this file.
-import { config } from 'dotenv';
-config({ path: ['.env.development.local', '.env.development'] });
+import { loadDevEnv } from '../config/devEnv.js';
+loadDevEnv();
 
 import pg from 'pg';
 import { closePool } from '../db/pool.js';

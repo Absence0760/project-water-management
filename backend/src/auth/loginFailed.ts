@@ -17,7 +17,7 @@ import { logEvent } from '../logging/logEvent.js';
  * Why a credential check failed.
  * - `unknown_account`: sign-in with an address that has no account.
  * - `bad_password`: a real account, the wrong password (sign-in, or the
- *   current password on change-password).
+ *   current password on change-password or on deleting the account).
  * - `locked`: refused by the per-address lockout before the password was checked.
  * - `invalid_link`: a reset or verification token that is malformed, used,
  *   expired or never existed.
@@ -25,7 +25,8 @@ import { logEvent } from '../logging/logEvent.js';
 export type LoginFailureReason = 'unknown_account' | 'bad_password' | 'locked' | 'invalid_link';
 
 /** The routes that check a credential: the patterns, never a concrete path. */
-export type LoginFailureRoute = '/auth/login' | '/auth/change-password' | '/auth/reset-password' | '/auth/verify-email';
+/** `DELETE /auth/me`: "Delete my account" asks for the password again (issue #112). */
+export type LoginFailureRoute = '/auth/login' | '/auth/change-password' | '/auth/me' | '/auth/reset-password' | '/auth/verify-email';
 
 /** Log `{"event":"login_failed","route","reason"}`: nothing that names a person. */
 export function logLoginFailed(route: LoginFailureRoute, reason: LoginFailureReason): void {

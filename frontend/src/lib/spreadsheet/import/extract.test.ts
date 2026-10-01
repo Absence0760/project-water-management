@@ -202,6 +202,52 @@ describe('extractProject errors and options', () => {
 	});
 });
 
+describe('the run-of-river option (--run-of-river, issue #54 2c/2d)', () => {
+	// Farm A's dam becomes a 0.5 m³ pool on the river (flagged), and its enabled transfer to Farm B draws on it;
+	// Farm B has no dam and now takes all of the upstream inflow (flagged).
+	const flaggedBoth = () => syntheticB023().set('Farm spec', 'P30', 0.5).set('Farm spec', 'N31', 1);
+
+	it('is off by default: the flagged units are only warned about', () => {
+		const { project, notes } = extractProject(flaggedBoth().build(), { fileName: FILE });
+		expect(notes.filter((n) => n.code === 'probable-run-of-river').map((n) => n.element)).toEqual(['Farm A', 'Farm B']);
+		expect(project.model.nodes.some((n) => 'supplyRule' in n)).toBe(false);
+		expect(notes.some((n) => n.code === 'run-of-river-imported' || n.code === 'run-of-river-kept-dam')).toBe(false);
+	});
+
+	it('converts the flagged units, except one an enabled transfer draws on, and changes nothing else', () => {
+		const plain = extractProject(flaggedBoth().build(), { fileName: FILE });
+		const { project, notes } = extractProject(flaggedBoth().build(), { fileName: FILE, runOfRiver: true });
+		const [a, b, outlet] = project.model.nodes;
+		expect(a).toEqual(plain.project.model.nodes[0]);
+		expect(a).toMatchObject({ damCapacityM3: 0.5 });
+		expect(b).toEqual({ ...plain.project.model.nodes[1], damCapacityM3: 0, damInitialPct: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: null });
+		expect(outlet).toEqual(plain.project.model.nodes[2]);
+		expect({ ...project, model: { ...project.model, nodes: [] } }).toEqual({ ...plain.project, model: { ...plain.project.model, nodes: [] } });
+		// The notes: the default import's, then one warning per flagged unit, in network order, before anything after the transfers.
+		const extra = notes.filter((n) => n.code === 'run-of-river-imported' || n.code === 'run-of-river-kept-dam');
+		expect(extra.map((n) => [n.code, n.element, n.severity, n.sheet])).toEqual([
+			['run-of-river-kept-dam', 'Farm A', 'warning', 'Farm spec'],
+			['run-of-river-imported', 'Farm B', 'warning', 'Farm spec']
+		]);
+		expect(extra[1]!.message).toContain('farm Farm B: imported as run of river (--run-of-river): it has no dam');
+		expect(notes.filter((n) => !extra.includes(n))).toEqual(plain.notes);
+	});
+
+	it('converts a source whose transfer is switched off, or that only feeds a river off-take', () => {
+		// Switched off (a =0 draw formula): no transfer draws on the dam, so the pool goes.
+		const off = extractProject(flaggedBoth().set('Transfers', 'O8', '=0').build(), { fileName: FILE, runOfRiver: true }).project;
+		expect(off.model.transfers[0]).toMatchObject({ enabled: false });
+		expect(off.model.nodes[0]).toMatchObject({ damCapacityM3: 0, supplyRule: 'runOfRiver' });
+		// Into Farm B with no crops and no dam: a river off-take, which draws on the river, not the source's dam.
+		const offtake = flaggedBoth().set('Farm demand', 'H26', 0);
+		const { project, notes } = extractProject(offtake.build(), { fileName: FILE, runOfRiver: true });
+		expect(project.model.transfers[0]).toMatchObject({ source: 'river', enabled: true });
+		expect(project.model.nodes[0]).toMatchObject({ damCapacityM3: 0, damInitialPct: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: null });
+		expect(notes.filter((n) => n.code === 'run-of-river-imported').map((n) => n.element)).toEqual(['Farm A', 'Farm B']);
+		expect(notes.some((n) => n.code === 'run-of-river-kept-dam')).toBe(false);
+	});
+});
+
 function catchError(fn: () => unknown): unknown {
 	try {
 		fn();

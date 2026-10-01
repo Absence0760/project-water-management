@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { accountDeletedMail, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -235,5 +235,26 @@ describe('packNoticeMail (issue #71)', () => {
 		expect(m.html).toMatch(/<html lang="af">/);
 		expect(m.subject).toBe('Bewyspakket uitgereik: Upper dam — Kloof');
 		expect(m.text).toContain('http://localhost:7777/verify/ab12-cd34-ef56');
+	});
+});
+
+describe('accountDeletedMail (issue #112, POPIA s24(4))', () => {
+	it('says what was deleted, what stays without the name and what keeps it, and names what the person left', () => {
+		const m = accountDeletedMail('a@example.com', { projects: ['Kloof', 'Vaal'], teams: ['Hydro team'] });
+		expect(m).toMatchObject({ kind: 'account_deleted', to: 'a@example.com', subject: 'Your account has been deleted — Water Management' });
+		expect(m.text).toContain('As you asked, we deleted the Water Management account for a@example.com.');
+		expect(m.text).toContain('Deleted with it: your name, email address and password');
+		expect(m.text).toContain('You are no longer a member of Kloof, Vaal and Hydro team.');
+		expect(m.text).toContain('Kept without your name:');
+		expect(m.text).toContain('Kept with your name: a sign-off keeps the name and registration you typed');
+		expect(m.text).toContain('within 35 days');
+		expect(m.text).toContain('Read the privacy notice: http://localhost:7777/privacy#retention');
+		expect(m.html).toMatch(/<html lang="en">/);
+	});
+
+	it('leaves out the "no longer a member" line for an account that belonged to nothing', () => {
+		const m = accountDeletedMail('a@example.com', { projects: [], teams: [] });
+		expect(m.text).not.toContain('no longer a member');
+		expect(m.text).toContain('Kept without your name:');
 	});
 });

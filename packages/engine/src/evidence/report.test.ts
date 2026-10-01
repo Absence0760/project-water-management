@@ -322,7 +322,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-10');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -388,6 +388,210 @@ describe('evidenceChecks: every refusal, each with its positive control', () => 
 		expect(r.issuable).toBe(false);
 		expect(r.flags[0]).toMatchObject({ id: 'assumptions', level: 'red' });
 		expect(r.ops.map((o) => o.class)).toEqual(['proposal', 'baseline']);
+	});
+});
+
+describe('licensing checks on the river abstraction (issue #54, #90 Q15 and Q16, evidence-10)', () => {
+	type Model = EvidenceRunInput['inputs']['model'];
+	type Scn = NonNullable<EvidenceInput['application']>['scenario'];
+	const check = (i: EvidenceInput, id: string) => evidenceChecks(i).find((c) => c.id === id);
+	/** The fixture with its two stored models edited, and the application's ops (all proposals unless classified). */
+	const withModels = (edit: { base?: (m: Model) => Model; app?: (m: Model) => Model; ops?: ScenarioOp[]; classified?: Scn['classified'] }) => {
+		const i = input();
+		const a = i.application!;
+		const ops = edit.ops ?? a.scenario.ops;
+		return {
+			...i,
+			baseline: { ...i.baseline, inputs: { ...i.baseline.inputs, model: (edit.base ?? ((m) => m))(i.baseline.inputs.model) } },
+			application: {
+				...a,
+				inputs: { ...a.inputs, model: (edit.app ?? ((m) => m))(a.inputs.model) },
+				scenario: { ...a.scenario, ops, classified: edit.classified ?? ops.map(() => 'proposal' as const) }
+			}
+		};
+	};
+	const setNode = (id: string, over: Partial<NetworkNode>) => (m: Model): Model => ({ ...m, nodes: m.nodes.map((n) => (n.id === id ? { ...n, ...over } : n)) });
+	const addNode = (n: NetworkNode) => (m: Model): Model => ({ ...m, nodes: [...m.nodes, n] });
+	const both = (f: (m: Model) => Model) => ({ base: f, app: f });
+	const town = node({ id: 'T', name: 'Town', kind: 'user', downstreamNodeId: 'G', userDemandM3Day: new Array(12).fill(800) });
+	const offtake = (over: Partial<import('../project').Transfer> = {}): import('../project').Transfer => ({
+		id: 'OT',
+		fromNodeId: 'F2',
+		toNodeId: 'F1',
+		months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+		maxRateM3s: 0.05,
+		dailyCapM3: null,
+		minStoragePct: 0,
+		enabled: true,
+		priority: 1,
+		source: 'river',
+		...over
+	});
+	const withOfftake = (t: import('../project').Transfer) => (m: Model): Model => ({ ...m, transfers: [...m.transfers, t] });
+
+	it('passes both on the fixture (positive control): no unit takes from the river, and the application adds none', () => {
+		expect(check(input(), 'pumpCapacity')).toMatchObject({ passed: true, blocksIssue: true, refuses: false, fix: null });
+		expect(check(input(), 'pumpCapacity')!.detail).toMatch(/^No unit, other water user or off-take takes from the river in either run/);
+		expect(check(input(), 'protectsEwr')).toMatchObject({ passed: true, blocksIssue: true, refuses: false, detail: 'The application adds or changes no river abstraction on the applicant’s units.' });
+	});
+
+	it('stops issue on a river pump with no capacity in the baseline, naming it; a capacity passes', () => {
+		const open = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: null })));
+		const c = check(open, 'pumpCapacity')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toBe('Both runs: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.');
+		// Only the baseline's (the application gives it a capacity): named as the baseline's.
+		const baseOnly = withModels({ base: setNode('F1', { supplyRule: 'riverFirst' }), app: setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 900 }) });
+		expect(check(baseOnly, 'pumpCapacity')!.detail).toBe('The baseline: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.');
+		expect(c.fix).toBe('Enter the river pump’s capacity (Network › the unit › Supply, pumps × m³/h), then run the model again and nominate the new run, and run the application on it.');
+		const r = evidenceReport(open);
+		expect(r.refused).toBe(false);
+		expect(r.issuable).toBe(false);
+		expect(r.questions.some((q) => q.startsWith('Every river pump has a capacity:'))).toBe(true);
+		for (const rule of ['trigger', 'runOfRiver'] as const) expect(check(withModels(both(setNode('F1', { supplyRule: rule }))), 'pumpCapacity')!.passed).toBe(false);
+		// The control: a capacity (and 0, no river pump) bounds it; dam only never pumps.
+		const capped = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })));
+		expect(check(capped, 'pumpCapacity')!.passed).toBe(true);
+		expect(check(capped, 'pumpCapacity')!.detail).toMatch(/^Every river pump, other water user and off-take in both runs has a capacity/);
+		expect(evidenceReport(capped).issuable).toBe(true);
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 0 }))), 'pumpCapacity')!.passed).toBe(true);
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'damFirst', pumpCapacityM3Day: null }))), 'pumpCapacity')!.passed).toBe(true);
+		// A capacity the run reads as no limit (not a size ≥ 0) is none.
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: -1 }))), 'pumpCapacity')!.passed).toBe(false);
+	});
+
+	it('stops issue on an other water user with demand and no pump, in either run; a pump, or no demand, passes', () => {
+		const base = withModels(both(addNode(town)));
+		expect(check(base, 'pumpCapacity')!.detail).toBe('Both runs: Town (other water user). With no capacity, only the river’s flow limits what it takes.');
+		const two = withModels({ ...both(addNode(town)), app: (m) => addNode(town)(setNode('F1', { supplyRule: 'riverFirst' })(m)) });
+		expect(check(two, 'pumpCapacity')!.detail).toBe('Both runs: Town (other water user); the application: Farm one’s river pump. With no capacity, only the river’s flow limits what they take.');
+		// Only the application's (a user it adds): the fix is the scenario's.
+		const app = withModels({ app: addNode(town) });
+		expect(check(app, 'pumpCapacity')).toMatchObject({ passed: false, detail: 'The application: Town (other water user). With no capacity, only the river’s flow limits what it takes.' });
+		expect(check(app, 'pumpCapacity')!.fix).toBe('Enter the other water user’s pump capacity (Network › the user), then run the application again (in the scenario, for the application’s own units).');
+		expect(check(withModels(both(addNode({ ...town, pumpCapacityM3Day: 1000 }))), 'pumpCapacity')!.passed).toBe(true);
+		expect(check(withModels(both(addNode({ ...town, userDemandM3Day: null }))), 'pumpCapacity')!.passed).toBe(true);
+	});
+
+	it('stops issue on a unit with no dam irrigated straight from the upstream river, but not one without demand', () => {
+		const damless = withModels(both(setNode('F1', { pctUpstreamToDam: 1 })));
+		expect(check(damless, 'pumpCapacity')!.detail).toMatch(/^Both runs: Farm one \(no dam: irrigated straight from the river\)\. /);
+		const noCrops = (m: Model): Model => ({ ...setNode('F1', { pctUpstreamToDam: 1 })(m), cropAreas: m.cropAreas.filter((a) => a.nodeId !== 'F1') });
+		expect(check(withModels(both(noCrops)), 'pumpCapacity')!.passed).toBe(true);
+		// With a dam, the upstream share is the on-channel dam catching its inflow, not a take.
+		expect(check(withModels(both(setNode('F1', { pctUpstreamToDam: 1, damCapacityM3: 1e5 }))), 'pumpCapacity')!.passed).toBe(true);
+	});
+
+	it('counts a river off-take as bounded by its rate, and a disabled one as nothing', () => {
+		const ot = withModels(both(withOfftake(offtake())));
+		expect(check(ot, 'pumpCapacity')!.passed).toBe(true);
+		expect(check(ot, 'pumpCapacity')!.detail).toMatch(/^Every river pump/);
+		expect(check(withModels(both(withOfftake(offtake({ enabled: false })))), 'pumpCapacity')!.detail).toMatch(/^No unit/);
+	});
+
+	it('names an off-take whose rate isn’t a number as unbounded, unless its daily cap holds it, and joins the fixes for each kind', () => {
+		const open = withModels(both(withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY }))));
+		const c = check(open, 'pumpCapacity')!;
+		expect(c.detail).toBe('Both runs: the off-take Farm two → Farm one. With no capacity, only the river’s flow limits what it takes.');
+		expect(check(withModels(both(withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY, dailyCapM3: 4000 })))), 'pumpCapacity')!.passed).toBe(true);
+		const mixed = withModels(both((m) => withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY }))(addNode(town)(setNode('F1', { pctUpstreamToDam: 1 })(m)))));
+		expect(check(mixed, 'pumpCapacity')!.fix).toBe(
+			'Give a unit without a dam the run of river supply rule, with a pump capacity; enter the other water user’s pump capacity (Network › the user); give the off-take a rate that is a number (Transfers), then run the model again and nominate the new run, and run the application on it.'
+		);
+	});
+
+	it('names a river-first unit with no dam twice: its capped pump passes, the river routed to its absent dam doesn’t', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 900, pctUpstreamToDam: 1 })));
+		expect(check(i, 'pumpCapacity')!.detail).toBe('Both runs: Farm one (no dam: irrigated straight from the river). With no capacity, only the river’s flow limits what it takes.');
+	});
+
+	it('applies the capacity check to baseline evidence too', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'runOfRiver' })));
+		const r = evidenceReport({ ...i, application: null });
+		expect(r.checks.find((c) => c.id === 'pumpCapacity')).toMatchObject({ passed: false, detail: 'The run: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.' });
+		expect(r.checks.find((c) => c.id === 'pumpCapacity')!.fix).not.toMatch(/application/);
+		expect(r.checks.some((c) => c.id === 'protectsEwr')).toBe(false);
+		expect(r.issuable).toBe(false);
+	});
+
+	it('stops an application whose own new river pump keeps neither a hands-off flow nor the EWR; either passes', () => {
+		const pump: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: 'F2', field: 'supplyRule', value: 'runOfRiver' },
+			{ op: 'node.set', nodeId: 'F2', field: 'pumpCapacityM3Day', value: 1200 }
+		];
+		const open = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0 }), ops: pump });
+		const c = check(open, 'protectsEwr')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toMatch(/^Farm two’s river pump keeps neither the EWR nor a hands-off flow in every month it takes, so on a dry day it can take the river below its Reserve\./);
+		expect(c.fix).toMatch(/^In the scenario, give each one a hands-off flow in every month it takes, or keep the EWR/);
+		expect(c.fix).not.toMatch(/other water user/);
+		expect(check(open, 'pumpCapacity')!.passed).toBe(true);
+		expect(evidenceReport(open).issuable).toBe(false);
+		for (const keep of [{ handsOffEwr: true }, { handsOffM3Day: new Array(12).fill(500) }]) {
+			const ok = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0, ...keep }), ops: pump });
+			expect(check(ok, 'protectsEwr')).toMatchObject({ passed: true, detail: 'Farm two’s river pump leaves the EWR, or a hands-off flow, in the river before taking anything, in every month it takes.' });
+		}
+		// A hands-off flow of 0 in every month is none (model.md §2.7h), and one month's leaves the other eleven open.
+		for (const handsOffM3Day of [new Array(12).fill(0), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500]]) {
+			const part = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0, handsOffM3Day }), ops: pump });
+			expect(check(part, 'protectsEwr')!.passed).toBe(false);
+		}
+	});
+
+	it('judges a new unit the application adds by its pump’s protection, and words two open takes in the plural', () => {
+		const farm = node({ id: 'N', name: 'New farm', downstreamNodeId: 'G', supplyRule: 'runOfRiver', pumpCapacityM3Day: 600 });
+		const crop = (m: Model): Model => ({ ...m, cropAreas: [...m.cropAreas, { nodeId: 'N', cropId: 'c', areaM2: 100_000 }] });
+		const ops: ScenarioOp[] = [{ op: 'node.add', node: farm }, { op: 'cropArea.set', nodeId: 'N', cropId: 'c', areaM2: 100_000 }];
+		expect(check(withModels({ app: (m) => crop(addNode(farm)(m)), ops }), 'protectsEwr')!.passed).toBe(false);
+		expect(check(withModels({ app: (m) => crop(addNode({ ...farm, handsOffEwr: true })(m)), ops }), 'protectsEwr')!.passed).toBe(true);
+		// Two open takes on the applicant's units, one ops each: both named, the plural wording.
+		const both2: ScenarioOp[] = [...ops, { op: 'transfer.add', transfer: offtake() }];
+		const c = check(withModels({ app: (m) => withOfftake(offtake())(crop(addNode(farm)(m))), ops: both2 }), 'protectsEwr')!;
+		expect(c.detail).toMatch(/^New farm’s river pump, the off-take Farm two → Farm one keep neither the EWR nor a hands-off flow in every month they take, so on a dry day they can take the river below its Reserve\./);
+		// One open of two: only the open one is named.
+		const one = check(withModels({ app: (m) => withOfftake(offtake({ handsOffEwr: true }))(crop(addNode(farm)(m))), ops: both2 }), 'protectsEwr')!;
+		expect(one.detail).toMatch(/^New farm’s river pump keeps neither/);
+		const fine = check(withModels({ app: (m) => withOfftake(offtake({ handsOffEwr: true }))(crop(addNode({ ...farm, handsOffEwr: true })(m))), ops: both2 }), 'protectsEwr')!;
+		expect(fine.detail).toBe('New farm’s river pump, the off-take Farm two → Farm one each leave the EWR, or a hands-off flow, in the river before taking anything, in every month they take.');
+	});
+
+	it('judges more of the applicant’s existing river take (a crop area on a unit that pumps), and River to dam', () => {
+		const pumps = both(setNode('F2', { supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 }));
+		const more = withModels({ ...pumps, ops: [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 600_000 }] });
+		expect(check(more, 'protectsEwr')!.passed).toBe(false);
+		const divert = withModels({ app: setNode('F2', { damCapacityM3: 1e5, divertCapacityM3Day: 3000 }), ops: [{ op: 'node.set', nodeId: 'F2', field: 'divertCapacityM3Day', value: 3000 }] });
+		expect(check(divert, 'protectsEwr')!.detail).toMatch(/^Farm two’s River to dam keeps neither/);
+		// A renamed unit changes no take.
+		expect(check(withModels({ ...pumps, ops: [{ op: 'node.set', nodeId: 'F2', field: 'name', value: 'Farm 2' }] }), 'protectsEwr')!.passed).toBe(true);
+	});
+
+	it('leaves the baseline’s existing users alone: another unit’s unprotected pump, untouched by a proposal, passes', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })));
+		expect(check(i, 'protectsEwr')).toMatchObject({ passed: true });
+		// And an op on another's unit is a baseline assumption (its own check stops it), never judged here.
+		const theirs = withModels({ ...both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })), ops: [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2: 500_000 }], classified: ['baseline'] });
+		expect(check(theirs, 'protectsEwr')!.passed).toBe(true);
+		expect(check(theirs, 'assumptions')!.passed).toBe(false);
+	});
+
+	it('judges an off-take the application adds by its own hands-off flow, not its source unit’s', () => {
+		const ops: ScenarioOp[] = [{ op: 'transfer.add', transfer: offtake() }];
+		const open = withModels({ app: withOfftake(offtake()), ops });
+		expect(check(open, 'protectsEwr')!.detail).toMatch(/^the off-take Farm two → Farm one keeps neither/);
+		// The source unit's hands-off flow binds its own pump, not the off-take (model.md §2.7h).
+		expect(check(withModels({ app: (m) => withOfftake(offtake())(setNode('F2', { handsOffEwr: true })(m)), ops }), 'protectsEwr')!.passed).toBe(false);
+		expect(check(withModels({ app: withOfftake(offtake({ handsOffM3Day: 400 })), ops }), 'protectsEwr')!.passed).toBe(true);
+		expect(check(withModels({ app: withOfftake(offtake({ handsOffEwr: true })), ops }), 'protectsEwr')!.passed).toBe(true);
+		// A dam transfer isn't the river.
+		expect(check(withModels({ app: withOfftake(offtake({ source: 'dam' })), ops }), 'protectsEwr')!.passed).toBe(true);
+	});
+
+	it('stops an application that adds an other water user, which can’t keep a hands-off flow, and says how to model it', () => {
+		const added = { ...town, pumpCapacityM3Day: 1000 };
+		const c = check(withModels({ app: addNode(added), ops: [{ op: 'node.add', node: added }] }), 'protectsEwr')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toMatch(/^Town \(other water user\) keeps neither/);
+		expect(c.fix).toMatch(/An other water user can’t keep one in the model: model the new take as a unit that pumps from the river, with a pump capacity and a hands-off flow\.$/);
 	});
 });
 
@@ -531,7 +735,7 @@ describe('baseline evidence (the nominated run alone)', () => {
 			expect(row.application).toBeNull();
 			expect(row.change).toBeNull();
 		}
-		expect(r.checks.map((c) => c.id)).toEqual(['nominated', 'notLegacy', 'notForecast', 'declaredRule', 'citedEnsemble', 'coverage']);
+		expect(r.checks.map((c) => c.id)).toEqual(['nominated', 'notLegacy', 'notForecast', 'pumpCapacity', 'declaredRule', 'citedEnsemble', 'coverage']);
 		expect(r.applicantStatement).toBeNull();
 		expect(r.users.every((u) => u.suppliedB === null)).toBe(true);
 	});
@@ -676,7 +880,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-9');
+		expect(got.version).toBe('evidence-10');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1107,7 +1311,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-10');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1163,7 +1367,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-10');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

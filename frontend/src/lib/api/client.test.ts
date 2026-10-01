@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, createApi, scenarioProblems } from './client';
+import { ApiError, assessmentCheckOf, createApi, scenarioProblems } from './client';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 function mockFetch(status: number, body?: unknown, raw?: string) {
@@ -31,6 +31,18 @@ describe('createApi', () => {
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('http://x/auth/logout-everywhere');
 		expect(init.method).toBe('POST');
+	});
+
+	it('DELETEs /auth/me with the password (204), and keeps a refusal’s code and details', async () => {
+		const f = mockFetch(204);
+		await expect(createApi('http://x', f).auth.deleteMe('pw')).resolves.toBeUndefined();
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/me');
+		expect(init.method).toBe('DELETE');
+		expect(JSON.parse(init.body as string)).toEqual({ password: 'pw' });
+		const details = { projects: [{ id: 'p1', name: 'Kloof' }], teams: [] };
+		const refused = mockFetch(409, { error: 'x', code: 'account_sole_holder', details });
+		await expect(createApi('http://x', refused).auth.deleteMe('pw')).rejects.toMatchObject({ status: 409, code: 'account_sole_holder', details });
 	});
 
 	it('PATCHes /auth/me with the display name and returns the user', async () => {
@@ -638,6 +650,38 @@ describe('sweeps client', () => {
 		const withSeries = mockFetch(200, { sweep: { id: 's' } });
 		await createApi('', withSeries).sweeps.get('p', 's', { series: true });
 		expect(call(withSeries).url).toBe('/projects/p/sweeps/s?series=true');
+	});
+});
+
+describe('assessments client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('checks (a dry run), creates, lists and reads one', async () => {
+		const body = { name: 'Two', scenarioIds: ['a', 'b'] };
+		const check = mockFetch(200, { check: { ok: true, conflicts: [], problems: [] } });
+		expect(await createApi('', check).assessments.check('p', body)).toEqual({ ok: true, conflicts: [], problems: [] });
+		expect(call(check)).toEqual({ url: '/projects/p/assessments', method: 'POST', body: { ...body, dryRun: true } });
+		const create = mockFetch(202, { assessment: { id: 'x' }, jobId: 'j', job: { id: 'j' } });
+		expect((await createApi('', create).assessments.create('p', body)).assessment.id).toBe('x');
+		expect(call(create)).toEqual({ url: '/projects/p/assessments', method: 'POST', body });
+		const list = mockFetch(200, { assessments: [{ id: 'x' }] });
+		expect(await createApi('', list).assessments.list('p')).toEqual([{ id: 'x' }]);
+		expect(call(list).url).toBe('/projects/p/assessments');
+		const get = mockFetch(200, { assessment: { id: 'x' } });
+		expect(await createApi('', get).assessments.get('p', 'x/1')).toEqual({ id: 'x' });
+		expect(call(get).url).toBe('/projects/p/assessments/x%2F1');
+	});
+
+	it('reads a refusal’s conflicts and problems, and nothing from any other error', () => {
+		const conflicts = [{ reason: 'same_target', target: 'settings: gr4j.x1', message: 'm' }];
+		expect(assessmentCheckOf(new ApiError(422, 'x', { conflicts, problems: ['p'] }))).toEqual({ ok: false, conflicts, problems: ['p'] });
+		expect(assessmentCheckOf(new ApiError(422, 'x', { problems: ['p', 3] }))).toEqual({ ok: false, conflicts: [], problems: ['p'] });
+		expect(assessmentCheckOf(new ApiError(422, 'x', [{ path: ['name'] }]))).toBeNull();
+		expect(assessmentCheckOf(new ApiError(404, 'x', { conflicts }))).toBeNull();
+		expect(assessmentCheckOf(new Error('x'))).toBeNull();
 	});
 });
 

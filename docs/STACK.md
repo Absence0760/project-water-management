@@ -64,7 +64,10 @@ sides share.
   fork's image, since upstream stopped publishing one).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
-  bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
+  bound by RLS. Each checkout has its own dev database: `water` in the main
+  checkout, `water_w<n>` in a git worktree (`backend/src/config/devEnv.ts`,
+  created on first `pnpm dev`, empty until `pnpm seed:examples`), so a
+  branch's unmerged migrations never reach main's. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored, except
   the synthetic workbook fixture for the importer parity test and the

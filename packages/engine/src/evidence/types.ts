@@ -52,8 +52,13 @@ import type { ApplicantPrompts } from './prompts';
  * its source (engine ≥ 1.56.0) and the note on it, its demand in both runs, and the share of
  * their demand by source, with a flag when most of it isn't from meter records. A pack drafted
  * before it has no `demandObjects`, and its report has no § 6.
+ * evidence-10: two checks that stop issue (issue #54, #90 Q15 and Q16): `pumpCapacity`, every
+ * river pump, other water user and river off-take either run rests on has a capacity, and, for an
+ * application, `protectsEwr`, the river abstraction its proposals add or change keeps a hands-off
+ * flow or the EWR (evidence/riverWorks.ts). A pack drafted before it lists neither check: its frozen
+ * report stays as it was, and issuing it checks the live report, which has both.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-9';
+export const EVIDENCE_REPORT_VERSION = 'evidence-10';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -262,6 +267,8 @@ export interface EvidenceCheck {
 		| 'period'
 		| 'runoffModel'
 		| 'assumptions'
+		| 'pumpCapacity'
+		| 'protectsEwr'
 		| 'declaredRule'
 		| 'citedEnsemble'
 		| 'pairedBand'

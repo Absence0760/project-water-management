@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Issue #287, cumulative impact (Assess together on the Applications tab, its conflict list, matrix and CSV). Measured 1420 KB on main @ 67214e0e and 1425 KB with this branch merged (+5 KB). Headroom 2 KB."
+}
