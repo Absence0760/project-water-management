@@ -23,7 +23,8 @@
 //   [Crop_Areas]    a header row "Farm …" followed by one column per crop (up
 //                   to a blank or a "Total …" column), then one row per farm:
 //                   its name and its area of each crop in m² (hectares when
-//                   the header says so and never m²). Ends like the crop
+//                   the crop columns' headers say so and none says m²; a
+//                   bracketed unit after a crop's name is dropped). Ends like the crop
 //                   table.
 //
 // Sheet names match ignoring case, spaces and underscores ("Crop Factors"
@@ -65,6 +66,11 @@ const MONTH_RE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?$/i
 
 /** A "Total" row or column ends a table (it sums the rows or columns before it). */
 const TOTAL_RE = /^totals?\b/i;
+/** Area units in a crop column's header. */
+const HECTARES = /\b(hectares?|ha)\b/i;
+const SQUARE_METRES = /m²|\bm2\b|sq\.?\s*m/i;
+/** A unit in brackets after a crop column's name: "Lucerne (ha)", "Olives [m²]". */
+const UNIT_SUFFIX = /\s*[([]\s*(hectares?|ha|m²|m2|sq\.?\s*m)\s*[)\]]$/i;
 /** Rows searched for a header, columns scanned per row, and rows read per table. */
 const HEADER_ROWS = 60;
 const MAX_COLS = 80;
@@ -405,7 +411,8 @@ function readAreas(wb: B023Workbook, sheet: string, out: NodeCropSet, warn: Coll
 	for (let c = header.col + 1; c <= MAX_COLS; c++) {
 		const v = wb.cell(sheet, c, header.row);
 		if (!isName(v) || TOTAL_RE.test(clean(v))) break;
-		const crop = clean(v);
+		// A unit after the crop's name ("Lucerne (ha)") isn't part of it: the name must match [Crop_Factors]'.
+		const crop = clean(v).replace(UNIT_SUFFIX, '') || clean(v);
 		if (seenCrop.has(crop.toLowerCase())) {
 			warn.add({ code: 'duplicate', sheet, cell: cellAddress(c, header.row), message: `${crop} has two columns in [${sheet}]; the first is used.` });
 			continue;
@@ -418,10 +425,11 @@ function readAreas(wb: B023Workbook, sheet: string, out: NodeCropSet, warn: Coll
 		return;
 	}
 	out.areaCrops = cols.map((c) => c.crop);
-	// Areas are m², unless the header (or the title row above it) says hectares and nowhere says m².
+	// Areas are m², unless the crop columns' own header cells (or the cells above them) say hectares and none says m².
+	// Only those cells: a "Total area m²" column or a title elsewhere says nothing about the crop columns.
 	let headerText = '';
-	for (const r of [header.row - 1, header.row]) for (let c = 1; r >= 1 && c <= MAX_COLS; c++) headerText += ` ${clean(wb.cell(sheet, c, r))}`;
-	const toM2 = /\b(hectares?|ha)\b/i.test(headerText) && !/m²|\bm2\b|sq\.?\s*m/i.test(headerText) ? 10_000 : 1;
+	for (const { col } of cols) for (const r of [header.row - 1, header.row]) if (r >= 1) headerText += ` ${clean(wb.cell(sheet, col, r))}`;
+	const toM2 = HECTARES.test(headerText) && !SQUARE_METRES.test(headerText) ? 10_000 : 1;
 	if (toM2 !== 1) {
 		warn.add({ code: 'areas-in-hectares', sheet, cell: cellAddress(header.col, header.row), message: `[${sheet}]'s header gives the areas in hectares, so they were read as hectares (× 10 000 m²).` });
 	}
