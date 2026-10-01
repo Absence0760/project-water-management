@@ -1326,6 +1326,28 @@ on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
+**No projects yet** (`projects/GetStarted.svelte`): in place of the list, a
+card says what a project is and the three steps from nothing to a run, with
+**New project** (and, without a team, a link to create one). Under them,
+**Or try an example first** offers **Start from an example** (issue #286):
+the invented Kleinberg example catchment (four hydrological units, fruit
+farms with dams, two transfers, a stored GR4J fit, 15 years of made-up rainfall), imported as
+your own personal project through `POST /projects/import?run=1` and opened
+on its first run (*Initial run (import)*) on Runs & results. If that run
+fails the project is still created, and the card says so instead of opening
+it ("The example was created, but the model didn’t run: …", with **Open the
+example**), as the import dialog does. A user who leaves the list while it
+works isn't pulled into the project when it lands. The document is
+`projects/exampleCatchment.generated.json`, the same data `pnpm
+seed:examples` seeds for Kleinberg, written by `pnpm gen:example`
+(`backend/scripts/example-file.ts`; synthetic only, the repo is public). It
+is ~25 KB gzip (84 KB raw) that nobody with projects needs, so it is a lazy chunk of its
+own (`projects/example.ts`): hovering or focusing the button starts the
+download, the press imports it. While it works the button reads *Setting up
+the example…* (`aria-busy`, still focusable); a failed download offers
+**Reload page** (`ChunkFailed`), a refused import says "Couldn’t create the
+example:" and the server's error.
+
 **Figures.** Each row carries the team portfolio's
 figures for its project, from `GET /projects/outcomes` ([api.md §
 Projects](./api.md#projects)), which covers personal and shared projects as

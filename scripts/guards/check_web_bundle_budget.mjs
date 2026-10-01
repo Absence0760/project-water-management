@@ -1629,6 +1629,17 @@
 //             Appendix C): 1350 locally, CI ~2 KB above. Re-measured again
 //             with main @ 0672e461's 1344 merged (#270, #268, #269): 1357
 //             locally, CI ~2 KB above. Headroom ~3 KB.
+// 2026-09-30  total 1362 → 1388 KB (issue #286, Start from an example on the
+//             empty project list): the invented Kleinberg example catchment
+//             as a project document (projects/exampleCatchment.generated.json,
+//             a lazy chunk of its own, 84 KB raw, ~25 KB gzip: 15 years of
+//             catchment rain, CHIRPS and the weir record at 3 significant
+//             figures, plus its stored GR4J fit) and the empty state's button
+//             (+~1 KB). Data, not code, but a JSON import is a JS chunk, so
+//             it counts here; it loads only on hover, focus or press of the
+//             button, never with a page, and the largest-chunk ceiling (42 KB)
+//             still holds it. Measured 1383 locally on main @ 4a17d615 plus
+//             this; CI ~2 KB above. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1639,7 +1650,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1362,
+	totalCodeKb: 1388,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 21,
