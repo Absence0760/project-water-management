@@ -1351,18 +1351,21 @@ the suggested order (the IDs carry the detail):
       rule's own reserve", `run.invariants.test.ts` › "engine 1.36.0: several
       rules from one dam …". The open entry PR #237 carries for this is closed
       by it.
-- [ ] **Report the V8 miscompile upstream** (issue #192; tracked in #232): reduce it to a
-      standalone script for crbug.com/v8 (the Sandspruit stress reproduces
-      it; a harness calling `supplyAssurance` alone never did, at 51
-      deopt periods) and file it against Node 24's V8. The durable fix is
-      V8's. Trigger: before the next Node major bump, and again after it,
-      run `pnpm test:backend:perf` alone, and the old form of the loop
-      (git show 47e1ddb1^:packages/engine/src/network/reliability.ts)
-      under `node --deopt-every-n-times=2900`, to learn whether the new V8
-      still has the bug. Keep `tallyWindow` either way. If the fault
-      turns up in a saved run's `assurance` check on a new Node version,
-      that is this bug in another place: look for another long per-node
-      loop read through an object argument.
+- [ ] **Report the V8 miscompile upstream** (issue #192; tracked in #232). The report is
+      drafted in [upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md), and
+      `pnpm test:backend:v8-osr` stresses the pre-fix loop (`47e1ddb1^`) on any
+      Node binary. On x64 the stress has not reproduced it on Node 22, 24 or 25,
+      though x64 is where it first showed in CI, and a 150-line harness of the
+      loop never failed. What is left: re-check the flag table on arm64 (an
+      Apple Silicon Mac) with the commands in that file, and the operator files
+      it at crbug.com/v8 after the checklist there. The durable fix is V8's;
+      `tallyWindow` stays either way. Trigger: before the next Node major bump,
+      and again after it, run `pnpm test:backend:perf` alone and
+      `pnpm test:backend:v8-osr` (on arm64, where it reproduces), to learn
+      whether the new V8 still has the bug. If the fault turns up in a saved
+      run's `assurance` check on a new Node version, that is this bug in
+      another place: look for another long per-node loop read through an
+      object argument.
 - [x] **The water account's EWR rows are redone by a per-run check**
       (issue #192, engine 1.34.0): `checkSupplyAssurance` holds each
       site's required, met and days not met, per water year and over the
