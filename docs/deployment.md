@@ -1629,7 +1629,10 @@ Every step is an ordinary app action by an owner unless it says "operator".
    says which endpoint and what kind of failure; `at` points at the throwing
    line. One route with a SQLSTATE after a deploy is usually a migration the
    code got ahead of (§ A failed migration); every route at once with
-   `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
+   `ECONNREFUSED` or `57P01` is the database (RDS alarms); a failover or
+   restart also leaves `{"event":"db_idle_client_error","code":"57P01"}`
+   warnings, one per pooled connection it dropped (`backend/src/db/pool.ts`:
+   the pool replaces the connection, the process keeps running). Reproduce it
    locally, fix the cause and add a test; the message was deliberately not
    logged (it can hold row values), so the stack and code are the lead.
 10. **Request flood** (the `cloudfront-requests` or `waf-blocked-requests`
