@@ -378,7 +378,11 @@ extracts the project, posting progress per sheet; `extract` builds the project
 again with other options (the gauge as a reference) from the workbook the
 worker still holds, in milliseconds; a failure comes back as a plain object
 with the typed error's code and fields (the missing named ranges, sheet and
-cell). Cancel, closing the dialog and a finished import terminate the worker.
+cell). `nodeCrops` reads a node-based workbook's [Crop_Factors] and
+[Crop_Areas] instead (`nodeCrops.ts`, for the Load crop factors dialog):
+only those two sheets are parsed, and it posts a crop set whose content
+problems are warnings, not failures. Cancel, closing the dialog and a
+finished import terminate the worker.
 The reader is the import's own, not SheetJS: `zip.ts` inflates only the
 parts the importer reads, with the browser's
 `DecompressionStream('deflate-raw')` and hard caps ([security.md § Input

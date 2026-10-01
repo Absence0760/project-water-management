@@ -2399,10 +2399,29 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   importer in its worker (`spreadsheet/import/`, the same reader and
   failure messages as Import a b023 workbook; it reads the whole workbook,
   so a large one takes a few seconds). Workbooks never leave the
-  browser. A node-based workbook (no b023 named ranges) can't be
-  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
-- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
-  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+  browser.
+  **A node-based workbook** is the third source: its [Crop_Factors] and
+  [Crop_Areas] sheets, read by the same worker
+  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+  efficiency column isn't loaded (a crop's efficiency changes only through
+  the system select below), nor are its farm areas. For
+  either workbook, the dialog lists what the reader flagged as text under
+  the file: for a node-based workbook, a missing sheet (a b023 file picked
+  under this option), names that differ between the two sheets and cells
+  read as 0; for a b023 workbook, the import report's
+  `crop-factors-copied` and `crop-factors-suspect` warnings.
+- **Pan coefficient Kp** multiplies the source factors. It starts at the
+  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
+  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
+  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
+  set against reference ET₀ while the engine multiplies crop factors by
+  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
+  mid value). A line under the input says which and why, linking [FAO-56
+  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
+  re-applies the new source's default only while Kp is still the previous
+  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
+  **Use the default, N** puts the default back.
 - **Match crops:** a row per project crop with a **Load factors from**
   select, preset by name (`matchByName`: the same name ignoring case,
   accents, punctuation and a plural s, or the one source whose words hold the
@@ -4861,8 +4880,35 @@ read it before.
   series with the engine's `recessionPoints`, so the summary holds only the
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
-  those runs; an older run shows neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  those runs; an older run shows neither. From engine 1.55.0, after it,
+  **Validation signatures** (`runs/ValidationSignatures.svelte`, helpers in
+  `runs/signatures.ts`; [model.md §2.10d](./model.md), *Validation
+  signatures*, CR-16): which record is scored (the outlet's gauge or logger
+  record, or the calibration site's, named) and on how many days; a verdict
+  line; a table with a row each for the base-flow index by the Hughes et al.
+  (2003) and the Eckhardt (2005) filters, the low-flow FDC's Q70–Q95 slope,
+  the low-flow volume bias (%BiasFLV) and the skill on held-out recessions
+  (observed = the river's own recession curve fitted on the other segments,
+  simulated = the model), each with its observed and simulated value, the
+  difference or bias, the **Provisional limit** and *within* / *outside* /
+  *not judged* (a row outside its limit shaded); and a line on how the
+  recessions were held out. The intro says the limits are provisional, for
+  the hydrologist to confirm: they are the engine's warning limits (±0.15
+  BFI by either filter, ±50 % on the slope bias and %BiasFLV, a held-out
+  skill of at least 0 with 8 or more segments), which the display reads
+  through one named constant, `PROVISIONAL_SIGNATURE_LIMITS` in
+  `runs/signatures.ts` ([followups.md § Hydrologist](./followups.md#hydrologist)).
+  The check list gains a *Validation signatures* line (so does the run's
+  credibility strip, which counts the check list's findings) and the
+  panel's intro counts six checks on those runs; a run with no observed
+  record shows the heading and "Not computed: needs an observed flow
+  record."; a run made before 1.55.0 shows neither. The help article
+  *Validation signatures* (`plausibility-signatures`) explains BFI, the two
+  filters, the low-flow slope and %BiasFLV and the held-out recession skill
+  in plain words. The Compare page sets the first four checks and the
+  gauges side by side
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)), not the
+  recession diagnostics or the validation signatures. Hydrological unit detail (on Hydrological units since issue #17: supply
   against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
