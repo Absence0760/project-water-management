@@ -923,7 +923,8 @@ flowchart LR
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
    is held, and while that run is behind the recorded rain: its
-   `lastObserved` before the rain's last recorded day), the data feeds (staleness per feed, each at its own level) and
+   `lastObserved` before the rain's last recorded day; Active alerts and
+   the mails then say the firing event's forecast is out of date), the data feeds (staleness per feed, each at its own level) and
    the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly

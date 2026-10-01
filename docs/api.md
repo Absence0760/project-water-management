@@ -1197,7 +1197,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   `seriesName` the series as the Data page names it, its name else its kind's label, e.g. "Weir" or
   "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
   key's days).
-- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail }`.
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail, forecastOutOfDate }`.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
@@ -1213,6 +1213,17 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   forecast's `madeOn` is the day the run was made, and "still current" (its
   `to` not yet past) is judged against today, both in the project's time
   zone.
+- `forecastOutOfDate` is `{ madeOn, observedTo, rainUntil }` on a **firing**
+  `ewr_forecast_fail` event while the project's newest forecast run is
+  behind the recorded rain (its `lastObserved`, `observedTo` here, before
+  `rainUntil`, the last day with a catchment or CHIRPS rain value; read at
+  request time, `alerts/evaluate.ts` `newestForecast`), and `null`
+  otherwise (a current forecast, a cleared event, every other kind). Such a
+  forecast neither opens nor clears the event, so without a newer forecast
+  (the forecast feed failing, which `feed_failing` reports) the event keeps
+  the figures of the last current one; this says so. A mail of the event
+  sent meanwhile (a digest line the next morning) adds the same in a
+  sentence (`mail.alert.ewr.outOfDate`).
 - **Unsubscribe.** Every alert email links to the site's
   `/alerts/unsubscribe#t=<token>` (the token in the fragment, so it reaches
   no server log), and carries `List-Unsubscribe: <API/alerts/unsubscribe?token=…>`

@@ -4845,14 +4845,17 @@ own. Loop in the CISO or security analyst before acting on any of them.
       neither). Who: operator,
       [#93](https://github.com/Absence0760/project-water-management/issues/93).
       Trigger: before farmers are invited.
-- [ ] **A stale EWR-forecast alert says nothing.** A firing
+- [x] **A stale EWR-forecast alert says nothing.** A firing
       `ewr_forecast_fail` event is left as it is while its forecast is behind
       the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast
       neither opens nor clears), but when no new forecast is made (the
-      forecast feed failing) the workspace's Active alerts shows it as
-      current. Show "forecast out of date since …" on the event (the
-      `feed_failing` alert already fires for the feed). Trigger: before a
-      forecast feed runs on production.
+      forecast feed failing) the workspace's Active alerts showed it as
+      current. Done: the API's `forecastOutOfDate` (derived at read time,
+      `newestForecast`; api.md § Alerts) puts "Forecast out of date: made …
+      on the rain recorded to …, but rain is now recorded to …" under the
+      event on Active alerts (ui.md § Alerts), and a mail of it sent
+      meanwhile says the same (`mail.alert.ewr.outOfDate`). The farm page
+      and the farmer alert pages show no EWR event (staff only).
 - [ ] **A log of restriction decisions** (WUA persona): which restriction
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.

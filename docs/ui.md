@@ -7472,7 +7472,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
   series sent by API key (headed **API data behind**, its email's subject
   too), "3 of 14 hydrological units short from … to …, in figures
-  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
+  an auto run published (alert at 1)"), or "No alert is firing". A firing
+  EWR forecast alert whose forecast is behind the recorded rain, with no
+  newer forecast made (the API's `forecastOutOfDate`), has an amber line
+  under it (`data-forecast-out-of-date`, `alerts.ts` `outOfDateText`):
+  "Forecast out of date: made 20 Sep 2026 on the rain recorded to 19 Sep
+  2026, but rain is now recorded to 24 Sep 2026 and no newer forecast has
+  been made. Check the forecast data feed." An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
   restriction notice, background jobs failed, data feed failing,
