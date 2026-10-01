@@ -121,7 +121,8 @@ server and no tile CDN: the file is served from the app's own storage.
 
 ## Uploads
 
-`POST /projects/:id/map/import` takes a **GeoJSON** file's text; the server
+`POST /projects/:id/map/import` (and its review,
+`POST /projects/:id/map/import/preview`) takes a **GeoJSON** file's text; the server
 parses and checks it (`backend/src/geo/geojson.ts`), whatever the browser
 did, and refuses the whole file on any problem, listing them per feature:
 
@@ -147,10 +148,36 @@ did, and refuses the whole file on any problem, listing them per feature:
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
   can't be imported twice into a project.
-- A **catchment boundary** file's polygons become one boundary (a
-  MultiPolygon if several), replacing the project's current one. A parcel,
-  dam or gauge named like a node of a fitting kind is linked to it; the
-  editor can change the link.
+- **A file may mix kinds** (issue #326 D2). `POST …/map/import/preview`
+  reads and checks the file as the import will, saves nothing, and proposes
+  each feature's kind (`proposeKinds` in `geojson.ts`):
+  - from a `kind`, `type` or `layer` property (the key's case ignored), when
+    its value names a kind that fits the feature's geometry. Case,
+    `_`/`-`/spaces and a plural `s` are ignored, with synonyms: boundary,
+    catchment → catchment boundary; parcel, farm, field → farm parcel;
+    reservoir → dam; gage, weir, station → gauge; stream → river. The
+    property is read for this only, never kept;
+  - else from the shape: a line is a river, a point a gauge, a polygon a
+    farm parcel, and the largest polygon whose inside holds every other
+    feature's centre the catchment boundary. A lone polygon is the boundary
+    only while the project has none. A property that names no kind, or one
+    the shape can't be, falls back to the shape with a note saying so.
+
+  Each feature is also proposed the node of the same name (case-insensitive)
+  of a kind it can stand for. The editor reviews every row (kind, name,
+  Stands for) in the upload sheet, then `POST …/map/import` sends
+  `features: [{ index, kind, name, nodeId }]` for every feature of the file.
+  The server checks it all again: each kind fits its geometry, each node is
+  the project's and of a kind the feature can stand for, and **a file holds
+  at most one boundary**, which replaces the project's current one. Any
+  problem refuses the whole file (422, per feature). The import's audit
+  event records the count of each kind (`kind: 'mixed'` when there are
+  several).
+- The one-kind import (`kind` instead of `features`, kept for API callers):
+  every feature that kind; a **catchment boundary** file's polygons become
+  one boundary (a MultiPolygon if several), replacing the project's current
+  one. A parcel, dam or gauge named like a node of a fitting kind is linked
+  to it; the editor can change the link.
 
 **Shapefiles are not read yet** (WP-3.12 plans `shpjs` and proj4 in the
 browser, with Hartebeesthoek94 Lo projections from the `.prj`); the form
