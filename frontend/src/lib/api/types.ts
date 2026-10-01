@@ -98,6 +98,24 @@ export interface User {
 	farmNoticeCurrent?: boolean;
 }
 
+/** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
+export interface MfaStatus {
+	/** An authenticator app is set up. */
+	enrolled: boolean;
+	enrolledAt: string | null;
+	/** Unused recovery codes left (0 when off). */
+	recoveryCodesLeft: number;
+	/** The person is a project owner, team admin or assessor: those actions need it. */
+	required: boolean;
+	/** This session signed in with a code. */
+	sessionVerified: boolean;
+}
+
+/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+export interface MfaChallenge {
+	mfaRequired: true;
+}
+
 export interface UserPreferences {
 	/**
 	 * The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`);
@@ -508,6 +526,19 @@ export interface Unsubscribed {
 	kind: AlertKind | 'all';
 	project: { name: string };
 	farm: string | null;
+}
+
+/** POST /alerts/feedback: what the answered mail was about (151_alert_feedback). */
+export interface FeedbackAnswered {
+	kind: AlertKind | 'digest';
+	project: { name: string };
+}
+
+/** GET /projects/:id/alert-feedback (editors): answers counted per kind, and comments, never who gave them. */
+export interface AlertFeedbackSummary {
+	since: string;
+	kinds: { kind: AlertKind | 'digest'; yes: number; no: number }[];
+	comments: { kind: AlertKind | 'digest'; useful: boolean; comment: string; answeredAt: string }[];
 }
 
 export interface Portfolio {

@@ -58,7 +58,7 @@ In a git worktree both URLs point at that worktree's own dev database,
 | `PACKS_BUCKET` | `water-packs` | Issued evidence packs' files: the reproduction bundle, stored when a pack is issued (created on first use; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)) |
 | `REPORT_DOWNLOADS` | `presigned` | How the download route signs a PDF link: `presigned` = a 60 s MinIO GET; production uses `cloudfront` (a CloudFront signed URL on the site's `/reports/*`, with `CLOUDFRONT_KEY_PAIR_ID` / `CLOUDFRONT_PUBLIC_KEY` from Terraform and `CLOUDFRONT_PRIVATE_KEY` from sops; security.md § Reports) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
-| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
+| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe and "Was this useful?" links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
 | `API_PUBLIC_URL` | `http://localhost:3001` | Where a mail client posts an alert's one-click unsubscribe (production: `SITE_URL/api`, the default) |
 | `ALERTS_ENABLED` / `ALERTS_DAILY_CAP` | `true` / `5` | The alert kill switch, and immediate alert emails per person per day |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
@@ -180,6 +180,36 @@ still succeeds. If you'd rather not run it at all, put `MAIL_TRANSPORT=log` in
 to the backend console instead. The DB tests use an in-memory transport and
 the e2e stack uses `log`, so neither needs Mailpit.
 
+## Two-step sign-in
+
+An account can add an authenticator app on the Account page (issue #282,
+[security.md § Two-step sign-in](./security.md#two-step-sign-in)): scan the
+QR code with any TOTP app on your phone (Google Authenticator, Microsoft
+Authenticator, Aegis, 1Password …), or type the key it shows. Nothing leaves
+the laptop: the code is checked locally and the QR code is drawn in the page.
+The TOTP secrets are sealed with `APP_ENCRYPTION_KEY`, a `dev-only-`
+placeholder in the committed `backend/.env.development`; changing it voids
+every authenticator set up against your local database.
+
+**Owners, team admins and assessors need it here too**, as in production:
+an owner's actions (members, invites, API keys, data feeds, share links,
+deleting a project), a team admin's, publishing to farmers, deciding an
+application and issuing or withdrawing an evidence pack answer
+`403 mfa_required` until the account has an authenticator, and
+`403 mfa_step_up` from a session signed in before it was added. The seeded
+demo accounts (`pnpm seed:examples`) start without one: set one up on the
+Account page, or, to try those actions without a phone, put
+`MFA_REQUIRED=false` in `backend/.env.development.local` and restart the
+backend (Lambda refuses that setting). The DB tests and the e2e API server
+set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
+the feature with it on and off.
+
+Without a phone, a code for a secret is one line in the backend workspace:
+`pnpm -C backend exec tsx -e "import('./src/auth/totp.ts').then(t => console.log(t.totp(t.base32Decode(process.argv[1]), Date.now())))" <SECRET>`
+(the key the Account page shows, spaces removed). Lost the codes and the
+app locally? `pnpm dev:db:psql`, then
+`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…';`.
+
 ## Alerts
 
 Alert emails (WP-2.13, [architecture.md § Alert emails](./architecture.md#alert-emails))
@@ -194,7 +224,11 @@ go to Mailpit like every other email, sent by the worker, so run
    farmer2@example.com) and the editors and owners.
 2. Mailpit shows the mail with its *Stop these emails* link
    (`/alerts/unsubscribe#t=…`) and its `List-Unsubscribe` headers; the
-   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`.
+   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`. Under
+   the button, *Was this alert useful? Yes · No* opens
+   `/alerts/feedback#t=…&a=yes|no`: pick an answer, add a comment and press
+   **Send** (opening the link records nothing). The answers show under the
+   rule editor as **Was it useful?**.
 3. Lower the level below the dam (plus 5 points) and save to clear it; raise
    it again for a second crossing and a second mail.
 4. Each person's choices are at `/account/alerts`. More than 5 immediate

@@ -14,7 +14,8 @@ import { attachment } from '../export/csv.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
-import { clearSession, issueSession, revokeSession } from './session.js';
+import { clearSession, issueMfaChallenge, issueSession, revokeSession } from './session.js';
+import { isEnrolled } from './mfa.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
@@ -120,7 +121,7 @@ export const LOGIN_THROTTLE = { freeAttempts: 5, baseLock: '1 minute', maxLock: 
  * go ahead. On a trusted device (auth/device.ts) it is that device's own
  * record for the address (070), otherwise the address's shared one (005).
  */
-async function countAttempt(db: Db, address: string, device: string | null): Promise<number> {
+export async function countAttempt(db: Db, address: string, device: string | null): Promise<number> {
 	const { rows } = await db.query<{ locked: number }>(
 		device
 			? 'SELECT app_login_device_attempt($1, $5, $2, $3::interval, $4::interval) AS locked'
@@ -141,7 +142,7 @@ export function lockedMessage(seconds: number): string {
 	return `too many sign-in attempts for this address — try again in ${wait}, or reset your password`;
 }
 
-type UserRow = {
+export type UserRow = {
 	id: string;
 	email: string;
 	display_name: string;
@@ -154,7 +155,7 @@ type UserRow = {
 	terms_version: string | null;
 	farm_notice_version: string | null;
 };
-const toUser = (r: UserRow) => ({
+export const toUser = (r: UserRow) => ({
 	id: r.id,
 	email: r.email,
 	displayName: r.display_name,
@@ -172,7 +173,7 @@ const toUser = (r: UserRow) => ({
 	// farmer presses "I understand", and again after a new version.
 	farmNoticeCurrent: r.farm_notice_version === FARMER_NOTICE_VERSION
 });
-const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, farm_notice_version, ${PREFERENCES_COL}`;
+export const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, farm_notice_version, ${PREFERENCES_COL}`;
 
 /**
  * The email for a sign-up with an address that already has an account: a
@@ -324,16 +325,27 @@ export const authRoutes = new Hono<AuthEnv>()
 			throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		}
 		// The password proved the account: read it as its owner.
-		const user = await withUser(row.id, async (db) => {
+		const found = await withUser(row.id, async (db) => {
 			await attemptSucceeded(db, body.email, device);
-			return (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
+			const user = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
+			return user ? { user, twoStep: await isEnrolled(db, row.id) } : undefined;
 		});
-		if (!user) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
+		if (!found) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
+		const { user } = found;
 		// The password is right, but the address was never confirmed (issue
 		// #57): no session until it is. Said only after a correct password, so
 		// it tells nothing to someone who doesn't know it. The sign-in page
 		// offers the link again (POST /resend-confirmation).
 		if (user.email_verified_at === null) throw ApiError.coded(403, 'email_unconfirmed', 'confirm your email address first: open the link we emailed you');
+		// Two-step sign-in (issue #282, auth/mfa-routes.ts): with an
+		// authenticator, the password buys a 5-minute challenge, not a
+		// session; POST /auth/mfa/verify trades it and a code for one (and
+		// sets the device cookie then). Nothing about the account is said
+		// before the code.
+		if (found.twoStep) {
+			await issueMfaChallenge(c, row.id);
+			return c.json({ mfaRequired: true as const });
+		}
 		await issueSession(c, row.id);
 		issueDevice(c, row.email, row.sessions_revoked_at);
 		return c.json({ user: toUser(user) });
@@ -517,8 +529,9 @@ export const authRoutes = new Hono<AuthEnv>()
 			return updated;
 		});
 		if (!user) throw ApiError.coded(409, 'password_changed_elsewhere', 'your password was changed somewhere else a moment ago — sign in again');
-		// Issued after the watermark, so this device stays signed in, and stays trusted.
-		await issueSession(c, userId);
+		// Issued after the watermark, so this device stays signed in, and stays
+		// trusted, signed in the way it was (a second factor isn't lost by changing the password).
+		await issueSession(c, userId, undefined, c.get('amr'));
 		issueDevice(c, user.email, watermark);
 		return c.json({ user: toUser(user) });
 	});

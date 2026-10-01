@@ -599,6 +599,7 @@ variables {
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
   alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  app_encryption_key  = "0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd"
   # PEM armour around a placeholder: the shape the variable checks, not a key.
   cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
   # Report downloads (reports.tf): a public key generated for these tests (its

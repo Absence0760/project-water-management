@@ -2,7 +2,8 @@
 // never stand in for each other). The app hands out many credentials, and
 // most share one shape (32 random bytes, 43 base64url characters, stored as
 // SHA-256, auth/tokens.ts): an email verify and reset token, an invite token,
-// a share link's token, a render token and an alert unsubscribe token; beside
+// a share link's token, a render token, an alert unsubscribe token and an
+// alert's "Was this useful?" token (151_alert_feedback); beside
 // them an API key (`wm_<prefix>_<secret>`), a session cookie and a render
 // session cookie (both JWTs). Each is only ever looked up where it was
 // stored, for the purpose it was issued. This file proves it as a matrix:
@@ -26,9 +27,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
-import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { hashToken as hashCred } from './tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
+import { base32Decode, hotp, totpStep } from './totp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 const ORIGIN = 'http://localhost:7777';
@@ -42,6 +45,7 @@ const KINDS = [
 	'share',
 	'renderToken',
 	'unsubscribe',
+	'feedback',
 	'apiKey',
 	'session',
 	'renderSession',
@@ -153,6 +157,12 @@ const SLOTS: { name: string; own: Kind[]; run: (cred: string) => Promise<Res>; a
 				body: 'List-Unsubscribe=One-Click'
 			}),
 		accepted: (r) => r.status === 204
+	},
+	{
+		name: 'body: POST /alerts/feedback (the "Was this useful?" page)',
+		own: ['feedback'],
+		run: (cred) => post('/alerts/feedback', { token: cred, useful: true }),
+		accepted: (r) => r.status === 200
 	}
 ];
 
@@ -201,6 +211,15 @@ beforeAll(async () => {
 		[owner.id, projectId, nonce, hash]
 	);
 	creds.unsubscribe = unsubscribeToken(nonce, TEST_ALERTS_SECRET);
+	// feedback: an alert mail's "Was this useful?" row of the owner's, in the worker's format.
+	const fbNonce = newNonce();
+	creds.feedback = feedbackToken(fbNonce, TEST_ALERTS_SECRET);
+	await asOwner(`INSERT INTO alert_feedback (project_id, user_id, kind, nonce, token_hash) VALUES ($1, $2, 'data_stale', $3, $4)`, [
+		projectId,
+		owner.id,
+		fbNonce,
+		hashCred(creds.feedback)
+	]);
 	// apiKey, and its bare secret.
 	const key = await owner.call('POST', `/projects/${projectId}/api-keys`, { name: 'Logger' });
 	expect(key.status).toBe(201);
@@ -237,6 +256,7 @@ describe('every credential in every other kind’s slot', () => {
 		// verify user unconfirmed: nothing above took effect.
 		expect((await asOwner(`SELECT mode FROM alert_subscription WHERE user_id = $1 AND project_id = $2 AND kind = 'data_stale'`, [owner.id, projectId]))[0].mode).toBe('immediate');
 		expect((await post('/auth/login', { email: resetEmail, password: 'correct horse' })).status).toBe(200);
+		expect((await asOwner(`SELECT answered_at FROM alert_feedback WHERE user_id = $1 AND project_id = $2`, [owner.id, projectId]))[0].answered_at).toBeNull();
 
 		// Positive controls, last: each credential works in each of its own
 		// slots, so none was burnt by being presented elsewhere. (A single-use
@@ -337,7 +357,10 @@ describe('where the backend reads a credential (source sweep)', () => {
 	 * and to the matrix above, on purpose.
 	 */
 	const READS: Record<string, string[]> = {
-		'auth/session.ts': ['getCookie(c, SESSION_COOKIE)'],
+		// The session, and two-step sign-in's challenge (issue #282): what a
+		// right password buys when the account has an authenticator, good only
+		// with a code at POST /auth/mfa/verify (test below).
+		'auth/session.ts': ['getCookie(c, MFA_CHALLENGE_COOKIE)', 'getCookie(c, SESSION_COOKIE)'],
 		'ingest/auth.ts': ["c.req.header('authorization')"],
 		'alerts/routes.ts': ["c.req.query('token')"],
 		// Not a user's credential: CloudFront's shared secret on the origin (app.ts).
@@ -387,6 +410,25 @@ describe('where the backend reads a credential (source sweep)', () => {
 		}
 		const bearer = await send('/ingest/v1/whoami', { headers: { authorization: `Bearer ${value}` } });
 		expect(bearer.status).toBe(401);
+	});
+
+	it('the two-step sign-in challenge opens nothing but the code step (positive control: there, with a code, it does)', async () => {
+		const u = await signUp('TCchallenge');
+		const { secret } = (await u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' })).body;
+		const key = base32Decode(secret)!;
+		// Confirmed with the current step's code; the sign-in below uses the next step's (within the window, never a replay).
+		expect((await u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) })).status).toBe(200);
+		const r = await post('/auth/login', { email: u.email, password: 'correct horse' });
+		expect(r.body).toEqual({ mfaRequired: true });
+		const challenge = (r.setCookie ?? '').split(/,(?=\s*wm_)/).map((c) => c.trim().split(';')[0]!).find((p) => p.startsWith('wm_mfa='))!;
+		expect(challenge, r.setCookie ?? '').toBeTruthy();
+		const value = challenge.slice('wm_mfa='.length);
+		for (const cookie of [challenge, asCookie(value)]) {
+			expect((await anon('GET', '/auth/me', undefined, cookie)).status, cookie).toBe(401);
+			expect((await anon('GET', '/projects', undefined, cookie)).status, cookie).toBe(401);
+		}
+		expect((await send('/ingest/v1/whoami', { headers: { authorization: `Bearer ${value}` } })).status).toBe(401);
+		expect((await anon('POST', '/auth/mfa/verify', { code: hotp(key, totpStep(Date.now()) + 1) }, challenge)).status).toBe(200);
 	});
 });
 

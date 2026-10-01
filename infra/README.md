@@ -322,6 +322,7 @@ The tradeoffs table and the AWS sources are in
 | `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | **No.** Ephemeral variable → write-only value |
 | `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | **No.** Ephemeral variable → write-only value |
 | Alert unsubscribe-token secret | sops `alerts_token_secret` → the worker's runtime secret | **No.** Ephemeral variable → write-only value |
+| TOTP sealing key (two-step sign-in) | sops `app_encryption_key` → the API's runtime secret | **No.** Ephemeral variable → write-only value |
 | CloudFront shared secret | `random_password` → the API's runtime secret (write-only), and CloudFront's origin header | **Yes**, in `random_password.cloudfront_shared_secret` and the distribution: `custom_header` isn't a write-only argument |
 
 **No secret sits in a Lambda's environment** (issue #126). Environment
@@ -856,6 +857,11 @@ The apply, for any of the sops keys:
   until you do:
   `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
 - **`auth_jwt_secret`:** edit it with sops, apply. Everyone is signed out.
+- **`app_encryption_key`** (two-step sign-in's TOTP secrets, the API only):
+  only if it leaked, since a new key can't open the stored secrets: edit it
+  with sops, apply, then clear `user_totp` and `user_recovery_code` and ask
+  everyone who had two-step sign-in to set it up again (docs/deployment.md
+  § Runbooks 15).
 - **`alerts_token_secret`** (WP-2.13, the worker only): only if it leaked,
   since every unsubscribe link in alert emails already sent stops working
   ("Manage your alerts" still does). Edit it with sops, apply. The alert kill switch is

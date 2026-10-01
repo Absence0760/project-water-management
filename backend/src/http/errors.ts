@@ -66,11 +66,21 @@ export const ERROR_CODES = [
 	'note_comment_closed',
 	'note_audience_denied',
 	'unsubscribe_link_gone',
+	'feedback_link_gone',
 	'export_throttled',
 	'alerts_resume_throttled',
 	'body_refused',
 	'run_unverified',
-	'account_sole_holder'
+	'account_sole_holder',
+	// Two-step sign-in (issue #282, auth/mfa-routes.ts, auth/stepUp.ts).
+	'mfa_code_wrong',
+	'mfa_locked',
+	'mfa_challenge_expired',
+	'mfa_already_enrolled',
+	'mfa_not_started',
+	'mfa_not_enrolled',
+	'mfa_required',
+	'mfa_step_up'
 ] as const;
 
 /**
