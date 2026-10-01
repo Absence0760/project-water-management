@@ -699,7 +699,9 @@
 		</section>
 	{:else}
 	<div class="map-layout" bind:this={mapEl} style:--map-top="{mapTop}px">
-		<section class="panel map-card" aria-labelledby="sch-h">
+		<!-- aria-busy while the latest run's results load: their status line sits in the card's head and,
+		     where the head wraps, moves the map when it goes (e2e's waitForMapFit waits it out). -->
+		<section class="panel map-card" aria-labelledby="sch-h" aria-busy={supplyLoading || (colourBy === 'dam' && damLoading !== null)}>
 			<div class="panel-head">
 				<h3 id="sch-h">Catchment map</h3>
 				{@render colourByControl()}

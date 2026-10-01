@@ -1718,8 +1718,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
     so the schematic's scroller carries `data-fit` (`<width>x<height>`, plus
     ` wide` from 900 px): the box the drawing on screen was laid out for. It
     is settled once that matches the box as it is now and `--map-top` matches
-    the layout's top; e2e waits on that (`waitForMapFit`, e2e/support/diagrams.ts)
-    before measuring the map (issue #138).
+    the layout's top, and the map card isn't `aria-busy` (set while the latest
+    run's results load: their status line sits in the card's head, which wraps
+    at 1280 px, so the map moves up when it goes); e2e waits on that
+    (`waitForMapFit`, e2e/support/diagrams.ts) before measuring the map (issue #138).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
