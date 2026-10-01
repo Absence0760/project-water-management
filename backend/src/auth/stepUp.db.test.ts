@@ -38,6 +38,7 @@ let outsider: User;
 let projectId: string;
 let ownProjectId: string;
 let teamId: string;
+let linkId: string;
 const uuid = () => crypto.randomUUID();
 
 beforeAll(async () => {
@@ -58,6 +59,7 @@ beforeAll(async () => {
 	}
 	ownProjectId = (await enrolledOwner.call('POST', '/projects', { name: 'Step-up enrolled' })).body.project.id;
 	teamId = (await owner.call('POST', '/teams', { name: 'Step-up team' })).body.team.id;
+	linkId = (await owner.call('POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 })).body.link.id;
 	enrolledOwnerTwoStep = await enrol(enrolledOwner);
 	// From here on, as in production.
 	vi.stubEnv('MFA_REQUIRED', 'true');
@@ -72,6 +74,17 @@ describe('an owner’s actions need two-step sign-in', () => {
 		const r = await owner.call('POST', `/projects/${projectId}/api-keys`, { name: 'logger' });
 		expect(r).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
 		expect((await owner.call('GET', `/projects/${projectId}/api-keys`)).status).toBe(403);
+	});
+
+	it('the owner’s hand-checked actions too: removing a member, revoking a share link', async () => {
+		expect(await owner.call('DELETE', `/projects/${projectId}/members/${viewer.id}`)).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
+		expect(await owner.call('DELETE', `/projects/${projectId}/share-links/${linkId}`)).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
+		// Leaving isn't stepped up: a viewer leaves on a password.
+		const leaver = await signUp('SuLeaver');
+		vi.stubEnv('MFA_REQUIRED', 'false');
+		await owner.call('POST', `/projects/${projectId}/members`, { email: leaver.email, role: 'viewer' });
+		vi.stubEnv('MFA_REQUIRED', 'true');
+		expect((await leaver.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBeLessThan(300);
 	});
 
 	it('with one, but a session signed in before it (password only): 403 mfa_step_up', async () => {

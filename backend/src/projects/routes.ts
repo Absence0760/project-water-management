@@ -17,6 +17,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
 import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
@@ -519,6 +520,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'farmer');
 			const self = userId === c.get('userId');
 			if (!self && role !== 'owner') throw new ApiError(403, 'requires owner role');
+			// Removing someone else is an owner's action: two-step sign-in (auth/stepUp.ts). Leaving isn't.
+			if (!self) await requireStepUp(db);
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastOwner(db, id, userId);
 			// Recorded before the delete: afterwards someone who left can no

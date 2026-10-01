@@ -211,9 +211,16 @@ describe('turning it off, and new recovery codes', () => {
 		const u = await enrolled('MfaOff');
 		expect(await anon('DELETE', '/auth/mfa/totp', { code: 'AAAAA-AAAAA' }, u.twoStep)).toMatchObject({ status: 400, body: { code: 'mfa_code_wrong' } });
 		expect(await asOwner('SELECT 1 FROM user_totp WHERE user_id = $1', [u.id])).toHaveLength(1);
+		// The faked clock stands still between codes: move it on, as real time would, so the sessions above predate the sign-out.
+		vi.setSystemTime(Date.now() + 1000);
 		const off = await anon('DELETE', '/auth/mfa/totp', { code: u.recoveryCodes[3] }, u.twoStep);
 		expect(off.status).toBe(204);
-		expect(amrOf(cookieOf(off.headers, SESSION_COOKIE)!)).toEqual(['pwd']);
+		const fresh = cookieOf(off.headers, SESSION_COOKIE)!;
+		expect(amrOf(fresh)).toEqual(['pwd']);
+		// Every other session is signed out (none signed in with a code outlives it); this browser's new one works.
+		for (const [name, old] of [['password-only', u.cookie], ['two-step', u.twoStep]] as const) expect((await anon('GET', '/auth/me', undefined, old)).status, name).toBe(401);
+		expect((await anon('GET', '/auth/me', undefined, fresh)).status).toBe(200);
+		expect(cookies(off.headers)).toHaveProperty('wm_device');
 		expect(await asOwner('SELECT 1 FROM user_totp WHERE user_id = $1', [u.id])).toEqual([]);
 		expect(await asOwner('SELECT 1 FROM user_recovery_code WHERE user_id = $1', [u.id])).toEqual([]);
 		expect((await asOwner('SELECT kind FROM account_security_event WHERE user_id = $1 ORDER BY id', [u.id])).map((r) => r.kind)).toEqual([
@@ -222,7 +229,7 @@ describe('turning it off, and new recovery codes', () => {
 			'mfa.disabled'
 		]);
 		expect((await login(u)).body.user).toMatchObject({ id: u.id });
-		expect(await anon('DELETE', '/auth/mfa/totp', { code: '123456' }, u.twoStep)).toMatchObject({ status: 409, body: { code: 'mfa_not_enrolled' } });
+		expect(await anon('DELETE', '/auth/mfa/totp', { code: '123456' }, fresh)).toMatchObject({ status: 409, body: { code: 'mfa_not_enrolled' } });
 	});
 
 	it('new recovery codes need a code from the app (not a recovery code) and void the old ones', async () => {

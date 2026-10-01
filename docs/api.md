@@ -52,7 +52,7 @@ doubling to 15, right codes included. The session JWT carries `amr`:
 | GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor; `sessionVerified`, this session signed in with a code (signed in) |
 | POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
 | POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
-| DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, this browser's session reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
 | POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
 
@@ -60,7 +60,8 @@ doubling to 15, right codes included. The session JWT carries `amr`:
 sign in with a code before: any route that needs the owner role (members,
 invites, API keys, data feeds, share links, renaming a team project,
 deleting a project), any that needs team admin (and removing someone else
-from a team), publishing to farmers (`POST` / `PATCH …/publication`,
+from a team; removing someone else from a project; an owner making or
+revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
 `POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
 deciding an application (`POST …/scenarios/:sid/decide`) and issuing or
 withdrawing an evidence pack. Checked after the role, so an outsider still

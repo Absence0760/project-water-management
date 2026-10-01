@@ -123,7 +123,9 @@ decide a licence application.
   confirming an enrolment on this browser). A token without `amr` (from
   before) is password-only; an unknown value makes the token invalid.
   Changing the password keeps the session's `amr`; turning two-step sign-in
-  off reissues this browser's session as `["pwd"]`.
+  off moves the session watermark (every other session is signed out, so
+  none signed in with a code outlives it and counts again after a later
+  re-enrolment) and reissues this browser's session as `["pwd"]`.
 - **The code.** `auth/totp.ts`, on `node:crypto` (an HMAC-SHA1, the
   dynamic truncation and a modulus, RFC 4226 § 5.3), 6 digits, 30-second
   steps, one step either side of now. A step at or before the last one
@@ -165,8 +167,12 @@ decide a licence application.
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
   deciding an application (`…/decide`) and issuing or withdrawing an
-  evidence pack. A team admin removing someone else is stepped up too
-  (leaving isn't). Without an authenticator the answer is
+  evidence pack. The owner and admin checks a route makes by hand are
+  stepped up too: removing someone else from a project or a team (leaving
+  isn't), and an owner making or revoking a share link of any kind. A guard
+  (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
+  `rank.owner` comparison in the backend and fails unless its file calls
+  `requireStepUp` or is listed with why it gates no action. Without an authenticator the answer is
   `403 mfa_required` ("set one up on your Account page"); with one but a
   password-only session, `403 mfa_step_up` ("sign in again"). The check
   reads the session's `amr` from the request's `requestAuth`

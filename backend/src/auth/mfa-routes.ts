@@ -128,27 +128,38 @@ export const mfaRoutes = new Hono<AuthEnv>()
 		return c.json({ recoveryCodes: result.codes });
 	})
 	// Turn two-step sign-in off: a code from the app or a recovery code. The
-	// authenticator and the codes go; this session counts as password-only.
+	// authenticator and the codes go, and every other session is signed out
+	// (the watermark), so none signed in with a code outlives it and counts
+	// as two-step again after a later re-enrolment; this browser gets a
+	// fresh password-only session and device cookie.
 	.delete('/mfa/totp', requireUser, async (c) => {
 		const body = Code.parse(await readJson(c));
 		const userId = c.get('userId');
 		await throttle(c, userId, '/auth/mfa/totp');
+		// This server's clock, the one that stamps session iat_ms (as change-password).
+		const watermark = new Date();
 		const result = await withUser(userId, async (db) => {
-			if (!(await isEnrolled(db, userId))) return 'none' as const;
+			if (!(await isEnrolled(db, userId))) return { kind: 'none' as const };
 			const via = await useCode(db, userId, body.code, { recovery: true });
-			if (!via) return 'wrong' as const;
+			if (!via) return { kind: 'wrong' as const };
 			if (via === 'recovery') await recordSecurityEvent(db, userId, 'mfa.recovery_used');
 			await removeFactor(db, userId);
 			await recordSecurityEvent(db, userId, 'mfa.disabled');
 			await db.query('SELECT app_mfa_succeeded()');
-			return 'ok' as const;
+			const { rows } = await db.query<{ email: string; sessions_revoked_at: Date | null }>(
+				'UPDATE app_user SET sessions_revoked_at = $2 WHERE id = $1 RETURNING email, sessions_revoked_at',
+				[userId, watermark]
+			);
+			return { kind: 'ok' as const, email: rows[0]!.email, watermark: rows[0]!.sessions_revoked_at };
 		});
-		if (result === 'none') throw ApiError.coded(409, 'mfa_not_enrolled', 'two-step sign-in is already off');
-		if (result === 'wrong') {
+		if (result.kind === 'none') throw ApiError.coded(409, 'mfa_not_enrolled', 'two-step sign-in is already off');
+		if (result.kind === 'wrong') {
 			logLoginFailed('/auth/mfa/totp', 'bad_code');
 			throw wrongCode();
 		}
+		// Issued after the watermark: this browser stays signed in, and trusted.
 		await issueSession(c, userId, undefined, PASSWORD_ONLY);
+		issueDevice(c, result.email, result.watermark);
 		return c.body(null, 204);
 	})
 	// A new set of recovery codes, the old ones void: a code from the app (not a recovery code).
