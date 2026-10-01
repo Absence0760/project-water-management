@@ -109,7 +109,7 @@ export const questionRoutes = new Hono<AuthEnv>()
 				ref.ops,
 				JSON.stringify(ref.ops.map((i) => s.ops[i]).filter((op) => op !== undefined)),
 				ref.rules,
-				check.assessorProblems[body.problem] ?? body.line
+				(check.assessorProblems[body.problem] ?? body.line).slice(0, 8000)
 			]);
 			const questionId = asked[0]!.id;
 			// Ids and the rules' kinds only: the history is read by every viewer.
