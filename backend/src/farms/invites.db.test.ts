@@ -216,6 +216,35 @@ describe('accepting a farmer invite', () => {
 		expect(await asOwner('SELECT 1 FROM farm_link WHERE user_id = $1', [viewer.id])).toEqual([]);
 		expect(await asOwner('SELECT 1 FROM invite WHERE id = $1', [row.id])).toEqual([]);
 	});
+	// 155_invite_sender_role: an invite is good only while its sender still owns the project.
+	it('an invite whose sender is no longer an owner links no farms, even for someone already a farmer here (positive control: an owner’s does)', async () => {
+		const email = newEmail('lapsedfarm');
+		await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmA.id] });
+		const uid = await register(email, tokenIn(lastMailTo(email)));
+		expect(await farmNodesOf(uid)).toEqual([farmA.id]);
+		// A farmer invite for more farms, sent by someone who is (now) only a viewer.
+		const invite = async (by: string) => {
+			const [row] = await asOwner(
+				`INSERT INTO invite (email, project_id, project_role, invited_by, token_hash, expires_at)
+				 VALUES ($1, $2, 'farmer', $3, decode(md5(random()::text) || md5(random()::text), 'hex'), now() + interval '1 day') RETURNING id`,
+				[email, projectId, by]
+			);
+			await asOwner('INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [row.id, projectId, farmC.id]);
+			return row.id as string;
+		};
+		const lapsed = await invite(viewer.id);
+		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers as { inviteId?: string; senderLapsed?: boolean }[];
+		expect(listed.find((f) => f.inviteId === lapsed)).toMatchObject({ status: 'invited', senderLapsed: true });
+		expect(await asOwner('SELECT app_accept_invites($1) AS n', [uid])).toEqual([{ n: 0 }]);
+		expect(await farmNodesOf(uid)).toEqual([farmA.id]);
+		// Kept for the owner to re-send or revoke.
+		expect(await asOwner('SELECT 1 FROM invite WHERE id = $1', [lapsed])).toHaveLength(1);
+		await asOwner('UPDATE invite SET invited_by = $2 WHERE id = $1', [lapsed, owner.id]);
+		expect((await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers.find((f: { inviteId?: string }) => f.inviteId === lapsed)).toMatchObject({ senderLapsed: false });
+		await asOwner('SELECT app_accept_invites($1)', [uid]);
+		expect(await farmNodesOf(uid)).toEqual([farmA.id, farmC.id].sort());
+		expect(await asOwner('SELECT 1 FROM invite WHERE id = $1', [lapsed])).toEqual([]);
+	});
 });
 
 describe('POST /farmers/bulk', () => {

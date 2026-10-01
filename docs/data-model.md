@@ -2184,7 +2184,15 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   another role keeps it and gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
   sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
-  never overwritten), and deletes those invites. Invites cascade away with their project or team,
+  never overwritten), and deletes those invites. Each of those functions,
+  and `app_my_invites` / `app_accept_invite` (109), takes an invite only
+  while its `invited_by` still holds owner on the project (directly or as
+  the team's admin) or admin on the team (155_invite_sender_role.sql,
+  `app_invite_sender_holds`, SECURITY INVOKER, not granted to `water_app`):
+  an invite whose sender lost that role is kept, accepted by nobody, and
+  flagged for the owners by `app_invite_sender_lapsed(invite)` (SECURITY
+  DEFINER; NULL to anyone who can't see the invite) until one of them re-sends
+  it (becoming its sender) or revokes it. Invites cascade away with their project or team,
   and with the account that sent them (`invited_by` cascade). An invite that
   lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
   the job tick deletes it with its `invite_node` rows

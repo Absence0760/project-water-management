@@ -1359,7 +1359,11 @@ it scrolls, and isn't fitted to the window.
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
+  Farmer invites stay out of the Members panel's pending list. In both
+  pending lists, an invite whose sender is no longer an owner (team admin)
+  carries a **Sender can no longer invite** badge: nobody can accept it
+  until it is re-sent, and Resend makes you its sender
+  (155_invite_sender_role.sql).
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this page: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".

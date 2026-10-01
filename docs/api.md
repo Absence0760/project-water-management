@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
-| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
+| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
@@ -934,7 +934,8 @@ account with that address is already a member (change a farmer's farms with
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
   displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
   applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
-  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale }`
+  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale,
+  senderLapsed }` (`senderLapsed` as on an `Invite`, [§ Invites](#invites))
   (farmer invites, and applicant invites that carry farms; an applicant
   invite without farms is only in `GET /invites`). An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
@@ -1002,8 +1003,11 @@ A window is 24 hours from its first add.
 | GET | `/projects/:id/invites` | – | `{ invites: Invite[] }` (newest first, expired ones included) | owner |
 | DELETE | `/projects/:id/invites/:inviteId` | – | `204` (revoke; the link stops working) | owner |
 
-- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired }` —
-  `invitedBy` is the display name of whoever last sent it.
+- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired,
+  senderLapsed }` — `invitedBy` is the display name of whoever last sent
+  it. `senderLapsed`: they no longer own the project (administer the team),
+  so nobody can accept it, nor sign up through its link, until an owner
+  re-sends it, which makes them its sender (155_invite_sender_role.sql).
 - Farmer invites ([§ Farmers](#farmers)) are listed here too, with `role:
   "farmer"`; `GET /projects/:id/farmers` lists them with their farms. The
   Members panel leaves them to the Farmers panel.
@@ -1016,8 +1020,8 @@ teams alike. Any signed-in account; each call sees only its own.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only, newest first; empty for an unverified address |
-| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired or doesn't exist |
+| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only (unexpired, and their sender still owns the project or administers the team, 155), newest first; empty for an unverified address |
+| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired, its sender lost the right to send it (155) or doesn't exist |
 | DELETE | `/me/invites/:inviteId` | – | `204` (decline: the invite is deleted; a project's History records `invite.declined` with the masked address and no actor); `404` as above |
 
 - `MyInvite = { id, kind: 'project' | 'team', targetId, name, role,

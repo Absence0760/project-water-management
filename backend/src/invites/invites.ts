@@ -16,7 +16,10 @@
 // so adding someone never tells the adder whether the address has an account,
 // nor shows them its name, and never makes a stranger a member unasked.
 // Owners (projects) / admins (teams) list and revoke pending invites; RLS
-// enforces the same.
+// enforces the same. An invite is good only while its sender still owns the
+// project (administers the team): one whose sender lost that role is listed
+// for the owners as `senderLapsed`, and nobody can accept it until one of them
+// re-sends it, which makes them its sender (155_invite_sender_role.sql).
 import { Hono, type Context } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { issueEmailToken } from '../auth/email-routes.js';
@@ -92,6 +95,7 @@ type InviteRow = {
 	invited_by_name: string;
 	created_at: Date;
 	expires_at: Date;
+	sender_lapsed: boolean | null;
 };
 
 export const toInvite = (r: InviteRow) => ({
@@ -101,12 +105,15 @@ export const toInvite = (r: InviteRow) => ({
 	invitedBy: r.invited_by_name,
 	createdAt: r.created_at.toISOString(),
 	expiresAt: r.expires_at.toISOString(),
-	expired: r.expires_at.getTime() <= Date.now()
+	expired: r.expires_at.getTime() <= Date.now(),
+	// Its sender no longer owns the project (administers the team), so it
+	// can't be accepted until an owner re-sends it (155_invite_sender_role).
+	senderLapsed: r.sender_lapsed === true
 });
 
 const selectInvites = (kind: InviteKind) => `
 	SELECT i.id, i.email, i.${COLS[kind].role}::text AS role, u.display_name AS invited_by_name,
-		i.created_at, i.expires_at
+		i.created_at, i.expires_at, app_invite_sender_lapsed(i.id) AS sender_lapsed
 	FROM invite i JOIN app_user u ON u.id = i.invited_by`;
 
 /** A prepared invite email; send it after the transaction has committed. */
