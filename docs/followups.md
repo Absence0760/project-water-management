@@ -3480,8 +3480,10 @@ from the WP:
       short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
       ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
       meaning: no demand, so no supply and nothing returned.
-- [ ] **Demand objects: the off reason.** Not built, because the client
-      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+- [ ] **Demand objects: the off reason (parked 2026-10-01).** Not built.
+      The hydrology holds up, but no catchment we hold has an on/off schedule,
+      so building it now would be guessing at a need (issue #54). Open
+      (issue #90 Q12, parked): what causes
       off days (occupancy, works downtime, load-shedding, switching to a
       borehole), whether an off period can mean "supplied from elsewhere"
       (no river take, the return goes on) or "curtailed" (counted as a
@@ -3492,19 +3494,12 @@ from the WP:
       the return as a per-day override (an `elsewhere` day keeps its return,
       from a set discharge or the recent mean) and into the summary
       (curtailed days as short, elsewhere days as met elsewhere). Trigger:
-      the client's answer to the rest of Q12.
-- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
-      meter or works record of which days a demand ran, uploaded through Add
-      data as a daily factor on one object (the design's second source
-      beside the windows). Left out of the schedule PR because it isn't
-      bounded like the windows: it needs a series kind scoped to an object
-      (today's series are project- or node-scoped), its storage and
-      provenance, the Add data flow and preview, and a rule for days the
-      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
-      stored like the node series, multiplied after the schedule in
-      `planObjects` (a gap runs at the schedule's factor), with the checks
-      reading it the same way. Trigger: a client supplying such a record for
-      a demand whose pattern windows can't describe.
+      a real demand object whose off days aren't "not needed".
+- [x] **Demand objects: an uploaded daily factor series: dropped
+      (2026-10-01, issue #54).** The date-window schedules cover recurring
+      patterns, common practice (WEAP) uses monthly profiles plus windows,
+      and no record we hold needs a daily series. Reopen only if a client
+      brings a record the windows can't describe.
 - [x] **Demand objects: a structured demand source** (engine 1.56.0,
       2026-09-30, migration 139; issue #54 Q11, confirmed in issue #90). A
       `source` on the object (`meter` | `aadd` | `perCapita` | `other`, null =
