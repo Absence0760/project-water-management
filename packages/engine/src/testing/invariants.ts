@@ -120,6 +120,18 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 	} catch (e) {
 		return `order invariance: scrambled input threw ${(e as Error).message}`;
 	}
+	const d = orderFreeDifference(out, y);
+	return d ? `order invariance (seed ${seed}): ${d}` : null;
+}
+
+/**
+ * The first difference between two runs of the same catchment whose input
+ * lists may be in different orders (null when none): every daily series to
+ * the last bit, the summary within float noise, as checkOrderInvariance
+ * judges them. Also how two scenarios combined in either order are compared
+ * (scenario/combine.invariants.test.ts, WP-3.11).
+ */
+export function orderFreeDifference(out: ModelOutput, y: ModelOutput): string | null {
 	// The summary's volumes are of the same catchment, so their common scale is
 	// the largest magnitude in any series of either run.
 	let scale = 1;
@@ -131,7 +143,7 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
 		d ??= sameBits(ca.series[k]?.values, cb.series[k]?.values, `series ${k}`);
 	}
 	d ??= sameValue({ ...ca, series: null }, { ...cb, series: null }, 'output', 1, scale);
-	return d ? `order invariance (seed ${seed}): ${d}` : null;
+	return d;
 }
 
 /**

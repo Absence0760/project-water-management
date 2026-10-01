@@ -1387,6 +1387,16 @@ must build WP-2.15 Phase B.
 
 ### WP-3.11 Cumulative impact assessment
 
+- **Status.** Built (2026-10-01, issue #287): engine `combineScenarios`,
+  `scenarioConflicts` and `cumulativeImpact` (no `runModel` change, so no
+  engine bump), migration `145_assessment.sql` (`assessment`,
+  `assessment_member`: the members' ops copied from their scenarios; no
+  `combined_run_id`, since the runs are stored as summaries like a sweep's,
+  never as `model_run` rows), `backend/src/assessments/` and the
+  `assessment` job, and the Applications tab's **Assess together** view with
+  CSV ([scenarios.md § Cumulative impact](../scenarios.md#cumulative-impact-wp-311)).
+  Left: the evidence report reading the combined run, yield per dam, and a
+  full-allocation baseline ([followups.md § Cumulative impact](../followups.md#cumulative-impact-wp-311)).
 - **Goal.** Several submitted applications against one published
   baseline, each **on its own and all together**, in one view.
 - **Changes**
