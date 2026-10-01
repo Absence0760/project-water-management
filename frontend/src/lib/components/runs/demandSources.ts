@@ -1,31 +1,13 @@
 // How solid a run's non-crop demand is, by rule (engine ≥ 1.56.0, issue #54
 // Q11, docs/model.md §2.7f): each source's share of the demand objects'
-// whole-run demand, best source first (meter records, a strategy's AADD, a
-// per-capita norm, other), then what isn't recorded. Pure, so it is
-// unit-tested without Svelte; the demand-objects table draws it.
-import { DEMAND_OBJECT_SOURCE_LABEL, DEMAND_OBJECT_SOURCES, type DemandObjectSource, type DemandObjectSummary } from '@water-management/engine';
+// whole-run demand (the engine's demandBySource, which the evidence report's
+// § 6 shares too), in words. Pure, so it is unit-tested without Svelte; the
+// demand-objects table and the evidence report draw it.
+import { DEMAND_OBJECT_SOURCE_LABEL, type DemandObjectSource, type DemandSourceShare } from '@water-management/engine';
 import { fmtPct } from '$lib/format/number';
 
-export interface SourceShare {
-	source: DemandObjectSource | null;
-	/** Mean demand from it, m³/day. */
-	demandM3Day: number;
-	/** Of the objects' whole demand, 0–1. */
-	share: number;
-	objects: number;
-}
-
-/** The sources a run's objects have, in the rule's order, not recorded last; none when no object records one (a run before engine 1.56.0, or no sources entered). */
-export function demandBySource(objects: readonly Pick<DemandObjectSummary, 'source' | 'avgDemandM3Day'>[]): SourceShare[] {
-	if (!objects.some((o) => o.source !== undefined)) return [];
-	const total = objects.reduce((s, o) => s + o.avgDemandM3Day, 0);
-	return [...DEMAND_OBJECT_SOURCES, null].flatMap((source) => {
-		const mine = objects.filter((o) => (o.source ?? null) === source);
-		if (!mine.length) return [];
-		const demandM3Day = mine.reduce((s, o) => s + o.avgDemandM3Day, 0);
-		return [{ source, demandM3Day, share: total > 0 ? demandM3Day / total : 0, objects: mine.length }];
-	});
-}
+export { demandBySource } from '@water-management/engine';
+export type SourceShare = DemandSourceShare;
 
 /** A source in the table's words: its label, or "not recorded". */
 export const sourceLabel = (source: DemandObjectSource | null | undefined) => (source ? DEMAND_OBJECT_SOURCE_LABEL[source] : 'not recorded');

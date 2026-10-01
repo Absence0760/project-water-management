@@ -3476,19 +3476,21 @@ from the WP:
       demand); a record only, so a run is the same with any source. Shown in
       the run's demand-objects table (a Source column and each source's
       share of the demand) and the summary CSV ([model.md §2.7f](./model.md)).
-- [ ] **Demand objects: the source in the evidence report.** Not built: the
-      licensing evidence report doesn't list the applicant's demand objects
-      at all yet, so grading them by source there means a new report section
-      (the application's objects, each with its source and demand, and the
-      share of the added demand that is metered), an `EVIDENCE_REPORT_VERSION`
-      bump so issued packs keep rebuilding to their hash, and its PDF and
-      preview. Durable fix: that section built from the runs'
-      `DemandObjectSummary.source` (engine ≥ 1.56.0) and the same
-      `demandBySource` shares the results table uses (move it to the engine
-      then), with a flag when most of the added demand isn't metered or
-      isn't recorded. Trigger: an assessor or the client asking the report
-      to grade an application's demand by source, or the first application
-      whose change is a demand object.
+- [x] **Demand objects: the source in the evidence report** (report format
+      `evidence-9`, 2026-09-30, issue #259). § 6 of the evidence report
+      lists each demand object on the applicant's units (theirs, or a unit
+      the application adds) in either run: what the application does to it
+      (added, changed, removed, unchanged), its sizing, its source and note
+      as the model holds them, each run's mean demand and its share
+      supplied, with the by-source line the run's table prints above it
+      (`demandBySource` moved to the engine as `network/demandSources.ts`,
+      `demandSourceShares` for the report, which says "not recorded" even
+      when nothing is). Page 1 cautions when less than half of that demand is
+      from meter records, and *Expect questions about* names the objects with
+      no source. The PDF and the preview are the same layout. A pack drafted
+      before `evidence-9` has no `demandObjects` and prints without § 6, its
+      stored manifest still matching its hash ([evidence-pack.md](./evidence-pack.md#what-a-pack-holds),
+      [ui.md § Evidence report](./ui.md#evidence-report)).
 - [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
       issue #123, migration 127; agreed in issue #90 Q13). A domestic or
       municipal demand object has a floor of population × 25 l a day (its

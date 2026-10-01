@@ -15,6 +15,8 @@ import type { PairedSummary } from '../uncertainty/paired';
 import { NO_FLOW_M3_DAY } from '../reserve/riverMeasures';
 import type { ScenarioOp } from '../scenario/ops';
 import type { NetworkNode, ProjectModel } from '../project';
+import { canonicalJson } from '../manifest';
+import { demandSourceShares, type DemandSourceShare } from '../network/demandSources';
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
@@ -30,6 +32,8 @@ import {
 	type EvidenceCheck,
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
+	type EvidenceDemandObject,
+	type EvidenceDemandObjects,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
 	type EvidenceFlag,
@@ -323,7 +327,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	]);
 	const coverage = baseSum?.coverage[0]?.fraction ?? null;
 	const coverageWarning = !!baseSum?.coverageWarning;
-	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited, allocations, served });
+	const demandObjects = demandObjectSection(b, a);
+	const flags = evidenceFlags(input, { river, baseSum, coverageWarning, assumptionsChanged, rule, cited, allocations, served, demandObjects });
 	const refused = checks.some((c) => c.refuses && !c.passed);
 
 	return {
@@ -369,7 +374,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		issuable: !refused && checks.every((c) => c.passed || !c.blocksIssue),
 		ops: a ? a.scenario.ops.map((op, index) => ({ index, class: classes[index] ?? 'baseline', op })) : [],
 		flags,
-		questions: questions(checks, rows, river, input),
+		questions: questions(checks, rows, river, input, demandObjects),
 		rows,
 		byMonth,
 		worstMonths,
@@ -391,6 +396,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		cumulative,
 		allocations,
 		licenceImpact,
+		demandObjects,
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
@@ -1398,6 +1404,87 @@ function allocationsOverFlag(al: EvidenceAllocations, app: boolean): string | nu
 }
 
 // ---------------------------------------------------------------------------
+// § 6 The applicant's demand objects (evidence-9, issue #259)
+// ---------------------------------------------------------------------------
+
+/** Why § 6 lists nothing. */
+export const DEMAND_OBJECTS_NONE =
+	'Not assessed: no demand object is on the applicant’s units, and the application adds, changes or removes none there. A town’s, a household’s or livestock’s demand that isn’t a crop is a demand object.';
+
+/**
+ * § 6: every demand object on one of the applicant's units (its own, or a
+ * unit the application adds) in either run: what the application does to
+ * it (compared by id across the two runs' stored models, field by field),
+ * its sizing, source and note as the application ran it (as the baseline
+ * did, for one it removes), each run's mean demand, and the share of their
+ * demand in the application by source (demandSourceShares, the run table's
+ * shares). Read from the runs' stored inputs and summaries: nothing re-runs.
+ */
+function demandObjectSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceDemandObjects | null {
+	if (!a) return null;
+	const mA = b.inputs?.model;
+	const mB = a.inputs?.model;
+	const baseNodes = new Set((mA?.nodes ?? []).map((n) => n.id));
+	// A unit the application adds is the applicant's, as classifyScenario counts it.
+	const owned = new Set([...a.scenario.ownedNodeIds, ...(mB?.nodes ?? []).filter((n) => !baseNodes.has(n.id)).map((n) => n.id)]);
+	const inA = new Map((mA?.demandObjects ?? []).map((o) => [o.id, o]));
+	const inB = new Map((mB?.demandObjects ?? []).map((o) => [o.id, o]));
+	const unitName = (m: ProjectModel | undefined, id: string) => m?.nodes.find((n) => n.id === id)?.name ?? id;
+	const results = (run: EvidenceRunInput) => new Map(run.summary.farms.flatMap((f) => (f.demandObjects ?? []).map((o) => [o.id, o] as const)));
+	const rA = results(b);
+	const rB = results(a);
+	const mine = (id: string) => owned.has(inB.get(id)?.nodeId ?? '') || owned.has(inA.get(id)?.nodeId ?? '');
+	const ids = [...inB.keys(), ...[...inA.keys()].filter((id) => !inB.has(id))].filter(mine);
+
+	const objects = ids.map((id): EvidenceDemandObject => {
+		const oa = inA.get(id) ?? null;
+		const ob = inB.get(id) ?? null;
+		const o = (ob ?? oa)!;
+		const demandA = oa && rA.has(id) ? finite(rA.get(id)!.avgDemandM3Day) : null;
+		const demandB = ob && rB.has(id) ? finite(rB.get(id)!.avgDemandM3Day) : null;
+		return {
+			id,
+			name: o.name,
+			nodeId: o.nodeId,
+			unit: unitName(ob ? mB : mA, o.nodeId),
+			category: o.category,
+			change: !oa ? 'added' : !ob ? 'removed' : canonicalJson(oa) === canonicalJson(ob) ? 'unchanged' : 'changed',
+			enabled: o.enabled,
+			sizing: o.sizing,
+			monthlyM3Day: o.sizing === 'monthly' && Array.isArray(o.monthlyM3Day) ? [...o.monthlyM3Day] : null,
+			count: o.sizing === 'perUnit' ? o.count : null,
+			litresPerUnitDay: o.sizing === 'perUnit' ? o.litresPerUnitDay : null,
+			lossPct: o.sizing === 'perUnit' ? o.lossPct : 0,
+			priority: o.priority,
+			destination: o.destination,
+			source: o.source ?? null,
+			note: typeof o.note === 'string' ? o.note : '',
+			demandA,
+			demandB,
+			suppliedB: ob && rB.has(id) ? finite(rB.get(id)!.fractionSupplied) : null
+		};
+	});
+	const modelled = objects.filter((o) => o.demandB !== null).map((o) => ({ source: o.source, avgDemandM3Day: o.demandB! }));
+	return {
+		notAssessed: objects.length ? null : DEMAND_OBJECTS_NONE,
+		objects,
+		bySource: demandSourceShares(modelled),
+		demandM3Day: modelled.reduce((s, o) => s + o.avgDemandM3Day, 0)
+	};
+}
+
+/** The "read these first" caution: most of the applicant's objects' demand isn't from meter records; null when it is, or they have none. */
+function demandSourceFlag(d: EvidenceDemandObjects | null): string | null {
+	if (!d || !(d.demandM3Day > 0)) return null;
+	const share = (src: DemandSourceShare['source']) => d.bySource.find((s) => s.source === src)?.share ?? 0;
+	const metered = share('meter');
+	if (metered >= 0.5) return null;
+	const unrecorded = share(null);
+	return `Most of the applicant’s demand objects’ demand isn’t from meter records: ${pct0(metered)} is${unrecorded > 0 ? `, and ${pct0(unrecorded)} has no source recorded` : ''} (§ 6).`;
+}
+
+
+// ---------------------------------------------------------------------------
 // Flags and questions
 // ---------------------------------------------------------------------------
 
@@ -1412,6 +1499,7 @@ function evidenceFlags(
 		cited: EvidenceEnsembleInput | null;
 		allocations: EvidenceAllocations;
 		served: EvidenceServedWhileFailing;
+		demandObjects: EvidenceDemandObjects | null;
 	}
 ): EvidenceFlag[] {
 	const b = input.baseline;
@@ -1485,6 +1573,8 @@ function evidenceFlags(
 	if (over) add('allocationsOver', 'caution', over, 'Modelled, not metered: arithmetic against the registered volume, not a finding on whether a use is lawful.');
 	const served = servedFlag(ctx.served, !!a);
 	if (served) add('servedWhileFailing', 'count', served, 'On those days the river’s shortfall was not shared with those users.');
+	const unmetered = demandSourceFlag(ctx.demandObjects);
+	if (unmetered) add('demandSource', 'caution', unmetered, 'That demand is sized from an estimate, not measured use: the supply and the change it makes rest on the sizing.');
 	const wa = b.summary.warnings.length;
 	const wb = a?.summary.warnings.length ?? 0;
 	add('warnings', 'count', a ? `${wa} warning${wa === 1 ? '' : 's'} on the baseline and ${wb} on the application, verbatim in Appendix A.5.` : `${wa} run warning${wa === 1 ? '' : 's'}, verbatim in Appendix A.5.`);
@@ -1492,7 +1582,7 @@ function evidenceFlags(
 	return out.map((f, i) => ({ f, i })).sort((x, y) => order[x.f.level] - order[y.f.level] || x.i - y.i).map((x) => x.f);
 }
 
-function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[], river: readonly EvidenceSite[], input: EvidenceInput): string[] {
+function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[], river: readonly EvidenceSite[], input: EvidenceInput, demand: EvidenceDemandObjects | null): string[] {
 	const out: string[] = [];
 	for (const c of checks) if (!c.passed && c.fix) out.push(`${c.label}: ${c.fix}`);
 	for (const r of rows) if (r.notAssessed) out.push(`${r.label}${r.subject ? ` at ${r.subject}` : ''}: ${r.notAssessed}`);
@@ -1502,6 +1592,11 @@ function questions(checks: readonly EvidenceCheck[], rows: readonly EvidenceRow[
 	if (!(input.baseline.inputs?.settings as { fitRecord?: unknown } | undefined)?.fitRecord)
 		out.push('Validation is not assessed: an automatic calibration, applied, gives split-sample and dry → wet scores.');
 	if (input.baseline.summary.wr2012 && input.baseline.summary.wr2012.flag.level !== 'ok') out.push('The WR2012 check is flagged: write the explanation the assessor will ask for.');
+	const unsourced = (demand?.objects ?? []).filter((o) => o.change !== 'removed' && o.source === null).length;
+	if (unsourced)
+		out.push(
+			`${unsourced} of the applicant’s demand objects ${unsourced === 1 ? 'has' : 'have'} no source recorded (§ 6): expect the assessor to ask where ${unsourced === 1 ? 'its number comes' : 'their numbers come'} from; set each one’s source and its note on its unit, then run the application again.`
+		);
 	return out;
 }
 
