@@ -27,7 +27,7 @@ import { ApiError, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { projectBaseForApplicant } from '../scenarios/applicant.js';
 import { downstreamOf } from '../scenarios/applicantResults.js';
-import { loadBaseInput, loadScenario } from '../scenarios/execute.js';
+import { loadBaseInput } from '../scenarios/execute.js';
 import { arr, num, obj, str, toBand, toSharedPackFigures, toVerify, type SharedBand, type SharedPackFigures } from '../share/links.js';
 import type { PackVerification } from './packs.js';
 
@@ -171,6 +171,9 @@ export function nameOthers(rows: readonly ApplicantPackOtherRow[], naming: Other
 	});
 }
 
+/** The own units the pack froze (162, `units.ownNodeIds`), for the server only: never returned. */
+export const frozenOwn = (raw: Record<string, unknown>): string[] => arr(raw.ownNodeIds).flatMap((x) => (typeof x === 'string' && UUID.test(x) ? [x] : []));
+
 /** The units field by field (app_applicant_pack_units, 131 and 135), the others named and filtered by `naming`. */
 export function toApplicantPackUnits(raw: Record<string, unknown>, naming: OthersNaming | null): NonNullable<ApplicantPack['units']> {
 	return {
@@ -209,11 +212,12 @@ export function toApplicantPack(r: Omit<ApplicantPackRow, 'application_run_id'>,
  * (scenarios/results.ts and applicantResults.ts, the same steps): its stored
  * model through app_application_run_results (118), its published base as a
  * contributor reads it, the anonymous names projectBaseForApplicant gives
- * the other units for the application's own units now, and what lies
+ * the other units for the application's own units as the pack froze them
+ * (`own`, 162: never the links its owner holds now), and what lies
  * downstream of those and the nodes the run adds. null when the run or its
  * published base can't be read (the base was unpublished since).
  */
-async function othersNaming(db: Db, projectId: string, sid: string, runId: string | null): Promise<OthersNaming | null> {
+async function othersNaming(db: Db, projectId: string, sid: string, runId: string | null, own: readonly string[]): Promise<OthersNaming | null> {
 	if (!runId) return null;
 	const { rows } = await db.query<{ model: ProjectModel | null; baseRunId: string | null }>(
 		'SELECT model, base_run_id AS "baseRunId" FROM app_application_run_results($1, $2, $3)',
@@ -229,7 +233,6 @@ async function othersNaming(db: Db, projectId: string, sid: string, runId: strin
 		if (err instanceof ApiError && (err.status === 404 || err.status === 409)) return null;
 		throw err;
 	}
-	const own = (await loadScenario(db, projectId, sid)).ownedNodeIds;
 	const view = projectBaseForApplicant(base, own);
 	const anonymous = new Set(view.anonymisedNodeIds);
 	const names = new Map(view.model.nodes.filter((n) => anonymous.has(n.id)).map((n) => [n.id, n.name]));
@@ -279,7 +282,7 @@ export const applicantPackRoutes = new Hono<AuthEnv>()
 				const row = rows[0];
 				// Not a party, not issued, or a pack of another application: the same 404.
 				if (!row || obj(row.pack).scenarioId !== sid) throw notFound();
-				const naming = row.units ? await othersNaming(db, id, sid, row.application_run_id) : null;
+				const naming = row.units ? await othersNaming(db, id, sid, row.application_run_id, frozenOwn(obj(row.units))) : null;
 				c.header('Cache-Control', 'no-store');
 				return c.json(toApplicantPack(row, naming));
 			},

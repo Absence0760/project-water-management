@@ -694,8 +694,8 @@ row; they read a projection the database builds (D2's recommended default,
 | --- | --- |
 | the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
-| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the application's own units now, as the results view; when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
+| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, **frozen at issue**: the units the pack's report counted as the applicant's (`users[].own`, hashed into the manifest), within the application's stored own nodes (frozen at submit), and the nodes its proposals add. A farm the applicant sells or unlinks afterwards stays theirs by name in this copy (162; provisional position, pre-counsel research, 2026-10-01: the copy belongs to the application, not to whoever holds the land now) |
+| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the frozen own units (as the results view names them while nothing changed hands); when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the
@@ -735,7 +735,9 @@ from the Application panel, sees their farm by name and not the neighbour
 beside it, which isn't downstream, as in their results view, makes a link,
 and it opens signed out); `evidence/applicant-pack-units.db.test.ts` (the other units are the
 results view's downstream units under the same names; no upstream or side
-unit).
+unit; the applicant's farm, unlinked after issue, is still theirs by name in
+the pack while the results view, which follows the links, no longer names
+it).
 
 ## Notices
 

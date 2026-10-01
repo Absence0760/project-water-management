@@ -1171,7 +1171,9 @@ scenario is `'team'`, and behaves exactly as above).
   nodes are the stored ones still linked to the owner
   (`app_application_own_nodes`): a farm the owner unlinks is anonymised in
   the base and its series hidden, even in an application made before; the
-  assessors keep the stored list.
+  assessors keep the stored list. An issued evidence pack is the exception:
+  its applicant's copy keeps the units it was issued about
+  ([evidence-pack.md § Applicants](./evidence-pack.md#applicants), 162).
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a

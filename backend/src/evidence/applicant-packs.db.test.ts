@@ -237,8 +237,9 @@ beforeAll(async () => {
 
 	await arrange(async (q) => {
 		const base = await plantRun(q);
-		// A's application owns Kalkoenkrans (still linked) and Bergvliet (never A's link: the database keeps it out).
-		appA = await plantScenario(q, 'Raise the weir dam', applicantA.id, base, [kalk.id, berg.id]);
+		// A's application owns Kalkoenkrans. The report also flags Bergvliet as theirs, which the application's stored
+		// own list never held: the database keeps it out (162 freezes the report's own units, within that list).
+		appA = await plantScenario(q, 'Raise the weir dam', applicantA.id, base, [kalk.id]);
 		appA2 = await plantScenario(q, 'A second dam', applicantA.id, base, [kalk.id]);
 		appB = await plantScenario(q, 'B plan', applicantB.id, base, []);
 		await q('INSERT INTO scenario_member (project_id, scenario_id, user_id, added_by) VALUES ($1, $2, $3, $4)', [projectId, appA, consultantA.id, applicantA.id]);

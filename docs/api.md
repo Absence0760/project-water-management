@@ -2439,8 +2439,10 @@ They read no pack row, so the routes above answer them `403`.
   timeReliabilityA, timeReliabilityB, annualReliabilityA,
   annualReliabilityB, change: { run, band, worse } | null }[], others: {
   kind: 'farm' | 'user', name, changePts }[] | null }`, or `null` when the
-  report changed a baseline assumption. `own`: the application's owned
-  nodes its owner still links and the nodes it adds; `others`: the other
+  report changed a baseline assumption. `own`: the units the pack froze as
+  the applicant's (the report's own units within the application's stored
+  own nodes, whatever the owner links now; 162) and the nodes it adds;
+  `others`: the other
   farms and water users downstream of those in the application run, as the
   results view lists them (`GET …/results` `downstream`), under the same
   anonymous `name` ("Farm 3", as on `…/base`), in its order, with

@@ -3,7 +3,8 @@
 // again field by field, so a key the database starts returning never leaves by
 // default. The database side is applicant-packs.db.test.ts.
 import { describe, expect, it } from 'vitest';
-import { nameOthers, toApplicantPack, toApplicantPackMeta, type ApplicantPackRow, type OthersNaming } from './applicantPacks.js';
+import { obj } from '../share/links.js';
+import { frozenOwn, nameOthers, toApplicantPack, toApplicantPackMeta, type ApplicantPackRow, type OthersNaming } from './applicantPacks.js';
 
 const PACK = '11111111-1111-4111-8111-111111111111';
 const SCENARIO = '22222222-2222-4222-8222-222222222222';
@@ -69,7 +70,9 @@ const row = (over: Partial<ApplicantPackRow> = {}): ApplicantPackRow => ({
 			// No id: dropped.
 			{ kind: 'farm', changePts: 1 }
 		],
-		holders: ['Jane Holder']
+		holders: ['Jane Holder'],
+		// For the server only (162): the frozen own units the others are named from.
+		ownNodeIds: [UPSTREAM]
 	},
 	application_run_id: RUN,
 	...over
@@ -143,5 +146,12 @@ describe('toApplicantPack', () => {
 		expect(toApplicantPack(row(), null).units?.others).toBeNull();
 		expect(nameOthers([{ nodeId: UPSTREAM, kind: 'farm', changePts: 3 }], naming)).toEqual([]);
 		expect(nameOthers([{ nodeId: 'not-in-the-base', kind: 'farm', changePts: 3 }], { names: new Map(), downstream: new Set(['not-in-the-base']) })).toEqual([]);
+	});
+
+	it('reads the own units the pack froze for the server (162), and never returns them', () => {
+		expect(frozenOwn(obj(row().units))).toEqual([UPSTREAM]);
+		expect(frozenOwn({ ownNodeIds: ['not-a-uuid', 3, UPSTREAM] })).toEqual([UPSTREAM]);
+		expect(frozenOwn({})).toEqual([]);
+		expect(toApplicantPack(row(), naming).units).not.toHaveProperty('ownNodeIds');
 	});
 });
