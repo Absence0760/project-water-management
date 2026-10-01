@@ -12,16 +12,18 @@
 # `fetch` needs the `pmtiles` CLI (go-pmtiles, https://github.com/protomaps/go-pmtiles
 # releases; a single static binary, put it on PATH). It reads only the byte
 # ranges of the bbox from the public build, so it downloads the extract, not
-# the planet. TILES_MAXZOOM (default 13, decision D7: enough to recognise farm
-# dams; measure the size before going higher), TILES_BBOX and TILES_BUILD
-# (a build date, YYYYMMDD; default yesterday's) override it.
+# the planet. TILES_MAXZOOM (default 15, the Protomaps build's deepest zoom:
+# close enough to place a dam or trace a parcel; #326 D5 measured the extract
+# at about 1.0 GB, against 490 MB at 14 and 250 MB at 13, docs/maps.md §
+# Basemap), TILES_BBOX and TILES_BUILD (a build date, YYYYMMDD; default
+# yesterday's) override it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/water-management-tiles"
 FILE="$CACHE/south-africa.pmtiles"
 BBOX="${TILES_BBOX:-16.3,-35.0,33.0,-22.0}"
-MAXZOOM="${TILES_MAXZOOM:-13}"
+MAXZOOM="${TILES_MAXZOOM:-15}"
 URL="http://localhost:9002/tiles/south-africa.pmtiles"
 
 case "${1:-}" in
