@@ -7,8 +7,9 @@ project's catchment boundary, farm parcels, dams, gauges and rivers over a
 self-hosted basemap, and proposes values from them that the hydrologist
 accepts one by one. Issue #288, phases 1–2 of roadmap
 [WP-3.12](./roadmap/step-3-licensing.md#wp-312-catchment-map). This page
-covers the tiles, uploads, areas, the quaternary lookup and its dataset, and
-the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
+covers the tiles, uploads, areas, the quaternary lookup and its dataset, the
+nearest gauging stations, the open-data sources and their licences, and the
+CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
 [data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
 
@@ -506,3 +507,83 @@ as the schema owner; the app never writes it.
   and the loader runs as the schema owner from a workstation. A follow-up
   (followups.md) adds one (a migrate-Lambda-style one-off, or a job reading the
   operator's file from the private bucket).
+
+## Gauging stations
+
+Settings → Data feeds → **Attach a feed** → source **DWS gauge flow** shows
+**Nearest gauging stations** above the station field (issue #326 Part B,
+"B-gauge"; `NearestGauges.svelte`, `GET /projects/:id/map/stations`): the
+river gauges within 50 km of the catchment's outlet, nearest first, at most
+ten, each with its code and name, river, distance, record (first and last
+year, and the years it spans; an open record runs to today) and its source.
+**Use** fills the station field and moves focus to it; nothing else happens
+until the owner presses **Attach feed**, so a station is chosen one at a
+time, by a person, with its source in view. The feed records the station
+code, which names its source.
+
+- **Where it measures from.** The point is chosen by one rule
+  (`backend/src/geo/stations.ts` `outletPoint`), and the panel says which
+  applied:
+  1. the map gauge linked to the model's **outflow gauge** (the node that
+     drains into nothing);
+  2. else the **centre** (area centroid) of the catchment boundary. The map
+     has no elevations, so its lowest point can't be told; placing the
+     outflow gauge on the map (Map tab) makes the proposal measure from the
+     outlet itself;
+  3. else nothing: the panel asks for the boundary or the outflow gauge on
+     the map. The API also takes a point (`?lon=&lat=`) and a radius
+     (`?within=`, up to 200 km).
+- **Distance** is the great-circle distance on a sphere (haversine, mean
+  Earth radius 6 371 km): within about 0.5 % of the ellipsoid, plenty to rank
+  stations. A bounding box around the point narrows the table first (an
+  index on lat, lon); no PostGIS.
+- **River gauges only.** DWS codes carry the station type in their third
+  character (`A2H012`: H a river gauge, R a reservoir). The DWS feed reads
+  river gauges only (feeds/config.ts `DWS_RIVER_GAUGE`), so reservoirs and
+  other types in the list are never proposed.
+- **Who sees it.** A viewer's read (the outlet comes from the project's map);
+  a farmer gets 403 and a non-member 404. The form itself is the owner's.
+
+### Gauging-station dataset
+
+The proposal reads `gauge_station_reference` (153), which the **operator**
+loads as the schema owner; the app never writes it.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/gauge-stations.synthetic.geojson`
+  holds six invented stations in drainage region **Z** (DWS has none),
+  codes `Z1H001`–`Z1H005` and a reservoir `Z1R001`, round the seeded
+  Sandspruit map's outlet (21.31° E, 33.79° S): four river gauges within
+  20 km, one about 40 km off. Every source says "SYNTHETIC".
+  `pnpm import:gauge-stations` with no argument loads it (`pnpm setup` does),
+  as dataset `synthetic`, and the panel marks it **Sample stations**.
+- **Real data: the operator's own download, once its licence allows it**
+  (see Sources: blocked today). The DWS station catalogue
+  (Hydrological Services → Verified data → Station catalogue) lists each
+  station's code, place, river, latitude, longitude, catchment area and the
+  dates its record spans. Transcribed to a CSV
+  (`code,name,river,lat,lon,catchment_km2,record_start,record_end`, any
+  column order, decimal degrees, dates `YYYY-MM-DD`) or a GeoJSON
+  FeatureCollection of points (`code`/`station`, `name`, `river`,
+  `catchmentKm2`, `recordStart`, `recordEnd`, `source`), it loads with
+  `pnpm import:gauge-stations stations.csv --dataset "DWS 2026-10" --source "DWS Hydrological Services station catalogue, <URL>, downloaded <date>"`.
+  Several files load as one dataset; a load replaces every row of its
+  dataset in one transaction, and stations it can't take are listed as
+  skipped. Never commit the real file.
+- **Production loading** has the quaternary dataset's gap: no path yet into
+  the private database (followups.md).
+
+## Sources
+
+Every dataset the map proposes from, with its licence. Decision **D-B**
+(#326): a dataset is loaded only once its publisher's terms are confirmed
+to allow **commercial use** (attribution is fine; non-commercial or
+share-alike-on-output terms are rejected). The repo is public, so only
+synthetic fixtures are committed; real data is the operator's own download,
+loaded as the schema owner.
+
+| Dataset | Publisher | Licence (read from) | Attribution | Version | Update cadence | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hydrological station catalogue (station code, name, river, lat/lon, catchment area, record start/end): the nearest-gauge proposal | Department of Water and Sanitation (DWS), National Hydrological Services, `https://www.dws.gov.za/Hydrology/Verified/HyCatalogue.aspx` | **Unconfirmed.** Read 2026-10-01: the Verified data pages answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) surfaced DWS's information-page wording (NIWIS pages on `dws.gov.za`): "copyright … remains with the Department of Water and Sanitation", data "may not be sold to third parties", and "the use of information data is restricted to use for academic, research or personal purposes". If that wording covers the hydrological catalogue, it is a non-commercial restriction and fails D-B | "Department of Water and Sanitation" named as the copyright owner, if allowed | the operator's download date | DWS updates the catalogue as stations open and close | **Blocked: licence unconfirmed.** Built and tested against the synthetic fixture only. To unblock: written confirmation from DWS Hydrological Services that the station metadata may be reused in a commercial service, recorded here with the date |
+| DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
+| Quaternary catchment boundaries | DWS (GIS layers) | Open data (§ Quaternary dataset) | DWS | the operator's download | rare | Allowed (boundaries); WR2012 values: the operator's own download until the WRC confirms redistribution (D-B) |
+
