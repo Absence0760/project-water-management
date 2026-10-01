@@ -34,7 +34,7 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
-import { requireStepUp } from '../auth/stepUp.js';
+import { requireStepUp, stepUpRefusal } from '../auth/stepUp.js';
 import { lockProjectRuns } from '../runs/execute.js';
 import { RUN_UNVERIFIED, runUnverified } from '../runs/stamp.js';
 import { FORECAST_NOT_SIGNABLE, insertSignoff, LEGACY, loadSignableRun, SIGNOFF_SELECT, SignoffBody, type SignoffRow } from '../signoffs/routes.js';
@@ -368,7 +368,7 @@ export const packRoutes = new Hono<AuthEnv>()
 							? 'requires editor role'
 							: pack.status !== 'draft'
 								? `only a draft pack is signed; this one is ${pack.status}`
-								: (blocked ?? (unverified ? RUN_UNVERIFIED : null)),
+								: (blocked ?? (unverified ? RUN_UNVERIFIED : ((await stepUpRefusal(db))?.message ?? null))),
 					signoffs: rows
 				});
 			},
@@ -380,6 +380,8 @@ export const packRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// A sign-off is the professional record an authority relies on: it needs two-step sign-in (auth/stepUp.ts).
+			await requireStepUp(db);
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status !== 'draft') throw new ApiError(409, `only a draft pack is signed; this one is ${pack.status}`);
 			const { statement, sha256: expected, blocked, unverified } = await packStatementFor(db, id, pack);

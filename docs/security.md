@@ -166,8 +166,12 @@ decide a licence application.
   passes (so an outsider still gets 404 and learns nothing), and so do the
   editor-level actions those roles exist for: publishing to farmers (`POST`
   and `PATCH …/publication`, publishing and withdrawing an outlook),
-  deciding an application (`…/decide`) and issuing or withdrawing an
-  evidence pack. The owner and admin checks a route makes by hand are
+  deciding an application (`…/decide`), issuing or withdrawing an
+  evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
+  needs an authenticator: a sign-off is the professional record an
+  authority relies on, and without it is only as strong as the signer's
+  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
   stepped up too: removing someone else from a project or a team (leaving
   isn't), and an owner making or revoking a share link of any kind. A guard
   (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
@@ -194,7 +198,7 @@ decide a licence application.
   **Sign in again**, which signs out and returns to the page after the
   password and the code. A `403 mfa_required` or `mfa_step_up` from any
   request shows the same two (the API client's `onError`), for an editor
-  publishing to farmers too, whose role alone doesn't need it; the action's
+  publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
   own error message stays where the page shows it. The banner is English
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal;

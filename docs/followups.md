@@ -191,8 +191,9 @@ admins and assessors at the route (security.md § Two-step sign-in). Open:
       way would not be. Durable fix: step-4 WP-4.2's `app.auth_mfa`
       transaction setting, with the owner-level policies refusing without it.
       Trigger: organisations (WP-4.1), when the session context is rebuilt.
-- [ ] **Signing a run or a pack doesn’t require it** (below,
-      "Two-step sign-in on sign-off"): the operator's decision.
+- [x] **Signing a run or a pack doesn’t require it** (below,
+      "Two-step sign-in on sign-off"). **Done** (operator decision,
+      2026-10-01): every signer needs it.
 - [ ] **A native speaker's review of the Afrikaans** for "tweestap-intekening",
       "verifikasie-app" and "herstelkode" (§ Afrikaans).
 
@@ -4336,13 +4337,18 @@ Left, each with its trigger:
       folded shut, in the run's Record group (`#res-validation`) and under
       the scenario's comparison (`liability/ValidationPanel.svelte`, its
       body a lazy chunk; ui.md § Runs & results, § Scenarios).
-- [ ] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
+- [x] **Two-step sign-in on sign-off** (issue #282 built TOTP two-step
       sign-in and requires it of owners, team admins and assessors:
-      security.md § Two-step sign-in). Signing a run or a pack doesn't
-      require it yet, since a signer is any editor: a one-line
-      `requireStepUp` in `signoffs/routes.ts` and the pack sign-off route
-      once the operator decides every signer must use it. Until then a
-      sign-off is as strong as the signer's sign-in.
+      security.md § Two-step sign-in). Signing a run or a pack didn't
+      require it, since a signer is any editor, so a sign-off was only as
+      strong as the signer's password. **Decided (operator, 2026-10-01):
+      require it of every signer**, since a sign-off is the professional
+      record an authority relies on. **Done:** `requireStepUp` after the
+      role check in `POST …/runs/:runId/signoffs` and
+      `POST …/packs/:packId/signoffs` (`403 mfa_required` / `mfa_step_up`,
+      which the workspace's two-step banner picks up), and both reads'
+      `cannotSign` say so first (`stepUpRefusal`), so nobody fills in the
+      dialog to be refused. Tests: `auth/stepUp.db.test.ts`.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done
       2026-09-26, `signoffs` in `GET /auth/me/export`): a sign-off holds the
       signer's typed name and registration; the export and account deletion
