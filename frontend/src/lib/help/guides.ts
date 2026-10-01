@@ -221,6 +221,15 @@ export const GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Start from an example',
+				blocks: [
+					{
+						type: 'p',
+						text: 'To look round a finished model before building your own, press **Start from an example** on the Projects page while you have no projects. It makes an invented winter-rainfall catchment your own project (four hydrological units, fruit farms with dams, two transfers, a calibrated runoff model and 15 years of made-up rainfall), runs it and opens that run on **Runs & results**. Every name and number in it is made up. Change it as you like, and delete it from its row’s **⋯** menu when you’re done.'
+					}
+				]
+			},
+			{
 				heading: 'Reading the Projects page',
 				blocks: [
 					{

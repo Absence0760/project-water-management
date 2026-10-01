@@ -1,0 +1,1279 @@
+{
+	"generatedBy": "pnpm gen:example (backend/scripts/example-file.ts): the invented Kleinberg example catchment from backend/scripts/examples/catchments.ts. Synthetic data, no real place or farm.",
+	"name": "Example · Kleinberg (winter rainfall)",
+	"description": "Invented demo catchment. Winter-rainfall valley with two tributaries, four fruit and wine farms on drip and micro irrigation with on-farm dams, and two winter transfers from the upper dam, run by priority. The rain gauge has gaps that bias-corrected CHIRPS fills, one flood year is excluded from calibration, and GR4J is fitted to the weir record (Settings → Fit record). Mostly meets demand; the EWR is missed in dry summers.",
+	"settings": {
+		"runoffModel": "gr4j",
+		"panCoefficient": [0.7,0.65,0.65,0.65,0.65,0.7,0.75,0.8,0.8,0.8,0.8,0.75],
+		"chirpsBiasCorrection": "monthly",
+		"zeroRainRuns": {
+			"mode": "missing",
+			"keepDry": [],
+			"missing": [
+				{
+					"start": "2021-07-05",
+					"end": "2021-07-18",
+					"reason": "Observer on leave: the fortnight was entered as 0 mm"
+				}
+			],
+			"accumulationMode": "spread",
+			"keepReadings": [],
+			"addAccumulations": []
+		},
+		"calibrationExclusions": [
+			{
+				"waterYear": 2013,
+				"reason": "Weir drowned in the winter floods: peaks above its rating were not recorded"
+			}
+		],
+		"apanMm": [160,210,250,260,210,180,110,70,50,50,70,110],
+		"calibration": {
+			"rainThresholdMm": 2,
+			"catchmentAreaKm2": null
+		},
+		"ewrPragmaticM3PerDay": [25100,7600,2300,1200,800,600,700,3600,55000,118400,130000,65300],
+		"gr4j": {
+			"x1": 426.0810500977728,
+			"x2": 0,
+			"x3": 55.91397846127095,
+			"x4": 2.4753800855010017,
+			"warmupDays": 365
+		},
+		"fitRecord": {
+			"fittedAt": "2025-01-15T09:00:00.000Z",
+			"engineVersion": "1.54.0",
+			"model": "gr4j",
+			"objective": "kgePrime",
+			"bounds": "wide",
+			"seed": 7,
+			"starts": 1,
+			"startResults": [
+				{
+					"seed": 7,
+					"params": {
+						"x1": 426.0810500977728,
+						"x2": 0,
+						"x3": 55.91397846127095,
+						"x4": 2.4753800855010017
+					},
+					"score": 0.9284881018599176,
+					"best": true
+				}
+			],
+			"budget": 300,
+			"evaluations": 900,
+			"cancelled": false,
+			"free": [
+				"x1",
+				"x3",
+				"x4"
+			],
+			"params": {
+				"x1": 426.0810500977728,
+				"x2": 0,
+				"x3": 55.91397846127095,
+				"x4": 2.4753800855010017
+			},
+			"startParams": {
+				"x1": 350,
+				"x2": 0,
+				"x3": 90,
+				"x4": 1.7
+			},
+			"flowKind": "flow_observed_m3s",
+			"siteNodeId": null,
+			"simulatedKey": "simulated_outflow",
+			"calibrationStart": null,
+			"calibrationEnd": null,
+			"exclusions": [
+				{
+					"waterYear": 2013,
+					"reason": "Weir drowned in the winter floods: peaks above its rating were not recorded"
+				}
+			],
+			"qualityFlags": {
+				"ratings": {},
+				"aboveRating": "censor",
+				"belowRating": "exclude",
+				"suspect": "exclude",
+				"infilled": "exclude"
+			},
+			"dayQuality": {
+				"flowKind": "flow_observed_m3s",
+				"rating": null,
+				"use": {
+					"aboveRating": "censor",
+					"belowRating": "exclude",
+					"suspect": "exclude",
+					"infilled": "exclude"
+				},
+				"windowDays": 5114,
+				"flow": {
+					"inRange": 4912,
+					"humanUse": 0,
+					"belowRating": 0,
+					"aboveRating": 0,
+					"suspect": 0,
+					"infilled": 0,
+					"missing": 202
+				},
+				"scoredDays": 4912,
+				"censoredDays": 0,
+				"leftOutDays": 0,
+				"suspectZeroDays": 0,
+				"rain": {
+					"observed": 4759,
+					"infilled": 153,
+					"missing": 0,
+					"zeroRunDays": 82
+				},
+				"notes": [
+					"No highest gauging is recorded for the gauge record (Settings → Calibration record → Rating), so no day can be flagged as extrapolated: flood days count as readings, however far the rating curve was extended beyond its gaugings.",
+					"Of the scored days, 82 days fall in zero-rain runs set aside as missing (Settings → Zero-rain runs); their rain is filled."
+				]
+			},
+			"fitAllDays": null,
+			"validate": true,
+			"validationRecord": null,
+			"fit": {
+				"start": "2010-01-01",
+				"end": "2024-12-31",
+				"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024],
+				"scores": {
+					"days": 4912,
+					"kgePrime": 0.9284881018599176,
+					"kgeYearly": 0.9133180727352086,
+					"kgeNp": 0.9700930154599918,
+					"nse": 0.8685674688063447,
+					"nseSqrt": 0.9503057092503925,
+					"nseLog": 0.9826581766694751,
+					"kgeLowHigh": 0.9523719760545251,
+					"volumeErrorPct": 1.5115332510292758,
+					"fdcHighPct": -3.8212240344573205,
+					"fdcMidSlopePct": 0.5466456817797001,
+					"fdcLowPct": 20.216898100978174
+				},
+				"wr2012Fit": {
+					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
+					"logYears": 9,
+					"stats": [
+						{
+							"key": "mar",
+							"observed": 32.179119930633895,
+							"simulated": 32.879365298896936,
+							"diffPct": 2.1760861383795036,
+							"bandPct": 4,
+							"withinBand": true
+						},
+						{
+							"key": "meanLog",
+							"observed": 1.4968409705459773,
+							"simulated": 1.505463718585951,
+							"diffPct": 0.5760630694674582,
+							"bandPct": 4,
+							"withinBand": true
+						},
+						{
+							"key": "sd",
+							"observed": 7.136527160428277,
+							"simulated": 7.4354934508962796,
+							"diffPct": 4.189240561232041,
+							"bandPct": 6,
+							"withinBand": true
+						},
+						{
+							"key": "logSd",
+							"observed": 0.10577899181010302,
+							"simulated": 0.11009238528002314,
+							"diffPct": 4.07774114321645,
+							"bandPct": 6,
+							"withinBand": true
+						},
+						{
+							"key": "seasonalIndex",
+							"observed": 113.41630436004556,
+							"simulated": 116.18517281777343,
+							"diffPct": 2.4413319349023834,
+							"bandPct": 8,
+							"withinBand": true
+						}
+					],
+					"bandsConfirmed": false
+				},
+				"intervals": {
+					"level": 0.9,
+					"resamples": 1000,
+					"seed": 20210101,
+					"years": 15,
+					"kgePrime": {
+						"lo": 0.9192313185181393,
+						"hi": 0.9351537982510669
+					},
+					"nse": {
+						"lo": 0.8512052664956938,
+						"hi": 0.8828033092748651
+					},
+					"kgeLowHigh": {
+						"lo": 0.9477658855334463,
+						"hi": 0.9553787349327956
+					}
+				},
+				"benchmarks": {
+					"meanFlow": {
+						"days": 4912,
+						"kgePrime": -0.4142135623730643,
+						"kgeYearly": -0.601703623836013,
+						"kgeNp": -0.1797630494085951,
+						"nse": 0,
+						"nseSqrt": -0.23508284643050237,
+						"nseLog": -0.8604982227948128,
+						"kgeLowHigh": -0.5672379203465755,
+						"volumeErrorPct": 8.125822277237208e-12,
+						"fdcHighPct": -89.56975925384958,
+						"fdcMidSlopePct": -99.99999999999999,
+						"fdcLowPct": 100
+					},
+					"climatology": {
+						"days": 4912,
+						"kgePrime": 0.6252370370344369,
+						"kgeYearly": 0.548393198317341,
+						"kgeNp": 0.7951895703847068,
+						"nse": 0.5445509995657376,
+						"nseSqrt": 0.7770955356033364,
+						"nseLog": 0.8495363121615706,
+						"kgeLowHigh": 0.7074024138524261,
+						"volumeErrorPct": 0.011692956718707508,
+						"fdcHighPct": -57.07812133439085,
+						"fdcMidSlopePct": 2.676888971196988,
+						"fdcLowPct": -144.29219723369832
+					},
+					"halfWindowDays": 7
+				}
+			},
+			"before": {
+				"start": "2010-01-01",
+				"end": "2024-12-31",
+				"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024],
+				"scores": {
+					"days": 4912,
+					"kgePrime": 0.8736219956459562,
+					"kgeYearly": 0.8627147970229054,
+					"kgeNp": 0.9091880964549303,
+					"nse": 0.8068666689011522,
+					"nseSqrt": 0.9280732022666851,
+					"nseLog": 0.9745248534107155,
+					"kgeLowHigh": 0.9271184292059511,
+					"volumeErrorPct": 8.49720587140962,
+					"fdcHighPct": 1.8083595569254935,
+					"fdcMidSlopePct": 1.6708081297097581,
+					"fdcLowPct": -24.34576686544785
+				},
+				"wr2012Fit": {
+					"waterYears": [2011,2012,2014,2016,2017,2018,2020,2022,2023],
+					"logYears": 9,
+					"stats": [
+						{
+							"key": "mar",
+							"observed": 32.179119930633895,
+							"simulated": 35.1685937679202,
+							"diffPct": 9.290104402266092,
+							"bandPct": 4,
+							"withinBand": false
+						},
+						{
+							"key": "meanLog",
+							"observed": 1.4968409705459773,
+							"simulated": 1.5361891543265942,
+							"diffPct": 2.6287484478905276,
+							"bandPct": 4,
+							"withinBand": true
+						},
+						{
+							"key": "sd",
+							"observed": 7.136527160428277,
+							"simulated": 7.448298829554861,
+							"diffPct": 4.368674876701144,
+							"bandPct": 6,
+							"withinBand": true
+						},
+						{
+							"key": "logSd",
+							"observed": 0.10577899181010302,
+							"simulated": 0.10242096443780332,
+							"diffPct": -3.17456927395196,
+							"bandPct": 6,
+							"withinBand": true
+						},
+						{
+							"key": "seasonalIndex",
+							"observed": 113.41630436004556,
+							"simulated": 117.31311367028236,
+							"diffPct": 3.4358457826894044,
+							"bandPct": 8,
+							"withinBand": true
+						}
+					],
+					"bandsConfirmed": false
+				},
+				"intervals": {
+					"level": 0.9,
+					"resamples": 1000,
+					"seed": 20210101,
+					"years": 15,
+					"kgePrime": {
+						"lo": 0.8588036076839974,
+						"hi": 0.8880255798775221
+					},
+					"nse": {
+						"lo": 0.7831138937351241,
+						"hi": 0.8272809828202281
+					},
+					"kgeLowHigh": {
+						"lo": 0.9183272698810435,
+						"hi": 0.9350650412623805
+					}
+				},
+				"benchmarks": {
+					"meanFlow": {
+						"days": 4912,
+						"kgePrime": -0.4142135623730643,
+						"kgeYearly": -0.601703623836013,
+						"kgeNp": -0.1797630494085951,
+						"nse": 0,
+						"nseSqrt": -0.23508284643050237,
+						"nseLog": -0.8604982227948128,
+						"kgeLowHigh": -0.5672379203465755,
+						"volumeErrorPct": 8.125822277237208e-12,
+						"fdcHighPct": -89.56975925384958,
+						"fdcMidSlopePct": -99.99999999999999,
+						"fdcLowPct": 100
+					},
+					"climatology": {
+						"days": 4912,
+						"kgePrime": 0.6252370370344369,
+						"kgeYearly": 0.548393198317341,
+						"kgeNp": 0.7951895703847068,
+						"nse": 0.5445509995657376,
+						"nseSqrt": 0.7770955356033364,
+						"nseLog": 0.8495363121615706,
+						"kgeLowHigh": 0.7074024138524261,
+						"volumeErrorPct": 0.011692956718707508,
+						"fdcHighPct": -57.07812133439085,
+						"fdcMidSlopePct": 2.676888971196988,
+						"fdcLowPct": -144.29219723369832
+					},
+					"halfWindowDays": 7
+				}
+			},
+			"forcing": {
+				"panCoefficient": [0.7,0.65,0.65,0.65,0.65,0.7,0.75,0.8,0.8,0.8,0.8,0.75],
+				"apanMm": [160,210,250,260,210,180,110,70,50,50,70,110],
+				"chirpsBiasCorrection": "monthly",
+				"zeroRainRuns": {
+					"mode": "missing",
+					"keepDry": [],
+					"missing": [
+						{
+							"start": "2021-07-05",
+							"end": "2021-07-18",
+							"reason": "Observer on leave: the fortnight was entered as 0 mm"
+						}
+					],
+					"accumulationMode": "spread",
+					"keepReadings": [],
+					"addAccumulations": []
+				},
+				"chirpsFitPeriod": "all",
+				"chirpsFactors": [
+					{
+						"label": "whole record",
+						"fittedOn": "2009/10–2024/25",
+						"factors": [0.9092762487257902,0.9891500904159136,1.0400882677454948,1.153827311696264,1.392085848423877,1.5522751769061336,1.4277511103135803,1.4821798590965616,1.3372681281618897,1.180611045828437,1.08640265854334,0.9571328179901618]
+					}
+				],
+				"rainSource": [],
+				"pe": {
+					"kind": "pan"
+				},
+				"arealRain": null,
+				"rainChecks": {
+					"zeroRunRule": "wetDays",
+					"zeroRunMinWetDays": 60,
+					"zeroRunUsualShare": 0.25,
+					"zeroRunMinDays": 60,
+					"zeroRunChirpsCheck": false,
+					"lowVsChirpsRatio": 0.5,
+					"lowVsChirpsBaseline": "record",
+					"lowVsChirpsMinimum": "fixed"
+				}
+			},
+			"flowGapFill": {
+				"spec": null
+			},
+			"splitSample": {
+				"params": {
+					"x1": 436.36628486908916,
+					"x2": 0,
+					"x3": 47.865747678772046,
+					"x4": 2.4198741421910177
+				},
+				"calibration": {
+					"start": "2010-01-01",
+					"end": "2017-12-31",
+					"waterYears": [2009,2010,2011,2012,2014,2015,2016,2017],
+					"scores": {
+						"days": 2456,
+						"kgePrime": 0.9355495173203736,
+						"kgeYearly": 0.9044882277767683,
+						"kgeNp": 0.9676493655581762,
+						"nse": 0.8791542775912473,
+						"nseSqrt": 0.9512144416043967,
+						"nseLog": 0.9784869340192877,
+						"kgeLowHigh": 0.9491595239535748,
+						"volumeErrorPct": -1.0219203490299489,
+						"fdcHighPct": -4.650728123547104,
+						"fdcMidSlopePct": -0.28922341094512405,
+						"fdcLowPct": 31.896169112378963
+					},
+					"wr2012Fit": {
+						"waterYears": [2011,2012,2014,2016],
+						"logYears": 4,
+						"stats": [
+							{
+								"key": "mar",
+								"observed": 32.96885524929533,
+								"simulated": 32.743197877762626,
+								"diffPct": -0.6844561930536797,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "meanLog",
+								"observed": 1.5106346235218533,
+								"simulated": 1.5095067601976757,
+								"diffPct": -0.07466155658130687,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "sd",
+								"observed": 6.888081122994564,
+								"simulated": 5.941631668993089,
+								"diffPct": -13.740393545045979,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "logSd",
+								"observed": 0.09421776580528651,
+								"simulated": 0.08161428374067362,
+								"diffPct": -13.376969785782931,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "seasonalIndex",
+								"observed": 115.58166902899853,
+								"simulated": 114.00028393337786,
+								"diffPct": -1.3681971448464876,
+								"bandPct": 8,
+								"withinBand": true
+							}
+						],
+						"bandsConfirmed": false
+					},
+					"intervals": {
+						"level": 0.9,
+						"resamples": 1000,
+						"seed": 20210101,
+						"years": 8,
+						"kgePrime": {
+							"lo": 0.9235027366119224,
+							"hi": 0.9424348268143757
+						},
+						"nse": {
+							"lo": 0.8607883050991565,
+							"hi": 0.8928383328646519
+						},
+						"kgeLowHigh": {
+							"lo": 0.9416220986317982,
+							"hi": 0.9523266428479576
+						}
+					},
+					"benchmarks": {
+						"meanFlow": {
+							"days": 2456,
+							"kgePrime": -0.41421356237307716,
+							"kgeYearly": -0.5233692162402995,
+							"kgeNp": -0.17824948542037466,
+							"nse": 0,
+							"nseSqrt": -0.2338353178555288,
+							"nseLog": -0.8534703489920026,
+							"kgeLowHigh": -0.5672030716033708,
+							"volumeErrorPct": 4.747440000289314e-12,
+							"fdcHighPct": -89.77613226656568,
+							"fdcMidSlopePct": -99.99999999999999,
+							"fdcLowPct": 100
+						},
+						"climatology": {
+							"days": 2456,
+							"kgePrime": 0.6827059315529607,
+							"kgeYearly": 0.655035937004928,
+							"kgeNp": 0.8367134067738409,
+							"nse": 0.6094905187499209,
+							"nseSqrt": 0.8398581023259313,
+							"nseLog": 0.9196955539793726,
+							"kgeLowHigh": 0.7642032627841027,
+							"volumeErrorPct": -0.018607509496296866,
+							"fdcHighPct": -53.63969730316178,
+							"fdcMidSlopePct": 2.0459658205471007,
+							"fdcLowPct": -109.30282092673862
+						},
+						"halfWindowDays": 7
+					}
+				},
+				"validation": {
+					"start": "2018-01-01",
+					"end": "2024-12-31",
+					"waterYears": [2017,2018,2019,2020,2021,2022,2023,2024],
+					"scores": {
+						"days": 2456,
+						"kgePrime": 0.9186059794666726,
+						"kgeYearly": 0.9019378735090879,
+						"kgeNp": 0.9588975488954785,
+						"nse": 0.8423778766758507,
+						"nseSqrt": 0.9421600743149829,
+						"nseLog": 0.9780289823910342,
+						"kgeLowHigh": 0.9446331712831171,
+						"volumeErrorPct": 2.5531653589866377,
+						"fdcHighPct": -1.4058213685948215,
+						"fdcMidSlopePct": 0.19472192148836168,
+						"fdcLowPct": 27.650047980123055
+					},
+					"wr2012Fit": {
+						"waterYears": [2018,2020,2022,2023],
+						"logYears": 4,
+						"stats": [
+							{
+								"key": "mar",
+								"observed": 30.175039105693358,
+								"simulated": 31.258506942120153,
+								"diffPct": 3.590609551927205,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "meanLog",
+								"observed": 1.465100069841912,
+								"simulated": 1.4758069736528805,
+								"diffPct": 0.7307967579391144,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "sd",
+								"observed": 8.620690753021965,
+								"simulated": 10.084305534777094,
+								"diffPct": 16.977929306210903,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "logSd",
+								"observed": 0.13283817336758103,
+								"simulated": 0.15361899131928664,
+								"diffPct": 15.64370950374506,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "seasonalIndex",
+								"observed": 114.3583396335276,
+								"simulated": 118.37225672859405,
+								"diffPct": 3.5099469858774035,
+								"bandPct": 8,
+								"withinBand": true
+							}
+						],
+						"bandsConfirmed": false
+					},
+					"intervals": {
+						"level": 0.9,
+						"resamples": 1000,
+						"seed": 20210101,
+						"years": 8,
+						"kgePrime": {
+							"lo": 0.9049120942603535,
+							"hi": 0.9283353368867417
+						},
+						"nse": {
+							"lo": 0.8171811764681567,
+							"hi": 0.8694903541408004
+						},
+						"kgeLowHigh": {
+							"lo": 0.9342385720895827,
+							"hi": 0.9506203634843858
+						}
+					},
+					"benchmarks": {
+						"meanFlow": {
+							"days": 2456,
+							"kgePrime": -0.4142135623730754,
+							"kgeYearly": -0.7456480883005621,
+							"kgeNp": -0.18130141113007814,
+							"nse": 0,
+							"nseSqrt": -0.23629397293985388,
+							"nseLog": -0.8674305873364727,
+							"kgeLowHigh": -0.5672722568484488,
+							"volumeErrorPct": 5.1509867458344305e-12,
+							"fdcHighPct": -89.34125862707864,
+							"fdcMidSlopePct": -99.99999999999999,
+							"fdcLowPct": 100.00000000000001
+						},
+						"climatology": {
+							"days": 2456,
+							"kgePrime": 0.592438128242472,
+							"kgeYearly": 0.494224134822828,
+							"kgeNp": 0.76277361014494,
+							"nse": 0.5095911333182377,
+							"nseSqrt": 0.7344049466519427,
+							"nseLog": 0.8125614437862844,
+							"kgeLowHigh": 0.6942239355343403,
+							"volumeErrorPct": 0.028462831504132483,
+							"fdcHighPct": -59.263363202373945,
+							"fdcMidSlopePct": 3.2402301096160326,
+							"fdcLowPct": -164.23759519661692
+						},
+						"halfWindowDays": 7
+					}
+				}
+			},
+			"differential": {
+				"params": {
+					"x1": 451.04510163893775,
+					"x2": 0,
+					"x3": 51.46496136905221,
+					"x4": 2.4976668144513297
+				},
+				"calibration": {
+					"start": "2010-01-01",
+					"end": "2024-09-30",
+					"waterYears": [2009,2010,2012,2016,2021,2022,2023],
+					"scores": {
+						"days": 2364,
+						"kgePrime": 0.937668388353481,
+						"kgeYearly": 0.9208052756363811,
+						"kgeNp": 0.9759406651116193,
+						"nse": 0.8825285707505028,
+						"nseSqrt": 0.9552749076225376,
+						"nseLog": 0.9850195851763663,
+						"kgeLowHigh": 0.9571031038551738,
+						"volumeErrorPct": -0.5298389294832092,
+						"fdcHighPct": -3.654448197295276,
+						"fdcMidSlopePct": 0.3835714633989892,
+						"fdcLowPct": 22.37838151248306
+					},
+					"wr2012Fit": {
+						"waterYears": [2012,2016,2022,2023],
+						"logYears": 4,
+						"stats": [
+							{
+								"key": "mar",
+								"observed": 25.611194243872593,
+								"simulated": 25.40850142099891,
+								"diffPct": -0.7914227698389212,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "meanLog",
+								"observed": 1.4023496148298666,
+								"simulated": 1.3973035393087558,
+								"diffPct": -0.3598300643255067,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "sd",
+								"observed": 4.835211556217362,
+								"simulated": 5.309022498949765,
+								"diffPct": 9.799177083020336,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "logSd",
+								"observed": 0.0849406616931987,
+								"simulated": 0.09616953128566995,
+								"diffPct": 13.219663431666397,
+								"bandPct": 6,
+								"withinBand": false
+							},
+							{
+								"key": "seasonalIndex",
+								"observed": 117.81933792391355,
+								"simulated": 115.95461867631305,
+								"diffPct": -1.5826937075514038,
+								"bandPct": 8,
+								"withinBand": true
+							}
+						],
+						"bandsConfirmed": false
+					},
+					"intervals": {
+						"level": 0.9,
+						"resamples": 1000,
+						"seed": 20210101,
+						"years": 7,
+						"kgePrime": {
+							"lo": 0.9233923181979358,
+							"hi": 0.9452381680855595
+						},
+						"nse": {
+							"lo": 0.8582298497118407,
+							"hi": 0.8975699046119026
+						},
+						"kgeLowHigh": {
+							"lo": 0.9519990825628664,
+							"hi": 0.9588521120018638
+						}
+					},
+					"benchmarks": {
+						"meanFlow": {
+							"days": 2364,
+							"kgePrime": -0.4142135623730838,
+							"kgeYearly": -0.42860907220851624,
+							"kgeNp": -0.1824473789379355,
+							"nse": 0,
+							"nseSqrt": -0.23900540945741033,
+							"nseLog": -0.8847012282881368,
+							"kgeLowHigh": -0.5673909564143376,
+							"volumeErrorPct": 2.9226203585138414e-12,
+							"fdcHighPct": -89.30911768952768,
+							"fdcMidSlopePct": -100,
+							"fdcLowPct": 100
+						},
+						"climatology": {
+							"days": 2364,
+							"kgePrime": 0.6606884690854277,
+							"kgeYearly": 0.63512456126691,
+							"kgeNp": 0.7975690261625064,
+							"nse": 0.5838355251607608,
+							"nseSqrt": 0.8029818446777228,
+							"nseLog": 0.8726617303694484,
+							"kgeLowHigh": 0.7431358726765258,
+							"volumeErrorPct": -0.0058297228020452166,
+							"fdcHighPct": -57.06722046639319,
+							"fdcMidSlopePct": 2.732578863296695,
+							"fdcLowPct": -113.51778465365935
+						},
+						"halfWindowDays": 7
+					}
+				},
+				"validation": {
+					"start": "2011-10-02",
+					"end": "2021-09-30",
+					"waterYears": [2011,2014,2015,2017,2018,2019,2020],
+					"scores": {
+						"days": 2456,
+						"kgePrime": 0.9250751762015709,
+						"kgeYearly": 0.9125569138024174,
+						"kgeNp": 0.970449970159164,
+						"nse": 0.8629645876041865,
+						"nseSqrt": 0.9496626929600301,
+						"nseLog": 0.9841129985170721,
+						"kgeLowHigh": 0.9506081830392767,
+						"volumeErrorPct": -0.7379808381766567,
+						"fdcHighPct": -7.185198850559648,
+						"fdcMidSlopePct": -0.08398208729897619,
+						"fdcLowPct": 27.481346957207318
+					},
+					"wr2012Fit": {
+						"waterYears": [2011,2014,2017,2018,2020],
+						"logYears": 5,
+						"stats": [
+							{
+								"key": "mar",
+								"observed": 37.43346048004294,
+								"simulated": 37.56460997253313,
+								"diffPct": 0.3503536429930335,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "meanLog",
+								"observed": 1.5724340551188658,
+								"simulated": 1.5740223879627926,
+								"diffPct": 0.10101109415407057,
+								"bandPct": 4,
+								"withinBand": true
+							},
+							{
+								"key": "sd",
+								"observed": 2.584147952372969,
+								"simulated": 2.4747261743274023,
+								"diffPct": -4.234346487208177,
+								"bandPct": 6,
+								"withinBand": true
+							},
+							{
+								"key": "logSd",
+								"observed": 0.029928144963252058,
+								"simulated": 0.028687886340456818,
+								"diffPct": -4.144121275535518,
+								"bandPct": 6,
+								"withinBand": true
+							},
+							{
+								"key": "seasonalIndex",
+								"observed": 115.5486757263558,
+								"simulated": 117.27847792704961,
+								"diffPct": 1.4970333409881358,
+								"bandPct": 8,
+								"withinBand": true
+							}
+						],
+						"bandsConfirmed": false
+					},
+					"intervals": {
+						"level": 0.9,
+						"resamples": 1000,
+						"seed": 20210101,
+						"years": 7,
+						"kgePrime": {
+							"lo": 0.915801617817875,
+							"hi": 0.9296963045744966
+						},
+						"nse": {
+							"lo": 0.8415691126974013,
+							"hi": 0.8820090532352028
+						},
+						"kgeLowHigh": {
+							"lo": 0.9456112231513355,
+							"hi": 0.9528181740215524
+						}
+					},
+					"benchmarks": {
+						"meanFlow": {
+							"days": 2456,
+							"kgePrime": -0.4142135623730745,
+							"kgeYearly": -0.41524272235178167,
+							"kgeNp": -0.17413510350143713,
+							"nse": 0,
+							"nseSqrt": -0.2283622837547501,
+							"nseLog": -0.8228427608419178,
+							"kgeLowHigh": -0.5671426304912965,
+							"volumeErrorPct": 5.3188400714753956e-12,
+							"fdcHighPct": -89.31500903017627,
+							"fdcMidSlopePct": -100,
+							"fdcLowPct": 100
+						},
+						"climatology": {
+							"days": 2456,
+							"kgePrime": 0.6396328152032633,
+							"kgeYearly": 0.6438586922013627,
+							"kgeNp": 0.8174765905574805,
+							"nse": 0.5594656089893572,
+							"nseSqrt": 0.7937261543135675,
+							"nseLog": 0.8724835456718955,
+							"kgeLowHigh": 0.727275030577516,
+							"volumeErrorPct": 0.039200244990936786,
+							"fdcHighPct": -54.507419602988996,
+							"fdcMidSlopePct": 4.1189160928069395,
+							"fdcLowPct": -139.251603669922
+						},
+						"halfWindowDays": 7
+					}
+				},
+				"dryYears": [2009,2010,2012,2016,2021,2022,2023],
+				"wetYears": [2011,2014,2015,2017,2018,2019,2020],
+				"wetDryRatio": 1.3492991789920137,
+				"rankedBy": "observed"
+			},
+			"independentRecord": null,
+			"marPenalty": null,
+			"notes": [
+				"The wettest years in the record carry only 1.3× the flow of the driest, so there are no clearly wet years to test on. How the model behaves in wet years is weakly constrained."
+			],
+			"editedParams": []
+		}
+	},
+	"model": {
+		"nodes": [
+			{
+				"id": "31a5d9bc-bb24-5a3a-bd04-923f6501e138",
+				"name": "Kleinberg Weir",
+				"kind": "gauge",
+				"downstreamNodeId": null,
+				"sortOrder": 0,
+				"areaKm2": 0,
+				"areaHiKm2": 0,
+				"areaLoKm2": 0,
+				"flowShareManual": null,
+				"pctUpstreamToDam": 1,
+				"pctRunoffToDam": 0.6,
+				"damCapacityM3": 0,
+				"damInitialPct": 0.6,
+				"damMinPct": 0.15,
+				"divertCapacityM3Day": 0,
+				"irrigationEfficiency": 0.9,
+				"lossReturnFraction": 0.5,
+				"damAreaFullM2": null,
+				"damAreaExponent": 0.7,
+				"damSeepagePerDay": 0,
+				"userDemandM3Day": null,
+				"userReturnPct": 0,
+				"userPriority": "senior",
+				"boreholeCapacityM3Day": null,
+				"boreholeRule": "supplemental",
+				"boreholeTriggerPct": 0.3,
+				"streamDepletionFrac": 0,
+				"streamDepletionLagDays": 0,
+				"damCurve": null,
+				"damReleaseRule": "none",
+				"damReleaseM3Day": null,
+				"damOutletCapacityM3Day": null,
+				"damSeepageReturnPct": 1,
+				"damSurveyDate": null,
+				"damSedimentPctPerYear": null,
+				"damInServiceFrom": null,
+				"abstractionFrom": null,
+				"supplyRule": "damFirst",
+				"pumpCapacityM3Day": null,
+				"supplyTriggerPct": 0.4,
+				"supplyStopPct": 0.6,
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"divertMonthlyM3Day": null,
+				"ewrSite": true,
+				"gaPropertyAreaHa": null,
+				"gaRateM3HaYear": null
+			},
+			{
+				"id": "b1698e42-171c-582b-a4f9-37112f856949",
+				"name": "Rustenvrede",
+				"kind": "farm",
+				"downstreamNodeId": "31a5d9bc-bb24-5a3a-bd04-923f6501e138",
+				"sortOrder": 1,
+				"areaKm2": 14,
+				"areaHiKm2": 0,
+				"areaLoKm2": 0,
+				"flowShareManual": null,
+				"pctUpstreamToDam": 1,
+				"pctRunoffToDam": 0.6,
+				"damCapacityM3": 250000,
+				"damInitialPct": 0.6,
+				"damMinPct": 0.15,
+				"divertCapacityM3Day": 3000,
+				"irrigationEfficiency": 0.82,
+				"lossReturnFraction": 0.3,
+				"damAreaFullM2": 62500,
+				"damAreaExponent": 0.7,
+				"damSeepagePerDay": 0,
+				"userDemandM3Day": null,
+				"userReturnPct": 0,
+				"userPriority": "senior",
+				"boreholeCapacityM3Day": null,
+				"boreholeRule": "supplemental",
+				"boreholeTriggerPct": 0.3,
+				"streamDepletionFrac": 0,
+				"streamDepletionLagDays": 0,
+				"damCurve": null,
+				"damReleaseRule": "none",
+				"damReleaseM3Day": null,
+				"damOutletCapacityM3Day": null,
+				"damSeepageReturnPct": 1,
+				"damSurveyDate": null,
+				"damSedimentPctPerYear": null,
+				"damInServiceFrom": null,
+				"abstractionFrom": null,
+				"supplyRule": "damFirst",
+				"pumpCapacityM3Day": null,
+				"supplyTriggerPct": 0.4,
+				"supplyStopPct": 0.6,
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"divertMonthlyM3Day": null,
+				"ewrSite": true,
+				"gaPropertyAreaHa": null,
+				"gaRateM3HaYear": null
+			},
+			{
+				"id": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
+				"name": "Bergwater",
+				"kind": "farm",
+				"downstreamNodeId": "b1698e42-171c-582b-a4f9-37112f856949",
+				"sortOrder": 2,
+				"areaKm2": 18,
+				"areaHiKm2": 0,
+				"areaLoKm2": 0,
+				"flowShareManual": null,
+				"pctUpstreamToDam": 1,
+				"pctRunoffToDam": 0.6,
+				"damCapacityM3": 400000,
+				"damInitialPct": 0.6,
+				"damMinPct": 0.15,
+				"divertCapacityM3Day": 4000,
+				"irrigationEfficiency": 0.9,
+				"lossReturnFraction": 0.3,
+				"damAreaFullM2": 80000,
+				"damAreaExponent": 0.7,
+				"damSeepagePerDay": 0,
+				"userDemandM3Day": null,
+				"userReturnPct": 0,
+				"userPriority": "senior",
+				"boreholeCapacityM3Day": null,
+				"boreholeRule": "supplemental",
+				"boreholeTriggerPct": 0.3,
+				"streamDepletionFrac": 0,
+				"streamDepletionLagDays": 0,
+				"damCurve": null,
+				"damReleaseRule": "none",
+				"damReleaseM3Day": null,
+				"damOutletCapacityM3Day": null,
+				"damSeepageReturnPct": 1,
+				"damSurveyDate": null,
+				"damSedimentPctPerYear": null,
+				"damInServiceFrom": null,
+				"abstractionFrom": null,
+				"supplyRule": "damFirst",
+				"pumpCapacityM3Day": null,
+				"supplyTriggerPct": 0.4,
+				"supplyStopPct": 0.6,
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"divertMonthlyM3Day": null,
+				"ewrSite": true,
+				"gaPropertyAreaHa": null,
+				"gaRateM3HaYear": null
+			},
+			{
+				"id": "df715b3b-864b-544f-ad00-6af5247c77d4",
+				"name": "Rooikloof",
+				"kind": "farm",
+				"downstreamNodeId": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
+				"sortOrder": 3,
+				"areaKm2": 22,
+				"areaHiKm2": 0,
+				"areaLoKm2": 0,
+				"flowShareManual": null,
+				"pctUpstreamToDam": 1,
+				"pctRunoffToDam": 0.6,
+				"damCapacityM3": 600000,
+				"damInitialPct": 0.6,
+				"damMinPct": 0.15,
+				"divertCapacityM3Day": 5000,
+				"irrigationEfficiency": 0.82,
+				"lossReturnFraction": 0.3,
+				"damAreaFullM2": 100000,
+				"damAreaExponent": 0.7,
+				"damSeepagePerDay": 0,
+				"userDemandM3Day": null,
+				"userReturnPct": 0,
+				"userPriority": "senior",
+				"boreholeCapacityM3Day": null,
+				"boreholeRule": "supplemental",
+				"boreholeTriggerPct": 0.3,
+				"streamDepletionFrac": 0,
+				"streamDepletionLagDays": 0,
+				"damCurve": null,
+				"damReleaseRule": "none",
+				"damReleaseM3Day": null,
+				"damOutletCapacityM3Day": null,
+				"damSeepageReturnPct": 1,
+				"damSurveyDate": null,
+				"damSedimentPctPerYear": null,
+				"damInServiceFrom": null,
+				"abstractionFrom": null,
+				"supplyRule": "damFirst",
+				"pumpCapacityM3Day": null,
+				"supplyTriggerPct": 0.4,
+				"supplyStopPct": 0.6,
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"divertMonthlyM3Day": null,
+				"ewrSite": true,
+				"gaPropertyAreaHa": null,
+				"gaRateM3HaYear": null
+			},
+			{
+				"id": "47a6d503-82fd-5e8e-bcde-178635fc039b",
+				"name": "Doornhoek",
+				"kind": "farm",
+				"downstreamNodeId": "b1698e42-171c-582b-a4f9-37112f856949",
+				"sortOrder": 4,
+				"areaKm2": 16,
+				"areaHiKm2": 0,
+				"areaLoKm2": 0,
+				"flowShareManual": null,
+				"pctUpstreamToDam": 1,
+				"pctRunoffToDam": 0.6,
+				"damCapacityM3": 180000,
+				"damInitialPct": 0.6,
+				"damMinPct": 0.15,
+				"divertCapacityM3Day": 2500,
+				"irrigationEfficiency": 0.9,
+				"lossReturnFraction": 0.3,
+				"damAreaFullM2": 51429,
+				"damAreaExponent": 0.7,
+				"damSeepagePerDay": 0,
+				"userDemandM3Day": null,
+				"userReturnPct": 0,
+				"userPriority": "senior",
+				"boreholeCapacityM3Day": null,
+				"boreholeRule": "supplemental",
+				"boreholeTriggerPct": 0.3,
+				"streamDepletionFrac": 0,
+				"streamDepletionLagDays": 0,
+				"damCurve": null,
+				"damReleaseRule": "none",
+				"damReleaseM3Day": null,
+				"damOutletCapacityM3Day": null,
+				"damSeepageReturnPct": 1,
+				"damSurveyDate": null,
+				"damSedimentPctPerYear": null,
+				"damInServiceFrom": null,
+				"abstractionFrom": null,
+				"supplyRule": "damFirst",
+				"pumpCapacityM3Day": null,
+				"supplyTriggerPct": 0.4,
+				"supplyStopPct": 0.6,
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"divertMonthlyM3Day": null,
+				"ewrSite": true,
+				"gaPropertyAreaHa": null,
+				"gaRateM3HaYear": null
+			}
+		],
+		"crops": [
+			{
+				"id": "778c530c-4ca9-5d06-aa83-1c3706950182",
+				"name": "Citrus",
+				"cropFactor": [0.65,0.7,0.7,0.7,0.7,0.65,0.6,0.55,0.55,0.55,0.6,0.65]
+			},
+			{
+				"id": "40625f05-9e2b-55a0-b302-d00190c07127",
+				"name": "Pasture",
+				"cropFactor": [0.8,0.85,0.9,0.9,0.85,0.8,0.75,0.7,0.7,0.7,0.72,0.76]
+			},
+			{
+				"id": "9c3981b4-30d8-59d1-8ea0-241520809047",
+				"name": "Apples",
+				"cropFactor": [0.45,0.65,0.85,0.95,0.95,0.8,0.55,0.3,0.25,0.25,0.3,0.35]
+			},
+			{
+				"id": "9ad0128f-a416-510a-b6dd-2de98c47bcf6",
+				"name": "Wine grapes",
+				"cropFactor": [0.3,0.45,0.6,0.65,0.6,0.45,0.3,0.2,0.2,0.2,0.2,0.25]
+			},
+			{
+				"id": "ca3971cb-0829-57fd-b42b-ac4c76bb77a0",
+				"name": "Vegetables",
+				"cropFactor": [0.7,0.9,1,1,0.9,0.7,0.6,0.5,0.5,0.5,0.6,0.65]
+			}
+		],
+		"cropAreas": [
+			{
+				"nodeId": "b1698e42-171c-582b-a4f9-37112f856949",
+				"cropId": "778c530c-4ca9-5d06-aa83-1c3706950182",
+				"areaM2": 450000
+			},
+			{
+				"nodeId": "b1698e42-171c-582b-a4f9-37112f856949",
+				"cropId": "40625f05-9e2b-55a0-b302-d00190c07127",
+				"areaM2": 200000
+			},
+			{
+				"nodeId": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
+				"cropId": "9c3981b4-30d8-59d1-8ea0-241520809047",
+				"areaM2": 600000
+			},
+			{
+				"nodeId": "f0fccdd8-5481-5bfa-bf48-f9f0ff34ddb3",
+				"cropId": "9ad0128f-a416-510a-b6dd-2de98c47bcf6",
+				"areaM2": 250000
+			},
+			{
+				"nodeId": "df715b3b-864b-544f-ad00-6af5247c77d4",
+				"cropId": "9c3981b4-30d8-59d1-8ea0-241520809047",
+				"areaM2": 400000
+			},
+			{
+				"nodeId": "47a6d503-82fd-5e8e-bcde-178635fc039b",
+				"cropId": "9ad0128f-a416-510a-b6dd-2de98c47bcf6",
+				"areaM2": 500000
+			},
+			{
+				"nodeId": "47a6d503-82fd-5e8e-bcde-178635fc039b",
+				"cropId": "ca3971cb-0829-57fd-b42b-ac4c76bb77a0",
+				"areaM2": 100000
+			}
+		],
+		"transfers": [
+			{
+				"id": "dc7d620c-5a01-5a9e-a72e-08806507269b",
+				"fromNodeId": "df715b3b-864b-544f-ad00-6af5247c77d4",
+				"toNodeId": "47a6d503-82fd-5e8e-bcde-178635fc039b",
+				"months": [6,7,8,9],
+				"maxRateM3s": 0.03,
+				"dailyCapM3": null,
+				"minStoragePct": 0.3,
+				"enabled": true,
+				"priority": 0,
+				"monthlyRateM3s": null,
+				"source": "dam",
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"lossPct": 0,
+				"sizing": "demand",
+				"topUpDam": false,
+				"lossReturnPct": 0,
+				"lossReturnNodeId": null
+			},
+			{
+				"id": "f6ca01bd-02b6-57ba-85a9-096ce7e42eee",
+				"fromNodeId": "df715b3b-864b-544f-ad00-6af5247c77d4",
+				"toNodeId": "b1698e42-171c-582b-a4f9-37112f856949",
+				"months": [6,7,8,9],
+				"maxRateM3s": 0.02,
+				"dailyCapM3": null,
+				"minStoragePct": 0.4,
+				"enabled": true,
+				"priority": 1,
+				"monthlyRateM3s": null,
+				"source": "dam",
+				"handsOffM3Day": null,
+				"handsOffEwr": false,
+				"lossPct": 0,
+				"sizing": "demand",
+				"topUpDam": false,
+				"lossReturnPct": 0,
+				"lossReturnNodeId": null
+			}
+		]
+	},
+	"series": [
+		{
+			"kind": "rain_catchment_mm",
+			"name": "Catchment average rainfall",
+			"unit": "mm",
+			"startDate": "2010-01-01",
+			"values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.5,3,2.6,0,0,0,0,0,0,0,0,0,0,3.2,8.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.2,9.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.8,0,0,0,15.8,0,0,0,0,0,0,9,0,0,0,0,0,0,0,10.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.5,7.7,17.2,5.2,13.7,5.3,10.9,6.2,0,0,0,0,0,0,0,0,35.9,0,0,0,0,23.8,9.3,5.2,21.2,0,0,0,0,28.1,0,7.3,33.1,5.7,8.5,9.5,0,7.5,20.6,10.2,11.7,0,0,0,0,4.2,11.2,14,21.9,7.9,6.9,0,0,0,15.7,15.5,21.5,0,0,0,9.4,17.8,45.4,0,0,0,0,0,6.2,5.8,0,0,11.2,0,14.8,7.4,1.7,0,0,0,14.3,4.6,13.8,3.4,0.7,11.9,0,14.7,14,0,0,0,0,5,7.9,0,0,0,0,4.3,13.2,2,0,0,0,0,1.6,19.8,0,15.6,13,4.7,13.8,15,2.9,22.1,0,0,0,0,0,16.4,6.9,0,7.2,3.9,0,0,0,24.6,6.3,0,0,23.7,15.7,0,0,0,0,0,0,12.8,0,0,0,0,0,0,0,2.5,0,0,11.5,0,5.9,6.2,1,1.5,0,0,7.6,0,0,17.4,16.2,0,0,0,24.1,1.7,1.6,10.7,0,0,3.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.4,1.3,0,0,0,4.9,4.5,9.5,9.7,0,0,0,7.3,0,0,0,0,0,0,0,0,0,0,0,9.5,0,0,0,0,0,0,0,0,0,0,4.7,9.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.5,0,0,0,0,0,0,0,4,2.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.4,5.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.3,2.1,0,0,0,0,0,0,0,0,2.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7.2,7.9,8,0,0,21.2,0,0,0,0,10.7,0,19.6,3.2,0,0,0,14.3,0,0,0,0,3.2,0,0,0,39.5,0,0,0,15,0,0,0,29.5,0,7.4,0,0,0,0,13.2,0,0,0,11.8,0,0,20.6,2.8,22.1,17,0,17.1,0,20.2,0,11,0,0,21.5,0,0,0,27.4,0,0,0,7.2,11.8,18,0,0,5.3,33,5.2,5,0,16,9.4,13.8,12.3,2.9,0,0,0,0,0,0,21,0,31.2,0,0,0,19.9,9.6,4.3,43.9,3.2,9.7,0,0,16.4,0,0,0,3.8,3.1,0,14.7,6.6,9.7,0,1.9,10.2,0,25.6,8.2,36.3,5.2,0,29.8,19.5,0,0,0,0,0,14.6,19.3,27.1,0,11.1,0,9.7,0,0,0,0,0,0,3,8.3,0,0,0,0,13.1,0,0,0,0,8,0,0,0,0,14.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.6,7.7,2.5,3.9,18,8.4,8.1,0,0,16,14.6,3,3.7,0,0,0,0,3.4,2.6,0,0,0,0,0,0,0,0,2.6,19.5,11.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.8,5.1,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,5.1,0,8.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.7,0,0,4.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14.6,0,18.5,0,0,0,0,0,0,0,0,0,0,12.9,0,0,0,0,2.3,12.2,3.9,0,0,0,0,0,0,0,0,0,0,13.3,0,0,0,0,0,0,0,7.7,7,3.7,6.7,0,0,0,3.4,0,0,0,0,13.6,16,7.6,5.9,0,0,0,0,0,0,0,0,0,0,0,9.5,0,0,0,7.5,15.5,0,24.9,0,0,0,1.8,0,0,0,6.6,10.7,6.5,0,0,10,14,8.4,10.1,10.5,17.6,0,3.1,7.2,0,0,19,0,11.5,0,4.3,9.3,0,35.2,7.5,16.9,14,6.1,0,0,0,0,38.9,0,5.5,0,0,0,0,0,0,0,11.2,0,0,0,5.8,0,0,16.2,5.8,13.8,31.9,11.4,8.1,23.2,51.1,17.6,29.2,13.2,3.3,19.2,16.7,17.1,23.7,0,0,1.8,19.9,7.8,0,17.1,30.6,0,0,12.3,36,0,0,0,17.9,0,0,0,0,0,55.8,5.4,18.4,0,0,0,0,0,0,0,3.4,0,0,31.4,9.4,0,0,0,10.8,0,0,0,0,8.3,0,0,0,0,0,0,0,0,24.1,0,16.1,0,0,4.3,16.8,0,7.2,0,0,0,0,0,12.2,2.2,0,0,0,0,0,0,7.7,0,0,11.9,0,0,0,5.5,0,0,0,0,0,0,0,5.2,2.1,0,0,0,5.1,1.3,5.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.2,0,0,0,0,0,0,0,7.1,0,12.3,0,0,9.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12.3,7.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,16.6,4.3,0,0,0,0,0,0,0,2.2,6.7,15,28,11.8,6.3,5.2,11.4,0,4.8,1.9,0,0,0,0,24.2,0,0,6.6,0,0,13,10.7,8.4,0,25.9,0,0,0,6.5,0,14.2,0,8.4,31.9,0,0,0,0,21.6,34.4,0,0,11.6,0,9.8,13.4,0,4.1,5.6,21.2,7.2,0,0,50.2,8.3,10.7,6.6,6.1,24.3,0,10.6,8.2,5.4,13.4,0,0,0,0,0,0,0,12.6,7.8,0,10.5,1.6,29.1,9.9,12.9,13.7,21.3,0,29.1,0,13.9,0,0,0,0,9.7,0,0,0,6,5.8,1.4,0,0,0,0,0,15,10.1,0,0,0,0,6.4,6.5,2.3,13.9,16.6,26.2,0,0,0,4.3,0,16.6,16.9,0,0,0,0,0,0,24.2,0,0,0,0,24.6,5.4,5.1,0,0,0,0,0,0,0,0,0,0,2.5,5.9,15.6,16.3,0,0,5.7,0,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.2,7.1,0,0,0,0,0,0,0,6.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21.4,0,0,0,0,0,1.1,0,10,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.2,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,7.4,0,0,13.2,11.3,0,0,5.7,14.3,23.6,0,0,0,0,0,0,0,0,0,0,0,0,11,0,0,0,26.1,0,0,0,0,0,11.4,0,0,29.4,0,0,0,0,0,0,0,0,0,0,3.1,0,0,0,25.7,0,0,10,0,13.6,7.6,0,28.2,4.5,7.2,17.4,10.1,0,0,0,27.8,0,0,0,6.5,8.6,0,0,0,0,0,0.7,0,0,0,0,0,22.5,31.2,0,0,22.7,0,3.6,4.6,5.2,4.8,13,6.7,0,0,6.9,0,0,0,0,11.2,12.8,21.2,0,17.4,6.4,4.8,8.2,15,42,3.5,18.5,0,0,16.5,17.7,26.7,44.7,23.3,4,0,23.8,0,0,0,33.6,2.4,14.8,12.4,20.3,3.9,5,5.9,8.5,9.7,15,16.7,7.1,25.5,0,0,14.9,3.8,0,6.4,5.4,0,0,0,7.4,0,0,0,15.4,0,0,0,0,0,39.3,0,9.6,8.2,7.5,5.1,38.6,0,0,0,5,16.5,35.1,26.1,0,0,0,0,0,0,0,14.2,0,9.2,5.6,7.1,0,3.8,4.1,0,0,23.8,0,0,0,2.2,0,0,3.5,0,0,0,10,10.4,9.3,0,0,20.5,0,0,1.4,0,0,0,0,0,0,0,0,8.3,9.3,8.1,9.6,5,0,0,0,0,0,10.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.5,0,4.7,4.4,0,19.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.9,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.5,11.3,0,0,0,0,0,0,0,0,4.4,5.8,0,0,0,0,0,0,0,0,0,4.5,0,0,13.2,0,0,0,0,2.1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,16.1,0,0,0,0,4.4,0,0,0,0,0,2.9,6.6,0,0,0,2.1,0,0,10.1,0,0,0,0,0,0,0,0,18.5,0,0,0,0,0,8.7,20.5,0,0,0,0,0,15.5,3.6,0,0,5,0,0,0,0,8.7,3,0,9.8,0,0,0,0,7.5,5.4,25.4,0,0,0,13.9,0,0,36.7,0,0,0,0,0,0,30.6,6,0,13.4,14.3,9.2,12.8,16.8,8.3,18.9,0,0,0,0,14.3,25.8,0,11.2,0,0,3.6,0,0,17.4,30.5,0,14.8,11.3,0,0,19.4,7.5,0,0,0,17.7,27.3,0,0,0,0,17.2,46.7,0,0,0,0,0,0,0,0,0,0,10.5,9.6,14.9,0,19.2,13,0,12.7,0,12.3,14.2,0,0,47.2,4.1,9.8,15.1,32.3,0,0,0,25.2,22.6,2.4,0,1,7.7,0,0,0,0,0,3.5,27.3,1.1,8.8,5.1,2.7,0,0,0,11.9,0,0,0,10.1,0,0,0,0,19.4,0,3.7,0,12.8,0,0,0,3.6,5.9,0,7.7,12.6,0,0,12.7,0,0,0,0,4,2.1,8,0,9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,14.6,0,0,0,0,10.9,13.3,6.6,0,0,0,0,0,0,4.5,0,0,0,0,0,0,19.7,8.5,0,2.4,13.2,0,0,0,0,10.2,11.2,5,0,0,0,0,0,0,0,0,0,0,0,0,14,1.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.6,0,0,0,0,0,0,0,0,0,0,0,0,5.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.5,0,0,7.6,0,0,0,0,0,0,0,0,0,0,0,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,0,0,0,0,4,8,16.8,0,0,0,0,67,0,0,0,0,0,3,0,8.5,0,15.1,2.5,2.9,8,12.2,9.3,0,0,7.2,12,2.5,0,35.5,0,0,0,0,0,0.8,9.3,9.8,0,0,33.5,9.9,22.8,1.9,6,13.4,9.5,0,28.8,0,12.7,4,14.2,1.3,16.2,3.4,12,0,0,0,16.1,0,0,0,0,0,0,0,4.3,12.8,10.7,22.2,0,0,0,0,0,14.7,0,18.9,38.5,0,17.7,0,16.9,18.1,12.1,4,40.7,0,0,7.8,26.9,0,0,13.9,18.5,8.1,0,0,9.1,0,0,0,0,6.8,0,0,0,0,3,4,27,26.9,0,0,24.6,0,0,0,0,0,0,0,0,0,0,0,1.5,18.2,14.2,0,0,0,0,0,0,7.7,0,0.7,0,0,0,0,0,0,6.6,7.8,0,0,11.3,0,0,0,0,0,0,4.6,0,0,0,0,6.1,4.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.7,3.9,0,0,0,0,0,0,9.4,6.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.5,4.4,0,0,0,7.2,0,0,0,0,0,0,0,0,0,0,0,3.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.2,5.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32.9,1.2,0,0,0,0,0,0,19.1,0,0,0,0,3.8,1.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.9,0,4.1,16.6,0,0,35.2,0,0,0,0,0,7.6,6.5,0,0,0,0,0,21.6,0,10.2,0,0,0,0,18.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,169.8,0,0,0,0,0,14.7,12.4,19.4,13.6,0,0,0,5.2,0,13.3,27.6,0,1.7,0,0,0,0,29.6,20.5,10.2,44,25.3,0,0,0,13.8,13.3,17.6,22.4,0,0,0,0,0,0,0,27.2,0,0,0,0,0,16.1,0,29.2,0,0,0,0,6.9,17.2,0,0,0,0,13.6,0,0,0,0,7.4,0,0,15.8,0,0,6.8,0,0,3.7,0,0,20.7,0,0,0,3,5.9,0,0,0,10.6,0,0,0,0,0,4.4,26.9,0,0,0,0,17,0,0,0,2.6,0,0,13.3,0,3.6,12,0,0,0,0,0,0,0,0,0,0,3.3,2.7,0,0,0,0,0,0,0,0,2.3,0,0,0,0,0,0,0,0,0,0,8.6,0.7,0,0,0,0,0,0,0,0,0,0,0,1.6,0,0,0,0,0,0,0,0,0,0,0,6.7,0,0,0,0,0,0,0,0,0,3.1,4.9,2.5,14.8,5.2,0,0,0,0,11.5,2.6,0,0,0,0,0,0,0,4.3,2.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.7,1.8,0,2.8,15.4,0,0,0,0,0,0,0,0,0,0,24.7,0,0,0,0,0,10.7,0,0,0,0,0,0,0,0,0,4.4,7.2,11.3,0,16.1,1.3,0,0,0,0,0,0,4.7,3.5,2.8,0,0,0,0,0,0,0,0.8,38.6,0,0,0,0,0,15.3,0,0,3.9,7.8,0,0,0,0,0,0,11.1,0,0,0,0,0,0,17.5,2.2,9.6,0,0,0,34.4,8.4,1.9,21.5,4.3,12.3,9.5,0,0,0,0,36.8,54.3,22.6,0,21,17.2,0,0,0,15.2,22.6,23.1,7.7,39.9,29.1,0,0,0,0,0,13.4,0,20.2,13.2,0,0,0,0,23.6,26.7,35.5,0,2.8,0,10.3,0,6,0,0,0,0,0,0,0,4.7,7.3,0,11.3,0,4.8,27,5.6,17.4,0,0,28,0,0,0,0,0,0,8,0,13,25.2,0,0,0,0,0,21.1,12.1,7.8,0,4.3,15.8,4.3,0,15.6,0,4.1,35.2,0,0,0,0,0,0,0,0,0,0,6.8,0,0,0,0,23.7,10.9,4.3,0,0,0,0,7.8,14.1,7.6,10,0,0,0,6.9,0,0,18.9,0,8.2,0,0,0,0,12.5,0,0,0,0,23.5,0,0,0,0,0,9.6,0,0,0,0,0,6,10.2,0,3.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.7,17.9,6.3,3.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.4,6.2,0,3.4,0,6.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,11.9,0,0,0,0,0,0,0,0,0,0,0,8,16.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.1,3.3,0,0,0,0,0,0,3,0,0,0,0,0,0,14.3,0,0,0,0,0,0,0,2,3.9,8.1,0,11.4,3.6,10.7,0,0,0,0,0,0,0,0,0,0,16.4,2.2,0,0,12,0,12.6,16.2,9.4,0,0,0,15.7,22.7,0,0,0,0,0,0,0,4.1,12.1,7,34.7,13.7,20.5,1.3,3.4,0,0,0,0,0,0,7.4,5,6.5,0,0,0,4.3,0,12.4,4.5,4.9,16.4,0,0,0,7.8,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,33.8,0,0,0,0,0,14.3,0,10,0,0,8.9,10.1,0,8.1,29.3,0,0,5.2,8.3,6,0,0,2.4,0,5.9,0,0,18.3,0,0,0,0,0,0,0,0,0,0,0,5.9,11.2,0,0,0,0,0,29.5,0,4.6,4.6,0,0,0,0,0,5.6,7.9,0,0,3.7,15.5,16.7,14.7,1.9,9.9,0,15.9,0,0,0,0,6,0,0,12.8,2.6,7.6,0,0,0,0,5.4,0,0,0,0,0,0,0,0,0,0,0,0,2.3,0,0,0,0,0,0,0,0,1.2,0,0,6.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.4,0,0,0,1.3,0,0,0,0,0,0,0,4.3,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,13.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.6,7.3,10.6,10,0,0,9.5,0,0,0,0,0,0,11.1,0,0,0,11.7,8,12,0,0,3.4,0,11.9,5.6,8.3,4.2,7,0,0,0,15.4,7.5,0,0,0,0,0,0,0,0,0.8,0,0,0,17.5,15.3,0,57.8,6.3,0,0,0,0,4.9,0,16.6,11,6.3,0,0,0,11.4,3,16.4,5.9,18.7,0,6.4,0,28.1,47.2,51.7,0,0,10.7,0,0,29.7,8.6,0,13.5,1.5,0,12,6,11.7,13.9,0,2.2,18.2,0,0,17.9,12.7,0,0,0,2.2,0,0,0,0,0,0,0,4.1,11,16.2,26.9,3,29.3,0,16.2,16.5,10.4,6.3,11.7,0,0,0,0,0,0,0,8.7,21.6,40.1,0,0,0,0,0,15.9,0,0,0,0,0,0,17.7,16.4,21.8,0,0,0,0,0,0,0,0,18.9,0,0,0,0,0,4.3,0,0,0,3.4,0,0,10.1,5.2,0,9.5,0,0,3.1,1.4,0,0,0,55.8,0,0,0,0,0,0,0,11.5,8,10.4,11.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7.8,0,0,0,0,0,0,0,0,0,0,0,11.3,0,0,0,0,0,0,7.8,14.4,0,0,0,0,0,3.2,0,0,0,0,0,6.3,8.2,0,0,0,0,0,1.1,2.9,0,0,0,0,0,3.1,0,0,0,0,10.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.4,0,0,0,6.5,7.9,4.8,0,0,2.3,0,0,0,0,0,0,0,0,6.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.4,0,0,0,0,0,0,0,1,4.1,0,0,0,10.7,5,0,0,0,0,0,0,0,0,0,0,0,0,0,5.1,0,0,5.8,5.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.4,0,0,0,0,5.5,0,0,0,0,0,0,0,0,0,0,13.3,0,11.5,1.4,0,0,0,0,15.1,0,5,0,0,0,0,3.9,0,0,19.7,16.4,8.1,0,0,8.9,0,0,0,8.5,8.5,3.7,0,0,0,0,0,0,0,0,10.6,42.1,3.8,0,30.3,0,16.8,13.8,8.7,11.4,73.7,0,0,0,34,7.5,0,3.6,2.9,0,8.6,12.7,22.9,26.3,14.8,16.6,6.6,24.6,8.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.3,0,21,20.2,13.2,0,13.9,47,0,0,0,0,4.2,0,18.3,0,0,0,0,11.9,0,0,0,11.3,7.2,10.6,14.1,24.1,0,0,0,0,29.9,0,0,7,24.5,0,0,0,0,4.7,0,0,0,0,8.9,7.4,22.9,35.8,24.1,16.3,0,0,18.9,0,0,0,5.8,0,22.7,15,23.6,0,0,4.8,0,0,0,0,0,0,0,0,0,0,0,6.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8.2,17.7,18.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.5,0,0,0,0,7.3,3.4,0,6.1,7.4,0,0,0,2,5.2,0,0,0,0,0,0,0,0,0,0,0,0,15.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.9,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.6,3,23.8,0,4.4,10.2,0,0,0,0,0,0,0,0,6.7,5.9,0,0,5.7,0,0,0,0,0,0,0,0,0,0,0,0,0,10.6,0,0,0.3,17.8,0,0,19.2,46.6,7.6,18.9,0,0,26.4,2.5,3.1,13.2,7.7,0,0,0,0,0,0,11.2,0,20,8.2,21.4,0,0,0,0,0,0,17,0,0,1.1,12.8,0,25.7,26,0,0,13.2,0,0,0,21.1,25.1,26.3,15.7,0,0,0,0,0,0,0,7,0,0,8.5,2.5,0,2.5,15.1,21.2,16.5,0,32.6,6.2,5.2,8,0,0,0,0,0,0,4.6,0,0,0,13.9,7.9,5.3,14.5,0,0,0,20.3,0,4.5,14.8,7.7,10.2,0,17.4,0,0,0,0,4.9,10.3,13.6,0,0,8.7,0,0,12.4,8.8,8.2,0,0,0,25.3,6.3,12.5,0,18.2,11.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.5,6.7,6.8,14.1,0,24.7,0,0,4.4,6.4,0,0,0,0,3.8,24.2,16,6.5,0,0,0,0,0,0,0,2.5,0,0,0,0,0.7,0,0,5.5,0,0,11.3,2.4,0,0,0,2.1,4.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.2,10.4,0,10.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.6,1.5,0,0,0,0,0,7.2,1.4,3.5,7.3,0,0,0,0,0,0,0,0,0,3.8,0,0,4.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7.9,6.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.9,1.3,5.6,0,0,0,0,0,0,0,0,0,0,2.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,20.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.1,0,0,0,0,0,0,0,0,0,0,0,0,0,6.8,0,0,0,0,0,0,0,0,17.6,27.7,1.2,9.6,0,5,0,0,0,0,0,0,14.4,8.1,0,0,22.4,0,0,0,0,0,0,0,18.2,0,0,0,0,5.3,0,7.6,0,0,14.6,10.8,20.1,6.2,13.2,18.4,0,0,0,0,0,2.8,0,0,0,0,4,0,2,0,0,0,0,49.1,13.1,0,0,0,0,12,0,12.8,19.1,7.2,41.8,0,0,21.4,19.7,0,0,8.1,0,23.1,18.5,0,9.1,0,17,10,2.7,5.3,10.6,0,0,0,0,0,0,0,0,0,12.4,12,0,0,33.4,26.5,6.8,13.9,15.7,11.4,15.9,31.1,12,0,28.6,0,4.9,31.4,7,0,0,9.3,0,0,10.5,0,0,0,0,29.8,0,0,7.6,5,0,0,0,0,0,5.2,0,5.7,13.5,1.8,0,18.5,0,10.9,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,5.2,0,0,0,0,4.9,7.5,7.6,0,8,0,0,0,2.4,7.3,0,0,0,11.1,0,0,0,3.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.6,0,0,0,0,0,0,0,6.3,0,0,0,0,0,0,0,0,0,0,0,0,0,11.1,0,0,0,0,0,0,0,7.6,2.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.6,5.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,21.4,0,0,0,0,0,0,0,0,0,0,0,0,2.4,9.5,0,0,0,4.9,9.9,14,10.3,18.8,0,0,0,0,10.2,5.5,0,0,0,0,0,0,0,0,0,0,11.6,0,0,1.4,0,1.9,0,4.2,3.5,32,11.1,0,8,8.5,4.9,10.5,0,0,12.4,0,0,0,0,0,0,0,0,0,0,0,0,6.9,12.1,0,0,0,0,5.3,0,0,0,0,0,0,0,8.4,15.2,26.4,10.7,24.4,15.2,25.3,10.7,23.6,18.8,0,30.1,0,0,0,0,0,0,36,5.5,8.2,0,0,0,0,0,24.4,11.5,0,0,0,0,0,0,7.8,0,0,7.3,12,11.8,0,0,0,0,0,0,8.2,34.2,18.1,14.5,0,0,27.6,13.1,0,1.9,6.8,0,0,0,0,0,0,0,0,0,0,12.6,2.4,0,0,0,9.6,15.1,7.4,5.8,0,0,0,0,0,0,0,4.4,10,0,3.3,0,0,0,0,0,5.8,0,0,0,0,9.7,7.7,5.7,9,0,0,0,0,17.6,1.7,0,0,0,0,0,0,0,0,1.9,0,11.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10.5,0,0,0,0,7.3,0,0,0,0,0,11.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.6,0,0,0,0,0,0,0,0,1,0,10,0,0,0,0,0,0,0,0,0,6.5,0,0,0,2,0,0,0]
+		},
+		{
+			"kind": "flow_observed_m3s",
+			"name": "Outlet weir (synthetic)",
+			"unit": "m³/s",
+			"startDate": "2010-01-01",
+			"values": [0.00332,0.0054,0.00398,0.00441,0.00217,0.00503,0.00445,0.00445,0.00351,0.00302,0.00481,0.00311,0.00421,0.00456,0.00408,0.00195,0.00211,0.00207,0.00339,0.00203,0.00209,0.00377,0.00409,0.00237,0.00293,0.00524,0.00501,0.00247,0.00259,0.00215,0.00323,0.00243,0.000415,0.00241,0.00338,0.00176,0.00151,0.0011,0.000545,0.00039,0.000526,0.000678,0.00056,0.000824,null,null,0.000326,0.000428,0.000575,0.000612,0.000839,0.000346,0.000634,0.000324,0.000489,0.000659,0.000485,0.000679,0.00069,0.000621,0.0000821,0.00000116,0.00124,0.000972,0.000785,0.000581,0.000296,0.000538,null,0.000241,0.000254,0.00056,0.000281,0.000428,0.000583,0.00025,0.000357,0.000329,null,0.000411,0.000214,0.000392,0.000227,0.000208,0.000432,0.00028,0.000121,0.000654,0.000381,0.000495,0.000129,0,0,0,0.000401,0.000814,0.000414,0.000101,0,0.000755,0.000406,0.000597,0.000193,0.000199,0.000284,null,0,0.0000662,0.000623,0.000314,0.000274,0.000479,0.000367,0.000163,0.000223,0.000375,0.000209,0.000198,0.000452,null,0.000325,0.000297,0.000244,0.000224,0.000321,0.000422,0.000157,0.000187,0.000188,0.000394,0.000107,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,null,0,0,0,0,0,0.0134,0.0182,0.0387,0.023,0.0386,0.203,0.406,0.519,0.505,1.01,0.599,0.879,0.912,0.458,1.24,0.946,3.93,2.57,1.62,1.73,2.65,2.31,3.05,2.61,3.32,3.86,1.66,2.14,2.57,3.52,5.25,7.36,3,2.05,3.81,1.61,1.7,1.92,1.56,null,1.52,null,4.67,4.06,3.62,1.47,1.16,1.09,1.35,1.7,null,2.26,2.98,3.29,3.91,4.11,6.64,5.93,1.94,1.46,1.57,2.65,2.15,1.5,1.67,1.89,1.49,0.898,1.34,2.43,2.58,1.52,0.932,1.18,1.96,2.95,2.36,1.81,2.49,2.49,6.71,7.03,7.63,5.04,5.63,5.03,2.99,1.9,2.7,2.17,null,2.6,3.19,1.92,1.8,2.19,1.31,3,3.53,1.65,1.87,3.69,7.08,3.16,2.42,2.56,2.05,2.74,1.05,1.5,2.25,1.8,0.876,1.99,null,0.599,1.53,1.17,1.06,0.573,0.602,0.991,1.22,1.19,1.52,0.54,0.474,0.509,0.882,0.878,1.33,2.06,null,1.41,2.29,1.27,1.21,null,2.53,2.03,1.97,1.7,1.58,0.859,0.694,0.549,0.731,0.829,0.57,null,0.274,0.331,0.426,0.182,0.187,0.199,0.274,0.201,null,0.108,0.103,0.157,0.321,0.244,0.261,0.338,0.214,0.304,0.13,0.221,0.259,0.081,0.0653,0.094,0.0825,0.028,0.0348,0.0188,0.00873,0.00434,null,0.112,0.0651,0.02,0.00391,0.00388,0.0024,0.00449,0.00228,0.00275,0.00401,0.00261,0.00141,0.000857,0.00294,0.00321,0.00334,0.00255,0.00241,0.00232,0.0026,0.00259,0.00391,0.00482,0.00197,0.00244,0.00188,0.00203,0.002,0.00535,0.00198,0.00267,0.00403,null,0.00346,0.00425,0.0045,0.00427,0.0028,0.00269,0.00337,0.00187,0.00164,0.00313,0.00329,0.00218,0.00279,0.00317,0.00313,0.00242,0.0023,0.00197,0.00206,0.00268,0.0018,0.00373,0.0037,0.00454,0.00448,0.00247,0.0044,0.00288,0.00348,0.00299,0.00253,0.0023,0.00253,0.00176,0.00271,0.0032,0.00408,0.00325,0.00474,0.00414,0.00197,0.00134,0.000518,0.000567,0.000402,0.000846,0.000521,0.000407,0.000435,0.000325,null,0.000629,0.000284,0.000529,0.000322,0.000681,0.000304,0.000655,0.000283,0.000385,0.000223,0.000253,0.000414,0.000137,0.000329,0.000808,0.000441,0.000273,0.00021,0.000276,0.000297,0.000292,0.000345,0.00022,0.000351,0.000419,0.000452,0.000322,0.000181,0.000262,0.000445,0.000438,0.000486,0.000473,0.000228,0.000202,0.000176,0.00037,0.000101,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.00603,0.0153,0.0207,0.0331,0.042,0.0245,0.426,0.543,0.454,0.626,1.14,1.08,1.08,1.11,2.15,1.39,0.988,null,2.03,1.46,2.92,1.99,2.55,5.12,5.66,2.37,1.54,1.83,null,4.54,2.64,2.42,1.49,1.67,2.29,1.33,1.2,null,3.06,3.05,4.61,4.66,3.32,1.76,null,4.3,5.87,10.2,6.28,4.56,4.51,null,2.61,2.97,4.59,null,2.94,1.86,1.57,2.91,3.23,2.87,4.53,2.19,1.84,4.82,3.78,5.26,6.93,9.77,5.43,8.16,11.2,8.26,3.15,2.82,2.01,1.97,2.22,4.3,7.17,10.8,6.37,7.69,3.28,4.54,2.04,3.2,1.98,2.52,2.64,2.81,2.18,2.04,2.28,1.35,2.47,2.19,2.04,2.8,1.24,1.75,1.5,1.02,1.16,null,2.11,1.81,2.18,2.24,2.12,1.12,0.951,0.696,0.603,1.02,0.79,0.58,null,1.08,null,null,0.427,0.912,0.568,0.715,0.98,2.06,0.968,1.09,1.4,0.95,2.45,1.52,1.21,2.65,2.15,0.745,1.49,1.58,0.607,0.484,1.14,0.683,null,0.846,0.65,0.433,null,0.314,0.496,0.937,1.27,0.681,1.28,0.901,0.474,0.603,0.683,0.268,0.329,0.32,0.335,0.267,0.372,0.146,0.288,0.11,0.272,0.105,0.117,0.164,0.129,0.0821,0.0939,null,0.0578,0.0417,0.0608,0.0465,0.0235,0.052,0.00999,0.0627,0.102,0.0168,0.00379,0.00266,0.00176,0.0026,0.00284,0.00301,0.00468,0.00318,0.00454,0.00179,0.00374,0.0027,0.00366,0.00333,0.00384,null,0.004,0.00279,0.00131,0.00337,0.000686,0.00177,0.00519,0.00215,0.00185,0.00181,0.00386,0.00393,0.00258,0.00231,0.00502,0.00428,0.0038,0.00261,0.00429,0.00362,0.00414,0.00257,0.00424,0.00416,0.00184,0.00158,0.00174,0.00195,null,0.00239,0.00484,0.00397,0.00301,0.00202,0.00432,0.00323,0.00426,0.00402,0.003,0.00324,0.00329,0.00276,0.00408,null,0.00225,0.0029,0.00351,0.00366,0.00464,0.00123,0.00152,0.000681,0.000347,0.000543,0.000495,0.000946,0.000536,0.000562,0.00035,0.000291,0.000529,0.000246,0.0004,0.000283,0.000354,0.000441,0.000407,0.000528,0.000323,0.00052,0.000426,0.000267,0.000466,0.000205,0.000289,0.000429,0.000472,0.000248,0.000524,0.000108,0,0,0,0,0.00105,0.00144,0.000604,null,0.000413,0.000501,0.000363,0.000209,0.0000893,0,0.00122,0.000322,0.000298,0.000408,0.000083,0,0.000697,0.00101,0.000492,0.000189,0.000423,0.000336,0.000237,0.000209,0.00022,0.000166,0.000121,0,0,0.000266,null,0.000498,0.000171,0.000334,0.0000649,0,0,0,0,0,0.0000603,0.0000838,0.00113,0.000714,0.000748,0.000657,0.0000532,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0.00264,0.00347,0.0103,0.0069,0.00432,0.112,null,0.788,0.642,2.3,2.04,1.47,2.54,2.26,null,1.3,2.52,1.75,2.36,2.58,1.13,1.67,1.94,0.864,0.613,0.782,1.16,1.41,0.959,0.852,0.882,1.13,0.75,2.04,2.39,3.28,5.04,3.65,6.27,10.3,18.5,14.9,12.9,9.94,10.4,4.86,8.62,9.93,11,5.65,5.92,2.23,6.28,8.86,7.78,4.7,16.5,5.37,3.65,8.77,8.64,15.3,6.42,5.21,4.62,5.38,2.14,1.86,3.82,3.3,6.1,12.1,6.7,6.11,7.47,2.24,1.53,null,1.48,1.97,2.47,1.27,1.16,6.98,6.72,3.06,4.06,3.39,1.9,2.33,1.63,1.28,1.48,3.09,2.46,1.83,1.88,1,0.667,0.829,1.51,0.727,1.73,3.58,3.16,3.28,3.48,2.76,1.52,1.93,2.33,1.37,1.82,1.68,1.79,1.65,0.888,1.36,2.07,0.675,1.52,1.11,0.931,0.46,0.677,1.01,1.35,0.799,1.21,1.13,0.812,0.61,0.459,0.471,0.395,0.292,0.701,0.268,0.639,0.52,0.426,0.21,0.381,0.23,0.268,0.419,0.146,0.145,0.268,0.249,0.182,0.188,0.092,0.0933,0.115,0.114,0.057,0.0497,0.0718,0.0899,0.0702,0.0335,0.0223,0.0349,0.0336,0.0115,0.0104,0.0117,0.00322,0.00441,0.00231,0.00525,0.00267,0.00404,0.00451,0.00328,0.00196,null,0.0043,0.0051,0.00366,null,0.00188,0.00245,0.00193,0.00359,0.00227,0.00235,0.00439,0.00209,0.00385,0.00478,0.00434,0.00317,0.00252,0.00193,0.0033,0.00382,0.00337,0.00249,0.00215,0.00462,0.00192,0.00531,0.0044,0.00208,0.00546,0.00416,0.00276,0.00444,0.00418,0.00494,0.00188,0.00415,0.00287,0.00266,0.00282,0.00369,0.00264,0.00217,0.00188,0.00334,0.00389,0.00506,0.00324,0.00427,0.00333,0.00466,0.00252,0.00157,0.000631,0.000659,0.000554,0.000886,0.000372,0.000742,0.000661,0.000407,0.000859,0.000376,0.000269,0.000321,0.000253,0.000314,0.00047,0.000629,0.000492,0.000568,0.0003,0.000547,0.000479,0.000206,0.000329,0.000497,0.000511,0.000209,0.000264,0.000199,0.000393,0.000225,0.000473,0.000202,0.000283,0.000491,0.000248,0.000194,0.000432,0.000313,0.000231,0.000226,0.000193,0.000474,0.000436,0.000243,null,0.000307,0.00015,0.0000224,0.000644,0.00017,0.000756,0.000672,0.000205,0.00021,0.000201,0.000299,0.000191,0.000308,0.000177,0.00042,0.000178,0.000419,0.000324,0.000269,0.0000994,0,0,0,0,0.000564,0.00128,0.00069,0.000207,0.000232,0.000257,0.000187,0.00036,0.000161,0.000281,0.000283,0.0000817,0,0,0,0,0.000249,0.00151,0.000803,0.000236,0.00034,0.0000543,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,null,0,0,0,0,0,0,0,0,0,0,0.0113,0.0116,0.00871,0.000647,0.000363,0.0314,0.304,1.03,0.42,0.823,null,1.3,1.14,1.84,1.64,1.06,1.95,2.66,2.6,2.98,3.44,7.69,6.06,4.08,4.1,4.36,2.71,2.65,null,2.49,3.89,4.4,3.44,2.86,1.47,0.924,0.806,0.849,2.8,2.03,1.43,3.47,3.19,2.71,7.01,7.21,5.88,8.84,9,9.43,5.81,6.58,3.37,4.09,2.25,2.19,3.29,1.62,1.39,3.3,1.47,1.42,2.66,null,1.21,1.11,null,1.24,2.02,4.82,1.67,1.65,2.21,2.36,2.16,1.67,2.68,1.72,2.55,9.69,4.7,2.98,1.83,2.78,2.76,4.2,3.7,null,2.04,1.71,1.18,1.02,2.79,2.39,4.61,1.56,2.99,2.32,5.37,3.3,3.26,3.52,1.98,2.51,1.35,1.77,1.15,1.44,0.856,1.45,0.536,0.552,1.74,null,2.71,2.62,2.84,1.75,1.16,1.35,1.43,1.1,0.841,0.77,1.05,0.804,0.487,0.637,0.62,0.975,0.403,0.537,0.381,0.293,0.402,0.779,0.776,1.11,0.536,0.713,0.32,0.385,0.495,0.233,0.485,0.315,0.362,0.526,0.279,0.398,0.16,0.146,0.188,0.127,0.125,0.16,0.0826,0.102,0.091,0.167,0.121,0.0499,0.0488,0.0687,0.0318,0.0189,0.0246,null,0.00902,0.0112,0.00359,0.00253,0.00186,0.00383,0.00294,0.00258,0.00422,0.0706,0.175,0.179,0.0469,0.00387,0.00191,0.00228,null,0.000562,0.00164,0.00246,0.00177,0.00491,0.00296,0.00208,0.00236,0.00383,0.00211,0.00278,0.00302,0.00343,0.00398,0.00469,0.0019,0.00502,0.0028,0.00191,0.00197,0.0026,0.00221,0.00489,0.00407,0.00393,0.0044,0.00457,0.00392,0.00268,0.00244,0.00455,0.0035,0.00233,0.00333,0.00266,0.00394,0.00293,0.00272,0.00281,0.00217,0.0047,0.00253,0.00443,0.00285,0.00273,0.00223,0.00262,0.00191,0.00303,0.0032,0.00239,0.00212,0.00264,0.00347,0.00537,0.00518,0.00364,null,0.00327,0.0021,0.000702,0.000441,0.000911,0.000363,0.000423,0.000862,0.000443,0.000303,0.000443,0.000593,0.000634,0.000462,0.000466,0.00042,0.000651,null,0.000252,0.000453,0.000391,0.000435,0.000382,0.000209,0.000403,0.000197,0.000219,0.0003,0.000573,0.000305,0.000306,0.000228,0.000268,0.000291,0.000341,0.000216,0.0000649,0.000761,0.000325,0.0000979,0,0,0.000122,0.0000937,0.0000563,0,0,0,0,0,0.00149,null,0.00141,0.000476,0.00038,0.000216,0.000479,0.000377,0.000127,null,0,0.00119,0.000213,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.000501,0.00129,0.000276,0.00113,0.00133,null,0.000291,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.00307,0.0075,0.00125,0,0,null,0.00073,0,0,0,0,0,0,0,0,0,0.0576,0.157,0.663,0.649,0.916,1.58,1.8,1.11,0.737,1.37,1.22,1.1,1.48,1.32,1.11,1.1,1.3,0.675,1.11,1.18,1.18,1.83,2.41,2.41,2.41,1.87,2.41,2.41,2.14,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,null,2.41,2.41,2.41,null,2.41,2.41,2.41,2.41,null,2.41,2.41,2.41,2.41,2.41,2.11,2.41,2.41,2.41,2.41,1.73,1.76,1.66,2.41,2.41,2.41,1.35,1.13,2.17,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,2.41,null,2.41,2.41,2.41,2.41,2.41,2.41,2.41,1.92,2.09,2.41,1.43,2.41,2.41,2.41,2.41,1.68,2.41,1.84,1.37,1.64,null,2.41,2.09,1.76,null,2.01,1.01,1.53,1.43,1.06,null,1.37,null,1.52,1.36,null,1.62,2.29,1.72,1.5,2.33,1.3,2.13,1.91,0.68,1.23,0.611,0.664,1.12,1.3,0.678,0.767,0.89,0.998,1.99,1.13,0.612,1.38,0.629,1.13,0.61,0.788,0.802,0.793,0.506,0.731,0.364,0.313,0.281,0.39,0.393,0.282,0.291,0.214,0.354,0.176,0.13,0.232,0.166,0.163,0.152,0.197,0.215,0.103,0.404,0.349,0.501,0.359,0.298,null,0.173,0.0823,0.0949,0.0575,0.0728,0.0107,null,0.00607,0.00337,0.00191,0.00188,0.00229,0.0018,0.00188,0.00135,0.00149,0.00231,0.00513,0.00258,0.0024,0.00404,0.00266,0.00452,0.0023,0.00269,0.003,0.00393,0.00399,0.0025,0.00229,0.00213,0.00342,0.00219,0.00489,0.00441,0.00413,0.00448,0.000819,0.00376,0.00473,0.00498,0.00229,0.0029,0.0052,0.00536,0.00271,0.00373,0.00528,0.00342,0.00194,0.00529,0.00352,0.00258,0.00416,0.00296,0.00531,0.00512,0.00221,0.00227,0.00544,0.00343,0.00451,0.00304,0.00244,0.00222,0.00216,0.00207,0.00272,0.00414,0.00253,0.00425,0.000803,null,0.00145,0.00149,0.00449,null,0.00467,0.00173,0.00165,0.00105,0.000553,0.000866,0.000434,0.000599,0.000554,0.000737,0.000517,0.000553,0.000616,0.000484,0.00044,0.000417,0.000461,0.000683,0.000201,0,0.000744,0.00119,0.000252,0.00036,0.000296,0.000276,0.00039,0.000354,0.000547,0.000515,0.000531,0.000396,0.000363,0.000408,0.000424,0.000384,0.000452,0.000471,0.000121,0,0.000588,0.0011,0.000349,0.000299,0.000559,0.000205,0.000247,0.00047,0.000203,0.000155,0.0001,null,0.000801,0.000267,0.000239,0.000277,0.000208,0.0000881,0,0.000191,0.000854,0.000854,0.000272,0.000309,0.000269,0.000188,0.0000565,0,0,0,0,0.00117,0.000559,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,null,0,0,0,0,0,0,0,0,0.00638,0.0245,0.027,0.0307,0.291,1.16,1.02,1.29,1.66,0.595,1.92,2.46,3.01,3.36,null,1.9,1.22,1.09,0.902,2.26,2.04,2.56,2.77,4.26,2.62,1.45,2.7,4.98,1.66,null,1.34,2.06,3.23,6.52,3.74,3.67,null,2.17,13.4,13,6.57,2.26,1.87,1.15,1.55,1.33,1.14,1.14,1.75,1.59,4.12,2.89,5.07,6.16,3.34,3.44,3.31,2.55,2.96,null,6.52,6.21,5.81,5.84,9.01,12.3,8.06,9.98,3.66,4.08,9.61,10.3,5.65,3.57,5.19,4.33,3.9,2.87,2.28,1.87,2.93,2.24,2.78,2.87,5.51,3.8,1.96,2.18,3.28,2.21,null,3.45,2.02,2.97,1.22,1.2,1.11,1.27,1.49,3.25,2.89,2.97,2.34,1.72,3.58,1.27,1.63,2,0.96,1.23,0.954,2.1,3.47,2.79,2.88,2.37,2.82,2.36,1.32,0.724,1.67,0.715,1.42,1.44,1.78,1.46,0.571,1.35,0.883,0.912,0.629,0.514,0.416,0.39,0.479,0.478,0.615,0.384,0.762,1.18,1.07,0.501,0.445,0.671,0.821,1.29,0.604,0.544,0.42,0.303,null,0.3,0.635,0.508,0.362,0.306,0.198,0.182,0.48,0.464,0.664,0.479,0.471,0.932,0.463,0.696,0.377,0.284,0.539,0.901,0.351,0.286,0.235,0.287,0.346,0.253,0.186,0.085,null,0.166,0.0765,0.0834,0.365,0.168,0.303,0.18,0.0664,0.0567,0.0634,0.0326,0.0183,0.00587,0.00412,0.00231,0.00253,0.00281,0.00236,0.00461,0.00214,0.00286,0.0025,0.00439,0.00372,null,0.00192,0.00182,0.0034,0.00196,0.00326,0.00401,0.00202,0.00232,0.00355,0.00224,0.00527,0.00189,0.0035,0.00483,0.00369,0.00408,0.00245,0.00531,0.0019,0.0038,0.00383,0.00229,0.00205,0.00261,0.00272,0.00241,0.00509,0.00256,0.00191,0.00453,0.00526,null,0.00362,0.00181,0.00209,0.0028,0.00162,0.00336,0.00311,0.00162,0.00293,0.0034,0.00452,null,null,0.00194,0.00185,0.00445,0.00163,0.00267,0.00451,null,0.00229,0.00371,0.00274,0.00409,0.00376,0.004,0.00209,0.000366,0.00043,0.000695,0.000363,0.000311,0.000829,0.000539,0.000681,0.000539,0.000734,0.000546,0.000429,0.000528,0.000297,0.000474,0.000477,0.000343,0.000459,0.000344,0.000391,0.000312,0.000527,0.00034,0.000236,0.000278,0.000163,0.000732,0.000709,0.000582,0.000256,0.000206,0.000248,0.000226,0.000241,0.000282,0.000252,0.000234,0.000227,0.000491,0.000399,0.000396,0.000496,0.000448,0.000203,0.000216,0.000342,0.000181,0.0002,0.000238,null,0.000319,0.000172,0.000175,0.000258,0.000429,0.000211,0.000175,0.0000534,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0.0298,0.0607,0.0393,0.0249,0.338,0.191,0.207,0.523,0.356,0.548,0.524,1.21,1.04,0.739,null,0.86,2.13,0.803,0.757,1.57,2.07,1.17,2.52,4.51,2.13,2.5,0.832,0.882,1.35,0.823,2.14,1.6,2.12,4.05,2.41,4.42,4.19,null,2.45,6.42,3.88,3.52,3.66,4.39,6.72,2.5,4.84,6.03,5.1,5.17,4.54,2.34,2.76,null,2.1,1.97,3.27,1.83,1.16,2,1.77,1.55,1.44,4.62,3.64,4.05,5.44,null,1.64,2.92,3.24,2.91,4.76,8.45,12.7,10.5,6.9,7.29,4.8,4.57,5.53,7.74,5.48,5.18,5.84,4.58,10.4,7.29,5.26,10.2,9.32,5.26,3.03,3.24,2.51,1.99,2.35,2.1,1.33,2.25,1.41,1.27,0.809,1.24,2.32,2.93,6.31,4.25,3.97,3.23,5.44,4.55,2.25,2.76,2.08,2.4,1.6,2.19,0.882,0.951,1.18,0.671,1.55,2.65,2.32,2.58,1.89,1.42,1.59,0.924,1.45,1.56,0.866,0.664,1.1,0.607,0.621,0.444,1,0.95,null,0.633,0.469,0.833,0.829,null,0.802,1,0.402,0.517,0.608,0.668,0.254,0.201,0.49,0.292,0.334,0.185,0.143,0.249,0.143,0.138,0.122,0.105,0.105,null,0.105,0.155,0.0571,0.0997,0.135,0.107,0.0717,0.0548,0.0347,0.0599,0.0186,0.04,0.0309,0.0196,0.0112,0.00237,0.00226,null,0.00341,0.00414,0.00267,0.00274,0.00208,0.00188,0.00211,0.00421,0.00455,0.00506,0.00343,0.00312,0.00379,0.00404,0.00442,0.00472,0.00187,0.00241,0.00365,0.00347,null,0.00204,0.002,0.00365,0.00185,0.0026,0.00235,0.00255,0.00518,0.00475,0.00202,0.00315,0.00243,0.000996,0.00096,0.00358,0.00208,0.00379,0.00378,0.00526,0.00284,0.00332,0.00241,0.0031,0.00193,0.00463,0.00394,0.00268,0.00459,0.00267,0.00304,0.00396,0.00406,0.00143,0.00378,0.00202,0.00285,null,0.00314,0.0022,0.0041,0.0021,0.00273,0.00128,0.000627,0.000401,0.000558,0.000551,0.00063,0.000565,0.000479,0.000382,0.000708,0.0004,0.000271,0.000552,null,0.000484,0.000401,0.000417,0.000224,0.000356,0.000229,0.000308,0.000551,0.000438,0.000565,0.00056,0.000315,0.000237,0.000219,0.00021,0.000267,0.000344,0.000414,0.000295,0.00033,0.000335,0.000408,0.000308,0.000221,0.000152,0.000604,0.000423,0.000309,0.000428,0.00032,0.000194,0.000294,0.000182,0.000247,0.0003,0.000246,null,0.000149,0.000352,0.000155,0.000183,0.00034,0.000162,0.000283,0.000198,0.000358,0.0000789,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0.000444,0.000791,0.00126,0.00135,0.0014,0.000719,0.000198,0.000294,0.000342,0.000372,0.000213,0.000223,0.000358,0.000353,0.000342,0.000225,0.000145,0.000054,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,null,0,0,0.0105,0.0183,0.00491,0.000732,0,0,0.0131,0.0144,0.00735,0.0867,0.624,0.555,0.466,0.805,0.332,0.743,1.39,0.577,1.18,0.449,0.64,0.572,0.775,0.951,1.2,1.53,2.85,3.33,1.89,1.77,1.02,0.806,1.25,1.32,1.74,3.39,null,2.38,1.49,0.895,1.86,null,6.96,3.45,6.33,10.2,9.21,3.17,4.02,6,6.72,4.6,8.49,4.06,3.84,3.71,1.86,1.67,2.99,3.23,4.64,2.62,2.17,3.53,1.39,1.49,2.88,4.16,3.09,3.68,3.78,3.37,1.48,3.61,2.29,3.78,2.14,1.2,1.48,2.54,1.68,1.38,1.81,0.976,2.42,1.72,1.37,2.19,2.11,2.71,2.87,2.26,1.38,1.06,1.88,1.61,2.5,null,1.41,2.46,1.17,0.867,1.11,1.23,1.61,1.23,1.03,1.64,1.05,0.819,0.672,0.78,1.43,1.59,2.95,1.24,1.67,1.02,1.85,2.28,1.46,0.874,0.794,1.1,1.08,1.43,1.74,1.84,1.4,0.747,0.514,0.76,1.21,0.591,0.852,0.429,0.337,0.828,0.296,0.603,0.58,0.56,null,null,null,0.143,0.11,0.174,0.242,0.155,0.218,0.0933,0.0892,0.12,0.0837,0.0846,0.0709,0.0667,0.215,0.0969,0.154,0.075,0.0401,0.0358,0.0406,0.019,0.023,0.019,0.00591,0.00408,0.0017,0.00406,0.00278,0.00334,null,0.0048,0.00256,null,0.00295,0.00423,0.00365,0.00228,0.00201,0.000911,0.00374,0.0025,0.00186,0.0018,0.00204,0.00245,0.00444,0.00511,0.00513,0.00167,0.00111,0.0029,0.00106,0,0.00116,0.00304,0.00393,0.00485,0.000898,0.00114,0.00252,0.00245,0.0033,0.00496,0.00288,0.00321,0.00439,0.00215,0.00156,0.00245,0.0043,0.00462,0.00398,0.00535,0.00357,0.00406,0.00442,0.0022,0.00306,0.00188,0.0019,0.00197,0.00263,0.00294,0.00304,0.0033,0.00193,0.00201,0.00386,0.00524,0.00203,0.00293,0.00288,0.00233,0.00276,0.00198,0.00404,0.00196,0.00336,0.000919,0.000521,0.000529,0.000641,0.000815,0.000556,0.000467,0.000329,0.000598,0.000377,0.00076,0.000771,null,0.00024,null,0.000347,0.000382,0.000343,0.000396,0.000506,0.000275,0.000253,0.000211,0.000223,0.000625,0.00059,0.000553,0.0000919,0,0.000516,0.00043,0.000255,0.00041,0.000464,null,0.000244,0.000183,0.000431,0.000144,0,0,0.0000404,0.00082,0.00117,0.000153,0.000246,0.000532,0.000603,0.000507,0.00018,0.000358,0.00026,0.0003,0.000257,0.0000704,0,0,0,0,0,0,0,0,0,0.000188,0.000645,0.00048,0,0,0.000629,null,0.00123,0.00136,null,0.000196,0.00027,0.000419,0.000129,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0.0406,0.309,2.85,3.89,3.65,4.75,3.78,1.47,1.94,2.04,3.37,7.81,9.15,6.1,14.4,9.84,2.7,4.42,4.12,3.23,3.62,2.26,4.67,6.65,4.24,2.55,1.7,1.89,3.82,5.25,11.9,15.5,3.45,null,3.42,3.88,2.86,1.75,2.52,2.34,2.56,1.61,1.36,1.87,1.19,2.64,1.46,3.74,2.27,4.4,2.96,8.34,9.26,4.84,2.68,5.07,8.07,2.76,4.59,1.84,3.07,1.94,2.84,2.13,2.72,3.14,3.85,4.42,1.79,2.67,null,3.91,4.38,3.76,2.41,2.58,3.2,2.71,2.3,3.61,null,null,5,5.44,3.84,2.79,1.39,1.97,3.08,1.76,1.17,1.24,1.97,1.85,1.18,0.952,1.17,0.848,1.9,2,2.22,3.83,1.82,1.06,2.17,1.7,1.52,2.13,null,2.22,1.88,1.27,1.69,1.42,2.57,2.24,1.49,1.88,1.91,2.45,1.1,1.72,1.85,1.14,1.89,0.738,1.12,1.32,null,2.24,1.57,0.862,0.826,0.744,1.1,1.53,0.94,0.579,0.829,1.35,0.902,0.729,0.56,0.532,0.54,0.417,0.425,0.396,0.716,0.484,0.2,0.294,0.157,0.165,0.272,0.124,0.309,0.249,0.165,0.0978,0.185,0.0962,0.12,0.0624,null,0.0769,0.0517,0.0394,0.0451,0.0553,0.132,0.15,0.428,0.594,0.351,0.201,0.12,0.0491,0.0289,0.00415,0.00403,0.00342,0.004,0.0019,0.00201,0.0047,0.00306,0.00272,0.00517,0.00311,0.00197,0.00406,0.00112,0.00091,0.00267,0.00339,0.002,0.00253,0.00406,0.00183,0.00526,0.00359,0.00194,0.0042,0.00275,0.00291,0.00401,0.00344,0.00436,0.00301,0.00205,0.00443,0.00307,0.00357,0.00451,null,0.00467,null,0.00382,0.00339,0.00223,0.00417,null,0.00361,0.00189,0.002,0.00285,0.00264,0.00141,0.00258,0.00449,0.00367,0.00278,0.00234,0.00543,0.0028,0.0041,0.00252,0.00313,0.00204,0.00168,0.0000452,0.00012,0.00292,0.0035,0.00259,0.00325,0.0023,0.00412,0.00273,0.00208,0.00272,null,0.00352,0.00337,null,0.0045,0.00205,0.000464,0.000438,0.000885,0.000981,0.00096,0.000353,0.00073,0.000683,0.000745,0.000514,0.000671,0.00057,0.000349,null,0.000467,0.000278,0.00047,0.000441,null,0.000508,0.000408,0.000231,0.000241,0.000229,0.000472,0.000177,0,0.000904,0.000601,0.00053,0.00024,0.00052,0.00045,0.000242,0.000364,0.000175,0.000511,0.000126,0,0,0,0.000461,0.00112,0.000615,0.000454,0.000274,0.000417,0.000337,0.000436,0.000207,0.0000666,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.00321,0.00575,0.00189,0,0.0849,0.393,1.61,0.986,0.728,null,1.9,2.67,2.1,1.5,2.39,1.12,2.51,2.77,1.8,1.56,1.6,1.61,3.72,2.86,5.71,7.9,null,3.36,4.44,7.69,7.69,4.66,5.21,2.41,4.4,5.59,3.97,1.83,1.23,1.42,2.85,3.7,2.48,null,1.9,0.989,1.48,2.59,2.29,7.01,6.23,9.61,null,2.81,3.24,2.64,1.2,2.82,2.12,2.22,1.71,2.94,3.29,11,7.65,2.41,null,3.9,2.77,2.03,2.21,3.21,3.3,9.78,9.69,6.29,2.33,5.07,null,7.22,10.3,6.48,14.6,6.79,3.3,3.16,3.23,2.76,3.59,3.34,null,2.69,1.56,2.04,5.3,2.51,4.34,4.72,3.61,4.94,2.12,2.4,2.79,4.7,2.3,2.84,2.26,1.22,2.48,2.23,1.83,null,1.68,2.05,0.988,1.31,1.79,1.12,1.62,1.6,null,0.963,0.657,1.38,null,0.915,1.09,1.56,1.07,1.49,2.74,1.37,1.32,0.97,1.27,1.15,0.97,1.09,0.577,1.19,0.658,1.02,0.575,1.73,2.04,1.73,2.71,1.62,1.72,2.56,2.98,1.34,1.06,1.17,0.926,1.59,1.81,1.25,1.85,1.77,1.24,0.622,1.23,0.754,0.446,0.585,0.765,0.727,0.346,0.427,0.212,0.362,null,0.365,0.169,0.234,0.315,0.124,0.145,0.129,0.1,0.233,0.133,0.183,0.12,0.153,0.0495,0.115,0.244,0.0473,0.0156,0.0077,0.00348,0.00188,0.0045,0.0036,0.00445,0.00445,0.00364,0.00391,0.00177,0.00179,0.00391,0.00211,0.00301,0.00284,0.00194,0.00268,0.00212,null,0.00207,0.00396,0.00457,0.00511,0.0033,0.00286,0.00205,0.00228,0.00182,0.00406,0.0034,0.00476,0.00185,0.00241,0.00222,0.00445,0.00286,0.00305,0.00386,0.00361,0.00203,0.00241,0.00229,0.00236,0.00133,0.002,0.00453,0.00346,0.00299,null,0.00478,0.00196,0.0028,0.00324,0.00228,0.00194,0.00364,0.00417,0.00285,0.00193,0.00479,0.00349,0.0016,null,0.00269,0.00283,0.00379,0.00224,0.00313,0.00127,0.000351,0.000795,0.000409,0.000718,0.000372,0.000363,0.000679,0.000588,0.000376,null,null,0.000441,0.000294,0.000591,0.000258,0.000575,0.000423,0.000449,0.000376,0.000375,0.000567,0.000266,0.000247,0.0000756,0,0.000557,0.000363,0.000344,0.000269,0.000223,0.000372,0.00035,0.000302,0.000289,0.000466,0.000185,0.000208,0.000266,0.000233,0.000379,0.000477,0.000135,0,0,0,0.00106,null,0.000908,0.00121,0.000621,0.000327,0.000443,0.000457,0.000132,0,0,0.000773,0.000365,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,null,0,0,0,0,0,0.000202,0.000105,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.00347,0.0111,0.0388,0.0319,0.0253,0.196,0.789,6.15,4.8,4.21,7.61,4.56,null,2.2,5.17,4.13,4.33,4.28,4.44,3.73,1.73,3.98,5.99,3.18,2.12,4.97,4.89,3.31,2.41,2.25,2.87,4.44,2.98,2.14,null,2.62,1.93,1.72,1.85,1.31,0.983,1.34,0.915,1.12,3.13,4,7.05,7.23,10.3,4.05,null,4.78,3.89,4,2.93,5.04,1.93,2.87,1.56,1.18,1.19,2.86,6.09,13.5,10.8,8.1,3.67,4.39,1.9,2.52,3.26,1.85,1.89,1.66,1.87,2.43,2.46,6.81,4.01,5.91,2.21,3.2,1.47,1.77,1.87,2.51,2.26,3.51,1.95,2.35,1.55,2.46,1.28,1.99,1.82,1.61,1.1,1.1,1.25,0.677,1.27,1.26,2.3,1.19,2.34,0.773,0.841,1.39,1.33,1.06,2.43,3.75,3.58,2.49,2.78,3.25,1.2,1.91,1.59,1.87,2.34,null,null,1.82,2.33,1.25,1.49,1.09,1.38,1.38,0.882,1,0.894,0.51,0.373,0.601,0.537,0.728,0.591,0.39,0.639,0.628,0.284,0.294,0.241,0.269,0.26,0.492,0.232,0.304,0.537,0.274,0.49,0.508,0.438,0.469,0.324,0.829,0.621,null,0.374,0.166,0.235,0.172,0.196,0.218,0.262,0.147,0.216,0.279,0.155,0.304,0.224,0.177,0.166,0.0684,0.173,0.144,0.0791,0.0717,0.0488,0.0564,0.0956,0.0497,0.0212,0.0155,0.0072,0.112,0.164,0.0198,0.00378,0.00454,0.00386,0.00481,0.0044,0.0031,0.00306,0.00298,0.00375,0.00238,0.00362,0.00217,0.00484,0.00347,0.00266,0.00235,0.00332,0.0024,0.00249,0.00441,0.00181,0.00239,0.00505,0.0034,0.00378,0.00526,0.00246,0.00371,0.00401,0.00477,0.00256,0.00396,0.00323,0.00314,0.00317,0.00345,0.00232,0.00183,0.00178,0.00178,0.00295,0.00185,0.0029,0.000984,0.000974,0.00209,0.00326,0.00345,0.00345,0.00276,0.00412,0.00296,0.00244,0.00264,0.00528,0.00365,0.00273,0.00306,0.00212,0.00507,0.00295,0.00421,0.00277,0.00425,0.00284,0.00307,0.0027,0.00154,0.000556,0.000425,0.000352,0.000327,0.000332,0.000475,0.000489,0.000395,0.000365,0.00051,0.000297,0.00101,0.000417,0.000469,null,0.000515,0.00039,0.000327,0.000278,0.00045,0.000219,null,0.000453,0.000127,0,0.000672,0.000893,0.000469,0.000269,0.000272,0.000212,0.000309,0.000501,0.000356,0.000274,0.000298,0.000186,0.000214,0.000456,0.00041,0.000187,0.000104,0.000262,0.00054,0.000271,null,0.000417,0.000415,0.000388,0.000244,0.000253,0.000361,0.000186,0.00029,0.000347,0.000167,0.000228,0.000298,0.000175,0.000396,0.000276,0.0000588,0.000225,0.000454,0.000275,0.000222,0.0000796,0.000226,0.000365,0.000201,0.000214,0.000391,0.000163,0.000132,0.000194,0.000129,0.00024,0.0000614,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0.000572,0.00494,0.044,0.336,1.03,0.724,1.55,2.61,3.55,3.31,2.28,1.5,1.42,2.31,2.19,5.08,7.77,7.14,10.1,5.51,5.93,6.69,3.83,3.71,2.98,3.09,1.41,null,1.02,2.03,null,0.855,1.15,0.793,1.37,1.04,0.746,0.854,0.88,1.44,1.9,3.83,4.4,6.89,null,8.22,10.7,8.06,4.79,3.09,1.44,3.62,2.85,1.89,2.08,1.27,3.14,1.57,3.11,1.8,2.35,2.01,2.47,3.66,4.69,3.56,7.71,5.17,1.58,2.63,4.54,6.37,3.31,2.74,5.55,6.77,4.67,4.03,2.74,1.19,2.05,1.12,1.69,2.42,1.18,2.35,3.43,5.61,6.72,5.68,8.78,6.37,5.19,5.56,1.96,3.55,2.05,1.65,4.86,5.8,12.1,3.57,3.51,3,1.51,1.33,2.73,2.49,1.09,0.907,1.62,1.52,0.906,1.61,1.34,1.25,0.635,null,0.481,0.911,0.689,0.51,0.618,0.634,0.382,0.4,0.723,0.567,0.616,0.304,0.401,0.52,0.322,0.536,0.345,0.527,1.34,1.79,2.28,0.824,0.971,0.914,0.615,0.7,0.369,0.463,0.31,0.324,0.199,0.325,0.438,0.2,0.167,0.244,0.155,null,0.129,0.0952,0.101,0.0816,0.154,0.133,0.0681,0.0539,0.204,0.11,0.0762,null,0.0471,0.209,0.133,0.0578,0.115,0.127,0.0332,null,null,null,0.00213,0.00282,0.0029,0.00523,0.00444,0.00225,0.00518,0.00285,0.00377,null,0.00179,0.00271,0.00295,0.000956,0.000464,0.00189,0.00395,0.00214,0.00256,0.00269,0.00514,null,0.00317,0.00231,0.00368,0.00267,0.002,0.00418,0.00502,0.00419,0.00252,0.00196,0.00277,0.00191,0.00369,0.00245,0.00382,0.00202,null,0.00291,0.00285,0.00485,0.00207,0.00188,0.00541,0.00235,0.00216,0.00213,0.00435,0.0034,0.00306,0.00241,0.00215,0.00226,0.00233,0.00213,0.00454,0.00258,0.00234,0.00401,0.00398,0.00183,0.00328,0.00191,0.00351,null,0.00254,0.00217,0.000796,0.000841,0.00093,0.000496,0.000562,0.000787,0.000869,0.000803,0.00061,0.000828,0.000567,0.000365,0.000344,0.000673,0.000342,0.000405,0.000317,0.000261,0.000322,0.000504,0.000308,0.000327,0.000542,0.000338,0.000432,0.000251,0.000307,0.000279,0.000291,0.000522,0.00021,0.000296,0.000275,null,0.000242,0.000361,0.000298,0.000298,0.000187,0.00034,0.000359,0.000504,0.000297,0.000136,0,0,0,null,0,0,0.000336,0.000663,null,0.00119,0.000339,0.0000788,0,0,0.000421,0.000185,0.000278,0.000547,0.000282,0.000321,0.000332,0.000212,0.000204,0.000193,0.000191,0.000226,0.000402,0.000186,0.000173,0.000102,0,0.000095,0.00084,0.000247,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,null,0.0087,0.0162,0.00581,0.000126,null,0,0,0.00568,0.0163,0.00402,0.0379,0.128,0.257,null,2.96,2.19,1,1.2,0.978,0.984,0.856,1.71,1.97,2.96,4.67,4.02,2.74,2.95,2.8,0.932,1.6,1.54,0.965,0.723,1.37,1.69,1.52,1.08,0.745,1.74,5.39,3.19,5.47,6.01,4.13,5.71,5.84,1.91,1.67,3.22,1.83,0.92,0.895,1.6,1.65,1.41,0.864,1.49,3.2,2.19,2.6,4.4,1.43,3.35,2.57,2.21,3,4.17,5.61,2.74,2.28,3.95,null,3.28,3.5,1.26,1.13,2.12,3.24,2.88,3.87,2.52,2.57,1.2,1.74,1.86,2.26,4.54,2.19,1.41,3.23,4.2,2.6,6.86,7.29,3.18,7.05,2.58,2.08,1.31,2.36,1.1,1.1,1.44,0.992,1.05,1.41,1,1.02,1.08,1.2,1.36,0.821,2.12,1.98,2.48,4.36,1.57,1.61,3.01,1.12,0.943,1.5,1.5,2.11,1.97,3.18,5.8,3.97,2.06,2.1,1.1,1.77,0.693,1.38,1.26,1.27,1.16,0.445,0.857,0.849,0.359,0.751,0.329,0.346,0.839,0.442,0.653,1.04,0.412,0.363,0.328,0.52,0.271,0.346,0.591,0.203,0.247,0.274,0.213,0.314,0.102,0.1,0.225,0.0908,0.0823,0.126,0.101,0.111,0.164,0.196,0.425,0.187,0.218,0.11,0.122,0.117,0.12,0.0944,0.0896,0.0903,0.0339,0.0818,0.032,0.0482,0.0335,0.0129,0.0158,0.00831,0.00367,0.00463,0.0037,0.00451,0.00478,0.00157,0.00318,0.00417,0.00409,0.0049,0.00434,0.00316,0.00158,0.00152,0.00303,0.000995,0.00222,0.00305,0.00232,0.00223,0.00186,0.00348,0.00454,0.00269,0.0037,0.00197,0.00183,0.00453,0.00279,0.00296,0.00483,0.00186,0.0039,0.00291,0.00243,0.00204,0.0027,0.00273,0.00277,0.00447,0.00396,null,0.00292,0.00347,0.00127,0.000905,0.00206,0.00399,0.0026,0.00318,0.0041,0.00252,0.00276,0.00439,0.00215,0.00189,0.00317,0.00314,0.00194,0.00275,0.00256,0.00217,0.00299,0.00352,0.00262,0.00187,0.00165,0.00211,0.00253,0.00249,0.0021,0.00118,0.00041,0.0004,0.000658,0.000377,0.00043,0.000523,0.000666,0.000496,0.000458,0.000342,0.000641,0.000619,0.000214,0.00021,0.000298,0.000211,0.000269,0.000206,0.000399,0.000596,0.000273,0.000283,0.000403,0.000313,0.000302,0.000379,0.000236,0.000328,0.000271,0.000432,0.000311,0.000313,0.000396,0.000239,0.000196,0.000117,null,0,0.0011,0.000867,0.000432,0.000183,null,0.000402,0.000224,0.000173,0.000152,0.000254,0.00029,null,null,0.000363,0.000268,0.000348,0.000325,0.00018,0.000274,0.000337,0.000291,0.00036,0.000292,0.000209,0.000347,0.000215,0.000392,0.000174,0.000227,0.000202,0.000229,0.000379,0.000151,0.000244,0.000177,0.000188,0.000235,0.000154,0.000218,0.0000986,0.000128,0.000351,0.000434,0.000124,0.000165,null,0.000373,0.000197,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0.0973,0.402,0.487,0.451,0.215,0.313,0.361,0.579,0.499,0.502,2.03,1.75,1.94,1.87,3.86,2.92,null,1.81,2.22,1.33,3.19,7.28,3.86,2.49,5,3.97,4.69,3.58,4.27,1.87,2.51,1.56,1.03,1.96,0.778,1.22,null,0.602,1.35,0.859,1.57,2.25,2.83,2.75,9.78,10.5,5.15,7.54,6.18,7.53,10.4,8.14,7.46,12.9,8.28,6.37,8.52,7.23,3.89,2.64,2.09,3.97,1.94,2.8,2.36,2.25,2.72,2.18,4.58,3.22,5.51,4.93,1.63,1.84,2.4,1.05,2.55,0.897,0.89,1.58,1.11,null,1.93,2.42,2.19,4.54,3.21,1.8,null,1.14,2.14,2.18,1.64,null,1.15,1.4,0.985,0.758,0.932,1.11,0.636,null,1.03,0.437,0.596,0.881,0.342,0.539,0.498,0.576,0.281,0.812,0.945,0.639,0.789,0.645,0.944,0.91,0.519,0.874,0.288,0.571,0.302,0.701,0.722,0.664,0.518,0.22,0.44,0.209,0.219,0.268,0.278,0.232,0.267,0.0871,0.139,0.0981,0.142,0.0615,0.0799,0.0751,0.114,0.0672,0.0347,0.036,0.0239,0.0228,0.0236,0.00846,0.00291,0.00241,0.00329,0.00314,0.0022,0.00358,0.00246,0.00277,0.00322,0.00207,0.00286,0.00296,0.003,0.00273,0.00248,0.00204,0.00279,0.00194,0.00362,0.00524,0.00302,0.00202,0.00502,0.00479,0.00234,0.00359,0.0052,0.00342,0.00197,0.00181,0.0052,0.00314,0.0026,0.00348,0.00222,0.00385,0.00234,0.00278,0.00199,0.0021,0.00231,0.00106,0.00227,0.00287,0.00213,0.00328,0.0046,0.00193,0.00455,0.00261,0.00195,0.00257,0.00219,0.00236,0.00449,0.000586,0.0031,0.0022,0.00479,0.00403,null,0.00455,0.00164,0.00062,0.00106,0.00217,0.00211,0.00109,0.000607,0.000857,0.000338,null,0.000546,0.000826,0.000374,0.00029,0.000407,0.000648,0.00029,0.000486,0.000482,0.000362,0.000285,0.000252,0.000277,0.000497,0.000211,0.000251,0.000231,0.000272,0.000242,0.000279,0.000264,0.000471,0.000393,0.000279,0.000472,0.000409,0.000284,0.000485,0.000277,0.000143,0.0006,0.000228,null,0.000356,0.000456,0.000327,0.000171,0.0004,0.000362,0.000315,0.000246,0.000271,0.000296,0.00025,0.0000752,0,0,0.000666,0.00104,0.000476,0.000263,0.000207,0.000163,0.000418,0.000253,null,0.000361,0.00025,0.000074,0,0.00043,0.000986,0.00013,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.000252,0.0000982,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,null,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.00451,0.0161,0.301,0.553,0.863,1.33,3.04,1.94,2.34,null,4.37,1.18,1.65,1.64,2.45,1.82,2.23,4.8,null,2.89,1.4,1.19,1.11,2.65,2.77,4.75,2.57,1.41,1.4,1.79,1.16,1.81,1.96,1.21,1.45,3.35,2.71,1.51,1.41,1.61,1.01,0.74,0.946,2.42,null,3.81,7.77,7.46,5.26,8.27,4.53,null,4.14,4.03,2.14,1.34,2.23,1.67,1.35,0.925,1.45,0.68,1.16,0.828,0.878,1.08,2.13,1.71,1.94,1.18,2.49,null,null,1.78,2.38,0.91,1.17,1.01,0.779,1.02,0.68,1.48,1.56,1.08,0.787,0.819,0.701,1.26,0.628,0.742,1.01,0.923,1.08,0.444,null,1.21,1.84,0.995,1.61,0.955,0.721,0.66,1.64,1.28,1.57,0.818,1.06,0.575,0.49,0.922,0.403,0.931,0.367,0.342,0.393,0.637,0.509,0.521,0.673,0.23,0.261,0.528,0.459,0.189,0.46,0.204,0.158,0.147,0.132,0.207,0.154,0.102,0.116,0.101,0.0542,0.165,0.175,0.205,0.0748,0.0488,0.168,0.148,0.0638,0.088,0.0504,0.0252,0.197,0.125,0.12,0.0509,0.0289,0.0529,0.0229,0.0227,0.0109,0.00707,0.00538,0.00242,0.00214,0.00215,0.00287,0.00263,0.00383,0.00483,0.00353,0.00343,0.00474,0.00491,0.0036,0.00405,0.00333,0.00189,0.00188,0.00493,0.000723,0.00212,0.00211,0.00238,0.00333,0.00189,0.00502,0.00408,0.0021,0.00223,0.00196,0.0033,0.00366,0.00189,0.00437,0.00286,0.00491,0.00399]
+		},
+		{
+			"kind": "rain_chirps_mm",
+			"name": "CHIRPS (synthetic)",
+			"unit": "mm",
+			"startDate": "2010-01-01",
+			"values": [0,0,0,1.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.3,3.6,3.1,0.7,0,0,0,0,0,0,0,0,0,2.2,6.8,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.9,7.3,3.4,0,0,0,0,0,0,0,0,0,0,0,1.8,0,0,0,0,0,0,0,0,0,0,0,3.8,3,0,1.2,11.8,3.9,0,0,0,0,0,4.4,1.5,0,0,0,0,0,0,7.3,4.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.3,7.9,11.4,5.4,9.1,5.6,5.1,3.6,0.8,0,0,0,0,0,0,0,12.9,4.3,0,0,0,15.9,8.6,3.4,11.7,3.7,0,0,0,15.3,5.1,3.2,13.2,7.2,6.9,8.8,2.3,3,7.8,6.8,7.6,2,1,0,0,1.7,5.9,6.4,12.6,9.4,4.7,0.9,0,0,6.4,7.6,15.4,4.5,0,0,3.1,11.4,25,7.2,0,0,0,0,3.4,5.1,1.3,0,6.1,2,5.5,4.3,1.9,1.5,0,0,5.8,4.8,9.1,5,1,7.5,2.5,6.7,11.5,3.1,0,0,0,2.5,6.2,1.8,0,0,0,2.8,5.3,2.8,0.4,0,0,0,0.7,14.1,4.6,9,12.3,4.7,5.3,9.8,5,11.6,3.6,0,0,0,0,12.1,6.7,0.9,3.9,3.9,0.9,0,0,12.1,7.9,1.3,0,8.5,9.3,2.2,0,0,0,0,0,9.1,3,0,0,0,0,0,0,1.2,0.4,0,7.1,2.4,2.9,4,1.8,1,0.2,0,6,2,0,8.2,10.1,2.5,0,0,12.2,5.1,1,7.2,2.3,0,2.5,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,1,0.2,0,0,2.4,4.6,10,7.9,1.7,0,0,7.2,2.4,0,0,0,0,0,0,0,0,0,0,8.5,2.8,0,0,0,0,0,0,0,0,0,3.1,8.5,2.5,0,0,0,0,0,1.5,0,0,0,0,0,0,0,0,0,0,1.4,0,0,2.1,0.7,0,0,0,0,0,0,2.8,3.5,0.9,0,0,0,0,0,0,0,0,0,0,0,0,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.3,0,0,0,0,0,1.9,3.9,1.1,0,0,0,0,0,0,0,0,0,0,0.9,0,0,0,5.6,2.9,0.4,0,0,0,0,0,0,0,1.2,0.4,0,0,0,0,0,0,0,0,0,0,0,0,0,3.4,6.2,7.8,2,0,15.4,5.1,0,0,0,6.2,2.1,11.5,6,0.7,0,0,8.3,2.8,0,0,0,1.3,0.4,0,0,23.1,7.7,0,0,9.5,3.2,0,0,11.9,4,4.4,1.5,0,0,0,7.4,2.5,0,0,5.2,1.7,0,14.3,6.9,13.6,14.9,3.5,5.7,1.9,12.9,4.3,5.9,2,0,11.7,3.9,0,0,19.1,6.4,0,0,2.6,6.5,8.1,2.1,0,2.5,19.5,9.7,4.3,1,10.8,10.4,8.8,11.1,4.1,0.4,0,0,0,0,0,11.6,3.9,16.6,5.5,0,0,14.4,10.4,4,18.1,7,5.3,1.6,0,6.6,2.2,0.7,0,1.8,2.2,0.5,5.8,5.7,6.9,1.9,0.7,6.5,2.1,14.8,8,19.7,9.3,1,13.6,17.1,4.2,0,0,0,0,7.8,13.9,16.2,4.1,7.7,2.6,3.7,1.2,0,0,0,0,0,1,3.6,2.7,0,0,0,8.6,2.9,0,0,0,5.5,1.8,0,0,0,7.5,2.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.9,6.8,3.2,2.7,8.5,8.5,6.4,1.5,0,8.7,12,5.6,3,0.7,0,0,0,1.4,1.8,0.4,0,0,0,0,0,0,0,2,10,9,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.2,0,0,0,0,0,0,0,0,0,0,0,1.9,0,0,5.4,4.4,0.9,0,0,0,0,0,1.5,0,0,0,0,0,0,3.5,1.2,0,0,0,0,3.8,1.3,9.3,3.1,0,0,0,0,0,0,0,0,0,0,0,0,0,1.5,0,0,0,0,0,5.7,1.9,0,2.1,0.7,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,2.5,0.8,0,0,0,0,0,0.8,0,0,0,0,0,0,0,0,0,1.9,0,0,0,0,0,0,0,0,0,0,0,0,10.6,3.5,12,4,0,0,0,0,0,0,0,0,0,8.3,2.8,0,0,0,1.3,7.3,4.3,0.7,0,0,0,0,0,0,0,0,0,6.6,2.2,0,0,0,0,0,0,5.9,5.2,2.8,6.3,1.9,0,0,2.9,1,0,0,0,5.8,10.3,5.7,3.6,0.9,0,0,0,0,0,0,0,0,0,0,5.3,1.8,1.1,0,5.8,10.9,3,10.9,3.6,0,0,1.4,0.5,0,0,5.1,6.9,5.2,1.1,0,6.1,10.2,7.2,7.5,8.5,10.9,2.9,1.9,3.6,1,0,13.2,4.4,7.4,2.5,2.2,5.2,1.5,17.9,8.5,10.9,9.7,6.4,1.4,0,0,0,26.2,8.7,2.9,1,0,0,0,0,0,0,4.5,1.5,0,0,2,0.7,0,8.7,6,8.2,23.6,13.1,5.2,15.6,39.7,21.7,22.2,13.5,3.6,8.6,10.8,11.5,11,4.2,0,1.1,11.5,7.3,3,6.5,14.8,4.2,0,5.7,20.7,6.3,0,0,10.4,3.5,0,0,0,0,36.1,14.5,8.1,2.4,0,0,0,0,0,0,1.3,0.4,0,13.5,8.2,1.2,0,0,7.8,2.6,0,0,0,3.9,1.3,0,0,0,0,0,0,0,10,4.4,12.3,4.1,0,2.6,13.2,4.1,4.2,1.4,0,0,0,0,8.3,4.4,0.6,0,0,0,0,0,3.7,1.2,0,6.2,2.1,0,0,3.4,1.1,0,0,0,0,0,0,2.9,1.9,0.3,0,0,3,2.1,5.1,1.6,0,0,0,0,0,0,0,0,0,0,0,1.9,0,0,0,0,0,0,0,0,0,0,0.8,0,0,0,1.2,0.4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.9,0,0,2.2,0.7,0,0,0,0,0,0,5.1,1.7,9.4,3.1,0,7.1,2.4,0,0,0,0,0,0,0,0,0,0,0,0,0,9.2,7.5,1.5,0,0,0,0,0,0,0,0,0,0,0,0,0,7.3,5.2,0.9,0,0,0,0,0,0,1.3,4,10.2,13.3,8.9,6.1,3.3,5.1,2.5,2.4,2,0.4,0,0,0,9.8,3.3,0,4.7,1.6,0,5.9,9.4,7.8,1.8,9.3,3.1,0,0,2.7,0.9,10.4,3.5,3,15.9,5,0,0,0,9.4,15.6,4.1,0,5.6,1.9,5.4,9.5,2.6,2.2,3.3,11.3,6.5,1,0,28.5,15.5,5.9,3.8,3,12.9,4.1,5.1,6.1,5.2,6.6,1.8,0,0,0,0,1.8,0,7.8,6,1.1,5.1,2.8,11.9,9.3,9.7,7.3,12.5,3.6,17.7,5.9,5.9,2,0,0,0,7,2.3,0,0,2,3,1.5,0.2,0,0,0,0,9,7,1.3,0,0,0,2.1,4.3,2.6,5.6,9.1,11.3,3,0,0,2.3,0.8,7.9,14.7,4,0,0,0,0,0,8.8,2.9,0,0,0,13.6,7.4,4.1,1,0,0,0,0,0,0,0,0,1.6,1.1,2.5,9.7,15.1,4,0,2.4,0.8,2.1,0.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7.8,6.6,1.3,0,0,0,0,0,0,3.4,1.1,0,0,0,0,0,0,0,0,1.1,0,0,0,0,2.8,0.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,4,0,0,0,0,1,0.3,7.5,2.5,0,0,0,0.7,0,1.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.4,1.1,0,0,0,0,0,0,0,0.8,0.3,0,0,0,0,0,1,5.7,1.9,0,8.4,12.4,3.2,0,4.4,11.1,21,5.9,0,0,0,0,0,0,0,0,0,0,0,9.4,3.1,0,0,18.2,6.1,0,0,0,0,6.7,2.2,0,24.2,8.1,0,0,0,0,0,0,0,0,0,2.3,0.8,0,0,14.1,4.7,0,3.8,1.3,9.7,5.9,0.9,19.3,9.3,4,10.6,7.2,1.3,0,0,20.2,6.7,0,0,2.5,7.5,2.2,0,0,0,0,0.4,0.1,0,0,0,0,9.5,24.8,7.2,0,10.2,3.4,1.4,2.7,3.2,4.1,8.2,5.5,1,0,4.9,1.6,0,0,0,5.1,7,11.8,3.3,9.5,5.6,3.4,3.7,9.1,23.9,8.5,12.1,3.9,0,9.1,9.3,13.5,30.5,23.2,7.7,1,9.6,3.2,0,0,21,8.2,5.7,8.4,15.7,6.5,3.6,3.3,4.6,6.5,10.5,13.7,7,16.3,5,0,6.2,4.2,0.7,4.4,4.1,0.9,0,0,2.5,0.8,0,0,9.5,3.2,0,0,0,0,22.8,7.6,4.2,5.9,5.9,4.1,13.6,4.2,0,0,2.2,12.5,16.3,16.6,4.2,0,0,0,0,0,0,10.9,3.6,4.2,3.4,5.1,1.5,2.4,3.4,0.9,0,9.5,3.2,0,0,1,0.3,0,1.3,0.4,0,0,4.4,7.4,7.5,1.9,0,16.8,7.5,0,0.8,0.3,1.3,0,0,0,0,0,0,4.6,9.2,6.6,7.5,5.5,1.1,0,0,0,0,5.1,1.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.1,0.4,2.4,4.2,1.1,18.3,6.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.9,4.8,1.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.6,0,5.5,2.1,0.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.2,0,0,0,0,0,0,0,0,0,0,3.8,10.3,3,0,0,0,0,0,0,0,3.5,6.4,3.3,0,1.2,0,0,0,0,0,0,2.8,0.9,0,8.1,2.7,0,0,0,1.2,0.4,0,1,0.3,0,0,0,0,0,0,0,0,0,0,11.9,4,0,0,0,3.7,1.2,0,0,0,0,1.5,3.9,1.1,0,0,1.3,0.4,0,6.1,2,0,0,0,0,0,0,0,10.2,3.4,0,0,0,0,4.9,15.3,4.6,0,0,0,0,10,5.9,0.8,0,2,0.7,0,0,0,6,3.3,0.4,3.5,1.2,0,0,0,4.3,4.5,17.7,5.6,0,0,9.2,3.1,0,21.7,7.2,0,0,0,0,0,17.6,10.1,1.4,5.1,9.3,6.1,6.3,11.3,6.9,11.2,3.3,0,0,0,10.4,12.4,3,6.1,2,0,1.7,0.6,0,8.4,14.7,4,6.4,7.1,1.7,0,9.9,6.5,1.1,0,0,9.9,16.2,4.3,0,0,0,8.1,36.5,11.3,0.9,0,0,0,0,0,0,0,0,4,4.8,9.6,2.8,7,9.9,2.5,7.3,2.4,6.9,7.9,1.9,0,17.3,7.3,4.9,11,19.7,5.5,0,0,11.2,17.8,5.5,0.3,0.6,5.5,1.8,0,0,0,0,2.5,11.8,4.4,4.4,3.3,2,0.5,0,0,6.9,2.3,0,0,6.4,2.1,0,0,0,10.8,3.6,2.2,0.7,6.8,2.3,0,0,1.4,3.6,1,5.1,7,1.8,1.6,8.6,2.9,0,0,1.5,2.8,2.7,7.1,2.2,5.1,1.7,0,2,0,0,0,0,0,0,0,0,0,0,0,11.3,3.8,0,0,0,9.5,10.3,6.1,1.2,0,0,0,0,0,2.4,0.8,0,0,0,0,1.8,9.6,11.4,2.7,1.6,7.1,2.2,0,0,0,8.1,10.5,7,1.5,0,0,0,0,0,0,0,0,0,0,0,14.3,6.4,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.2,0.7,0,0,0,0,0,0,0,0,0,0,0,5,1.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.6,0.5,0,5.1,1.7,0,0,0,0,0,0,0,0,0,0,0,0,1.3,0.4,0,0,0,0,0,0,0,0,0,3.2,1.1,2.4,0.8,0,1.9,0,0,0,0,0,0,0,1.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.5,0,0,0,2.8,7.4,5.3,1,0,0,7,4,0.6,4.5,4.1,12,3.7,0,0,0,10.3,8.8,11.1,10.8,2.6,8.4,2.8,14.4,17.6,4.3,0,0,0,0,0,2.1,4.5,9.1,2.6,0,0,0,23.7,7.9,0,0,0,0,2.2,0.7,3.6,1.2,5.4,2.8,1.4,3.1,8.2,5.9,1.2,1.2,4.1,10,3.8,0.3,12.3,4.1,0,0,0,0,0.3,6.3,5.7,1.2,0,15.5,8.5,16,5.7,4.5,9.2,7.4,1.6,19.7,6.6,6.5,4.2,5.7,2.3,10.6,4.6,8.9,2.8,0,0,5.9,2,0,0,0,0,0,0,3,8.9,7,8.8,2.4,0,0,0,0,6.2,2.1,10.6,28.8,8.4,7.2,2.4,10.3,14.3,11.6,4.5,19,6.1,0,4,17.3,5.3,0,5.6,12.6,8.2,1.5,0,6.9,2.3,0,0,0,4.4,1.5,0,0,0,1.6,3,17.8,20.7,5,0,14.8,4.9,0,0,0,0,0,0,0,0,0,0,0.7,15.7,14.2,3,0,0,0,0,0,6.3,2.1,0.5,0.2,0,0,0,0,0,2.8,7.8,2.3,0,8.5,2.8,0,0,0,0,0,4.1,1.4,0,0,0,3.3,4.8,1.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.9,3.8,1.1,0,0,0,0,0,4.7,5.3,1.2,0.6,0,0,0,0,0,0,0,0,1.7,0,0,0,0,0,0,0.8,4,1.2,0,0,4.1,1.4,0,0,0,0,0,0,0,0,0,0,2.3,0.8,0,0,0,0,0,0,0,0,0.9,0,0,0,0.7,0,6.3,5.5,1.2,0,0,0,0,0,0,0,0,0,0,0,0,0,7.9,2.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,27.2,9.5,0.2,0,0,0,0,0,13.4,4.5,0,0,0,1.6,1.2,0.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6.7,2.2,2,9.9,3.1,0,17,5.7,0,0,0,0,2.8,3.7,0.9,0,0,0,0,16.7,5.6,5.3,1.8,0,0,0,6.3,2.1,0,0,9,16.8,18.9,4.8,0.9,3.9,1.2,0,10.9,3.6,0,0,13.4,4.5,4.3,5.5,1.4,2.7,3.3,1.7,0.3,0,0,0,0,0,7.3,6.8,11.2,8.7,1.8,0,0,1.8,0.6,8.3,20.8,6,0.6,0.2,0,0,0,11.3,15.3,8.6,28.1,26.2,5.8,0,0,5.8,7.1,14,14.8,3.6,0,0,0,0,0,0,18.8,6.3,0,0,0,0,10,3.3,17,5.7,0,0,0,3.3,12.5,3.8,0,0,0,7.8,2.6,0,0,0,2.8,0.9,0,10.9,3.6,0,4.6,1.5,0,2.5,0.8,0,15.5,5.2,0,0,2.3,3.3,0.9,0,0,5,1.7,0,0,0,0,1.8,10.2,3.2,0,0,0,11.8,3.9,1.4,0,1.9,0.6,0,9.2,3.1,2.1,7.7,2.3,0,0,0,0,0,0,0,0,0,2,1.9,0.4,0,0,0,0,0,0,0,1.2,0.4,0,0,0,0,0,0,0,0,0,4.4,1.9,0.2,0,0,0,0,0,0,0,0,0,1.3,0.8,0.3,0,0,0,0,0,0,0,0,0,0,6.8,2.3,0,0,0,0,0,0,0,0,2.3,3.1,3.3,11.6,7.2,1.2,0,0,0,10.6,5.3,0.6,0,0,0,0,0,0,3.2,3,0.6,0,0,0,0,0,0,0,1.4,0,1,0,0,0,1.7,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0.7,0,0,0,0,0,0,0,0,0,0,0,0,0,2.7,2.1,0.4,2.7,8.7,2.6,0,0,0,0,0,0,0,0,0,24.1,8,0,0,0.9,0,9.6,3.2,0,0,0,0,0,0,0,0,3.4,5.5,7.7,2.1,13.9,5.3,0.2,0,0,0,0,0,4.1,3.2,2.5,0.6,0,0,0,0,0,0,0.4,32.7,10.9,0,0,0,0,6.1,2,0,1.7,5.1,1.5,0,1,0,0,0,8.6,2.9,0,0,0,0,0,9.9,4.9,4.8,1.4,0,0,14.6,8.9,2.2,13.8,6.8,8,9.5,2.4,0,0,0,15.7,37.3,23,4.1,7.7,9,2.2,0,0,10.4,11.2,14.2,7,20.2,16.9,3.5,0,0,1.6,0,4.8,1.6,7.2,11.1,2.9,0,1.9,0,12.4,18.6,19.5,4.9,1.4,0.5,7.2,2.4,2.5,0.8,0,0,0,0,0,0,2.1,6,1.8,5.8,1.9,3.3,15,6.8,11.1,3.4,0,12.6,4.2,0,0,0,0,0,2.6,0.9,7.1,14,3.9,0,0,0,0,11.1,11.2,6.5,1.3,1.6,6.9,3.9,0.6,9.8,3.3,2.3,20.5,6.6,0,0,0,0,0,0,0,0,0,4.9,2.5,0,0,0,11.6,10,3.7,0.6,0,0,0,4.7,8.8,6,6.3,3.3,0,0,4.1,1.4,0,9.6,3.2,3.8,1.3,0,0,0,7,2.3,0,0,0,10.4,3.5,0,0,0,0,6.6,2.2,0,0,0,0,3.4,5.3,1.4,2,0.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.8,10,7,3.1,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.2,7.9,2.2,3.6,1.2,4.5,1.5,0,0,0,0,0,0,0,0,0,0,1.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9.3,3.1,0,0,0,0,0,0,0,0,0,0,7.5,13.1,3.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.4,0,0,0,3.5,2.9,0.6,0,0,0,0,0,2.4,0.8,0,0,0,0,0,7.8,2.6,0,0,0,0,0,1,1.3,3.5,5.8,1.6,11.4,6.8,11.5,3.5,0,0,0,0,0,0,0,0,0,9.6,5,0.6,0,8.2,2.7,11.1,13.9,11,2.5,0,0,8.9,16.6,4.5,0,0,0,0,0,0,2.7,9,5.5,19.5,11.3,13.5,4.7,2.6,0.8,0,0,0,0,0,3.7,3.1,2.9,0.8,0,0,2.8,0.9,8.2,4.5,3.8,8.6,2.5,0,0,4.8,11.5,11.8,5.9,2.6,10.2,7.2,17.1,5.3,0,2,0.7,4.5,1.5,0,0,0,11.3,8.4,5.5,16.7,18.5,9.9,10,9.7,6.5,9.6,3.9,2.1,4,10.3,3.1,0,0,0.6,0,7.3,3.1,0,0,0,1.9,0,4.5,6.2,24.9,20.5,4.7,9.1,3,0,0,0,0,0,0,5.9,12.2,7.5,10.5,3.1,0,0,0,0.8,0,9.6,4.1,9.7,8.1,13.1,3.8,0,0,19.4,16.3,5,9.5,20.3,5.8,0,0,0,0,5.4,1.8,6.5,2.8,0,3.8,4.8,1.2,3,18.5,5.8,1.8,1.9,7,4.9,0.9,0,1.5,0.5,2.5,0.8,0,9.1,3,0,0,0,0,0,0,0,0,0,0,3.7,8.2,2.3,0,0,0,0,22.3,7.4,2.9,4.4,1.2,0,0,0,0,4.4,7.1,1.9,0,3.2,12,11.3,13.1,5.1,7.7,2.4,7.4,2.5,0,0,0,2.8,0.9,0,9.1,4.3,6.9,2.1,0,0,0,5.2,1.7,0,0,0,0,0,0,0,0,0,0,0,1.7,0.6,0,0,0,0,0,0,0,0.9,0.3,0,3.7,1.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.8,0.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.4,1.1,0,0,0,0,0,1.1,0,0,0,0,0,0,0,0,0,0,0,0.8,0,2.3,0.8,0,0,0.9,0.3,0,0,0,0,0,0,3.7,1.8,0.2,0,0,0,0,0,0,0,0,0,0,0,0,0,9.8,3.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.6,5.8,7.6,7.7,1.9,0,5,1.7,0,0,0,0,0,7.1,2.4,0,0,10.4,6.9,7.5,2.1,0,2.9,1,6,6.6,6.4,4.2,6.9,2,0,1.7,7.3,7.5,1.7,0,0,0,0,0,0,0,0.5,0.2,0,0,8.3,13.2,3.5,35.7,15.9,1.3,0,0,0,1.8,0.6,8.7,9.4,5.1,1,0,0,5.4,3,12.2,6.3,12.8,4,2.3,0.8,10.3,19.9,28.7,7.7,0,7.5,2.5,0,13,7.5,1,5,2.7,0.3,4.7,5.6,6.1,7.8,2.1,1.1,11.3,3.7,0,10.7,10,2.1,0,1.8,1,0.3,0,0,0,0,0,0,1.8,7.8,8.2,13.1,5.1,15.9,5.1,6.2,9.1,7.4,5.8,6.3,1.7,0,0,0,0,0,0,4.7,13.4,21.7,5.9,0,1.9,0,0,9,3,0,0,0,0,0,8.8,10.4,13.5,3.7,0,0,0,0,0,0,0,10.9,4.2,0,0,0,0,1.8,0.6,0,0,1.4,0.5,0,5,5.2,1.2,5,1.7,0,1.4,1.3,0.3,0,0,38.8,12.9,0,0,0,0,0,0,9,6.4,8.5,9.1,2.2,0.9,0,0,0,0,0,0,0,0,0,0,1.1,0,3.8,1.3,0,0,0,0,0,0,0,0,0,0,8.2,2.7,0,0,0,0,0,3.2,12.1,3.7,0,0,0,0,1.5,0.5,0,0,0,0,4.5,5.8,1.4,0,0,0,0,0.8,2,0.6,0,0,0,0,2.1,0.7,0,0,0,6.2,2.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.8,0.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,1.3,0,0,6.8,7.6,5.5,1.2,0,1.3,0.4,0,0,0,0,0,0,0,5.1,1.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5.1,1.7,0,0,0,0,0,0,1.1,2.8,0.8,0,0,5.8,4.2,0.8,0,0,0,0,0,0,0,0,0,0,0,0,4.6,1.5,0,5.4,4.2,0.8,0,0.7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4.4,1.5,0,0,0,4.4,2.5,0,0,0,0,0,0,0,0,0,8.1,2.7,7,3,0.2,0,0,0,11.1,3.7,2.6,0.9,0,0,0,2.1,0.7,0,8,13.6,8.2,1.5,0,4.8,1.6,0,0,4,4.4,2.6,0.5,0,0,0,0,0,0,0,4.2,19.8,8.8,2.5,10.9,3.6,5.7,8.9,7.7,6.2,29.6,9.4,0,0,13.8,8.4,1.3,1.7,1.7,0.4,3,8.2,14.2,16.6,11.3,9.1,4.7,9.4,7.1,1.4,0,0,0,0,0,0,0,0,0,7.7,3.3,0.2,0,0,18.8,12,1.9,7,13.8,10.3,2.2,9.6,20.8,5.9,0,0,0,2.7,0.9,6.2,2.1,0,0,0,5.4,1.8,0,0,5.1,5.4,8.6,8.7,13.9,4,0,0,1.8,19.7,6.6,0,2.5,14.6,4.6,0,0,0,3.2,1.1,0,0,0,5.9,5.8,17.3,19,17.6,11.6,2.4,0,7.3,2.4,0,0,2.1,1.9,14.4,11.1,20.2,6,0,2.6,0.9,0,1.9,0,0,0,0,0,0,0,0,3.1,1,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,6.5,11.8,18.5,5.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7.9,2.6,0,0,0,4,3.3,0.7,4.1,5.1,1.3,0,0,1.2,4.2,1.3,0,0,0,0,0,0,0,0.7,0,0,0,10.1,3.4,0,0,0,0,0,0.7,0,0,0,0,0,0,0,0,1.3,0,0,0,0,0,0,0,0,0,0,0,0,0,1.5,0,0,0,0,0,0,0,0,2.4,0.8,0,0.5,0.2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.6,0.5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.9,2.9,21.2,6.8,2.7,7.6,2.2,0,0,0,0,0,0,0,5.1,5.3,1.2,0,2.5,0.8,0,0,0,0,0,0,0.8,0,0,0,0,0,9.2,3.1,0,0.2,13.3,4.4,0.6,8.1,20.4,9.7,8.8,2.5,0,17.4,7.5,1.8,5.8,6.2,1.5,0,0,0,0,0,7.4,2.5,11.6,7.5,16.9,5.2,0,0,0,0,0,9.7,3.2,0,0.5,6.8,2.2,17.1,17,3.8,0,9.3,3.1,0,0,9.9,14.9,21.9,11.7,1.9,0,0,0,0,0,0,3.2,1.1,0,3.3,2.3,0.4,1.7,6.8,14.4,10,2,11.2,6.6,3.5,5.2,1.5,0,0,0,0,0,2.6,0.9,0,0,9.7,8.6,3.6,7.5,2.3,0,0,11,3.7,1.7,7.4,5,4.7,1.3,8.1,2.7,0,0,0,3,6.1,7.5,1.9,0,2.9,1,0,4.1,6.8,4.9,1,0,0,11,5.9,9.8,3,8.6,7.7,1.6,0,0,0,0,0,0,0.8,0,0,0,0,0,0,1.8,5.6,6.1,7.2,1.9,11.6,3.9,0,2.8,4.2,1.1,0,0,0,1.3,11.7,15.6,7.4,1.1,0,0,0,0,0,0,1.2,0.4,0,0,0,0.6,0.2,0,4.3,1.4,0,5,2.7,0.3,1.1,0,1.6,3.3,0.9,0,0,0,0,0,0,0,0,0,0,0,0,0,1.7,0,2.9,6.2,1.7,5.6,1.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.9,2,0.4,0,0.8,0,0,3.9,2.7,2.8,4.6,1.3,0,0,0,0,0,0,0,0,1.9,0.6,0,3.5,1.2,0,0,0,0,1.4,1.7,0,0,0,0,0,0,0,0,4,5.9,1.5,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,2.4,2.1,4.1,1.2,0,0,0,0,0,0,0,0,0,1.8,1.9,0,0,0,0,0,0,0,0,0,0,0,0,0,1.8,0.6,0,0,0,0,0,0,0,0,0,0,0,0,0,13.2,4.4,0,0,0,1.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2.5,0.8,0,0,0,0,0,0,0,0,0,0,0,0,4.9,1.6,1.4,0,0,0,0,0,0,9.8,19.9,6.2,6.1,2,2.7,0.9,0,0,0,0,0,9.1,6,1,0,9.3,3.1,0,0,0,0,0,0,10.8,3.6,0,0,0,3.6,1.2,2.6,0.9,0,7.1,6.3,9.6,6.3,5.8,10.6,3,0,0,0,0,1.3,0.4,0,0,0,1.8,0.6,1,0.3,0,0,0,19.5,13.5,2.3,0,0,0,6.4,2.1,5.8,9.7,5.6,28.8,11,0,13.2,10.9,2.2,0,3.4,1.1,15.3,17.7,4.2,6.2,2.1,11.4,11,3.7,3.6,4.7,1.2,0,0.5,0,0.7,0,0,0,0,5.7,8.7,2.3,0,18,21.1,9.3,10.4,8.3,6.3,9,16.7,10.1,1.8,17.4,7.4,2.6,13.3,6.8,0.9,0,6.7,2.2,0,5.3,1.8,0,0,0,11.4,3.8,0,5.3,5,1.1,0,0,0,0,2.5,0.8,4.2,9.3,3.4,0.2,9.8,3.3,8.3,5.3,0.8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.4,1.1,0,3.7,1.2,0,0,0,2.9,6.7,6.4,1.5,3.6,1.2,0,0,1.4,5.8,2.7,0,0,8.4,2.8,0,0,2.9,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.2,0,0,0,0,0,0,0,0,0,0,0,0,2.4,0.8,0,0,0,1.2,0,0,5.5,1.8,0,0,0,0,0,0,0,0,0,0,0,0,9.4,3.1,0,0,1.5,0,0,0,3.7,2.7,0.5,0,0,0,0,0,0,0,0,1.2,0,0,0,0,3.3,1.1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3.1,5.1,1.4,0,0,0,0,0,0,0,0,0,0,0,0,0,10,3.3,0,0,0,0,0,0,0,0,0,0,0,2,5.2,1.5,0,0,2.9,5.6,7.3,8.8,10.4,2.7,0,0,0,5.5,5.1,1.1,0,0,0,0,0,0,0,0,0,6.3,2.1,0,0.7,0.2,1.4,0.5,3,3.5,13.9,8.7,1.4,2.9,7.6,4.5,7.4,2.2,0,8.2,2.7,0,0,0,0,0,0,0,0,0,0,0,3.5,8.6,2.5,0,0,0,1.9,0.6,0,0,0,0,0,0,5.7,8.8,21.2,13.4,14.4,13.6,12.7,6.8,9.7,9.4,2.2,10.6,3.5,0,0,0,0,0,18,9.4,6.4,1.8,0.9,0,0,0,15.8,12.8,2.5,0,0,0,0,0,3,1,0,2.5,6,9.9,2.7,0,0,0,0,0,3.5,14.8,10.8,7.1,1.7,0,13.4,12.1,2.5,0.9,2.8,0.8,0,0,0,0,0,0,0,0,0,4.1,2.3,0.3,0,0,3.9,10.1,7.4,4,0.8,0,0,0,0,0,0,2.6,6.2,1.8,2.4,0.8,0,0,0,0,2.5,0.8,0,0,0,5.4,7.4,6.3,6.9,1.8,0,0,0,7.7,4.1,0.5,0,0,0,0,0,0,0,1.7,0.6,5.6,1.9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1.6,0,0,0,0,0,8.2,2.7,0,0,0,3.6,1.2,0,0,0,0,5.8,1.9,0,0,0,0,0,0,0,0,0,0.7,0,0,0,0,0,0.4,0.1,0,0,0,0,0,0,0,0.7,0.2,7.5,2.5,0,0,0,0,0,0,0,0,3.2,1.1,0,0,1.9,0.6,1.3,0]
+		}
+	]
+}

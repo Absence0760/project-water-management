@@ -127,7 +127,10 @@ water users). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
 room for the section header, issue #17). The compare page loads its daily overlay and, only when a side
-is a scenario run, its Scenario overrides section the same way. uPlot and the
+is a scenario run, its Scenario overrides section the same way. The project list's empty state loads
+the example catchment it can start from (`projects/example.ts`, ~25 KB gzip of
+invented rainfall and flow, issue #286) only on hover, focus or press of
+**Start from an example**. uPlot and the
 engine code the tabs use land in shared chunks that load with the first tab
 that needs them.
 
