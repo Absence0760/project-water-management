@@ -33,6 +33,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { guardUnsaved } from '$lib/nav/unsaved';
 	import { leavesScenario } from './leaves';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	// The Yield panel (WP-3.6) and its chart load only once a dam is picked.
 	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
@@ -384,7 +385,7 @@
 
 	<p class="banner" data-testid="scenario-base">
 		Based on run <strong>{s.baseRun.label || 'Untitled run'}</strong>{#if s.baseRun.createdAt}{' '}(run {fmtDate(s.baseRun.createdAt, true)}{baseMeta?.published || isApplication ? ', published' : ''}){/if}.
-		{#if s.owner}Created by {s.owner}.{/if}
+		Created by {s.owner ?? FORMER_MEMBER}.
 		The base can't be deleted or trimmed while this scenario exists.
 	</p>
 	{#if error}

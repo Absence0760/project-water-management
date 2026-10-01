@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "2026-09-30 total 1352 → 1355 KB (report format evidence-9, issue #259: the evidence report's § 6, the applicant's demand objects with their sizing, source, note and demand, the by-source line (demandBySource moved to the engine, shared with the run's demand-objects table) and demandObjects.ts; ~1 KB). Measured 1353 locally on feat/evidence-demand-source (stacked on feat/demand-source, #266); CI ~2 KB above. Headroom ~2 KB. 2026-09-30 total 1362 → 1364 KB (the evidence-9 entry above, re-measured with feat/demand-source @ 9def0a3c merged, which carries the drought rule's 1362 and main @ a2e28a02): 1360 locally, CI ~2 KB above. Headroom ~2 KB. 2026-10-01 total 1368 → 1369 KB (evidence-9 above, re-measured over feat/demand-source @ d8f4c85a, engine 1.56.0 with main @ the #267 merge): 1364 locally, CI ~2 KB above. Headroom ~3 KB. (moved from the old change log when entry files arrived, #308)"
+}

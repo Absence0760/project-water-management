@@ -13,10 +13,12 @@
 //   - publishRun accepts it (not a legacy-runoff run, a projectable summary).
 // The WUA's restriction notice and next-update date carry over unchanged,
 // since a new run is no reason to lift or change a restriction. The note says
-// it was published automatically, and the audit event carries `auto: true`.
+// it was published automatically, the audit event carries `auto: true`
+// (publishRun records it, with the decision log's fields, decision.ts), and
+// so does the publication (run_publication.auto, 141: the farms_short alert
+// watches automatic publications only).
 import type { NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
-import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { publishRun } from './publish.js';
@@ -75,29 +77,27 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 	const since = localDate(current.published_at, tz[0]?.time_zone ?? DEFAULT_TIME_ZONE);
 	let result;
 	try {
-		result = await publishRun(db, projectId, {
-			runId,
-			note: `Published automatically: this auto run raised no warning the run published on ${since} didn't.`,
-			restriction: {
-				level: current.restriction_level,
-				pct: current.restriction_pct === null ? null : Number(current.restriction_pct),
-				notice: current.notice
+		result = await publishRun(
+			db,
+			projectId,
+			{
+				runId,
+				note: `Published automatically: this auto run raised no warning the run published on ${since} didn't.`,
+				restriction: {
+					level: current.restriction_level,
+					pct: current.restriction_pct === null ? null : Number(current.restriction_pct),
+					notice: current.notice
+				},
+				nextExpectedOn: current.next_expected_on
 			},
-			nextExpectedOn: current.next_expected_on
-		});
+			{ auto: true }
+		);
 	} catch (err) {
 		// publishRun refuses before it writes anything (a legacy-runoff run, a
 		// summary it can't project); that leaves publishing to a person.
 		if (err instanceof ApiError) return { published: false, reason: 'not_publishable', detail: err.message };
 		throw err;
 	}
-	const p = result.publication;
-	await recordAudit(db, projectId, 'publication.published', {
-		publicationId: p.id,
-		runId: p.runId,
-		restriction: { level: p.restriction.level, pct: p.restriction.pct },
-		farms: result.farms,
-		auto: true
-	});
-	return { published: true, publicationId: p.id };
+	// publishRun recorded it in the decision log, `auto: true` (decision.ts).
+	return { published: true, publicationId: result.publication.id };
 }

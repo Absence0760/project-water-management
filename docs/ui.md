@@ -1826,7 +1826,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   text):
   - **Supply, latest run** (the default once there is a run): the newest
     run's summary (`api.runs.get`, sharing the Runs tab's `detailCache`; a
-    quiet status line covers loading, and a failure offers Retry) banded by
+    quiet status chip over the map's top-left corner covers loading, and a
+    failure offers Retry there; it lies over the drawing rather than in the
+    card's header, where at 1280 px it wrapped the header and moved the map
+    when the load ended, `network-map.spec.ts`) banded by
     `fractionSupplied` (`network/supplyColour.ts`): **≥ 95 %**
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
@@ -2379,10 +2382,29 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   importer in its worker (`spreadsheet/import/`, the same reader and
   failure messages as Import a b023 workbook; it reads the whole workbook,
   so a large one takes a few seconds). Workbooks never leave the
-  browser. A node-based workbook (no b023 named ranges) can't be
-  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
-- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
-  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+  browser.
+  **A node-based workbook** is the third source: its [Crop_Factors] and
+  [Crop_Areas] sheets, read by the same worker
+  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+  efficiency column isn't loaded (a crop's efficiency changes only through
+  the system select below), nor are its farm areas. For
+  either workbook, the dialog lists what the reader flagged as text under
+  the file: for a node-based workbook, a missing sheet (a b023 file picked
+  under this option), names that differ between the two sheets and cells
+  read as 0; for a b023 workbook, the import report's
+  `crop-factors-copied` and `crop-factors-suspect` warnings.
+- **Pan coefficient Kp** multiplies the source factors. It starts at the
+  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
+  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
+  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
+  set against reference ET₀ while the engine multiplies crop factors by
+  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
+  mid value). A line under the input says which and why, linking [FAO-56
+  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
+  re-applies the new source's default only while Kp is still the previous
+  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
+  **Use the default, N** puts the default back.
 - **Match crops:** a row per project crop with a **Load factors from**
   select, preset by name (`matchByName`: the same name ignoring case,
   accents, punctuation and a plural s, or the one source whose words hold the
@@ -5514,8 +5536,9 @@ volume to match it"), or matched to a unit the run doesn't have. A run made
 with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
 says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
-full allocation ("… what the river would look like if every registered user
-took their entitlement, not what they take").
+full allocation ("… what the river would look like if every registered or
+licensed volume were taken in full (a registration is not an entitlement), not
+what the units take").
 In a cap run the picked unit's card says, per capped source under its water
 years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
 days the cap held use back and by which limit (the volume used up, the
@@ -5837,6 +5860,16 @@ the viewer's day, with a request's change set folded into one entry.
   (`.history.fit`) and the list and the detail scroll inside it; a linked
   entry further down is scrolled into view inside the list, never the page.
   **Show older changes** (50 items a page) sits at the foot of the list.
+- **A publication's record** (the season decision log, issue #119;
+  `timeline.ts` `publicationRecord`): under a `publication.published` or
+  `publication.notice_changed` event, wherever the whole entry shows (the
+  detail, or the narrow list), the season window and data-until day, the
+  run id with its engine version and runoff model, the inputs' SHA-256, the
+  notice in each language it was written in ("Notice (Afrikaans): …"), the
+  next publication date, the note, and a collapsed **Figures per farm (N)**
+  table (supplied %, demand and supplied m³, short days, dam %, model band).
+  `&kind=publication` is the log on its own. Events from before the log
+  widened show only their line.
 - **Narrow (a phone):** no detail; each entry shows whole under its day, with
   its buttons (44 px targets), and the page scrolls. The two selects share a
   row, the parameter box has its own.
@@ -6631,9 +6664,10 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail pinned to the column's right edge instead). A
-  guide spans the Help column like the overview (issue #162): body text,
-  notes and lists keep a 44rem reading measure, while diagrams, picture
-  tours, formulas and the terms table take the column's whole width (a
+  guide spans the Help column like the overview (issue #162), and so do
+  its body text, notes and lists (no 44rem measure since 2026-09-30, which
+  left half the column empty beside the figures), along with diagrams,
+  picture tours, formulas and the terms table (a
   diagram is drawn at most 1.3 times its viewBox width, centred, so a small
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
@@ -7197,15 +7231,26 @@ the catalogue, [§ Language](#language)); both unit-tested.
 - **Summary → Active alerts** (`alerts/AlertsPanel.svelte`, under Needs
   attention): the alerts firing now, each as a sentence ("Farm One: dam
   about 8 % on 20 Sep 2026 (alert below 30 %)", "EWR at the outlet at risk
-  on 5 of 14 forecast days (alert at 3)", the late or failing feeds), or "No
-  alert is firing". An editor gets **Set up alert emails**, which loads the
+  on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
+  series sent by API key (headed **API data behind**, its email's subject
+  too), "3 of 14 hydrological units short from … to …, in figures
+  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
-  restriction notice, background jobs failed, data feed failing), per farm
-  dam, and, under **Data feeds behind**, per data feed ("CHIRPS daily
-  rainfall (Upper)", "(feed switched off)" when it is), each with its level
-  (dam % of capacity; days, a feed's past its own usual delay, defaulting by
-  source; failures or jobs; range-checked in the form and by the API), a
+  restriction notice, background jobs failed, data feed failing,
+  hydrological units short (automatic publications)), per farm dam, under
+  **Data feeds behind**, per data feed ("CHIRPS daily rainfall (Upper)",
+  "(feed switched off)" when it is), and under **API data behind**, per
+  series an API key writes, named as the Data page names it (its name, else
+  its kind's label, `seriesDisplayName` in the engine, which the mails use
+  too), "(no API key sends it now)" once a person wrote over the key's days
+  (issue #120: a hand-uploaded series has none), each with its level (dam % of capacity;
+  days, a feed's past its own usual delay, defaulting by source, a series'
+  with no new reading past yesterday's, 2 by default; failures, jobs or
+  units short in the last 7 days; range-checked in the form and by the
+  API; while staleness alerts are on for anything, an unsaved feed's or
+  series' rule shows as on, since the next evaluation switches it on and
+  Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
@@ -7222,13 +7267,18 @@ the catalogue, [§ Language](#language)); both unit-tested.
   which only the WUA's staff can get (`mail.alert.model.staff`), says it
   comes from the newest forecast run, which may not be published yet, and
   is an estimate, not a measurement or a restriction; its body ends
-  "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
+  "Forecasts change." The units-short alert, staff only too
+  (`mail.alert.model.short.staff`), says it is the model's estimate from
+  figures an auto run published by itself, without a person checking them
+  first, and not a measurement or a restriction; its body gives counts
+  only ("… from 20 Sept 2026 to 26 Sept 2026: 3 of 14"), never a farm's
+  name. A restriction notice (`mail.alert.restriction.wua`)
   says it is the WUA's own, shown as published, and that questions go to the
   WUA; its percentage reads as a cut, "a 20 % cut in registered water use",
   written whole as the farm page writes it (`cutPctText`: never "12.5 %"),
   and the WUA's own words are marked with their `lang` when they are in
-  another language than the mail (issue #51). The operational alerts (data feed behind, data feed failing,
-  background jobs failed) are no model figure and carry no liability line.
+  another language than the mail (issue #51). The operational alerts (data feed behind, API data
+  behind, data feed failing, background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
@@ -7251,7 +7301,8 @@ the catalogue, [§ Language](#language)); both unit-tested.
   warns, "Warns when the model puts your dam below 30 %. Your WUA sets this
   level." (also the row's description; `thresholdLine` in
   `alerts/words.ts`, issue #51); a viewer
-  also the opt-in kinds (dam alerts for every farm, the EWR forecast);
+  also the opt-in kinds (dam alerts for every farm, the EWR forecast, units
+  short of water);
   editors and owners the operational kinds. A choice saves when made
   ("Saved." in the card's head); the switch stays usable while it saves
   (disabling it dropped the keyboard's focus), and a catchment's saves go

@@ -572,11 +572,19 @@ describe('a project with a nominated evidence run', () => {
 		expect((await owner.call('GET', `/projects/${projectId}/evidence`)).body.nominations.map((n: { runId: string }) => n.runId)).toEqual([runId]);
 	});
 
-	it('deleting the account is refused while it created the project (no cascade into project); there is no account-deletion route', async () => {
+	it('deleting the account is refused while it is the project’s only owner; with a co-owner the project and its evidence stay, maker cleared (138)', async () => {
 		const owner = await signUp('EvUser');
-		const { projectId } = await withEvidence(owner, 'User evidence');
-		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [owner.id])).rejects.toMatchObject({ code: '23503' });
+		const coOwner = await signUp('EvCoOwner');
+		const { projectId, runId } = await withEvidence(owner, 'User evidence');
+		// The only owner: refused at commit (project_member_keep_owner), the project untouched.
+		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [owner.id])).rejects.toMatchObject({ code: '23514' });
 		expect((await owner.call('GET', `/projects/${projectId}`)).status).toBe(200);
+		// Handed over: the deletion goes through, and the project, its run and its nomination stay with no maker.
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: coOwner.email, role: 'owner' })).status).toBe(201);
+		await asOwner('DELETE FROM app_user WHERE id = $1', [owner.id]);
+		expect(await asOwner('SELECT created_by FROM project WHERE id = $1', [projectId])).toEqual([{ created_by: null }]);
+		expect(await asOwner('SELECT created_by FROM model_run WHERE id = $1', [runId])).toEqual([{ created_by: null }]);
+		expect((await coOwner.call('GET', `/projects/${projectId}/evidence`)).body.nominations).toEqual([expect.objectContaining({ runId, nominatedBy: null })]);
 	});
 
 	it('the operator can still remove one out of band, as the schema owner, by disabling the guard for one transaction', async () => {

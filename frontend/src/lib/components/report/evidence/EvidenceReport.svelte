@@ -43,6 +43,7 @@
 	import { evidenceSections, sectionHeading } from './sections';
 	import { CHANGE_LABEL, sizingText } from './demandObjects';
 	import { sourceLabel, sourceLine } from '$lib/components/runs/demandSources';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let {
 		report,
@@ -253,7 +254,7 @@
 						<dt>Cited ensemble</dt>
 						<dd>
 							{#if report.uncertainty.cited}
-								{report.uncertainty.cited.id.slice(0, 8)}, started {fmtDate(report.uncertainty.cited.createdAt)}{report.uncertainty.cited.createdBy ? ` by ${report.uncertainty.cited.createdBy}` : ''}
+								{report.uncertainty.cited.id.slice(0, 8)}, started {fmtDate(report.uncertainty.cited.createdAt)} by {report.uncertainty.cited.createdBy ?? FORMER_MEMBER}
 								<span class="sub">The first complete ensemble on the declared rule; seed {report.uncertainty.cited.seed}, drawn by the database</span>
 							{:else}<span class="na">None</span>{/if}
 						</dd>
@@ -268,7 +269,7 @@
 								{#each report.uncertainty.ledger as e (e.id)}
 									<tr>
 										<th scope="row">{e.id.slice(0, 8)}{e.cited ? ' (cited)' : ''}</th>
-										<td>{fmtDate(e.createdAt)}{e.createdBy ? `, ${e.createdBy}` : ''}</td>
+										<td>{fmtDate(e.createdAt)}, {e.createdBy ?? FORMER_MEMBER}</td>
 										<td>{e.status === 'complete' ? 'complete' : 'started, not completed: no result stored'}</td>
 										<td class="num">{e.accepted === null ? '–' : `${fmtNum(e.accepted)} of ${fmtNum(e.members + 1)}`}</td>
 										<td>{!report.uncertainty.declared ? 'no rule declared' : e.departsFromDeclared.length ? e.departsFromDeclared.map((d) => `${d.label}: ${d.b} (rule ${d.a})`).join('; ') : 'follows it'}</td>
@@ -382,7 +383,7 @@
 								<tr>
 									<th scope="row">{fmtDate(n.nominatedAt)}</th>
 									<td>{n.withdrawn ? 'Withdrawn' : `${n.runLabel || 'unlabelled run'}${n.runId === id.baseline.runId ? ' (this baseline)' : ''}`}</td>
-									<td>{n.nominatedBy ?? '–'}</td>
+									<td>{n.nominatedBy ?? FORMER_MEMBER}</td>
 									<td>{n.reason}</td>
 								</tr>
 							{:else}
@@ -733,7 +734,7 @@
 				<h3>A.6 Every application run on this baseline</h3>
 				<ul class="changes" data-testid="evidence-application-runs">
 					{#each report.appendix.applicationRuns as r (r.runId)}
-						<li>{fmtDate(r.createdAt)}: “{r.scenarioName}”{r.label ? `, ${r.label}` : ''}{r.createdBy ? `, run by ${r.createdBy}` : ''}{r.runId === id.application?.runId ? ' (this report)' : ''}</li>
+						<li>{fmtDate(r.createdAt)}: “{r.scenarioName}”{r.label ? `, ${r.label}` : ''}, run by {r.createdBy ?? FORMER_MEMBER}{r.runId === id.application?.runId ? ' (this report)' : ''}</li>
 					{:else}
 						<li class="na">None.</li>
 					{/each}

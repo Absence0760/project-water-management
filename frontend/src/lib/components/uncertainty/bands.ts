@@ -13,6 +13,7 @@ import {
 } from '@water-management/engine';
 import type { Ensemble } from '$lib/api';
 import { fmtDate, fmtNum } from '$lib/format/number';
+import { FORMER_MEMBER } from '$lib/format/maker';
 
 /** Digits that read well for a value of this size (3 significant figures, whole numbers from 100). */
 export function sig(v: number | null | undefined): string {
@@ -74,7 +75,7 @@ export function historyRows(list: readonly Ensemble[], shown: Ensemble | null): 
 		.map((e) => ({
 			id: e.id,
 			when: fmtDate(e.createdAt, true),
-			by: e.createdBy ?? '–',
+			by: e.createdBy ?? FORMER_MEMBER,
 			status: e.status === 'complete' ? 'stored' : 'started, never stored',
 			seed: e.seed,
 			members: e.members,

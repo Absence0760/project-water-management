@@ -12,7 +12,9 @@ export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
 	registration: 'Registration (WARMS)',
 	licence: 'Licence',
 	general_authorisation: 'General authorisation',
-	existing_lawful_use: 'Existing lawful use (verified)'
+	schedule_1: 'Schedule 1 (permissible use)',
+	existing_lawful_use_claimed: 'Existing lawful use (claimed, not verified)',
+	existing_lawful_use: 'Existing lawful use (verified under s35)'
 };
 
 export const PURPOSE_LABEL: Record<AllocationPurpose, string> = {
@@ -91,7 +93,7 @@ export const MODE_NOTE: Record<AllocationMode, string | null> = {
 	none: null,
 	cap: 'This run capped each unit’s use at its registered volume per water year (allocation mode “cap”), so its modelled use can’t be above it. A unit with no registered volume wasn’t capped.',
 	fullAllocation:
-		'This run is a full allocation: each unit with a registered volume had its demand scaled so it asks for exactly that volume every water year. It shows what the river would look like if every registered user took their entitlement, not what they take.'
+		'This run is a full allocation: each unit with a registered volume had its demand scaled so it asks for exactly that volume every water year. It shows what the river would look like if every registered or licensed volume were taken in full (a registration is not an entitlement), not what the units take.'
 };
 
 /** "2021/22". */

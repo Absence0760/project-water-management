@@ -5,7 +5,7 @@
 // reproduces the days it covered. Synthetic example catchment only.
 import { canonicalJson, runModelChecked, type ModelOutput } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { buildExamples } from '../../scripts/examples/catchments.js';
+import { buildExamples, type ExampleProject } from '../../scripts/examples/catchments.js';
 import { importProjectData } from '../../scripts/import-project.js';
 import { signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -13,7 +13,15 @@ import { loadModelInput, loadRunInput } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
-const example = buildExamples({ fit: false })[0]!;
+/**
+ * Kleinberg's first two years, rain and gauge records only: the series under
+ * test covers 60 days, and on the 15-year record the test's two runs and a
+ * re-run took ~2.8 s on a CI runner, within a slow one of vitest's 5 s
+ * (docs/testing.md § Big or repeated fixtures in db tests).
+ */
+const full: ExampleProject = buildExamples({ fit: false })[0]!;
+const start = full.series.find((s) => s.kind === 'rain_catchment_mm')!.startDate;
+const example: ExampleProject = { ...full, series: full.series.filter((s) => s.startDate === start).map((s) => ({ ...s, values: s.values.slice(0, 731) })) };
 const canon = (v: unknown) => canonicalJson(JSON.parse(JSON.stringify(v)));
 
 const newRun = async (u: User, projectId: string) => {

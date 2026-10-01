@@ -65,7 +65,9 @@ test('a volume unit that fails to save goes back to the saved one', async ({ pag
 	await page.route(/\/auth\/me$/, (route) =>
 		route.request().method() === 'PATCH' ? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) }) : route.fallback()
 	);
-	await prefs.getByLabel('Megalitres (ML)').check();
+	// click(), not check(): the failed save puts the radio back at once, so check()'s own
+	// "did the state change?" read can land after the revert and throw. Where it ends is asserted below.
+	await prefs.getByLabel('Megalitres (ML)').click();
 	await expect(prefs.getByRole('alert')).toBeVisible();
 	await expect(prefs.getByLabel('Cubic metres (m³)')).toBeChecked();
 	await expect(prefs.getByLabel('Megalitres (ML)')).not.toBeChecked();

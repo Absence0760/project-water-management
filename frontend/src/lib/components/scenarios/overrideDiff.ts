@@ -48,7 +48,6 @@ const IGNORED_NODE_KEYS = new Set(['id', 'sortOrder']);
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const sortedMonths = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - b);
 const label = (n: { name: string }) => `“${n.name || 'unnamed node'}”`;
-const cropLabel = (c: { name: string }) => `“${c.name || 'unnamed crop'}”`;
 
 /** Crop areas summed per farm and crop (the editor keeps one row each; an old document may have duplicates). */
 function areaMap(rows: readonly CropArea[], keep: (a: CropArea) => boolean = () => true): Map<string, number> {
