@@ -97,6 +97,37 @@ describe('email templates', () => {
 	});
 });
 
+describe('the organisation’s privacy contact in invitations (POPIA s18(1)(b), 168)', () => {
+	const url = siteLink('/register', TOKEN, 'invite');
+	const contact = { organisation: 'Kloof WUA', name: 'Info Officer', email: 'io@kloof.example', postal: 'PO Box 1 <b>' };
+
+	it('names the organisation and whom to ask in a farmer invite, escaped, with the postal address when there is one', () => {
+		const mail = farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'], contact });
+		expect(mail.text).toContain('Kloof WUA decides about your information in this catchment. Questions about it: Info Officer, io@kloof.example.');
+		expect(mail.text).toContain('Or write to Info Officer at: PO Box 1 <b>');
+		expect(mail.html).toContain('PO Box 1 &lt;b&gt;');
+		const noPost = farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'], contact: { ...contact, postal: null } });
+		expect(noPost.text).toContain('Questions about it: Info Officer');
+		expect(noPost.text).not.toContain('Or write to');
+	});
+
+	it('names it in a project or team invite too', () => {
+		const mail = inviteMail('x@example.com', url, 'Ann', { kind: 'project', name: 'Kloof', role: 'viewer' }, 'sign-up', contact);
+		expect(mail.text).toContain('Kloof WUA decides about your information in its projects. Questions about it: Info Officer, io@kloof.example.');
+		expect(mail.text).toContain('Or write to Info Officer at: PO Box 1 <b>');
+	});
+
+	it('says nothing of a contact when none is set (positive control: the privacy notice line stays)', () => {
+		for (const mail of [
+			farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'] }),
+			inviteMail('x@example.com', url, 'Ann', { kind: 'team', name: 'T', role: 'member' })
+		]) {
+			expect(mail.text).not.toContain('decides about your information');
+			expect(mail.text).toContain('How we handle your information');
+		}
+	});
+});
+
 describe('reportReadyMail', () => {
 	const url = 'https://water.example.com/projects/p/reports/j';
 	it('links to the sign-in-gated download page, names the run and pages, and escapes user text', () => {

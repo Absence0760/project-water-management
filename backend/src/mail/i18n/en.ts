@@ -53,6 +53,8 @@ export const en = {
 	'mail.invite.signUpExpires': 'This invitation expires in 7 days.',
 	'mail.invite.signUpIgnore': "If you weren't expecting this, you can ignore this email.",
 	'mail.invite.privacy': 'How we handle your information: {url}',
+	'mail.invite.contact': '{organisation} decides about your information in this catchment. Questions about it: {name}, {email}.',
+	'mail.invite.contactPost': 'Or write to {name} at: {postal}',
 	'mail.invite.confirm': 'There is already a {product} account for {email}. Confirm that this is your email address to accept.',
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',
@@ -188,7 +190,7 @@ export const sections: Record<string, string> = {
 	'mail.farmer':
 		'Email: the farmer invite. The WUA gives a farmer access to their hydrological unit(s), the model’s name for a farm, in a catchment. {farms} is one or more hydrological unit names joined with “and” (or “your hydrological unit”).',
 	'mail.invite':
-		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline.',
+		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline. The “contact” lines name the organisation responsible for the catchment’s information ({organisation}, a team’s name) and the person or office to ask about it ({name}, {email}, {postal}, as the organisation typed them); they appear only when the organisation has set a contact.',
 	'mail.alert':
 		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
 	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',

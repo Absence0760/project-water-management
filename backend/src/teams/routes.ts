@@ -12,6 +12,7 @@ import { requireStepUp } from '../auth/stepUp.js';
 import { readJson } from '../http/body.js';
 import { recordTeamAudit } from '../history/record.js';
 import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatch } from './settings.js';
+import { PrivacyContactInput, toPrivacyContact } from './privacyContact.js';
 
 const RoleEnum = z.enum(TEAM_ROLES);
 const Name = z.string().trim().min(1).max(200);
@@ -51,21 +52,33 @@ export async function memberSubject(db: Db, teamId: string, userId: string): Pro
 const TEAM_SUMMARY = `t.id, t.name, app_team_role(t.id) AS role, t.created_at AS "createdAt",
 	(SELECT count(*)::int FROM team_member m WHERE m.team_id = t.id) AS "memberCount",
 	(SELECT count(*)::int FROM project p WHERE p.team_id = t.id) AS "projectCount",
-	t.settings`;
+	t.settings, t.privacy_contact_name, t.privacy_contact_email, t.privacy_contact_postal`;
 
-/** A team as the API returns it: the stored settings, and the portfolio thresholds they come to (the team's or the defaults). */
-const toTeam = <T extends { settings: unknown }>(row: T) => ({ ...row, portfolioThresholds: appliedThresholds(row.settings) });
+type TeamRow = { settings: unknown; privacy_contact_name: string | null; privacy_contact_email: string | null; privacy_contact_postal: string | null };
+
+/**
+ * A team as the API returns it: the stored settings, the portfolio thresholds they come to (the team's or the
+ * defaults), and its privacy contact (168; null = not set).
+ */
+const toTeam = <T extends TeamRow>({ privacy_contact_name, privacy_contact_email, privacy_contact_postal, ...row }: T) => ({
+	...row,
+	portfolioThresholds: appliedThresholds(row.settings),
+	privacyContact: toPrivacyContact({ privacy_contact_name, privacy_contact_email, privacy_contact_postal })
+});
 
 async function getTeam(db: Db, id: string) {
-	const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
+	const { rows } = await db.query<TeamRow>(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return toTeam(rows[0]);
 }
 
 const TeamPatch = z
-	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional() })
+	// privacyContact: the organisation's privacy contact (168, POPIA s18(1)(b)); null removes it.
+	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional(), privacyContact: PrivacyContactInput.nullable().optional() })
 	.strict()
-	.refine((b) => b.name !== undefined || b.settings !== undefined, { message: 'nothing to change: send name or settings' });
+	.refine((b) => b.name !== undefined || b.settings !== undefined || b.privacyContact !== undefined, {
+		message: 'nothing to change: send name, settings or privacyContact'
+	});
 
 /**
  * Change the team's settings (admin; the caller checked). Records
@@ -93,7 +106,7 @@ async function patchSettings(db: Db, id: string, patch: TeamSettingsPatch) {
 export const teamRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
 		withUser(c.get('userId'), async (db) => {
-			const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
+			const { rows } = await db.query<TeamRow>(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
 			return c.json({ teams: rows.map(toTeam) });
 		})
 	)
@@ -127,6 +140,17 @@ export const teamRoutes = new Hono<AuthEnv>()
 			await requireTeamRole(db, id, 'admin');
 			if (body.name !== undefined) mustChange(await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]));
 			if (body.settings) await patchSettings(db, id, body.settings);
+			if (body.privacyContact !== undefined) {
+				const pc = body.privacyContact;
+				mustChange(
+					await db.query('UPDATE team SET privacy_contact_name = $2, privacy_contact_email = $3, privacy_contact_postal = $4 WHERE id = $1', [
+						id,
+						pc?.name ?? null,
+						pc?.email ?? null,
+						pc?.postal ?? null
+					])
+				);
+			}
 			return c.json({ team: await getTeam(db, id) });
 		});
 	})
