@@ -305,7 +305,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			changePassword: (currentPassword: string, newPassword: string) =>
 				request<{ user: User }>('POST', '/auth/change-password', { currentPassword, newPassword }).then(
 					(r) => r.user
-				)
+				),
+			/**
+			 * "Delete my account" (issue #112): the password, typed again. Resolves
+			 * once the account is gone and this browser's cookies are cleared.
+			 * ApiError 403 = wrong password, 429 = locked (the sign-in lockout),
+			 * 409 `account_sole_holder` = the only owner or admin of what `details`
+			 * names (SoleHoldings; account/deleteAccount.ts soleHoldingsOf reads it).
+			 */
+			deleteMe: (password: string) => request<void>('DELETE', '/auth/me', { password })
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
