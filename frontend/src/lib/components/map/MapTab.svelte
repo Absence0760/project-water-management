@@ -21,7 +21,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type MapFeature, type MapFeatureList } from '$lib/api';
+	import { api, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -37,6 +37,10 @@
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
 	import { overlayColours } from './mapStyle';
+	import MapKeyRow from './MapKeyRow.svelte';
+	import { featureResult, viewLabel } from './mapResults';
+	import { MapResults } from './mapResults.svelte';
+	import { BAND_WORD } from './mapStatus';
 	import PlaceSheet from './PlaceSheet.svelte';
 	import SourceList from './SourceList.svelte';
 	import UploadSheet from './UploadSheet.svelte';
@@ -45,11 +49,17 @@
 		projectId,
 		editor,
 		canEdit,
+		runs = null,
+		role = null,
 		onModelChanged
 	}: {
 		projectId: string;
 		editor: ModelEditor;
 		canEdit: boolean;
+		/** The project's runs, newest first (null = not loaded): the results on the map read one (#326 A1). */
+		runs?: RunMeta[] | null;
+		/** The caller's role: below editor the map shows the published run only. */
+		role?: Role | null;
 		/** An area was accepted into the model: the page reloads its inputs. */
 		onModelChanged: () => Promise<void> | void;
 	} = $props();
@@ -235,6 +245,17 @@
 	$effect(() => watchAppTheme(() => (dark = appIsDark())));
 	const key = $derived(keyGroups(overlayColours(dark)));
 
+	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
+	const results = new MapResults({
+		projectId: () => projectId,
+		runs: () => runs,
+		role: () => role,
+		nodes: () => editor.model.nodes,
+		features: () => features,
+		params: () => params,
+		dark: () => dark
+	});
+
 	// --- the window fit: the layout is the height left below its top edge (ui-playbook § 2, as the Network) ---
 	let layoutEl: HTMLDivElement | undefined = $state();
 	let layoutTop = $state(0);
@@ -309,6 +330,20 @@
 	{/if}
 {/snippet}
 
+<!-- The picked feature's figure from the run the map shows (#326 A1): the measure's, or a gauge's EWR, in words with its band. -->
+{#snippet resultFacts(f: MapFeature)}
+	{@const r = results.ready ? featureResult(f, results.unitBy, results.ewrBy) : null}
+	{#if r}
+		<dt>{r.measure === 'ewr' ? 'EWR' : viewLabel(results.view)}</dt>
+		<dd data-testid="map-card-result" data-band={r.band}>{r.label} · {BAND_WORD[r.band].toLowerCase()}</dd>
+		{#if r.measure !== 'ewr' && results.ewrBy.get(f.nodeId ?? '')}
+			{@const e = results.ewrBy.get(f.nodeId ?? '')!}
+			<dt>EWR</dt>
+			<dd data-testid="map-card-ewr" data-band={e.band}>{e.label} · {BAND_WORD[e.band].toLowerCase()}</dd>
+		{/if}
+	{/if}
+{/snippet}
+
 <!-- The unit's area, typed or from the map (E6), in words. -->
 {#snippet unitArea(f: MapFeature)}
 	{@const s = areaSourceOf(f, nodes)}
@@ -345,23 +380,12 @@
 					<div class="map-body">
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
-								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" fill />
+								<CatchmentMap bind:this={mapRef} {features} {selectedId} onselect={select} {tilesUrl} label="Map of the catchment" fills={results.fills} fill />
 							{/snippet}
 						</Lazy>
 					</div>
-					<!-- The key, from the map's own colours. A1's measure picker goes beside it, in this row. -->
-					<div class="key-row">
-						<div class="key small" role="group" aria-label="Key" data-testid="map-key">
-							{#each key as g (g.label)}
-								<span class="key-group">
-									<span class="key-h">{g.label}</span>
-									{#each g.items as k (g.label + k.label)}
-										<span class="key-item"><span class="sw sw-{k.swatch}" style:--c={k.colour} aria-hidden="true"></span>{k.label}</span>
-									{/each}
-								</span>
-							{/each}
-						</div>
-					</div>
+					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
 				</section>
 
 				<aside class="map-side" aria-label="Features">
@@ -377,6 +401,7 @@
 									<dt>Stands for</dt>
 									<dd>{@render standsFor(picked)}</dd>
 								{/if}
+								{@render resultFacts(picked)}
 								{#if areaSourceOf(picked, nodes)}
 									<dt>Unit’s area</dt>
 									<dd data-testid="map-card-area-source">{@render unitArea(picked)}</dd>
@@ -445,7 +470,10 @@
 				<Dialog bind:open={grid.open} title={TAB_GRIDS[GRID_ID].title} full>
 					<div class="grid-body" data-testid="map-grid">
 						{#if features.length}
-							<p class="muted small grid-note">Areas are computed on the server from each polygon (geodesic, WGS84).</p>
+							<p class="muted small grid-note">
+									Areas are computed on the server from each polygon (geodesic, WGS84).
+									{#if results.ready}Result and Band: {viewLabel(results.view).toLowerCase()} for what each area stands for, and the EWR at gauges, from the run the map shows.{/if}
+								</p>
 							<div class="table-wrap">
 								<table class="data map-table" data-testid="map-feature-table">
 									<caption class="visually-hidden">Map features, what each stands for, and its area</caption>
@@ -456,6 +484,7 @@
 											<th scope="col" class="num">Area or position</th>
 											<th scope="col">Stands for</th>
 											<th scope="col">Unit’s area</th>
+											{#if results.ready}<th scope="col">Result</th><th scope="col">Band</th>{/if}
 											{#if canEdit}<th scope="col">Area into the model</th><th scope="col"><span class="visually-hidden">Actions</span></th>{/if}
 										</tr>
 									</thead>
@@ -469,13 +498,18 @@
 												<td class="num"><span class="cell-label" aria-hidden="true">Area or position </span>{featureSummary(f)}</td>
 												<td><span class="cell-label" aria-hidden="true">Stands for </span>{@render standsFor(f)}</td>
 												<td><span class="cell-label" aria-hidden="true">Unit’s area </span>{#if areaSourceOf(f, nodes)}{@render unitArea(f)}{:else}<span class="muted">–</span>{/if}</td>
+												{#if results.ready}
+													{@const r = featureResult(f, results.unitBy, results.ewrBy)}
+													<td data-testid="map-grid-result"><span class="cell-label" aria-hidden="true">Result{' '}</span>{#if r}{r.label}{:else}<span class="muted">–</span>{/if}</td>
+													<td data-testid="map-grid-band" data-band={r?.band}><span class="cell-label" aria-hidden="true">Band{' '}</span>{#if r}{BAND_WORD[r.band]}{:else}<span class="muted">–</span>{/if}</td>
+												{/if}
 												{#if canEdit}
 													<td class="area-cell"><span class="cell-label" aria-hidden="true">Area into the model </span>{@render areaInto(f)}</td>
 													<td class="row-actions">{@render deleteButton(f)}</td>
 												{/if}
 											</tr>
 											{#if rowError?.id === f.id}
-												<tr><td colspan={canEdit ? 7 : 5}><p class="err" role="alert">{rowError.text}</p></td></tr>
+												<tr><td colspan={(canEdit ? 7 : 5) + (results.ready ? 2 : 0)}><p class="err" role="alert">{rowError.text}</p></td></tr>
 											{/if}
 										{/each}
 									</tbody>
@@ -677,74 +711,6 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		align-items: center;
-	}
-	.key-row {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem 1rem;
-		align-items: center;
-	}
-	.key {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 1rem;
-		margin: 0;
-		color: var(--text-2);
-	}
-	.key-group {
-		display: inline-flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 0.6rem;
-		align-items: center;
-	}
-	.key-h {
-		font-weight: 600;
-		color: var(--text);
-	}
-	.key-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-	}
-	/* Each swatch drawn as the map draws its kind, in the colour mapStyle gives it (--c). */
-	.sw {
-		display: inline-block;
-		flex: none;
-	}
-	.sw-dashed,
-	.sw-line,
-	.sw-dotted {
-		width: 1.4rem;
-		height: 0;
-		border-top: 3px solid var(--c);
-	}
-	.sw-dashed {
-		border-top-style: dashed;
-	}
-	.sw-dotted {
-		border-top-style: dotted;
-	}
-	.sw-area {
-		width: 1rem;
-		height: 0.75rem;
-		border: 2px solid var(--c);
-		background: color-mix(in srgb, var(--c) 25%, transparent);
-	}
-	.sw-gauge,
-	.sw-dam,
-	.sw-other {
-		width: 0.85rem;
-		height: 0.85rem;
-		background: var(--c);
-	}
-	.sw-gauge {
-		clip-path: polygon(50% 0, 100% 100%, 0 100%);
-	}
-	.sw-dam {
-		border-radius: 50%;
-	}
-	.sw-other {
-		clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 	}
 	.err {
 		color: var(--danger);

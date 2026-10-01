@@ -2366,8 +2366,29 @@ map" card) stays the schematic; this is the geography.
   other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
   drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
   (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
-  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live). A1's
-  measure picker goes in the key's row.
+  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live).
+- **Results on the map** (#326 A1, the key row under the map,
+  `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
+  (`measure=`: Days short, the default and so absent from the URL;
+  `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
+  colours above) and, for editors and owners when there is more than one run,
+  **Run** (`run=`; each option "name · day · published"). Both are history
+  entries, so Back undoes a change. The run is the published one by default;
+  an editor with nothing published sees their newest; below editor only the
+  published run, a `run=` link is ignored, and with nothing published one line
+  says so ("Nothing is published yet, so the map shows each feature’s kind.";
+  an editor with no run at all: "No run yet, …"). A line names the run ("From
+  the published run “…”, ran 2026-10-01."). The legend names the measure and
+  each band in words with what it means and how many units it holds ("**OK**
+  95% or more of demand days met (2 units)"); areas with no figure, or not
+  linked to a unit, take "No figure"'s colour. A line counts the EWR sites met
+  and missed; the key keeps the boundary, river and point swatches. The
+  picked feature's card adds the measure's line ("Days short: 1 089 of 4 558
+  days short · watch") or a gauge's **EWR** ("EWR missed on 12 days (outlet) ·
+  short"), and Every feature adds **Result** and **Band** columns, so the map
+  is never the only way to read a colour. Loading and a failed load (with
+  Retry) show beside the pickers; dam level loads the run's dam levels as the
+  Network does. The page fits 1440×960 with thirty units and the legend.
 - **The picked feature's card** (top of the side column): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
@@ -2403,7 +2424,8 @@ map" card) stays the schematic; this is the geography.
   `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
   one rather than through the model's save row): a table in the list's order
   with Feature (picks it and closes the modal), Kind, Area or position,
-  Stands for, Unit’s area, and for editors Area into the model and Delete
+  Stands for, Unit’s area, Result and Band while a measure shows (A1), and
+  for editors Area into the model and Delete
   (the same controls as the card); "Areas are computed on the server from
   each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
   came from** (every unit, including those with no parcel, with the count
@@ -2437,6 +2459,11 @@ map" card) stays the schematic; this is the geography.
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways
   scroll), axe light and dark, wide and phone, with the grid open too.
+  Results: `e2e/tests/map-results.spec.ts` (the seeded Sandspruit as owner
+  and viewer, every parcel's figure in the table, the measure and run in the
+  URL with Back, published-only below editor, the fills re-read on a theme
+  switch through the key row's `data-fill-theme` and each band's
+  `data-colour` against its token, thirty units, axe wide and phone).
 
 ## Crops & demand
 

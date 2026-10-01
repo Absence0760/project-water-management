@@ -223,13 +223,16 @@ Geometry is in metres on a local equirectangular projection around the
 features (well under 1 % off over a catchment); people read haversine
 distances and the server's areas.
 
-## Results on the map (data)
+## Results on the map
 
-Issue #326 A1 (decision D-A1) colours each parcel by one run's figures. This
-section is the data layer, `frontend/src/lib/components/map/mapStatus.ts`
-(pure, `mapStatus.test.ts`). **Not wired to the page yet:** the map's
-colours, measure picker, legend and the table beside it are the next round
-of #326, and nothing on the Map tab calls this module today.
+Issue #326 A1 (decision D-A1) colours each parcel, and each dam polygon
+through its node, by one run's figures. The data layer is
+`frontend/src/lib/components/map/mapStatus.ts` (pure, `mapStatus.test.ts`);
+the page's side is `mapResults.ts` (the `measure=` words, the legend's rows,
+a feature's figure, the "no figure" fill for unlinked areas;
+`mapResults.test.ts`), `mapResults.svelte.ts` (the run's record through the
+Runs cache, its dam levels, the fills) and `MapKeyRow.svelte` (the pickers and
+the legend). What the page shows is in [ui.md § Map](./ui.md#map-tabmap).
 
 - **No new route.** Every figure is in the run's summary, which
   `GET /projects/:id/runs/:runId` already returns (`api.runs.get`), with the
@@ -277,7 +280,20 @@ of #326, and nothing on the Map tab calls this module today.
   the app's theme at the time of the call. The caller must call it again on
   `watchAppTheme` and pass the new `fills`: CatchmentMap redraws a theme
   change with the `fills` it was given, so stale ones keep the old theme's
-  colours. The boundary and rivers are never filled.
+  colours. The boundary and rivers are never filled. The tab does: its band
+  colours are derived from the theme it watches, so CatchmentMap's
+  `setStyle` on a switch reads the new `fills`. Areas with no figure (not
+  linked, or no status) get the `none` colour (`resultFills`), so a parcel's
+  own green never reads as OK.
+- **Contrast.** `RESULT_FILL_OPACITY` (0.75) is not held to 3:1 against the
+  basemap: the fill isn't what marks the shape out. Every parcel keeps its
+  cased outline (`ov-casing` under `ov-parcel-line`, ≥ 3:1 against the
+  basemap, `mapStyle.test.ts`), and the fill's meaning is also in words (the
+  legend, the card, Every feature's Result and Band), so WCAG 1.4.1 and
+  1.4.11 rest on the outline and the words, not the fill.
+- **Gauges' markers are not yet coloured** met or missed: the markers are
+  CatchmentMap's DOM buttons, which don't read `fills`. The EWR is in the
+  card, the table and the legend's count line meanwhile.
 
 ## Quaternary lookup
 
