@@ -31,7 +31,9 @@
 	// reproduction bundle found (detail.reproduction, 154_pack_reproduce):
 	// reproduced, not reproduced (with the failed checks), another engine, or
 	// still re-running. It is the app's own claim: never printed, never on
-	// verify.
+	// verify. An editor may ask for it again (POST …/reproduce) when the last
+	// re-run gave up, or when the outcome is an older engine's than the
+	// server's: the new outcome is recorded beside the old.
 	//
 	// Sharing and comments (WP-3.15, 128_pack_share_notes): an editor makes a
 	// read-only share link to an issued pack here (Share link…, the same
@@ -141,6 +143,22 @@
 			renderError = e instanceof Error ? e.message : String(e);
 		} finally {
 			renderingAgain = false;
+		}
+	}
+	let rerunning = $state(false);
+	let rerunError = $state<string | null>(null);
+	/** An editor asks the server to re-run the pack again (POST …/reproduce), then reads the pack again. */
+	async function rerunAgain() {
+		if (!pack) return;
+		rerunning = true;
+		rerunError = null;
+		try {
+			await api.packs.reproduce(projectId, pack.id);
+			await reload();
+		} catch (e) {
+			rerunError = e instanceof Error ? e.message : String(e);
+		} finally {
+			rerunning = false;
 		}
 	}
 	const report = $derived(detail?.manifest.report ?? null);
@@ -267,6 +285,8 @@
 				>
 					{r.text}
 					{#if reproduction.state.status === 'checking'}<button type="button" class="btn btn-sm" onclick={reload}>Check again</button>{/if}
+					{#if canEdit && r.rerun}<button type="button" class="btn btn-sm" onclick={rerunAgain} disabled={rerunning} data-testid="pack-reproduce-again">{r.rerun}</button>{/if}
+					{#if rerunError}<span data-testid="pack-reproduce-error">({rerunError})</span>{/if}
 					{#if r.failed.length}
 						<ul class="failed-checks">{#each r.failed as c (c.id)}<li><span class="mono">{c.id}</span>: {c.detail}</li>{/each}</ul>
 					{/if}

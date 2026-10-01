@@ -579,8 +579,21 @@ issue, recorded as reproduced; a stored bundle replaced by other bytes
 recorded as not reproduced; the writer's refusals), and the pack PDF e2e
 (`e2e/tests/evidence-pack-pdf.spec.ts`, the page showing it).
 
-Not built: an editor's "re-run again" after the job gave up, or under a
-newer engine ([followups.md](./followups.md#evidence-report-issue-71)).
+**Re-run again** (operator decision, 2026-10-01). An editor asks for the
+re-run again from the pack's bar (`POST …/packs/:packId/reproduce`,
+[api.md § Evidence packs](./api.md#evidence-packs)) when the last one gave
+up (**Try again**), when the recorded outcome is an older engine's than the
+server's (**Re-run on engine X**, after an engine upgrade), or for a pack
+issued before re-runs. It queues the same `pack_reproduce` job, as the
+caller; while one is pending the request is idempotent (the pending job
+comes back). On a newer engine the new outcome is recorded **beside** the
+older engine's, never in place of it (one per pack and engine), and the
+newest shows. Once the server's engine has an outcome it stands, and the
+request is refused (`409`). Tests: `evidence/packs.db.test.ts` (refused on
+its own engine, queued once on a newer one, recorded beside the old; a
+re-run that gave up asked for again), `packs/pack.test.ts`
+(`reproductionNote`'s button) and the pack PDF e2e (the button after an
+engine upgrade).
 
 ## Sharing and comments
 

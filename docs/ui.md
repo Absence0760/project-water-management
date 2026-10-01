@@ -6770,7 +6770,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   and date (an info box), *Not reproduced* with each failed check listed (an
   error), *Not re-run on the runs' own engine* when only the re-runs differ
   on another engine (a warning), a quiet *re-running* line with **Check
-  again** while its job runs, or that it couldn't be done and why. It is
+  again** while its job runs, or that it couldn't be done and why. An editor
+  gets a button to ask for it again (`POST …/reproduce`,
+  `data-testid="pack-reproduce-again"`): **Try again** when it couldn't be
+  done, **Re-run on engine X** when the outcome is an older engine's than
+  the server's (the line adds that the server now runs X and the new
+  outcome is recorded beside this one), **Re-run on the server** for a pack
+  issued before re-runs; never on the server's own engine's outcome. It is
   the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a

@@ -7,12 +7,15 @@
 // bytes: their SHA-256 is what the pack and the public verify lookup answer.
 // The same tick re-runs the pack's runs from its stored reproduction bundle
 // (pack_reproduce, 154_pack_reproduce), and the pack's page says they
-// reproduced; verify doesn't (it is the app's own claim).
+// reproduced; verify doesn't (it is the app's own claim). After an engine
+// upgrade an editor re-runs it on the new engine from the same bar, and the
+// new outcome is recorded beside the old.
 //
 // Needs MinIO (`pnpm dev:s3:up`; CI starts it). Locally, without it the spec
 // is skipped and says why; in CI it never skips.
 import { createHash } from 'node:crypto';
 import { createRun, nominateRun, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { ageReproductionEngine } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
@@ -113,4 +116,23 @@ test('issuing a pack prints its PDF once; the download is the bytes whose SHA-25
 
 	// Printed once: a second request is refused.
 	expect((await page.request.post(`${at}/${pack.id}/pdf`, { data: {} })).status()).toBe(409);
+
+	// On the engine it ran with, the outcome stands: no re-run is offered.
+	await expect(page.getByTestId('pack-reproduce-again')).toHaveCount(0);
+	// After an engine upgrade (the recorded outcome now an older engine's), the editor re-runs it on the server's.
+	await ageReproductionEngine(pack.id, '0.0.1-older');
+	await page.reload();
+	await expect(reproduced).toHaveAttribute('data-state', 'reproduced');
+	await expect(reproduced).toContainText(`The server now runs engine ${read.reproduction.engineVersion}`);
+	const again = page.getByTestId('pack-reproduce-again');
+	await expect(again).toHaveText(`Re-run on engine ${read.reproduction.engineVersion}`);
+	await again.click();
+	await expect(reproduced).toHaveAttribute('data-state', 'checking');
+	await expect(again).toHaveCount(0);
+	await runJobsTick({ projects: [project.id], schedule: false });
+	await reproduced.getByRole('button', { name: 'Check again' }).click();
+	await expect(reproduced).toHaveAttribute('data-state', 'reproduced');
+	await expect(reproduced).toContainText(`re-run with engine ${read.reproduction.engineVersion} from the stored reproduction bundle`);
+	await expect(reproduced).not.toContainText('now runs engine');
+	await expect(again).toHaveCount(0);
 });

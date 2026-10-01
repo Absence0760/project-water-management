@@ -4602,7 +4602,7 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       check in `pack_reproduction`, through `app_record_pack_reproduction`
       from that job only. The pack page's bar shows it; verify doesn't
       ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
-- [ ] **Re-run a pack again on the server.** The `pack_reproduce` job runs
+- [x] **Re-run a pack again on the server.** The `pack_reproduce` job runs
       once, at issue (3 attempts). When it gives up (the packs bucket
       unreachable for all three) the pack page says the re-run couldn't be
       done, and nothing asks again; and after an engine upgrade nothing
@@ -4614,7 +4614,14 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       engine; route inventory, role ladder, mass-assignment and write-route
       entries), with a "Try again" on the pack page. Trigger: the first
       `pack_reproduce` job that goes dead in production, or an engine
-      version bump after the first pack is issued.
+      version bump after the first pack is issued. **Decided (operator,
+      2026-10-01): build it now. Done:** `POST …/packs/:packId/reproduce`
+      (`requestPackReproduce`: idempotent while one is pending, `409` once
+      the server's engine has an outcome), `canRerun` and `serverEngine` on
+      the pack's `reproduction`, and the bar's **Try again** / **Re-run on
+      engine X** (evidence-pack.md § Reproduction, "Re-run again"). Tests:
+      `evidence/packs.db.test.ts`, the four route lists,
+      `packs/pack.test.ts`, `e2e/tests/evidence-pack-pdf.spec.ts`.
 - [ ] **Move the bundle's build to a job if issue nears the timeout.** The
       bundle is built in the issue's transaction today, estimated 5–10 s at
       300 outputs × 30 years a run

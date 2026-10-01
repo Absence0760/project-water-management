@@ -539,6 +539,10 @@ const WRITE_ROUTES: Entry[] = [
 	{
 		route: `POST ${P}/packs/:packId/pdf`,
 		exempt: 'asks again for an issued pack’s PDF; its pack_render job keeps who asked, and the PDF, once recorded, is fixed on the pack (119_pack_render)'
+	},
+	{
+		route: `POST ${P}/packs/:packId/reproduce`,
+		exempt: 're-runs an issued pack on the server again; its pack_reproduce job keeps who asked, and each outcome is its own row, once per engine, with the engine and every check (154_pack_reproduce); no input changes'
 	}
 ];
 

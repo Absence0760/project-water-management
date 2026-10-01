@@ -2349,6 +2349,7 @@ reproduction bundle).
 | GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
 | POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s, `403`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
 | POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), as is the server's re-run of its runs from the bundle (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
+| POST | `/projects/:id/packs/:packId/reproduce` | none, or `{}` (strict) | `202 { jobId, reproduction: PackReproductionState }`: re-runs an issued pack on the server again from its stored bundle, as the caller (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): after the last re-run gave up, or on a newer engine than the recorded outcome's, which is kept and the new engine's recorded beside it. Idempotent while one is pending: the pending job's id comes back and nothing more is queued. `409` for a pack never issued, and once an outcome is recorded on the server's engine (one per pack and engine stands). Contributors and farmers `403`, a stranger `404` | editor |
 | GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
 | POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
@@ -2372,13 +2373,16 @@ reproduction bundle).
   `failed` when the last render gave up (`error` says why; an editor asks
   again with `POST …/pdf`); `none` for a pack never issued.
 - `PackReproductionState = { status, engineVersion, runEngines, checkedAt,
-  checks: { id, ok, detail }[], error }` (154_pack_reproduce): a recorded
-  outcome, `reproduced`, `not_reproduced`, `other_engine` (only the re-runs
-  differ, on another engine than the runs') or `no_bundle`, with the engine
-  that re-ran the runs, theirs, when, and every check; else `checking` while
-  its job is queued, running or retrying, `failed` when it gave up (`error`
+  checks: { id, ok, detail }[], error, serverEngine, canRerun }`
+  (154_pack_reproduce): a recorded outcome, `reproduced`, `not_reproduced`,
+  `other_engine` (only the re-runs differ, on another engine than the runs')
+  or `no_bundle`, with the engine that re-ran the runs, theirs, when, and
+  every check; else `checking` while a job is queued, running or retrying,
+  `failed` when the newest job gave up after the newest outcome (`error`
   says why), or `none` (a draft, or a pack issued before re-runs). The
-  newest outcome stands.
+  newest outcome stands. `serverEngine` is the engine this server re-runs
+  with; `canRerun`, whether an editor may ask again (`POST …/reproduce`):
+  issued, none pending, and no outcome on `serverEngine` yet.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.

@@ -408,3 +408,12 @@ export async function plantEwrForecastAlert(projectId: string, runId: string, la
 		);
 	});
 }
+
+/**
+ * Make a pack's recorded server re-runs (154_pack_reproduce) an older engine's
+ * than the server's, as after an engine upgrade: the pack's page then offers
+ * an editor a re-run on the server's engine (POST …/packs/:packId/reproduce).
+ */
+export async function ageReproductionEngine(packId: string, engine: string): Promise<void> {
+	await withDb((db) => db.query('UPDATE pack_reproduction SET engine_version = $2 WHERE pack_id = $1', [packId, engine]));
+}
