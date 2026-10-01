@@ -28,10 +28,15 @@ import {
 	BASIS_NO_FLOW,
 	BASIS_PRAGMATIC,
 	citedEnsemble,
-	CUMULATIVE_BASIS,
-	CUMULATIVE_NO_BAND,
-	CUMULATIVE_NONE,
-	CUMULATIVE_TRUNCATED,
+	COMBINED_BASIS,
+	COMBINED_CONFLICT,
+	COMBINED_LABEL,
+	COMBINED_NO_BAND,
+	COMBINED_NONE,
+	COMBINED_NOT_RUN,
+	COMBINED_ONE,
+	COMBINED_PENDING,
+	COMBINED_PROBLEMS,
 	DEMAND_OBJECTS_NONE,
 	driestMonth,
 	evidenceChecks,
@@ -44,7 +49,8 @@ import {
 import type { EnsembleHeader, MemberMetrics, MemberResult } from '../uncertainty/ensemble';
 import { ENSEMBLE_MEASURES_SINCE } from '../version';
 import type { ScenarioOp } from '../scenario/ops';
-import type { EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
+import { cumulativeImpact } from '../scenario/cumulative';
+import type { EvidenceAssessmentInput, EvidenceCombinedInput, EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -226,6 +232,7 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 		applicationRuns: [{ runId: 'app', label: 'app', scenarioName: 'Farm two dam', createdAt: '2026-09-03T00:00:00.000Z', createdBy: 'Applicant' }],
 		otherApplications: [],
 		otherApplicationsTruncated: false,
+		combined: { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false },
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: 'd-1' },
 		...over
 	};
@@ -322,7 +329,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-11');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -880,7 +887,7 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-10');
+		expect(got.version).toBe('evidence-11');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
@@ -1209,7 +1216,7 @@ describe('§ 1 the driest month’s FDC beside the largest-change month (evidenc
 	});
 });
 
-describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
+describe('§ 4 other applications on the baseline, each one’s own run (evidence-3)', () => {
 	/** A second application: Farm one builds a dam, run on the same baseline. */
 	const otherInput: ModelInput = {
 		...base,
@@ -1245,20 +1252,8 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		expect(c.counted).toBe(2);
 		expect(c.total.ewrDays).toBe(2 * (days(otherOut) - days(baseOut)));
 		expect(c.withThis!.ewrDays).toBe(c.total.ewrDays! + (days(appOut) - days(baseOut)));
-		// Page 1: the last row, no band, its basis saying it is a sum and naming WP-3.11.
-		const row = r.rows.at(-1)!;
-		expect(row.id).toBe('otherApplications');
-		expect(row.basis).toBe(CUMULATIVE_BASIS);
-		expect(row.basis).toMatch(/not one combined run \(WP-3\.11\)$/);
-		expect(row.change).toEqual({ run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null });
-		expect(row.note).toMatch(/^2 applications: “Farm one dam”, “Approved weir”\./);
-	});
-
-	it('names at most three on page 1, so the row stays one row high; § 4 lists every one', () => {
-		const many = Array.from({ length: 5 }, (_, k) => other({ scenarioId: `s${k}`, scenarioName: `App ${k}`, runId: `r${k}`, runCreatedAt: `2026-09-0${k + 1}T00:00:00.000Z` }));
-		const r = evidenceReport(input({ otherApplications: many }));
-		expect(r.rows.at(-1)!.note).toMatch(/^5 applications: “App 0”, “App 1”, “App 2”, 2 more in § 4\./);
-		expect(r.cumulative.applications).toHaveLength(5);
+		// Page 1's row no longer reads this sum (evidence-11): without an assessment it is not assessed.
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', basis: COMBINED_BASIS, change: null });
 	});
 
 	it('leaves out of the sum an application run on another engine, period or runoff model, saying why', () => {
@@ -1270,12 +1265,11 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		// Positive control: the comparable one alone is summed.
 		expect(c.counted).toBe(1);
 		expect(c.total.ewrDays).toBe(days(otherOut) - days(baseOut));
-		expect(r.rows.at(-1)!.note).toMatch(/2 more not counted/);
 	});
 
 	it('says "None" when there is no other application, and baseline evidence has no row', () => {
 		const none = evidenceReport(input());
-		expect(none.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_NONE, change: null });
+		expect(none.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_NONE, change: null });
 		const baseline = evidenceReport(input({ application: null, changes: [], otherApplications: [other()] }));
 		expect(baseline.rows.some((x) => x.id === 'otherApplications')).toBe(false);
 		expect(baseline.cumulative.withThis).toBeNull();
@@ -1287,7 +1281,6 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		expect(r.cumulative.truncated).toBe(true);
 		expect(r.cumulative.applications).toHaveLength(1);
 		expect(r.cumulative.total).toEqual({ ewrDays: null, reservePp: null });
-		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_TRUNCATED(1), change: null, note: null });
 		// Control: the same list, not cut, is summed.
 		expect(evidenceReport(input({ otherApplications: [other()] })).cumulative.total.ewrDays).not.toBeNull();
 	});
@@ -1301,6 +1294,97 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 	});
 });
 
+describe('page 1’s combined row: every application together (evidence-11, finding C26)', () => {
+	/** A second application, Farm one's dam, and both applications together: their ops touch different farms, so they combine. */
+	const withF1Dam = (m: ModelInput): ModelInput => ({
+		...m,
+		model: { ...m.model, nodes: m.model.nodes.map((n) => (n.id === 'F1' ? { ...n, pctRunoffToDam: 1, pctUpstreamToDam: 0, damCapacityM3: 8e5, damAreaFullM2: 2e5 } : n)) }
+	});
+	const otherOut = runModel(withF1Dam(base));
+	const togetherOut = runModel(withF1Dam(app));
+	const window = { startDate: START, endDate: '1995-09-30' };
+	const cumulative = cumulativeImpact(
+		{ summary: baseOut.summary, ...window },
+		[
+			{ id: 'scn', name: 'Farm two dam', summary: appOut.summary, ...window },
+			{ id: 'scn-2', name: 'Farm one dam', summary: otherOut.summary, ...window }
+		],
+		{ summary: togetherOut.summary, ...window }
+	);
+	const assessment: EvidenceAssessmentInput = {
+		id: 'asm-1',
+		name: 'Both dams',
+		createdAt: '2026-09-10T08:00:00.000Z',
+		createdBy: 'Assessor',
+		engineVersion: ENGINE_VERSION,
+		report: cumulative
+	};
+	const others = [{ scenarioId: 'scn-2', scenarioName: 'Farm one dam', status: 'submitted' as const, outcome: null }];
+	const combined = (over: Partial<EvidenceCombinedInput> = {}): EvidenceCombinedInput => ({ others, unavailable: null, conflicts: [], problems: [], assessment, pending: false, ...over });
+	const days = (o: ModelOutput) => o.summary.catchment.ewrDaysNotMet;
+
+	it('shows the combined change and the interaction, from one run of both, never a sum', () => {
+		const r = evidenceReport(input({ combined: combined() }));
+		const c = r.cumulative.combined!;
+		expect(c.notAssessed).toBeNull();
+		const outlet = cumulative.rows.find((x) => x.metric === 'ewr_days_not_met' && x.isOutlet)!;
+		expect(c.ewrDays).toEqual({ baseline: outlet.baseline, combined: outlet.combined, change: outlet.combinedChange, sumOfSingles: outlet.sumOfSingles, interaction: outlet.interaction });
+		// The run of both, against the baseline: the outlet is the catchment's EWR site.
+		expect(c.ewrDays!.change).toBe(days(togetherOut) - days(baseOut));
+		expect(c.ewrDays!.interaction).toBe(days(togetherOut) - days(baseOut) - (days(appOut) - days(baseOut)) - (days(otherOut) - days(baseOut)));
+		// This one first, each with its own change alone in the assessment.
+		expect(c.applications.map((x) => [x.scenarioName, x.isThis, x.ewrDays])).toEqual([
+			['Farm two dam', true, days(appOut) - days(baseOut)],
+			['Farm one dam', false, days(otherOut) - days(baseOut)]
+		]);
+		expect(c.reserveMonths).not.toBeNull();
+		expect(c.assessment).toEqual({ id: 'asm-1', name: 'Both dams', createdAt: assessment.createdAt, createdBy: 'Assessor', engineVersion: ENGINE_VERSION });
+		const row = r.rows.at(-1)!;
+		expect(row).toMatchObject({ id: 'otherApplications', label: COMBINED_LABEL, basis: COMBINED_BASIS, notAssessed: null, baseline: outlet.baseline, application: outlet.combined });
+		expect(row.change).toEqual({ run: outlet.combinedChange, band: null, bandNote: COMBINED_NO_BAND, worse: null });
+		expect(row.note).toMatch(/^2 applications together: “Farm two dam” \(this one\), “Farm one dam”\. Interaction [+−]\d+ days: .*Assessment “Both dams” \(2026-09-10, engine /);
+	});
+
+	it('is not assessed when the applications conflict, naming each conflict, and reads no figure (positive control above)', () => {
+		const conflict = '"Farm two dam" op 1 (node.set) and "Farm one dam" op 1 (node.set) both change node "Farm two": damCapacityM3';
+		const r = evidenceReport(input({ combined: combined({ conflicts: [conflict], assessment: null }) }));
+		const c = r.cumulative.combined!;
+		expect(c.notAssessed).toBe(COMBINED_CONFLICT([conflict]));
+		expect(c.notAssessed).toContain(conflict);
+		expect(c.conflicts).toEqual([conflict]);
+		expect(c.ewrDays).toBeNull();
+		expect(c.applications.every((x) => x.ewrDays === null)).toBe(true);
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT([conflict]), change: null, baseline: null, application: null, note: null });
+		// Page 1's questions carry it, so the applicant sees what the assessor will ask.
+		expect(r.questions.some((q) => q.includes(conflict))).toBe(true);
+		// A conflict wins over a stale assessment: never a figure beside a conflict.
+		expect(evidenceReport(input({ combined: combined({ conflicts: [conflict] }) })).cumulative.combined!.ewrDays).toBeNull();
+	});
+
+	it('names an op that applies alone but not together', () => {
+		const problem = '"Farm one dam" op 1 (node.add): a node named "New dam" already exists';
+		const r = evidenceReport(input({ combined: combined({ problems: [problem], assessment: null }) }));
+		expect(r.rows.at(-1)!.notAssessed).toBe(COMBINED_PROBLEMS([problem]));
+	});
+
+	it('says why there is no figure: not assessed yet, under way, too many, or nothing to combine', () => {
+		expect(evidenceReport(input({ combined: combined({ assessment: null }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_NOT_RUN(2));
+		expect(evidenceReport(input({ combined: combined({ assessment: null, pending: true }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_PENDING);
+		expect(evidenceReport(input({ combined: combined({ unavailable: 'more than 8 applications; an assessment takes at most 8.', assessment: null }) })).rows.at(-1)!.notAssessed).toBe(
+			'Not assessed: more than 8 applications; an assessment takes at most 8.'
+		);
+		expect(evidenceReport(input({ combined: combined({ others: [] }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_NONE);
+		// Baseline evidence: no page-1 row, and one other application is nothing to combine.
+		const baseline = evidenceReport(input({ application: null, changes: [], combined: combined({ assessment: null }) }));
+		expect(baseline.rows.some((x) => x.id === 'otherApplications')).toBe(false);
+		expect(baseline.cumulative.combined!.notAssessed).toBe(COMBINED_ONE);
+	});
+
+	it('is deterministic: the same input gives the same document', () => {
+		expect(canonicalJson(evidenceReport(input({ combined: combined() })))).toBe(canonicalJson(evidenceReport(input({ combined: combined() }))));
+	});
+});
+
 describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
 	const catchment = (out: ModelOutput, key: string) => out.series.find((s) => s.nodeId === null && s.key === key)!.values.map((v) => (Number.isNaN(v) ? null : v));
 	const impact = {
@@ -1311,7 +1395,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-11');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1367,7 +1451,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-10');
+		expect(r.version).toBe('evidence-11');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
