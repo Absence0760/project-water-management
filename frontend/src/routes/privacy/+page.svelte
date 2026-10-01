@@ -146,6 +146,12 @@
 			names and registrations of the professionals who signed it, as its public verify page does.
 		</li>
 		<li>
+			<strong>Registered water use</strong> (such as WARMS records): a registered user’s name is shown only to the organisation’s
+			editors and owners and to the farmer linked to that farm. Registered volumes for each farm are shown to the organisation’s
+			editors and owners (and its viewers only if it allows that). Share links and evidence packs never show a name, and show other
+			farms’ volumes only as totals.
+		</li>
+		<li>
 			<strong>Our service providers</strong>, who process information only on our instructions: Amazon Web Services (hosting, the
 			database, file storage, sending email, and logs).
 		</li>

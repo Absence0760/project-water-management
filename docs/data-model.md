@@ -1344,6 +1344,10 @@ water-use volumes per farm or water user.
   `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
   file is imported once per project (the index also covers the project key).
   Deleting a source deletes its allocations (undo an import).
+  `allocation_source_warms_reference` (162): a `warms_extract` has a
+  non-blank `reference`, how it was obtained (the DWS or CMA letter or
+  terms; rows from before 162 without one read "Not recorded (imported
+  before the reference was required)").
 - **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
   composite key `(source_id, project_id)` → `allocation_source (id,
   project_id)`, cascade, so a source is always the same project's), `node_id`
@@ -1375,12 +1379,25 @@ water-use volumes per farm or water user.
   `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
   and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
   a gauge leaves its allocations unmatched, as a deleted node does).
-- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
-  editor; `allocation_select_farmer` lets a farmer read the allocations on
+- **RLS.** `allocation_source`: `SELECT` viewer, writes editor.
+  `allocation`: `SELECT` editor, or a viewer while
+  `project.allocations_viewer_units` is true (`allocation_select`, redefined
+  in 162 through the definer `app_allocations_viewer_units`; decision D3,
+  provisional position, pre-counsel research 2026-10-01), writes editor;
+  `allocation_select_farmer` lets a farmer read the allocations on
   their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
   policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
   on their own farm; **viewers read no names**; writes editor. `water_app` has
   `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **Viewers' switch and totals (162).** `project.allocations_viewer_units`
+  (default false) is set only through `app_set_allocations_viewer_units`
+  (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses
+  `water_app` writing it). `app_allocation_volumes(project)` (`SECURITY
+  DEFINER`, any member viewer and up) returns the rows behind a viewer's
+  totals, per water source held by at least 5 registered users (distinct by
+  the holder's name ignoring case and spacing, else a name another row of the same unit carries, else the unit, else the row):
+  water source, holder count, node, volume, storage, water use, validity;
+  never a name, number or property. The API sums them (`allocations/viewerUnits.ts`).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`

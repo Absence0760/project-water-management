@@ -41,6 +41,7 @@ import {
 	driestMonth,
 	evidenceChecks,
 	evidenceReport,
+	otherUnitsName,
 	firstSiteBelow,
 	NO_BAND,
 	NOT_ASSESSED_NO_SITE_BELOW,
@@ -329,7 +330,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-12');
+		expect(r.version).toBe('evidence-13');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -809,11 +810,9 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notAssessed).toBeNull();
 	});
 
-	it('lists each unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14)', () => {
-		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([
-			['Farm one', false, null],
-			['Farm two', true, null]
-		]);
+	it('lists the applicant’s unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14); one other unit is too few for a total (evidence-13, D3)', () => {
+		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([['Farm two', true, null]]);
+		expect(r.allocations.othersLeftOut).toBe(1);
 		const cb = comparisonOf(app, appOut, allocations);
 		const ca = comparisonOf(base, baseOut, allocations);
 		for (const u of r.allocations.units) {
@@ -828,17 +827,18 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 			expect(s.countsA!.wholeYears).toBe(5);
 		}
 		expect(meanUse(appOut, 'F2')).toBeGreaterThan(0);
-		// Farm one takes nothing: below its volume every year. Farm two: below it in the baseline, above it in the application.
-		const [f1, f2] = r.allocations.units.map((u) => u.sources[0]!);
-		expect([f1!.countsA!.under, f1!.countsB!.under]).toEqual([5, 5]);
+		// Farm two: below its volume in the baseline, above it in the application.
+		const [f2] = r.allocations.units.map((u) => u.sources[0]!);
 		expect([f2!.countsA!.under, f2!.countsA!.over, f2!.countsB!.over]).toEqual([5, 0, 5]);
 		expect(r.allocations.toleranceA).toBe(0.1);
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
-	it('the page-1 row sums the unit-years above the volume, both runs, with no band', () => {
+	it('the page-1 row sums every unit’s years above the volume, both runs, with no band, the units § 5 leaves out included (evidence-13)', () => {
 		const row = r.rows.find((x) => x.id === 'registeredUse')!;
+		// Farm one (left out of § 5) is under its volume every year, so the sums are Farm two's; its 5 whole years count as judged.
 		const sum = (k: 'countsA' | 'countsB') => r.allocations.units.reduce((t, u) => t + u.sources.reduce((v, s) => v + (s[k]?.over ?? 0), 0), 0);
+		expect(r.allocations.unitYears).toEqual({ overA: sum('countsA'), judgedA: 10, overB: sum('countsB'), judgedB: 10 });
 		expect(row.notAssessed).toBeNull();
 		expect(row.baseline).toBe(sum('countsA'));
 		expect(row.application).toBe(sum('countsB'));
@@ -887,19 +887,19 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-12');
+		expect(got.version).toBe('evidence-13');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
 		const i = withAllocations();
 		const cb = i.application!.allocations!;
-		const onlyBase = evidenceReport({ ...i, application: { ...i.application!, allocations: { ...cb, nodes: cb.nodes.filter((n) => n.nodeId !== 'F1') } } });
-		const f1 = onlyBase.allocations.units.find((u) => u.nodeId === 'F1')!;
-		expect(f1.onlyIn).toBe('baseline');
-		expect(f1.sources[0]!.countsB).toBeNull();
-		expect(f1.sources[0]!.years.every((y) => y.modelledB === null && y.modelledA !== null)).toBe(true);
+		const onlyBase = evidenceReport({ ...i, application: { ...i.application!, allocations: { ...cb, nodes: cb.nodes.filter((n) => n.nodeId !== 'F2') } } });
+		const f2 = onlyBase.allocations.units.find((u) => u.nodeId === 'F2')!;
+		expect(f2.onlyIn).toBe('baseline');
+		expect(f2.sources[0]!.countsB).toBeNull();
+		expect(f2.sources[0]!.years.every((y) => y.modelledB === null && y.modelledA !== null)).toBe(true);
 		// Control: in both runs, it isn't marked.
-		expect(r.allocations.units.find((u) => u.nodeId === 'F1')!.onlyIn).toBeNull();
+		expect(r.allocations.units.find((u) => u.nodeId === 'F2')!.onlyIn).toBeNull();
 
 		const loose = evidenceReport(withAllocations([{ id: 'a9', nodeId: null, waterSource: 'surface', volumeM3PerYear: 1e5 }]));
 		expect(loose.allocations.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
@@ -907,17 +907,22 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(loose.rows.find((x) => x.id === 'registeredUse')!.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
 	});
 
-	it('baseline evidence: one run’s counts, and the flag names the baseline', () => {
+	it('baseline evidence: no applicant, so no unit is listed; two units are too few for a total, but the page-1 row still counts them (evidence-13)', () => {
 		const i = withAllocations();
 		const b = evidenceReport({ ...i, application: null, changes: [] });
-		expect(b.allocations.units.every((u) => u.sources.every((s) => s.countsB === null && s.years.every((y) => y.statusB === null)))).toBe(true);
+		expect(b.allocations.units).toEqual([]);
+		expect(b.allocations.othersLeftOut).toBe(2);
+		expect(b.allocations.notAssessed).toBeNull();
 		expect(b.allocations.modeB).toBeNull();
 		expect(b.rows.at(-1)!.id).toBe('registeredUse');
 		expect(b.rows.at(-1)!.application).toBeNull();
-		// The baseline never takes more than a volume: no flag. Control: the application's run read as a baseline flags as the baseline.
+		expect(b.rows.at(-1)!.notAssessed).toBeNull();
+		expect(b.rows.at(-1)!.note).toMatch(/^0 of 10 unit-years judged/);
+		// The baseline never takes more than a volume: no flag. The application's run read as a baseline is over on Farm two, which isn't named.
 		expect(b.flags.map((f) => f.id)).not.toContain('allocationsOver');
 		const appAsBase = evidenceReport({ ...i, baseline: { ...i.application!, id: 'base' }, application: null, changes: [] });
-		expect(appAsBase.flags.find((f) => f.id === 'allocationsOver')!.text).toMatch(/^The baseline’s modelled use is more than ±10 % above the registered volume: Farm two, surface water, 5 of 5/);
+		expect(appAsBase.flags.map((f) => f.id)).not.toContain('allocationsOver');
+		expect(appAsBase.rows.at(-1)!.baseline).toBe(5);
 	});
 
 	it('names both bands when the runs used different ones', () => {
@@ -934,13 +939,61 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const i = withAllocations();
 		const short = comparisonOf(app, { ...appOut, series: appOut.series.map((x) => ({ ...x, values: x.values.slice(0, 1600) })) }, allocations);
 		const got = evidenceReport({ ...i, application: { ...i.application!, allocations: short } });
-		const last = got.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		const last = got.allocations.units[0]!.sources[0]!.years.at(-1)!;
 		expect([last.partialA, last.partialB]).toEqual([false, true]);
-		const s = got.allocations.units[1]!.sources[0]!;
+		const s = got.allocations.units[0]!.sources[0]!;
 		expect([s.countsA!.wholeYears, s.countsB!.wholeYears]).toEqual([5, 4]);
 		// Control: the full-length runs have it whole in both.
-		const full = r.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		const full = r.allocations.units[0]!.sources[0]!.years.at(-1)!;
 		expect([full.partialA, full.partialB]).toEqual([false, false]);
+	});
+
+	it('sums 5 or more other units into one total per water source, naming none of them, with the flag on the total (evidence-13, D3)', () => {
+		// Five other units, each with Farm one's use (none) and a small volume, and Farm two (the applicant's).
+		const others = ['O1', 'O2', 'O3', 'O4', 'O5'];
+		const many = (out: ModelOutput, inp: ModelInput, use: number) => {
+			const get = (id: string, key: string) => out.series.find((s) => s.nodeId === id && s.key === key)?.values ?? null;
+			const days = get('F2', 'supplied')!.length;
+			return compareAllocations({
+				startDate: START,
+				tolerance: 0.1,
+				allocations: [...others.map((id) => ({ id: `a-${id}`, nodeId: id, waterSource: 'surface' as const, volumeM3PerYear: 1000 })), allocations[1]!],
+				nodes: [
+					...others.map((id) => ({ nodeId: id, name: `Neighbour ${id}`, kind: 'farm' as const, supplied: new Array<number>(days).fill(use), groundwater: null, riverAbstraction: null })),
+					...inp.model.nodes.filter((n) => n.id === 'F2').map((n) => ({ nodeId: n.id, name: n.name, kind: 'farm' as const, supplied: get(n.id, 'supplied')!, groundwater: get(n.id, 'groundwater_used'), riverAbstraction: get(n.id, 'river_abstraction') }))
+				]
+			});
+		};
+		const i = input();
+		// Each neighbour takes 10 m³ a day, 3 650 m³ a year: far above its 1 000.
+		const got = evidenceReport(input({ baseline: { ...i.baseline, allocations: many(baseOut, base, 10) }, application: { ...i.application!, allocations: many(appOut, app, 10) } }));
+		expect(got.allocations.units.map((u) => [u.nodeId, u.name, u.own, u.aggregate ?? null])).toEqual([
+			['F2', 'Farm two', true, null],
+			['others:surface', otherUnitsName(5), false, 5]
+		]);
+		expect(got.allocations.othersLeftOut).toBe(0);
+		const total = got.allocations.units[1]!.sources[0]!;
+		const y = total.years.find((x) => x.partialA === false)!;
+		expect(y.registeredA).toBeCloseTo(5 * 1000, 6);
+		expect(y.modelledA).toBeCloseTo(5 * 10 * y.days, 6);
+		expect(y.statusA).toBe('over');
+		expect(total.countsA!.over).toBe(total.countsA!.wholeYears);
+		expect(total.capA).toBeNull();
+		// No neighbour's name anywhere in the document.
+		expect(canonicalJson(got)).not.toMatch(/Neighbour/);
+		// The flag names the total, never a neighbour.
+		expect(got.flags.find((f) => f.id === 'allocationsOver')!.text).toContain(`${otherUnitsName(5)}, surface water, 5 of 5 whole water years`);
+		// The page-1 row counts each neighbour's years: 5 units × 5 whole years over, plus Farm two's.
+		const row = got.rows.find((x) => x.id === 'registeredUse')!;
+		expect(row.baseline).toBe(25 + got.allocations.units[0]!.sources[0]!.countsA!.over);
+		// Control: four neighbours are too few, and are left out.
+		const four = (out: ModelOutput, inp: ModelInput) => {
+			const c = many(out, inp, 10);
+			return { ...c, nodes: c.nodes.filter((n) => n.nodeId !== 'O5') };
+		};
+		const few = evidenceReport(input({ baseline: { ...i.baseline, allocations: four(baseOut, base) }, application: { ...i.application!, allocations: four(appOut, app) } }));
+		expect(few.allocations.units.map((u) => u.nodeId)).toEqual(['F2']);
+		expect(few.allocations.othersLeftOut).toBe(4);
 	});
 
 	it('is deterministic, and a changed volume changes the document', () => {
@@ -1395,7 +1448,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-12');
+		expect(r.version).toBe('evidence-13');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1451,7 +1504,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-12');
+		expect(r.version).toBe('evidence-13');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],

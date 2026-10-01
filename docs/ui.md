@@ -6052,6 +6052,20 @@ WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
 workspace.
 
+**What a viewer sees** (decision D3, 162). Until an owner switches viewers
+on, a viewer gets one card instead of the page below, *Registered water use
+in this catchment* (`AllocationTotals.svelte`): per water source held by 5
+or more registered users, the holders, the volume registered today and the
+storage (`totalsSentence`), and the run's modelled use against the
+registered volumes summed per water year; "No total is shown" when no
+source has 5 holders. No unit, number, name or Download CSV. Owners get a
+**What viewers see** card at the foot of the page, a checkbox *Viewers see
+each farm's registered volumes* with the note to switch it on only if every
+viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
+The import sheet asks a WARMS extract **How you obtained this extract (the
+DWS or CMA letter or terms)**, required, and refuses the file until it is
+filled; a CSV's reference stays optional.
+
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
 registered volumes · 4 not matched · 6 units above registered";
@@ -7008,7 +7022,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     caps, the days the licence limit held use back by limit and the years
     the volume was used up, in the Allocations page's words (`capYearsText`),
     "Not capped" for the run that doesn't cap it. Units by their unit name,
-    never the holder's. *Not assessed* when the runs carry no volumes, or
+    never the holder's, and only the applicant's own (`evidence-13`, D3):
+    every other unit is one *Other registered users (n units)* row per water
+    source, left out below 5 units, and a note says which
+    (`evidence-allocations-others`). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units

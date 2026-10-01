@@ -69,7 +69,11 @@ Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-
 
 ## Importing
 
-WARMS has no public API; a CMA or DWS sends an extract. Extract layouts vary,
+WARMS has no public API; a CMA or DWS sends an extract. Importing one needs
+its reference: **how you obtained this extract** (the DWS or CMA letter or
+terms; 162, operator agreement 3A.1(d)). No published DWS terms for WARMS
+extracts were found, so the app records the client's; stricter terms win
+over the app's defaults. Extract layouts vary,
 so the importer finds columns **by their heading** through an alias table
 (`backend/src/allocations/parse.ts`, `HEADER_ALIASES`): "Registration
 Number", "Registered Volume (m3/a)", "Resource Type", "Water Use Sector" and
@@ -279,8 +283,17 @@ existing lawful use beside the application's numbers.
   application's, at most five, then a count.
 - **No names.** A run's stored allocations never carry the holder's name or
   the registration number, so neither does the report, whoever reads it
-  (viewers and up). An issued evidence pack (WP-3.14) freezes this document,
-  so the pack an applicant later holds carries volumes by unit only.
+  (viewers and up). An issued evidence pack (WP-3.14) freezes this document.
+- **Only the applicant's own units, one by one** (report version
+  `evidence-13`, decision D3). Every other unit is one *Other registered
+  users (n units)* total per water source and water year (the volumes and
+  use summed, judged against the band as a whole), left out when fewer than
+  5 units hold that source; the section says how many were left out. Baseline
+  evidence has no applicant, so every unit is in the totals. The page-1 row
+  still counts unit-years over the band unit by unit (`unitYears`, counts
+  only), and the flag names the applicant's units or the total. The
+  project's editors see every unit on the Allocations tab. The engine counts
+  units, since a run's allocations carry no holder.
 
 ### What the comparison is not
 
@@ -296,15 +309,25 @@ existing lawful use beside the application's numbers.
 
 ## Who sees what
 
-Decision D3 is open (client + legal adviser); the build follows its
-recommendation (b), pending legal advice:
+Decision D3, provisional position (pre-counsel research, 2026-10-01; the
+reasoning is in [security.md § Allocations](./security.md#allocations-popia-minimisation-038_allocationssql)):
 
-| Role | Volumes, numbers, dates | Registered user's name | Writes |
+| Reader | Volumes, numbers, dates | Registered user's name | Writes |
 | --- | --- | --- | --- |
 | Owner, editor | all | all | yes |
-| Viewer | all | none | no |
+| Viewer | only when an owner switches **What viewers see** on (`project.allocations_viewer_units`, 162); otherwise totals per water source held by 5 or more registered users: the volume and storage in force today, and a run's use against them by water year | none | no |
 | Farmer | their linked farms' allocations only (RLS); the farm view shows their own farm's totals | their own only (not shown on the farm view) | no |
+| Share links, pack links, the verify page | none (any later total at 5 or more holders, never per unit) | none | no |
+| An issued evidence pack | the applicant's own units; the rest as totals at 5 or more units (`evidence-13`) | none | no |
 | Not a member | nothing | nothing | no |
+
+The switch is off by default, for viewers can be outside the organisation
+(an NGO posting public-participation comments). The Allocations tab tells
+an owner to switch it on only if every viewer works for, or was appointed
+by, the organisation. With it off, no route hands a viewer a copy of the
+volumes ([api.md § Allocations](./api.md#allocations)), except a capped
+run's per-unit daily series, which still bound use by the volume
+([followups.md § Allocations](./followups.md#allocations-wp-310)).
 
 Names live in their own table (`allocation_holder`) so RLS, not the API,
 hides them. Farmers are refused the allocations routes (like every viewer
@@ -326,7 +349,10 @@ Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
 
 - XLSX import and a column-mapping step for extracts whose headings the alias
   table doesn't know (waits on a real WARMS extract).
-- Share views per D3 (c) (volumes public, names hidden; waits on D3).
+- Allocation figures on share views: totals only, at 5 or more holders (the
+  share links' `k` rule), never a unit name beside a volume, never a name
+  (D3, narrowed from "volumes public, names hidden": per-farm volumes aren't
+  anonymous). Share views show none today.
 - Whether filling a dam is also a s21(a) take, and how the cap counts water
   drawn from a dam that boreholes filled (pending the hydrologist, issue
   #90). Dam capacity against registered storage is built (above).

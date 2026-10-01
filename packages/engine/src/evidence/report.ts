@@ -4,7 +4,8 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
-import type { AllocationNodeComparison, AllocationSourceComparison, AllocationWaterSource, AllocationYear } from '../allocations/compare';
+import { allocationStatus, DEFAULT_ALLOCATION_TOLERANCE, type AllocationNodeComparison, type AllocationSourceComparison, type AllocationWaterSource, type AllocationYear } from '../allocations/compare';
+import { FARMER_K } from '../views/farmView';
 import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
 import type { EwrAssuranceSite } from '../reserve/assurance';
@@ -1408,7 +1409,9 @@ function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
  * water source with one, every water year of both runs: the registered
  * volume and the modelled use, and whole years counted over, within and
  * under the band. Units are matched by node id (as § 4 matches them) and
- * named by the unit, never the holder (D3).
+ * named by the unit, never the holder (D3). Only the applicant's own units
+ * are listed one by one (evidence-13): every other unit is in one total per
+ * water source (otherUnitTotals), at FARMER_K or more units.
  */
 function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
 	const ca = b.allocations ?? null;
@@ -1466,16 +1469,116 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 		return { nodeId, name: n.name, kind: n.kind, own: owned.has(nodeId), onlyIn: a && !nb ? 'baseline' : a && !na ? 'application' : null, sources };
 	});
 
+	const toleranceA = ca?.tolerance ?? null;
+	const toleranceB = cb?.tolerance ?? null;
+	const A = allocationTotals({ units }, 'A');
+	const B = a ? allocationTotals({ units }, 'B') : null;
+	const others = otherUnitTotals(
+		units.filter((u) => !u.own),
+		toleranceA,
+		toleranceB
+	);
 	return {
 		notAssessed: total === 0 ? ALLOCATIONS_NOT_ASSESSED.none : units.length === 0 ? ALLOCATIONS_NOT_ASSESSED.notMatched(total) : null,
 		modeA: b.summary.allocations?.mode ?? null,
 		modeB: a ? (a.summary.allocations?.mode ?? null) : null,
-		toleranceA: ca?.tolerance ?? null,
-		toleranceB: cb?.tolerance ?? null,
-		units,
+		toleranceA,
+		toleranceB,
+		units: [...units.filter((u) => u.own), ...others.units],
 		notMatchedA: ca ? ca.unmatchedAllocationIds.length + ca.notInRunAllocationIds.length : 0,
-		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null
+		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null,
+		othersLeftOut: others.leftOut,
+		unitYears: { overA: A.over, judgedA: A.judged, overB: B ? B.over : null, judgedB: B ? B.judged : null }
 	};
+}
+
+/** The label of a total of other units (evidence-13). */
+export const otherUnitsName = (n: number) => `Other registered users (${n} units)`;
+
+const sumOrNull = (xs: (number | null)[]) => (xs.some((x) => x !== null) ? xs.reduce<number>((s, x) => s + (x ?? 0), 0) : null);
+
+/**
+ * Every unit that isn't the applicant's, summed per water source and water
+ * year (evidence-13, D3): the registered volume and modelled use of each run,
+ * the status of the sums, and the whole years counted from them. A source
+ * fewer than FARMER_K such units hold is left out (counted in `leftOut`).
+ */
+function otherUnitTotals(others: EvidenceAllocationUnit[], tolA: number | null, tolB: number | null): { units: EvidenceAllocationUnit[]; leftOut: number } {
+	const units: EvidenceAllocationUnit[] = [];
+	const left = new Set<string>();
+	for (const src of SOURCES) {
+		const holding = others.filter((u) => u.sources.some((s) => s.waterSource === src));
+		if (!holding.length) continue;
+		if (holding.length < FARMER_K) {
+			for (const u of holding) left.add(u.nodeId);
+			continue;
+		}
+		const parts = holding.map((u) => u.sources.find((s) => s.waterSource === src)!);
+		const wys = [...new Set(parts.flatMap((p) => p.years.map((y) => y.waterYear)))].sort((x, y) => x - y);
+		const years: EvidenceAllocationYear[] = wys.map((wy) => {
+			const ys = parts.map((p) => p.years.find((y) => y.waterYear === wy)).filter((y): y is EvidenceAllocationYear => !!y);
+			const side = (reg: (y: EvidenceAllocationYear) => number | null, mod: (y: EvidenceAllocationYear) => number | null, part: (y: EvidenceAllocationYear) => boolean | null, tol: number | null) => {
+				const registered = sumOrNull(ys.map(reg));
+				const modelled = sumOrNull(ys.map(mod));
+				const partial = ys.some((y) => part(y) !== null) ? ys.some((y) => part(y) === true) : null;
+				const status = registered === null || modelled === null ? null : allocationStatus(modelled, registered, tol ?? DEFAULT_ALLOCATION_TOLERANCE);
+				return { registered, modelled, partial, status };
+			};
+			const sa = side((y) => y.registeredA, (y) => y.modelledA, (y) => y.partialA, tolA);
+			const sb = side((y) => y.registeredB, (y) => y.modelledB, (y) => y.partialB, tolB);
+			return {
+				waterYear: wy,
+				days: ys[0]!.days,
+				yearDays: ys[0]!.yearDays,
+				partialA: sa.partial,
+				partialB: sb.partial,
+				registeredA: sa.registered,
+				modelledA: sa.modelled,
+				statusA: sa.status,
+				registeredB: sb.registered,
+				modelledB: sb.modelled,
+				statusB: sb.status
+			};
+		});
+		const run = (r: 'A' | 'B') => {
+			const has = parts.some((p) => (r === 'A' ? p.countsA : p.countsB) !== null);
+			if (!has) return { counts: null, meanModelled: null, meanRegistered: null };
+			const whole = years.filter((y) => (r === 'A' ? y.partialA : y.partialB) === false);
+			const st = (y: EvidenceAllocationYear) => (r === 'A' ? y.statusA : y.statusB);
+			const n = (f: (s: ReturnType<typeof st>) => boolean) => whole.filter((y) => f(st(y))).length;
+			const mean = (f: (y: EvidenceAllocationYear) => number | null) => (whole.length ? whole.reduce((s, y) => s + (f(y) ?? 0), 0) / whole.length : null);
+			return {
+				counts: { wholeYears: whole.length, over: n((s) => s === 'over'), within: n((s) => s === 'within'), under: n((s) => s === 'under'), noVolume: n((s) => s === 'unregistered' || s === 'none') },
+				meanModelled: mean((y) => (r === 'A' ? y.modelledA : y.modelledB)),
+				meanRegistered: mean((y) => (r === 'A' ? y.registeredA : y.registeredB))
+			};
+		};
+		const ra = run('A');
+		const rb = run('B');
+		units.push({
+			nodeId: `others:${src}`,
+			name: otherUnitsName(holding.length),
+			kind: 'farm',
+			own: false,
+			onlyIn: null,
+			aggregate: holding.length,
+			sources: [
+				{
+					waterSource: src,
+					years,
+					countsA: ra.counts,
+					countsB: rb.counts,
+					meanModelledA: ra.meanModelled,
+					meanRegisteredA: ra.meanRegistered,
+					meanModelledB: rb.meanModelled,
+					meanRegisteredB: rb.meanRegistered,
+					capA: null,
+					capB: null
+				}
+			]
+		});
+	}
+	return { units, leftOut: left.size };
 }
 
 /**
@@ -1493,7 +1596,7 @@ function capOf(run: Pick<EvidenceRunInput, 'summary'>, nodeId: string, source: A
 }
 
 /** Σ over units and sources of a run's whole years over, and of those judged. */
-function allocationTotals(al: EvidenceAllocations, run: 'A' | 'B') {
+function allocationTotals(al: Pick<EvidenceAllocations, 'units'>, run: 'A' | 'B') {
 	let over = 0;
 	let judged = 0;
 	for (const u of al.units)
@@ -1514,8 +1617,10 @@ const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not record
 
 /** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
 function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
-	const A = allocationTotals(al, 'A');
-	const B = app ? allocationTotals(al, 'B') : null;
+	// Per unit, before § 5's totals of other units (evidence-13).
+	const uy = al.unitYears;
+	const A = uy ? { over: uy.overA, judged: uy.judgedA } : allocationTotals(al, 'A');
+	const B = app ? (uy && uy.overB !== null && uy.judgedB !== null ? { over: uy.overB, judged: uy.judgedB } : allocationTotals(al, 'B')) : null;
 	const judged = A.judged + (B?.judged ?? 0);
 	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
 	const mode =

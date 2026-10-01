@@ -72,8 +72,14 @@ import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
  * the SVG drawn from them (geo/localityMap.ts), so a pack freezes the figure and reproduce:pack draws
  * it again. Null when the project has no map features; absent from a pack drafted before it, whose
  * § 1 says the figure isn't part of it.
+ * evidence-13: § 5 names only the applicant's own units (decision D3, provisional position,
+ * pre-counsel research 2026-10-01): every other unit's registered volume and modelled use is
+ * one "Other registered users (n units)" total per water source (`EvidenceAllocationUnit.aggregate`),
+ * left out when fewer than FARMER_K (5) units hold that source (`othersLeftOut`). Baseline evidence
+ * has no applicant, so every unit is in the totals. The page-1 row still counts unit-years over the
+ * band per unit (`unitYears`). A pack drafted before it names every unit.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-12';
+export const EVIDENCE_REPORT_VERSION = 'evidence-13';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -771,8 +777,15 @@ export interface EvidenceCapYears {
 
 /** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */
 export interface EvidenceAllocationUnit {
+	/** The node; `others:<source>` for a total of other units (evidence-13). */
 	nodeId: string;
 	name: string;
+	/**
+	 * evidence-13: this row is the total of this many units that aren't the
+	 * applicant's, on its one water source (name "Other registered users (n
+	 * units)"); absent for a unit of its own.
+	 */
+	aggregate?: number;
 	kind: 'farm' | 'user';
 	/** One of the applicant's own units. */
 	own: boolean;
@@ -796,6 +809,18 @@ export interface EvidenceAllocations {
 	/** Registered volumes matched to no unit of the run, or to one the run lacks: counted, not compared. */
 	notMatchedA: number;
 	notMatchedB: number | null;
+	/**
+	 * evidence-13: units other than the applicant's with a volume on a water
+	 * source fewer than 5 such units hold, so left out of § 5 even as a total
+	 * (D3). Absent from an older pack's document.
+	 */
+	othersLeftOut?: number;
+	/**
+	 * evidence-13: whole unit-years judged and above the band, per run, over
+	 * every unit before the totals (the page-1 row's figures). Absent from an
+	 * older pack's document.
+	 */
+	unitYears?: { overA: number; judgedA: number; overB: number | null; judgedB: number | null };
 }
 
 /** Why the licence impact board couldn't be built; the page words it. */

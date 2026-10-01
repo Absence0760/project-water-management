@@ -309,6 +309,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'licence.confirmed':
 			return `Confirmed the licence record is still needed${str(s.reviewDueOn) ? `; next review ${str(s.reviewDueOn)}` : ''}`;
+		// Whether viewers read each registered volume (162, D3).
+		case 'allocation.viewer_units':
+			return s.on ? 'Let viewers see each farm’s registered volumes' : 'Showed viewers registered volumes as totals only';
 		case 'allocation.import_deleted':
 			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'scenario.submitted':

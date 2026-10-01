@@ -35,7 +35,10 @@ applicant's own copy of their application's issued packs, with share links
 re-run of both runs from the stored bundle after issue, shown on the pack's
 page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
 locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
-report format `evidence-12`, 2026-10-01). What is left is
+report format `evidence-12`, 2026-10-01); and § 5 naming only the
+applicant's own units, every other unit's registered volume and use as
+totals at 5 or more units (report format `evidence-13`, decision D3,
+2026-10-01; [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds

@@ -371,6 +371,11 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['allocation.import_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
+	{
+		route: `PUT ${P}/allocations/viewer-units`,
+		records: ['allocation.viewer_units'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/allocations/viewer-units`, { on: true })
+	},
 	// --- the Map tab (152, issue #288) -----------------------------------------------------
 	{
 		route: `POST ${P}/map/import`,

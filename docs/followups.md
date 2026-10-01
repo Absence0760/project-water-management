@@ -3512,8 +3512,35 @@ from the WP:
       modelled dam, with "not an entitlement" (`FarmView.registered`; no
       name or registration number). Not blocked by D3, which is about other
       people's names and volumes.
-- [ ] **Share views per D3 (c)** (volumes public, names hidden). Trigger: D3
-      settled with the client's legal adviser.
+- [x] **D3: who sees registered water use** (2026-10-01, migration 162,
+      provisional position, pre-counsel research). Viewers read each volume
+      only once an owner switches it on, else totals per water source at 5
+      or more registered users; § 5 of the evidence report lists only the
+      applicant's own units, the rest as totals (`evidence-13`); a WARMS
+      extract needs its reference; Privacy §5 says so
+      ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
+- [ ] **Share views: allocation totals** (D3 (c), narrowed): totals only, at
+      5 or more holders (the share links' `k` rule), never a unit beside a
+      volume or a name. Share views show no allocation figure today, so
+      nothing leaks; this is the feature, to the rule. Trigger: a client
+      asks for registered use on its public page.
+- [ ] **A capped run's per-unit series still bound a viewer's guess at the
+      volume** (D3). With viewers' switch off, a viewer reads no copy of the
+      volumes, but a cap run's daily `supplied` per unit is held to its
+      volume, and `allocation_left_*` (a capped source with licence
+      conditions) is the volume less use so far; a viewer's project
+      `model-input` also omits the volumes (RLS), so a fit they run in a cap
+      project runs uncapped. Durable fix: for a viewer with the switch off,
+      leave `allocation_left_*` out of the series routes and exports, and
+      say on a cap run's per-unit pages that its use is capped by a volume
+      they can't see. Trigger: a project with outside viewers runs in cap
+      mode, or counsel reads per-unit modelled use as personal information.
+- [ ] **Registration numbers in History** are readable by viewers
+      (`allocation.created/changed/deleted` carry `registrationNo`), and a
+      registration number is a "unique identifier" (POPIA s1). Durable fix:
+      leave `registrationNo` out of those events for a viewer in the History
+      route (as `allocation.viewer_units` is off). Trigger: with the share
+      views item above, or counsel's review (#92).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -4220,7 +4247,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
+- [ ] **D1, D2 are open decisions; D3 is a provisional position** (2026-10-01, pre-counsel research, built in 162; [allocations.md § Who sees what](./allocations.md#who-sees-what)) ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and results (downstream
       units as a whole percentage, nothing but the EWR for a run with a
       baseline assumption) and the outcome words

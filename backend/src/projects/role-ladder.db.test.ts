@@ -109,7 +109,8 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in'],
 	['PUT /projects/:id/licence-record', 'the licence outcome sets how long the evidence and the names it keeps are kept (161)'],
-	['POST /projects/:id/licence-record/confirm', 'confirming the licence record is still needed keeps it, with its names, five more years (161)']
+	['POST /projects/:id/licence-record/confirm', 'confirming the licence record is still needed keeps it, with its names, five more years (161)'],
+	['PUT /projects/:id/allocations/viewer-units', 'whether viewers, who may be outside the organisation, read each farm’s registered volumes (162, D3)']
 ]);
 
 /**

@@ -36,6 +36,7 @@ import type {
 	AlertFeedbackSummary,
 	Allocation,
 	AllocationCapYears,
+	AllocationComparisonTotals,
 	AllocationImportRequest,
 	AllocationInput,
 	AllocationList,
@@ -899,11 +900,19 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ source: AllocationSource; imported: number; skipped: number; unmatched: number }>('POST', `${p(id)}/allocations/import/commit`, body),
 			/** Undo an import: the file's record and every allocation it brought. */
 			removeSource: (id: string, sourceId: string) => request<void>('DELETE', `${p(id)}/allocations/sources/${enc(sourceId)}`),
+			/** Whether viewers read each registered volume (162, D3): owners only. */
+			setViewerUnits: (id: string, on: boolean) => request<{ viewerUnits: boolean }>('PUT', `${p(id)}/allocations/viewer-units`, { on }),
 			/** The allocations as CSV (a plain link: the cookie goes with it). */
 			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
 			/** A run's modelled use against the registered volumes, per water year. */
 			compare: (id: string, runId: string, tolerance?: number) =>
-				request<{ run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode }; comparison: AllocationComparison; capYears: AllocationCapYears[] }>(
+				request<{
+					run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode };
+					/** null for a viewer who can't read each volume (162, D3): `totals` instead. */
+					comparison: AllocationComparison | null;
+					capYears: AllocationCapYears[];
+					totals: AllocationComparisonTotals | null;
+				}>(
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)

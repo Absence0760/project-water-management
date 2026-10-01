@@ -2344,10 +2344,34 @@ database:
   slip in as a name.
 - The registered user's **name** is the only personal field kept, in
   `allocation_holder`, readable by editors and owners and by the linked farmer
-  for their own farm; **viewers never read it** (RLS, decision D3 (b) pending
-  legal advice). The history records registration numbers, file names and
-  counts, never names. The export's `holder` column is only in an editor's
-  file.
+  for their own farm; **viewers never read it** (RLS, decision D3). The
+  history records registration numbers, file names and counts, never names.
+  The export's `holder` column is only in an editor's file.
+- **Decision D3** (provisional position, pre-counsel research, 2026-10-01).
+  A per-farm volume beside a farm's name identifies its holder in a rural
+  catchment, and over/under-use flags beside a neighbour suggest unlawful
+  use. WARMS is not public (s12(2)(a) doesn't apply); comparing registered
+  with modelled use is compatible further processing (s15(2)(a)), but
+  republishing names or per-farm volumes isn't: NWA s142 releases WARMS only
+  "subject to any limitations imposed by law", and PAIA s34(1) would have
+  DWS refuse a stranger this. So, by reader:
+
+  | Reader | Names | Per-unit volumes |
+  | --- | --- | --- |
+  | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
+  | Farmer or applicant linked to the farm | their own farm's holder | their own units |
+  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`) |
+  | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
+  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-13`) |
+
+  With the switch off, a viewer's routes carry no copy of the volumes: the
+  run's model and summary per unit, the compare route, the summary CSV, the
+  run's model input (refused for a cap or full-allocation run) and the farm
+  view's registered water ([api.md § Allocations](./api.md#allocations)).
+  Left: a capped run's per-unit daily series still bound use by the volume
+  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
+  extract must say how it was obtained (`allocation_source.reference`,
+  operator agreement 3A.1(d)); stricter terms from DWS or the CMA win.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does. A licence condition in words
   (103) is checked like the holder: a 13-digit number there is a row problem.
@@ -2356,15 +2380,16 @@ database:
   engine reads (id, unit, source, volume, storage, validity, months, maximum
   rate, and `waterUse: '21b'` on a storage-only row, issue #72), never the holder's name, the registration number or the property
   (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
-  appears). A viewer reads a run's input and could read the volumes anyway;
+  appears). A viewer reads a run's input only with the switch on (above);
   an applicant's projection of a published base keeps only the allocations on
   their own units (`scenarios/applicant.ts`), and a contributor never reads a
   run's summary, whose comparison names every unit.
 - The **evidence report's § 5** (issue #71) compares each run's *stored*
-  allocations, so it carries volumes by unit and never a holder's name or
-  registration number, for every reader (viewers and up) and in an issued
-  pack an applicant later holds (`evidence/report.db.test.ts` fails if either
-  appears).
+  allocations, so it never carries a holder's name or registration number,
+  for every reader (viewers and up) and in an issued pack an applicant later
+  holds; since `evidence-13` it lists only the applicant's own units, the
+  rest as totals (`evidence/report.db.test.ts` fails if a name, a number or
+  another unit appears).
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to
@@ -2529,7 +2554,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
 | Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
-| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
+| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql); D3: editors, owners and the linked farmer only) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
 | Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |

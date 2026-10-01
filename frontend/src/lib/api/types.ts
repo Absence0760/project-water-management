@@ -1945,6 +1945,31 @@ export interface AllocationList {
 	nodes: { id: string; name: string }[];
 	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
 	canSeeHolders: boolean;
+	/** The owners let viewers read each registered volume (162, D3). */
+	viewerUnits: boolean;
+	/** This caller is a viewer who can't (allocations is then empty): `totals` instead. */
+	unitsHidden: boolean;
+	/** Per water source held by 5 or more registered users; null unless unitsHidden. */
+	totals: AllocationTotal[] | null;
+}
+
+/** A water source's registered volumes in force today, summed (a viewer's view, 162). */
+export interface AllocationTotal {
+	waterSource: 'surface' | 'groundwater';
+	holders: number;
+	registeredM3PerYear: number;
+	storageM3: number | null;
+}
+
+/** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
+export interface AllocationComparisonTotals {
+	tolerance: number;
+	sources: {
+		waterSource: 'surface' | 'groundwater';
+		holders: number;
+		units: number;
+		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+	}[];
 }
 
 /** The fields an editor sends to create or change an allocation. */
