@@ -199,6 +199,25 @@ test('a glossary topic spans the help column, with "On this page" pinned to its 
 	await expect(onPage).toBeInViewport();
 });
 
+// A 44rem text measure left half the help column empty beside full-width
+// figures (operator, 2026-09-30): a guide's and a glossary topic's text runs
+// to the "On this page" rail, as the column's figures do.
+for (const { path, heading, text } of [
+	{ path: '/help/guides/the-whole-process', heading: 'The whole process, from catchment to results', text: 'ol.steps' },
+	{ path: '/help/glossary/goodness-of-fit', heading: 'Goodness of fit', text: 'article.entry p.short' }
+]) {
+	test(`${path}: the text spans the help column up to the rail`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto(path);
+		await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
+		const rail = (await page.getByRole('navigation', { name: 'On this page' }).boundingBox())!;
+		const block = (await page.locator(text).first().boundingBox())!;
+		// The text's box ends at the rail's 2.5rem gap, not 44rem in.
+		expect(rail.x - (block.x + block.width)).toBeLessThanOrEqual(42);
+	});
+}
+
 // All four groups open made the sticky contents column ~1180 px tall, so it
 // scrolled inside itself at 1440×960 and 1280×800. One group opens at a time
 // (the current page's), and the column fits both windows with any one open.
