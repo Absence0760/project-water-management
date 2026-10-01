@@ -416,6 +416,34 @@ describe('seasonal_outlook RLS', () => {
 		const upd = await withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET result = '{}' WHERE id = $1 RETURNING id`, [outlook.id]));
 		expect(upd.rows).toEqual([]);
 	});
+
+	it('the 30-day job clean-up clears an outlook’s job and keeps the outlook, complete or pending (148_job_purge_clears_links)', async () => {
+		const owner = await signUp('OutlookPurge');
+		const c = await catchment(owner);
+		const one = [{ label: 'one', ops: [] }];
+		const done = (await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { name: 'Done', analogueYears: [2012] }, one))).body;
+		await tick();
+		const stuck = (await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { name: 'Stuck', analogueYears: [2012] }, one))).body;
+		// The second outlook's job died before it ran: the outlook stays pending.
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now() WHERE id = $1`, [stuck.jobId]);
+		const cols = 'id, status, completed_at, engine_version, result';
+		const before = await asOwner(`SELECT ${cols} FROM seasonal_outlook WHERE project_id = $1 ORDER BY name`, [c.projectId]);
+		expect(before.map((r) => r.status)).toEqual(['complete', 'pending']);
+
+		await asOwner(`UPDATE job SET finished_at = now() - interval '31 days' WHERE id = ANY($1)`, [[done.jobId, stuck.jobId]]);
+		expect((await tick()).purged).toBeGreaterThanOrEqual(2);
+		expect(await asOwner('SELECT id FROM job WHERE project_id = $1', [c.projectId])).toEqual([]);
+		const after = await asOwner(`SELECT ${cols}, job_id FROM seasonal_outlook WHERE project_id = $1 ORDER BY name`, [c.projectId]);
+		expect(after).toEqual(before.map((r) => ({ ...r, job_id: null })));
+		const got = await owner.call('GET', `/projects/${c.projectId}/outlooks/${done.outlook.id}`);
+		expect(got.status).toBe(200);
+		expect(got.body.outlook).toMatchObject({ status: 'complete', job: null });
+
+		// Positive control: the guard still refuses a real change, alone or beside a cleared link, even by the schema owner.
+		await expect(asOwner(`UPDATE seasonal_outlook SET result = '{}' WHERE id = $1`, [done.outlook.id])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE seasonal_outlook SET created_by = NULL, name = 'Changed' WHERE id = $1`, [done.outlook.id])).rejects.toMatchObject({ code: '23514' });
+		await expect(asOwner(`UPDATE seasonal_outlook SET job_id = $2 WHERE id = $1`, [done.outlook.id, done.jobId])).rejects.toMatchObject({ code: '23514' });
+	});
 });
 
 describe('the drought restriction rule (engine 1.54.0, WP-3.8)', () => {
