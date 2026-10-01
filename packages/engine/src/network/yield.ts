@@ -224,7 +224,10 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	nodes[i] = node;
 	const transfers = p.plan.transfers.map((tr) => (tr.from === i ? { ...tr, reserveM3: tr.reserveM3 * ratio } : tr));
 	const e = node.irrigationEfficiency;
-	const sub = supplyNetwork({ ...p.plan, nodes, transfers }, i);
+	// Without the drought restriction rule (engine ≥ 1.54.0): a yield is what the dam can give, not what a
+	// restriction policy asks of it (docs/model.md §2.7i), as the caps and boreholes above.
+	const { restriction: _restriction, ...plan } = p.plan;
+	const sub = supplyNetwork({ ...plan, nodes, transfers }, i);
 	return {
 		...sub,
 		// F = draft × pattern × e, so the abstraction demand D = F / e is the draft.

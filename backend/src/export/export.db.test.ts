@@ -297,8 +297,8 @@ describe('run summary export', () => {
 		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
-		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0) and the assurance of supply (1.34.0)
-		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(12);
+		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0), the assurance of supply (1.34.0) and the drought restriction rule (1.54.0)
+		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(13);
 		// The curtailment table names its EWR attribution rule, and the EWR sites follow it (Q17).
 		expect(rows).toContain('Curtailment targets');
 		expect(rows.some((r) => r.startsWith('EWR attribution,"net impact pro rata (Q17)'))).toBe(true);
