@@ -172,6 +172,7 @@ export type AuditKind =
 	| 'invite.revoked'
 	// The invitee declined it (109_invite_accept, issue #136): recorded by app_decline_invite, with no actor.
 	| 'invite.declined'
+	// The season decision log (issue #119, publish/decision.ts): the notice, window, run and per-farm figures.
 	| 'publication.published'
 	| 'publication.notice_changed'
 	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
@@ -241,7 +242,9 @@ export type AuditKind =
  * Record one audit event as the transaction's actor, with a snapshot of their
  * name: the signed-in user (withUser) and their display name, or the API key
  * (withApiKey, 039_api_keys.sql) and `API key “<name>”`. `subject` holds ids,
- * names, counts and dates, never a secret, a token or series values.
+ * names, counts and dates (and a publication's notice and per-farm season
+ * totals, the decision log, publish/decision.ts), never a secret, a token or
+ * series values.
  */
 export async function recordAudit(db: Db, projectId: string, kind: AuditKind, subject: Record<string, unknown> = {}): Promise<void> {
 	await db.query(

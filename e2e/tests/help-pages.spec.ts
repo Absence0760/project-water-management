@@ -142,7 +142,7 @@ test('a link to one section of a guide lands on it', async ({ page, owner }) => 
 	]);
 });
 
-test('a guide spans the help column: "On this page" at its right edge, figures wider than the text, no previous / next (issue #162)', async ({
+test('a guide spans the help column: "On this page" at its right edge, text and figures up to it, no previous / next (issue #162)', async ({
 	page,
 	owner
 }) => {
@@ -153,11 +153,11 @@ test('a guide spans the help column: "On this page" at its right edge, figures w
 	const col = (await page.locator('.help-main').boundingBox())!;
 	const rail = (await page.getByRole('navigation', { name: 'On this page' }).boundingBox())!;
 	expect(Math.abs(rail.x + rail.width - (col.x + col.width))).toBeLessThanOrEqual(2);
-	// Body text keeps a readable measure; a diagram's frame takes the text column's whole width.
+	// Body text and a diagram's frame both run to the rail's 2.5rem gap: a 44rem text measure left half
+	// the column empty beside the figures (operator, 2026-09-30; help.spec.ts pins the same for the steps).
 	const para = (await page.getByRole('main').locator('section > p').first().boundingBox())!;
 	const figure = (await page.locator('figure.diagram').first().boundingBox())!;
-	expect(para.width).toBeLessThanOrEqual(44 * 16 + 1);
-	expect(figure.width).toBeGreaterThan(para.width + 100);
+	expect(rail.x - (para.x + para.width)).toBeLessThanOrEqual(42);
 	expect(figure.x + figure.width).toBeGreaterThan(rail.x - 3 * 16);
 	// Related guides stay; the previous / next pager is gone (the contents mark where you are).
 	await expect(page.getByRole('region', { name: 'Related guides' })).toBeVisible();

@@ -5845,6 +5845,16 @@ the viewer's day, with a request's change set folded into one entry.
   (`.history.fit`) and the list and the detail scroll inside it; a linked
   entry further down is scrolled into view inside the list, never the page.
   **Show older changes** (50 items a page) sits at the foot of the list.
+- **A publication's record** (the season decision log, issue #119;
+  `timeline.ts` `publicationRecord`): under a `publication.published` or
+  `publication.notice_changed` event, wherever the whole entry shows (the
+  detail, or the narrow list), the season window and data-until day, the
+  run id with its engine version and runoff model, the inputs' SHA-256, the
+  notice in each language it was written in ("Notice (Afrikaans): …"), the
+  next publication date, the note, and a collapsed **Figures per farm (N)**
+  table (supplied %, demand and supplied m³, short days, dam %, model band).
+  `&kind=publication` is the log on its own. Events from before the log
+  widened show only their line.
 - **Narrow (a phone):** no detail; each entry shows whole under its day, with
   its buttons (44 px targets), and the page scrolls. The two selects share a
   row, the parameter box has its own.
@@ -6618,9 +6628,10 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail pinned to the column's right edge instead). A
-  guide spans the Help column like the overview (issue #162): body text,
-  notes and lists keep a 44rem reading measure, while diagrams, picture
-  tours, formulas and the terms table take the column's whole width (a
+  guide spans the Help column like the overview (issue #162), and so do
+  its body text, notes and lists (no 44rem measure since 2026-09-30, which
+  left half the column empty beside the figures), along with diagrams,
+  picture tours, formulas and the terms table (a
   diagram is drawn at most 1.3 times its viewBox width, centred, so a small
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last

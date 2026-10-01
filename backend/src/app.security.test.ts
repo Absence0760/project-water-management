@@ -2,11 +2,15 @@
 // CloudFront shared secret, the CORS allowlist and the cross-origin write check.
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fakeRuntime } from './__tests__/lambdaRuntime.js';
 import { createApp } from './app.js';
 
 const ORIGIN = 'http://localhost:7777';
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.unstubAllGlobals();
+});
 
 describe('CloudFront shared secret', () => {
 	it('checks the header CloudFront sends on the API origin (infra/s3_cloudfront.tf)', () => {
@@ -89,6 +93,8 @@ describe('the Lambda entry point fails closed without the secret', () => {
 	});
 
 	it('lambda.ts will not load without it, and loads with it', async () => {
+		// The streaming handler is made from the Lambda runtime's awslambda global (http/lambdaStream.ts).
+		vi.stubGlobal('awslambda', fakeRuntime);
 		vi.resetModules();
 		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', '');
 		await expect(import('./lambda.js')).rejects.toThrow(/CLOUDFRONT_SHARED_SECRET/);

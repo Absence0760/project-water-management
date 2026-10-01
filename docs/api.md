@@ -132,7 +132,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `byYou: true`, or that names them as its subject; newest first, at most
   50 000, `auditEventsTruncated` past that) come from `app_subject_export()`,
   which reads only the caller's own rows, including in projects they have
-  left. Never a secret: no password or token hash, unsubscribe nonce, key or
+  left. A `publication.published` event comes without its `perFarm` figures
+  (other people's farms, issue #119; `publish/decision.ts`
+  `withoutFarmFigures`); the project's history keeps them. Never a secret: no password or token hash, unsubscribe nonce, key or
   link material. One export a minute per account
   (`app_user.data_exported_at`); a render session is refused (403).
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
@@ -185,7 +187,7 @@ path" }` on any route for a path with an escaped unreserved character
 (`%61`), an escaped `/`, `\` or `%`, a malformed escape or a dot segment
 (`backend/src/http/rawPath.ts`; `%20` and non-ASCII escapes are fine); `409` = conflict (duplicate name or email,
 already a member, last owner/admin); `413` = request body over 4 MB (5 MB
-for `POST /projects/import`), a series over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
+for `POST /projects/import`), a series over 60 000 days, or an export over its cap (50 MB for a CSV, 5 MB for `export.json`); `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
 `Retry-After`). Database errors are mapped to fixed messages and anything
 unexpected is `500 { error: "Internal server error" }`; raw database error
@@ -2422,8 +2424,8 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
-| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
-| PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
+| POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
+| PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`, and records `publication.notice_changed` with the whole notice as it then stands (issue #119). `409` for a superseded publication | editor |
 | GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
@@ -2712,7 +2714,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
 | GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
-| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 50 MB; streamed like every CSV, [Export](#export)) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
@@ -3262,7 +3264,7 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
@@ -3553,21 +3555,29 @@ Runs are not included (re-run after importing, or pass `run=1` / `--run`),
 nor is the import report ([why](#import-report)). The importer gives every row
 a fresh id.
 
-**Size cap — 413.** Production serves the API through Lambda's *buffered*
-response mode, which fails any response over **6 MB**. Every export body is
-built in memory and refused with `413 { error: "export larger than 5 MB — …" }`
-once it passes 5 MB, with a hint to narrow the window (`from`/`to`). For scale:
-a 60 000-day series is ≈ 1 MB, and the catchment table fits, but a **farm's
-daily CSV over a multi-decade record does not**: a farm has ~32 columns at
-full precision (≈ 12–13 bytes a value on average), so a 40-year record
-(≈ 14 600 days) is ≈ 5.8 MB and gets the 413; download it in windows of about
-30 years or less, or take the `.xlsx` workbook, whose bulk fetch pages under the
-cap ([below](#bulk-run-series)). WP-1.29 (Lambda response streaming) removes
-the limit for the CSVs ([followups.md](./followups.md)). The durable fix if exports grow (many long series, multi-node
-workbooks) is Lambda response streaming (`streamHandle`, 20 MB soft limit) or
-writing the file to S3 and returning a pre-signed URL. Gzip is not a clean win
-here: a gzipped body is binary, so the Lambda adapter base64-encodes it (+33 %),
-and CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress either.
+**Size caps — 413, and streaming.** Every CSV download is **streamed**
+(WP-1.29a, issue #283): production's Function URL is in `RESPONSE_STREAM`
+mode, so a response is no longer stopped at Lambda's 6 MB buffered limit, and
+the local Node server streams the same body the same way
+(`backend/src/export/download.ts`, `backend/src/http/lambdaStream.ts`,
+[deployment.md § Response streaming](./deployment.md#response-streaming)). The
+route measures the file first and answers
+`413 { error: "export larger than 50 MB — …" }` before sending a byte when it
+passes **50 MB**, with a hint to narrow the window (`from`/`to`); otherwise the
+file is written from memory as the client reads it, with no `Content-Length`
+(chunked). For scale: a farm's daily CSV has ~32 full-precision columns,
+≈ 400 KB a year, so a 60-year record is ≈ 24 MB and a century fits; a
+60 000-day series is ≈ 1 MB. Past Lambda's first 6 MB a stream runs at about
+2 MB/s, so a 50 MB file takes ~25 s (inside the API's 30 s timeout, which is
+why the cap isn't higher). A download that fails partway is cut off, never
+ended short: the client sees a failed download, not a complete-looking file.
+
+`export.json` is the exception: it is built in memory and keeps a **5 MB**
+cap (`413 { error: "export larger than 5 MB — …" }`), because a project file
+must import back and `POST /projects/import` can't take more (a Lambda
+request can't be streamed or pass 6 MB). The [bulk series](#bulk-run-series)
+pages stay under the same 5 MB, since the browser holds a page whole. Gzip is
+not used: CloudFront's `CachingDisabled` policy on `/api/*` doesn't compress.
 
 ### Bulk run series
 

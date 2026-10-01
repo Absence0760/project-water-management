@@ -176,16 +176,10 @@
 </article>
 
 <style>
-	/* The guide spans the Help column, as the overview does (issue #162):
-	   text keeps a readable measure, while figures, diagrams, formulas and the
-	   terms table take the column's whole width. */
-	.head,
-	section > h2,
-	section > p,
-	.steps,
-	.list,
-	.note,
-	.related,
+	/* The guide spans the Help column, as the overview does (issue #162), and
+	   so does its text: a 44rem measure left half the column empty beside the
+	   figures. The Help layout's own max-width bounds the line length. Below
+	   the rail's breakpoint, the in-text "On this page" box stays narrow. */
 	.onpage {
 		max-width: 44rem;
 	}

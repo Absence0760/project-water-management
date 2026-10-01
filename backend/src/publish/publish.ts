@@ -25,7 +25,9 @@ import {
 } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
+import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
+import { noticeChangedSubject, publishedSubject } from './decision.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recentShortfall, type RecentShortfall } from './recent.js';
 
@@ -234,6 +236,8 @@ async function loadProjectionRun(
 	calibration: StoredCatchmentView['calibration'];
 	/** A forecast run's summary.forecast (WP-2.12) and the day it was made, in the project's time zone (058); null for an ordinary run. */
 	forecast: { summary: ForecastSummary; madeOn: string } | null;
+	/** SHA-256 (hex) of the run's inputs snapshot, for the decision log (decision.ts). */
+	inputsSha256: string;
 } | null> {
 	const { rows } = await db.query<{
 		start_date: string;
@@ -247,6 +251,7 @@ async function loadProjectionRun(
 		forecast: ForecastSummary | null;
 		created_at: Date;
 		time_zone: string | null;
+		inputs_sha256: string;
 	}>(
 		// observed_until: the last day of the observed rain drivers in the run's
 		// input snapshot (catchment gauge, CHIRPS), not the forecast: a run that
@@ -258,7 +263,7 @@ async function loadProjectionRun(
 				(SELECT to_char(max((s.value->>'startDate')::date + (s.value->>'length')::int - 1), 'YYYY-MM-DD')
 				 FROM jsonb_each(inputs->'series') s
 				 WHERE s.key IN ('rain_catchment_mm', 'rain_chirps_mm') AND (s.value->>'length')::int > 0)) AS observed_until,
-			summary->'forecast' AS forecast, created_at, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone,
+			summary->'forecast' AS forecast, created_at, encode(sha256(convert_to(inputs::text, 'UTF8')), 'hex') AS inputs_sha256, (SELECT p.time_zone FROM project p WHERE p.id = model_run.project_id) AS time_zone,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS runoff_model, inputs->'settings'->'apanMm' AS apan_mm, summary->'calibration' AS calibration
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
@@ -292,20 +297,23 @@ async function loadProjectionRun(
 		engineVersion: r.engine_version,
 		runoffModel: r.runoff_model,
 		calibration: c ? { nse: c.nse ?? null, pbias: c.pbias ?? null, kge: c.kge ?? null } : null,
-		forecast: r.forecast ? { summary: r.forecast, madeOn: localDate(r.created_at, r.time_zone ?? DEFAULT_TIME_ZONE) } : null
+		forecast: r.forecast ? { summary: r.forecast, madeOn: localDate(r.created_at, r.time_zone ?? DEFAULT_TIME_ZONE) } : null,
+		inputsSha256: r.inputs_sha256
 	};
 }
 
 /**
  * Publish a run: supersede the current publication, store the new one with
  * its catchment view, and one projection per farm that still exists as a
- * farm. One transaction (the caller's), one publish at a time per project.
+ * farm, and record it in the decision log (the `publication.published` audit
+ * event, decision.ts; `auto` for an auto run published by itself). One
+ * transaction (the caller's), one publish at a time per project.
  */
 export async function publishRun(
 	db: Db,
 	projectId: string,
 	body: z.infer<typeof PublishBody>,
-	/** `auto`: an auto run publishing on its own (autoPublish.ts), recorded as run_publication.auto (141; the farms_short alert reads it). */
+	/** `auto`: an auto run publishing on its own (autoPublish.ts), recorded as run_publication.auto (141; the farms_short alert reads it) and in the audit event. */
 	{ auto = false }: { auto?: boolean } = {}
 ): Promise<{ publication: Publication; farms: number }> {
 	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('run_publication:' || $1::text, 0))`, [projectId]);
@@ -351,10 +359,12 @@ export async function publishRun(
 			[pubId, projectId, JSON.stringify(views)]
 		);
 	}
-	return { publication: await getPublication(db, pubId), farms: views.length };
+	const publication = await getPublication(db, pubId);
+	await recordAudit(db, projectId, 'publication.published', publishedSubject(publication, { inputsSha256: loaded.inputsSha256, views, auto }));
+	return { publication, farms: views.length };
 }
 
-/** Change the current publication's notice, note or next date, without re-publishing. */
+/** Change the current publication's notice, note or next date, without re-publishing, and record it in the decision log (`publication.notice_changed`). */
 export async function patchPublication(db: Db, projectId: string, pubId: string, body: z.infer<typeof PatchBody>): Promise<Publication> {
 	const { rows } = await db.query<{ superseded: boolean }>('SELECT superseded_at IS NOT NULL AS superseded FROM run_publication WHERE project_id = $1 AND id = $2', [
 		projectId,
@@ -376,5 +386,8 @@ export async function patchPublication(db: Db, projectId: string, pubId: string,
 		[projectId, pubId, ...set.map(([, v]) => v)]
 	);
 	if (!rowCount) throw new ApiError(409, 'this publication has been superseded; change the current one');
-	return getPublication(db, pubId);
+	const publication = await getPublication(db, pubId);
+	const fields = (['note', 'restriction', 'nextExpectedOn'] as const).filter((k) => body[k] !== undefined);
+	await recordAudit(db, projectId, 'publication.notice_changed', noticeChangedSubject(publication, fields));
+	return publication;
 }

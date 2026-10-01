@@ -591,9 +591,11 @@ buys a **render session** that can read one report and nothing else.
   GET instead, so no cloud account is needed; production's config check
   refuses anything but `cloudfront` (§ Production configuration). The
   alternative, streaming the PDF through the API, was not taken: the API's
-  Function URL is in buffered mode (a 6 MB response cap, less after base64,
-  that a long report could pass), and streaming would hold a VPC Lambda open
-  and billed for every transfer. **Emails carry no PDF and no download link**:
+  Function URL does stream since WP-1.29a (the CSV exports, deployment.md
+  § Response streaming), but past its first 6 MB a stream is paced at about
+  2 MB/s, holding a VPC Lambda open, billed and counted against the API's
+  reserved concurrency for every transfer, where a signed URL costs the API
+  one request. **Emails carry no PDF and no download link**:
   they link to the app's `/projects/:id/reports/:jobId` page, which needs the
   reader signed in and still a member, so a forwarded email opens nothing.
   Recipients must be direct project members with viewer or above, checked
@@ -2217,6 +2219,7 @@ PDF someone else asked for kept the person as a recipient
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
+| A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
 | A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |

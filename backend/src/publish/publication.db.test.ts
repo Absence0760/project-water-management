@@ -558,3 +558,93 @@ describe('the farm view’s freshness', () => {
 		}
 	});
 });
+
+describe('the season decision log (issue #119)', () => {
+	type Ev = { kind: string; subject: Record<string, any> };
+	const log = async (u: User, pid: string) => {
+		const res = await u.call('GET', `/projects/${pid}/history?kind=publication&limit=100`);
+		return { status: res.status, events: (res.body.items ?? []) as Ev[] };
+	};
+
+	it('records what was announced, over which window, from which run and per-farm figures, and keeps it after the run is gone', async () => {
+		const p = await makeProject(owner, 'Decision log');
+		const r1 = await run(owner, p);
+		const notice = { en: 'Irrigate at night only.', af: 'Besproei net snags.' };
+		expect((await publish(owner, r1, { note: 'Dry spell', restriction: { level: 'restricted', pct: 20, notice }, nextExpectedOn: '2024-01-15' }, p)).status).toBe(201);
+		const [{ engine_version, inputs_sha256 }] = await asOwner(
+			`SELECT engine_version, encode(sha256(convert_to(inputs::text, 'UTF8')), 'hex') AS inputs_sha256 FROM model_run WHERE id = $1`,
+			[r1]
+		);
+		const [pub] = await asOwner(`SELECT id, catchment_view FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL`, [p]);
+		const views = (await asOwner(`SELECT view FROM publication_farm WHERE publication_id = $1 ORDER BY view->>'name'`, [pub.id])).map((r) => r.view);
+		const cv = pub.catchment_view;
+		const expected = {
+			publicationId: pub.id,
+			runId: r1,
+			engineVersion: engine_version,
+			runoffModel: 'gr4j',
+			inputsSha256: inputs_sha256,
+			window: { runStart: cv.runStart, dataUntil: cv.dataUntil, season: { from: cv.season.from, to: cv.season.to }, last30: { from: cv.last30.from, to: cv.last30.to } },
+			restriction: { level: 'restricted', pct: 20, notice },
+			nextExpectedOn: '2024-01-15',
+			note: 'Dry spell',
+			farms: 6
+		};
+		const first = (await log(owner, p)).events;
+		expect(first).toHaveLength(1);
+		expect(first[0]!.subject).toMatchObject(expected);
+		expect(first[0]!.subject.inputsSha256).toMatch(/^[0-9a-f]{64}$/);
+		expect(first[0]!.subject).not.toHaveProperty('auto');
+		// One line per farm: its own figures, as its farm history reads them, never the even share.
+		const perFarm = [...first[0]!.subject.perFarm].sort((a, b) => a.name.localeCompare(b.name));
+		expect(perFarm).toHaveLength(6);
+		perFarm.forEach((f, i) => {
+			const v = views[i];
+			expect(f).toEqual({
+				nodeId: v.nodeId,
+				name: v.name,
+				dataUntil: v.dataUntil,
+				season: { from: v.season.from, to: v.season.to, demandM3: v.season.demandM3, suppliedM3: v.season.suppliedM3, fraction: v.season.fraction, shortDays: v.season.shortDays },
+				damPct: v.dam?.pct ?? null,
+				model: { headline: v.river.headline, band: v.river.band }
+			});
+		});
+		expect(perFarm.find((f) => f.name === 'Farm Six')!.damPct).toBeNull();
+
+		// A notice change records the whole notice as it now stands, not only which parts were sent.
+		expect((await owner.call('PATCH', `/projects/${p}/publication/${pub.id}`, { restriction: { level: 'advisory', pct: null, notice: { en: 'Use water sparingly.' } } })).status).toBe(200);
+		const [changed] = (await log(owner, p)).events;
+		expect(changed).toMatchObject({
+			kind: 'publication.notice_changed',
+			subject: { publicationId: pub.id, runId: r1, fields: ['restriction'], restriction: { level: 'advisory', pct: null, notice: { en: 'Use water sparingly.' } }, nextExpectedOn: '2024-01-15', note: 'Dry spell' }
+		});
+
+		// The publication superseded and trimmed, its run deleted: the record stands on its own.
+		const r2 = await run(owner, p);
+		expect((await publish(owner, r2, {}, p)).status).toBe(201);
+		await asOwner(`DELETE FROM run_publication WHERE id = $1`, [pub.id]);
+		expect((await owner.call('DELETE', `/projects/${p}/runs/${r1}`)).status).toBe(204);
+		expect(await asOwner('SELECT count(*)::int AS n FROM model_run WHERE id = $1', [r1])).toEqual([{ n: 0 }]);
+		const after = (await log(owner, p)).events;
+		expect(after.map((e) => e.kind)).toEqual(['publication.published', 'publication.notice_changed', 'publication.published']);
+		expect(after[2]!.subject).toMatchObject(expected);
+		expect(after[2]!.subject.perFarm).toHaveLength(6);
+		expect(after[0]!.subject).toMatchObject({ runId: r2, restriction: { level: 'none', pct: null, notice: {} }, nextExpectedOn: null, note: '' });
+		expect((await owner.call('DELETE', `/projects/${p}`)).status).toBe(204);
+	});
+
+	it('is staff-only: a viewer reads every farm’s line, a farmer none (they read their own farm’s history)', async () => {
+		const seen = await log(viewer, projectId);
+		expect(seen.status).toBe(200);
+		const published = seen.events.find((e) => e.kind === 'publication.published')!;
+		expect(published.subject.perFarm.map((f: { nodeId: string }) => f.nodeId).sort()).toEqual(farms.map((f) => f.id).sort());
+		expect((await log(farmer, projectId)).status).toBe(403);
+		expect(await rowsAs(farmer, `SELECT id FROM audit_event WHERE project_id = $1 AND kind LIKE 'publication.%'`, [projectId])).toEqual([]);
+		// Positive control at the database: the viewer's RLS shows the same rows the route did.
+		expect((await rowsAs(viewer, `SELECT id FROM audit_event WHERE project_id = $1 AND kind = 'publication.published'`, [projectId])).length).toBeGreaterThan(0);
+		// The farmer's own line, through their farm's history.
+		const own = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}/history`);
+		expect(own.status).toBe(200);
+		expect(own.body.publications.length).toBeGreaterThan(0);
+	});
+});

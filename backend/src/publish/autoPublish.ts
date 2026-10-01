@@ -13,12 +13,12 @@
 //   - publishRun accepts it (not a legacy-runoff run, a projectable summary).
 // The WUA's restriction notice and next-update date carry over unchanged,
 // since a new run is no reason to lift or change a restriction. The note says
-// it was published automatically, the audit event carries `auto: true`, and
+// it was published automatically, the audit event carries `auto: true`
+// (publishRun records it, with the decision log's fields, decision.ts), and
 // so does the publication (run_publication.auto, 141: the farms_short alert
 // watches automatic publications only).
 import type { NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
-import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { publishRun } from './publish.js';
@@ -98,13 +98,6 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 		if (err instanceof ApiError) return { published: false, reason: 'not_publishable', detail: err.message };
 		throw err;
 	}
-	const p = result.publication;
-	await recordAudit(db, projectId, 'publication.published', {
-		publicationId: p.id,
-		runId: p.runId,
-		restriction: { level: p.restriction.level, pct: p.restriction.pct },
-		farms: result.farms,
-		auto: true
-	});
-	return { published: true, publicationId: p.id };
+	// publishRun recorded it in the decision log, `auto: true` (decision.ts).
+	return { published: true, publicationId: result.publication.id };
 }

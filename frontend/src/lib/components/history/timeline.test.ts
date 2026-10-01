@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { HistoryEvent, HistoryRevision } from '$lib/api/types';
+import { fmtNum } from '$lib/format/number';
 import {
 	entryHeading,
 	entrySummary,
@@ -12,6 +13,7 @@ import {
 	localTime,
 	parseKind,
 	pickEntry,
+	publicationRecord,
 	revisionLines,
 	revisionTitle,
 	seriesRestore,
@@ -366,5 +368,94 @@ describe('the page: the kind filter, the rows, the pick and the header line', ()
 		expect(historyContext(gone!, null, now)).toBe('Latest change yesterday 23:00 by a deleted account: Model changed');
 		expect(historyContext(null, '2026-09-01T00:00:00Z', now)).toBe('No changes recorded yet · recorded since 1 Sep 2026');
 		expect(whenText('2026-09-25T08:05:00.000000Z', now)).toBe('today 22:05');
+	});
+});
+
+describe('the season decision log under a publication event (issue #119)', () => {
+	const unit = (nodeId: string, name: string, fraction: number | null, extra: Record<string, unknown> = {}) => ({
+		nodeId,
+		name,
+		dataUntil: '2023-12-29',
+		season: { from: '2023-10-01', to: '2023-12-29', demandM3: 12345.6, suppliedM3: 11000, fraction, shortDays: 4 },
+		damPct: 0.64,
+		model: { headline: 0.88, band: 'watch' },
+		...extra
+	});
+	const published = {
+		publicationId: 'p1',
+		runId: 'r1',
+		engineVersion: '1.55.0',
+		runoffModel: 'gr4j',
+		inputsSha256: 'a'.repeat(64),
+		window: { runStart: '2021-10-01', dataUntil: '2023-12-20', season: { from: '2023-10-01', to: '2023-12-29' }, last30: { from: '2023-11-30', to: '2023-12-29' } },
+		// As jsonb returns it: shortest key first, then alphabetically, so Afrikaans before English.
+		restriction: { level: 'restricted', pct: 20, notice: { af: 'Besproei net snags.', en: 'Irrigate at night only.', xx: 'Old language' } },
+		nextExpectedOn: '2024-01-15',
+		note: 'Dry spell',
+		farms: 3,
+		perFarm: [
+			unit('n1', 'Hilltop', 0.891),
+			unit('n2', 'River farm', null, { damPct: null, model: { headline: null, band: null }, season: { from: '2023-10-01', to: '2023-12-29', demandM3: 0, suppliedM3: 0, fraction: null, shortDays: 0 } }),
+			unit('n3', 'Dry corner', 0.4, { model: { headline: 0.4, band: 'short' } })
+		]
+	};
+
+	it('shows the window, the run, the notice in the table’s language order, the next date, the note and each unit’s figures, least supplied first', () => {
+		const r = publicationRecord(ev('publication.published', published))!;
+		expect(r.lines).toEqual([
+			'Season 1 Oct 2023 to 29 Dec 2023, data to 20 Dec 2023; the run from 1 Oct 2021',
+			'Run r1, engine 1.55.0 (gr4j)',
+			`Inputs SHA-256 ${'a'.repeat(64)}`,
+			'Next publication expected 15 Jan 2024',
+			'Note: Dry spell'
+		]);
+		// A code the language table no longer lists still shows, under its code, last.
+		expect(r.notices).toEqual([
+			{ language: 'English', text: 'Irrigate at night only.' },
+			{ language: 'Afrikaans', text: 'Besproei net snags.' },
+			{ language: 'xx', text: 'Old language' }
+		]);
+		const vol = `${fmtNum(11000)} / ${fmtNum(12346)}`;
+		expect(r.farms).toEqual([
+			{ key: 'n3', name: 'Dry corner', supplied: '40%', volumes: vol, shortDays: '4', dam: '64%', band: 'Short' },
+			{ key: 'n1', name: 'Hilltop', supplied: '89%', volumes: vol, shortDays: '4', dam: '64%', band: 'Watch' },
+			{ key: 'n2', name: 'River farm', supplied: '–', volumes: '0 / 0', shortDays: '0', dam: '–', band: '–' }
+		]);
+	});
+
+	it('says the data-until day once when it is the season’s end, and keys a unit without an id by its place', () => {
+		const r = publicationRecord(
+			ev('publication.published', { ...published, window: { ...published.window, dataUntil: '2023-12-29', runStart: undefined }, perFarm: [{ name: 'No id', season: {} }] })
+		)!;
+		expect(r.lines[0]).toBe('Season 1 Oct 2023 to 29 Dec 2023');
+		expect(r.farms.map((f) => f.key)).toEqual(['#0']);
+	});
+
+	it('gives a notice change its restriction, and says so when it had no text or no next date', () => {
+		const r = publicationRecord(ev('publication.notice_changed', { fields: ['restriction'], restriction: { level: 'none', pct: null, notice: {} }, nextExpectedOn: null, note: '' }))!;
+		expect(r).toEqual({ lines: ['No restriction', 'No notice text', 'No next publication date'], notices: [], farms: [] });
+		const raised = publicationRecord(ev('publication.notice_changed', { fields: ['restriction'], restriction: { level: 'restricted', pct: 40, notice: { en: 'Stop.' } }, nextExpectedOn: null, note: '' }))!;
+		expect(raised.lines[0]).toBe('Restriction: restricted (40 %)');
+	});
+
+	it('is nothing for an event from before the log widened, or another kind', () => {
+		expect(publicationRecord(ev('publication.published', { restriction: { level: 'restricted', pct: 20 }, farms: 6 }))).toBeNull();
+		expect(publicationRecord(ev('publication.notice_changed', { fields: ['note'], restriction: { level: 'none', pct: null } }))).toBeNull();
+		expect(publicationRecord(ev('outlook.published', published))).toBeNull();
+	});
+
+	describe('under a skewed time zone', () => {
+		const tz = process.env.TZ;
+		afterEach(() => {
+			process.env.TZ = tz;
+		});
+		it('writes the recorded calendar days as they are, in any zone (rule 7)', () => {
+			for (const zone of ['Pacific/Kiritimati', 'Pacific/Pago_Pago']) {
+				process.env.TZ = zone;
+				const r = publicationRecord(ev('publication.published', published))!;
+				expect(r.lines[0]).toBe('Season 1 Oct 2023 to 29 Dec 2023, data to 20 Dec 2023; the run from 1 Oct 2021');
+				expect(r.lines).toContain('Next publication expected 15 Jan 2024');
+			}
+		});
 	});
 });
