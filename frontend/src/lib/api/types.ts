@@ -249,8 +249,8 @@ export interface ImportReport {
 /** GET /projects/:id/import-report: the newest import's report, with who imported it and when. */
 export interface StoredImportReport extends ImportReport {
 	importedAt: string;
-	/** The importer's display name. */
-	importedBy: string;
+	/** The importer's display name; null once their account is deleted (138). */
+	importedBy: string | null;
 }
 
 export interface Member {
@@ -692,7 +692,8 @@ export interface Ensemble {
 	summary: EnsembleSummary | PairedSummary | null;
 	createdAt: string;
 	createdBy: string | null;
-	createdById: string;
+	/** Null once the starter's account is deleted (138). */
+	createdById: string | null;
 	completedAt: string | null;
 }
 
@@ -896,7 +897,8 @@ export interface Scenario {
 	 * rebase dropped still reads by name. Sorted by id.
 	 */
 	opNames: { id: string; name: string }[];
-	ownerUserId: string;
+	/** Null once the owner's account is deleted (138): the scenario stays, the name goes. */
+	ownerUserId: string | null;
 	/** The owner's display name. */
 	owner: string | null;
 	status: ScenarioStatus;
