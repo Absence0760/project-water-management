@@ -163,9 +163,10 @@ section it belongs to, with the example that taught it.
   on the text column (`help-pages.spec.ts` checks the page and the column).
 - **A reading page spans its column; the measure is on the text.** Help's
   guides and glossary sat in a 42rem article with the "On this page" rail
-  beside it, leaving 200–350 px empty at 1440 (issue #162). Cap body text,
-  notes and lists at a reading measure (44rem) and let figures, diagrams and
-  tables take the column; pin a side rail to the column's right edge.
+  beside it, leaving 200–350 px empty at 1440 (issue #162). A 44rem measure
+  on the text then left half the column empty beside full-width figures
+  (operator, 2026-09-30), so the text takes the column too, bounded by the
+  Help layout's 1480 px; pin a side rail to the column's right edge.
 - **Navigation groups are headings, not items; a menu doesn't change as you
   scroll.** A group name styled like its links reads as one of them; make
   it a heading with its links indented under a rule. A contents list that
@@ -973,6 +974,9 @@ Interaction details that bit:
   always renders belongs in the tab's chunk: workspace tabs (the page's
   `LOAD` map) have their own ceiling, 60 KB, apart from the 42 KB one for
   pages, routes and shared chunks.
-- Every ceiling change gets a dated change-log entry with the measured
-  numbers and what grew. Never raise the page ceiling to fit a page; move
-  code out of the workspace page chunk instead.
+- Every ceiling change gets a dated entry with the measured numbers and
+  what grew. A raise of the total is a new entry file,
+  `pnpm gen:bundle-budget <slug> <kb> "<why>"`, never an edit of
+  `BUDGET.totalCodeKb`, so parallel PRs don't conflict on it
+  (`scripts/guards/bundle-budget/README.md`). Never raise the page ceiling
+  to fit a page; move code out of the workspace page chunk instead.

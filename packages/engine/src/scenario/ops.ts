@@ -20,6 +20,7 @@ import {
 	DEMAND_OBJECT_DESTINATIONS,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
 	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
@@ -731,6 +732,7 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'enabled',
 	'schedule',
 	'population',
+	'source',
 	'note'
 ] as const;
 export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
@@ -788,6 +790,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	schedule: demandSchedule,
 	// The people it serves, for the basic-needs floor (engine ≥ 1.44.0); null = a per-person object's count.
 	population: nullable(nonNeg),
+	// Where its number comes from (engine ≥ 1.56.0); null = not recorded. Its fit with the sizing is a model rule.
+	source: nullable(oneOf(DEMAND_OBJECT_SOURCES)),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
 
@@ -804,8 +808,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no population (its count), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its

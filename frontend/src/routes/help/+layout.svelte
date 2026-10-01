@@ -78,7 +78,7 @@
 <style>
 	/* The app's usual page width (not a narrower cap), starting at the sidebar:
 	   the contents column sits beside it, and the tour and guides get the width
-	   (the text keeps its own reading width). */
+	   (their text too). */
 	/* No bottom padding of its own: the page's 1rem gutter is the space under
 	   it (no-pointless-scroll.spec.ts), and the sticky contents column ends
 	   1.25rem above the window's foot, inside that. */

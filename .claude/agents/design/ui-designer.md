@@ -58,7 +58,10 @@ screen, lose nothing the old screen had, and hold up with real-sized data.
    phone, the big case), unit tests for pure helpers, updated neighbours.
    Run `pnpm check`, `pnpm test`, your specs plus the neighbours listed in
    playbook § 5, `--repeat-each 5 --retries 0` on new interactions, then
-   `pnpm build:frontend && pnpm check:bundle`.
+   `pnpm build:frontend && pnpm check:bundle`. If the total is over, trim
+   first; a warranted raise is a new entry file
+   (`pnpm gen:bundle-budget <slug> <kb> "<why>"`), never an edit of
+   `BUDGET.totalCodeKb` (`scripts/guards/bundle-budget/README.md`).
 7. **Docs:** `docs/ui.md`, the help guide for the screen
    (`frontend/src/lib/help/guides.ts`; keep `vitest run src/lib/help`
    green), and the playbook if you learned something.

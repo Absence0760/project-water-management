@@ -97,6 +97,11 @@ describe('the history of a run’s ensembles', () => {
 		expect(rows.find((r) => r.id === 'a')!.changes).toEqual([{ label: 'Lowest skill kept', a: '0.5', b: '0.3' }]);
 		expect(rows.find((r) => r.id === 'b')!.changes).toEqual([]);
 	});
+	it('names a starter whose account is deleted as a former member (138), not a dash', () => {
+		const rows = historyRows([ens({ id: 'g', createdBy: null, createdById: null }), shown], shown);
+		expect(rows.find((r) => r.id === 'g')!.by).toBe('a former member');
+		expect(rows.find((r) => r.id === 'b')!.by).toBe(shown.createdBy);
+	});
 	it('counts the starts never stored', () => {
 		expect(abandonedText(list)).toBe(
 			'1 of the 3 ensembles started for this run was never stored (cancelled or abandoned). Every start is kept, with its seed and rule.'

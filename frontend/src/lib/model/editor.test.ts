@@ -187,7 +187,7 @@ describe('ModelEditor', () => {
 		const unit = ed.addNode();
 		const town = ed.addDemandObject(unit.id, 'municipal');
 		expect(ed.model.demandObjects).toHaveLength(1);
-		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true });
+		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, source: null });
 		const homes = ed.addDemandObject(unit.id, 'domestic');
 		expect(homes).toMatchObject({ name: 'Demand 2', sizing: 'perUnit', count: 0, litresPerUnitDay: 230, monthlyM3Day: null });
 		expect(ed.addDemandObject(unit.id, 'external')).toMatchObject({ destination: 'external', returnPct: 0 });

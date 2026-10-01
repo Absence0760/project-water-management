@@ -1,7 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
-import { BUDGET, WORKSPACE_PAGE, kb, pageBuildWorkerViolations, landingChunks, measure, tabChunks, tabModules, violations } from './check_web_bundle_budget.mjs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+	BUDGET,
+	MAX_ENTRY_KB,
+	WORKSPACE_PAGE,
+	budgetEntries,
+	effectiveBudget,
+	kb,
+	newEntry,
+	pageBuildWorkerViolations,
+	landingChunks,
+	measure,
+	parseEntry,
+	readBudgetEntries,
+	tabChunks,
+	tabModules,
+	violations,
+} from './check_web_bundle_budget.mjs';
 
 const budget = { totalCodeKb: 30, largestChunkKb: 5, largestTabChunkKb: 7, largestWorkerKb: 8, largestSpreadsheetWorkerKb: 12, largestAssetKb: 3, landingKb: 6 };
 
@@ -48,7 +66,11 @@ test('a build under every ceiling passes', () => {
 
 test('each ceiling fails on its own', () => {
 	const total = measure(Array.from({ length: 8 }, (_, i) => ({ path: `${i}.js`, gzipBytes: 4 * 1024 })));
-	assert.match(violations(total, budget).join('\n'), /Total gzipped JS\+CSS is 32 KB/);
+	const totalMessage = violations(total, budget).join('\n');
+	assert.match(totalMessage, /Total gzipped JS\+CSS is 32 KB, over the 30 KB budget by 2 KB/);
+	assert.match(totalMessage, /new entry file: pnpm gen:bundle-budget <slug> <kb>/);
+	assert.match(totalMessage, /scripts\/guards\/bundle-budget\/<date>-<slug>\.json/);
+	assert.match(totalMessage, /Don't edit BUDGET\.totalCodeKb/);
 
 	const chunk = measure([{ path: 'big.js', gzipBytes: 6 * 1024 }]);
 	const v = violations(chunk, budget);
@@ -199,12 +221,97 @@ test('an empty build is a failure, not a pass', () => {
 });
 
 test('the committed budget is internally sane', () => {
-	assert.ok(BUDGET.largestChunkKb < BUDGET.totalCodeKb);
-	assert.ok(BUDGET.largestChunkKb < BUDGET.largestTabChunkKb, 'a tab loads on top of the page, so its ceiling is the higher');
-	assert.ok(BUDGET.largestTabChunkKb < BUDGET.totalCodeKb);
-	assert.ok(BUDGET.largestWorkerKb < BUDGET.totalCodeKb);
-	assert.ok(BUDGET.largestSpreadsheetWorkerKb < BUDGET.totalCodeKb);
-	assert.ok(Object.isFrozen(BUDGET));
+	const committed = readBudgetEntries();
+	assert.deepEqual(committed.errors, [], 'every committed entry in scripts/guards/bundle-budget/ is well formed');
+	for (const b of [BUDGET, effectiveBudget(committed.addKb)]) {
+		assert.ok(b.largestChunkKb < b.totalCodeKb);
+		assert.ok(b.largestChunkKb < b.largestTabChunkKb, 'a tab loads on top of the page, so its ceiling is the higher');
+		assert.ok(b.largestTabChunkKb < b.totalCodeKb);
+		assert.ok(b.largestWorkerKb < b.totalCodeKb);
+		assert.ok(b.largestSpreadsheetWorkerKb < b.totalCodeKb);
+		assert.ok(Object.isFrozen(b));
+	}
+});
+
+const entry = (name, data) => ({ name, text: typeof data === 'string' ? data : JSON.stringify(data) });
+
+test('the total ceiling is the base plus every entry; the other ceilings stay the base', () => {
+	const r = budgetEntries([
+		entry('2026-10-01-pack-share.json', { addKb: 6, why: 'the pack share view' }),
+		entry('2026-09-30-drought-rule.json', { addKb: 17, why: 'the drought restriction rule' }),
+		entry('2026-10-02-drop-a-dependency.json', { addKb: -5, why: 'a dependency removed' }),
+		{ name: 'README.md', text: '# not an entry' },
+	]);
+	assert.deepEqual(r.errors, []);
+	assert.equal(r.addKb, 18);
+	assert.deepEqual(r.entries.map((e) => e.name), ['2026-09-30-drought-rule.json', '2026-10-01-pack-share.json', '2026-10-02-drop-a-dependency.json'], 'in date order');
+	const b = effectiveBudget(r.addKb, budget);
+	assert.equal(b.totalCodeKb, 48);
+	assert.equal(b.largestChunkKb, budget.largestChunkKb);
+	assert.equal(budgetEntries([]).addKb, 0, 'no entries: the base');
+	// 32 KB fails the 30 KB base and passes once an entry adds 2.
+	const total = measure(Array.from({ length: 8 }, (_, i) => ({ path: `${i}.js`, gzipBytes: 4 * 1024 })));
+	assert.equal(violations(total, effectiveBudget(1, budget)).length, 1);
+	assert.deepEqual(violations(total, effectiveBudget(2, budget)), []);
+});
+
+test('a malformed entry fails loudly, naming the file', () => {
+	const bad = (name, data) => budgetEntries([entry(name, data)]).errors.join('\n');
+	const ok = { addKb: 3, why: 'grew' };
+	assert.match(bad('2026-10-01-pack share.json', ok), /pack share\.json: an entry is named YYYY-MM-DD-<slug>\.json/);
+	assert.match(bad('2026-10-01-Pack.json', ok), /an entry is named/);
+	assert.match(bad('2026-10-01--pack.json', ok), /an entry is named/);
+	assert.match(bad('pack.json', ok), /an entry is named/);
+	assert.match(bad('2026-10-01-pack.jsn', ok), /an entry is named/);
+	assert.match(bad('notes.md', ok), /the README is the only other file/);
+	assert.match(bad('2026-02-30-pack.json', ok), /2026-02-30 is not a real date/);
+	assert.match(bad('2026-10-01-pack.json', '{ addKb: 3 }'), /not valid JSON/);
+	assert.match(bad('2026-10-01-pack.json', '[3]'), /must be a JSON object/);
+	assert.match(bad('2026-10-01-pack.json', 'null'), /must be a JSON object/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: 0, why: 'x' }), /addKb must be a non-zero whole number/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: 2.5, why: 'x' }), /addKb must be a non-zero whole number/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: '3', why: 'x' }), /addKb must be a non-zero whole number of KB \(negative lowers the ceiling\), got "3"/);
+	assert.match(bad('2026-10-01-pack.json', { why: 'x' }), /addKb must be/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: MAX_ENTRY_KB + 1, why: 'x' }), /more than 100 KB\. That is a design change/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: -(MAX_ENTRY_KB + 1), why: 'x' }), /more than 100 KB/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: 3, why: '  ' }), /why must be a non-empty string/);
+	assert.match(bad('2026-10-01-pack.json', { addKb: 3 }), /why must be a non-empty string/);
+	assert.match(bad('2026-10-01-pack.json', { addKB: 3, addKb: 3, why: 'x' }), /unknown key\(s\) addKB/);
+	// A bad entry is left out of the sum and reported; the good ones still count.
+	const mixed = budgetEntries([entry('2026-10-01-a.json', ok), entry('2026-10-01-b.json', { addKb: 0, why: 'x' })]);
+	assert.equal(mixed.addKb, 3);
+	assert.equal(mixed.errors.length, 1);
+	assert.equal(parseEntry('2026-10-01-a.json', JSON.stringify(ok)).entry.addKb, 3);
+});
+
+test('the entry directory is read from disk: files only, the README skipped', () => {
+	const dir = mkdtempSync(join(tmpdir(), 'bundle-budget-'));
+	try {
+		writeFileSync(join(dir, 'README.md'), '# rules\n');
+		writeFileSync(join(dir, '2026-10-01-a.json'), JSON.stringify({ addKb: 4, why: 'a' }));
+		assert.deepEqual(readBudgetEntries(dir), { entries: [{ name: '2026-10-01-a.json', addKb: 4, why: 'a' }], addKb: 4, errors: [] });
+		mkdirSync(join(dir, 'old'));
+		assert.match(readBudgetEntries(dir).errors.join('\n'), /old: not a file/);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+	assert.match(readBudgetEntries(join(tmpdir(), 'no-such-bundle-budget-dir')).errors.join('\n'), /No budget entry directory/);
+});
+
+test('gen:bundle-budget writes an entry the guard accepts, and refuses a bad one', () => {
+	const e = newEntry('issue-71-pack-share', '6', '  The pack share view. Measured 1332 against 1326.  ', '2026-10-01');
+	assert.deepEqual(e.errors, []);
+	assert.equal(e.name, '2026-10-01-issue-71-pack-share.json');
+	assert.deepEqual(JSON.parse(e.text), { addKb: 6, why: 'The pack share view. Measured 1332 against 1326.' });
+	assert.ok(e.text.endsWith('}\n'));
+	assert.equal(newEntry('trim', '-20', 'removed a dependency', '2026-10-01').errors.length, 0, 'a negative entry lowers the ceiling');
+	assert.match(newEntry('Pack Share', '6', 'x').errors.join(), /The slug "Pack Share" must be lowercase/);
+	assert.match(newEntry(undefined, undefined, undefined).errors.join(), /Usage: pnpm gen:bundle-budget <slug> <kb>/);
+	assert.match(newEntry('pack', '6kb', 'x').errors.join(), /must be a whole number of KB/);
+	assert.match(newEntry('pack', '6', '').errors.join(), /why must be a non-empty string/);
+	assert.match(newEntry('pack', '0', 'x').errors.join(), /non-zero/);
+	assert.match(newEntry('pack', '500', 'x').errors.join(), /more than 100 KB/);
+	assert.match(newEntry('pack', '6', 'x').name, /^\d{4}-\d{2}-\d{2}-pack\.json$/, 'dated today by default');
 });
 
 test('the landing page is found by its modules, summed with its CSS, and has its own ceiling (issue #57)', () => {

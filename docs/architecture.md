@@ -551,6 +551,16 @@ lazy chunk, where gzip already folds them).
 6. Errors map to `{ error, details? }` with 400/401/403/404/409/413/429,
    and anything unexpected to a generic 500; raw database error text never
    reaches the client ([api.md § Errors](./api.md#errors)).
+7. The response is **streamed** in both runtimes (WP-1.29a, issue #283):
+   the Node server writes a `ReadableStream` body as it is read, and in
+   Lambda the Function URL is in `RESPONSE_STREAM` mode with the app behind
+   `backend/src/http/lambdaStream.ts` (status, headers and `Set-Cookie` in
+   the stream's prelude). Most routes answer one JSON chunk; the CSV
+   downloads (`export/download.ts`) measure the file inside the transaction
+   (`413` past 50 MB), then write it from memory after the transaction has
+   ended, so no database connection waits on a slow client. A body that
+   fails partway cuts the response off instead of ending it
+   ([deployment.md § Response streaming](./deployment.md#response-streaming)).
 
 ## Data flow of a model run
 
@@ -858,7 +868,10 @@ Settings → Automatic runs.
   self-checks failed and it raises no warning the published run didn't (the
   same sentence with other numbers or dates is the same warning), carrying
   the WUA's notice and next-update date over; the audit event says `auto:
-  true`. There is no "always".
+  true`, and so does the publication (`run_publication.auto`, 141), which
+  is what the `farms_short` alert watches: a publication no person made
+  mails the WUA's staff when farms went short in its last week of data
+  (issue #120). There is no "always".
 - **Waking the worker**: a route wakes it after commit only when the re-run
   is due at once (a debounce of 0, handy in dev); a debounced one is found
   by the next poll (15 s locally) or the production tick (5 minutes) once
@@ -1175,7 +1188,9 @@ merges into:
   `disabled`. A feed not fetched two days after it was attached or changed is
   stale ("the background worker may not be running"). A project with the
   `data_stale` or `feed_failing` alert on emails its owners and editors
-  ([§ Alert emails](#alert-emails)).
+  ([§ Alert emails](#alert-emails)); `data_stale` also watches each series
+  an API key sends (a logger pushing to `/ingest`, which has no feed):
+  days with no new value, from its last non-blank day (141, issue #120).
 
 Where the fetch runs (`FEED_FETCHER`, `jobs/transport.ts`):
 

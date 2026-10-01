@@ -116,7 +116,7 @@ Hono backend
  ├─ GET  …/runs/:runId/series/bulk    all keys of one node                  (WP-1.28)
  ├─ /auth/change-password, PATCH /auth/me, GET /account/export.json,
  │  DELETE /account                                                         (WP-1.9, 1.12, 1.13)
- └─ export routes streamed (Function URL invoke mode RESPONSE_STREAM)       (WP-1.29, if chosen)
+ └─ every response streamed (Function URL invoke mode RESPONSE_STREAM)     (WP-1.29a, built #283)
 Postgres (new next-free NNN_ migrations)
  ├─ model_run.pinned_at, pinned_by                                          (WP-1.11)
  ├─ user_preferences.preferences jsonb (083, built)                         (WP-1.26)
@@ -996,7 +996,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - the UI stays responsive (typing never blocks) on the largest example.
 - **Size:** M.
 - **Depends on:** – (the bundle budget: the worker chunk carries the engine;
-  record any ceiling raise in `check_web_bundle_budget.mjs`'s change log).
+  record any ceiling raise as `scripts/guards/bundle-budget/README.md`
+  says).
 
 ### WP-1.18 Automatic calibration
 
@@ -1548,6 +1549,17 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.29 Exports over 5 MB
 
+> **Built (option (a), issue #283, 2026-09-30).** As planned, with two
+> departures: the streaming adapter is the app's own
+> (`backend/src/http/lambdaStream.ts`, after Hono's `streamHandle`, which
+> ends a body that fails partway as if complete), and a CSV is measured
+> before it streams, so the `413` at 50 MB still comes before any byte. The
+> whole API streams, not a separate export function: see
+> [deployment.md § Response streaming](../deployment.md#response-streaming)
+> for that choice. The production check (a 12 MB export through CloudFront,
+> sign-in after the switch) waits for the first deploy
+> ([followups.md](../followups.md)).
+
 - **Goal:** no export fails because of the Lambda buffered 6 MB response.
 - **Options (D9):**
   - (a) **Lambda response streaming:** Function URL `invoke_mode =
@@ -1920,7 +1932,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
     - lockout applies;
     - the dry-run first.
   - **Streaming mode (WP-1.29):** re-test the shared-secret header check and
-    cookies under `RESPONSE_STREAM`.
+    cookies under `RESPONSE_STREAM` (done: `backend/src/http/lambdaStream.test.ts`
+    runs the app through the streaming adapter).
   - Run `/audit/auth` and `/audit/xss` before each release that adds
     routes; add every new route to `backend/src/routes.test.ts`'s inventory.
 - **Personal data (POPIA):**

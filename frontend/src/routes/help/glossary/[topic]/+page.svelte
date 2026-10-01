@@ -173,12 +173,9 @@
 </div>
 
 <style>
-	/* Body text keeps a readable measure; the page itself spans the Help
-	   column, with "On this page" pinned to its right edge (as a guide's). */
-	.head,
-	.entry > * {
-		max-width: 46rem;
-	}
+	/* The page and its text span the Help column, with "On this page" pinned
+	   to its right edge (as a guide's); the Help layout's max-width bounds
+	   the line length. */
 	.head {
 		margin-bottom: 0.5rem;
 	}
