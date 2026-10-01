@@ -199,6 +199,23 @@ describe('supplyOf (WP-3.8)', () => {
 		expect(warned({ damCapacityM3: 0, pctUpstreamToDam: 1, supplyRule: 'runOfRiver', pumpCapacityM3Day: 500 })).toEqual([]); // capped
 	});
 
+	// Engine 1.60.0: river first and trigger keep the dam split and River to dam, so on a dam-less farm they bypass the pump.
+	it('warns about a river-first or trigger farm with no dam that has river routed to it, past its pump; not run of river', () => {
+		const warned = (over: Partial<NetworkNode>) => {
+			const w: string[] = [];
+			supplyOf(farm({ damCapacityM3: 0, pumpCapacityM3Day: 500, ...over }), w);
+			return w.filter((x) => x.includes('past the river pump'));
+		};
+		const text =
+			'farm "F": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, past the river pump and its capacity; to send it all through the pump, set the supply rule to run of river';
+		for (const supplyRule of ['riverFirst', 'trigger'] as const)
+			for (const over of [{ pctUpstreamToDam: 1 }, { pctRunoffToDam: 0.3 }, { divertCapacityM3Day: 8640 }, { divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100] }])
+				expect(warned({ supplyRule, ...over }), `${supplyRule} ${JSON.stringify(over)}`).toEqual([text]);
+		expect(warned({ supplyRule: 'riverFirst', pctUpstreamToDam: 0, pctRunoffToDam: 0, divertCapacityM3Day: 0 })).toEqual([]); // nothing routed to it
+		expect(warned({ supplyRule: 'riverFirst', pctUpstreamToDam: 1, damCapacityM3: 50_000 })).toEqual([]); // a real dam
+		expect(warned({ supplyRule: 'runOfRiver', pctUpstreamToDam: 1 })).toEqual([]); // run of river routes nothing to a dam
+	});
+
 	it('trigger without a dam and run of river with one run as river first, with a warning', () => {
 		const w: string[] = [];
 		expect(supplyOf(farm({ supplyRule: 'trigger', pumpCapacityM3Day: 10 }), w).supply!.rule).toBe(1);
