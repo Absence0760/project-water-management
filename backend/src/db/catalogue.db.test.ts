@@ -157,7 +157,9 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * pack_reproduce job through app_record_pack_reproduction (154_pack_reproduce),
  * so no member can claim a pack reproduced. The quaternary reference dataset is
  * loaded by the operator as the schema owner (152_catchment_map.sql,
- * `pnpm import:quaternaries`); the app only proposes from it.
+ * `pnpm import:quaternaries`); the app only proposes from it. So is the
+ * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
+ * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
  */
 const READ_ONLY = new Set([
 	'language',
@@ -167,9 +169,10 @@ const READ_ONLY = new Set([
 	'erratum_sweep',
 	'quaternary_reference',
 	'pack_reproduction',
-	// A signer's registration check is recorded by the operator's script as the schema owner, insert-only
-	// (`pnpm import:registration-check`), and bound to a sign-off only by app_pack_bind_registration_checks
-	// at issue, so no member can mark a registration checked (165_signers).
+	'gauge_station_reference',
+	'dam_register_reference',
+	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
+	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',
 	'signoff_registration_check'
 ]);

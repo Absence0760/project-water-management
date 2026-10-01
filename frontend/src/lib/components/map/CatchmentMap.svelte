@@ -7,19 +7,70 @@
 	told apart by shape); the canvas is focusable for MapLibre's keyboard pan
 	and zoom. Without WebGL the map says so and the list carries on; when the
 	basemap tiles can't be read, the features stay drawn on a plain background.
+	It follows the app's theme (appTheme.ts: data-theme, else the OS), redrawing
+	basemap and overlay with setStyle; the picked feature's name shows over the
+	map's top-left corner until the basemap has labels (#326 E9). The farm
+	view's map (#326 A3) passes `words` in the reader's language: this file
+	imports no catalogue (i18n/boundary.test.ts), so its own words are English.
+	With a `draft` active (#326 C1, D1: drawing, placing or editing) the map is
+	in drawing mode (draw/attachDrawing.ts): clicks and keys shape the draft,
+	the features underneath stop taking clicks, and a crosshair marks the
+	middle while the map has the keyboard focus (Enter adds a corner there).
+	Measuring (#326 A7) is the same mode with a MeasureDraft. With a glyphs
+	URL the basemap draws place and water names (#326 A6), and `quaternaries`
+	(the tab's layer toggle) draws the quaternary outlines under the features,
+	a click inside one (with no feature there) picking it (`onquaternary`).
 -->
+<script module lang="ts">
+	import type { MapFeatureKind } from '$lib/api/types';
+
+	/** Everything the map says in words (the farm view passes its own, translated). */
+	export interface MapWords {
+		loading: string;
+		unavailable: string;
+		tilesNote: string;
+		/** After the map's name on the canvas, for the keyboard. */
+		keys: string;
+		kind: (k: MapFeatureKind) => string;
+		/** The zoom buttons' names (MapLibre's own English when absent). */
+		zoomIn?: string;
+		zoomOut?: string;
+	}
+</script>
+
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
-	import { basemapLayerIds, basemapStyle, overlayData, overlayLayers } from './mapStyle';
+	import { appIsDark, watchAppTheme } from './appTheme';
+	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, type QuaternaryOutline } from './mapStyle';
+	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import { attachDrawing } from './draw/attachDrawing';
+	import type { Draft } from './draw/draft.svelte';
+	import { DRAFT_SOURCE, draftData, draftLayers } from './draw/drawLayers';
+	const ENGLISH: MapWords = {
+		loading: 'Drawing the map…',
+		unavailable: 'The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.',
+		tilesNote: 'The basemap couldn’t be loaded, so the features are drawn on a plain background.',
+		keys: 'use the arrow keys to pan, + and − to zoom',
+		kind: (k) => KIND_LABEL[k]
+	};
 
 	let {
 		features,
 		selectedId = null,
 		onselect,
 		tilesUrl,
-		label
+		label,
+		fills,
+		fill = false,
+		words = ENGLISH,
+		draft = null,
+		onstatus,
+		glyphs = null,
+		quaternaries = null,
+		pickedQuaternary = null,
+		onquaternary
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -28,16 +79,40 @@
 		tilesUrl: string | null;
 		/** The map region's accessible name. */
 		label: string;
+		/** Take the parent's height (a flex column) instead of the map's own fixed height. */
+		fill?: boolean;
+		/** Results colours by feature id (A1): a polygon listed here is filled with its colour instead of its kind's. */
+		fills?: Readonly<Record<string, string>>;
+		/** The shape being drawn, placed or edited (#326 C1): the map is in drawing mode while it is active. */
+		draft?: Draft | null;
+		/** The map's state, for the tab (no WebGL: drawing falls back to pasting and typed coordinates). */
+		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
+		/** What the map says, for a translated page (the farm view); English by default. */
+		words?: MapWords;
+		/** The glyphs URL, absolute (mapStyle.ts glyphsUrl): place and water names and the quaternaries' codes. Null: no labels, no glyphs fetched. */
+		glyphs?: string | null;
+		/** The quaternary outlines to draw (#326 A6); null or empty: none. */
+		quaternaries?: readonly QuaternaryOutline[] | null;
+		/** The quaternary picked in the tab's list, drawn heavier. */
+		pickedQuaternary?: string | null;
+		/** A click inside a quaternary where no feature is: its code. */
+		onquaternary?: (code: string) => void;
 	} = $props();
 
 	let el: HTMLDivElement;
 	let status = $state<'loading' | 'ready' | 'failed'>('loading');
+	$effect(() => onstatus?.(status));
+	const drawing = $derived(!!draft?.active);
+	/** The map's canvas has the keyboard focus: the crosshair shows (drawing by keyboard). */
+	let keyFocus = $state(false);
 	let tilesNote = $state(false);
 	type Lib = typeof import('./maplibre');
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
 	const markers = new Map<string, { marker: InstanceType<Lib['Marker']>; button: HTMLButtonElement; key: string }>();
-	const dark = typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+	let dark = $state(typeof matchMedia === 'function' && typeof document !== 'undefined' && appIsDark());
+	const colours = $derived(overlayColours(dark));
+	const picked = $derived(selectedId ? features.find((f) => f.id === selectedId) : undefined);
 	const reduceMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 	/** South Africa, before there is anything to frame. */
 	const SA: [[number, number], [number, number]] = [
@@ -82,8 +157,10 @@
 		}
 		for (const f of points) {
 			const at = f.geometry.coordinates as [number, number];
-			const name = f.name || KIND_LABEL[f.kind];
-			const key = `${f.kind}|${name}|${at.join(',')}`;
+			const name = f.name || words.kind(f.kind);
+			// A results colour (A1: a gauge's EWR met or missed) fills the marker's shape; its words are in the card, the grid and the legend.
+			const tint = fills?.[f.id] ?? '';
+			const key = `${f.kind}|${name}|${at.join(',')}|${tint}`;
 			const had = markers.get(f.id);
 			if (had && had.key === key) {
 				had.button.setAttribute('aria-pressed', String(f.id === selectedId));
@@ -93,9 +170,13 @@
 			const button = document.createElement('button');
 			button.type = 'button';
 			button.className = `map-marker mk-${f.kind}`;
-			button.setAttribute('aria-label', `${KIND_LABEL[f.kind]}: ${name}`);
+			button.setAttribute('aria-label', `${words.kind(f.kind)}: ${name}`);
 			button.setAttribute('aria-pressed', String(f.id === selectedId));
-			button.title = `${KIND_LABEL[f.kind]}: ${name}`;
+			button.title = `${words.kind(f.kind)}: ${name}`;
+			if (tint) {
+				button.style.setProperty('--mk-fill', tint);
+				button.dataset.fill = tint;
+			}
 			button.append(markerShape(f.kind));
 			button.addEventListener('click', (e) => {
 				e.stopPropagation();
@@ -106,21 +187,34 @@
 		}
 	}
 
+	/** The draft's source and layers, after every style load (a theme switch replaces the style). */
+	function ensureDraft() {
+		if (!map || map.getSource(DRAFT_SOURCE)) return;
+		map.addSource(DRAFT_SOURCE, { type: 'geojson', data: draftData(draftView()) as never });
+		for (const l of draftLayers(dark)) map.addLayer(l as never);
+	}
+	const draftView = () => (draft?.active ? { shape: draft.shape, coords: draft.coords, phase: draft.phase, whole: draft.whole, cursor: draft.cursor, corner: draft.corner } : null);
+
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
 		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
-		src?.setData?.(overlayData(features, selectedId));
+		src?.setData?.(overlayData(features, selectedId, fills));
+		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
+		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
 		syncMarkers();
 	}
 
 	onMount(() => {
 		let disposed = false;
+		let stopTheme: (() => void) | null = null;
 		(async () => {
 			try {
 				lib = await import('./maplibre');
 				if (tilesUrl) await lib.usePmtiles();
 				if (disposed) return;
-				const style = basemapStyle(tilesUrl, dark);
+				const styleNow = () =>
+					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary) });
+				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
 					// Plain objects matching the style spec (mapStyle.ts keeps MapLibre out of the tab's chunk).
@@ -129,6 +223,7 @@
 					bounds: boundsOfAll(features) ?? SA,
 					fitBoundsOptions: { padding: 48, maxZoom: 13 },
 					keyboard: true,
+					...(words.zoomIn && words.zoomOut ? { locale: { 'NavigationControl.ZoomIn': words.zoomIn, 'NavigationControl.ZoomOut': words.zoomOut } } : {}),
 					dragRotate: false,
 					pitchWithRotate: false,
 					touchPitch: false
@@ -137,7 +232,6 @@
 				m.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
 				// Always expanded: the basemap's licence must stay visible.
 				m.addControl(new lib.AttributionControl({ compact: false }), 'bottom-right');
-				m.getCanvas().setAttribute('aria-label', `${label}: use the arrow keys to pan, + and − to zoom`);
 				m.on('error', (ev) => {
 					const e = ev as unknown as { sourceId?: string; error?: { message?: string } };
 					if (e.sourceId === 'basemap' && !tilesNote) {
@@ -147,17 +241,46 @@
 						status = 'failed';
 					}
 				});
+				// The app's theme changed: redraw basemap and overlay in it (the style carries the current features and selection).
+				let drawnDark = dark;
+				stopTheme = watchAppTheme(() => {
+					dark = appIsDark();
+					if (dark === drawnDark || disposed) return;
+					drawnDark = dark;
+					m.setStyle(styleNow() as never);
+				});
+				// A pick made while the new style loaded reaches it here.
+				m.on('style.load', () => {
+					ensureDraft();
+					syncOverlay();
+				});
 				m.on('load', () => {
-					m.addSource('features', { type: 'geojson', data: overlayData(features, selectedId) as never });
-					for (const layer of overlayLayers(dark)) m.addLayer(layer as never);
+					ensureDraft();
 					m.on('click', OVERLAY_CLICKABLE, (e: { features?: { properties?: { id?: string } }[] }) => {
+						// Drawing: a click shapes the draft, it doesn't pick what's under it.
+						if (draft?.active) return;
 						const id = e.features?.[0]?.properties?.id;
 						if (id) onselect(id);
 					});
+					// A click inside a quaternary picks it, unless a feature (or a marker, which stops the click) is there.
+					m.on('click', (e: { point: { x: number; y: number } }) => {
+						if (draft?.active || !onquaternary || !m.getLayer(QUATERNARY_HIT_LAYER)) return;
+						if (m.queryRenderedFeatures(e.point as never, { layers: OVERLAY_CLICKABLE.filter((l) => m.getLayer(l)) }).length) return;
+						const code = m.queryRenderedFeatures(e.point as never, { layers: [QUATERNARY_HIT_LAYER] })[0]?.properties?.code;
+						if (typeof code === 'string') onquaternary(code);
+					});
 					for (const id of OVERLAY_CLICKABLE) {
-						m.on('mouseenter', id, () => (m.getCanvas().style.cursor = 'pointer'));
-						m.on('mouseleave', id, () => (m.getCanvas().style.cursor = ''));
+						m.on('mouseenter', id, () => {
+							if (!draft?.active) m.getCanvas().style.cursor = 'pointer';
+						});
+						m.on('mouseleave', id, () => {
+							if (!draft?.active) m.getCanvas().style.cursor = '';
+						});
 					}
+					// The crosshair is for the keyboard: shown when the focus came by keyboard (focus-visible), not after a click.
+					m.getCanvas().addEventListener('focus', () => (keyFocus = m.getCanvas().matches(':focus-visible')));
+					m.getCanvas().addEventListener('keydown', () => (keyFocus = true));
+					m.getCanvas().addEventListener('blur', () => (keyFocus = false));
 					status = 'ready';
 					syncMarkers();
 				});
@@ -168,6 +291,7 @@
 		})();
 		return () => {
 			disposed = true;
+			stopTheme?.();
 			for (const m of markers.values()) m.marker.remove();
 			markers.clear();
 			map?.remove();
@@ -179,6 +303,9 @@
 	$effect(() => {
 		void features;
 		void selectedId;
+		void fills;
+		void quaternaries;
+		void pickedQuaternary;
 		syncOverlay();
 	});
 
@@ -197,25 +324,105 @@
 	export function showAll() {
 		frame(boundsOfAll(features) ?? SA);
 	}
+
+	/** Frame a geometry (a pasted shape, a located point). */
+	export function frameGeometry(g: MapGeometry) {
+		frame(boundsOf(g), g.type === 'Point' ? 15 : 14);
+	}
+
+	/** Give the map the keyboard focus (entering drawing mode, so Enter adds a corner at once). */
+	export function focusMap() {
+		map?.getCanvas().focus();
+	}
+
+	// Drawing mode: on while the draft is active, off (and every handler gone) when it ends.
+	$effect(() => {
+		if (status !== 'ready' || !drawing || !map || !draft) return;
+		const m = map;
+		return untrack(() => attachDrawing(m as never, draft, el));
+	});
+
+	// Draw the draft as it changes.
+	$effect(() => {
+		const v = draftView();
+		if (status !== 'ready' || !map) return;
+		const src = map.getSource(DRAFT_SOURCE) as { setData?: (d: unknown) => void } | undefined;
+		src?.setData?.(draftData(v));
+	});
+
+	// The canvas says what the keys do while drawing.
+	const keysHelp = $derived(
+		!draft?.active
+			? `${label}: ${words.keys}`
+			: 'measuring' in draft
+				? `${label}, measuring: the arrow keys move the map under the crosshair, Enter adds a point there, Backspace removes the last, Escape ends the measurement`
+				: draft.shape === 'point'
+					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
+					: draft.phase === 'drawing'
+						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
+						: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
+	);
+	$effect(() => {
+		const help = keysHelp;
+		if (status === 'ready') map?.getCanvas().setAttribute('aria-label', help);
+	});
+
+	/** Where the crosshair is (the map's middle), for tests and the bar: the point Enter would add. */
+	export function centre(): MapPosition | null {
+		const c = map?.getCenter();
+		return c ? [c.lng, c.lat] : null;
+	}
 </script>
 
-<div class="map-wrap" data-status={status}>
-	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map"></div>
+<div
+	class="map-wrap"
+	class:fill
+	class:drawing
+	data-status={status}
+	data-theme-drawn={dark ? 'dark' : 'light'}
+	style:--mk-casing={colours.casing}
+	style:--mk-other={colours.other}
+	style:--mk-water={colours.water}
+	style:--mk-selected={colours.selected}
+>
+	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map" data-drawing={drawing ? draft?.phase : undefined}>
+		{#if status === 'ready' && drawing && keyFocus}
+			<!-- Where Enter adds a corner: the map's middle; the arrow keys move the map under it. -->
+			<span class="crosshair" aria-hidden="true" data-testid="map-crosshair"></span>
+		{/if}
+	</div>
+	{#if status === 'ready' && picked && !drawing}
+		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
+		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
+			<span class="picked-kind">{words.kind(picked.kind)}</span>
+			<span class="picked-label">{picked.name || words.kind(picked.kind)}</span>
+		</p>
+	{/if}
 	{#if status === 'loading'}
-		<p class="map-state muted" role="status">Drawing the map…</p>
+		<p class="map-state muted" role="status">{words.loading}</p>
 	{:else if status === 'failed'}
 		<p class="map-state alert alert-info slim" role="status" data-testid="map-unavailable">
-			The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.
+			{words.unavailable}
 		</p>
 	{/if}
 	{#if tilesNote}
-		<p class="tiles-note small muted" role="status" data-testid="map-tiles-note">The basemap couldn’t be loaded, so the features are drawn on a plain background.</p>
+		<p class="tiles-note small muted" role="status" data-testid="map-tiles-note">{words.tilesNote}</p>
 	{/if}
 </div>
 
 <style>
 	.map-wrap {
 		position: relative;
+	}
+	.map-wrap.fill {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	/* Grows (or shrinks to its min-height) to the parent's height; where the parent isn't a sized flex column (a phone), the fixed height stands. */
+	.map-wrap.fill .map {
+		flex: 1 1 auto;
 	}
 	.map {
 		height: min(60vh, 560px);
@@ -230,6 +437,26 @@
 			height: 50vh;
 			min-height: 240px;
 		}
+	}
+	/* Drawing: the points underneath stop taking clicks, so a click there places a corner. */
+	.drawing .map :global(.map-marker) {
+		pointer-events: none;
+		opacity: 0.6;
+	}
+	/* The keyboard crosshair: the map's middle, in the picked colour with a casing, over the canvas but never taking a click. */
+	.crosshair {
+		position: absolute;
+		z-index: 2;
+		left: 50%;
+		top: 50%;
+		width: 28px;
+		height: 28px;
+		margin: -14px 0 0 -14px;
+		pointer-events: none;
+		background:
+			linear-gradient(var(--mk-selected), var(--mk-selected)) center / 3px 100% no-repeat,
+			linear-gradient(var(--mk-selected), var(--mk-selected)) center / 100% 3px no-repeat;
+		filter: drop-shadow(0 0 1px var(--mk-casing)) drop-shadow(0 0 1px var(--mk-casing));
 	}
 	.map-state {
 		position: absolute;
@@ -257,19 +484,23 @@
 		display: block;
 		overflow: visible;
 	}
+	/* The marker colours come from mapStyle.ts (overlayColours) as custom properties on .map-wrap, so they follow the app's theme as the map does. */
 	.map :global(.mk-shape) {
-		stroke: #ffffff;
+		stroke: var(--mk-casing);
 		stroke-width: 2.5;
-		fill: #3a3d3a;
+		fill: var(--mk-other);
 	}
-	.map :global(.mk-gauge .mk-shape) {
-		fill: #0b4fa0;
-	}
+	/* Gauges and dams are water: the rivers' blue, told apart by shape (▲, ●). */
+	.map :global(.mk-gauge .mk-shape),
 	.map :global(.mk-dam .mk-shape) {
-		fill: #0b5a73;
+		fill: var(--mk-water);
+	}
+	/* A results colour (A1) wins over the kind's; the casing stays, so the marker keeps its 3:1 edge on the basemap. */
+	.map :global(.map-marker[data-fill] .mk-shape) {
+		fill: var(--mk-fill);
 	}
 	.map :global(.map-marker[aria-pressed='true'] .mk-shape) {
-		stroke: #b0006e;
+		stroke: var(--mk-selected);
 		stroke-width: 4;
 	}
 	.map :global(.map-marker:focus-visible) {
@@ -277,19 +508,32 @@
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
-	@media (prefers-color-scheme: dark) {
-		.map :global(.mk-shape) {
-			stroke: #000000;
-			fill: #e0e0e0;
-		}
-		.map :global(.mk-gauge .mk-shape) {
-			fill: #8ec7ff;
-		}
-		.map :global(.mk-dam .mk-shape) {
-			fill: #7fd5e8;
-		}
-		.map :global(.map-marker[aria-pressed='true'] .mk-shape) {
-			stroke: #ff8fd0;
-		}
+	/* The picked feature's name (#326 E9), over the top-left corner (the zoom buttons are top right). */
+	.picked-name {
+		position: absolute;
+		top: 0.6rem;
+		left: 0.6rem;
+		max-width: calc(100% - 5rem);
+		margin: 0;
+		padding: 0.25rem 0.55rem;
+		display: flex;
+		flex-direction: column;
+		background: var(--surface);
+		color: var(--text);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		box-shadow: var(--shadow);
+		pointer-events: none;
+		line-height: 1.3;
+	}
+	.picked-kind {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+	}
+	.picked-label {
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

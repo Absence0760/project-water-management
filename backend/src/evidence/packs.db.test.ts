@@ -22,6 +22,7 @@ import {
 	checkPackBundle,
 	declaredRuleRequest,
 	ENGINE_VERSION,
+	localityMapSvg,
 	type Erratum,
 	packManifestText,
 	runEnsemble,
@@ -151,6 +152,23 @@ async function scenarioRun(name: string, ops: Record<string, unknown>[]) {
 }
 const bytesSha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
 
+/** A synthetic boundary and the applicant's parcel on the map (§ 1's locality map, evidence-12); deleted by the caller. */
+const square = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
+async function addFeature(body: Record<string, unknown>) {
+	const res = await owner.call('POST', `${at()}/map/features`, body);
+	expect(res.status, JSON.stringify(res.body)).toBe(201);
+	return res.body.feature.id as string;
+}
+async function seedLocality() {
+	return [
+		await addFeature({ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [square(21.3, -33.7, 0.1)] } }),
+		await addFeature({ kind: 'farm_parcel', name: '', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [square(21.31, -33.69, 0.03)] } })
+	];
+}
+const dropFeatures = async (ids: string[]) => {
+	for (const id of ids) expect((await owner.call('DELETE', `${at()}/map/features/${id}`)).status).toBe(204);
+};
+
 /** Issuing a pack stores its reproduction bundle in MinIO (bundle.ts), so the describes that issue need it. */
 const minio = await minioUp('packs.db.test.ts (issuing a pack and what follows)');
 
@@ -255,7 +273,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-11');
+		expect(manifest.report.version).toBe('evidence-12');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -294,6 +312,63 @@ describe('drafting a pack', () => {
 			expect((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.demandObjects).not.toBeUndefined();
 		} finally {
 			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		}
+	});
+
+	it('freezes § 1’s locality map with its SVG’s SHA-256; moving a feature changes the live report, not the pack (evidence-12)', async () => {
+		const features = await seedLocality();
+		try {
+			const p = await draft(editor, appRun);
+			const read = (await viewer.call('GET', packPath(p.id))).body;
+			expect(read.manifestMatches).toBe(true);
+			const loc = (read.manifest as PackManifest).report.localityMap!;
+			expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+				['boundary', null],
+				['applicantParcel', 'Upper']
+			]);
+			expect(loc.svgSha256).toBe(sha256(localityMapSvg(loc).svg));
+			// The parcel moves: the live report draws it elsewhere, the pack keeps what it froze.
+			const moved = await owner.call('PATCH', `${at()}/map/features/${features[1]}`, { geometry: { type: 'Polygon', coordinates: [square(21.35, -33.69, 0.03)] } });
+			expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+			const live = ((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report as PackManifest['report']).localityMap!;
+			expect(live.svgSha256).not.toBe(loc.svgSha256);
+			const again = (await viewer.call('GET', packPath(p.id))).body;
+			expect(again.manifestMatches).toBe(true);
+			expect((again.manifest as PackManifest).report.localityMap).toEqual(loc);
+			expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		} finally {
+			await dropFeatures(features);
+		}
+	});
+
+	it('still matches a pack drafted before evidence-12 to its hash: its stored manifest has no locality map, and nothing rebuilds it', async () => {
+		const features = await seedLocality();
+		try {
+			const p = await draft(editor, appRun);
+			const read0 = (await editor.call('GET', packPath(p.id))).body;
+			const now = read0.manifest as PackManifest;
+			expect(now.report.localityMap).toBeTruthy();
+			expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+			// The pack as an evidence-10 draft froze it: the same report without localityMap, under its own id and hash.
+			const id = crypto.randomUUID();
+			const { localityMap: _, ...report } = now.report;
+			const old = { ...now, pack: { ...now.pack, id }, report: { ...report, version: 'evidence-10' } } as unknown as PackManifest;
+			const hash = sha256(packManifestText(old));
+			await asOwner(
+				`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+				 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-10', $8, $9)`,
+				[id, projectId, baseRun, read0.pack.scenarioId, appRun, JSON.stringify(old), hash, now.engine.version, editor.id]
+			);
+			try {
+				const read = (await viewer.call('GET', packPath(id))).body;
+				expect(read.manifestMatches).toBe(true);
+				expect(read.pack.manifestSha256).toBe(hash);
+				expect('localityMap' in read.manifest.report).toBe(false);
+			} finally {
+				expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+			}
+		} finally {
+			await dropFeatures(features);
 		}
 	});
 
@@ -1101,8 +1176,11 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 describe.skipIf(!minio)('an application pack’s bundle', () => {
 	let first: Awaited<ReturnType<typeof draft>>;
 
-	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists', async () => {
+	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists, and the locality map draws again to its hash', async () => {
+		// The map features are read at drafting: deleted after, the pack keeps its figure.
+		const features = await seedLocality();
 		const p = (first = await draft(editor, appRun));
+		await dropFeatures(features);
 		await sign(editor, p.id);
 		const res = await issue(editor, p.id);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -1112,7 +1190,7 @@ describe.skipIf(!minio)('an application pack’s bundle', () => {
 		const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
 		expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
 		expect(checked.checks.map((k) => k.id)).toEqual(
-			expect.arrayContaining(['changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
+			expect.arrayContaining(['figure:locality', 'changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
 		);
 		expect(checked.ok).toBe(true);
 	});

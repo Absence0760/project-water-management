@@ -90,7 +90,7 @@ beforeAll(async () => {
 describe('the evidence report’s combined row (evidence-11, C26)', () => {
 	it('says the applications have not been assessed together until an assessment of exactly them exists', async () => {
 		const r = await reportOf(assessor, runA);
-		expect(r.version).toBe('evidence-11');
+		expect(r.version).toBe('evidence-12');
 		const c = r.cumulative.combined!;
 		expect(c.applications.map((x) => [x.scenarioName, x.isThis])).toEqual([
 			['Raise Rooikloof', true],

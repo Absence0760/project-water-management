@@ -230,6 +230,13 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'feed.configured': {
 			const feed = `the ${feedName(s.source)} feed`;
+			// Set from the map's catchment boundary (issue #326 B-rain): named, with its cell count.
+			const b = s.boundary as { name?: unknown } | undefined;
+			if (b && typeof b === 'object') {
+				const from = `the catchment boundary${str(b.name) ? ` “${str(b.name)}”` : ''}${typeof s.cells === 'number' ? ` (${plural(s.cells, 'cell')})` : ''}`;
+				if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })} from ${from}`;
+				return `Gave ${feed} the cells of ${from}`;
+			}
 			if (s.action === 'created') return `Set up ${feed} into ${seriesName({ kind: s.targetKind, name: s.targetName })}`;
 			if (s.action === 'removed') return `Removed ${feed}`;
 			// A confirmation to replace its series (issue #40c) is its own sentence: it is why the series will change.

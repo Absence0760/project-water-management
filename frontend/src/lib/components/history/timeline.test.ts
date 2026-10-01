@@ -150,6 +150,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
 			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
 		);
+		// Set from the map's catchment boundary (issue #326 B-rain).
+		const boundary = { featureId: 'b', name: 'Sandspruit catchment' };
+		expect(eventLine(ev('feed.configured', { action: 'created', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 14 }))).toBe(
+			'Set up the CHIRPS feed into the Rainfall — CHIRPS series from the catchment boundary “Sandspruit catchment” (14 cells)'
+		);
+		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 1 }))).toBe(
+			'Gave the CHIRPS feed the cells of the catchment boundary “Sandspruit catchment” (1 cell)'
+		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);
