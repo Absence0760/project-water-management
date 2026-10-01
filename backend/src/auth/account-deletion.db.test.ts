@@ -205,6 +205,8 @@ describe('deleting the account of a modeller who made evidence, and of an applic
 	let submitted: string; // the applicant's submitted application
 	let draft: string; // their draft, with a run
 	let draftRun: string;
+	let keptDraft: string; // a draft whose run the project keeps (pinned)
+	let keptRun: string;
 	const P = () => `/projects/${projectId}`;
 	const ok = async (res: Promise<{ status: number; body: any }>, status = 200) => {
 		const r = await res;
@@ -257,6 +259,10 @@ describe('deleting the account of a modeller who made evidence, and of an applic
 		await ok(applicant.call('POST', `${P()}/scenarios/${submitted}/submit`));
 		draft = (await ok(applicant.call('POST', `${P()}/scenarios`, { name: 'Bigger dam', baseRunId: runId, ops: [] }), 201)).scenario.id;
 		draftRun = (await ok(applicant.call('POST', `${P()}/scenarios/${draft}/runs`, { label: 'draft run' }), 201)).run.id;
+		// A draft whose run the project keeps: pinned (as the schema owner; an applicant can't pin), so the draft stays.
+		keptDraft = (await ok(applicant.call('POST', `${P()}/scenarios`, { name: 'Weir option', baseRunId: runId, ops: [] }), 201)).scenario.id;
+		keptRun = (await ok(applicant.call('POST', `${P()}/scenarios/${keptDraft}/runs`, { label: 'kept run' }), 201)).run.id;
+		await asOwner('UPDATE model_run SET pinned = true WHERE id = $1', [keptRun]);
 	}, 120_000);
 
 	it('refuses anyone a change to who made a row while the account exists (negative controls)', async () => {
@@ -319,6 +325,11 @@ describe('deleting the account of a modeller who made evidence, and of an applic
 			expect(await asOwner('SELECT 1 FROM scenario WHERE id = $1', [draft])).toEqual([]);
 			// The run went with it, not left behind as a run of the model (scenario_id cleared).
 			expect(await asOwner('SELECT 1 FROM model_run WHERE id = $1', [draftRun])).toEqual([]);
+		});
+
+		it('keeps a draft the project relies on (a kept run), its applicant cleared, so no run is left without its scenario', async () => {
+			expect(await asOwner('SELECT owner_user_id, status FROM scenario WHERE id = $1', [keptDraft])).toEqual([{ owner_user_id: null, status: 'draft' }]);
+			expect(await asOwner('SELECT scenario_id, created_by FROM model_run WHERE id = $1', [keptRun])).toEqual([{ scenario_id: keptDraft, created_by: null }]);
 		});
 
 		it('still shows an editor the run, the nomination history, the ensemble and the scenarios, with no name (positive controls)', async () => {
