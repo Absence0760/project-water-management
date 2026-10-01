@@ -78,5 +78,10 @@ describe('the example catchment on the empty project list', () => {
 	it('is written by the generator’s format: numbers on one line, the rest indented', () => {
 		expect(readFileSync(EXAMPLE_FILE, 'utf8')).toBe(formatDocument(exampleDocument(shipped)));
 		expect(formatDocument({ a: [1, -2.5, null, 3e-7], b: [{ c: 'x' }] })).toBe('{\n\t"a": [1,-2.5,null,3e-7],\n\t"b": [\n\t\t{\n\t\t\t"c": "x"\n\t\t}\n\t]\n}\n');
+		// A long run of digits ahead of something that isn't a number: the old pattern's optional comma
+		// backtracked exponentially here (CodeQL js/redos; 24 digits took 150 ms, each one more doubles it,
+		// so this would outlast the test's timeout); the required separator keeps it linear.
+		const tail = { s: `[${'0'.repeat(40)}x` };
+		expect(formatDocument(tail)).toBe(`${JSON.stringify(tail, null, '\t')}\n`);
 	});
 });

@@ -35,7 +35,10 @@ export function exampleDocument(ex: ExampleProject): Record<string, unknown> {
  */
 export function formatDocument(doc: Record<string, unknown>): string {
 	const text = JSON.stringify(doc, null, '\t');
-	return `${text.replace(/\[(?:\s*(?:-?\d[\d.eE+-]*|null),?)+\s*\]/g, (m) => m.replace(/\s+/g, ''))}\n`;
+	// Items separated by a required comma, so the match is linear: an optional comma let a run of digits split
+	// into numbers many ways and backtrack exponentially on a non-matching tail (CodeQL js/redos).
+	const numberArray = /\[\s*(?:-?\d[\d.eE+-]*|null)(?:,\s*(?:-?\d[\d.eE+-]*|null))*\s*\]/g;
+	return `${text.replace(numberArray, (m) => m.replace(/\s+/g, ''))}\n`;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
