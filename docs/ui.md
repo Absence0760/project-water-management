@@ -72,7 +72,7 @@ header (issue #17): **Account**, then who you are as its summary line, the
 initials avatar, display name, email and a Confirmed / Not confirmed badge
 (a region named by the heading). Below it the cards sit in **two columns**
 once the page itself is 52rem wide (a container query, so the 240 px
-sidebar counts): Profile, Password and Delete my account on the left; Language and units,
+sidebar counts): Profile, Password, Two-step sign-in and Delete my account on the left; Language and units,
 Alert emails and Your data on the right; one column below that. The page is
 capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
@@ -98,6 +98,24 @@ in an alert above the form, with the field it's about marked
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
+
+**Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
+`GET /auth/mfa`). Off: one line on what it does and **Set up two-step
+sign-in**, which asks for the current password (**Continue**), then shows
+two numbered steps: the QR code for the authenticator app, drawn in the page
+(`account/qr.ts`, uqr; black on white in both themes, with its quiet zone,
+220 px; the encoder loads only at that moment) with the key in groups of
+four to type instead, and **Enter the code the app shows** with **Turn on
+two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
+whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them) and **I’ve
+saved them**. On: an **On** badge, how many recovery codes are left, a line
+when this browser signed in before it was set up, and **New recovery codes**
+/ **Turn off**, each opening one code field (the app's code; turning off
+also takes a recovery code). A project owner, team admin or assessor without
+it sees a warning that their actions need it. Errors are worded from their
+codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
+is under § Sign-in pages.
 
 **Delete my account** (issue #112; `lib/components/account/DeleteAccount.svelte`,
 `DELETE /auth/me`) is a small card (one line and a danger button) so the
@@ -347,7 +365,7 @@ English only: its readers are licensing assessors, like the methods page's.
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
-`/verify-email` and `/alerts/unsubscribe` share one frame,
+`/verify-email`, `/alerts/unsubscribe` and `/alerts/feedback` share one frame,
 `lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
 brand panel with the catchment drawing on the left (55 %), the form on the
 right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
@@ -368,6 +386,14 @@ under a dead-invitation warning).
   the same answer for any address). A taken address gets exactly the same
   pages. Sign-up through a live invitation link is still confirmed, joined and
   signed in at once.
+
+- **Two-step sign-in** (issue #282). For an account with an authenticator,
+  a right password turns the form into its second step: a **Two-step
+  sign-in** heading and **Code from your authenticator app** (numeric,
+  `autocomplete="one-time-code"`, focused), **Sign in**, and **Lost your
+  phone? Use a recovery code**, which swaps the field for **Recovery code**
+  (and back). A wrong code, the 5-minute challenge running out (back to the
+  password step) and the code lockout are alerts worded from their codes.
 
 - **The security check** (the WAF's sign-in CAPTCHA, issue #126;
   [security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)). Only when
@@ -7283,6 +7309,7 @@ view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
+"Was this useful?" page (`/alerts/feedback`), the
 public shared view (`/share`), the public landing page (`/` signed out,
 `/welcome`, [§ Landing page](#landing-page)), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
@@ -7595,7 +7622,14 @@ the catalogue, [§ Language](#language)); both unit-tested.
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
-  and that each alert is sent once per crossing.
+  and that each alert is sent once per crossing. Under the rules, **Was it
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
+  people answered to "Was this alert useful?" over the last year, one line
+  per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
+  most answered first), then **Comments** (the newest 50, each with its
+  kind, useful or not and the day; shown as text), never who gave them;
+  "No answers yet." before any. It says only people who chose to answer are
+  counted, and that nothing records whether an email was opened.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
   kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
   kind by kind and reader by reader). A dam alert to a farmer
@@ -7685,6 +7719,21 @@ the catalogue, [§ Language](#language)); both unit-tested.
   means the link is dead; no signal or a server problem keeps the question
   and its button, with the reason above them, to try again. The page sets
   `no-referrer`, like the reset pages.
+- **`/alerts/feedback`** (an alert email's *Was this alert useful? Yes · No*
+  links, 147, issue #74; signed in or out, on `AuthCard`; translated): reads
+  the token and the link's answer from the fragment (`#t=…&a=yes|no`) once
+  and strips them from the address bar. Titled *Was this alert useful?*,
+  it shows **Your answer** (Yes, it was useful / No, it wasn't useful) with
+  the link's answer chosen, *Anything to add? (optional)* (500 characters
+  at most, said under it when over), the line "Your WUA reads your answer
+  and comment without your name. Nothing is kept until you press Send.", and
+  **Send**. Nothing is recorded until Send (a mail scanner that opens the
+  link answers nothing). Then "Thank you. Your answer goes to the people who
+  run alerts for <catchment>, without your name." with *Manage alerts*.
+  Send with neither chosen says "Choose Yes or No." A dead link ("This link
+  doesn't work any more: it lasts 30 days, and only while you are a member
+  of the catchment.") and a link without its token have their own states;
+  as on the unsubscribe page, only the API's 404 means dead.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
   alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may

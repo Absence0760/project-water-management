@@ -23,6 +23,8 @@ import type {
 	SeriesMeta
 } from '@water-management/engine';
 import type {
+	MfaChallenge,
+	MfaStatus,
 	AddMemberResult,
 	AlertChoiceChange,
 	AlertEvent,
@@ -30,6 +32,8 @@ import type {
 	AlertRuleChange,
 	ProjectAlerts,
 	Unsubscribed,
+	FeedbackAnswered,
+	AlertFeedbackSummary,
 	Allocation,
 	AllocationCapYears,
 	AllocationImportRequest,
@@ -261,10 +265,29 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * after a CAPTCHA_REQUIRED ApiError ($lib/auth/wafCaptcha), sent
 			 * in the header the WAF reads.
 			 */
-			login: (email: string, password: string, wafToken?: string) =>
-				request<{ user: User }>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
-					(r) => r.user
+			login: (email: string, password: string, wafToken?: string): Promise<User | MfaChallenge> =>
+				request<{ user: User } | MfaChallenge>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
+					(r) => ('mfaRequired' in r ? { mfaRequired: true as const } : r.user)
 				),
+			/**
+			 * Two-step sign-in (issue #282, docs/api.md § Two-step sign-in).
+			 * `code` is six digits from the authenticator app, or a recovery code
+			 * where one is accepted (verify, disable). ApiError 400 mfa_code_wrong,
+			 * 429 mfa_locked (5 wrong codes in a row).
+			 */
+			mfa: {
+				status: () => request<MfaStatus>('GET', '/auth/mfa'),
+				/** Start adding an authenticator: the current password (403 wrong_current_password), then the secret and its otpauth URI, shown once. */
+				enrol: (password: string) => request<{ secret: string; uri: string }>('POST', '/auth/mfa/totp/enrol', { password }),
+				/** The first code from the app: turns it on, and returns the ten recovery codes (shown once). */
+				confirm: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/totp/confirm', { code }).then((r) => r.recoveryCodes),
+				/** Turn it off (a code from the app or a recovery code). */
+				disable: (code: string) => request<void>('DELETE', '/auth/mfa/totp', { code }),
+				/** A new set of recovery codes, the old ones void (a code from the app). */
+				regenerate: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/recovery-codes', { code }).then((r) => r.recoveryCodes),
+				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
+				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code })
+			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
 			 * confirmation link and answers `{ confirm, email }` (the same for a
@@ -715,7 +738,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Turn alert emails back on after SES suppressed your address (429 when it bounced again within a day). */
 			resume: () => request<{ mailSuppressed: null }>('POST', '/me/alerts/resume'),
 			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
-			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
+			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token }),
+			/** Answer "Was this useful?" for the mail a token names (signed out; 404 for a dead link). */
+			feedback: (token: string, useful: boolean, comment: string | null) =>
+				request<FeedbackAnswered>('POST', '/alerts/feedback', { token, useful, ...(comment ? { comment } : {}) }),
+			/** The catchment's "Was this useful?" answers, counted, and their comments (editor). */
+			feedbackSummary: (id: string) => request<AlertFeedbackSummary>('GET', `${p(id)}/alert-feedback`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */

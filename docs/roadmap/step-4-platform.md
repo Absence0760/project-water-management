@@ -248,6 +248,16 @@ run in parallel after WP-4.1.
 
 ### WP-4.2 Session context and MFA
 
+> **Partly built (issue #282, 2026-10-01).** TOTP with recovery codes, the
+> two-step sign-in, `amr` in the session JWT and the requirement for project
+> owners, team admins and assessors exist now, without organisations: the
+> check is at the route (`auth/stepUp.ts`, from the request's `amr`), not in
+> RLS, and the tables are `user_totp`, `user_recovery_code`,
+> `mfa_throttle` and `account_security_event` (150_mfa.sql;
+> security.md § Two-step sign-in). Still to do here: `withSession` and
+> `app.auth_mfa` in RLS, the per-organisation `require_mfa_for_admins`, and
+> SSO.
+
 - **Goal.** Admins must use a second factor. RLS knows how the session was
   authenticated.
 - **Changes**

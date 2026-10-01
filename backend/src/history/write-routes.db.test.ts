@@ -821,6 +821,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'PUT /me/alerts/:projectId', exempt: 'a member’s own alert subscription: their preference, not the project’s rules (alert_rules.changed covers those)' },
 	{ route: 'POST /me/alerts/resume', exempt: 'resumes the caller’s own paused alert emails; a personal delivery setting, not project data' },
 	{ route: 'POST /alerts/unsubscribe', exempt: 'a recipient’s one-click unsubscribe from alert emails: a personal delivery setting, not project data' },
+	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },
@@ -836,6 +837,13 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/me/farm-notice', exempt: 'records the caller’s own acknowledgement of the farm view notice on their account (093); changes no project' },
 	{ route: 'POST /auth/me/accept-terms', exempt: 'records which terms the caller’s own account accepted (app_user.terms_version, stamped by the database); changes no project' },
 	{ route: 'POST /auth/change-password', exempt: 'the caller’s own credential; changes no project, and the password is never logged' },
+	// Two-step sign-in (issue #282): the account's own factor. No project is touched, so no project history; each
+	// change the account would want to see is in its own append-only log, account_security_event (auth/mfa.db.test.ts).
+	{ route: 'POST /auth/mfa/totp/enrol', exempt: 'starts adding the caller’s own authenticator (unconfirmed); no project, and nothing to log until it is confirmed' },
+	{ route: 'POST /auth/mfa/totp/confirm', exempt: 'the caller’s own authenticator turned on; recorded as mfa.enrolled in the account’s own security log, not a project’s history' },
+	{ route: 'DELETE /auth/mfa/totp', exempt: 'the caller’s own authenticator turned off; recorded as mfa.disabled in the account’s own security log, not a project’s history' },
+	{ route: 'POST /auth/mfa/recovery-codes', exempt: 'a new set of the caller’s own recovery codes; recorded as mfa.recovery_regenerated in the account’s own security log' },
+	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },
 	{ route: 'POST /auth/invite-info', exempt: 'reads what an invite token is for, to show on the sign-up page; writes nothing' },

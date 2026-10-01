@@ -20,10 +20,12 @@
 	import { msg, t } from '$lib/i18n/locale.svelte';
 
 	// What changed in this version. Rewrite it whenever LEGAL_VERSION changes.
+	// Since 2026-09-28: two-step sign-in (#282), Privacy §7 (2026-09-30, issue #112) and the alert feedback (2026-10-01, issue #74).
 	const CHANGES = [
-		msg('If you live or are based in South Africa, South African law and courts now apply to the Terms.'),
-		msg('If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.'),
-		msg('The Terms now start with a short version of the main points.')
+		msg('If you turn on two-step sign-in, we keep the key your authenticator app uses (encrypted), your recovery codes (only as one-way hashes) and a record of when you turned it on or off or used a recovery code.'),
+		msg('When an account is deleted, what it made for a project stays as the project’s record with the name removed. A sign-off’s typed name and the names in an evidence pack are kept only as long as that record.'),
+		msg('Alert emails now ask “Was this useful?”. If you answer, your answer and any comment are kept for a year, and your WUA sees them without your name.'),
+		msg('Our emails don’t track whether you open them or follow their links.')
 	];
 
 	let busy = $state(false);
