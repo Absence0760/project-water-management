@@ -43,6 +43,15 @@ const CODES: Record<string, Msg> = {
 	alerts_resume_throttled: msg('You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.'),
 	body_refused: msg('Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.'),
 	run_unverified: msg('This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.'),
+	// Two-step sign-in (issue #282).
+	mfa_code_wrong: msg('That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.'),
+	mfa_locked: msg('Too many wrong codes. Try again in {wait}.'),
+	mfa_challenge_expired: msg('Your sign-in timed out. Enter your email and password again.'),
+	mfa_already_enrolled: msg('Two-step sign-in is already on. Turn it off first to set up another authenticator app.'),
+	mfa_not_started: msg('Start setting up two-step sign-in again.'),
+	mfa_not_enrolled: msg('Two-step sign-in is off.'),
+	mfa_required: msg('This needs two-step sign-in. Set up an authenticator app on your Account page first.'),
+	mfa_step_up: msg('This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.'),
 	// Not from the API: the WAF's sign-in CAPTCHA (client.ts CAPTCHA_REQUIRED), on a page that can't show the puzzle.
 	captcha_required: msg('Too many sign-in attempts from your network. Wait a few minutes, then try again.')
 };
@@ -74,7 +83,7 @@ interface HttpFailure {
 const isHttpFailure = (e: unknown): e is HttpFailure => e instanceof Error && typeof (e as { status?: unknown }).status === 'number';
 
 /** Codes whose wording says how long to wait: `params.seconds`, as whole minutes. */
-const WAITS = new Set(['signin_locked', 'signup_throttled', 'export_throttled']);
+const WAITS = new Set(['signin_locked', 'signup_throttled', 'export_throttled', 'mfa_locked']);
 
 /** What to tell the reader about a failed request (anything thrown: anything else reads as a generic failure). */
 export function errorText(err: unknown): string {

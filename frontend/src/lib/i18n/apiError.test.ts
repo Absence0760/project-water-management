@@ -42,7 +42,15 @@ describe('errorText', () => {
 		body_refused: 'Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.',
 		run_unverified: 'This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.',
 		note_comment_closed: 'This application isn’t open for comment right now.',
-		note_audience_denied: 'You can’t post a comment here.'
+		note_audience_denied: 'You can’t post a comment here.',
+		mfa_code_wrong: 'That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.',
+		mfa_locked: 'Too many wrong codes. Try again in 1 minute.',
+		mfa_challenge_expired: 'Your sign-in timed out. Enter your email and password again.',
+		mfa_already_enrolled: 'Two-step sign-in is already on. Turn it off first to set up another authenticator app.',
+		mfa_not_started: 'Start setting up two-step sign-in again.',
+		mfa_not_enrolled: 'Two-step sign-in is off.',
+		mfa_required: 'This needs two-step sign-in. Set up an authenticator app on your Account page first.',
+		mfa_step_up: 'This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.'
 	};
 
 	it('has its own words for every code the API sends', () => {

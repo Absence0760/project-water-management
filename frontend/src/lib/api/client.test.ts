@@ -16,12 +16,37 @@ describe('createApi', () => {
 		const f = mockFetch(200, { user: { id: '1', email: 'a@b.c', displayName: 'A' } });
 		const api = createApi('http://x/', f);
 		const user = await api.auth.login('a@b.c', 'pw');
-		expect(user.displayName).toBe('A');
+		expect(user).toEqual({ id: '1', email: 'a@b.c', displayName: 'A' });
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('http://x/auth/login');
 		expect(init.method).toBe('POST');
 		expect(init.credentials).toBe('include');
 		expect(JSON.parse(init.body as string)).toEqual({ email: 'a@b.c', password: 'pw' });
+	});
+
+	// Two-step sign-in (issue #282): a right password for an account with an authenticator buys no session yet.
+	it('login answers a challenge when the account has two-step sign-in, and verify sends the code', async () => {
+		const f = mockFetch(200, { mfaRequired: true });
+		const api = createApi('http://x', f);
+		await expect(api.auth.login('a@b.c', 'pw')).resolves.toEqual({ mfaRequired: true });
+		const user = { id: '1', email: 'a@b.c', displayName: 'A' };
+		const g = mockFetch(200, { user });
+		await expect(createApi('http://x', g).auth.mfa.verify('123456')).resolves.toEqual({ user });
+		const [url, init] = g.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/mfa/verify');
+		expect(JSON.parse(init.body as string)).toEqual({ code: '123456' });
+	});
+
+	it.each([
+		['enrol', (a: ReturnType<typeof createApi>) => a.auth.mfa.enrol('pw'), 'POST', '/auth/mfa/totp/enrol', { password: 'pw' }],
+		['confirm', (a: ReturnType<typeof createApi>) => a.auth.mfa.confirm('123456'), 'POST', '/auth/mfa/totp/confirm', { code: '123456' }],
+		['disable', (a: ReturnType<typeof createApi>) => a.auth.mfa.disable('123456'), 'DELETE', '/auth/mfa/totp', { code: '123456' }],
+		['regenerate', (a: ReturnType<typeof createApi>) => a.auth.mfa.regenerate('123456'), 'POST', '/auth/mfa/recovery-codes', { code: '123456' }]
+	] as const)('mfa.%s calls %s %s with its body', async (_name, call, method, path, body) => {
+		const f = mockFetch(200, { secret: 'S', uri: 'otpauth://x', recoveryCodes: ['A'] });
+		await call(createApi('http://x', f));
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect([init.method, url, JSON.parse(init.body as string)]).toEqual([method, `http://x${path}`, body]);
 	});
 
 	it('posts to /auth/logout-everywhere and returns undefined (204)', async () => {

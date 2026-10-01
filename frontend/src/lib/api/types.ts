@@ -90,6 +90,24 @@ export interface User {
 	farmNoticeCurrent?: boolean;
 }
 
+/** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
+export interface MfaStatus {
+	/** An authenticator app is set up. */
+	enrolled: boolean;
+	enrolledAt: string | null;
+	/** Unused recovery codes left (0 when off). */
+	recoveryCodesLeft: number;
+	/** The person is a project owner, team admin or assessor: those actions need it. */
+	required: boolean;
+	/** This session signed in with a code. */
+	sessionVerified: boolean;
+}
+
+/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+export interface MfaChallenge {
+	mfaRequired: true;
+}
+
 export interface UserPreferences {
 	/**
 	 * The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`);

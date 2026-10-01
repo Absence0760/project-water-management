@@ -24,6 +24,9 @@ export const SECTIONS: Record<string, string> = {
 	verify: 'The confirm-your-email page (opened from the confirmation email).',
 	banner: 'The strips at the top of every page: until the email address is confirmed, and while an invitation to a catchment or team waits to be accepted.',
 	account: 'The account page: name, language and units, password.',
+	'account.two-step':
+		'The account page’s “Two-step sign-in” box: after the password, a 6-digit code from an authenticator app on the phone (Google Authenticator, Microsoft Authenticator, Aegis: app names stay as they are). Setting it up (scan a QR code or type a key), the ten recovery codes (each signs in once if the phone is lost), new codes, turning it off. “Two-step sign-in” is the feature’s name: one consistent term.',
+	'account.two-step.counts': 'The account page’s “Two-step sign-in” box: how many unused recovery codes are left.',
 	invitations: 'The invitations page (from the account page, an invitation email or the strip at the top): invitations to join a catchment or a team, each accepted or declined. Nobody joins until they accept.',
 	farm: 'The farm view (a farmer’s own farm, on a phone). The app calls the farm a “hydrological unit” everywhere a farmer reads it (the client’s choice, issue #90 Q6): keep the one Afrikaans term for it throughout. Otherwise plain words for farmers; see docs/design/farmer-view.md §5.1 for the words to use and to avoid.',
 	'farm.state': 'Farm view: loading, error and empty states.',

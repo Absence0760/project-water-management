@@ -1,0 +1,373 @@
+<!-- i18n-section: account.two-step -->
+<script lang="ts">
+	// Two-step sign-in on the Account page (issue #282; docs/ui.md § Account,
+	// docs/security.md § Two-step sign-in). Off: set it up (the password, then
+	// a QR code drawn here, or the key typed in, then the first code), and the
+	// ten recovery codes, shown once. On: how many recovery codes are left, a
+	// new set, and turning it off, each with a code. A project owner, team
+	// admin or assessor is told their role needs it.
+	import { onMount, tick } from 'svelte';
+	import { api, ApiError, type MfaStatus } from '$lib/api';
+	import { session } from '$lib/auth/session.svelte';
+	import { saveBlob } from '$lib/export/download';
+	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
+	import { errorText } from '$lib/i18n/apiError';
+	import { t, tn, plural } from '$lib/i18n/locale.svelte';
+	import type { QrDrawing } from './qr';
+
+	// i18n-section: account.two-step.counts
+	const CODES_LEFT = plural({ one: '{n} recovery code left.', other: '{n} recovery codes left.' });
+	// i18n-section: account.two-step
+
+	let status = $state<MfaStatus | null>(null);
+	let loadError = $state<string | null>(null);
+
+	async function load() {
+		try {
+			status = await api.auth.mfa.status();
+			loadError = null;
+		} catch (err) {
+			loadError = errorText(err);
+		}
+	}
+	onMount(load);
+
+	// ---- Setting it up ----
+	type Setup = { stage: 'password' } | { stage: 'scan'; secret: string; uri: string; qr: QrDrawing | null };
+	let setup = $state<Setup | null>(null);
+	let password = $state('');
+	let code = $state('');
+	let busy = $state(false);
+	let error = $state<string | null>(null);
+	/** Shown once, after turning it on or making a new set. */
+	let codes = $state<string[] | null>(null);
+	let codesHeading: HTMLHeadingElement | undefined = $state();
+	let codeInput: HTMLInputElement | undefined = $state();
+
+	function start() {
+		setup = { stage: 'password' };
+		password = code = '';
+		error = null;
+	}
+
+	function cancel() {
+		setup = null;
+		password = code = '';
+		error = null;
+	}
+
+	async function sendPassword(e: SubmitEvent) {
+		e.preventDefault();
+		if (!password) {
+			error = t('Enter your current password.');
+			return;
+		}
+		busy = true;
+		error = null;
+		try {
+			const { secret, uri } = await api.auth.mfa.enrol(password);
+			password = '';
+			setup = { stage: 'scan', secret, uri, qr: null };
+			// The QR encoder loads only now (qr.ts): the page chunk doesn't carry it.
+			try {
+				const { qrDrawing } = await import('./qr');
+				if (setup?.stage === 'scan' && setup.uri === uri) setup = { ...setup, qr: qrDrawing(uri) };
+			} catch {
+				// No picture: the key below can still be typed in.
+			}
+			await tick();
+			codeInput?.focus();
+		} catch (err) {
+			error = err instanceof ApiError && err.status === 403 ? t('Your current password is wrong.') : errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function confirmCode(e: SubmitEvent) {
+		e.preventDefault();
+		if (!code.trim()) {
+			error = t('Enter the 6-digit code from your authenticator app.');
+			return;
+		}
+		busy = true;
+		error = null;
+		try {
+			codes = await api.auth.mfa.confirm(code.trim());
+			setup = null;
+			code = '';
+			await load();
+			await tick();
+			codesHeading?.focus();
+		} catch (err) {
+			error = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	// ---- On: new codes, turning it off ----
+	let action = $state<'regenerate' | 'disable' | null>(null);
+	let actionCode = $state('');
+	let actionError = $state<string | null>(null);
+	let done = $state<string | null>(null);
+
+	function choose(a: 'regenerate' | 'disable') {
+		action = a;
+		actionCode = '';
+		actionError = null;
+		done = null;
+	}
+
+	async function runAction(e: SubmitEvent) {
+		e.preventDefault();
+		if (!actionCode.trim()) {
+			actionError = t('Enter the 6-digit code from your authenticator app.');
+			return;
+		}
+		busy = true;
+		actionError = null;
+		try {
+			if (action === 'regenerate') {
+				codes = await api.auth.mfa.regenerate(actionCode.trim());
+				action = null;
+				await load();
+				await tick();
+				codesHeading?.focus();
+			} else {
+				await api.auth.mfa.disable(actionCode.trim());
+				action = null;
+				codes = null;
+				done = t('Two-step sign-in is off.');
+				await load();
+			}
+			actionCode = '';
+		} catch (err) {
+			actionError = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	/** The key, in groups of four, as most apps ask for it typed. */
+	const grouped = (secret: string) => secret.replace(/(.{4})/g, '$1 ').trim();
+
+	/** The codes as a text file, through the app's one blob-download helper. */
+	function downloadCodes() {
+		if (!codes) return;
+		const text = `${t('Water Management recovery codes for {email}', { email: session.user?.email ?? '' })}\n\n${codes.join('\n')}\n\n${t('Each code works once, in place of a code from your authenticator app.')}\n`;
+		saveBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), 'water-management-recovery-codes.txt');
+	}
+</script>
+
+<section class="panel two-step" aria-labelledby="two-step-h" data-two-step={status ? (status.enrolled ? 'on' : 'off') : 'loading'}>
+	<h2 id="two-step-h">{t('Two-step sign-in')}</h2>
+	{#if loadError}
+		<div class="alert alert-error" role="alert">{loadError}</div>
+	{:else if status}
+		{#if status.required && !status.enrolled}
+			<div class="alert alert-warning required" role="note">
+				{t('You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.')}
+			</div>
+		{/if}
+
+		{#if codes}
+			<div class="codes" aria-labelledby="codes-h">
+				<h3 id="codes-h" tabindex="-1" bind:this={codesHeading}>{t('Your recovery codes')}</h3>
+				<p>{t('Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.')}</p>
+				<ul class="code-list mono">
+					{#each codes as c (c)}<li>{c}</li>{/each}
+				</ul>
+				<div class="actions">
+					<button type="button" class="btn" onclick={downloadCodes}>{t('Download the codes')}</button>
+					<button type="button" class="btn btn-primary" onclick={() => (codes = null)}>{t('I’ve saved them')}</button>
+				</div>
+			</div>
+		{/if}
+
+		{#if status.enrolled}
+			<p class="state">
+				<span class="badge badge-owner">{t('On')}</span>
+				{t('Signing in asks for a code from your authenticator app after your password.')}
+			</p>
+			<p class="muted">{tn(CODES_LEFT, status.recoveryCodesLeft)}</p>
+			{#if !status.sessionVerified}
+				<p class="muted">{t('This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.')}</p>
+			{/if}
+			{#if action}
+				<form onsubmit={runAction} novalidate>
+					{#if actionError}<div class="alert alert-error" role="alert" id="action-error">{actionError}</div>{/if}
+					<div class="field">
+						<label for="action-code">
+							{action === 'regenerate' ? t('Code from your authenticator app') : t('Code from your authenticator app, or a recovery code')}
+						</label>
+						<input
+							id="action-code"
+							autocomplete="one-time-code"
+							maxlength="40"
+							aria-invalid={actionError ? 'true' : undefined}
+							aria-describedby={actionError ? 'action-error' : undefined}
+							bind:value={actionCode}
+						/>
+					</div>
+					<div class="actions">
+						<button class="btn {action === 'disable' ? 'btn-danger' : 'btn-primary'}" type="submit" disabled={busy}>
+							{action === 'regenerate' ? t('Make new recovery codes') : t('Turn off two-step sign-in')}
+						</button>
+						<button type="button" class="btn" onclick={() => (action = null)}>{t('Cancel')}</button>
+					</div>
+				</form>
+			{:else}
+				<div class="actions">
+					<button type="button" class="btn" onclick={() => choose('regenerate')}>{t('New recovery codes')}</button>
+					<button type="button" class="btn" onclick={() => choose('disable')}>{t('Turn off')}</button>
+				</div>
+			{/if}
+		{:else if !setup}
+			<p class="muted intro">
+				{t('Add a second step to signing in: after your password, a 6-digit code from an authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis). Someone who learns your password still can’t get in.')}
+			</p>
+			<div class="actions">
+				<button type="button" class="btn btn-primary" onclick={start}>{t('Set up two-step sign-in')}</button>
+			</div>
+		{:else if setup.stage === 'password'}
+			<form onsubmit={sendPassword} novalidate>
+				{#if error}<div class="alert alert-error" role="alert" id="setup-error">{error}</div>{/if}
+				<div class="field">
+					<label for="setup-password">{t('Current password')}</label>
+					<PasswordInput id="setup-password" autocomplete="current-password" maxlength={200} bind:value={password} />
+				</div>
+				<div class="actions">
+					<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Continue')}</button>
+					<button type="button" class="btn" onclick={cancel}>{t('Cancel')}</button>
+				</div>
+			</form>
+		{:else}
+			<ol class="steps">
+				<li>
+					<p>{t('Scan this code with your authenticator app.')}</p>
+					{#if setup.qr}
+						<!-- Black on white whatever the theme: a scanner needs the contrast, and the quiet zone is part of the code. -->
+						<svg class="qr" viewBox="0 0 {setup.qr.size} {setup.qr.size}" role="img" aria-label={t('QR code for your authenticator app')} shape-rendering="crispEdges">
+							<rect width={setup.qr.size} height={setup.qr.size} fill="#ffffff" />
+							<path d={setup.qr.path} fill="#000000" />
+						</svg>
+					{/if}
+					<p class="muted">{t('Can’t scan it? Type this key into the app instead:')}</p>
+					<p class="key mono" data-totp-secret={setup.secret}>{grouped(setup.secret)}</p>
+				</li>
+				<li>
+					<form onsubmit={confirmCode} novalidate>
+						{#if error}<div class="alert alert-error" role="alert" id="confirm-error">{error}</div>{/if}
+						<div class="field">
+							<label for="setup-code">{t('Enter the code the app shows')}</label>
+							<input
+								id="setup-code"
+								inputmode="numeric"
+								autocomplete="one-time-code"
+								maxlength="10"
+								aria-invalid={error ? 'true' : undefined}
+								aria-describedby={error ? 'confirm-error' : undefined}
+								bind:this={codeInput}
+								bind:value={code}
+							/>
+						</div>
+						<div class="actions">
+							<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Turn on two-step sign-in')}</button>
+							<button type="button" class="btn" onclick={cancel}>{t('Cancel')}</button>
+						</div>
+					</form>
+				</li>
+			</ol>
+		{/if}
+		<p class="status" role="status" aria-live="polite">{done ?? ''}</p>
+	{/if}
+</section>
+
+<style>
+	.panel {
+		padding: 1rem 1.1rem 0.75rem;
+	}
+	h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1.05rem;
+	}
+	h3 {
+		margin: 0 0 0.5rem;
+		font-size: 1rem;
+	}
+	.intro,
+	.state,
+	.muted {
+		margin: 0 0 0.75rem;
+		max-width: 60ch;
+	}
+	.state {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.required {
+		margin-bottom: 0.75rem;
+	}
+	.field {
+		max-width: 36rem;
+	}
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+		margin-bottom: 0.75rem;
+	}
+	.steps {
+		margin: 0;
+		padding-left: 1.25rem;
+	}
+	.steps p {
+		margin: 0 0 0.5rem;
+	}
+	.qr {
+		display: block;
+		width: min(220px, 100%);
+		height: auto;
+		margin: 0 0 0.75rem;
+		border-radius: var(--radius);
+	}
+	.key {
+		margin: 0 0 1rem;
+		font-size: 1rem;
+		letter-spacing: 0.05em;
+		overflow-wrap: anywhere;
+	}
+	.codes {
+		margin: 0 0 1rem;
+		padding: 0.75rem 0.9rem;
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--radius);
+		background: var(--accent-soft);
+	}
+	.codes p {
+		margin: 0 0 0.5rem;
+		max-width: 60ch;
+	}
+	.code-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+		gap: 0.25rem 1rem;
+		margin: 0 0 0.75rem;
+		padding: 0;
+		list-style: none;
+		font-size: 1rem;
+	}
+	.status {
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--text-2);
+	}
+	.status:empty {
+		display: none;
+	}
+</style>

@@ -2,7 +2,7 @@
 <script lang="ts">
 	// The account page (WP-1.9): display name, email and whether it's
 	// confirmed, language and volume unit (WP-2.5), and changing the password
-	// while signed in, a link to the alert emails page (WP-2.13), with a
+	// while signed in, two-step sign-in (issue #282, TwoStepSignIn), a link to the alert emails page (WP-2.13), with a
 	// banner when SES stopped delivering to the address (alert emails paused
 	// until the person turns them back on), and "download my data" (POPIA,
 	// GET /auth/me/export). The header's account menu links here. docs/ui.md § App
@@ -18,6 +18,7 @@
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
 	import { resumeProblem, suppressedText } from '$lib/components/alerts/words';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
+	import TwoStepSignIn from '$lib/components/account/TwoStepSignIn.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 
@@ -309,6 +310,8 @@
 						</div>
 					</form>
 				</section>
+
+				<TwoStepSignIn />
 			</div>
 
 			<div class="col">

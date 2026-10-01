@@ -37,6 +37,72 @@ export const af: Catalogue = {
 	'bb72711c': 'Gebruik hoogstens 200 karakters.',
 	// The two passwords don’t match.
 	'd62a92b9': 'Die twee wagwoorde stem nie ooreen nie.',
+	// {n} recovery code left. / {n} recovery codes left.
+	'4aaaac52': { one: '{n} herstelkode oor.', other: '{n} herstelkodes oor.' },
+	// Enter your current password.
+	'f555922c': 'Tik jou huidige wagwoord in.',
+	// Your current password is wrong.
+	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
+	// Enter the 6-digit code from your authenticator app.
+	'7feb1b8c': 'Tik die 6-syferkode van jou verifikasie-app in.',
+	// Two-step sign-in is off.
+	'7aa9d2cc': 'Tweestap-intekening is af.',
+	// Water Management recovery codes for {email}
+	'e65b3921': 'Water Management-herstelkodes vir {email}',
+	// Each code works once, in place of a code from your authenticator app.
+	'16b901ba': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app.',
+	// Two-step sign-in
+	'67ca1ae1': 'Tweestap-intekening',
+	// You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.
+	'174d5a26': 'Omdat jy ’n projekeienaar, spanadministrateur of beoordelaar is, het jy tweestap-intekening nodig om te publiseer, oor aansoeke te besluit en lede te bestuur. Stel dit hier op.',
+	// Your recovery codes
+	'950aa263': 'Jou herstelkodes',
+	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
+	'083eca42': 'Hou hulle op ’n veilige plek, weg van jou foon af. As jy jou foon verloor, teken elke kode jou een keer in. Hulle sal nie weer gewys word nie.',
+	// Download the codes
+	'61a0db4c': 'Laai die kodes af',
+	// I’ve saved them
+	'f7156f45': 'Ek het hulle gestoor',
+	// On
+	'60e47df0': 'Aan',
+	// Signing in asks for a code from your authenticator app after your password.
+	'fdc7e615': 'Wanneer jy inteken, word ná jou wagwoord ’n kode van jou verifikasie-app gevra.',
+	// This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.
+	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
+	// Code from your authenticator app
+	'8dcd2213': 'Kode van jou verifikasie-app',
+	// Code from your authenticator app, or a recovery code
+	'a0fb5ebd': 'Kode van jou verifikasie-app, of ’n herstelkode',
+	// Make new recovery codes
+	'2cd1bc62': 'Skep nuwe herstelkodes',
+	// Turn off two-step sign-in
+	'ecddfcbd': 'Skakel tweestap-intekening af',
+	// Cancel
+	'35afca3b': 'Kanselleer',
+	// New recovery codes
+	'3695d1ea': 'Nuwe herstelkodes',
+	// Turn off
+	'cd03e04b': 'Skakel af',
+	// Add a second step to signing in: after your password, a 6-digit code from an authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis). Someone who learns your password still can’t get in.
+	'c11c725f': 'Voeg ’n tweede stap by wanneer jy inteken: ná jou wagwoord, ’n 6-syferkode van ’n verifikasie-app op jou foon (soos Google Authenticator, Microsoft Authenticator of Aegis). Iemand wat jou wagwoord uitvind, kan dan steeds nie inkom nie.',
+	// Set up two-step sign-in
+	'6580af84': 'Stel tweestap-intekening op',
+	// Current password
+	'8eedf1f3': 'Huidige wagwoord',
+	// Checking…
+	'732bdad5': 'Kontroleer tans…',
+	// Continue
+	'ab43d664': 'Gaan voort',
+	// Scan this code with your authenticator app.
+	'79170ef4': 'Skandeer hierdie kode met jou verifikasie-app.',
+	// QR code for your authenticator app
+	'97fe04db': 'QR-kode vir jou verifikasie-app',
+	// Can’t scan it? Type this key into the app instead:
+	'3e40e69a': 'Kan jy dit nie skandeer nie? Tik eerder hierdie sleutel in die app in:',
+	// Enter the code the app shows
+	'96778761': 'Tik die kode in wat die app wys',
+	// Turn on two-step sign-in
+	'd9156f01': 'Skakel tweestap-intekening aan',
 	// Right away
 	'52eea1c1': 'Dadelik',
 	// Once a day (06:00)
@@ -103,12 +169,10 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
-	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
-	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
-	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit in geheel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
-	// The Terms now start with a short version of the main points.
-	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
+	// If you turn on two-step sign-in, we keep the key your authenticator app uses (encrypted), your recovery codes (only as one-way hashes) and a record of when you turned it on or off or used a recovery code.
+	'd17f9391': 'As jy tweestap-intekening aanskakel, hou ons die sleutel wat jou verifikasie-app gebruik (geënkripteer), jou herstelkodes (net as eenrigting-hutswaardes) en ’n rekord van wanneer jy dit aan- of afgeskakel het of ’n herstelkode gebruik het.',
+	// When an account is deleted, what it made for a project stays as the project’s record, with the name removed.
+	'82fd7174': 'Wanneer ’n rekening uitgevee word, bly wat dit vir ’n projek gemaak het as die projek se rekord, met die naam daaruit verwyder.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -611,8 +675,6 @@ export const af: Catalogue = {
 	'395e6e23': 'Wysig nota',
 	// Save
 	'4d2d5d68': 'Stoor',
-	// Cancel
-	'35afca3b': 'Kanselleer',
 	// edited
 	'6df599e8': 'gewysig',
 	// Edited {date}
@@ -1005,6 +1067,8 @@ export const af: Catalogue = {
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
 	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
 	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
+	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
 	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// Your comment is posted.
@@ -1111,12 +1175,12 @@ export const af: Catalogue = {
 	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
 	// Print a summary for members
 	'ff85468b': 'Druk ’n opsomming vir lede',
-	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
-	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// Period
 	'87248424': 'Tydperk',
 	// Print or save as PDF
 	'80a077b4': 'Druk of stoor as PDF',
+	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
+	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// The mean flow was above the reserve in every month.
 	'bb92196c': 'Die gemiddelde vloei was elke maand bo die reserwe.',
 	// The mean flow was below the reserve in every month.
@@ -1321,8 +1385,6 @@ export const af: Catalogue = {
 	'b7c3703c': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy en lees hulle weer.',
 	// This notice changed since the page opened. Reload the page and read it again.
 	'e8f9dfe9': 'Hierdie kennisgewing het verander sedert die bladsy oopgemaak is. Herlaai die bladsy en lees dit weer.',
-	// Your current password is wrong.
-	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
 	'c5d6716a': 'Jou wagwoord is ’n oomblik gelede elders verander. Teken weer in.',
 	// This link is invalid or has expired. Ask for a new one.
@@ -1357,6 +1419,20 @@ export const af: Catalogue = {
 	'f3414d07': 'Iets in wat jy gestuur het, kan nie gestoor word nie (’n verborge beheerkarakter, of ’n getal wat heeltemal te groot is). Kyk na wat jy ingevul het en probeer weer.',
 	// This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.
 	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
+	// That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.
+	'adb80c07': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app in, of een van jou herstelkodes.',
+	// Too many wrong codes. Try again in {wait}.
+	'c7ae688e': 'Te veel verkeerde kodes. Probeer weer oor {wait}.',
+	// Your sign-in timed out. Enter your email and password again.
+	'af1c1fed': 'Jou intekening het verval. Tik weer jou e-posadres en wagwoord in.',
+	// Two-step sign-in is already on. Turn it off first to set up another authenticator app.
+	'0343cbd2': 'Tweestap-intekening is reeds aan. Skakel dit eers af om ’n ander verifikasie-app op te stel.',
+	// Start setting up two-step sign-in again.
+	'362ea51a': 'Begin weer om tweestap-intekening op te stel.',
+	// This needs two-step sign-in. Set up an authenticator app on your Account page first.
+	'32d75bec': 'Hiervoor is tweestap-intekening nodig. Stel eers op jou rekeningbladsy ’n verifikasie-app op.',
+	// This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.
+	'380b94ff': 'Hiervoor is tweestap-intekening nodig. Teken uit, en teken dan weer in met ’n kode van jou verifikasie-app.',
 	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
 	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
@@ -1387,8 +1463,6 @@ export const af: Catalogue = {
 	'a7f2031b': 'Tik ’n vertoonnaam in.',
 	// Use at most 100 characters.
 	'c5951029': 'Gebruik hoogstens 100 karakters.',
-	// Enter your current password.
-	'f555922c': 'Tik jou huidige wagwoord in.',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -1413,8 +1487,6 @@ export const af: Catalogue = {
 	'2cc30838': 'Wagwoord',
 	// Changing your password signs you out on every other device. This browser stays signed in.
 	'a7a7cd70': 'As jy jou wagwoord verander, word jy op elke ander toestel uitgeteken. Hierdie blaaier bly ingeteken.',
-	// Current password
-	'8eedf1f3': 'Huidige wagwoord',
 	// New password
 	'6a3aaab2': 'Nuwe wagwoord',
 	// At least 8 characters.
@@ -1599,6 +1671,8 @@ export const af: Catalogue = {
 	'3bf754b9': 'Onthou jy dit?',
 	// If {email} still needs confirming, a new link is on its way. Check your inbox and spam folder.
 	'9a0aaea5': 'As {email} nog bevestig moet word, is ’n nuwe skakel op pad. Kyk in jou inkassie en gemorspos.',
+	// Enter one of your recovery codes.
+	'5457b62c': 'Tik een van jou herstelkodes in.',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
 	// Check your email to finish signing up
@@ -1613,6 +1687,16 @@ export const af: Catalogue = {
 	'1ed87a58': 'Stuur die skakel weer',
 	// **Your email address isn’t confirmed yet.** Open the link we emailed to {email}, then sign in again.
 	'5b10b774': '**Jou e-posadres is nog nie bevestig nie.** Maak die skakel oop wat ons na {email} ge-e-pos het, en teken dan weer in.',
+	// Recovery code
+	'd01c975f': 'Herstelkode',
+	// One of the codes you saved when you set up two-step sign-in. Each works once.
+	'ea77aa7b': 'Een van die kodes wat jy gestoor het toe jy tweestap-intekening opgestel het. Elkeen werk een keer.',
+	// Open the app on your phone and enter the 6-digit code it shows for Water Management.
+	'fa62aa3c': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir Water Management wys.',
+	// Use a code from the app instead
+	'a43288ae': 'Gebruik eerder ’n kode van die app',
+	// Lost your phone? Use a recovery code
+	'3023ae8f': 'Foon verloor? Gebruik ’n herstelkode',
 	// Forgot password?
 	'e2619568': 'Wagwoord vergeet?',
 	// Signing in…
@@ -1743,8 +1827,6 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
-	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.
 	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// We’ve sent a new link to {email}.
