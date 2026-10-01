@@ -12,6 +12,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { currentFor, farmerProjection } from '../farms/view.js';
 import { ApiError } from '../http/errors.js';
+import { withoutFarmFigures } from '../publish/decision.js';
 
 /** The document's shape version; bump it when a section changes shape. */
 export const SUBJECT_EXPORT_VERSION = 1;
@@ -264,7 +265,8 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			packNotices,
 			preferences: prefs,
 			reportSubscriptions: rest.reportSubscriptions,
-			auditEvents: rest.auditEvents,
+			// Without a publication's per-farm figures (the decision log, issue #119): the project's figures about others' farms.
+			auditEvents: rest.auditEvents.map(withoutFarmFigures),
 			auditEventsTruncated: rest.auditEventsTruncated
 		};
 	});
