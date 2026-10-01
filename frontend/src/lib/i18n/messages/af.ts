@@ -55,6 +55,8 @@ export const af: Catalogue = {
 	'df3539b8': 'Mislukte agtergrondtake',
 	// Failing data feeds
 	'cf891bfc': 'Datavoere wat misluk',
+	// Hydrological units short of water (automatic publications)
+	'ef9a2bfa': 'Hidrologiese eenhede met ’n watertekort (outomatiese publikasies)',
 	// dam level
 	'17e428e3': 'die damvlak',
 	// river flow forecast
@@ -67,6 +69,8 @@ export const af: Catalogue = {
 	'8bc7a37b': 'mislukte agtergrondtake',
 	// failing data feed
 	'fb655347': 'datavoere wat misluk',
+	// hydrological units short of water
+	'e5f272dd': 'hidrologiese eenhede met ’n watertekort',
 	// Dam running low: {farm}
 	'21b1fd3a': 'Dam raak laag: {farm}',
 	// Warns when the model puts your dam below {pct}. Your WUA sets this level.
