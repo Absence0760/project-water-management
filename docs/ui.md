@@ -2364,8 +2364,10 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   importer in its worker (`spreadsheet/import/`, the same reader and
   failure messages as Import a b023 workbook; it reads the whole workbook,
   so a large one takes a few seconds). Workbooks never leave the
-  browser. A node-based workbook (no b023 named ranges) can't be
-  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
+  browser. A node-based workbook (no b023 named ranges) isn't offered yet.
+  Its reader exists (`spreadsheet/import/nodeCrops.ts`, the worker's
+  `readNodeCrops`), but the dialog doesn't call it yet
+  ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
 - **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
   A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
 - **Match crops:** a row per project crop with a **Load factors from**

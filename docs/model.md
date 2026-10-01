@@ -7915,6 +7915,14 @@ table is already general enough to hold such nodes.
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
   whole system, per water-year month.
+- **Crop sheets:** `[Crop_Factors]` (A-pan evaporation, rainfall and
+  effective-rainfall rows, then a crop per row with twelve factors, Oct..Sep,
+  and an irrigation efficiency) and `[Crop_Areas]` (a farm per row, a crop
+  per column, m²). The factors are FAO-56 Kc values (against ET₀) that the
+  workbook applies to A-pan with no pan coefficient (§2.3). The browser
+  reads these two sheets (`frontend/src/lib/spreadsheet/import/nodeCrops.ts`,
+  issue #289) and marks the set FAO-shaped, so a Kp of about 0.75 applies
+  before the factors stand as A-pan factors.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 

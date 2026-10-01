@@ -9,9 +9,14 @@
 // The parsed workbook stays here between messages, so changing an option on
 // the review screen (the gauge as a reference) re-extracts in milliseconds
 // instead of reading the file again. The protocol lives in ./protocol.ts.
+//
+// It also reads a node-based workbook's crop sheets for the Load crop
+// factors dialog ('nodeCrops', ./nodeCrops.ts): only those two sheets are
+// parsed, and nothing is kept for a later 'extract'.
 import { WorkbookTooLargeError } from './errors';
 import { extractProject } from './extract';
 import type { FromWorker, ToWorker } from './messages';
+import { readNodeCropWorkbook } from './nodeCrops';
 import { handle, type WorkerState } from './protocol';
 import type { WorkbookSource } from './source';
 import { MAX_WORKBOOK_BYTES, readWorkbook } from './workbook';
@@ -29,5 +34,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) =>
 			if (file.size > MAX_WORKBOOK_BYTES) throw new WorkbookTooLargeError('bytes', file.size, MAX_WORKBOOK_BYTES);
 			return readWorkbook(file, { onProgress });
 		},
-		extract: extractProject
+		extract: extractProject,
+		// readWorkbook refuses a file over MAX_WORKBOOK_BYTES before reading any of it.
+		readNodeCrops: (file, fileName, onProgress) => readNodeCropWorkbook(file, fileName, { onProgress })
 	});
