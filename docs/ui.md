@@ -1189,8 +1189,9 @@ for every workspace tab. Its own chunk.
   its minimum (10%) in its last year", `DamLevel.daysAtMin`; none for a dam
   without one). While the levels load, each card says "Loading dam levels
   (N of M)…". Then links
-  **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
-  and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
+  **On the Network** (`?tab=network&node=<id>`, the node picked on the map),
+  **Show on map** (`?tab=map&node=<id>`, only for a dam's unit with a linked
+  map feature) and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
   this page). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
 - **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
@@ -1823,8 +1824,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - Beside it (one column below 900 px, the map first), two cards:
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
-      (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
-      which opens its form in the node sheet. A farm has two tiles:
+      (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
+      only when a map feature is linked to the node, issue #326 A2; which
+      nodes have one comes from the map's feature list, fetched once the page
+      has drawn, `workspace/mapLinks.ts`, as on Hydrological units and Dams) and
+      **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, and "no demand" / "not in this run"
@@ -1855,8 +1859,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
-    text, land cover, boreholes, the farmers note, Preview as farmer,
-    make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
+    text, land cover, boreholes, the farmers note, Show on map (as the card's),
+    Preview as farmer, make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
     Move down (removed, issue #174): row order is for display only and the
     list isn't visible from the sheet; the node table reorders (drag, ↑/↓,
     Sort by flow path). The save row
@@ -4307,8 +4311,9 @@ read it before.
   (`cardFacts`) the mean shortfall (m³/day and Mm³/a), the demand days short
   in the reporting window (assurance of supply, engine ≥ 0.32.0), the days
   short in the last 7 when there were any, and the cut the curtailment table
-  asks for; links to its node on the Network (`?tab=network&node=`) and its
-  planted areas (the farm drawer, `farm=`). The whole card picks the unit:
+  asks for; links to its node on the Network (`?tab=network&node=`), **Show on
+  map** (`?tab=map&node=`, only for a unit a map feature is linked to; issue
+  #326 A2) and its planted areas (the farm drawer, `farm=`). The whole card picks the unit:
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
