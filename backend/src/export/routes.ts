@@ -100,6 +100,12 @@ async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow
 	return rows[0];
 }
 
+/** The project's node names by id (the drought restriction rule's dams, units and EWR site in the summary sheet). */
+async function loadNodeNames(db: Db, projectId: string): Promise<Record<string, string>> {
+	const { rows } = await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1', [projectId]);
+	return Object.fromEntries(rows.map((r) => [r.id, r.name]));
+}
+
 /** Each node's dam capacity as the run's stored model had it (m³ by node id); a node without one is left out. */
 async function loadDamCapacities(db: Db, runId: string): Promise<Record<string, number>> {
 	const { rows } = await db.query<{ id: string; capacity: number }>(
@@ -295,7 +301,9 @@ export const exportRoutes = new Hono<AuthEnv>()
 					flowDuration: await loadFlowDuration(db, runId, { startDate: run.startDate, forecastFrom: run.summary.forecast?.from ?? null }),
 					runoffModel: run.runoffModel,
 					damCapacityM3: await loadDamCapacities(db, runId),
-					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run))
+					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run)),
+					// The drought restriction rule's dams, units and EWR site by name (engine ≥ 1.54.0).
+					...(run.summary.droughtRestriction ? { nodeNames: await loadNodeNames(db, id) } : {})
 				},
 				run.summary
 			);

@@ -12,8 +12,9 @@ Built: R1 (`demand.scale`, engine 0.41.0,
 category is what the client wants, O4), R4 in full (§3.4: the engine, the
 settings and the matrix screen), R5 in full (§3.5: the engine core, engine
 0.44.0; the `outlook` job, its settings and the WUA screen; the farmer view
-E3, engine 1.19.0, migration 106), R6 but WP-3.8's rule (§3.6: the engine,
-engine 0.46.0; the job, the review-date setting and the screen) and R7
+E3, engine 1.19.0, migration 106), R6 in full (§3.6: the engine,
+engine 0.46.0; the job, the review-date setting and the screen; WP-3.8's
+rule, engine 1.54.0) and R7
 (§3.7: the impact report's board; existing *authorised* use when its
 baseline is a full-allocation run).
 
@@ -28,7 +29,7 @@ it is marked **(judgement)**.
 | --- | --- | --- | --- | --- |
 | S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The board (today, EWR met; the equal share one sentence in its intro, issue #177) ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
-| S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | ✅ The outlook (R5), the computed review triggers (R6) and the published level on each farm's page (E3); 🚧 WP-3.8's drought restriction rule to apply the triggers in a run | The rule (WP-3.8) |
+| S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | ✅ The outlook (R5), the computed review triggers (R6), the published level on each farm's page (E3), and WP-3.8's drought restriction rule to apply the triggers in a run (engine 1.54.0) | – |
 | S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | ✅ The impact report's board by year class (R7, §3.7), the verdict from the months; existing *authorised* use on a full-allocation baseline (WP-3.10's allocation mode) | Year classes, the full-allocation run, the summary board |
 
 Two things in the sketches the app should **not** copy:
@@ -256,7 +257,7 @@ band at the review date and pick, per band, the highest demand level that
 meets R5's rule. Once WP-3.8's drought restriction rule exists, the table
 becomes that rule's parameters, so a scenario can simulate following it.
 
-**Status: engine half built** (`packages/engine/src/outlook/triggers.ts`,
+**Status: built, WP-3.8's rule included (engine 1.54.0)** (`packages/engine/src/outlook/triggers.ts`,
 engine 0.46.0 for `settings.damStorageReset`; method, bands, start storage,
 monotonicity and wording in
 [model.md §2.15a](../model.md#215a-review-triggers-from-the-outlook-issue-53-r6)).
@@ -294,9 +295,12 @@ analogue years." Choices, each marked in model.md:
 Cost: one run of the history, then bands × years × levels runs of the
 season alone (3 × 12 × 4 in 53 ms on the test catchment, against 1.1 s
 re-running the history per member, engine 1.1.0).
-WP-3.8's drought restriction rule isn't in the engine yet, so the table's
-mapping to its parameters is a typed shape only
-(`DroughtRestrictionTriggerParameters`, model.md §2.15a).
+WP-3.8's drought restriction rule is built (engine 1.54.0, model.md §2.7i):
+`restrictionRuleFromTriggers` turns the table into its parameters (the
+review date, a lift the day after the season end, one level per band below
+the fullest from the band above's lower edge, cutting 1 − its level's
+factor), and the outlook panel saves it as the project's rule, so a run or
+a scenario follows the table (model.md §2.15a).
 
 **Backend and screen: built** (engine 1.19.0, migration 106). The
 `outlook` job draws the table after the outlook, for the season's review
@@ -311,9 +315,9 @@ its record holds: a rule by storage band for that day of the year
 panel shows it with each row in `describeTriggerRow`'s words, the notes
 and warnings, and every level's years met per band
 ([ui.md § Seasonal outlook](../ui.md#seasonal-outlook)). Band edges stay
-the terciles; a WUA setting its own would be a new setting. Still to
-build: **WP-3.8's drought restriction rule**, which takes the table's
-steps (roadmap step 3).
+the terciles; a WUA setting its own would be a new setting. Under the
+table the panel shows it as WP-3.8's drought restriction rule and an
+editor can save it as the project's rule (engine 1.54.0, model.md §2.7i).
 
 ### 3.7 R7: licence impact by year class (**M**, inside the evidence report)
 

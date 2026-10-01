@@ -39,6 +39,7 @@ import {
 	type DemandObject,
 	type DemandPart,
 	type DemandScheduleWindow,
+	type DroughtRestrictionRule,
 	type FlowShareMethod,
 	type LandCoverPatch,
 	type NetworkNode,
@@ -48,6 +49,7 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
+import { droughtRestrictionIssues } from '../network/restriction';
 import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS } from '../network/demandSchedule';
 import {
 	EWR_CHARGE_SOURCES,
@@ -382,6 +384,12 @@ export interface SettingsPathValues {
 	lowFlowMeasure: LowFlowMeasure;
 	/** What the registered volumes do to the run (engine ≥ 1.18.0, issue #72): compare only, cap, or a full allocation. */
 	allocationMode: AllocationMode;
+	/**
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8), whole: a rule or
+	 * null (off). So a WUA can compare restriction policies; always a baseline
+	 * assumption (classifyOp), never an applicant's proposal.
+	 */
+	droughtRestriction: DroughtRestrictionRule | null;
 }
 export type SettingsPath = keyof SettingsPathValues;
 
@@ -445,7 +453,12 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS)),
 	ewrChargeSource: oneOf(EWR_CHARGE_SOURCES),
 	lowFlowMeasure: oneOf(LOW_FLOW_MEASURES),
-	allocationMode: oneOf(ALLOCATION_MODES)
+	allocationMode: oneOf(ALLOCATION_MODES),
+	// The rule's own checks (../network/restriction.ts), as a settings save runs them.
+	droughtRestriction: nullable((v) => {
+		const i = droughtRestrictionIssues(v)[0];
+		return i ? `${i.field ? `${i.field} ` : ''}${i.message}` : null;
+	})
 };
 
 export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];
