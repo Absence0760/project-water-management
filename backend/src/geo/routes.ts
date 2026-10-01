@@ -344,11 +344,15 @@ async function reviewedFeatures(db: Db, projectId: string, parsed: ParsedFeature
 
 const sha256Of = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
+type NodeRef = { id: string; name: string; kind: string };
+const projectNodes = async (db: Db, projectId: string) =>
+	(await db.query<NodeRef>('SELECT id, name, kind::text AS kind FROM node WHERE project_id = $1 ORDER BY sort_order, name', [projectId])).rows;
+
 /** A feature named like a node of a kind it can stand for is linked to it (the editor can change the link); nothing else follows from it. */
-async function nodeByName(db: Db, projectId: string): Promise<(kind: MapFeatureKind, name: string) => string | null> {
-	const { rows: nodes } = await db.query<{ id: string; name: string; kind: string }>('SELECT id, name, kind::text AS kind FROM node WHERE project_id = $1', [projectId]);
-	return (kind, name) => (name.trim() ? (nodes.find((n) => KIND_NODES[kind].includes(n.kind) && n.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null) : null);
-}
+const nodeByName =
+	(nodes: readonly NodeRef[]) =>
+	(kind: MapFeatureKind, name: string): string | null =>
+		name.trim() ? (nodes.find((n) => KIND_NODES[kind].includes(n.kind) && n.name.trim().toLowerCase() === name.trim().toLowerCase())?.id ?? null) : null;
 
 const importLimit = () =>
 	bodyLimit({
@@ -446,7 +450,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
 			const { rows: b } = await db.query(`SELECT 1 FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [id]);
 			const proposals = proposeKinds(parsed.features, { hasBoundary: b.length > 0 });
-			const link = await nodeByName(db, id);
+			const nodes = await projectNodes(db, id);
+			const link = nodeByName(nodes);
 			const refused = parsed.problems.flatMap((p) => (p.feature === null ? [] : [p.feature]));
 			const features = [
 				...parsed.features.map((f, i) => {
@@ -464,7 +469,7 @@ export const mapRoutes = new Hono<AuthEnv>()
 				}),
 				...[...new Set(refused)].map((index) => ({ index, geometryType: null, name: '', areaM2: null, kind: null, kindFrom: null, nodeId: null }))
 			].sort((x, y) => x.index - y.index);
-			return c.json({ fileName: body.fileName, sha256, duplicate: dup.length > 0, features, problems: parsed.problems });
+			return c.json({ fileName: body.fileName, sha256, duplicate: dup.length > 0, features, problems: parsed.problems, nodes });
 		});
 	})
 	.post('/:id/map/import', importLimit(), async (c) => {
@@ -488,7 +493,7 @@ export const mapRoutes = new Hono<AuthEnv>()
 				[id, body.fileName, sha256]
 			);
 			const sourceId = src[0]!.id;
-			const link = await nodeByName(db, id);
+			const link = nodeByName(await projectNodes(db, id));
 			const ids: string[] = [];
 			for (const r of made.rows) {
 				const { rows: ins } = await db.query<{ id: string }>(

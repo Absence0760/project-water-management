@@ -160,6 +160,8 @@ describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () 
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body).toMatchObject({ fileName: 'mixed.geojson', duplicate: false, problems: [] });
 		expect(res.body.sha256).toMatch(/^[0-9a-f]{64}$/);
+		// The nodes, for each row's Stands for.
+		expect(res.body.nodes.map((n: { name: string }) => n.name).sort()).toEqual(['Lower farm', 'Outlet weir', 'Upper farm']);
 		expect(res.body.features.map((f: Record<string, unknown>) => [f.index, f.geometryType, f.kind, f.kindFrom, f.nodeId])).toEqual([
 			[1, 'Polygon', 'farm_parcel', 'geometry', upper.id],
 			[2, 'Polygon', 'catchment_boundary', 'geometry', null],
