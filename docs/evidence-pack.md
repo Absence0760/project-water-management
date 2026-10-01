@@ -182,6 +182,49 @@ made on an uncapped pump can't be issued after this change (`409`, naming
 the two checks; `packs.db.test.ts` pins it); an issued pack stays as it
 was, and its verify and re-render read its frozen document.
 
+## The other applications together
+
+Report format `evidence-11` (finding C26, WP-3.11, issue #287) makes page 1's
+row over the other applications, now *This and the other applications on
+this baseline, together*, read **one combined run** instead of adding up
+the other applications' separate runs: this application with every other
+one the reader can see that is submitted, or decided with approval, and
+based on this baseline (`cumulative.combined`; engine
+`evidence/report.ts` `combinedOf`, backend `evidence/report.ts`
+`loadCombined`).
+
+- **Where the run comes from.** A completed cumulative assessment of exactly
+  these applications with their current ops on this baseline
+  ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)):
+  the `assessment` job already ran the baseline, each alone and all together
+  on one engine, and stored the table. The report reads its outlet rows (days
+  below the pragmatic EWR, Reserve months met): the combined change, the sum
+  of each alone and the **interaction** (combined − Σ each alone). It does
+  not run the model itself: a combination is up to 8 + 2 runs, which a
+  report request (a viewer's GET, a pack draft, the issue route's live
+  check) must not carry. The note names the assessment, its date and engine;
+  its baseline column is the assessment's run of the baseline, so it may
+  differ from the stored run's on an older engine.
+- **A conflict is never merged.** Without a matching assessment the backend
+  still checks the combination (`checkCombination`, pure, no model run), so
+  two applications that change the same thing make the row *Not assessed*
+  with each conflict named (and an op that applies alone but not together
+  likewise), whether or not anyone has asked for an assessment.
+- **Otherwise it says why there is no figure:** no other application
+  (*None*), one under way (*Not assessed yet*), none of exactly these
+  (*an editor runs Applications › Assess together*), more than an assessment
+  takes (8), or this application still a draft. Assessments are an editor's
+  (RLS), so a viewer's report finds none.
+
+§ 4 still lists each other application with its own run's change, without
+the old sum, and prints the combined table (each alone, the sum, all
+together, the interaction) under it. A pack drafted before `evidence-11`
+keeps its frozen sum row and § 4 (no `combined`); its stored manifest still
+hashes to its recorded hash, since nothing rebuilds it (`packs.db.test.ts`
+pins it). The reproduction bundle doesn't carry the assessment's runs yet,
+so `reproduce:pack` re-runs the baseline and the application but not the
+combined row ([followups.md § Cumulative impact](./followups.md#cumulative-impact-wp-311)).
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text

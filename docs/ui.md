@@ -6563,11 +6563,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply,
-    and *Other applications on this baseline, summed* (the other submitted
-    or approved applications' own changes in days below the pragmatic EWR,
-    added up, no band, its basis saying it is a sum of separate runs and not
-    one combined run, WP-3.11; *None* when there are none the reader can
-    see)), with the paired band and "worse in k of n"; then **Impact by year
+    and *This and the other applications on this baseline, together*
+    (`evidence-11`: the change in days below the pragmatic EWR at the outlet
+    with this application and every other submitted or approved one run
+    together, from a cumulative assessment of exactly them, and the
+    interaction in its note; no band; *Not assessed* naming each conflict
+    when they conflict, or saying none of exactly them is assessed yet;
+    *None* when there are none the reader can see; an older pack prints its
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
     class** (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
@@ -6623,12 +6626,16 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     Then **Other
     applications on this baseline** (`evidence-cumulative`): each other
     submitted or approved application, its status and its own change in days
-    below the pragmatic EWR and in Reserve months met at the outlet, the sum
-    of those counted (same engine, period and runoff model; any other says
-    why it isn't) and the sum with this application; the words say it is a
-    sum of separate runs, not a combined run (WP-3.11), listed as the reader
-    can see them; past 50 the newest 50 are listed and nothing is summed
-    (page 1's row then *Not assessed*).
+    below the pragmatic EWR and in Reserve months met at the outlet from its
+    own newest run, listed as the reader can see them (past 50 the newest 50).
+    Then **All of them together** (`evidence-11`, `evidence-combined`): this
+    application and each other one, its change alone, the sum of each
+    alone, all together and the interaction, in days below the pragmatic EWR
+    and Reserve months met at the outlet, from the cumulative assessment it
+    names (`evidence-combined-source`); or, in their place, why not
+    (`evidence-combined-na`: the conflicts named, not assessed yet, under
+    way). An older pack (before `evidence-11`) prints its frozen sum of the
+    runs counted and the sum with this application instead.
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
