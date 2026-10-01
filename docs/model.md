@@ -3523,7 +3523,8 @@ conservative reading where it didn't settle them):
   causes off days, whether an off day can instead mean "supplied from
   elsewhere" (no river take, the return goes on) or "curtailed" (a
   shortfall), and whether a treatment works keeps discharging while its
-  user is off the river are still open, so no off *reason* is modelled
+  user is off the river are still open, so no off *reason* is modelled;
+  it is parked until a real demand object needs one
   ([followups.md](./followups.md) "Demand objects: the off reason").
 
 **The schedule** (engine ≥ 1.17.0, issue #90 Q4 and Q12, `network/demandSchedule.ts`).
@@ -3550,12 +3551,9 @@ range, an Easter span past 60 days) is refused on save and skipped with a
 warning by the run. A schedule that changes no day (every factor 1, or
 windows outside the run) runs to the bit as no schedule.
 
-*Not built yet:* an uploaded daily factor series (a meter record of which
-days a works ran) needs an object-scoped series kind, its upload through
-Add data and its storage; it's a follow-up
-([followups.md](./followups.md) "Demand objects: an uploaded daily factor
-series"), to be built when a client has such a record. Flow-triggered
-switching stays with WP-3.8's operating rules (the hands-off flow on the
+An uploaded daily factor series was considered and dropped (issue #54):
+the windows cover recurring patterns, and no record we hold needs one.
+Flow-triggered switching stays with WP-3.8's operating rules (the hands-off flow on the
 river pump and River to dam, §2.7h, doesn't switch demand objects).
 - *Restrictions by category* (engine ≥ 1.45.0, issue #123). A scenario's
   `demand.scale` on a unit scales its crops and its objects alike, one % for
