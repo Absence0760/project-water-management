@@ -649,7 +649,21 @@ the result change?", and put back any earlier version.
   `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
   flag, which would say whether the address has an account; `declined`,
   109, has no actor, so the owner never learns who declined),
-  `publication.published/notice_changed`, `outlook.published/unpublished`
+  `publication.published/notice_changed` (the season decision log, issue
+  #119, `publish/decision.ts`: `published` holds the publication and run
+  ids, the run's `engineVersion`, `runoffModel` and `inputsSha256` (SHA-256
+  of `model_run.inputs::text`, the hash `app_run_digest` folds in, 077), the
+  `window` (`runStart`, `dataUntil`, `season` and `last30` from/to), the
+  whole notice (`restriction` level, % and `notice` text in every language,
+  `nextExpectedOn`, the modeller's `note`), the number of `farms`, `perFarm`
+  (each farm's own figures as its farm history reads them: id, name,
+  `dataUntil`, season demand, supply, fraction and short days, `damPct`,
+  the model's headline and band; never the even share) and `auto` for an
+  auto run published by itself; `notice_changed` holds the ids, the
+  `fields` sent and the whole notice as it then stands. So the record of
+  what was announced, and from which figures, outlives the 12 publications
+  `run_publication` keeps and the run itself; events from before it hold
+  only the level, % and farm count), `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
