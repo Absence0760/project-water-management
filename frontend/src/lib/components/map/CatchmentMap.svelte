@@ -12,6 +12,10 @@
 	map's top-left corner until the basemap has labels (#326 E9). The farm
 	view's map (#326 A3) passes `words` in the reader's language: this file
 	imports no catalogue (i18n/boundary.test.ts), so its own words are English.
+	With a `draft` active (#326 C1, D1: drawing, placing or editing) the map is
+	in drawing mode (draw/attachDrawing.ts): clicks and keys shape the draft,
+	the features underneath stop taking clicks, and a crosshair marks the
+	middle while the map has the keyboard focus (Enter adds a corner there).
 -->
 <script module lang="ts">
 	import type { MapFeatureKind } from '$lib/api/types';
@@ -31,11 +35,15 @@
 </script>
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import { basemapLayerIds, mapStyle, overlayColours, overlayData } from './mapStyle';
+	import type { MapGeometry, MapPosition } from '$lib/api/types';
+	import { attachDrawing } from './draw/attachDrawing';
+	import type { Draft } from './draw/draft.svelte';
+	import { DRAFT_SOURCE, draftData, draftLayers } from './draw/drawLayers';
 	const ENGLISH: MapWords = {
 		loading: 'Drawing the map…',
 		unavailable: 'The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.',
@@ -52,7 +60,9 @@
 		label,
 		fills,
 		fill = false,
-		words = ENGLISH
+		words = ENGLISH,
+		draft = null,
+		onstatus
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -65,12 +75,20 @@
 		fill?: boolean;
 		/** Results colours by feature id (A1): a polygon listed here is filled with its colour instead of its kind's. */
 		fills?: Readonly<Record<string, string>>;
+		/** The shape being drawn, placed or edited (#326 C1): the map is in drawing mode while it is active. */
+		draft?: Draft | null;
+		/** The map's state, for the tab (no WebGL: drawing falls back to pasting and typed coordinates). */
+		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
 		/** What the map says, for a translated page (the farm view); English by default. */
 		words?: MapWords;
 	} = $props();
 
 	let el: HTMLDivElement;
 	let status = $state<'loading' | 'ready' | 'failed'>('loading');
+	$effect(() => onstatus?.(status));
+	const drawing = $derived(!!draft?.active);
+	/** The map's canvas has the keyboard focus: the crosshair shows (drawing by keyboard). */
+	let keyFocus = $state(false);
 	let tilesNote = $state(false);
 	type Lib = typeof import('./maplibre');
 	let lib: Lib | null = null;
@@ -147,6 +165,14 @@
 		}
 	}
 
+	/** The draft's source and layers, after every style load (a theme switch replaces the style). */
+	function ensureDraft() {
+		if (!map || map.getSource(DRAFT_SOURCE)) return;
+		map.addSource(DRAFT_SOURCE, { type: 'geojson', data: draftData(draftView()) as never });
+		for (const l of draftLayers(dark)) map.addLayer(l as never);
+	}
+	const draftView = () => (draft?.active ? { shape: draft.shape, coords: draft.coords, phase: draft.phase, whole: draft.whole, cursor: draft.cursor, corner: draft.corner } : null);
+
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
 		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
@@ -181,7 +207,6 @@
 				m.addControl(new lib.NavigationControl({ showCompass: false }), 'top-right');
 				// Always expanded: the basemap's licence must stay visible.
 				m.addControl(new lib.AttributionControl({ compact: false }), 'bottom-right');
-				m.getCanvas().setAttribute('aria-label', `${label}: ${words.keys}`);
 				m.on('error', (ev) => {
 					const e = ev as unknown as { sourceId?: string; error?: { message?: string } };
 					if (e.sourceId === 'basemap' && !tilesNote) {
@@ -200,16 +225,30 @@
 					m.setStyle(styleNow() as never);
 				});
 				// A pick made while the new style loaded reaches it here.
-				m.on('style.load', () => syncOverlay());
+				m.on('style.load', () => {
+					ensureDraft();
+					syncOverlay();
+				});
 				m.on('load', () => {
+					ensureDraft();
 					m.on('click', OVERLAY_CLICKABLE, (e: { features?: { properties?: { id?: string } }[] }) => {
+						// Drawing: a click shapes the draft, it doesn't pick what's under it.
+						if (draft?.active) return;
 						const id = e.features?.[0]?.properties?.id;
 						if (id) onselect(id);
 					});
 					for (const id of OVERLAY_CLICKABLE) {
-						m.on('mouseenter', id, () => (m.getCanvas().style.cursor = 'pointer'));
-						m.on('mouseleave', id, () => (m.getCanvas().style.cursor = ''));
+						m.on('mouseenter', id, () => {
+							if (!draft?.active) m.getCanvas().style.cursor = 'pointer';
+						});
+						m.on('mouseleave', id, () => {
+							if (!draft?.active) m.getCanvas().style.cursor = '';
+						});
 					}
+					// The crosshair is for the keyboard: shown when the focus came by keyboard (focus-visible), not after a click.
+					m.getCanvas().addEventListener('focus', () => (keyFocus = m.getCanvas().matches(':focus-visible')));
+					m.getCanvas().addEventListener('keydown', () => (keyFocus = true));
+					m.getCanvas().addEventListener('blur', () => (keyFocus = false));
 					status = 'ready';
 					syncMarkers();
 				});
@@ -251,11 +290,58 @@
 	export function showAll() {
 		frame(boundsOfAll(features) ?? SA);
 	}
+
+	/** Frame a geometry (a pasted shape, a located point). */
+	export function frameGeometry(g: MapGeometry) {
+		frame(boundsOf(g), g.type === 'Point' ? 15 : 14);
+	}
+
+	/** Give the map the keyboard focus (entering drawing mode, so Enter adds a corner at once). */
+	export function focusMap() {
+		map?.getCanvas().focus();
+	}
+
+	// Drawing mode: on while the draft is active, off (and every handler gone) when it ends.
+	$effect(() => {
+		if (status !== 'ready' || !drawing || !map || !draft) return;
+		const m = map;
+		return untrack(() => attachDrawing(m as never, draft, el));
+	});
+
+	// Draw the draft as it changes.
+	$effect(() => {
+		const v = draftView();
+		if (status !== 'ready' || !map) return;
+		const src = map.getSource(DRAFT_SOURCE) as { setData?: (d: unknown) => void } | undefined;
+		src?.setData?.(draftData(v));
+	});
+
+	// The canvas says what the keys do while drawing.
+	const keysHelp = $derived(
+		!draft?.active
+			? `${label}: ${words.keys}`
+			: draft.shape === 'point'
+				? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
+				: draft.phase === 'drawing'
+					? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels`
+					: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels; pick a ${draft.cornerWord.one} on the map to remove it with Delete`
+	);
+	$effect(() => {
+		const help = keysHelp;
+		if (status === 'ready') map?.getCanvas().setAttribute('aria-label', help);
+	});
+
+	/** Where the crosshair is (the map's middle), for tests and the bar: the point Enter would add. */
+	export function centre(): MapPosition | null {
+		const c = map?.getCenter();
+		return c ? [c.lng, c.lat] : null;
+	}
 </script>
 
 <div
 	class="map-wrap"
 	class:fill
+	class:drawing
 	data-status={status}
 	data-theme-drawn={dark ? 'dark' : 'light'}
 	style:--mk-casing={colours.casing}
@@ -263,8 +349,13 @@
 	style:--mk-water={colours.water}
 	style:--mk-selected={colours.selected}
 >
-	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map"></div>
-	{#if status === 'ready' && picked}
+	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map" data-drawing={drawing ? draft?.phase : undefined}>
+		{#if status === 'ready' && drawing && keyFocus}
+			<!-- Where Enter adds a corner: the map's middle; the arrow keys move the map under it. -->
+			<span class="crosshair" aria-hidden="true" data-testid="map-crosshair"></span>
+		{/if}
+	</div>
+	{#if status === 'ready' && picked && !drawing}
 		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
 		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
 			<span class="picked-kind">{words.kind(picked.kind)}</span>
@@ -310,6 +401,26 @@
 			height: 50vh;
 			min-height: 240px;
 		}
+	}
+	/* Drawing: the points underneath stop taking clicks, so a click there places a corner. */
+	.drawing .map :global(.map-marker) {
+		pointer-events: none;
+		opacity: 0.6;
+	}
+	/* The keyboard crosshair: the map's middle, in the picked colour with a casing, over the canvas but never taking a click. */
+	.crosshair {
+		position: absolute;
+		z-index: 2;
+		left: 50%;
+		top: 50%;
+		width: 28px;
+		height: 28px;
+		margin: -14px 0 0 -14px;
+		pointer-events: none;
+		background:
+			linear-gradient(var(--mk-selected), var(--mk-selected)) center / 3px 100% no-repeat,
+			linear-gradient(var(--mk-selected), var(--mk-selected)) center / 100% 3px no-repeat;
+		filter: drop-shadow(0 0 1px var(--mk-casing)) drop-shadow(0 0 1px var(--mk-casing));
 	}
 	.map-state {
 		position: absolute;
