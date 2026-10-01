@@ -1824,7 +1824,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   text):
   - **Supply, latest run** (the default once there is a run): the newest
     run's summary (`api.runs.get`, sharing the Runs tab's `detailCache`; a
-    quiet status line covers loading, and a failure offers Retry) banded by
+    quiet status chip over the map's top-left corner covers loading, and a
+    failure offers Retry there; it lies over the drawing rather than in the
+    card's header, where at 1280 px it wrapped the header and moved the map
+    when the load ended, `network-map.spec.ts`) banded by
     `fractionSupplied` (`network/supplyColour.ts`): **≥ 95 %**
     (`SUPPLY_TARGET`), **70–95 %** and **under 70 %** (`LOW_SUPPLY`), "no
     demand" (the engine reports 100 %) dashed and unfilled, "not in this run"
@@ -2364,10 +2367,29 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   importer in its worker (`spreadsheet/import/`, the same reader and
   failure messages as Import a b023 workbook; it reads the whole workbook,
   so a large one takes a few seconds). Workbooks never leave the
-  browser. A node-based workbook (no b023 named ranges) can't be
-  read yet ([followups.md § Crop factors](./followups.md#crop-factors-issue-54-item-1)).
-- **Pan coefficient Kp** (default 1) multiplies the source factors: 1 for
-  A-pan factors (the library, b023), about 0.75 for an FAO-56 Kc set.
+  browser.
+  **A node-based workbook** is the third source: its [Crop_Factors] and
+  [Crop_Areas] sheets, read by the same worker
+  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+  efficiency column isn't loaded (a crop's efficiency changes only through
+  the system select below), nor are its farm areas. For
+  either workbook, the dialog lists what the reader flagged as text under
+  the file: for a node-based workbook, a missing sheet (a b023 file picked
+  under this option), names that differ between the two sheets and cells
+  read as 0; for a b023 workbook, the import report's
+  `crop-factors-copied` and `crop-factors-suspect` warnings.
+- **Pan coefficient Kp** multiplies the source factors. It starts at the
+  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
+  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
+  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
+  set against reference ET₀ while the engine multiplies crop factors by
+  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
+  mid value). A line under the input says which and why, linking [FAO-56
+  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
+  re-applies the new source's default only while Kp is still the previous
+  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
+  **Use the default, N** puts the default back.
 - **Match crops:** a row per project crop with a **Load factors from**
   select, preset by name (`matchByName`: the same name ignoring case,
   accents, punctuation and a plural s, or the one source whose words hold the
@@ -5499,8 +5521,9 @@ volume to match it"), or matched to a unit the run doesn't have. A run made
 with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
 says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
-full allocation ("… what the river would look like if every registered user
-took their entitlement, not what they take").
+full allocation ("… what the river would look like if every registered or
+licensed volume were taken in full (a registration is not an entitlement), not
+what the units take").
 In a cap run the picked unit's card says, per capped source under its water
 years (`capYearsText`, `allocation-cap-years`, engine ≥ 1.40.0), on how many
 days the cap held use back and by which limit (the volume used up, the

@@ -1890,7 +1890,9 @@ In short:
     size first;
   - only the parts the import reads are ever unpacked (content types,
     relationships, the workbook, shared strings, styles, the b023 config
-    sheets). The VBA project, the per-farm result sheets, drawings and
+    sheets; for the Load crop factors dialog's node-based reader,
+    `nodeCrops.ts`, only `[Crop_Factors]` and `[Crop_Areas]`, under the same
+    caps). The VBA project, the per-farm result sheets, drawings and
     embedded objects are never inflated;
   - those parts are parsed by the import's own streaming reader, not a
     general XML or spreadsheet library (`xml.ts`, `sheet.ts`,
