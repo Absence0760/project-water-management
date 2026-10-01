@@ -24,9 +24,10 @@
 	import LookingBack from '$lib/components/farm/LookingBack.svelte';
 	import MonthlyChart from '$lib/components/farm/MonthlyChart.svelte';
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
+	import RegisteredCard from '$lib/components/farm/RegisteredCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, lookingBackFolds, noRestriction, noticeCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, disclaimer, levelWord, lookingBackFolds, noRestriction, noticeCard, registeredCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
 	import { farmCsvForReader } from '$lib/components/farm/csvNote';
@@ -157,6 +158,9 @@
 					<ChunkFailed text={t('The season outlook could not be loaded. Check your connection, then reload the page.')} reload={t('Reload page')} />
 				{/await}
 			{/if}
+			<!-- The farm's own registered volumes and storage (issue #72): reference figures, below the season's cards. -->
+			{@const registered = registeredCard(view, unit)}
+			{#if registered}<RegisteredCard vm={registered} />{/if}
 			<MonthlyChart farm={view.farm} {unit} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />

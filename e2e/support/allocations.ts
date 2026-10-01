@@ -19,7 +19,7 @@ export interface AllocationBody {
 	registrationNo?: string;
 	propertyRef?: string;
 	holder?: string;
-	authorisation: 'registration' | 'licence' | 'general_authorisation' | 'existing_lawful_use';
+	authorisation: 'registration' | 'licence' | 'general_authorisation' | 'schedule_1' | 'existing_lawful_use_claimed' | 'existing_lawful_use';
 	purpose?: string;
 	waterSource: 'surface' | 'groundwater';
 	volumeM3PerYear: number;
@@ -27,6 +27,8 @@ export interface AllocationBody {
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
+	/** The s21 water use (issue #72): '21b' is a dam's storage only (volume 0, a storage, surface). */
+	waterUse?: '21a' | '21b';
 }
 
 export async function addAllocation(request: APIRequestContext, projectId: string, body: AllocationBody): Promise<string> {

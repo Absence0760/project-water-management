@@ -19,7 +19,7 @@ export const uncertaintyHandler = defineHandler({
 	role: 'editor',
 	payload: UncertaintyPayload,
 	async run({ db, job, payload, progress }) {
-		const { rows } = await db.query<{ runId: string; status: string; createdBy: string; baselineId: string | null; options: ResolvedEnsembleOptions; engineVersion: string }>(
+		const { rows } = await db.query<{ runId: string; status: string; createdBy: string | null; baselineId: string | null; options: ResolvedEnsembleOptions; engineVersion: string }>(
 			`SELECT run_id AS "runId", status, created_by AS "createdBy", baseline_id AS "baselineId", options, engine_version AS "engineVersion"
 			 FROM run_uncertainty WHERE project_id = $1 AND id = $2`,
 			[job.projectId, payload.uncertaintyId]

@@ -5,6 +5,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { runsList } from '../support/runs.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -73,6 +74,76 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await page.reload();
 	await expect(row(page, 'Example Valley — baseline')).toBeVisible();
 	await expect(row(page, 'Example Valley — drought')).toHaveCount(0);
+});
+
+// Issue #286: a new user with no projects can start from the invented example
+// catchment (the frontend's exampleCatchment.generated.json, a lazy chunk),
+// imported as their own project through POST /projects/import with one run.
+test('an empty list starts from the example catchment: imported, run and opened on its run', async ({ page, owner }) => {
+	void owner;
+	const EXAMPLE = 'Example · Kleinberg (winter rainfall)';
+	await page.goto('/');
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	await page.getByRole('button', { name: 'Start from an example' }).click();
+
+	await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\?tab=runs&run=[0-9a-f-]{36}$/);
+	await expect(page.getByTestId('project-name').filter({ hasText: EXAMPLE })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Runs & results' })).toBeVisible();
+	await expect(runsList(page).getByRole('button', { name: /^Initial run \(import\)/ })).toHaveAttribute('aria-current', 'true');
+	await expect(page.getByRole('img', { name: /^Flow at the outflow gauge/ }).locator('canvas')).toBeVisible();
+
+	// It is the user's own project now, on the list in place of the empty state.
+	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
+	await expect(row(page, EXAMPLE).getByTestId('project-role')).toHaveText('owner');
+	await expect(page.getByText('You have no projects yet.')).toHaveCount(0);
+});
+
+test('a refused example import says why, keeps the empty list and lets you try again', async ({ page, owner }) => {
+	void owner;
+	await page.route(/\/projects\/import\?run=1$/, (route) =>
+		route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'service unavailable, try again shortly' }) })
+	);
+	await page.goto('/');
+	const start = page.getByRole('button', { name: 'Start from an example' });
+	await start.click();
+	await expect(page.getByRole('alert')).toHaveText('Couldn’t create the example: service unavailable, try again shortly');
+	await expect(page.getByText('You have no projects yet.')).toBeVisible();
+	await expect(start).not.toHaveAttribute('aria-busy');
+	await expect(start).toBeFocused();
+});
+
+test('an example whose run failed is created, and the card says so with the way in', async ({ page, owner }) => {
+	void owner;
+	// The real import, answered as if its run had failed (an example that runs can't be made to fail here).
+	await page.route(/\/projects\/import\?run=1$/, async (route) => {
+		const res = await route.fetch();
+		const { runId, ...body } = (await res.json()) as { runId?: string; project: { id: string } };
+		void runId;
+		await route.fulfill({ response: res, json: { ...body, runError: 'model run failed: test' } });
+	});
+	await page.goto('/');
+	await page.getByRole('button', { name: 'Start from an example' }).click();
+	const alert = page.getByRole('alert');
+	await expect(alert).toHaveText('The example was created, but the model didn’t run: model run failed: test. Open the example and run it from Runs & results.');
+	await expect(page).toHaveURL(/\/$/);
+	await alert.getByRole('link', { name: 'Open the example' }).click();
+	await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}$/);
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Example · Kleinberg (winter rainfall)' })).toBeVisible();
+});
+
+test('on a phone the example block stacks under the steps, with nothing scrolling sideways', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/');
+	const start = page.getByRole('button', { name: 'Start from an example' });
+	await expect(start).toBeVisible();
+	const box = (await start.boundingBox())!;
+	expect(box.height).toBeGreaterThanOrEqual(24);
+	const text = (await page.getByText(/^A finished model of an invented winter-rainfall catchment/).boundingBox())!;
+	// Stacked: the button sits under its text, at the same left edge.
+	expect(box.y).toBeGreaterThan(text.y + text.height - 1);
+	expect(Math.abs(box.x - text.x)).toBeLessThanOrEqual(1);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
 // A click anywhere on a row opens the project; the row's own buttons still do their own thing.

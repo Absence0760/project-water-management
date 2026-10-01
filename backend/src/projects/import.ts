@@ -20,9 +20,10 @@ import { ProjectFile } from './document.js';
 import { importedAutoFitError, mergeSettings, remapSettingNodeIds } from './settings.js';
 
 /**
- * Body cap for POST /projects/import: 5 MB, the same as the export cap
- * (MAX_EXPORT_BYTES), so every file GET /projects/:id/export.json writes
- * imports back. Its own constant because it can't follow the export cap up:
+ * Body cap for POST /projects/import: 5 MB, the same as the JSON export cap
+ * (MAX_JSON_EXPORT_BYTES), so every file GET /projects/:id/export.json writes
+ * imports back. Its own constant because it can't follow a cap up (the
+ * streamed CSVs' is 50 MB):
  * a Lambda request payload stops at 6 MB (the event JSON, where the body is
  * one escaped string, plus headers), and a request can't be streamed. A
  * catchment with a multi-decade daily record is well under 1 MB (docs/api.md

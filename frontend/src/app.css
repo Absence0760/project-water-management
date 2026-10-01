@@ -278,6 +278,22 @@ p a:not(.btn),
 .btn-danger:hover:not(:disabled) {
 	background: var(--danger-soft);
 }
+/* A file picker dressed as a button (<label class="btn file">Load a CSV file<input type="file"></label>):
+   the input covers the label, invisible, so the focus ring goes on the label. */
+.btn.file {
+	position: relative;
+	overflow: hidden;
+}
+.btn.file input {
+	position: absolute;
+	inset: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+.btn.file:focus-within {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+}
 .btn-sm {
 	padding: 0.2rem 0.5rem;
 	font-size: 0.85rem;

@@ -37,7 +37,7 @@ const clear = (u: User) => asOwner('UPDATE app_user SET mail_suppressed_at = NUL
 async function delivery(u: User, status: 'pending' | 'digest' = 'pending') {
 	const [rule] = await asOwner(
 		`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'job_dead', 1)
-		 ON CONFLICT (project_id, kind, node_id, feed_id) DO UPDATE SET threshold = 1 RETURNING id`,
+		 ON CONFLICT (project_id, kind, node_id, feed_id, series_id) DO UPDATE SET threshold = 1 RETURNING id`,
 		[projectId]
 	);
 	await asOwner(`UPDATE alert_event SET state = 'cleared' WHERE rule_id = $1 AND state = 'firing'`, [rule.id]);

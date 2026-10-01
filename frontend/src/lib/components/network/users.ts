@@ -9,12 +9,28 @@ export function userDemandOf(n: Pick<NetworkNode, 'userDemandM3Day'>): number[] 
 	return Array.from({ length: 12 }, (_, i) => (d && Number.isFinite(d[i]) ? d[i]! : 0));
 }
 
-/** "senior · 1 200 m³/day on average · 40 % returned", or a hint when it has no demand. */
-export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userReturnPct' | 'userPriority'>): string {
+/** "senior · 1 200 m³/day on average · 40 % returned · pump 800 m³/day", or a hint when it has no demand. */
+export function describeUser(n: Pick<NetworkNode, 'userDemandM3Day' | 'userReturnPct' | 'userPriority'> & Partial<Pick<NetworkNode, 'pumpCapacityM3Day'>>): string {
 	const d = userDemandOf(n);
 	const mean = d.reduce((a, b) => a + b, 0) / 12;
 	const priority = n.userPriority ?? 'senior';
 	if (!(mean > 0)) return `${priority} · no demand yet: enter it by month`;
 	const ret = n.userReturnPct ?? 0;
-	return `${priority} · ${fmtNum(mean, 0)} m³/day on average${ret > 0 ? ` · ${fmtNum(ret * 100, 0)} % returned` : ''}`;
+	// Its pump capacity (engine ≥ 1.58.0), when set.
+	const pump = typeof n.pumpCapacityM3Day === 'number' ? ` · pump ${fmtNum(n.pumpCapacityM3Day, 0)} m³/day` : '';
+	return `${priority} · ${fmtNum(mean, 0)} m³/day on average${ret > 0 ? ` · ${fmtNum(ret * 100, 0)} % returned` : ''}${pump}`;
+}
+
+/**
+ * The line under an other water user's pump capacity (engine ≥ 1.58.0,
+ * docs/model.md §2.7c): what blank, 0 and a capacity mean, and for a senior
+ * user that the units upstream then pass only what the pump can take.
+ */
+export function userPumpNote(n: Pick<NetworkNode, 'pumpCapacityM3Day' | 'userPriority'>, readonly = false): string {
+	const pump = n.pumpCapacityM3Day ?? null;
+	if (pump === null) return 'Blank is no limit: it takes its demand from whatever reaches it.';
+	if (pump === 0) return 'No pump: it takes nothing from the river (boreholes still pump).';
+	const senior = (n.userPriority ?? 'senior') !== 'junior';
+	const calc = readonly ? '' : ' Or enter the pumps and their rate to work it out.';
+	return `It takes at most ${fmtNum(pump, 0)} m³/day from the river${senior ? '; units upstream pass no more than that for it' : ''}.${calc}`;
 }

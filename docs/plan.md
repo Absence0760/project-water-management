@@ -190,10 +190,12 @@ workbook (as in 1a) with **no manual edits**.
   vs simulated vs observed flow, EWR line, days not met), per-farm charts
   (demand vs supplied, dam storage, spill), a Shortfalls table, and calibration
   stats. Charts use uPlot and handle a full multi-decade daily record without lag.
-- 🚧 A browser-side instant preview: change a parameter and see the effect
-  without saving, using the same engine. The preview worker is built (issue
-  #73, `lib/preview/engine.worker.ts`), so far for the Yield panel's instant
-  firm yield; the preview of an unsaved model is still to come (WP-1.17).
+- ✅ A browser-side instant preview: change a parameter and see the effect
+  without saving, using the same engine. The preview worker (issue #73,
+  `lib/preview/engine.worker.ts`) runs the Yield panel's instant firm yield
+  and, since issue #284, **Preview** on Settings and the model save bar: the
+  last run against the same run with the unsaved edits (WP-1.17; no mini
+  hydrograph).
 - ✅ Members panel (owner manages; anyone can leave).
 - ⬜ **Request sequencer** for list and series fetches, so that a slow, stale
   response can't overwrite a newer one when the user switches project or
@@ -305,8 +307,8 @@ writing, or gives a ranked change list.
   parameters with live NSE/PBIAS, and save a calibration version (the
   workbook's "Calibration" button and `[Log]`). Built: the calibration panel,
   automatic calibration (Fit automatically, model.md §2.10b) and a fit record
-  stored with the parameters and snapshotted by each run. Not built: a live
-  preview while editing (roadmap WP-1.17).
+  stored with the parameters and snapshotted by each run, and **Preview**
+  of the unsaved parameters against the last run (issue #284, WP-1.17).
 - ✅ **In-browser Excel import** with SheetJS (WP-1.31, 2026-09-25), loaded
   from its official CDN tarball (the npm `xlsx` 0.18.5 is stale and has known
   advisories), in a Web Worker. The import needs no Python. Since then it
@@ -727,7 +729,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
       is two demand objects (model.md §2.7f).
     - **Demand sources:** meter records, else the reconciliation strategy's
       AADD, else population × litres per person per day, recording which
-      (model.md §2.7f; a structured field is in followups.md).
+      (model.md §2.7f; the object's `source`, engine 1.56.0).
     - **GIS:** open data only (Copernicus 30 m DEM, WR2012, other openly
       licensed layers), proposed by the app and confirmed by the modeller
       (planned-work.md § Catchment map).
@@ -836,7 +838,7 @@ From the client's four sketched outputs; research and recommendations in
 | **Scope creep**: three model families, pump scenarios, a runoff module | Nothing gets finished | The phases gate on client sign-off. The node-based and runoff features wait until the b023 port is accepted. |
 | **VPC Lambda cold starts / DB connection limits** | Slow first request; too many connections from concurrent Lambdas | RDS stays warm. Small `pg` pool per Lambda (1–2). Reserved concurrency is capped. RDS Proxy only if connection counts become a problem. |
 | **Run output volume** (up to ~25 MB/run) | DB growth and cost | Trim keys, cap the number of runs, float4. Runs can be recomputed deterministically. |
-| **Lambda payload limits** (6 MB request/response) | Large imports or series downloads fail | One series per request. Imports for the client catchment are well under the limit. Use S3 presigned upload if a project goes over. |
+| **Lambda payload limits** (6 MB request; responses stream up to 200 MB since WP-1.29a, CSVs capped at 50 MB) | Large imports fail | One series per request. Imports for the client catchment are well under the limit. Use S3 presigned upload if a project goes over. |
 | **Public repo**: a secret, workbook or real farm data is committed by accident | Leak of credentials or client data | gitleaks pre-commit and CI; `.gitignore` guards; synthetic-only fixtures; secrets only in `infra-secrets`. If it happens, rewrite history *before* pushing ([security.md](./security.md#incident-playbook)). |
 | **Single developer / bus factor** | Stalls | Docs (this folder), tests as the spec, conventional commits. |
 | **Stale SheetJS on npm** | Security advisories | The official CDN tarball (SheetJS CE 0.20.3), pinned with its integrity hash; bumped by hand, since Dependabot can't see a URL dependency. |

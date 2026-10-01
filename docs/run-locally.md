@@ -113,7 +113,13 @@ Overview's Share links panel and open it in a private window; none is seeded,
 since the URL is shown only when it is made. Every name and
 number is synthetic, so the examples are committed
 (`backend/scripts/examples/`) and work on any clone. Re-seeding gives the same
-projects. Between them they show every feature of the current engine:
+projects. Kleinberg also ships in the frontend as the example a new user can
+start from on an empty project list (**Start from an example**, docs/ui.md §
+Project list): `pnpm gen:example` writes it to
+`frontend/src/lib/components/projects/exampleCatchment.generated.json`, and
+`backend/scripts/example-file.test.ts` fails until you rerun that after
+changing the examples or the model's fields. Between them they show every
+feature of the current engine:
 
 | Example | What it shows |
 | --- | --- |

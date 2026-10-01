@@ -5,14 +5,15 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmRegistered, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
-import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { csvDownload } from '../export/download.js';
 import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
@@ -26,6 +27,31 @@ const isoDate = z
 const CsvQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
+
+/**
+ * The farm's own registered water in force on `day` (FarmView.registered,
+ * issue #72): its allocations summed per source (21(a) takes) and its
+ * registered storage, read under the caller's RLS (a farmer reads only the
+ * allocations on their linked farms, 038), Schedule 1 permissible use left out
+ * (it isn't registered, 136). No name, no registration number:
+ * only the farm's own totals. null when nothing is in force.
+ */
+export async function farmRegistered(db: Db, projectId: string, nodeId: string, day: string): Promise<FarmRegistered | null> {
+	const { rows } = await db.query<{ surface: number | null; groundwater: number | null; storage: number | null; n: number }>(
+		`SELECT sum(volume_m3_year) FILTER (WHERE water_use = '21a' AND water_source = 'surface') AS surface,
+			sum(volume_m3_year) FILTER (WHERE water_use = '21a' AND water_source = 'groundwater') AS groundwater,
+			sum(storage_m3) AS storage, count(*)::int AS n
+		 FROM allocation
+		 WHERE project_id = $1 AND node_id = $2
+			-- Schedule 1 permissible use isn't registered with DWS, and the card says "registered".
+			AND authorisation <> 'schedule_1'
+			AND (valid_from IS NULL OR valid_from <= $3::date) AND (valid_to IS NULL OR valid_to >= $3::date)`,
+		[projectId, nodeId, day]
+	);
+	const r = rows[0];
+	if (!r || r.n === 0) return null;
+	return { asOf: day, surfaceM3PerYear: r.surface, groundwaterM3PerYear: r.groundwater, storageM3: r.storage };
+}
 
 /** The chart series route's window by default: the year to dataUntil (roadmap WP-2.6; a whole run is too much for a phone). */
 export const FARM_SERIES_DEFAULT_DAYS = 365;
@@ -178,7 +204,9 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
 				stale: isStale(farm.dataUntil, today),
 				// The seasonal outlook the WUA published, this farm's own figures (issue #53 R5, E3), until its season ends there.
-				outlook: await farmOutlook(db, id, nodeId, today)
+				outlook: await farmOutlook(db, id, nodeId, today),
+				// The farm's own registered volumes and storage (issue #72): not an entitlement, the page says so.
+				registered: await farmRegistered(db, id, nodeId, today)
 			};
 			return c.json(body);
 		});
@@ -289,13 +317,12 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_CSV_DEFAULT_DAYS - 1));
 			const range = dayRange(start, Math.max(...columns.map((col) => col.values.length)), from, to);
 			if (!range) throw new ApiError(400, `the window is outside the published figures (${start} … ${cur.view.dataUntil})`);
-			const body = collectCsv(dailyCsvLines(start, columns, range));
-			if (body === null) throw new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
-			return c.body(body, 200, {
-				'Content-Type': 'text/csv; charset=utf-8',
-				'Content-Disposition': attachment(exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv', p[0]!.timeZone)),
-				'Cache-Control': 'no-store'
-			});
+			return csvDownload(
+				c,
+				() => dailyCsvLines(start, columns, range),
+				exportFilename(p[0]!.name, [cur.view.name, 'daily'], 'csv', p[0]!.timeZone),
+				new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD')
+			);
 		});
 	});

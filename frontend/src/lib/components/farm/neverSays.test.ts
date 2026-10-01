@@ -1,7 +1,9 @@
 // docs/design/farmer-view.md §5.1, the "Never says" column: none of the
 // modeller's words reach a farmer. Every string the view models produce for
 // the Vaalbank fixture and its variants is scanned. "What this is not" is
-// left out on purpose: it names an allocation to say this isn't one.
+// left out on purpose: it names an allocation to say this isn't one; so is
+// registeredNote(), which names an entitlement to say a registration isn't
+// one (issue #72's fact-check wording).
 import { describe, expect, it } from 'vitest';
 import type { FarmView } from '@water-management/engine';
 import * as cards from './cards';
@@ -49,7 +51,8 @@ function everything(v: FarmView): string[] {
 		dam.damSource(),
 		chart.supplySummary(f.monthly, f.dataUntil),
 		chart.damSummary(f.monthly, f.dataUntil),
-		forecastCard(f, '2024-01-20')
+		forecastCard(f, '2024-01-20'),
+		cards.registeredCard(v, 'ML')
 	]);
 }
 
@@ -66,7 +69,8 @@ const variants: [string, (v: FarmView) => void][] = [
 		'with a forecast (WP-2.12)',
 		(v) =>
 			(v.farm.forecast = { from: '2024-01-11', to: '2024-01-24', days: 14, madeOn: '2024-01-11', minDamPct: 0.38, minDamDate: '2024-01-20', deficitDays: 3, suppliedFraction: 0.8 })
-	]
+	],
+	['with registered water (issue #72)', (v) => (v.registered = { asOf: '2024-01-12', surfaceM3PerYear: 400_000, groundwaterM3PerYear: 25_000, storageM3: 300_000 })]
 ];
 
 describe('the farmer view never uses the modeller’s words', () => {

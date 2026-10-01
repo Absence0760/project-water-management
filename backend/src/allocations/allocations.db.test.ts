@@ -107,6 +107,11 @@ describe('importing a WARMS extract', () => {
 		expect(kind).toBe('allocation.imported');
 	});
 
+	it('stores the extract\'s unverified "Existing lawful use" as a claim, not as verified (#281)', async () => {
+		const rows = await asOwner(`SELECT a.authorisation FROM allocation a WHERE a.project_id = $1 AND a.registration_no = 'SYN-0004'`, [projectId]);
+		expect(rows).toEqual([{ authorisation: 'existing_lawful_use_claimed' }]);
+	});
+
 	it('refuses the same file twice, naming the day it was imported where the catchment is', async () => {
 		// Imported at 22:30 UTC: the next day in South Africa (the project's zone, 058).
 		await asOwner(`UPDATE allocation_source SET imported_at = '2026-09-25T22:30:00Z' WHERE project_id = $1`, [projectId]);
@@ -149,6 +154,21 @@ describe('entering allocations by hand', () => {
 		expect(kinds).toEqual(['allocation.changed', 'allocation.created']);
 		expect((await editor.call('DELETE', `/projects/${projectId}/allocations/${aid}`)).status).toBe(204);
 		expect((await editor.call('PATCH', `/projects/${projectId}/allocations/${aid}`, { volumeM3PerYear: 1 })).status).toBe(404);
+	});
+
+	it('stores each authorisation, Schedule 1 and claimed existing lawful use included (136, #281)', async () => {
+		for (const authorisation of ['registration', 'licence', 'general_authorisation', 'schedule_1', 'existing_lawful_use_claimed', 'existing_lawful_use']) {
+			const res = await editor.call('POST', `/projects/${projectId}/allocations`, { nodeId: null, authorisation, waterSource: 'surface', volumeM3PerYear: 1 });
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+			expect(res.body.allocation.authorisation).toBe(authorisation);
+			const [stored] = (await asOwner('SELECT authorisation FROM allocation WHERE id = $1', [res.body.allocation.id])) as { authorisation: string }[];
+			expect(stored!.authorisation).toBe(authorisation);
+			expect((await editor.call('DELETE', `/projects/${projectId}/allocations/${res.body.allocation.id}`)).status).toBe(204);
+		}
+		expect((await editor.call('POST', `/projects/${projectId}/allocations`, { nodeId: null, authorisation: 'entitlement', waterSource: 'surface', volumeM3PerYear: 1 })).status).toBe(400);
+		await expect(
+			asOwner(`INSERT INTO allocation (project_id, authorisation, water_source, volume_m3_year) VALUES ($1, 'entitlement', 'surface', 1)`, [projectId])
+		).rejects.toThrow(/allocation_authorisation_check/);
 	});
 
 	it('refuses bad input: the outlet gauge as a node, dates out of order, a viewer writing', async () => {
@@ -213,7 +233,8 @@ describe('the run comparison', () => {
 		expect(a.surface.years[0]).toMatchObject({ waterYear: 2021, partial: false });
 		expect(a.surface.years[0].registeredM3).toBeCloseTo(120_000, 6);
 		expect(a.groundwater.years[0].registeredM3).toBeCloseTo(15_000, 6);
-		expect(a.storage).toEqual({ registeredM3: 150_000, modelledCapacityM3: farmA.damCapacityM3 });
+		// 150 000 m³ registered against the 100 000 m³ dam: 50 000 m³ smaller, below the band (issue #72).
+		expect(a.storage).toEqual({ registeredM3: 150_000, modelledCapacityM3: farmA.damCapacityM3, differenceM3: farmA.damCapacityM3 - 150_000, status: 'under' });
 		const again = compareAllocations({
 			startDate: '2021-10-01',
 			nodes: [{ nodeId: farmA.id, name: 'Farm A', kind: 'farm', supplied: supplied.values }],

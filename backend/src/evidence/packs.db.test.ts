@@ -221,7 +221,7 @@ describe('drafting a pack', () => {
 		expect(read.body.manifestMatches).toBe(true);
 		// The issue checklist is an editor's (only editors issue); a viewer gets null.
 		expect(read.body.issue).toBeNull();
-		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true });
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true, errataRecorded: true });
 	});
 
 	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
@@ -229,14 +229,46 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-8');
+		expect(manifest.report.version).toBe('evidence-9');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
 		expect(manifest.report.licenceImpact).toEqual(live.licenceImpact);
 		// § 1's paired FDC change (evidence-7) freezes with it, whatever it holds for this run.
 		expect(manifest.report.river.map((s) => s.fdcChange)).toEqual(live.river.map((s: { fdcChange?: unknown }) => s.fdcChange));
+		// § 6 the applicant's demand objects (evidence-9) freezes with it too.
+		expect(manifest.report.demandObjects).toEqual(live.demandObjects);
+		expect(manifest.report.demandObjects?.notAssessed).toMatch(/^Not assessed/);
 		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+	});
+
+	it('still matches a pack drafted before evidence-9 to its hash: its stored manifest has no § 6, and nothing rebuilds it', async () => {
+		// A draft of today's report, deleted again, lends its manifest to the evidence-8 pack stored below.
+		const p = await draft(editor, appRun);
+		const read0 = (await editor.call('GET', packPath(p.id))).body;
+		const now = read0.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		// The pack as an evidence-8 draft froze it: the same report without demandObjects, under its own id and hash.
+		const id = crypto.randomUUID();
+		const { demandObjects: _, ...report } = now.report;
+		const old = { ...now, pack: { ...now.pack, id }, report: { ...report, version: 'evidence-8' } } as unknown as PackManifest;
+		const hash = sha256(packManifestText(old));
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-8', $8, $9)`,
+			[id, projectId, baseRun, read0.pack.scenarioId, appRun, JSON.stringify(old), hash, now.engine.version, editor.id]
+		);
+		try {
+			const read = (await viewer.call('GET', packPath(id))).body;
+			expect(read.manifestMatches).toBe(true);
+			expect(read.pack.manifestSha256).toBe(hash);
+			expect(read.manifest.report.version).toBe('evidence-8');
+			expect('demandObjects' in read.manifest.report).toBe(false);
+			// Positive control: the live report has § 6.
+			expect((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.demandObjects).not.toBeUndefined();
+		} finally {
+			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		}
 	});
 
 	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-8)', async () => {
@@ -308,8 +340,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	beforeAll(async () => {
 		v1 = await draft(owner, baseRun);
 	});
+	/** Found after a draft was made and before its issue: the draft can't be issued (pack_errata_since_draft). */
+	const SINCE_DRAFT: Erratum = { id: 'ER-994', keyedOn: 'run', firstAffected: ENGINE_VERSION, fixedIn: null, severity: 'High', appliesWhen: 'Always', summary: 'A bug found before issue', source: 'test' };
 	afterAll(() => {
-		errataList.splice(0, errataList.length, ...errataList.filter((e) => !LATER.includes(e)));
+		errataList.splice(0, errataList.length, ...errataList.filter((e) => !LATER.includes(e) && e !== SINCE_DRAFT));
 	});
 
 	it('refuses to issue without a sign-off of the current statement', async () => {
@@ -703,6 +737,25 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		});
 	});
 
+	it('refuses to issue a signed draft missing an erratum found since it was drafted (409 pack_errata_since_draft); drafted again, it issues (below)', async () => {
+		const stale = await draft(editor, baseRun, v1.id);
+		await sign(editor, stale.id);
+		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({ issuable: true, signed: true, runsVerified: true, errataRecorded: true });
+		errataList.push(SINCE_DRAFT);
+		const detail = (await editor.call('GET', packPath(stale.id))).body;
+		expect(detail.issue).toMatchObject({ signed: true, errataRecorded: false });
+		expect(detail.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-994']);
+		const res = await issue(editor, stale.id);
+		expect(res.status).toBe(409);
+		expect(res.body.code).toBe('pack_errata_since_draft');
+		expect(res.body.error).toMatch(/ER-994.*Draft the pack again/);
+		// Nothing changed: still a draft, no bundle, v1 still the issued one.
+		expect((await editor.call('GET', packPath(stale.id))).body.pack).toMatchObject({ status: 'draft', bundleSha256: null, issuedAt: null });
+		expect((await editor.call('GET', packPath(v1.id))).body.pack.status).toBe('issued');
+		// A signed draft is kept; it is withdrawn, and the next test drafts afresh (the positive control).
+		expect((await editor.call('POST', `${packPath(stale.id)}/withdraw`, { reason: 'drafted again to record ER-994' })).status).toBe(200);
+	});
+
 	it('issues a new version, which supersedes the old one in the same step', async () => {
 		v2 = await draft(editor, baseRun, v1.id);
 		expect(v2).toMatchObject({ version: 2, supersedesId: v1.id });
@@ -720,9 +773,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(verified.body.pack).toMatchObject({ status: 'superseded', successorSha256: v2.manifestSha256 });
 		// An erratum on the list when v2 was drafted is recorded, so it isn't found since v2's issue; v1 still lists it as found since.
 		const v2Verified = (await anon('GET', `/verify/${v2.shortCode}`)).body.pack;
-		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toContain('ER-991');
+		// Drafted afresh after ER-994 was found, it records it, so it issued (the refusal's positive control).
+		expect(v2Verified.errata.map((e: { id: string }) => e.id)).toEqual(expect.arrayContaining(['ER-991', 'ER-994']));
 		expect(v2Verified.errataFoundSince).toEqual([]);
-		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991']);
+		expect(verified.body.pack.errataFoundSince.map((e: { id: string }) => e.id)).toEqual(['ER-991', 'ER-994']);
 		// Issued by the editor this time: the owner is told (the notice names the version it replaces); the superseded pack gets no notice of its own.
 		expect(await notices(v2.id)).toEqual([{ user_id: owner.id, event: 'issued', status: 'pending' }]);
 		expect((await notices(v1.id)).map((n) => n.event)).toEqual(['issued']);

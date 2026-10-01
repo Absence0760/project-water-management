@@ -40,6 +40,7 @@ export const SECTIONS: Record<string, string> = {
 	'farm.system': 'Farm view: the irrigation system the model assumes, inside the efficiency sentence.',
 	'farm.short': 'Farm view: the days the farm was short of water. {head} is “Short on 16 days (in Nov and Dec)”.',
 	'farm.dam': 'Farm view: the “Your dam” card.',
+	'farm.registered': 'Farm view: the “Your registered water” card: what is registered for the farm with DWS (a registration, not an entitlement).',
 	'farm.band': 'Farm view: the model’s own rating chip on the look-back card (not a restriction).',
 	'farm.back': 'Farm view: the “Looking back” card (the model’s estimate, not a restriction).',
 	'farm.forecast': 'Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.',
@@ -61,6 +62,8 @@ export const SECTIONS: Record<string, string> = {
 	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
 	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
 	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',
+	'share.summary':
+		'Shared view, printed: the “member summary”, one or two printed pages of the shared catchment view that a water user association prints or saves as a PDF and sends to its members (irrigation farmers), over a period the reader picks (the last 30 days, this season, or the whole model run). Dates are written out (“1 Oct 2023”); {period} is the period’s name, {dates} two dates like “1 Oct 2023 to 10 Jan 2024”, {days} is like “102 days”.',
 	'share.scenario':
 		'Shared application: a page anyone with a link to one water-use licence application can open without signing in (an NGO, a catchment forum). Its effect on the river’s ecological reserve (the EWR) at each site against the published baseline, what it changes (a “baseline assumption” changes the shared model itself, not only the applicant’s own proposal), and the public comments. Never names another hydrological unit. Technical names inside {field}, {path} and {kind} stay as they are.',
 	'share.pack':
@@ -90,6 +93,11 @@ export const NOTES: Record<string, string> = {
 	'It gives the river {days} fewer days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',
 	'The river is below the reserve about as often as today': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',
 	'{dam} dam': '{dam} is a farm dam’s name, like “Rooikloof”.',
+	'Surface water: {volume} a year': '{volume} is a volume like “120 000 m³” or “120 ML”: the water registered with DWS to take from the river or dam each year.',
+	'Groundwater: {volume} a year': '{volume} is a volume like “15 000 m³” or “15 ML”: the water registered with DWS to pump from boreholes each year.',
+	'Dam storage: {volume}': '{volume} is a volume like “150 000 m³”: the storage registered with DWS for the farm’s dam.',
+	'The model supplied {got} since {from}. The volume registered for the whole year is {year}.': '{got} and {year} are volumes like “324.2 ML”; {from} is a date like “1 Oct” (the start of the water year).',
+	'Your dam in the model holds {capacity} when full.': '{capacity} is a volume like “350 ML”.',
 	'mm a week': 'The unit on a chart’s axis: millimetres of rain in a week.',
 	'Couldn’t load the notes. {reason}': '{reason} is one of the “Error messages” below.',
 	'note from {date}': 'Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”.',

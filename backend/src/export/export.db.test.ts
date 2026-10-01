@@ -218,6 +218,48 @@ describe('run daily export', () => {
 		expect((await download(owner, `${base}?nodeId=${crypto.randomUUID()}`)).status).toBe(404);
 		expect((await download(owner, `${base}?nodeId=not-a-uuid`)).status).toBe(400);
 	});
+
+	it('streams a farm’s multi-decade daily CSV past Lambda’s 6 MB buffered limit (WP-1.29a, issue #283)', async () => {
+		// 60 years of the farm's stored series on a run of its own (the engine run over 60 years is the
+		// engine's tests' business; this is the download's size). Was a 413 above 5 MB before streaming.
+		const made = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Long record' });
+		expect(made.status).toBe(201);
+		const longId: string = made.body.run.id;
+		const DAYS_60Y = 21_915;
+		try {
+			const [period] = (await asOwner(
+				`UPDATE model_run SET end_date = start_date + $2::int - 1 WHERE id = $1
+				 RETURNING to_char(start_date, 'YYYY-MM-DD') AS start, to_char(end_date, 'YYYY-MM-DD') AS "end"`,
+				[longId, DAYS_60Y]
+			)) as { start: string; end: string }[];
+			const { start, end } = period!;
+			const stretched = await asOwner(
+				`UPDATE run_series SET "values" = (SELECT array_agg(i + 0.123456789 ORDER BY i)::float8[] FROM generate_series(0, $3::int - 1) i)
+				 WHERE run_id = $1 AND node_id = $2 RETURNING key`,
+				[longId, farm.id, DAYS_60Y]
+			);
+			expect(stretched.length).toBeGreaterThan(20); // every stored series of the farm
+
+			const res = await download(owner, `/projects/${projectId}/runs/${longId}/export/daily.csv?nodeId=${farm.id}`);
+			expect(res.status).toBe(200);
+			expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+			expect(Buffer.byteLength(res.text, 'utf8')).toBeGreaterThan(6 * 1024 * 1024);
+			expect(res.text.startsWith(BOM)).toBe(true);
+			expect(res.text.endsWith('\r\n')).toBe(true);
+			const rowsOut = table(res.text);
+			expect(rowsOut).toHaveLength(1 + DAYS_60Y);
+			expect(rowsOut[1]!.slice(0, 10)).toBe(start);
+			expect(rowsOut.at(-1)!.slice(0, 10)).toBe(end);
+			// Every value cell of the last day is that day's value: nothing cut short or out of order.
+			const last = cells(rowsOut.at(-1)!).slice(1).filter((v) => v !== '');
+			expect(last.length).toBeGreaterThan(20);
+			for (const v of last) expect(v).toBe(String(DAYS_60Y - 1 + 0.123456789));
+			// The leading lines still say which run made it, over the whole period.
+			expect(lines(res.text).find((l) => l.startsWith('# run='))).toContain(`period=${start}..${end}`);
+		} finally {
+			expect((await owner.call('DELETE', `/projects/${projectId}/runs/${longId}`)).status).toBeLessThan(300);
+		}
+	});
 });
 
 describe('all-farms daily export', () => {
@@ -297,8 +339,8 @@ describe('run summary export', () => {
 		// The engine's self-checks and the water balance (engine 0.12.0).
 		expect(rows).toContain('Self-checks');
 		expect(rows).toContain('All passed,yes');
-		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0) and the assurance of supply (1.34.0)
-		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(12);
+		// incl. the soil-water store (engine 0.14.0), the EWR attribution (0.17.0), groundwater (0.23.0), land cover (0.24.0), registered volumes (1.18.0), operating rules (1.32.0), the assurance of supply (1.34.0) and the drought restriction rule (1.54.0)
+		expect(rows.filter((r) => r.endsWith(',passed,'))).toHaveLength(13);
 		// The curtailment table names its EWR attribution rule, and the EWR sites follow it (Q17).
 		expect(rows).toContain('Curtailment targets');
 		expect(rows.some((r) => r.startsWith('EWR attribution,"net impact pro rata (Q17)'))).toBe(true);

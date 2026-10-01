@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ShareSeries } from '$lib/api/types';
 import { CHART_BASE } from '$lib/components/farm/chart';
-import { addMonths, flowCaption, flowChart, flowMonths, flowRows, flowSummary, monthsBelow } from './chart';
+import { addMonths, FLOW_MONTHS, flowCaption, flowChart, flowMonths, flowRows, flowSummary, flowVerdict, monthsBelow, recentMonths } from './chart';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');
 const series = (key: ShareSeries['key'], startMonth: string, values: (number | null)[]): ShareSeries => ({
@@ -102,5 +102,39 @@ describe('the words', () => {
 		expect(flowSummary(all)).toContain('below the reserve in every month');
 		expect(flowSummary(none)).toContain('above the reserve in every month');
 		expect(flowSummary([])).toBe('No flows to show.');
+	});
+});
+
+describe('recentMonths and flowVerdict', () => {
+	it('draws the latest FLOW_MONTHS on the page', () => {
+		const all = Array.from({ length: 40 }, (_, i) => ({ month: addMonths('2020-01', i), flow: 1, ewr: 2 }));
+		expect(recentMonths(all)).toHaveLength(FLOW_MONTHS);
+		expect(recentMonths(all).at(-1)!.month).toBe(all.at(-1)!.month);
+		expect(recentMonths(all.slice(0, 3))).toHaveLength(3);
+	});
+
+	it('is the summary sentence’s verdict on its own', () => {
+		const months = [
+			{ month: '2023-01', flow: 1, ewr: 2 },
+			{ month: '2023-02', flow: 3, ewr: 2 }
+		];
+		expect(flowVerdict(months)).toBe('The mean flow was below the reserve in 1 of the 2 months.');
+		expect(flowSummary(months)).toContain(flowVerdict(months));
+	});
+});
+
+describe('a chart longer than two years', () => {
+	it('labels the years, not bare month names', () => {
+		const months = Array.from({ length: 360 }, (_, i) => ({ month: addMonths('1994-01', i), flow: 1, ewr: 2 }));
+		const labels = flowChart(months, 680).labels.map((l) => l.label);
+		expect(labels.length).toBeGreaterThan(2);
+		for (const l of labels) expect(l).toMatch(/^\d{4}$/);
+		const xs = flowChart(months, 680).labels.map((l) => l.x);
+		for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeGreaterThanOrEqual(48);
+	});
+
+	it('keeps month names within two years', () => {
+		const months = Array.from({ length: FLOW_MONTHS }, (_, i) => ({ month: addMonths('2022-01', i), flow: 1, ewr: 2 }));
+		expect(flowChart(months, 680).labels.every((l) => !/^\d{4}$/.test(l.label))).toBe(true);
 	});
 });

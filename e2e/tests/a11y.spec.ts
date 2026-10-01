@@ -343,6 +343,13 @@ test.describe('phone', () => {
 		await expectNoViolations(page);
 	});
 
+	test('the empty project list, with its example block stacked, has no violations', async ({ page, owner }) => {
+		void owner;
+		await page.goto('/');
+		await expect(page.getByRole('button', { name: 'Start from an example' })).toBeVisible();
+		await expectNoViolations(page);
+	});
+
 	test('help, with its contents open, and a guide with diagrams have no violations', async ({ page, owner }) => {
 		void owner;
 		await page.goto('/help');

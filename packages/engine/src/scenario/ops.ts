@@ -4,7 +4,7 @@
 // body (or mirror in zod). Pure: no I/O.
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
-import type { AllocationEntry } from '../allocations/compare';
+import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
 	ACCUMULATION_MODES,
@@ -20,6 +20,7 @@ import {
 	DEMAND_OBJECT_DESTINATIONS,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
 	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
@@ -39,6 +40,7 @@ import {
 	type DemandObject,
 	type DemandPart,
 	type DemandScheduleWindow,
+	type DroughtRestrictionRule,
 	type FlowShareMethod,
 	type LandCoverPatch,
 	type NetworkNode,
@@ -48,6 +50,7 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
+import { droughtRestrictionIssues } from '../network/restriction';
 import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS } from '../network/demandSchedule';
 import {
 	EWR_CHARGE_SOURCES,
@@ -184,6 +187,8 @@ const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Da
 const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
+/** An other water user's river pump (engine ≥ 1.58.0, WP-3.8, docs/model.md §2.7c): the farm's field, without a supply rule. */
+const USER_PUMP = ['pumpCapacityM3Day'] as const;
 /**
  * How a farm takes its water (engine ≥ 0.42.0, WP-3.8, docs/model.md §2.7e):
  * the supply rule, the river pump and the trigger rule's two dam levels.
@@ -208,7 +213,7 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  */
 export const NODE_SET_FIELDS = {
 	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
-	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
+	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 
@@ -382,6 +387,12 @@ export interface SettingsPathValues {
 	lowFlowMeasure: LowFlowMeasure;
 	/** What the registered volumes do to the run (engine ≥ 1.18.0, issue #72): compare only, cap, or a full allocation. */
 	allocationMode: AllocationMode;
+	/**
+	 * The drought restriction rule (engine ≥ 1.54.0, WP-3.8), whole: a rule or
+	 * null (off). So a WUA can compare restriction policies; always a baseline
+	 * assumption (classifyOp), never an applicant's proposal.
+	 */
+	droughtRestriction: DroughtRestrictionRule | null;
 }
 export type SettingsPath = keyof SettingsPathValues;
 
@@ -445,7 +456,12 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS)),
 	ewrChargeSource: oneOf(EWR_CHARGE_SOURCES),
 	lowFlowMeasure: oneOf(LOW_FLOW_MEASURES),
-	allocationMode: oneOf(ALLOCATION_MODES)
+	allocationMode: oneOf(ALLOCATION_MODES),
+	// The rule's own checks (../network/restriction.ts), as a settings save runs them.
+	droughtRestriction: nullable((v) => {
+		const i = droughtRestrictionIssues(v)[0];
+		return i ? `${i.field ? `${i.field} ` : ''}${i.message}` : null;
+	})
 };
 
 export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];
@@ -666,13 +682,15 @@ const ALLOCATION_FIELDS: Record<string, Check> = {
 	waterSource: oneOf(ALLOCATION_WATER_SOURCES),
 	volumeM3PerYear: allocVolume,
 	storageM3: nullable(allocVolume),
+	// The s21 water use (engine ≥ 1.59.0): a storage-only 21b row is never a take.
+	waterUse: nullable(oneOf(ALLOCATION_WATER_USES)),
 	validFrom: nullable(isoDate),
 	validTo: nullable(isoDate),
 	months: nullable(allocMonths),
 	maxRateM3s: nullable((v) => (isNum(v) && v >= 0 && v < 1e6 ? null : 'must be a rate in m³/s from 0 to below 10⁶'))
 };
 /** Left out = not stated (no storage, open validity, no licence conditions), as a volume entered by hand. */
-const ALLOCATION_OPTIONAL = new Set(['storageM3', 'validFrom', 'validTo', 'months', 'maxRateM3s']);
+const ALLOCATION_OPTIONAL = new Set(['storageM3', 'waterUse', 'validFrom', 'validTo', 'months', 'maxRateM3s']);
 
 /**
  * An `allocation.set` op's entry rebuilt from its known fields, with every
@@ -687,6 +705,12 @@ export function allocationOpIssues(raw: unknown): { allocation: AllocationEntry 
 		return [k!, rest.join(': ')];
 	});
 	if (typeof a.validFrom === 'string' && typeof a.validTo === 'string' && a.validFrom > a.validTo) issues.push(['validTo', `is before valid from (${a.validFrom})`]);
+	// A storage-only (21b) row is a dam's storage: no take, a storage, surface water (as the API's 137 CHECK).
+	if (a.waterUse === '21b') {
+		if (a.volumeM3PerYear !== 0) issues.push(['volumeM3PerYear', 'must be 0 on a storage-only (21b) row: it registers no take']);
+		if (a.storageM3 == null) issues.push(['storageM3', 'is needed on a storage-only (21b) row']);
+		if (a.waterSource !== 'surface') issues.push(['waterSource', 'must be surface on a storage-only (21b) row (a dam)']);
+	}
 	return { allocation: issues.length ? null : (a as unknown as AllocationEntry), issues };
 }
 
@@ -718,6 +742,7 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'enabled',
 	'schedule',
 	'population',
+	'source',
 	'note'
 ] as const;
 export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
@@ -775,6 +800,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	schedule: demandSchedule,
 	// The people it serves, for the basic-needs floor (engine ≥ 1.44.0); null = a per-person object's count.
 	population: nullable(nonNeg),
+	// Where its number comes from (engine ≥ 1.56.0); null = not recorded. Its fit with the sizing is a model rule.
+	source: nullable(oneOf(DEMAND_OBJECT_SOURCES)),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
 
@@ -791,8 +818,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no population (its count), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its

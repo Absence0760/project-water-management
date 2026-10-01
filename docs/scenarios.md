@@ -116,7 +116,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `demandObject.add` | `demandObject` | Adds a demand object on a unit (engine ≥ 1.45.0, [model.md §2.7f](./model.md)): a town, households, livestock or water piped out, supplied from the unit's own dam, river pump and boreholes with its crops. Every field as the model document has it (`schedule` and `note` may be left out: none, empty); only a farm node (a unit) takes one. The save rules apply as the op is applied: a monthly object needs 12 values, a per-unit one a count and litres, nothing returns from one piped out, and each schedule window must be one the run can read. |
-| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.45.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null), `population` (the people it serves for the basic-needs floor, engine ≥ 1.44.0; ≥ 0, or null for a per-person object's count) or `note` (at most 1000 characters). A name, a note and a window's label are trimmed as a save trims them. Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got, or a population it hasn't got, changes nothing. |
+| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.45.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null), `population` (the people it serves for the basic-needs floor, engine ≥ 1.44.0; ≥ 0, or null for a per-person object's count), `source` (where its number comes from, engine ≥ 1.56.0: `meter`, `aadd`, `perCapita`, `other`, or null = not recorded; its sizing must fit, so switch both in one edit group) or `note` (at most 1000 characters). A name, a note and a window's label are trimmed as a save trims them. Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got, or a population or source it hasn't got, changes nothing. |
 | `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.45.0). `node.remove` drops the node's objects too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
@@ -194,7 +194,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   reads them (level, area, volume, one row per line) and checks them the
   same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
-  `userPriority`, `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
+  `userPriority`, `pumpCapacityM3Day` (engine ≥ 1.58.0: its river pump, `null`
+  = no limit, [model.md §2.7c](./model.md); the supply rule and trigger levels
+  stay a farm's), `abstractionFrom` (engine ≥ 1.30.0), and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
   EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
   can't be taken off (a model rule), and the op is always a baseline
@@ -214,8 +216,16 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
 (`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`), and
 from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
-`fullAllocation`: a full-allocation scenario on a base run is the "every
-registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+`fullAllocation`: a full-allocation scenario on a base run is the "if every
+registered or licensed volume were taken in full" background (a registration
+is not an entitlement), [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)),
+and from engine 1.54.0 (WP-3.8) `droughtRestriction`: the drought
+restriction rule, whole (review and lift dates, levels with a threshold and
+a % cut per part of demand), or `null` for off, checked by the engine's
+`droughtRestrictionIssues` as a settings save is ([model.md §2.7i](./model.md));
+a `null` over no rule changes nothing. So a WUA compares restriction
+policies: the same base run with the rule off, with the outlook's triggers,
+and with a harsher table.
 Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
@@ -372,7 +382,10 @@ requested volume in a full-allocation background, is one op.
   nothing), `waterSource` (`surface` | `groundwater`), `volumeM3PerYear`
   (0 to below 10¹² m³, the API's limit), and optionally `storageM3`,
   `validFrom` / `validTo` (ISO dates, from ≤ to), `months` (1–12, no
-  repeats; stored as a sorted set) and `maxRateM3s` (0 to below 10⁶).
+  repeats; stored as a sorted set), `maxRateM3s` (0 to below 10⁶) and
+  `waterUse` (`'21a'`, the default, or `'21b'`: a dam's storage only,
+  volume 0, never a take; engine ≥ 1.59.0, issue #72). The scenario form
+  offers only takes to change; a storage-only row can be removed.
   Under `cap` (engine ≥ 1.37.0) the months of use and the maximum rate
   bind the scenario run as they bind a stored licence ([model.md
   §2.12a](./model.md)), so "what if this licence were winter-only" is one
@@ -760,6 +773,13 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   describes the op as "GR4J potential evaporation: pan coefficient × A-pan →
   monthly, entered directly: 1,200 mm a year (source)". Like every
   `settings.set`, it is a baseline assumption.
+- **The drought restriction rule** (`settings.set droughtRestriction`,
+  engine ≥ 1.54.0) is edited whole in the Settings tab's own editor
+  (`settings/DroughtRestrictionFields.svelte`, loaded when picked),
+  starting from the rule the scenario meets (or off); its first problem
+  blocks Add, in the same words as Settings. Described as "Drought
+  restriction rule: off → reviewed 5 Oct; Level 1 (below 70 %): crops 50 %".
+  A baseline assumption, like every `settings.set`.
 - **Scale demand** (`demand.scale`): whose demand (farms' irrigation or
   other water users'), the new demand as a % of what they'd take (0–200 %),
   a checkbox per node of that category and per month, Oct first (none ticked

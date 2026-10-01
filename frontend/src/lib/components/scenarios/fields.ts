@@ -19,6 +19,7 @@ import {
 	CROP_SET_FIELDS,
 	DEMAND_OBJECT_CATEGORIES,
 	DEMAND_OBJECT_CATEGORY_LABEL,
+	DEMAND_OBJECT_SOURCES,
 	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_CLASSES,
 	LAND_COVER_SET_FIELDS,
@@ -40,11 +41,14 @@ import {
 	type SettingsPath,
 	type TransferSetField
 } from '@water-management/engine';
+import { describeDroughtRestriction, type DroughtRestrictionRule } from '@water-management/engine';
+import { restrictionFormError } from '$lib/components/settings/droughtRestriction';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
 import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
+import { SOURCE_OPTION_LABEL } from '$lib/components/network/demandObjectSource';
 
 export interface EnumOption {
 	value: string;
@@ -83,7 +87,13 @@ export type ValueSpec =
 	 * landCover.set): "MAR %, low-flow %", typed as two numbers; empty is the
 	 * class's defaults.
 	 */
-	| { t: 'reductions' };
+	| { t: 'reductions' }
+	/**
+	 * The drought restriction rule (settings.droughtRestriction, engine ≥
+	 * 1.54.0, WP-3.8), whole, edited with the Settings form's editor
+	 * (settings/DroughtRestrictionFields.svelte); null is off.
+	 */
+	| { t: 'restriction' };
 
 /** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
 export interface PeDraft {
@@ -247,7 +257,9 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	enabled: { label: 'Modelled', spec: { t: 'bool' } },
 	// The basic-needs floor's people (engine ≥ 1.44.0): a domestic or municipal object is never cut below 25 l each a day.
 	population: { label: 'People served', spec: num('', { nullable: true, nullLabel: 'its count (per person), else none' }) },
-	note: { label: 'Where the number comes from', spec: { t: 'text', optional: true } }
+	// Where its number comes from (engine ≥ 1.56.0); its sizing must match (a model rule, so set both in one edit group).
+	source: { label: 'Source of the number', spec: { t: 'enum', options: plain(DEMAND_OBJECT_SOURCES, SOURCE_OPTION_LABEL), nullable: true, nullLabel: 'not recorded' } },
+	note: { label: 'Source details', spec: { t: 'text', optional: true } }
 };
 /** The schedule field's label, as the Network form heads it. */
 export const SCHEDULE_LABEL = 'On/off schedule';
@@ -313,7 +325,9 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The pragmatic EWR', ruleTable: 'The rule tables' }) } },
 	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } },
 	// Registered volumes (engine ≥ 1.18.0, issue #72): a full-allocation scenario is the cumulative-impact background.
-	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } }
+	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } },
+	// The drought restriction rule (engine ≥ 1.54.0, WP-3.8): a WUA compares restriction policies with it.
+	droughtRestriction: { label: 'Drought restriction rule', spec: { t: 'restriction' } }
 };
 
 export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));
@@ -353,8 +367,14 @@ const round = (n: number) => Math.round(n * 1e9) / 1e9;
  * is null where the field allows it. Percentages are divided by 100. The
  * range checks are the engine's, run on the op afterwards.
  */
-export function parseValue(spec: ValueSpec, input: string | readonly number[] | PeDraft): Parsed {
+export function parseValue(spec: ValueSpec, input: string | readonly number[] | PeDraft | DroughtRestrictionRule | null): Parsed {
 	if (spec.t === 'pe') return parsePe(input);
+	if (spec.t === 'restriction') {
+		// The rule as the editor holds it, checked as a save checks it; null turns restrictions off.
+		if (input === null) return { ok: true, value: null };
+		const e = restrictionFormError(input as DroughtRestrictionRule);
+		return e ? { ok: false, error: e.charAt(0).toLowerCase() + e.slice(1).replace(/\.$/, '') } : { ok: true, value: input };
+	}
 	if (spec.t === 'months') {
 		if (!Array.isArray(input)) return { ok: false, error: 'pick the months' };
 		return { ok: true, value: [...new Set(input as number[])].sort((a, b) => a - b) };
@@ -467,6 +487,8 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 			const r = v as { mar?: unknown; lowFlow?: unknown };
 			return typeof r.mar === 'number' && typeof r.lowFlow === 'number' ? `${round(r.mar * 100)}; ${round(r.lowFlow * 100)}` : '';
 		}
+		case 'restriction':
+			return describeDroughtRestriction(v as DroughtRestrictionRule);
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -514,6 +536,8 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			if (!r || typeof r.mar !== 'number' || typeof r.lowFlow !== 'number') return "the class's";
 			return `MAR −${fmtNum(r.mar * 100, 1, true)} %, low flow −${fmtNum(r.lowFlow * 100, 1, true)} %`;
 		}
+		case 'restriction':
+			return describeDroughtRestriction((v ?? null) as DroughtRestrictionRule | null);
 	}
 }
 

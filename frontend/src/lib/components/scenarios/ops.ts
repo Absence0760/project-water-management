@@ -38,6 +38,7 @@ import {
 	type LandCoverSetField,
 	type TransferSetField
 } from '@water-management/engine';
+import type { DroughtRestrictionRule } from '@water-management/engine';
 import { newNode } from '$lib/model/editor.svelte';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
@@ -317,7 +318,8 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const what = o ? `${nodeName(o.nodeId)}, demand object “${o.name}”` : 'A demand object';
 			if (op.field === 'schedule') return `${what}: ${SCHEDULE_LABEL} ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
 			const f = DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField];
-			const was = o ? (o as unknown as Record<string, unknown>)[op.field] : undefined;
+			// No source has a meaning, not recorded (engine ≥ 1.56.0): show it as the "was".
+			const was = o ? ((o as unknown as Record<string, unknown>)[op.field] ?? (op.field === 'source' ? null : undefined)) : undefined;
 			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'demandObject.remove': {
@@ -327,7 +329,8 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		case 'settings.set': {
 			const f = SETTINGS_SPECS[op.path as SettingsPath];
 			// An unset date or PE input has a meaning (the first day with rain; pan × A-pan, as the engine runs it): show it as the "was".
-			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe';
+			// So has no drought restriction rule (engine ≥ 1.54.0): off.
+			const unsetIsNull = f?.spec.t === 'date' || f?.spec.t === 'pe' || f?.spec.t === 'restriction';
 			const was = before ? (settingsValue(before.settings, op.path) ?? (unsetIsNull ? null : undefined)) : undefined;
 			return `${f?.label ?? op.path}: ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
@@ -391,7 +394,7 @@ function scheduleText(w: DemandObject['schedule']): string {
 
 /** A registered volume in words (docs/allocations.md): "surface 120,000 m³/a, valid 2020-10-01 to …, Oct–Mar only, at most 0.05 m³/s". */
 export function volumeText(a: AllocationEntry): string {
-	const parts = [`${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
+	const parts = [a.waterUse === '21b' ? `${a.waterSource} storage only (s21b)` : `${a.waterSource} ${fmtNum(a.volumeM3PerYear)} m³/a`];
 	if (a.validFrom || a.validTo) parts.push(`valid ${a.validFrom ?? '…'} to ${a.validTo ?? '…'}`);
 	if (a.storageM3 != null) parts.push(`storage ${fmtNum(a.storageM3)} m³`);
 	if (a.months?.length) parts.push(`${monthsText(a.months)} only`);
@@ -448,6 +451,8 @@ export interface OpDraft {
 	months: number[];
 	/** settings.set pe: the PE input being written. */
 	pe: PeDraft;
+	/** settings.set droughtRestriction (engine ≥ 1.54.0): the rule being written, null = off. */
+	restriction: DroughtRestrictionRule | null;
 	cropId: string;
 	areaHa: string;
 	transferId: string;
@@ -526,6 +531,7 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		value: '',
 		months: [],
 		pe: { kind: 'pan', mm: '', source: '' },
+		restriction: null,
 		cropId: '',
 		areaHa: '',
 		transferId: '',
@@ -657,7 +663,7 @@ function number(text: string, what: string, opts: { nullable?: boolean; scale?: 
 	if (opts.int && !Number.isInteger(n)) throw new DraftError(`${what} must be a whole number`);
 	return Math.round((n / (opts.scale ?? 1)) * 1e9) / 1e9;
 }
-function parsed(spec: ValueSpec, input: string | number[] | PeDraft, what: string): unknown {
+function parsed(spec: ValueSpec, input: string | number[] | PeDraft | DroughtRestrictionRule | null, what: string): unknown {
 	const p = parseValue(spec, input);
 	if (!p.ok) throw new DraftError(`${what}: ${p.error}`);
 	return p.value;
@@ -850,7 +856,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 			case 'settings.set': {
 				spec = draftSpec(d);
 				if (!spec) throw new DraftError('pick a setting');
-				const value = parsed(spec, spec.t === 'months' ? d.months : spec.t === 'pe' ? d.pe : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
+				const value = parsed(spec, spec.t === 'months' ? d.months : spec.t === 'pe' ? d.pe : spec.t === 'restriction' ? d.restriction : d.value, SETTINGS_SPECS[d.field as SettingsPath].label);
 				op = { op: 'settings.set', path: d.field, value } as ScenarioOp;
 				break;
 			}

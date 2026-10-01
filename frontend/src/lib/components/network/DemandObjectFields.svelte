@@ -8,17 +8,21 @@
 	// (DemandScheduleFields, engine ≥ 1.17.0). A domestic or municipal one has
 	// a basic-needs floor of 25 l a person a day that a restriction never cuts
 	// through (engine ≥ 1.44.0, issue #123): its people are a per-unit count, or
-	// entered here. The objects are the editor's own, so edits land in the model directly.
+	// entered here. Where its number comes from is a source by rule (engine ≥
+	// 1.56.0, issue #54 Q11), which sets how the demand is given
+	// (demandObjectSource.ts), with the note for the detail. The objects are the
+	// editor's own, so edits land in the model directly.
 	import {
 		BASIC_NEEDS_CATEGORIES,
-		DEMAND_NORMS,
 		DEMAND_OBJECT_CATEGORIES,
 		DEMAND_OBJECT_CATEGORY_LABEL,
+		DEMAND_OBJECT_SOURCES,
 		objectMonthlyM3Day,
 		type DemandObject,
 		type DemandObjectCategory,
 		type DemandObjectDestination,
 		type DemandObjectPriority,
+		type DemandObjectSource,
 		type NetworkNode
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -26,8 +30,8 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
-	import { monthsOf } from './monthFields';
 	import { floorLine, peopleHint } from './demandObjectFloor';
+	import { setSizing, setSource, sizingFixedBy, SOURCE_OPTION_LABEL } from './demandObjectSource';
 
 	let {
 		node,
@@ -61,14 +65,6 @@
 	/** Its mean abstraction demand over the year, m³/day (the engine's own sizing). */
 	const meanOf = (o: DemandObject) => objectMonthlyM3Day(o, []).reduce((s, v) => s + v, 0) / 12;
 
-	function setSizing(o: DemandObject, sizing: DemandObject['sizing']) {
-		o.sizing = sizing;
-		if (sizing === 'monthly') o.monthlyM3Day ??= monthsOf(0);
-		else {
-			o.count ??= 0;
-			o.litresPerUnitDay ??= o.category === 'livestock' ? DEMAND_NORMS.litresPerCattleDay : DEMAND_NORMS.litresPerPersonDay;
-		}
-	}
 	function setDestination(o: DemandObject, d: DemandObjectDestination) {
 		o.destination = d;
 		// Nothing returns from water piped out (the save refuses a return share there).
@@ -99,11 +95,30 @@
 							</select>
 						</div>
 						<div class="field">
+							<span class="lbl"><label for="do-src-{o.id}">Source of the number</label><HelpTip key="demandObject.source" /></span>
+							<select
+								id="do-src-{o.id}"
+								disabled={readonly}
+								value={o.source ?? ''}
+								onchange={(e) => setSource(o, (e.currentTarget.value || null) as DemandObjectSource | null)}
+							>
+								<option value="">Not recorded</option>
+								{#each DEMAND_OBJECT_SOURCES as src (src)}<option value={src}>{SOURCE_OPTION_LABEL[src]}</option>{/each}
+							</select>
+						</div>
+						<div class="field">
 							<label for="do-size-{o.id}">Demand given as</label>
-							<select id="do-size-{o.id}" disabled={readonly} value={o.sizing} onchange={(e) => setSizing(o, e.currentTarget.value as DemandObject['sizing'])}>
+							<select
+								id="do-size-{o.id}"
+								disabled={readonly || sizingFixedBy(o) !== null}
+								value={o.sizing}
+								aria-describedby={sizingFixedBy(o) ? `do-size-hint-${o.id}` : undefined}
+								onchange={(e) => setSizing(o, e.currentTarget.value as DemandObject['sizing'])}
+							>
 								<option value="monthly">m³/day by month</option>
 								<option value="perUnit">{unitWord(o.category)} × litres a day</option>
 							</select>
+							{#if sizingFixedBy(o)}<span class="muted small" id="do-size-hint-{o.id}">Set by the source.</span>{/if}
 						</div>
 						<div class="field">
 							<span class="lbl"><label for="do-pri-{o.id}">Priority</label><HelpTip key="demandObject.priority" /></span>
@@ -178,8 +193,8 @@
 					{/if}
 					<DemandScheduleFields object={o} {readonly} />
 					<div class="field">
-						<label for="do-note-{o.id}">Where the number comes from</label>
-						<input id="do-note-{o.id}" maxlength="1000" placeholder="e.g. meter records, a reconciliation strategy, a per-person norm" readonly={readonly} bind:value={o.note} />
+						<label for="do-note-{o.id}">Source details</label>
+						<input id="do-note-{o.id}" maxlength="1000" placeholder="e.g. which meter and years, which strategy, which norm" readonly={readonly} bind:value={o.note} />
 					</div>
 					<p class="muted small" data-testid="demand-object-mean-{o.id}">
 						{fmtNum(meanOf(o), 0)} m³/day on average{o.enabled ? '' : ' (not modelled)'}.

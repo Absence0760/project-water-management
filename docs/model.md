@@ -153,9 +153,69 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
 
    The crop factors multiply **A-pan** evaporation (`grossCropMm` in
    `packages/engine/src/demand.ts`), not FAO reference evapotranspiration ET₀.
-   ET₀ is about 0.7–0.85 × pan, so an FAO-56 Kc entered as it is overstates
-   demand by roughly a quarter. The Crops tab says so and points out any factor
-   above 1.0 (a hint, not an error).
+   The Crops tab says so and points out any factor above 1.0 (a hint, not an
+   error).
+
+   **How far an FAO-56 Kc set overstates demand (issue #289).** An FAO-56 Kc
+   is set against ET₀, and ET₀ = Kp × A-pan, so a Kc entered as it is
+   overstates demand by 1/Kp − 1 from the missing pan coefficient alone.
+   [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm) gives a Class
+   A pan Kp of **0.35–0.85**. Across 0.60–0.85, the plausibility band the
+   pan coefficient warns outside (§2.4a), that is about **18–67 %**: 18 % at
+   0.85, 25 % at 0.80, 33 % at 0.75, 43 % at 0.70, 67 % at 0.60. The
+   table's lowest cells (strong or very strong wind, a dry fallow fetch, low
+   humidity) go down to 0.35, which would give up to about 186 %. The
+   "~25–40 %" issue #54 item 1 first gave covers only Kp 0.71–0.80.
+
+   The node-based workbook's set as a whole differs by more than the missing
+   Kp, because its curves are also taller than the A-pan tables'. Weighted by
+   the workbook's own monthly A-pan row (Σ A-pan × factor over the year, the
+   workbook's set ÷ the matching crop in the reference library, item 8),
+   annual crop use comes out about **45–76 % higher** for citrus, deciduous
+   fruit and pasture: citrus +75 % (Table 4.13 citrus), pasture +46 % (mixed
+   pasture), apples and pears +47 % (late deciduous cultivars), nectarines
+   and peaches +64 % and +76 % (medium and early cultivars). Pecan comes out
+   about **+5 %**: its Table 4.10 curve (summer rainfall) is high all year.
+   The workbook is client data and isn't in the repo; the figures come from
+   it (issue #289) and aren't reproducible from a fresh clone. Three caveats
+   go with them:
+
+   - The ARC/SABI tables are design values of the late 1980s (the
+     winter-rainfall tables are dated June 1990) for clean-cultivated
+     orchards. Newer WRC orchard water-use studies give a higher Kc under a
+     cover crop (about 0.2–0.25 higher, issue #54), which narrows the gap for
+     the tree crops.
+   - The workbook's row labelled "WR90 A-pan evaporation" may really be
+     S-pan, or otherwise scaled (§2.4a, *Check the A-pan row*). A Symons
+     S-pan reads lower than an A-pan beside it, so if it is, the A-pan tables
+     belong on a higher row than the one both sets were weighted by, and the
+     workbook's Kc × row sits nearer Kc × ET₀ than the percentages suggest.
+     That would partly offset the excess.
+   - The figures are for that one workbook's row and crops. For a real
+     choice, the Load crop factors dialog (item 8) shows the demand
+     difference on the catchment's own row and areas before anything is
+     applied.
+
+   **Checks on an imported b023 crop table (issue #289).** b023's `[Crop
+   demand]` table has rows pasted from another crop and one-month slips (issue
+   #54 item 1). Both importers (`crops.ts` `cropTableNotes`,
+   `extract_project.py` `crop_table_notes`) import every factor as it is and
+   add one import-report warning per crop that trips a check, on the `Crop
+   demand` sheet with the crop as its element:
+
+   | Check | Rule | Why this line |
+   | --- | --- | --- |
+   | Copied row (`crop-factors-copied`) | the 12 factors equal an earlier, differently named crop's, exactly; a row of zeros (an unused crop) isn't compared | a pasted row is exact; two crops may share a curve (apples and pears, #54), so it is for the modeller to confirm, not an error. The copy's months aren't checked again, the first crop's warning covers them |
+   | Negative factor (`crop-factors-suspect`) | below 0 | a crop can't give water back to the pan |
+   | Lone month out of the ground | 0, with both neighbouring months above 0 | no crop in the ARC/SABI tables (item 8) leaves the ground for one month between two in it |
+   | Lone spike or dip | more than 0.3 above, or below, both neighbouring months | 0.3 is the largest step between adjacent months in those tables (table grapes Mar → Apr, pecan into and out of dormancy), and no month there stands off both neighbours by more than 0.15 |
+   | Above 1.0 | above 1.0 | the Crops tab's hint: a factor is Kp × Kc, FAO-56 Kc mid-season is at most about 1.2 ([Table 12](https://www.fao.org/4/x0490e/x0490e0b.htm)) and Class A pan Kp at most 0.85 ([Table 5](https://www.fao.org/4/x0490e/x0490e08.htm)), about 1.0; the ARC/SABI tables peak at 0.7 |
+
+   The year wraps (Oct's neighbours are Sep and Nov). A difference exactly at
+   0.3 isn't flagged (a 10⁻⁹ allowance absorbs float noise). The checks read
+   the table, not the farms, so a crop no farm grows is checked too. A number
+   cell holding text is already its own unmapped item (`non-numeric-value`,
+   imported as 0).
 
    Demand always reads A-pan: `apanMm`, or on the days it covers the daily
    A-pan series (§2.3a, engine ≥ 0.38.0). GR4J's own PE input (`settings.pe`,
@@ -174,10 +234,20 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    ```
    Pe        = croppedArea × effRain / 1000 × rainUsed[t]          (m³)
    available = W[t−1] + Pe                   (not capped yet)
-   used      = MIN(available, MAX(0, grossFarm))
-   netDemand = MAX(0, grossFarm) − used
-   W[t]      = MIN(Smax, available − used)   Smax = croppedArea × effectiveRainStoreMm / 1000
+   need      = MAX(0, grossFarm)
+   used      = need        when need − available ≤ 10⁻¹² × need   (rain covers it; engine ≥ 1.57.0)
+             = available   otherwise
+   netDemand = need − used
+   W[t]      = MIN(Smax, MAX(0, available − used))   Smax = croppedArea × effectiveRainStoreMm / 1000
    ```
+
+   Rain that falls short of the need by no more than 10⁻¹² of it covers it
+   (engine ≥ 1.57.0): the store's running sum carries float noise, and before
+   1.57.0 a sum an ulp short left a crop requirement of 1.4 × 10⁻¹⁴ m³ beside
+   a 35 m³ need. At an efficiency of 0.01 that was a demand of 1.4 × 10⁻¹² m³,
+   which switched on an emergency dam-target borehole (§2.7d; 495 m³ pumped
+   into an empty dam, verify random seed 1343) and counted as a short day in
+   `limitBound` (§2.12a, seed 145). The same test applies with no store.
 
    The store starts empty. Adding the day's rain *before* capping means a big
    rain still covers that day's demand first, however small the store, as the
@@ -185,7 +255,8 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    store's size is lost to drainage and runoff (the catchment runoff model
    already counts that water, so nothing is double-counted). With
    `effectiveRainStoreMm = 0`, W is 0 every day and net demand is **bit for
-   bit** the workbook's `MAX(0, gross − Pe)` (tested). Demand stays
+   bit** the workbook's `MAX(0, gross − Pe)` (tested), but for rain within
+   10⁻¹² of the gross, which covers it. Demand stays
    precomputed, independent of supply, so the network simulation is
    unchanged. The farm's `effective_rain` working column is now the effective
    rain *used* that day (from the day's rain or the store), and `soil_water`
@@ -333,9 +404,12 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
-     optional Kp (default 1). A-pan tables and b023 factors already multiply
-     A-pan, so Kp stays 1 for them; an FAO-56 Kc set (against ET₀) needs
-     about 0.75 (issue #54).
+     optional Kp, defaulted by the source's shape (issue #289). A-pan tables
+     and b023 factors already multiply A-pan, so Kp defaults to 1 for them;
+     an FAO-56 Kc set (against ET₀; a node-based workbook's
+     [Crop_Factors], the dialog's third source) defaults to 0.75, a mid value of FAO-56
+     Table 5's 0.35–0.85 for a Class A pan, which the site's humidity, wind
+     and fetch refine (issue #54).
    - **Caveats** (issue #54): A-pan factors are site-specific design values
      from 1990; an orchard cover crop raises them by about 0.2–0.25; newer
      WRC orchard studies should be checked. The engine's maths is unchanged
@@ -2811,9 +2885,12 @@ kind `user` runs exactly as before (no new series or summary fields).
 | `userDemandM3Day` | demand from the river, m³/day per water-year month (Oct–Sep); null = none |
 | `userReturnPct` r | share of what it takes that returns directly below it the same day (treated wastewater), 0–1, default 0 |
 | `userPriority` | `senior` (default: a municipal allocation is usually senior) or `junior` |
+| `pumpCapacityM3Day` P | its river pump's capacity, m³/day (engine ≥ 1.58.0; the farm's field, §2.7e, in the form pumps × m³/h × 24); null = no limit (the default, every user before 1.58.0, no warning); 0 = no river pump |
 
-It has no area, flow share, dam, crops, transfers or EWR share; the API
-refuses crop areas and transfers on it (`backend/src/model/validate.ts`).
+It has no area, flow share, dam, crops, transfers, EWR share or supply
+rule; the API refuses crop areas and transfers on it
+(`backend/src/model/validate.ts`) and a supply rule other than `damFirst`
+(`modelRuleIssues`; the run ignores one with a warning).
 A scenario's `demand.scale` with `category: 'user'` (engine ≥ 0.41.0)
 multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 
@@ -2821,8 +2898,8 @@ multiplies its monthly demand by the node's `demandFactor` (§2.3 step 4a).
 Σ upstream senior requirement (below):
 
 ```
-G  = MIN(D, H)                    senior
-G  = MIN(D, MAX(0, H − Zs_in))    junior: leaves the senior users' water in the river
+G  = MIN(D, H, P)                 senior
+G  = MIN(D, MAX(0, H − Zs_in), P) junior: leaves the senior users' water in the river
 T  = r × G                        returned below it
 U  = H − G + T
 deficit = D − G
@@ -2836,9 +2913,10 @@ farms upstream of it must pass, fragmented to them by flow share the way the
 pragmatic EWR is (§2.5):
 
 ```
-Y_f  = Σ over senior users u downstream of f of D_u × share_f / Σ_{g upstream of u} share_g
+C_u  = MIN(D_u, P_u)                    the user's claim: its demand, up to its pump capacity (engine ≥ 1.58.0; = D_u without one)
+Y_f  = Σ over senior users u downstream of f of C_u × share_f / Σ_{g upstream of u} share_g
 Zs   = Y_f + Σ upstream Zs              at a farm (series senior_requirement)
-Zs   = MAX(0, Σ upstream Zs − D_u)      below a senior user; junior users and gauges pass it on
+Zs   = MAX(0, Σ upstream Zs − C_u)      below a senior user; junior users and gauges pass it on
 ```
 
 A farm then keeps MIN(Zs, H + I) below its dam before it fills the dam:
@@ -2877,20 +2955,57 @@ their own rows (`CurtailmentSummary.otherUsers`):
   standing (`uncurtailedChargeM3Day`). It is **not** moved onto the farms,
   which would charge irrigators for the town's use.
 
+**The pump capacity (engine ≥ 1.58.0, roadmap WP-3.8, issue #54 item 2b;
+decided, pending the hydrologist).** Mirrors a farm's river pump (§2.7e)
+without its supply rules: a user always takes from the river where it sits,
+so it needs only the capacity P. The choices:
+
+- *The river take is capped, boreholes are not.* P limits what it takes from
+  the river (G above, before groundwater); its boreholes (§2.7d) are separate
+  pumps with their own capacities, and a supplemental one still fills what
+  the river pump leaves. With primary boreholes, the river is asked only for
+  what they leave.
+- *A senior user claims only what it can lift.* The farms upstream pass
+  C = MIN(D, P), not D: water it can't pump would only flow past it. So a
+  small pump on a senior town leaves the farms above it more, and the
+  requirement below it drops by C. Engine-audit L1's point (a new senior user
+  curtails the farms above) holds for the capped claim.
+- *No pump = no limit, silently.* Unlike a farm's river pump (which warns
+  when a river-pumping rule has no capacity), every user before 1.58.0 had
+  none, so null is the default and runs exactly as before (a test on random
+  networks: absent, null and a capacity above any flow give the same values
+  to the bit). A capacity that isn't a size ≥ 0 runs as no limit with a
+  warning; the API refuses it.
+- *Not cut by the drought restriction* (§2.7i): the rule cuts units only;
+  whether to cut other water users is open for the hydrologist
+  ([followups.md § Hydrologist](./followups.md#hydrologist)). The pump is a
+  physical limit, not a restriction: it applies every day.
+
 **Outputs.** Per user: `demand`, `supplied` (taken), `deficit`,
 `inflow_upstream`, `outflow`, `return_flow`, `ewr_cumulative`,
 `ewr_shortfall`, `ewr_charge` (and `senior_requirement` when any senior user's
 demand is passed down, at every node, with the farms' `passed_for_senior`).
-`summary.users` has the whole-run means; the water balance gains
+With a pump capacity (engine ≥ 1.58.0) also `pump_limited` =
+MAX(0, MIN(what its priority leaves, its allocation room, D − GW) − Gr), with
+Gr = supplied − groundwater its river take (no `river_abstraction` series: that
+key is a farm's river pump, and run comparison reads its absence as 0), the
+demand its pump left unmet although the river had it (≤ deficit; 0 on a day
+the farms upstream passed only its capped claim and it took it all), with
+`UserSummary.avgRiverAbstractionM3Day`, `avgPumpLimitedM3Day` and
+`daysPumpLimited`. `summary.users` has the whole-run means; the water balance gains
 `otherUseM3` = Σ (taken − returned) and closes with it (§6).
 
 **Checks** (`verify/checks.ts`): the user's day (G as above, T = r·G,
-U = H − G + T, deficit, shortfall), the farm keeps MIN(Zs, H + I) below its
+U = H − G + T, deficit, shortfall; with a pump, G − GW ≤ P, the
+`pump_limited` replay and the requirement below a senior user dropping by at
+most MIN(D, P), and the summary's pump means), the farm keeps MIN(Zs, H + I) below its
 dam and holds nothing back without a requirement, Zs never grows past a user,
 the attribution check counts users as contributors, and the summaries and
 curtailment rows are the means of the series. The fuzz generator adds up to
 three users (senior or junior, any return share, demand from none to far more
-than the river) to 30 % of networks.
+than the river) to 30 % of networks, and a pump capacity (0, a trickle, or up
+to more than any flow) to half the users of 30 % of seeds. Hand examples:
+`network/users.test.ts` and `network/userPump.test.ts`.
 
 ### 2.7d Groundwater abstraction and stream depletion (engine ≥ 0.23.0, roadmap WP-1.34, audit N5)
 
@@ -3068,7 +3183,12 @@ storage up to it first, since the water can't be drawn otherwise.
 
 *Only on a day the dam is drawn for demand (engine ≥ 1.8.0).* A primary or
 emergency dam-target borehole pumps only while Dr > 0 (to within 10⁻¹² × D,
-the float noise of several primary units adding up to D). Before 1.8.0 they
+the float noise of several primary units, or of off-take water, adding up to
+D). D here is the day's full demand, the off-take water used included (engine
+≥ 1.57.0): before, a day with off-take water judged the rest against itself,
+so off-take water that arrived an ulp short of the demand (980.5862268744551
+of 980.5862268744552 m³) left 1.1 × 10⁻¹³ m³ that switched an emergency
+borehole on and pumped 1 590 m³ into its dam (verify dense seed 86). Before 1.8.0 they
 pumped whenever the dam had room, demand or not: in a winter-rainfall
 catchment a primary 200 m³/day borehole filled an empty dam from groundwater
 over a dry winter with nothing to irrigate, and the rain that came later
@@ -3261,15 +3381,16 @@ reading of this document where it didn't settle them):
   start-of-day storage, like the drought borehole rule, so it doesn't depend
   on the order nodes are listed in.
 - *Invalid combinations run and warn; the API refuses them on save*
-  (`modelRuleIssues`): a supply rule or pump on a gauge or other user
-  (ignored), `trigger` without a dam and `runOfRiver` with one (both run as
+  (`modelRuleIssues`): a supply rule or pump on a gauge, a supply rule on
+  an other user (ignored; its pump capacity is its own from engine 1.58.0), `trigger` without a dam and `runOfRiver` with one (both run as
   river first), a stop level below the trigger (clamped up to it). A
   scenario's `node.set` of any of the four fields (or of the dam capacity)
   that would break one of these is skipped with the rule as its problem
   ([scenarios.md](./scenarios.md)), so a licence what-if such as "river
   first at 1,200 m³/day" never produces a model the API would refuse.
-- *Other water users* keep taking MIN(what reaches them, demand) with no pump
-  limit (§2.7c); a pump capacity on them is a later step (issue #54 item 2b).
+- *Other water users* have a pump capacity of their own from engine 1.58.0
+  (§2.7c), with no supply rule: they always take from the river where they
+  sit, up to MIN(demand, what reaches them, capacity).
 
 **Outputs** (only on a farm with a rule other than `damFirst`): the series
 `river_abstraction` and `FarmSummary.avgRiverAbstractionM3Day`.
@@ -3317,7 +3438,8 @@ regression suite is unchanged.
 | Field | Meaning |
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
-| `name`, `note` | a label, and where the number comes from, so reports can say how solid it is (Q11). The rule, decided with the client (issue #90): use meter records where they exist, else the reconciliation strategy's AADD, else population × litres per person per day, and record which one was used. Today that record is the free-text `note`; a structured source field is a follow-up ([followups.md](./followups.md) "Demand objects: a structured demand source") |
+| `name`, `note` | a label, and the detail of where the number comes from (which meter and years, which strategy, which norm) |
+| `source` | where the number comes from, by rule (engine ≥ 1.56.0, migration 139; below): `meter`, `aadd`, `perCapita` or `other`; null = not recorded |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -3348,6 +3470,35 @@ unit (it no longer follows from G alone), and the curtailment report's supply
 cut divides the irrigation part of the charge by the window's
 (Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
 objects included, with the draft; its `demand` shape includes them.
+
+**The source** (engine ≥ 1.56.0, issue #54 Q11, `project.ts`
+`DEMAND_OBJECT_SOURCES`). So a report can say by rule how solid a demand
+is, the client's rule (confirmed in issue #90) is recorded per object: use
+meter records where they exist, else the reconciliation strategy's AADD
+(annual average daily demand), else population × litres per person per day.
+The source fixes how the volume is derived:
+
+| `source` | The number | `sizing` |
+| --- | --- | --- |
+| `meter` | metered abstraction, m³/day per month (a meter record includes losses, so it isn't grossed up) | `monthly` |
+| `aadd` | the strategy's AADD, m³/day, shaped by month if the strategy gives a profile | `monthly` |
+| `perCapita` | `count` (people, or head of stock) × `litresPerUnitDay` (a norm: the Red Book's 230 l, about 45 l per head of cattle) ÷ (1 − losses) × the monthly profile | `perUnit` |
+| `other` | anything else: a licence volume, an estimate, a workbook's typed-over demand (the importers' choice) | either |
+
+A save (and a scenario op) that gives `meter` or `aadd` to a per-unit object,
+or `perCapita` to a monthly one, is refused (modelRules `doSourceSizing`); the
+node form sets the sizing when the source is picked and locks it. Null (every
+object saved before 1.56.0, and a new one until the modeller says) is "not
+recorded". The source is a record, never an input: a run is the same to the
+bit with any source or none (`run.demandSource.test.ts` on random networks).
+The run carries it on the object's summary (`DemandObjectSummary.source`), and
+the demand-objects table and the summary CSV show it with each source's share
+of the objects' demand (`network/demandSources.ts`); the licensing evidence
+report's § 6 lists the applicant's objects with their sources and the same
+shares, and cautions on page 1 when less than half of that demand is from
+meter records (report format `evidence-9`, [evidence-pack.md](./evidence-pack.md)). Which source a demand *should* have (whether a
+catchment has meter records the modeller skipped) is the modeller's call; the
+app records it and never guesses one.
 
 **Decisions, pending the hydrologist** (the issue #54 research; the
 conservative reading where it didn't settle them):
@@ -3454,16 +3605,17 @@ floor either (the unit's demand over the year is then its registered volume
 plus what the floor holds). A full allocation alone is not a restriction and
 rescales the object, floor included; whether it should hold the floor too is
 [audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
-too (§2.11). *Not modelled:* a drought restriction rule that cuts demand by
-dam level (WP-3.8) doesn't exist yet; when it is built it has to hold the
-same floor (`planObjects` applies it to the demand factor today). A municipality's own restriction
+too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.54.0, §2.7i) holds
+the same floor, with the object's floor and `dayFloor`: MIN(floor, the
+demand before the restriction). A municipality's own restriction
 stages are shown as the supplied l per person per day, never applied.
 
 **Outputs** (only on a unit with an enabled object): per object the series
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
 supplied, return and days short, and, on an object with a schedule, its
-days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
+days off, engine ≥ 1.17.0; a day off is never a day short; and its source
+when it records one, engine ≥ 1.56.0). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so. An
 object with a basic-needs floor (engine ≥ 1.44.0) adds its people and floor
 B_k, the days it got less than b_k(t) and the mean of MAX(b_k − G_k, 0) (the
@@ -3488,7 +3640,7 @@ span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction (and doubles an object's population, so a floor doubles with it). Half the fuzz's monthly objects name people
 (engine ≥ 1.44.0), so domestic and municipal ones have floors below and above
-their demand; `run.basicNeeds.test.ts` restricts every unit of the random
+their demand, and two in three objects a source that fits their sizing (engine ≥ 1.56.0); `run.basicNeeds.test.ts` restricts every unit of the random
 networks (factors 0 to 1) and checks every invariant. Hand examples: `run.basicNeeds.test.ts`, `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
 dates, the year-end wrap, 29 February, overlap order).
@@ -3662,6 +3814,216 @@ Hand examples: `network/handsOff.test.ts`.
 
 **Outputs.** No new series: the columns O, S and `river_abstraction` carry
 it, and the summary's farm figures follow.
+
+### 2.7i Drought restrictions (engine ≥ 1.54.0, roadmap WP-3.8)
+
+**Why.** The last of WP-3.8's operating rules: "cut demand by x % when
+storage falls below y %". A WUA restricts its members in a drought by
+levels, each a % cut per category of use, decided from how full the dams
+are on set review dates, as DWS restriction schedules are. The seasonal
+outlook's review triggers (§2.15a) compute such a table from the analogue
+years; this rule lets a run, or a scenario, follow one. **Off by default**:
+`settings.droughtRestriction` absent or null runs to the bit as before (a
+test compares every series and summary figure of random networks with the
+rule absent, null, and on with levels that cut nothing); the examples and
+the client catchment regression suite are unchanged. A model rule, distinct
+from the restriction notice the WUA publishes to farmers (WP-2.3): the
+notice says what the WUA asked for; the rule is what the model assumes.
+
+**The rule** (`settings.droughtRestriction`, engine `DroughtRestrictionRule`,
+`network/restriction.ts`), one per project:
+
+| Field | Meaning |
+| --- | --- |
+| `reviewDates` | 1–12 month-days (`"MM-DD"`, never 29 February) on which the level is decided |
+| `liftDates` | 0–12 month-days on which any restriction ends until the next review (e.g. the day after the season); none of them a review date |
+| `levels` | 1–6 levels, mildest first: `belowPct` (a share of capacity, 0 < x ≤ 1, strictly falling level by level) and `cuts` (per part of demand, a share 0–1). A deeper level cuts each part at least as much as the one above, and every part a milder level cuts |
+| `source` | where the levels come from (≤ 500 characters), optional |
+| `basis` | engine ≥ 1.54.0: which storage the level reads. `total` (the default, absent): every farm dam's, one level for every unit; `dams`: the farm dams in `damNodeIds` only, one level for every unit; `own`: each unit its own dam, a level per unit |
+| `damNodeIds` | the farm dams `dams` reads (with that basis only) |
+| `nodeIds` | the units the rule cuts (farm ids); absent = every unit |
+| `ewrTrigger` | `{ siteNodeId, level }`: on a review day, when the EWR at the site (null = the outlet, else a gauge that is an EWR site) wasn't met the day before, the level is at least `level` |
+
+The parts are the ones `demand.scale` cuts on their own (#252): `crops` (a
+unit's crop water requirement F) and each demand-object category
+(`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`,
+`external`, `other`). A part a level doesn't list isn't cut.
+
+**Each day** t (before the transfers, so their room reads it):
+
+```
+review day (or a fresh run's first day when the latest date before it is a review):
+  share = Σ Q_start(d) ÷ Σ capacity(d, t)      over the dams read (every farm dam, the listed ones, or the
+                                               unit's own) with capacity > 0 today, in node-id order
+          Q_start = the storage at the start of the day (the day before's, after any storage reset that day)
+  storage level = the deepest level with share < belowPct; 0 when none (or no dam)
+  failed = the EWR trigger's site had ewr_shortfall < 0 the day before (false on a fresh run's first day)
+  level(unit) = MAX(storage level, failed ? trigger level : 0)    units the rule cuts; 0 for the rest
+lift day:   every level = 0
+other days: each level = the day before's
+per unit, with c_p = its level's cut on part p:
+  F′ = F × (1 − c_crops)
+  d′_k = MAX(d_k × (1 − c_cat(k)), MIN(floor_k, d_k))   floored objects (§2.7f)
+  d′_k = d_k × (1 − c_cat(k))                            the rest
+  D′ = F′ ÷ e + Σ d′_k                                   restricted_demand
+```
+
+The unit's sources (off-take water, the river pump, the dam, the boreholes)
+supply `D′` instead of `D` (§2.7, §2.7d, §2.7e), a transfer's room reads the
+destination's `D′` (§2.6), and a river off-take sized to its destination's
+need sizes to `D′` (§2.6a); the supply is split between crops and objects on
+their cut demands (§2.7f). `demand` and `deficit` stay the unrestricted
+demand's, so a cut shows as a shortfall and in the assurance of supply
+(§2.11a): the unit still wants the water. The water not taken stays in the
+dam or the river.
+
+**Decisions** (the most defensible option where the design leaves a choice;
+each **pending the hydrologist**, listed in
+[followups.md § Hydrologist](./followups.md#hydrologist)):
+
+- *One rule per project, on the total farm dam storage by default.* The
+  review triggers read the total storage of the farm dams, shared pro rata
+  to capacity (§2.15a), and the rule takes their steps, so by default it
+  reads the same total: `Σ storage ÷ Σ capacity`, every farm dam in the
+  project, the day's capacity where it changes (§2.7g). From engine 1.54.0
+  a WUA whose members hang off one scheme dam reads it alone (`dams`), and
+  one where each member's own dam decides reads each (`own`, the per-node
+  rule WP-3.8's design sketched as `NetworkNode.restriction`), and a rule
+  may cut some units only (`nodeIds`). Under `own` a unit without a dam
+  isn't restricted by storage (there is none to read; the run warns), only
+  by the EWR trigger. Ids that don't fit the network (a "dam" without one,
+  a unit that isn't a farm, a site that isn't a gauge) are left out with a
+  warning; a rule left with no unit isn't applied.
+- *Decided on review dates, held between them.* The triggers are read on a
+  review date and applied to the season's end (§2.15a), and DWS
+  restrictions are reviewed at set points, not daily, so the level is a
+  decision that holds until the next review or lift date: the hold period
+  the design asks for. There is no separate hysteresis: a WUA that reviews
+  monthly lists twelve dates. Daily evaluation with hysteresis would let a
+  level flicker with a day's inflow.
+- *The start of the day.* The level reads the storage the day starts with
+  (the day before's, and a storage reset's, §2.15a), never later, so the
+  rule is causal: a forecast tail changes no historical day (the prefix
+  stability test holds with the rule on) and a shorter run has the same
+  levels on its days.
+- *A run's first day.* A fresh run that starts between a review and the
+  next lift decides its first day from its starting storage (a restriction
+  in force when the record starts); one that starts after a lift starts
+  unrestricted. A run resumed from a snapshot (§2.16) keeps each unit's
+  level held on the day before it and whether the trigger's site failed
+  that day, so it is the uninterrupted run to the bit (`checkResume` on
+  random networks), and records that state in its summary (`start`) so the
+  self-check redoes it.
+- *Every farm's demand; not the other water users.* A user node's demand
+  has no category and no population, so a cut on it could take a town's
+  water below basic needs with no floor to stop it. Users keep taking their
+  demand; whether to cut them, and how, is a policy question for the
+  hydrologist ([followups.md § Hydrologist](./followups.md#hydrologist)).
+- *The floor.* A domestic or municipal object never goes below MIN(its
+  basic-needs floor, its demand before the restriction) (#250, §2.7f): the
+  rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
+  floor. Its demand before the restriction is the plan's, so on a
+  full-allocation run it is already scaled by the allocation factor KF and
+  the floor is MIN(floor, KF × d), where a `demand.scale` restriction keeps
+  MIN(floor, d): [engine-audit W1](./engine-audit.md), for the hydrologist,
+  decides both.
+- *The demand stays the demand.* Unlike `demand.scale` (a scenario's change
+  in what is wanted), a restriction is a cut in what is supplied: the
+  shortfall and the assurance of supply count it.
+- *The outlook, its triggers and firm yield run without the rule.* The
+  triggers are what the rule is made from, and a demand level on top of the
+  rule would cut twice; a firm yield is what the dam can give, not what a
+  policy asks of it (§2.13, §2.15). `withoutDroughtRestriction` strips it,
+  and a base run made with the rule passed to the outlook or its triggers is
+  refused (`assertUnrestrictedBase`), since its history is the restricted
+  one.
+- *The EWR trigger* (engine ≥ 1.54.0; the roadmap's "when the downstream EWR
+  site failed yesterday"). It raises the level only on a review day, as
+  the storage does, from the site's pragmatic EWR shortfall on the day
+  before (§2.7): at the outlet the catchment's `ewr_shortfall`, the outflow
+  against the whole EWR, which the compliance report counts (not the outflow
+  node's own share-weighted column, lower when the flow shares sum below
+  1); at a gauge its own, and only a gauge that is an EWR site. Known at the
+  start of the review day, so it stays causal and holds with the rest until the next
+  review or lift. A fresh run's first day has no day before and isn't
+  raised. Only the day before is read, not a count of recent days, and not
+  the Reserve rule tables' monthly compliance.
+
+**Outputs.** On the catchment, `restriction_level` (the level in force each
+day, 0 = none; under `own` the deepest any unit is at) and, under a shared
+basis, `restriction_cut@<part>` (that day's cut, 0–1, for each part some
+level cuts); on every unit the rule cuts, `restricted_demand` (m³/day) and,
+under `own`, its own `restriction_level`. The summary's
+`droughtRestriction`: the rule, the days at each level per water year and
+over the run, the reviews in the run (with a trigger, `ewrReviews`: those
+after a day its site failed), and per unit its mean demand, mean restricted
+demand and mean supply over the run, its mean cut over the restricted days
+alone and its days at each level; on a resumed run, `start`. Also a block
+of the summary CSV. A model-state snapshot carries each unit's level held
+(`restrictionLevels`) and the trigger's state (`restrictionEwrFailed`).
+
+**From the published notice** (engine ≥ 1.54.0). `restrictionRuleFromNotice`
+turns the WUA's published restriction notice (WP-2.3) into a starting rule,
+never the reverse: one level in force whenever the dams aren't full (below
+100 %), cutting every part by the notice's %, reviewed on the day it was
+published (in the project's time zone) and lifted on the day the WUA expects to publish next (29
+February read as 1 March). A notice with no restriction, or none with a %,
+gives no rule, with the reason. Settings and the scenario form offer it.
+
+**From the review triggers.** `restrictionRuleFromTriggers(table, levels)`
+(`outlook/triggers.ts`, §2.15a) makes a rule from a trigger table: the
+review date's month and day is the review date and the day after the season
+end the lift date; each band below the fullest is a level from the band
+above's lower edge (÷ the total capacity) down, cutting each part by 1 − its
+level's `demand.scale` factor. What the rule can't carry is said, never
+dropped silently: an op limited to some nodes or months or on the other
+water users, a factor above 1, a band where no level met the planning rule
+(it takes the band above's cuts, for the WUA to decide), a table that isn't
+monotone (each part keeps the largest cut above it), and a fullest band
+whose level cuts (the rule then applies it below 100 %). A top band of full
+dams only is no level (no share is below 100 % there), two bands with one
+lower edge make one level (the deeper cuts), and a table that still can't
+make a rule a save accepts gives none, with the reason.
+
+**Scenarios and comparison.** `settings.set` with the path
+`droughtRestriction` sets or replaces the rule, or clears it with null (a
+null over no rule changes nothing), checked by the same rules as a save,
+always a baseline assumption ([scenarios.md](./scenarios.md)); so a WUA can
+compare restriction policies. The run comparison lists what changed: on or
+off, the dates, each level's threshold, name and cuts, levels added or
+removed, the source ([run-comparison.md](./run-comparison.md)).
+
+**Checks.** The self-check `droughtRestriction` (`checkDroughtRestriction`)
+recomputes each unit's level every day from the stored storage, capacity,
+reset and EWR-shortfall columns and the rule (the review and lift days, the
+dams read, the units cut and the trigger's site worked out in the check
+itself, not by the engine's planner, and the level, cut and floor formulas
+written out in it, not imported; a resumed run from the state its summary
+records, taken as given: the check can't see the snapshot, and `checkResume`
+is what holds a resumed run to the uninterrupted one), each part's cut column, and each unit's restricted
+demand from its crop requirement, efficiency and object demands with the
+floor; it holds supplied ≤ restricted demand ≤ demand (a restriction never
+raises supply) and the summary's days and means to the columns; without
+the rule there is no restriction column. `checkWorkings` replays the supply
+against the restricted demand, and the objects' shares against their cut
+demands. Tests (`run.droughtRestriction.test.ts`, `outlook/restriction.test.ts`):
+hand examples (a dam emptying at 100 m³/day reviewed on 5 October, a lift
+date, a run starting after a lift, the start of the day read rather than the
+end, two levels with the floor held; the listed dams, each unit's own dam, some
+units only, ids that don't fit the network, the EWR trigger read from the
+day before, and a rule from the notice), bit identity off, the self-check
+catching a tampered level, cut, restricted demand and supply, the rule's
+checks, the scenario op and the comparison, resume from a snapshot (to the
+bit, and passing the self-check), the triggers mapping; and on random
+networks every invariant (balance, self-checks, order invariance,
+determinism), forecast prefix stability and a run cut short. The fuzz
+generator gives a quarter of networks a random rule (1–12 review dates,
+lift dates, 1–4 levels up to cuts of 100 %; each basis, some units, an EWR
+trigger on the outlet or a gauge, now and then an id the network hasn't
+got), the warm-start and scenario fuzz carry it, and the doubled-crop-areas property
+runs without it (more demand restricts every unit sooner, and a unit
+upstream that takes less leaves more below, as the trigger rule does). The
+Excel audit workbook refuses a farm under a rule, by name.
 
 ### 2.8 Outputs
 
@@ -4225,7 +4587,8 @@ rule table has no such dependence.
 *Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
 Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
 *Hydrological Processes* 19:507 (the two-parameter causal filter, set
-aside) · Nathan & McMahon
+aside here; engine ≥ 1.55.0 uses it, and the Hughes form, for the
+validation signatures' BFI, §2.10d) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
@@ -5391,7 +5754,7 @@ question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
-Not in the workbook. Five checks (four before engine 1.19.0) a reviewing hydrologist makes by hand
+Not in the workbook. Six checks (four before engine 1.19.0, five before 1.55.0) a reviewing hydrologist makes by hand
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
@@ -5648,6 +6011,149 @@ fits. The summary CSV has a *Recession diagnostics* block
 ([api.md](./api.md#export)). The check stays at the outlet: it doesn't run at
 gauges inside the network. Per-segment fits, bootstrap bands and seasonal
 tags are CR-15.
+
+#### Validation signatures (engine ≥ 1.55.0, calibration-research.md CR-16)
+
+A sixth check (`packages/engine/src/plausibility/signatures.ts`, kept in
+`RunSummary.plausibility.signatures`; absent on older runs, null without an
+observed record). It follows the **scored record**: the calibration site's
+record when `settings.calibrationSiteNodeId` scores a gauge inside the
+network (§2.10k), with the simulated flow there, else the outlet's
+calibration record against the simulated outflow; the summary names the site
+(`siteNodeId`, `siteName`). Three signatures of that record against the
+simulated flow on the same days. Like the other checks it only reports and
+warns: nothing it computes reaches a simulated flow (tested: the flows are
+bit-identical whichever record is scored).
+
+**Days.** The base-flow index and the low-flow curve use every recorded day
+(≥ 0 m³/s) the calibration exclusions leave in, over the whole run, as the
+Q90 check does. They keep the days the record's quality flags mark
+(extrapolated above or below the rating, infilled, suspect): a digital
+filter needs the continuous hydrograph (an extrapolated flood is still a
+flood, and cutting it out would split the record at every storm), and the
+days below the lowest gauging are the low end of the curve being measured.
+The recession segments leave flagged days out, as the recession check does
+(CR-18): the mask is the exclusions and the days the scored record's
+per-day classes flag, the classes the run stores as `observed_flow_quality`
+(§2.10h, `recordFlowFlags`; at a calibration site without a gauged range or
+gap fill, as there).
+
+**1. Base-flow index** (BFI = Σ base flow ÷ Σ flow), by two filters on the
+§2.9d plumbing (`filterBaseflow` in `reserve/baseflow.ts`, the series
+reflected by 30 days at each end, as there):
+
+| Filter | Formula | Parameters | Source |
+| --- | --- | --- | --- |
+| Hughes, Hannart & Watkins (2003) | q_t = α·q_t−1 + β·(1 + α)·(Q_t − Q_t−1), 0 ≤ q_t ≤ Q_t, b_t = Q_t − q_t, q_0 = 0 | α **0.995**, β **0.5**, **one forward pass** | their eq. 1; β fixed at 0.5 for daily data ("no reason to change the β parameter from the fixed value of 0.5"); α 0.995 for South African daily flows (Smakhtin & Watkins 1997; up to 0.997 in some catchments); Nathan & McMahon's repeated passes set aside as a further parameter |
+| Eckhardt (2005) | b_t = ((1 − BFImax)·a·b_t−1 + (1 − a)·BFImax·Q_t) ÷ (1 − a·BFImax), b_t ≤ Q_t, b_0 = BFImax·Q_0 | a **0.98**, BFImax **0.25** | Eckhardt 2005's BFImax 0.25 for perennial streams on hard-rock aquifers (0.80 perennial on porous aquifers, 0.50 ephemeral on porous); most South African rivers drain fractured hard-rock aquifers. a 0.98 is the usual daily recession constant; Eckhardt (2008) derives it from the record's own recessions instead |
+
+β = 0.5 is Lyne & Hollick's own filter, so the Hughes form is §2.9d's filter
+with one pass instead of three (`lyneHollickBaseflow` is now the β = 0.5 case
+of `filterBaseflow`, bit for bit; tested). b_0 = BFImax·Q_0 is Eckhardt's
+steady state for a constant flow, so a flat record needs no start-up.
+Eckhardt's index can't exceed BFImax much, so its absolute value says more
+about the parameter than the river; read it as a comparison between record
+and model, and the Hughes index as the South African figure. A filter needs
+consecutive days: each runs over every stretch of **30 or more** consecutive
+scored days (`BFI_MIN_RUN_DAYS`; a shorter stretch is mostly start-up), the
+record and the simulated flow over the **same** stretches, and the BFI sums
+over all of them. It needs **365** such days (`SIGNATURE_MIN_DAYS`, a year,
+so every season is in) or is null. For both filters 0 ≤ b_t ≤ Q_t every day,
+so 0 ≤ BFI ≤ 1 (tested on random series and parameters).
+
+**2. The low-flow duration curve.** On the same scored days (365 or more),
+the flow duration curve of the record and of the simulated flow (Weibull
+positions, as check 4, `exceedanceFlow` in `lowFlow.ts`), its **slope**
+between Q70 and Q95 on log flow:
+
+```
+slope = (ln Q70 − ln Q95) ÷ (0.95 − 0.70)          flows floored at 0.001 m³/s
+slope bias = 100 × (slope_sim − slope_obs) ÷ slope_obs    (null when slope_obs = 0, or either curve's Q95 ≤ 0.001 m³/s)
+```
+
+The bias is Yilmaz, Gupta & Wagener's (2008) %BiasFMS form; their segment is
+20–70 % (the fit reports that one, §2.10b), and this is the low segment the
+Reserve's low flows sit on. Beside it, their **%BiasFLV** (the bottom 30 %'s
+volume in log space) from `fdcSignatures` in `calibrate/objective.ts`, the
+definition the fit report and the ensemble's low-flow filter (§2.10e)
+already use. A positive slope bias is a model whose low flows fall away
+faster than the river's. The slope bias needs both curves to flow at Q95:
+where either is at or below the 0.001 m³/s floor there (an intermittent
+river, or a model that dries out), the floored slope measures the floor,
+not the river (two curves that both stop flowing by Q95, with Q70 either
+side of the floor, read −100 % apart; the example Sandspruit catchment
+did), so it is null and %BiasFLV alone judges those low flows.
+
+**3. Skill on withheld recession segments.** The scored record's recession
+segments, found as the recession check finds them (TOSSH defaults and the
+1 mm rain rule, the day mask above). **Every third segment in date order is
+held out** (`HOLDOUT_EVERY` 3: the 3rd, 6th, 9th …, a third of them): a
+deterministic split, the same on every run of the same record, spread
+through the record's seasons and years rather than one period (a date split
+would put every held-out recession in one climate). The power law
+−dQ/dt = a·Q^b is fitted to the **other** segments (ETS, as the check). On
+each held-out segment from its first day s to its last e:
+
+```
+observed fall     y_t = ln(Q_obs(t) ÷ Q_obs(s))
+simulated fall    m_t = ln(Q_sim(t) ÷ Q_sim(s))
+law's fall        l_t = ln(L(t − s) ÷ Q_obs(s)),  L(τ) solved exactly from −dQ/dt = a·Q^b, Q(0) = Q_obs(s)
+                    b = 1: Q_obs(s)·e^(−aτ);  else (Q_obs(s)^(1−b) + (b − 1)·a·τ)^(1/(1−b)), 0 once that base is ≤ 0,
+                    floored at 10⁻⁶ × Q_obs(s)
+skill = 1 − Σ (m_t − y_t)² ÷ Σ y_t²     over every held-out day t > s   (the same for l_t)
+```
+
+The skill is against **no recession at all** (a flat line scores 0; the same
+fall scores 1; tested by hand: a flow that rises as the river falls by
+halves scores −3). Both falls start from their own first day, so the score
+is the recession's shape, not its level (the low-flow curve and the
+calibration statistics judge the level). The simulated flow is scored on
+the held-out segments where it is above zero every day (`modelSegments`); the
+law on all of them. The log RMSEs are reported too. **What is withheld:**
+the segments are withheld from the recession law, which the check compares
+the model with; the model's parameters were fitted to every scored day
+(§2.10b), these included, so for the model the score is on recessions it was
+not fitted to separately, not on unseen days. The fit's split-sample tests
+(§2.10b) are the out-of-sample check of the parameters.
+
+**Warnings** (provisional thresholds, engine constants, pending the
+hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)):
+
+| Signature | Warns when | Reasoning |
+| --- | --- | --- |
+| BFI | \|simulated − observed\| > **0.15** by either filter (`BFI_WARN_DIFF`) | a house default: separation methods and parameters differ in BFI on the same record (Eckhardt 2008 compares seven), so a small gap is method noise, and 0.15 is meant to sit beyond it |
+| Low-flow FDC | \|slope bias\| or \|%BiasFLV\| > **50 %** (`FDC_LOW_WARN_PCT`) | the ensemble's default low-flow limit (§2.10e); low-flow gauging error runs to ±50–100 % (McMillan, Krueger & Freer 2012) |
+| Held-out recessions | simulated skill < **0** (`HOLDOUT_SKILL_WARN`) with **8** or more segments (`RECESSION_MIN_SEGMENTS`), or a simulated flow that reaches zero on every held-out segment | worse than assuming the river doesn't fall at all; below 8 segments not judged, as the recession check |
+
+Each warning starts "Validation signatures (provisional limits): …", names the
+record (and the gauge, at a site) and points at the GR4J parameters to look
+at. The Plausibility checks panel lists them under **Validation signatures**
+([ui.md](./ui.md)), the summary CSV has a *Validation signatures* block
+([api.md](./api.md#export)), and the check list a *Validation signatures*
+line. The fit record is unchanged: it already keeps the fit's %BiasFLV and
+%BiasFMS, and the BFI and the held-out recessions are signatures of a run,
+not of the objective.
+
+*Tests* (`plausibility/signatures.test.ts`, `reserve/baseflow.test.ts`):
+each filter by hand on three-day series and on a step from 1 to 2 m³/s
+(Hughes' quick flow 0.9975·α^k after the step, Eckhardt's base flow
+2B − B·c1^(k+1) with c1 = (1 − B)·a ÷ (1 − a·B)); a steady river gives
+BFI 1 by Hughes and BFImax by Eckhardt; zero flow gives no BFI rather than a
+pass or a fail; gaps split the stretches and a stretch under 30 days drops
+out, 365 days in stretches being the least; the low-flow slope by hand
+(a doubled flow has no slope bias, Q^0.4 −60 %, Q² +100 %; none where either
+curve is at the floor at Q95, a model that dries out or an intermittent river); the held-out skill by hand (1, 0, −3), pooled over the held-out
+days rather than averaged per segment, with the log RMSE and the law's score;
+no segments, nothing judged. `run.invariants.test.ts` checks on random
+networks that both indices stay in [0, 1], Q70 ≥ Q95, the held-out count is
+a third of the segments, a skill never exceeds 1, and that removing the
+observed records leaves the simulated outflow bit-identical.
+
+*Sources:* Hughes, Hannart & Watkins 2003, *Water SA* 29(1):43–48 ·
+Eckhardt 2005, *Hydrological Processes* 19:507–515 · Eckhardt 2008,
+*J. Hydrology* 352:168 (a from recession analysis) · Smakhtin & Watkins 1997,
+WRC 494/1/97 · Yilmaz, Gupta & Wagener 2008, *WRR* 44:W09417 · Gnann et
+al. 2021 (TOSSH) · Klemeš 1986 (split-sample testing).
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
@@ -6784,8 +7290,14 @@ the days *D(y)* of *y* inside the run:
 - partial = |*D(y)*| < *L(y)*; the per-node summary (`yearsOver`,
   `meanModelledM3PerYear`, `meanRegisteredM3PerYear`) counts whole years
   only.
-- storage: Σ `storageM3` of the node's allocations (none when no allocation
-  states one) beside the run's `damCapacityM3` for a farm.
+- storage: Σ `storageM3` of the node's allocations, storage-only (s21b)
+  rows included (none when no allocation states one), beside the run's
+  `damCapacityM3` for a farm, with the difference *C* − *S* and a status
+  banded the same way with *C* for *M* and *S* for *R* (issue #72): **over**
+  = a dam larger than the storage registered for it by more than *τ*,
+  **unregistered** = a dam with no storage registered. Arithmetic only:
+  whether filling the dam is also a s21(a) take is the hydrologist's
+  question (issue #90). A storage-only row is never part of *R(n,s,y)*.
 
 Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
 of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ
@@ -6809,6 +7321,15 @@ volume that isn't a number ≥ 0, an unknown source, dates that aren't ISO days
 in order) are left out with a warning; the ones matched to a farm or water
 user of the run are used, in id order (so a unit's volume sums to the same
 bits whatever order they came in).
+
+A **storage-only** allocation (`waterUse: '21b'`, engine ≥ 1.59.0, issue
+#72) registers a dam's storage under NWA s21(b), not a take: its volume is
+0 and only its storage counts. No mode reads it (it neither caps nor scales
+a unit, and `RunSummary.allocations` doesn't count it); §2.12's storage
+comparison does. A WARMS extract lists one row per s21 water use, so a dam
+arrives as its own 21(b) row; read as a take, its storage would have capped
+the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
+`waterUse` is a take (21a), as before 1.59.0, so no stored input changes.
 
 - **`none`** (the default, and every run before 1.18.0): nothing changes but
   the summary. A run whose input has allocations reports
@@ -6856,7 +7377,8 @@ bits whatever order they came in).
   volumes; the comparison still nets it, and reads the unit below its
   surface volume by that much. Pending the hydrologist, with dam filling vs
   registered storage (s21b, issue #90).
-- **`fullAllocation`**: "what if every lawful user took their entitlement",
+- **`fullAllocation`**: "what if every registered or licensed volume were
+  taken in full" (a registration is not an entitlement, issue #281),
   the background run of a cumulative assessment (WP-3.11). Each unit's
   abstraction demand D = F / e + its demand objects' (a water user's own
   demand) is scaled, water year by water year, by
@@ -6879,10 +7401,12 @@ bits whatever order they came in).
   names them). What the unit is then supplied is the model's, as always. The
   run stores *k* as `allocation_demand_factor`, and `RunSummary.allocations`
   lists per unit and year the demand before and the volume it was scaled to
-  (`scaled`). A year with no demand lists the volume registered over its
-  run days, except the year a forecast tail starts in, which lists k × its
-  demand, 0 (verify/ probe `scaled-no-demand-tail-year`; the two readings
-  disagree, followups.md § Verification).
+  (`scaled`). A year with no demand on the days it is scaled on lists the
+  volume registered over those days, what it would have asked for: its run
+  days, and for the year a forecast tail starts in its historical days
+  (engine ≥ 1.57.0; before, that year listed k × its demand, 0; verify/ probe
+  `scaled-no-demand-tail-year`). A tail that starts on 1 October starts a
+  year with no historical days, a part year of its own over its tail days.
 
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
@@ -6928,9 +7452,10 @@ to its rate all season or dry outside its months, so each capped source also
 carries, per water year, the days the limit bound (`limitBound`: `days`,
 split into `volumeDays`, `rateDays` and `monthsDays`, only years with such a
 day). A day counts when the source took all its room (use ≥ room − 10⁻⁹ of
-it) and the unit still went short (deficit > 10⁻⁹ of its demand), so a day
-with no demand, or one the river or dam couldn't fill anyway without the
-room being used, doesn't count. The day goes to `volumeDays` when what was
+it, or of 1 m³ for a smaller room) and the unit still went short (deficit >
+10⁻⁹ of its demand, or of 1 m³ for a demand under 1 m³: a deficit of 10⁻⁹ m³
+or less is float noise), so a day with no demand, or one the river or dam
+couldn't fill anyway without the room being used, doesn't count. The day goes to `volumeDays` when what was
 left of the year's volume was no more than the limit (a year whose volume is
 used up counts as volume in every month), else to `monthsDays` on a day
 outside the months of use (some allocation of the source in force, none of
@@ -6944,7 +7469,8 @@ left). The count says which limit set the room on a day the unit went short,
 not that the limit alone caused the shortfall: a day the river or dam had
 exactly the room left counts too, and outside the months every short day
 does. What is left is compared with the limit within 10⁻⁹ of the year's
-budget, so a volume used up to summing noise counts as volume. The days are
+budget (or of 1 m³ for a smaller budget), so a volume used up to summing
+noise counts as volume. The days are
 the run's own: a run resumed inside a water year counts that year's days
 from the snapshot on (its `capReached` counts the use before it, as the cap
 does), and the whole run, a forecast tail included, is counted.
@@ -7026,7 +7552,10 @@ with *F*(*t*) = *x* × *p*(*t*) × *e*, so its abstraction demand D = F / e is
 the draft, and runs `simulateNetwork` on it. Other nodes keep their own
 demand. The dam's **boreholes are removed** for the search, those that pump
 into the dam (WP-3.9) included, pending the hydrologist: the yield is
-the dam's, not the dam's plus groundwater. When no transfer touches the dam
+the dam's, not the dam's plus groundwater. The drought restriction rule
+(engine ≥ 1.54.0, §2.7i) is dropped too, on every node: the yield is what
+the dam can give, not what a restriction policy asks of it (pending the
+hydrologist). When no transfer touches the dam
 or anything upstream of it, a probe simulates only the dam and the nodes
 upstream of it: nothing below the dam changes what reaches it, and nothing
 above it depends on its draft (senior users' claims are fixed per node
@@ -7322,6 +7851,14 @@ planning share are project settings (`settings.outlook`). The WUA
 publishes one level to farmers, and each farm page shows that farm's own
 figures at it, *This season* (`views/farmOutlook.ts`, migration 106, issues
 #53 R5 and #122; [ui.md § Farmer view](./ui.md#farmer-view-farm)).
+
+**Without the drought restriction rule** (engine ≥ 1.54.0, §2.7i). The
+outlook and its review triggers (§2.15a) run the project without
+`settings.droughtRestriction` (`withoutDroughtRestriction`, in the engine's
+entry points and the backend job): the triggers are what that rule is made
+from, and a member's demand level on top of the rule would cut demand
+twice. The history the season starts from is the unrestricted one too
+(pending the hydrologist, [followups.md § Hydrologist](./followups.md#hydrologist)).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.
@@ -7654,17 +8191,20 @@ median, 2026-09-26; `outlook.perf.test.ts` holds it under 250 ms and at
 least 8× the older path). The history is shared by every band, level and
 year, since a band changes only the dams' storage on the review date.
 
-**WP-3.8's drought restriction rule.** The roadmap's rule ("cut demand by
-x % when storage < y %", `NetworkNode.restriction`) isn't in the engine
-yet, so no function turns a table into its parameters. The typed shape
-`DroughtRestrictionTriggerParameters` records the intended mapping: the
-review date's month and day; the basis (total farm dam storage, as the
-bands); and one step per row, fullest first, with the band's lower edge
-(`atOrAboveM3`, and ÷ Σ capacity as `atOrAboveShare`) and the row's level
-(its id and `demand.scale` ops, applied from the review date to the season
-end), or null where no level met the rule (the WUA decides). When the rule
-is built it takes these steps; a scenario can then simulate following the
-table.
+**WP-3.8's drought restriction rule** (engine ≥ 1.54.0, §2.7i).
+`restrictionRuleFromTriggers(table, levels)` turns a table into the rule's
+parameters: the review date's month and day as the review date, the day
+after the season end as the lift date (the table's level applies from the
+review date to the season end), the basis the bands' own (total farm dam
+storage, ÷ Σ capacity), and one level per band below the fullest, from the
+band above's lower edge down, cutting each part by 1 − the row level's
+`demand.scale` factor; a row where no level met the rule takes the band
+above's cuts, for the WUA to decide. Its notes say what it couldn't carry
+(§2.7i). The outlook panel offers it as the project's rule
+([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)), and a scenario can
+then simulate following the table. The outlook and the triggers themselves
+run without the rule (`withoutDroughtRestriction`), so a table never reads a
+restriction built from an earlier one.
 
 **Tests** (`outlook/triggers.test.ts`, `triggers.invariants.test.ts`,
 `run.damStorageReset.test.ts`, synthetic): the default review date and a
@@ -7729,6 +8269,12 @@ can store one per base run. The state holds:
   use so far this water year (`allocationUsedM3`) and a full allocation's
   demand factor for the water year in progress (`allocationFactor`), each
   left out without one;
+- from engine 1.54.0 (§2.7i), the drought restriction level each node held
+  the day before (`restrictionLevels`, model order) and whether the rule's
+  EWR trigger site failed that day (`restrictionEwrFailed`), left out
+  without the rule; a run resumed part-way keeps the levels until its next
+  review or lift date, one resumed on the capture run's first day decides
+  that day as the capture run did;
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
   split by the snapshot is still assessed whole (§2.9c); with low flows on
@@ -7911,10 +8457,22 @@ table is already general enough to hold such nodes.
   `riverFirst`, `trigger` and `runOfRiver`; the river-abstraction fraction is
   not (the pump takes the flow below the dam that need not pass, up to its
   capacity).
+- **Drought restrictions** (curtail demand when storage falls low, WP-3.8):
+  **ported** (engine ≥ 1.54.0, §2.7i) as one rule per project on the total
+  farm dam storage, decided on review dates, with a % cut per part of
+  demand per level and the basic-needs floor kept.
 - **Stress classes** (supply ratio): **≥ 95% Low, ≥ 85% Moderate, ≥ 70% High,
   ≥ 50% Severe, otherwise Critical**, per farm and per month.
   **Ported** (engine 0.32.0, §2.11a): per farm, per other user and for the
   whole system, per water-year month.
+- **Crop sheets:** `[Crop_Factors]` (A-pan evaporation, rainfall and
+  effective-rainfall rows, then a crop per row with twelve factors, Oct..Sep,
+  and an irrigation efficiency) and `[Crop_Areas]` (a farm per row, a crop
+  per column, m²). The factors are FAO-56 Kc values (against ET₀) that the
+  workbook applies to A-pan with no pan coefficient (§2.3). The browser
+  reads these two sheets (`frontend/src/lib/spreadsheet/import/nodeCrops.ts`,
+  issue #289) and marks the set FAO-shaped, so a Kp of about 0.75 applies
+  before the factors stand as A-pan factors.
 - **Naturalisation:** present-day flow + irrigation demand = naturalised flow,
   compared with observed and simulated flow at the outlet.
 
@@ -8019,6 +8577,7 @@ text:
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
+| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the storage at the start of that day (every farm dam's, the listed dams', or under `own` each unit's own dam, in its own `restriction_level` column, the catchment column the deepest), raised to the EWR trigger's level after a day its site's EWR wasn't met (the outlet's catchment column, or the gauge's), 0 from a lift date, else held; only the units the rule cuts carry `restricted_demand`; each part's cut column (a shared basis only) is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's reviews, EWR-triggered reviews, days per level and unit means add up to the columns. The level, cut and floor formulas are written out in the check, not the engine's. A resumed run starts from the state its summary records (`start`), which the check takes as given: it can't see the snapshot. Without the rule, no restriction column or summary. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
@@ -8042,8 +8601,9 @@ objects and the basic-needs floor, river off-takes and canal seepage, other
 water users, supply rules and the river pump, dam survey curves and releases,
 and hands-off flows. On engine 1.36.0 it found no departure from this
 document; on 1.53.0 one, on a few random networks: a float-noise demand
-switches on a primary or emergency dam-target borehole (§2.7d), and drops a
-day from `limitBound` (§2.12a) (followups.md § Verification). What it doesn't
+switched on a primary or emergency dam-target borehole (§2.7d), fixed in
+1.57.0 (§2.3, §2.7d; erratum ER-12), and a noise-level day in `limitBound`
+that §2.12a now settles. What it doesn't
 cover yet (rule tables, forecast mode, calibration, land cover, time-varying
 development, drought restrictions, `demand.scale` by part and the other
 optional inputs) is its phase 2b ([followups.md](./followups.md) §
@@ -8105,8 +8665,8 @@ through `runModelChecked` = `runModel` + `withVerification`, which calls
 `verifyRun` (`packages/engine/src/verify/verify.ts`) on the run's own output:
 `checkBalance`, `checkWorkings`, `checkSoilWater`, `checkRunoffBalance`, `checkTransferLimits`,
 `checkReportTotals`, (engine ≥ 0.17.0) `checkEwrAttribution`, `checkGroundwater`, `checkLandCover`,
-`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
-ids `balance` … `allocations`, `operatingRules` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
+`checkAllocations`, (engine ≥ 1.32.0) `checkOperatingRules`, (engine ≥ 1.54.0) `checkDroughtRestriction` and (engine ≥ 1.34.0) `checkSupplyAssurance`,
+ids `balance` … `allocations`, `operatingRules`, `droughtRestriction` and `assurance` (`VerificationCheckId`). Each runs separately, so one failure doesn't hide
 another, and a check that throws counts as failed with the reason. The result
 is `RunSummary.verification`: pass/fail per check, the first broken property
 with node ids and day numbers turned into farm names and dates, and the largest
@@ -8221,7 +8781,7 @@ step when a definition changes.
 | **Hydrological unit** | The name users see (issue #54 item 2a; client question Q6, issue #90) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The workspace, the farmer view, the farmer emails and the shared view all say it; the code, API, CSV exports and this document say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the S-pan evaporation (convert it before entering it as A-pan, §2.4a), MAP and naturalised flow data per quaternary catchment. |
-| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |
+| **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (about 0.6–0.85 × pan; 0.35–0.85 in FAO-56 Table 5). |
 | **Potential evaporation (PE)** | The evaporation GR4J's soil store is drawn down by. Pan coefficient × A-pan by default, or a monthly row entered directly, such as a station ET₀ (`settings.pe`, engine ≥ 0.31.0, §2.4a). |
 | **Effective rainfall** | The share of rain on cropped land that reduces irrigation need (a project setting). |
 | **Soil-water store** | Effective rain the crop can't use on the day it falls, kept for the following days up to `effectiveRainStoreMm` (25 mm by default, engine ≥ 0.14.0). |

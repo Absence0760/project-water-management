@@ -9,6 +9,7 @@
 	import { api, type StoredImportReport } from '$lib/api';
 	import ImportReportLists from '$lib/components/import/ImportReportLists.svelte';
 	import { fmtDate } from '$lib/format/number';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let { projectId }: { projectId: string } = $props();
 
@@ -39,7 +40,7 @@
 	<section class="panel" aria-labelledby="import-record-h">
 		<div class="panel-head"><h2 id="import-record-h">Import record</h2></div>
 		<!-- One line of markup, so the sentence has no stray line break in its text. -->
-		<p class="summary">Imported from the {sourceLabel} <span class="mono">{report.fileName}</span> on {when} by {report.importedBy}.</p>
+		<p class="summary">Imported from the {sourceLabel} <span class="mono">{report.fileName}</span> on {when} by {report.importedBy ?? FORMER_MEMBER}.</p>
 		<p class="muted small">Importer: {report.importerVersion}. What it flagged then is kept here as it was shown.</p>
 		<ImportReportLists
 			notes={report.notes}

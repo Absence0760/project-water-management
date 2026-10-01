@@ -138,11 +138,13 @@ const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_s
  */
 const NO_INSERT = new Set(['series_blob', 'note_revision']);
 /**
- * Reference data water_app only reads: the languages a person or an invite
- * can have, written by the migration runner from the engine's language table
- * (080_language.sql, scripts/migrate.ts syncLanguages).
+ * Tables water_app only reads: the languages a person or an invite can have,
+ * written by the migration runner from the engine's language table
+ * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
+ * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
+ * no caller can choose a recipient.
  */
-const READ_ONLY = new Set(['language']);
+const READ_ONLY = new Set(['language', 'pack_notice']);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -166,11 +168,13 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
  *     tokens, their pending jobs, invites they sent);
  *   - set null: the row is the project's and stays, with who made it cleared
  *     (the audit log is pseudonymised as well, 048_account_deletion.sql);
- *   - restrict: the account can't be deleted while the row exists, because
- *     the row is evidence that names its maker (a run, a nomination, an
- *     ensemble, a scenario, an imported project, a project or team they
- *     created). Deleting such an account needs the operator to decide what
- *     happens to that evidence first (followups.md § POPIA).
+ *   - restrict: the account can't be deleted while the row exists. None
+ *     today: evidence that names its maker (a project or team they created,
+ *     a run, a nomination, an ensemble, a scenario, an imported project) was
+ *     restrict until 138_account_evidence_deletion.sql, and is now set null
+ *     too, under the rule "keep the evidence, remove the name" (issue #112).
+ *     A new restrict key needs the operator's decision on what deletion does
+ *     to it first (docs/security.md § Personal information).
  * account-deletion.db.test.ts checks the outcome end to end.
  */
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
@@ -194,13 +198,13 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',
-	'model_run.created_by': 'restrict',
+	'model_run.created_by': 'set null',
 	'model_run.notes_updated_by': 'set null',
 	'note.author_id': 'set null',
 	'note.deleted_by': 'set null',
 	'note_revision.edited_by': 'set null',
-	'project.created_by': 'restrict',
-	'project_import.imported_by': 'restrict',
+	'project.created_by': 'set null',
+	'project_import.imported_by': 'set null',
 	'project_member.user_id': 'cascade',
 	'render_token.user_id': 'cascade',
 	'report.requested_by': 'cascade',
@@ -208,16 +212,16 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'report_schedule.created_by': 'set null',
 	'report_schedule_recipient.user_id': 'cascade',
 	'revoked_session.user_id': 'cascade',
-	'run_nomination.nominated_by': 'restrict',
+	'run_nomination.nominated_by': 'set null',
 	// What the WUA published to farmers stays with who published or ended it cleared (106).
 	'outlook_publication.ended_by': 'set null',
 	'outlook_publication.published_by': 'set null',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
-	'run_uncertainty.created_by': 'restrict',
+	'run_uncertainty.created_by': 'set null',
 	// The assessor who decided an application (045, WP-3.3): the decision stays with who cleared.
 	'scenario.decided_by': 'set null',
-	'scenario.owner_user_id': 'restrict',
+	'scenario.owner_user_id': 'set null',
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
 	'scenario_sweep.created_by': 'set null',
@@ -230,7 +234,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
-	'team.created_by': 'restrict',
+	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).
 	'user_preferences.user_id': 'cascade',
@@ -354,7 +358,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app only SELECT, and has only a read policy, on reference tables (language)', async () => {
+	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice)', async () => {
 		for (const table of READ_ONLY) {
 			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);

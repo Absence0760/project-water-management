@@ -22,8 +22,9 @@
 //    nothing, and otherwise at most the in-force allocations' maximum rates
 //    × 86 400 (dailyLimits). The cap's room on a day is the smaller of the
 //    two.
-//  - 'fullAllocation': "what if every lawful user took their entitlement"
-//    (WP-3.11's background run): each unit's abstraction demand (crops and
+//  - 'fullAllocation': "what if every registered or licensed volume were
+//    taken in full" (a registration is not an entitlement; WP-3.11's
+//    background run): each unit's abstraction demand (crops and
 //    demand objects) is scaled, per water year, so it adds up to the
 //    registered volume in force over the run's days of that year (both
 //    sources together), keeping the unit's own seasonal pattern. A unit with
@@ -35,7 +36,7 @@
 //
 // Pure, like the rest of the engine.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
-import type { AllocationEntry, AllocationWaterSource } from './compare';
+import { isStorageOnly, type AllocationEntry, type AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 
 export const ALLOCATION_MODES = ['none', 'cap', 'fullAllocation'] as const;
@@ -77,12 +78,19 @@ export function usableAllocations(list: readonly AllocationEntry[] | undefined, 
 						: a.validFrom && a.validTo && a.validFrom > a.validTo
 							? 'it is valid from after valid to'
 							: null;
-		if (bad) {
-			warnings.push(`allocation ${String(a.id)} left out: ${bad}`);
+		const use = a.waterUse ?? null;
+		const badUse = use !== null && use !== '21a' && use !== '21b' ? `its water use "${String(use)}" is not 21a or 21b` : null;
+		if (bad || badUse) {
+			warnings.push(`allocation ${String(a.id)} left out: ${bad ?? badUse}`);
 			continue;
 		}
 		// A licence condition that doesn't read is dropped, not the volume (a stored input edited by hand).
 		let c = a;
+		// A storage-only (21b) row registers no take (engine ≥ 1.59.0): a volume on it isn't one either.
+		if (use === '21b' && a.volumeM3PerYear > 0) {
+			warnings.push(`allocation ${String(a.id)}: it is storage only (21b), so its volume of ${a.volumeM3PerYear} m³ a year is not a take and is ignored`);
+			c = { ...c, volumeM3PerYear: 0 };
+		}
 		if (a.months != null && !(Array.isArray(a.months) && a.months.every((m) => Number.isInteger(m) && m >= 1 && m <= 12))) {
 			warnings.push(`allocation ${String(a.id)}: its months of use aren't calendar months 1–12, so they're ignored`);
 			c = { ...c, months: null };
@@ -228,7 +236,9 @@ export function outsideMonths(allocs: readonly AllocationEntry[], source: Alloca
  * keep that factor, so the tail never changes a historical day's demand
  * (engine-audit.md K1); its registered volume is then factor × demand, as a
  * pinned year's. So a year with no demand on its historical days takes
- * nothing on its tail days either, as the run without the tail has it.
+ * nothing on its tail days either, as the run without the tail has it, and
+ * (engine ≥ 1.57.0) lists the volume registered over its historical days, as
+ * every other year with no demand lists the volume over its days.
  * A unit that abstracts only from run day `from` (NetworkNode.abstractionFrom,
  * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
  * it starts in asks for that part of the year's volume, a year wholly before
@@ -266,8 +276,10 @@ export function fullAllocationFactors(
 		let all = d;
 		for (let k = fit + 1; k <= last; k++) all += demand[k]!;
 		// A pinned year was scaled to the capture run's volume for the whole of it, and a year cut by
-		// the forecast tail to its historical days' volume: record what its days got.
-		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || fit < last ? f * all : reg });
+		// the forecast tail to its historical days' volume: record what its days got. A year with no
+		// demand to scale lists the volume registered over the days it would have been scaled on, the
+		// year the tail starts in too (engine ≥ 1.57.0; before, that year listed k × demand = 0).
+		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || (fit < last && d > 0) ? f * all : reg });
 		t = last + 1;
 	}
 	return { factor, years, unscaled };
@@ -327,7 +339,11 @@ export function matchAllocations(
 	warnings: string[]
 ): AllocationPlan {
 	// In id order, so a unit's registered volume sums the same to the last bit however the list came.
-	const list = usableAllocations(allocations, warnings).sort((a, b) => cmpStr(String(a.id), String(b.id)));
+	// A storage-only (s21b) allocation is not a take (engine ≥ 1.59.0): it neither caps nor scales a
+	// unit, and RunSummary.allocations doesn't count it; the storage comparison reads it (compare.ts).
+	const list = usableAllocations(allocations, warnings)
+		.filter((a) => !isStorageOnly(a))
+		.sort((a, b) => cmpStr(String(a.id), String(b.id)));
 	const index = new Map(nodes.map((n, i) => [n.id, i]));
 	const byNode = new Map<number, AllocationEntry[]>();
 	for (const a of list) {

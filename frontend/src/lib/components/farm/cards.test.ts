@@ -27,6 +27,8 @@ import {
 	bandChip,
 	contactText,
 	levelWord,
+	registeredCard,
+	registeredNote,
 	stateText
 } from './cards';
 import { vaalbankFixture } from './fixture';
@@ -268,6 +270,36 @@ describe('Your dam', () => {
 		expect(down.trend.dir).toBe('down');
 		const flat = damCard(withFarm((f) => (f.dam!.pct30dAgo = 0.244)).farm, 'm3')!;
 		expect(sp(flat.trend.text)).toBe('About the same as 30 days ago (24 %)');
+	});
+});
+
+describe('Your registered water (issue #72)', () => {
+	it('lists the farm’s own registered volumes and storage beside the season’s modelled supply and dam', () => {
+		const v = vaalbankFixture();
+		v.registered = { asOf: '2024-01-12', surfaceM3PerYear: 400_000, groundwaterM3PerYear: 25_000, storageM3: 300_000 };
+		const r = registeredCard(v, 'ML')!;
+		expect(r.lines.map(sp)).toEqual(['Surface water: 400 ML a year', 'Groundwater: 25 ML a year', 'Dam storage: 300 ML']);
+		expect(sp(r.use)).toBe('The model supplied 324.2 ML since 1 Oct. The volume registered for the whole year is 425 ML.');
+		expect(sp(r.dam)).toBe('Your dam in the model holds 350 ML when full.');
+		expect(sp(registeredCard(v, 'm3')!.lines[0])).toBe('Surface water: 400 000 m³ a year');
+	});
+
+	it('is null with nothing registered, and leaves out what isn’t', () => {
+		const v = vaalbankFixture();
+		expect(registeredCard(v, 'ML')).toBeNull();
+		v.registered = null;
+		expect(registeredCard(v, 'ML')).toBeNull();
+		// Storage only (a 21(b) row, no take): no supply line, and the dam beside it.
+		v.registered = { asOf: '2024-01-12', surfaceM3PerYear: null, groundwaterM3PerYear: null, storageM3: 300_000 };
+		expect(registeredCard(v, 'ML')).toEqual({ lines: [expect.stringMatching(/^Dam storage: 300\sML$/)], use: null, dam: expect.stringMatching(/^Your dam in the model/) });
+		// A take, no storage registered: no dam line.
+		v.registered = { asOf: '2024-01-12', surfaceM3PerYear: 1000, groundwaterM3PerYear: null, storageM3: null };
+		expect(registeredCard(v, 'ML')!.dam).toBeNull();
+	});
+
+	it('says a registered volume is not an entitlement, and never says lawful or unlawful of the farm', () => {
+		expect(registeredNote()).toContain('A registered volume is not an entitlement');
+		expect(registeredNote()).not.toMatch(/\b(unlawful|illegal|compliant)\b/i);
 	});
 });
 

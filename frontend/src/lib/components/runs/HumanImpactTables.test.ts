@@ -61,3 +61,38 @@ describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', (
 		expect(body).not.toContain('Per person');
 	});
 });
+
+describe('the demand-objects table and where each number comes from (engine 1.56.0)', () => {
+	it('adds a Source column and the demand by source when an object records one', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object({ source: 'meter', avgDemandM3Day: 75 }), object({ id: 'm', name: 'Mill', category: 'industrial' })]) } }).body);
+		expect(body).toContain('Hydrological unit Demand object Source Priority');
+		expect(body).toContain('Village Domestic Meter records first 75');
+		expect(body).toContain('Mill Industrial not recorded first 25');
+		expect(body).toContain('Of their demand, 75% is from meter records and 25% not recorded.');
+	});
+
+	it('has neither when no object records a source (every run before engine 1.56.0)', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object()]) } }).body);
+		expect(body).not.toContain('Source');
+		expect(body).not.toContain('Of their demand');
+	});
+});
+
+describe('the other water users’ pumps table (engine 1.58.0)', () => {
+	const user = (over: object = {}) => ({ nodeId: 'u', name: 'Town', priority: 'senior', avgDemandM3Day: 800, avgSuppliedM3Day: 225, avgDeficitM3Day: 575, fractionSupplied: 0.28, avgReturnedM3Day: 0, avgEwrChargeM3Day: 0, daysEwrNotMet: 0, ...over });
+	const withUsers = (users: object[]) => ({ farms: [], users, catchment: {}, warnings: [] }) as unknown as RunSummary;
+
+	it('lists each user with a pump capacity, even when the users table itself is left out', () => {
+		const s = withUsers([user({ avgRiverAbstractionM3Day: 225, avgPumpLimitedM3Day: 250, daysPumpLimited: 2 }), user({ nodeId: 'm', name: 'Mill' })]);
+		const body = text(render(HumanImpactTables, { props: { summary: s, users: false } }).body);
+		expect(body).toContain('Other water users’ pumps');
+		expect(body).toContain('Town 800 225 250 2');
+		// A user without a pump isn't in it.
+		expect(body).not.toContain('Mill');
+	});
+
+	it('has no pumps table when no user has a pump capacity', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: withUsers([user()]) } }).body);
+		expect(body).not.toContain('pumps');
+	});
+});

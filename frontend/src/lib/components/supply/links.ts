@@ -15,8 +15,9 @@ export const UNIT_PARAM = 'unit';
  * in the run summary, and `res-farm` the unit detail. `res-other-uses` is the
  * land-cover, groundwater, demand-object and other-user tables, which were
  * under the run summary with no anchor (issue #137): the Summary links here.
+ * `res-restrictions` is the drought restriction rule's tables (engine ≥ 1.54.0).
  */
-export const SUPPLY_ANCHORS = ['res-farm', 'res-farms', 'res-curtailment', 'res-assurance', 'res-other-uses'] as const;
+export const SUPPLY_ANCHORS = ['res-farm', 'res-farms', 'res-curtailment', 'res-assurance', 'res-restrictions', 'res-other-uses'] as const;
 
 /** True for a `#res-…` fragment that now lives on Units & supply (without the `#`). */
 export function supplyAnchor(hash: string): boolean {

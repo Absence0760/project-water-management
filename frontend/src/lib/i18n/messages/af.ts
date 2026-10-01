@@ -55,6 +55,8 @@ export const af: Catalogue = {
 	'df3539b8': 'Mislukte agtergrondtake',
 	// Failing data feeds
 	'cf891bfc': 'Datavoere wat misluk',
+	// Hydrological units short of water (automatic publications)
+	'ef9a2bfa': 'Hidrologiese eenhede met ’n watertekort (outomatiese publikasies)',
 	// dam level
 	'17e428e3': 'die damvlak',
 	// river flow forecast
@@ -67,6 +69,8 @@ export const af: Catalogue = {
 	'8bc7a37b': 'mislukte agtergrondtake',
 	// failing data feed
 	'fb655347': 'datavoere wat misluk',
+	// hydrological units short of water
+	'e5f272dd': 'hidrologiese eenhede met ’n watertekort',
 	// Dam running low: {farm}
 	'21b1fd3a': 'Dam raak laag: {farm}',
 	// Warns when the model puts your dam below {pct}. Your WUA sets this level.
@@ -209,6 +213,8 @@ export const af: Catalogue = {
 	'874f0827': 'Seisoensvooruitsig',
 	// What is the season outlook?
 	'd82c623d': 'Wat is die seisoensvooruitsig?',
+	// Your registered water
+	'97df4b2d': 'Jou geregistreerde water',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -305,6 +311,18 @@ export const af: Catalogue = {
 	'e54e8052': 'besproeiing stop by {pct}',
 	// {storage} of {capacity}
 	'e25b39e5': '{storage} van {capacity}',
+	// This is what is registered for your hydrological unit with the Department of Water and Sanitation (DWS). A registered volume is not an entitlement, and it doesn’t say whether a use is lawful.
+	'95525f4e': 'Dit is wat vir jou hidrologiese eenheid by die Departement van Water en Sanitasie (DWS) geregistreer is. ’n Geregistreerde volume is nie ’n reg op water nie, en dit sê nie of ’n gebruik wettig is nie.',
+	// Surface water: {volume} a year
+	'106ead85': 'Oppervlakwater: {volume} per jaar',
+	// Groundwater: {volume} a year
+	'867e8f4b': 'Grondwater: {volume} per jaar',
+	// Dam storage: {volume}
+	'1da2cd80': 'Damberging: {volume}',
+	// The model supplied {got} since {from}. The volume registered for the whole year is {year}.
+	'39eaf4e3': 'Sedert {from} het die model {got} gelewer. Die volume wat vir die hele jaar geregistreer is, is {year}.',
+	// Your dam in the model holds {capacity} when full.
+	'3b652552': 'Jou dam in die model hou {capacity} wanneer hy vol is.',
 	// Model: OK
 	'70c63e42': 'Model: goed',
 	// Model: watch
@@ -979,6 +997,16 @@ export const af: Catalogue = {
 	'4702e852': 'Gemiddelde vloei by die uitloop en die ekologiese reserwe elke maand, in m³ per dag',
 	// Flow
 	'3df462b5': 'Vloei',
+	// Member summary
+	'c6bc9e37': 'Opsomming vir lede',
+	// The river’s ecological reserve
+	'd593593a': 'Die rivier se ekologiese reserwe',
+	// Couldn’t load the flow chart just now.
+	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
+	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
+	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
+	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// Your comment is posted.
 	'8883bbbe': 'Jou kommentaar is geplaas.',
 	// Sign in to comment.
@@ -997,8 +1025,6 @@ export const af: Catalogue = {
 	'c007a48f': 'Die weergawe wat dit vervang het, het die kode {code}.',
 	// Check it on the verify page
 	'4ba8c6ca': 'Kontroleer dit op die verifikasiebladsy',
-	// The river’s ecological reserve
-	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Months the Reserve is met at each EWR site: the baseline beside this application, as the pack records them.
 	'7908fb42': 'Maande waarin die Reserwe by elke EWR-punt behou word: die basislyn en hierdie aansoek langs mekaar, soos die pakket dit aanteken.',
 	// Months the Reserve is met at each EWR site, as the pack records them.
@@ -1063,8 +1089,6 @@ export const af: Catalogue = {
 	'c68155f0': '’n Bewyspakket vir ’n lisensieaansoek: die modelresultate wat ’n aansoeker by ’n aansoek om ’n watergebruiklisensie aanheg, onderteken deur ’n geregistreerde professionele persoon en vasgelê sodra dit uitgereik is. Hierdie bladsy wys ’n deel daarvan, leesalleen, en noem geen hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn. If the pack is withdrawn or replaced, the link says so instead of showing its figures.
 	'60872763': 'Hierdie skakel werk totdat dit verval of ingetrek word. As die pakket teruggetrek of vervang word, sê die skakel dit in plaas daarvan om sy syfers te wys.',
-	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
-	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// An application in {project}, shared read-only
 	'47a825ae': '’n Aansoek in {project}, leesalleen gedeel',
 	// Months the Reserve is met at each EWR site: the published baseline beside this application.
@@ -1085,14 +1109,22 @@ export const af: Catalogue = {
 	'243c85d3': '’n Aansoek om water in hierdie opvanggebied te gebruik, gemodelleer op grond van die opvanggebied se gepubliseerde basislyn. Dit is leesalleen, en dit noem geen ander hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn, while the application is submitted or decided.
 	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
-	// No flows to show.
-	'be1887a5': 'Geen vloei om te wys nie.',
+	// Print a summary for members
+	'ff85468b': 'Druk ’n opsomming vir lede',
+	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
+	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
+	// Period
+	'87248424': 'Tydperk',
+	// Print or save as PDF
+	'80a077b4': 'Druk of stoor as PDF',
 	// The mean flow was above the reserve in every month.
 	'bb92196c': 'Die gemiddelde vloei was elke maand bo die reserwe.',
 	// The mean flow was below the reserve in every month.
 	'd9bcae10': 'Die gemiddelde vloei was elke maand onder die reserwe.',
 	// The mean flow was below the reserve in {n} of the {months} months.
 	'0a3709bf': 'Die gemiddelde vloei was in {n} van die {months} maande onder die reserwe.',
+	// No flows to show.
+	'be1887a5': 'Geen vloei om te wys nie.',
 	// River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below.
 	'8ca58fb8': 'Riviervloei by die opvanggebied se uitloop elke maand teenoor sy ekologiese reserwe, {from} tot {to}. {verdict} Die syfers is in die tabel hieronder.',
 	// {from} to {to}. Monthly means of the modelled daily flow.
@@ -1255,6 +1287,20 @@ export const af: Catalogue = {
 	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// {farms} in the catchment.
 	'aecf2c05': '{farms} in die opvanggebied.',
+	// The last 30 days
+	'a675b6da': 'Die afgelope 30 dae',
+	// The whole model run
+	'5d348ea7': 'Die hele modellopie',
+	// {period}: {dates}
+	'856bd14d': '{period}: {dates}',
+	// Kept its reserve on every one of the {days} from {from} to {to}.
+	'150c49d2': 'Het sy reserwe op elkeen van die {days} van {from} tot {to} behou.',
+	// Below its reserve on all of the {days} from {from} to {to}.
+	'a9b2bd5d': 'Onder sy reserwe op al die {days} van {from} tot {to}.',
+	// Below its reserve on {n} of the {days} from {from} to {to}.
+	'72a8a1e8': 'Onder sy reserwe op {n} van die {days} van {from} tot {to}.',
+	// Printed on {date}.
+	'367a96b8': 'Gedruk op {date}.',
 	// Language
 	'9a73db9b': 'Taal',
 	// Couldn’t save your choice to your account. It applies on this device.
@@ -1697,10 +1743,6 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// Couldn’t load the flow chart just now.
-	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
-	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
-	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
 	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.

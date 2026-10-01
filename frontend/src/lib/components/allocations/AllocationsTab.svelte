@@ -47,8 +47,10 @@
 		rowsInListOrder,
 		shortHash,
 		SOURCE_LABEL,
+		storageSentence,
 		unitRows,
 		unitStatusText,
+		volumeCell,
 		waterYearLabel
 	} from './allocations';
 
@@ -147,6 +149,8 @@
 	const pickedName = $derived(units.find((u) => u.nodeId === pickedId)?.name ?? '');
 	const pickedYears = $derived(rows.filter((r) => r.nodeId === pickedId));
 	const pickedStorage = $derived(comparison?.nodes.find((n) => n.nodeId === pickedId)?.storage ?? null);
+	// The dam against its registered storage (s21b), in words (issue #72).
+	const storageLine = $derived(pickedStorage && comparison ? storageSentence(pickedStorage, comparison.tolerance) : null);
 	const pickedCap = $derived(capYears.filter((c) => c.nodeId === pickedId));
 	const pickedVolumes = $derived(data?.allocations.filter((a) => a.nodeId === pickedId) ?? []);
 	const tally = $derived.by(() => {
@@ -229,8 +233,8 @@
 
 	async function remove(a: Allocation) {
 		const ok = await confirmDialog({
-			title: 'Delete this registered volume?',
-			message: `Delete the registered volume ${a.registrationNo || ''} (${fmtNum(a.volumeM3PerYear)} m³/a)?`,
+			title: a.waterUse === '21b' ? 'Delete this registered storage?' : 'Delete this registered volume?',
+			message: `Delete the registered ${a.waterUse === '21b' ? 'storage' : 'volume'} ${a.registrationNo || ''} (${a.waterUse === '21b' ? `${fmtNum(a.storageM3)} m³` : `${fmtNum(a.volumeM3PerYear)} m³/a`})?`,
 			confirmLabel: 'Delete',
 			danger: true
 		});
@@ -389,18 +393,17 @@
 											{/each}
 										</div>
 									{/if}
-									{#if pickedStorage && (pickedStorage.registeredM3 !== null || pickedStorage.modelledCapacityM3)}
-										<p class="small storage">
-											Registered storage {pickedStorage.registeredM3 === null ? 'not stated' : `${fmtNum(pickedStorage.registeredM3)} m³`} · dam capacity in the run
-											{fmtNum(pickedStorage.modelledCapacityM3)} m³
-										</p>
+									{#if storageLine}
+										<p class="small storage" data-testid="allocation-storage">{storageLine}</p>
 									{/if}
 									<h3 class="sub-h">Registered volumes for this hydrological unit</h3>
 									{#if pickedVolumes.length}
 										<ul class="vols">
 											{#each pickedVolumes as a (a.id)}
 												<li>
-													<span class="vol-main"><strong>{fmtNum(a.volumeM3PerYear)} m³/a</strong> · {SOURCE_LABEL[a.waterSource]} · {AUTHORISATION_LABEL[a.authorisation]}</span>
+													<span class="vol-main"
+														><strong>{volumeCell(a)}</strong>{#if a.waterUse === '21b' && a.storageM3 !== null}: {fmtNum(a.storageM3)} m³{/if} · {SOURCE_LABEL[a.waterSource]} · {AUTHORISATION_LABEL[a.authorisation]}</span
+													>
 													<span class="small muted">
 														{a.registrationNo || 'No registration number'}{data?.canSeeHolders && a.holder ? ` · ${a.holder}` : ''} · valid {validity(a)}
 													</span>
@@ -459,7 +462,7 @@
 										<th scope="row">{a.nodeName ?? 'Not matched'}<span class="sub">{a.registrationNo || '–'}</span></th>
 										{#if data.canSeeHolders}<td data-label="Registered user">{a.holder ?? '–'}</td>{/if}
 										<td data-label="Authorisation">{AUTHORISATION_LABEL[a.authorisation]}<span class="sub">{PURPOSE_LABEL[a.purpose]}</span></td>
-										<td class="num" data-label="Volume (m³/a)">{fmtNum(a.volumeM3PerYear)}<span class="sub">{SOURCE_LABEL[a.waterSource]}</span></td>
+										<td class="num" data-label="Volume (m³/a)">{a.waterUse === '21b' ? volumeCell(a) : fmtNum(a.volumeM3PerYear)}<span class="sub">{SOURCE_LABEL[a.waterSource]}</span></td>
 										<td class="num" data-label="Storage (m³)">{fmtNum(a.storageM3)}</td>
 										<td data-label="Valid">
 											{validity(a)}

@@ -322,6 +322,30 @@ describe('projects', () => {
 	});
 });
 
+describe('a copied project’s drought restriction rule (engine 1.54.0, WP-3.8)', () => {
+	it('points the rule’s dams, units and EWR site at the copy’s nodes, and leaves the original’s alone', async () => {
+		const a = await signUp('CopyRestriction');
+		const { projectId, outlet, farm } = await projectWithModel(a);
+		const rule = {
+			reviewDates: ['10-01'],
+			levels: [{ belowPct: 0.5, cuts: { crops: 0.5 } }],
+			basis: 'dams',
+			damNodeIds: [farm.id],
+			nodeIds: [farm.id],
+			ewrTrigger: { siteNodeId: outlet.id, level: 1 }
+		};
+		expect((await a.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: rule } })).status).toBe(200);
+
+		const copy = await a.call('POST', `/projects/${projectId}/copy`, { name: 'Catchment R' });
+		expect(copy.status).toBe(201);
+		const dup = (await a.call('GET', `/projects/${copy.body.project.id}/model`)).body;
+		const ids = (name: string) => dup.nodes.find((n: { name: string }) => n.name === name).id as string;
+		expect(copy.body.project.settings.droughtRestriction).toEqual({ ...rule, damNodeIds: [ids('Farm 1')], nodeIds: [ids('Farm 1')], ewrTrigger: { siteNodeId: ids('Gauge'), level: 1 } });
+		const orig = (await a.call('GET', `/projects/${projectId}`)).body.project;
+		expect(orig.settings.droughtRestriction).toEqual(rule);
+	});
+});
+
 describe('the project’s time zone (058_project_time_zone, issue #45)', () => {
 	it('starts in South Africa, takes a known zone from an editor, refuses an unknown one and a viewer, and is audited', async () => {
 		const owner = await signUp('Zone');
@@ -548,11 +572,19 @@ describe('a project with a nominated evidence run', () => {
 		expect((await owner.call('GET', `/projects/${projectId}/evidence`)).body.nominations.map((n: { runId: string }) => n.runId)).toEqual([runId]);
 	});
 
-	it('deleting the account is refused while it created the project (no cascade into project); there is no account-deletion route', async () => {
+	it('deleting the account is refused while it is the project’s only owner; with a co-owner the project and its evidence stay, maker cleared (138)', async () => {
 		const owner = await signUp('EvUser');
-		const { projectId } = await withEvidence(owner, 'User evidence');
-		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [owner.id])).rejects.toMatchObject({ code: '23503' });
+		const coOwner = await signUp('EvCoOwner');
+		const { projectId, runId } = await withEvidence(owner, 'User evidence');
+		// The only owner: refused at commit (project_member_keep_owner), the project untouched.
+		await expect(asOwner('DELETE FROM app_user WHERE id = $1', [owner.id])).rejects.toMatchObject({ code: '23514' });
 		expect((await owner.call('GET', `/projects/${projectId}`)).status).toBe(200);
+		// Handed over: the deletion goes through, and the project, its run and its nomination stay with no maker.
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: coOwner.email, role: 'owner' })).status).toBe(201);
+		await asOwner('DELETE FROM app_user WHERE id = $1', [owner.id]);
+		expect(await asOwner('SELECT created_by FROM project WHERE id = $1', [projectId])).toEqual([{ created_by: null }]);
+		expect(await asOwner('SELECT created_by FROM model_run WHERE id = $1', [runId])).toEqual([{ created_by: null }]);
+		expect((await coOwner.call('GET', `/projects/${projectId}/evidence`)).body.nominations).toEqual([expect.objectContaining({ runId, nominatedBy: null })]);
 	});
 
 	it('the operator can still remove one out of band, as the schema owner, by disabling the guard for one transaction', async () => {

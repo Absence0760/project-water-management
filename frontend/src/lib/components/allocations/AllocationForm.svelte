@@ -6,7 +6,7 @@
 	import { api, type Allocation, type AllocationInput } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { parseNum } from '$lib/format/number';
-	import { AUTHORISATION_LABEL, conditionsFromText, monthShort, PURPOSE_LABEL, SOURCE_LABEL, WATER_YEAR_MONTHS } from './allocations';
+	import { AUTHORISATION_LABEL, conditionsFromText, monthShort, PURPOSE_LABEL, SOURCE_LABEL, WATER_USE_LABEL, WATER_YEAR_MONTHS } from './allocations';
 
 	let {
 		projectId,
@@ -33,6 +33,8 @@
 		authorisation: a?.authorisation ?? ('licence' as AllocationInput['authorisation']),
 		purpose: a?.purpose ?? ('irrigation' as NonNullable<AllocationInput['purpose']>),
 		waterSource: a?.waterSource ?? ('surface' as AllocationInput['waterSource']),
+		// The s21 water use (issue #72): 21b is a dam's storage only (volume 0, surface water).
+		waterUse: a?.waterUse ?? ('21a' as NonNullable<AllocationInput['waterUse']>),
 		volume: a ? String(a.volumeM3PerYear) : '',
 		storage: a?.storageM3 == null ? '' : String(a.storageM3),
 		validFrom: a?.validFrom ?? '',
@@ -53,12 +55,19 @@
 		formError = null;
 	});
 
+	const storageOnly = $derived(draft.waterUse === '21b');
+
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
-		const volume = parseNum(draft.volume);
+		// A storage-only (21b) row registers no take: volume 0, surface water (142).
+		const volume = storageOnly ? 0 : parseNum(draft.volume);
 		const storage = draft.storage.trim() === '' ? null : parseNum(draft.storage);
 		if (volume === null || volume < 0) {
 			formError = 'Enter the registered volume in m³ per year.';
+			return;
+		}
+		if (storageOnly && (storage === null || storage < 0)) {
+			formError = 'Enter the dam’s registered storage in m³.';
 			return;
 		}
 		if (draft.storage.trim() !== '' && (storage === null || storage < 0)) {
@@ -81,7 +90,8 @@
 			propertyRef: draft.propertyRef,
 			authorisation: draft.authorisation,
 			purpose: draft.purpose,
-			waterSource: draft.waterSource,
+			waterSource: storageOnly ? 'surface' : draft.waterSource,
+			waterUse: draft.waterUse,
 			volumeM3PerYear: volume,
 			storageM3: storage,
 			validFrom: draft.validFrom || null,
@@ -125,8 +135,23 @@
 				</select>
 			</div>
 			<div class="field">
+				<label for="af-use">Water use</label>
+				<select
+					id="af-use"
+					bind:value={draft.waterUse}
+					onchange={() => {
+						// A dam stores surface water: show what will be saved.
+						if (draft.waterUse === '21b') draft.waterSource = 'surface';
+					}}
+					aria-describedby={storageOnly ? 'af-use-h' : undefined}
+				>
+					{#each Object.entries(WATER_USE_LABEL) as [v, l] (v)}<option value={v}>{l}</option>{/each}
+				</select>
+				{#if storageOnly}<span class="hint" id="af-use-h">Registers a dam’s storage, not a volume taken: surface water.</span>{/if}
+			</div>
+			<div class="field">
 				<label for="af-source">Water source</label>
-				<select id="af-source" bind:value={draft.waterSource}>
+				<select id="af-source" bind:value={draft.waterSource} disabled={storageOnly}>
 					{#each Object.entries(SOURCE_LABEL) as [v, l] (v)}<option value={v}>{l}</option>{/each}
 				</select>
 			</div>
@@ -136,13 +161,15 @@
 					{#each Object.entries(PURPOSE_LABEL) as [v, l] (v)}<option value={v}>{l}</option>{/each}
 				</select>
 			</div>
+			{#if !storageOnly}
+				<div class="field">
+					<label for="af-volume">Volume (m³ per year)</label>
+					<input id="af-volume" type="text" inputmode="decimal" required bind:value={draft.volume} />
+				</div>
+			{/if}
 			<div class="field">
-				<label for="af-volume">Volume (m³ per year)</label>
-				<input id="af-volume" type="text" inputmode="decimal" required bind:value={draft.volume} />
-			</div>
-			<div class="field">
-				<label for="af-storage">Storage (m³) <span class="muted">(optional)</span></label>
-				<input id="af-storage" type="text" inputmode="decimal" bind:value={draft.storage} />
+				<label for="af-storage">Storage (m³){#if !storageOnly} <span class="muted">(optional)</span>{/if}</label>
+				<input id="af-storage" type="text" inputmode="decimal" required={storageOnly} bind:value={draft.storage} />
 			</div>
 			<div class="field">
 				<label for="af-from">Valid from</label>

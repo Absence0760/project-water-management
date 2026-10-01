@@ -8,6 +8,7 @@
 	import {
 		ALLOCATION_MODE_LABEL,
 		APPLICANT_PROMPTS,
+		DEMAND_OBJECT_CATEGORY_LABEL,
 		declaredRuleText,
 		describeFitRecord,
 		ENSEMBLE_MEASURES_SINCE,
@@ -40,6 +41,9 @@
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
+	import { CHANGE_LABEL, sizingText } from './demandObjects';
+	import { sourceLabel, sourceLine } from '$lib/components/runs/demandSources';
+	import { FORMER_MEMBER } from '$lib/format/maker';
 
 	let {
 		report,
@@ -250,7 +254,7 @@
 						<dt>Cited ensemble</dt>
 						<dd>
 							{#if report.uncertainty.cited}
-								{report.uncertainty.cited.id.slice(0, 8)}, started {fmtDate(report.uncertainty.cited.createdAt)}{report.uncertainty.cited.createdBy ? ` by ${report.uncertainty.cited.createdBy}` : ''}
+								{report.uncertainty.cited.id.slice(0, 8)}, started {fmtDate(report.uncertainty.cited.createdAt)} by {report.uncertainty.cited.createdBy ?? FORMER_MEMBER}
 								<span class="sub">The first complete ensemble on the declared rule; seed {report.uncertainty.cited.seed}, drawn by the database</span>
 							{:else}<span class="na">None</span>{/if}
 						</dd>
@@ -265,7 +269,7 @@
 								{#each report.uncertainty.ledger as e (e.id)}
 									<tr>
 										<th scope="row">{e.id.slice(0, 8)}{e.cited ? ' (cited)' : ''}</th>
-										<td>{fmtDate(e.createdAt)}{e.createdBy ? `, ${e.createdBy}` : ''}</td>
+										<td>{fmtDate(e.createdAt)}, {e.createdBy ?? FORMER_MEMBER}</td>
 										<td>{e.status === 'complete' ? 'complete' : 'started, not completed: no result stored'}</td>
 										<td class="num">{e.accepted === null ? '–' : `${fmtNum(e.accepted)} of ${fmtNum(e.members + 1)}`}</td>
 										<td>{!report.uncertainty.declared ? 'no rule declared' : e.departsFromDeclared.length ? e.departsFromDeclared.map((d) => `${d.label}: ${d.b} (rule ${d.a})`).join('; ') : 'follows it'}</td>
@@ -379,7 +383,7 @@
 								<tr>
 									<th scope="row">{fmtDate(n.nominatedAt)}</th>
 									<td>{n.withdrawn ? 'Withdrawn' : `${n.runLabel || 'unlabelled run'}${n.runId === id.baseline.runId ? ' (this baseline)' : ''}`}</td>
-									<td>{n.nominatedBy ?? '–'}</td>
+									<td>{n.nominatedBy ?? FORMER_MEMBER}</td>
 									<td>{n.reason}</td>
 								</tr>
 							{:else}
@@ -623,6 +627,53 @@
 						</div>
 					{/if}
 				{/if}
+			{:else if s.id === 'demandObjects' && report.demandObjects}
+				<!-- evidence-9: the applicant's demand objects and where each one's number comes from; a pack drafted before it has no § 6. -->
+				{@const dob = report.demandObjects}
+				{#if dob.notAssessed}
+					<p class="na" data-testid="evidence-demand-objects-na">{dob.notAssessed}</p>
+				{:else}
+					<p class="small muted">
+						The demands that aren’t crops on the applicant’s units (a town, households, livestock, a bulk supply), as the application ran them, and one it removes as the
+						baseline did. Each is supplied from its unit’s dam, river pump and boreholes with its crops; demand is the daily mean over the run. Under each source, its
+						note as entered on the model, not checked by the app.
+					</p>
+					{#if dob.bySource.length}
+						<p class="small" data-testid="evidence-demand-sources">
+							{sourceLine(dob.bySource)} The rule: meter records where they exist, else the reconciliation strategy’s AADD, else population × litres a person a day.
+						</p>
+					{/if}
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-demand-objects">
+							<thead>
+								<tr>
+									<th scope="col">Unit</th>
+									<th scope="col">Demand object</th>
+									<th scope="col">In the application</th>
+									<th scope="col">Sizing</th>
+									<th scope="col">Source</th>
+									<th scope="col" class="num">Demand, baseline<br /><span class="u">m³/day</span></th>
+									<th scope="col" class="num">Demand, application<br /><span class="u">m³/day</span></th>
+									<th scope="col" class="num">Supplied, application</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each dob.objects as o (o.id)}
+									<tr>
+										<td>{o.unit}</td>
+										<th scope="row">{o.name}<span class="sub">{DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category}{o.enabled ? '' : ' · not modelled'}</span></th>
+										<td>{CHANGE_LABEL[o.change]}</td>
+										<td>{sizingText(o)}</td>
+										<td class:muted={!o.source}>{sourceLabel(o.source)}{#if o.note.trim()}<span class="sub">{o.note}</span>{/if}</td>
+										<td class="num">{o.demandA === null ? '–' : fmtNum(o.demandA, 1)}</td>
+										<td class="num">{o.demandB === null ? '–' : fmtNum(o.demandB, 1)}</td>
+										<td class="num">{pct(o.suppliedB)}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
 			{:else if s.id === 'appendixInputs'}
 				<h3>A.1 Settings that drive the results</h3>
 				<dl class="kv">
@@ -683,7 +734,7 @@
 				<h3>A.6 Every application run on this baseline</h3>
 				<ul class="changes" data-testid="evidence-application-runs">
 					{#each report.appendix.applicationRuns as r (r.runId)}
-						<li>{fmtDate(r.createdAt)}: “{r.scenarioName}”{r.label ? `, ${r.label}` : ''}{r.createdBy ? `, run by ${r.createdBy}` : ''}{r.runId === id.application?.runId ? ' (this report)' : ''}</li>
+						<li>{fmtDate(r.createdAt)}: “{r.scenarioName}”{r.label ? `, ${r.label}` : ''}, run by {r.createdBy ?? FORMER_MEMBER}{r.runId === id.application?.runId ? ' (this report)' : ''}</li>
 					{:else}
 						<li class="na">None.</li>
 					{/each}

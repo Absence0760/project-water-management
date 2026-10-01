@@ -44,6 +44,10 @@ describe('hasSupplySettings', () => {
 		expect(hasSupplySettings({ supplyRule: 'damFirst', pumpCapacityM3Day: null })).toBe(false);
 		expect(hasSupplySettings({ supplyRule: 'riverFirst' })).toBe(true);
 		expect(hasSupplySettings({ pumpCapacityM3Day: 0 })).toBe(true);
+		// An other water user's pump is its own field (engine 1.58.0), not a stale supply setting; a gauge's is.
+		expect(hasSupplySettings({ kind: 'user', pumpCapacityM3Day: 500 })).toBe(false);
+		expect(hasSupplySettings({ kind: 'user', supplyRule: 'riverFirst' })).toBe(true);
+		expect(hasSupplySettings({ kind: 'gauge', pumpCapacityM3Day: 500 })).toBe(true);
 	});
 
 	it('counts the hands-off flow and River to dam by month (engine 1.32.0), so a gauge left with them can clear them', () => {

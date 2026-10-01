@@ -84,19 +84,24 @@ export interface LowFlowInput {
 
 const KINDS: CalibrationFlowKind[] = ['flow_observed_m3s', 'flow_logger_m3s'];
 
+/**
+ * The flow equalled or exceeded p % of the time on a curve sorted largest
+ * first: Weibull plotting positions, as reserve/assurance.ts durationQuantile
+ * (the i-th highest at i ÷ (n + 1), linear between, held at the ends).
+ */
+export function exceedanceFlow(sortedDesc: ArrayLike<number>, p: number): number {
+	const n = sortedDesc.length;
+	const h = (p / 100) * (n + 1);
+	if (h <= 1) return sortedDesc[0]!;
+	if (h >= n) return sortedDesc[n - 1]!;
+	const i = Math.floor(h);
+	return sortedDesc[i - 1]! + (h - i) * (sortedDesc[i]! - sortedDesc[i - 1]!);
+}
+
 function curve(source: LowFlowSource, pairedWith: CalibrationFlowKind | null, values: number[]): LowFlowCurve | null {
 	if (values.length < LOW_FLOW_MIN_DAYS) return null;
 	const x = Float64Array.from(values).sort().reverse();
-	const n = x.length;
-	// Weibull plotting positions, as reserve/assurance.ts durationQuantile: the i-th highest at i ÷ (n + 1), linear between, held at the ends.
-	const at = (p: number) => {
-		const h = (p / 100) * (n + 1);
-		if (h <= 1) return x[0]!;
-		if (h >= n) return x[n - 1]!;
-		const i = Math.floor(h);
-		return x[i - 1]! + (h - i) * (x[i]! - x[i - 1]!);
-	};
-	return { source, pairedWith, days: n, flowsM3s: LOW_FLOW_POINTS.map(at) };
+	return { source, pairedWith, days: x.length, flowsM3s: LOW_FLOW_POINTS.map((p) => exceedanceFlow(x, p)) };
 }
 
 /** The dry-season low-flow duration curves and the Q90 comparison; null without a dry season. */

@@ -1,7 +1,7 @@
 // Guard: Svelte's runtime ships as one chunk (frontend/vite.config.ts,
 // svelteRuntimeChunk; issue #9). Without the rule the bundler cuts the runtime into
 // ~15 chunks, several under 0.5 KB, and every page loads more (numbers in
-// scripts/guards/check_web_bundle_budget.mjs's change log).
+// the bundle budget's history, scripts/guards/bundle-budget/README.md).
 import { describe, expect, it } from 'vitest';
 import config, { helpArticlesChunk, svelteRuntimeChunk } from '../../vite.config';
 

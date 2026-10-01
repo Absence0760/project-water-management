@@ -200,6 +200,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.userReturnPct']
 	},
 	{
+		id: 'user-pump',
+		term: 'Pump capacity (other user)',
+		short: 'The most an other water user takes from the river in a day. Blank is no limit; a senior user’s claim upstream is capped to it too.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['run.pump_limited']
+	},
+	{
 		id: 'borehole',
 		term: 'Boreholes (groundwater)',
 		short: 'Groundwater a hydrological unit or other user pumps up to a daily capacity and annual cap, by mode: supplemental, primary or emergency.',
@@ -239,12 +247,27 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.population']
 	},
 	{
+		id: 'demand-source',
+		term: 'Demand source',
+		short: 'Where a demand object’s number comes from, by rule: meter records where they exist, else a strategy’s AADD, else population × litres a day.',
+		category: 'network',
+		fields: ['demandObject.source']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
+	},
+	{
+		id: 'drought-restriction',
+		term: 'Drought restrictions',
+		short: 'A model rule: on each review date a level is chosen from the farm dams’ storage; it cuts each part of demand until the next review.',
+		units: '% of capacity; % cut',
+		category: 'network',
+		fields: ['settings.droughtRestriction', 'run.restriction_level', 'run.restricted_demand']
 	},
 	{
 		id: 'hands-off-flow',
@@ -923,7 +946,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'plausibility-checks',
 		term: 'Plausibility checks',
-		short: 'Five checks a reviewing hydrologist makes on a run (four before engine 1.19.0): they only warn, and never change a result.',
+		short: 'Six checks a reviewing hydrologist makes on a run (fewer on older runs): they only warn, and never change a result.',
 		category: 'results'
 	},
 	{
@@ -957,6 +980,13 @@ export const TIPS: HelpTipText[] = [
 		term: 'Recession diagnostics',
 		short: 'How fast flow falls in rain-free spells (−dQ/dt against Q), in the record and in the model on the same days.',
 		units: 'm³/s; m³/s per day',
+		category: 'results'
+	},
+	{
+		id: 'plausibility-signatures',
+		term: 'Validation signatures',
+		short: 'Base-flow index by two filters, the low-flow duration curve’s slope and bias, and skill on held-out recessions.',
+		units: 'ratio; %',
 		category: 'results'
 	},
 	{

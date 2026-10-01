@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
+import { cropRowFindings, cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidWorkbookError } from './errors';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
+import { extractProject } from './extract';
 import { B023Workbook } from './workbook';
 
 describe('readCrops', () => {
@@ -155,7 +156,92 @@ describe('nonCropDemand (non_crop_demand): the part above the crop areas becomes
 
 	it('makes a municipal object without crops, returning the farm’s return flow', () => {
 		const o = nonCropDemandObject((k) => `id:${k}`, 'Town dam', 'n1', new Array(12).fill(800), false, 0.2);
-		expect(o).toMatchObject({ id: 'id:demand-object:Town dam', category: 'municipal', returnPct: 0.2, sizing: 'monthly', priority: 'shared', destination: 'internal', enabled: true });
+		expect(o).toMatchObject({ id: 'id:demand-object:Town dam', category: 'municipal', returnPct: 0.2, sizing: 'monthly', priority: 'shared', destination: 'internal', enabled: true, source: 'other' });
 		expect(nonCropDemandObject((k) => k, 'F', 'n2', new Array(12).fill(1), true, 0).category).toBe('other');
+	});
+});
+
+// Invented factors (issue #289): a smooth curve, the ARC/SABI shapes the thresholds are set against, and single slips.
+const SMOOTH = [0.4, 0.45, 0.5, 0.55, 0.55, 0.5, 0.45, 0.4, 0.35, 0.35, 0.35, 0.4];
+const put = (m: number, v: number, row: number[] = SMOOTH) => row.map((x, i) => (i === m ? v : x));
+
+describe('cropRowFindings', () => {
+	it('passes a smooth curve, a dormant season and the steepest published steps', () => {
+		expect(cropRowFindings(SMOOTH)).toEqual([]);
+		// Three dormant months at 0: no lone month.
+		expect(cropRowFindings([0.3, 0.4, 0.5, 0.5, 0.4, 0.3, 0.2, 0, 0, 0, 0.1, 0.2])).toEqual([]);
+		// Pecan's 0.65 ↔ 0.35 (ARC Table 4.10) is a step of exactly 0.3 on each side of its dormant months,
+		// and table grapes' 0.6 → 0.3; neither is a lone month (float noise in 0.65 − 0.35 doesn't count).
+		expect(cropRowFindings([0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.35, 0.35, 0.35, 0.65, 0.65])).toEqual([]);
+		// A single month exactly 0.3 above both neighbours is at the threshold, not over it.
+		expect(cropRowFindings(put(3, 0.85, [0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55, 0.55]))).toEqual([]);
+	});
+
+	it('flags a lone 0 between two months in the ground, wrapping the year end', () => {
+		expect(cropRowFindings(put(4, 0))).toEqual(['Feb factor is 0 between Jan 0.55 and Mar 0.5 (a lone month out of the ground)']);
+		expect(cropRowFindings(put(0, 0))).toEqual(['Oct factor is 0 between Sep 0.4 and Nov 0.45 (a lone month out of the ground)']);
+		expect(cropRowFindings(put(11, 0))).toEqual(['Sep factor is 0 between Aug 0.35 and Oct 0.4 (a lone month out of the ground)']);
+	});
+
+	it('flags a lone spike or dip of more than 0.3 against both neighbours, but not a step on one side', () => {
+		expect(cropRowFindings(put(6, 0.9))).toEqual(['Apr factor 0.9 is more than 0.3 above both Mar 0.5 and May 0.4 (a lone spike)']);
+		expect(cropRowFindings(put(3, 0.1))).toEqual(['Jan factor 0.1 is more than 0.3 below both Dec 0.5 and Feb 0.55 (a lone dip)']);
+		// 0.9 against 0.5 and 0.85: a rise, but only on one side.
+		expect(cropRowFindings(put(7, 0.85, put(6, 0.9)))).toEqual([]);
+	});
+
+	it('flags a factor above 1.0 and a negative one', () => {
+		expect(cropRowFindings(put(3, 1.05, put(2, 0.9, put(4, 0.9))))).toEqual(['Jan factor 1.05 is above 1 (more water than an open A-pan loses)']);
+		expect(cropRowFindings(put(3, 1, put(2, 0.9, put(4, 0.9))))).toEqual([]);
+		expect(cropRowFindings(put(5, -0.2))).toEqual(['Mar factor -0.2 is negative']);
+	});
+
+	it('lists a spike above 1.0 under both rules, in month order', () => {
+		expect(cropRowFindings(put(8, 0, put(2, 1.4)))).toEqual([
+			'Dec factor 1.4 is more than 0.3 above both Nov 0.45 and Jan 0.55 (a lone spike)',
+			'Dec factor 1.4 is above 1 (more water than an open A-pan loses)',
+			'Jun factor is 0 between May 0.4 and Jul 0.35 (a lone month out of the ground)'
+		]);
+	});
+});
+
+describe('cropTableNotes', () => {
+	const crop = (name: string, cropFactor: number[]) => ({ name, cropFactor });
+
+	it("names the first crop whose row a later crop copies, and leaves the copy's months to that crop's note", () => {
+		const spiky = put(2, 1.4);
+		const notes = cropTableNotes([crop('Apples', SMOOTH), crop('Plums', spiky), crop('Pecans', SMOOTH), crop('Pears', spiky)]);
+		expect(notes.map((n) => [n.code, n.crop])).toEqual([
+			['crop-factors-suspect', 'Plums'],
+			['crop-factors-copied', 'Pecans'],
+			['crop-factors-copied', 'Pears']
+		]);
+		expect(notes[1]!.message).toBe(
+			"WARNING: [Crop demand] crop Pecans: its 12 factors are the same as Apples's, a row copied from another crop by the look of it; " +
+				'imported as they are, so give it its own curve if it has one (issue #289)'
+		);
+		expect(notes[0]!.message).toMatch(/^WARNING: \[Crop demand\] crop Plums: Dec factor 1\.4 .*; imported as they are, so check them against the workbook \(issue #289\)$/);
+	});
+
+	it('ignores rows of zeros (unused crops), a repeated name and a near copy', () => {
+		const zeros = new Array(12).fill(0);
+		expect(cropTableNotes([crop('Spare 1', zeros), crop('Spare 2', zeros), crop('Apples', SMOOTH), crop('Apples', SMOOTH), crop('Quince', put(0, 0.41))])).toEqual([]);
+	});
+});
+
+describe('extractProject: the crop-table checks', () => {
+	it('warns without changing a factor, on the [Crop demand] sheet with the crop as the element', () => {
+		const wb = syntheticB023().row('Crop demand', 'F31', [0.3, 0.5, 0.8, 1.1, 1.1, 0.9, 0.5, 0.3, 0, 0, 0, 0.1]).build();
+		const { project, notes } = extractProject(wb, { fileName: 't.xlsx' });
+		expect(project.model.crops.map((c) => c.cropFactor)).toEqual([
+			[0.3, 0.5, 0.8, 1.1, 1.1, 0.9, 0.5, 0.3, 0, 0, 0, 0.1],
+			[0.3, 0.5, 0.8, 1.1, 1.1, 0.9, 0.5, 0.3, 0, 0, 0, 0.1]
+		]);
+		const crops = notes.filter((n) => n.code.startsWith('crop-factors-'));
+		expect(crops.map((n) => [n.code, n.severity, n.sheet, n.element])).toEqual([
+			['crop-factors-suspect', 'warning', 'Crop demand', 'Maize'],
+			['crop-factors-copied', 'warning', 'Crop demand', 'Wheat']
+		]);
+		expect(crops[0]!.message).toContain('Jan factor 1.1 is above 1 (more water than an open A-pan loses); Feb factor 1.1 is above 1');
 	});
 });

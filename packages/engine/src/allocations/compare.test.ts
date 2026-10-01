@@ -123,7 +123,55 @@ describe('compareAllocations', () => {
 			nodes: [farm([1], undefined, { damCapacityM3: 50_000 })],
 			allocations: [alloc(1, { storageM3: 20_000 }), alloc(2, { storageM3: 10_000 }), alloc(3)]
 		});
-		expect(r.nodes[0]!.storage).toEqual({ registeredM3: 30_000, modelledCapacityM3: 50_000 });
+		// A dam of 50 000 m³ against 30 000 m³ registered: 20 000 m³ larger, above the ±10 % band.
+		expect(r.nodes[0]!.storage).toEqual({ registeredM3: 30_000, modelledCapacityM3: 50_000, differenceM3: 20_000, status: 'over' });
+	});
+
+	it('bands the dam capacity against the registered storage, and names a dam with none registered', () => {
+		const storage = (capacity: number | null, stored: number | null) =>
+			compareAllocations({
+				startDate: '2001-10-01',
+				nodes: [farm([1], undefined, { damCapacityM3: capacity })],
+				allocations: stored === null ? [] : [alloc(0, { waterUse: '21b', storageM3: stored })]
+			}).nodes[0]!.storage;
+		expect(storage(100_000, 100_000)).toEqual({ registeredM3: 100_000, modelledCapacityM3: 100_000, differenceM3: 0, status: 'within' });
+		expect(storage(50_000, 100_000)).toMatchObject({ differenceM3: -50_000, status: 'under' });
+		expect(storage(50_000, null)).toEqual({ registeredM3: null, modelledCapacityM3: 50_000, differenceM3: null, status: 'unregistered' });
+		expect(storage(null, null)).toEqual({ registeredM3: null, modelledCapacityM3: null, differenceM3: null, status: 'none' });
+		// No dam modelled is no comparison, never "a dam smaller than its registration".
+		expect(storage(null, 100_000)).toEqual({ registeredM3: 100_000, modelledCapacityM3: null, differenceM3: null, status: 'none' });
+	});
+
+	it('counts only storage registered for the run’s days', () => {
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(new Array(days).fill(1), undefined, { damCapacityM3: 100_000 })],
+			allocations: [
+				{ id: 'now', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 100_000, validFrom: '2002-01-01' },
+				{ id: 'lapsed', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 50_000, validTo: '2001-09-30' },
+				{ id: 'later', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 70_000, validFrom: '2003-10-01' }
+			]
+		});
+		expect(r.nodes[0]!.storage).toMatchObject({ registeredM3: 100_000, status: 'within' });
+	});
+
+	it('counts a storage-only (s21b) row for storage, never as a volume taken (issue #72)', () => {
+		const r = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(new Array(days).fill(100), undefined, { damCapacityM3: 150_000 })],
+			allocations: [alloc(30_000), { id: 'dam', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 150_000 }]
+		});
+		const s = r.nodes[0]!.surface;
+		expect(s.allocationIds).toEqual(['a30000']);
+		expect(s.years[0]!.registeredM3).toBeCloseTo(30_000, 9);
+		expect(r.nodes[0]!.storage).toMatchObject({ registeredM3: 150_000, status: 'within' });
+		// Alone, a dam's storage leaves the take unregistered (not "over a volume of 0").
+		const alone = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [farm(new Array(days).fill(100))],
+			allocations: [{ id: 'dam', nodeId: 'F', waterSource: 'surface', volumeM3PerYear: 0, waterUse: '21b', storageM3: 150_000 }]
+		});
+		expect(alone.nodes[0]!.surface.years.every((y) => y.status === 'unregistered')).toBe(true);
 	});
 
 	it('refuses a tolerance outside [0, 1) and a negative volume', () => {

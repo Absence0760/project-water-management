@@ -111,7 +111,7 @@ describe('verification (engine 0.12.0)', () => {
 	it('passes every check on a sound run and reports the largest residual as float noise', () => {
 		const out = handRun();
 		const v = out.summary.verification!;
-		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations', 'operatingRules', 'assurance']);
+		expect(v.checks.map((c) => c.id)).toEqual(['balance', 'workings', 'soilWater', 'runoff', 'transfers', 'reports', 'ewrAttribution', 'groundwater', 'landCover', 'allocations', 'operatingRules', 'droughtRestriction', 'assurance']);
 		expect(v.checks.filter((c) => !c.passed)).toEqual([]);
 		expect(v.passed).toBe(true);
 		expect(v.maxResidual!.valueM3Day).toBeLessThan(1e-9);

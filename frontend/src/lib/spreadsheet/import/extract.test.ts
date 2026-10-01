@@ -76,7 +76,8 @@ describe('extractProject on a small synthetic workbook', () => {
 			['rain_catchment_mm', 'Rain (mm)', 'mm', '2010-01-01', 5],
 			['rain_chirps_mm', 'CHIRPS (mm)', 'mm', '2010-01-01', 5]
 		]);
-		expect(notes.map((n) => n.code)).toEqual(['dam-min-is-transfer-minimum', 'dam-area-unknown']);
+		// Maize's Jan and Feb factors, 1.1, are above 1.0 (issue #289).
+		expect(notes.map((n) => n.code)).toEqual(['dam-min-is-transfer-minimum', 'dam-area-unknown', 'crop-factors-suspect']);
 		// Column P (no destination, no rate) is an unused column, not a skipped rule.
 		expect(unmapped).toEqual([]);
 	});

@@ -5,8 +5,9 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SOURCES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
+import { randomDroughtRestriction } from './fuzz';
 import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
 
 const monthly = (g: Rng, f: () => number) => Array.from({ length: 12 }, f);
@@ -364,6 +365,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 																	? o.bool(0.8)
 																	: field === 'population'
 																		? o.pick([null, o.int(0, 20_000)])
+																		: field === 'source'
+																		? o.pick([null, ...DEMAND_OBJECT_SOURCES])
 																		: field === 'schedule'
 																		? o.bool(0.4)
 																			? null
@@ -395,6 +398,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					priority: o.pick(DEMAND_OBJECT_PRIORITIES),
 					destination: external ? 'external' : 'internal',
 					enabled: o.bool(0.9),
+					// Where its number comes from (engine ≥ 1.56.0): now and then one that doesn't fit the sizing (a problem).
+					source: o.pick([null, perUnit ? 'perCapita' : o.pick(['meter', 'aadd'] as const), 'other', o.pick(DEMAND_OBJECT_SOURCES)]),
 					note: ''
 				}
 			});
@@ -568,6 +573,14 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					break;
 			}
 		}
+	}
+	// The drought restriction rule (engine ≥ 1.54.0) as a settings.set, from its own stream so every seed's other ops are
+	// what they were: in a fifth of the lists it takes the place of one op (the count stays), a rule, off (null), or now
+	// and then one the op must refuse.
+	const dr = new Rng(seed ^ 0x3243f6a8);
+	if (ops.length && dr.bool(0.2)) {
+		const value = dr.bool(0.15) ? null : dr.bool(0.1) ? { reviewDates: ['02-29'], levels: [] } : randomDroughtRestriction(dr, input.model.nodes);
+		ops[dr.int(0, ops.length - 1)] = { op: 'settings.set', path: 'droughtRestriction', value } as ScenarioOp;
 	}
 	return ops;
 }

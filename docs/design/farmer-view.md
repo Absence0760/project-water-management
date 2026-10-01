@@ -162,7 +162,7 @@ Nothing here changes `runModel` except E2, which is WP-2.12's.
 | E5 | The projection's curtailment over the **season** (`computeCurtailment` with the season as its window), the days charged, and the sites' days not met with their charged/natural split, all over the season | Q2's lines; §2 "The season" | WP-2.3 |
 | E6 | Farms upstream and downstream of a node, and the catchment's farm count, as a `SECURITY DEFINER` count function (no ids) | "1 farm upstream, 2 downstream" (D1 b) | WP-2.1 |
 | E7 | The headline fraction (supplied − supply cut) ÷ demand, in the projection | The model card and its band, at any `k` (§5.4) | WP-2.3 |
-| E8 | A per-farm registered or scheduled volume (licence, WARMS or the WUA's quota), readable by the farmer | Turning "a 20 % cut" into the farm's m³ (§11 F4) | Step 3 (model.md §2.11 names authorised volume as the base of a future allocation). Until then the notice speaks in % of registered use and the view does no sum on it |
+| E8 | A per-farm registered or scheduled volume (licence, WARMS or the WUA's quota), readable by the farmer | Turning "a 20 % cut" into the farm's m³ (§11 F4) | ✅ Partly built (issue #72): *Your registered water* shows the farm's own registered volumes a year and dam storage in force today (`FarmView.registered`), beside the season's supply, with "not an entitlement". The notice still speaks in % of registered use, and the view does no sum of a cut on it (F4 stays open) |
 | E9 | A node flag for release works (an outlet or bypass on the dam) | Whether "let water pass your dam" is something the farmer can do (§11 F11) | WP-2.6 follow-up (a Network-tab field, default unknown) |
 | E10 | `next_expected_on date NULL` on `run_publication` | "Next update expected around …" (§11 F21) | WP-2.3 |
 
@@ -177,7 +177,7 @@ breakdown; not in the first release.
 
 | Engine / modeller term | Farmer view says | Afrikaans (draft, for the named reviewer) | Never says |
 | --- | --- | --- | --- |
-| Equitable share, K_tot, target volume | "even share" ("everyone gets the same share of what they need") | "gelyke deel" | gain, entitlement, allocation, target |
+| Equitable share, K_tot, target volume | "even share" ("everyone gets the same share of what they need") | "gelyke deel" | gain, entitlement, allocation, target (two deliberate exceptions, each to say what something is *not*: "What this is not" names an allocation, and *Your registered water* says "A registered volume is not an entitlement", issue #72; `neverSays.test.ts`) |
 | Above (−) / below (+) equitable share, N | "a little more / less than an even share (about 118 m³ a day)" under 10 points between the farm's % and the even share, "more / less than …" from 10, "much more / less than …" from 25 (`SHARE_GAP_POINTS`, issue #51) | "'n bietjie meer / minder as 'n gelyke deel" | reduce/gain, "you may take" |
 | EWR, Ecological Reserve | "the river's reserve" ("water the law keeps in the river so it stays healthy for everyone downstream"), with a help link | "die rivier se reserwe" | EWR, shortfall, charge |
 | EWR charge, supply cut ΔG | "pump less" | "pomp minder" | charge, attribution, consumptive |
@@ -269,7 +269,11 @@ roadmap's "desktop is the same column"). Cards, top to bottom:
    the dam screen.
 6. **Looking back** (the model card: dashed border, neutral "Model: watch"
    chip), linking to "Why?". A single link line under a `restricted` notice, and when the river asked for no cut (issue #177).
-7. **Next 14 days** (hidden until WP-2.12).
+7. **Next 14 days** (hidden until WP-2.12), then **This season** (only
+   while an outlook is published).
+7a. **Your registered water** (issue #72; only when something is registered
+   on the farm): reference figures that rarely change, so below the
+   season's cards.
 8. **Last 12 months** chart, with "Show the numbers".
 9. **Compared with last season.**
 10. **Your hydrological unit on the river**, with the privacy line and "Who can see my

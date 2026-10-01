@@ -4,16 +4,26 @@ import { CSV_DISCLAIMER_COMMENT, fromEpochDay, toEpochDay } from '@water-managem
 import { localDate } from '../projects/timeZone.js';
 
 /**
- * Largest export body we build. Lambda's buffered (non-streaming) responses
- * are capped at 6 MB, and the API runs behind `hono/aws-lambda`'s buffered
- * `handle`, so anything bigger would fail in production with an opaque 502.
- * 5 MB leaves headroom for headers. The catchment table fits real records,
- * but a farm's daily CSV (~32 full-precision columns, ≈ 150 KB a year) passes
- * the cap beyond about 30 years, and the 413 tells the caller how to narrow
- * the request (`from` / `to`). The bulk series route pages under it instead
- * (runs/bulk.ts); WP-1.29 (streaming) lifts it. See docs/api.md § Export.
+ * Largest CSV download (WP-1.29a, issue #283). The CSVs are streamed
+ * (csvStream below): the API's Function URL runs in RESPONSE_STREAM mode
+ * (backend/src/lambda.ts, infra/lambda.tf), so Lambda's 6 MB buffered-response
+ * limit no longer applies to them, and the Node server streams the same body
+ * locally. 50 MB is a sanity cap, not a platform one (streaming allows
+ * 200 MB): past Lambda's first 6 MB a stream runs at about 2 MB/s, so 50 MB
+ * takes ~25 s, inside the API's 30 s timeout. A farm's daily CSV is about
+ * 400 KB a year, so the cap holds a century-long record. Past it the route
+ * answers 413 before any byte is sent (the size is measured first).
  */
-export const MAX_EXPORT_BYTES = 5 * 1024 * 1024;
+export const MAX_CSV_EXPORT_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Largest JSON body an export route builds in memory: the project document
+ * (`export.json`) and a page of the bulk series route (runs/bulk.ts). Not
+ * raised with the CSVs: `export.json` must import back, and a Lambda request
+ * can't be streamed or pass 6 MB (projects/import.ts IMPORT_MAX_BYTES); a bulk
+ * page is held whole by the browser, so it stays a page. See docs/api.md § Export.
+ */
+export const MAX_JSON_EXPORT_BYTES = 5 * 1024 * 1024;
 
 /** UTF-8 byte-order mark: without it Excel reads the file as ANSI and mangles "m³". */
 export const BOM = '\uFEFF';
@@ -168,19 +178,75 @@ export function* dailyCsvLines(
 	}
 }
 
-/**
- * Join lines into a CSV body (BOM + CRLF), stopping as soon as it would exceed
- * `maxBytes`. Returns null when it doesn't fit.
- */
-export function collectCsv(lines: Iterable<string>, maxBytes = MAX_EXPORT_BYTES): string | null {
-	const parts: string[] = [BOM];
+/** The UTF-8 size of `lines` as a CSV body (BOM + CRLF after every record), or null as soon as it passes `maxBytes`. */
+export function csvBytes(lines: Iterable<string>, maxBytes = MAX_CSV_EXPORT_BYTES): number | null {
 	let bytes = 3; // the BOM is 3 bytes in UTF-8
 	for (const line of lines) {
 		bytes += Buffer.byteLength(line, 'utf8') + EOL.length;
 		if (bytes > maxBytes) return null;
-		parts.push(line, EOL);
 	}
-	return parts.join('');
+	return bytes;
+}
+
+/** Characters per piece of a streamed CSV body: big enough to keep the per-chunk overhead small, small enough to keep memory flat. */
+export const CSV_CHUNK_CHARS = 64 * 1024;
+
+/** A CSV body (BOM, then each line + CRLF) in pieces of about `chunkChars` characters. */
+export function* csvChunks(lines: Iterable<string>, chunkChars = CSV_CHUNK_CHARS): Generator<string> {
+	let chunk = BOM;
+	for (const line of lines) {
+		chunk += line + EOL;
+		if (chunk.length >= chunkChars) {
+			yield chunk;
+			chunk = '';
+		}
+	}
+	if (chunk) yield chunk;
+}
+
+/**
+ * A CSV download body, streamed (WP-1.29a): `lines` is a factory because the
+ * lines are walked twice, first to measure the body against `maxBytes` (so an
+ * oversize export is a clean 413, refused before any byte is sent), then
+ * again, lazily, as the client reads, so the body is never held whole. Null
+ * when it passes the cap. The factory must make a fresh iterable each call and
+ * read only memory the caller has already loaded: the stream is read after
+ * the route's transaction has ended (withUser), so it holds no database
+ * connection while it trickles out. A second walk that differs from the
+ * measured one errors the stream instead of ending it, so the client sees a
+ * failed download (a truncated chunked response), never a short file that
+ * looks complete.
+ */
+export function csvStream(lines: () => Iterable<string>, maxBytes = MAX_CSV_EXPORT_BYTES): { body: ReadableStream<Uint8Array>; bytes: number } | null {
+	const measured = lines();
+	const bytes = csvBytes(measured, maxBytes);
+	if (bytes === null) return null;
+	const encoder = new TextEncoder();
+	let chunks: Iterator<string> | null = null;
+	let sent = 0;
+	const body = new ReadableStream<Uint8Array>({
+		pull(controller) {
+			if (!chunks) {
+				const again = lines();
+				// A factory handing back the generator it already gave (spent now) would stream a BOM and nothing else.
+				if (again === measured && (again[Symbol.iterator]() as unknown) === again) throw new Error('csvStream: lines() must make a fresh iterable each call');
+				chunks = csvChunks(again)[Symbol.iterator]();
+			}
+			const next = chunks.next();
+			if (next.done) {
+				if (sent !== bytes) throw new Error(`csvStream: the body came to ${sent} bytes, measured ${bytes}`);
+				controller.close();
+				return;
+			}
+			const piece = encoder.encode(next.value);
+			sent += piece.byteLength;
+			controller.enqueue(piece);
+		},
+		cancel() {
+			chunks?.return?.();
+		}
+	});
+	return { body, bytes };
 }
 
 /** ASCII file-name slug: "Client Catchment (v2)" → "client-catchment-v2". Never empty. */

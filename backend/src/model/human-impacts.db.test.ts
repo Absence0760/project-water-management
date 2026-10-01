@@ -1,7 +1,7 @@
 // Human impacts on the model document (roadmap WP-1.33 …): they are stored,
 // read back, validated and reach a run. Needs Postgres (pnpm dev:db:up).
 import { describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -350,6 +350,36 @@ describe('dam storage (WP-3.5)', () => {
 		await expect(asOwner(`UPDATE node SET pump_capacity_m3_day = -1 WHERE id = $1`, [upper.id])).rejects.toThrow(/check/i);
 	});
 
+	it('stores an other water user’s pump capacity, runs it, and refuses a supply rule on the user (engine 1.58.0)', async () => {
+		const u = await signUp('UserPump');
+		const projectId = await project(u, 'Town pump');
+		const outlet = node('Outlet', null);
+		const town = node('Town', outlet.id, { kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(5e5), pumpCapacityM3Day: 1500 });
+		const farm = node('Upper', town.id);
+		const model = { nodes: [outlet, town, farm], crops: [], cropAreas: [], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const got = (await u.call('GET', `/projects/${projectId}/model`)).body.nodes as Record<string, unknown>[];
+		expect(got.find((n) => n.id === town.id)).toMatchObject({ kind: 'user', supplyRule: 'damFirst', pumpCapacityM3Day: 1500 });
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'town pump' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		const user = (summary.users as { nodeId: string; avgSuppliedM3Day: number; avgRiverAbstractionM3Day?: number; avgPumpLimitedM3Day?: number; daysPumpLimited?: number }[]).find((x) => x.nodeId === town.id)!;
+		// It never takes more than its pump: the mean is at most 1 500 m³/day, and on the wet days the pump bound.
+		expect(user.avgRiverAbstractionM3Day).toBe(user.avgSuppliedM3Day);
+		expect(user.avgSuppliedM3Day).toBeLessThanOrEqual(1500);
+		expect(user.avgPumpLimitedM3Day).toBeGreaterThan(0);
+		expect(user.daysPumpLimited).toBeGreaterThan(0);
+		// Its river take is supplied − groundwater_used: no river_abstraction series (a farm's river pump).
+		expect(await seriesKeys(u, projectId, run.body.run.id, town.id, ['river_abstraction', 'pump_limited'])).toEqual(['pump_limited']);
+
+		const res = await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, supplyRule: 'riverFirst' }, farm] });
+		expect(res.status).toBe(400);
+		expect(JSON.stringify(res.body)).toMatch(/only a farm has a supply rule; an other water user always takes from the river/);
+		expect((await u.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, { ...town, pumpCapacityM3Day: -1 }, farm] })).status).toBe(400);
+	});
+
 	it('stores a farm’s hands-off flow and River to dam by month, runs them, and refuses invalid ones (issue #204)', async () => {
 		const u = await signUp('HandsOff');
 		const projectId = await project(u, 'Hands-off flow');
@@ -391,5 +421,54 @@ describe('dam storage (WP-3.5)', () => {
 		}
 		// Positive control: 12 values ≥ 0 go in.
 		await asOwner(`UPDATE node SET hands_off_m3_day = array_fill(0::float8, ARRAY[12]) WHERE id = $1`, [farm.id]);
+	});
+});
+
+describe('the drought restriction rule (engine 1.54.0, WP-3.8)', () => {
+	it('is saved with the settings, reaches a run (its level, cuts and restricted demand, the summary, the self-check), and is refused when malformed', async () => {
+		const u = await signUp('Drought');
+		const projectId = await project(u, 'With restrictions');
+		const outlet = node('Outlet', null, { kind: 'gauge', areaKm2: 0 });
+		const farm = node('Upper', outlet.id, { damCapacityM3: 20_000, damInitialPct: 0.5 });
+		const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(1) };
+		const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 20_000 }], transfers: [] };
+		expect((await u.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		// Reviewed on the 1st of every month: below 60 % the crops lose 40 %.
+		const rule = { reviewDates: Array.from({ length: 12 }, (_, m) => `${String(m + 1).padStart(2, '0')}-01`), levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.4 } }] };
+		const bad = await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: { ...rule, levels: [{ belowPct: 1.5, cuts: {} }] } } });
+		expect(bad.status).toBe(400);
+		expect(JSON.stringify(bad.body)).toMatch(/drought restriction rule: levels\[0\]\.belowPct/);
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: rule } })).status).toBe(200);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.droughtRestriction).toEqual(rule);
+
+		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'restricted' });
+		expect(run.status).toBe(201);
+		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
+		expect(summary.verification.passed).toBe(true);
+		expect(summary.verification.checks.map((c: { id: string }) => c.id)).toContain('droughtRestriction');
+		expect(summary.droughtRestriction.rule).toEqual(rule);
+		// Half full from the start: level 1 from the first day.
+		expect(summary.droughtRestriction.daysByLevel[1]).toBeGreaterThan(0);
+		expect(await seriesKeys(u, projectId, run.body.run.id, null, ['restriction_level', 'restriction_cut@crops'])).toEqual(['restriction_level', 'restriction_cut@crops']);
+		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, ['restricted_demand'])).toEqual(['restricted_demand']);
+
+		// Engine 1.54.0: the listed dam, the listed unit and the outlet's EWR trigger, by name in the summary sheet.
+		const named = { ...rule, basis: 'dams', damNodeIds: [farm.id], nodeIds: [farm.id], ewrTrigger: { siteNodeId: null, level: 1 } };
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: named } })).status).toBe(200);
+		const namedRun = await u.call('POST', `/projects/${projectId}/runs`, { label: 'named' });
+		expect(namedRun.status).toBe(201);
+		const csv = await (await app.request(`/projects/${projectId}/runs/${namedRun.body.run.id}/export/summary.csv`, { headers: { cookie: u.cookie, origin: 'http://localhost:7777' } })).text();
+		const ruleLine = csv.split('\r\n').find((l) => l.startsWith('Rule,'))!;
+		expect(ruleLine).toContain('the storage of Upper');
+		expect(ruleLine).toContain('cutting Upper only');
+		expect(ruleLine).not.toContain(farm.id);
+		expect(csv).toMatch(/\r\nUpper,[^\r]*\r\n/);
+
+		// Off again: the next run has none of it.
+		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { droughtRestriction: null } })).status).toBe(200);
+		const off = await u.call('POST', `/projects/${projectId}/runs`, { label: 'off' });
+		const offSummary = (await u.call('GET', `/projects/${projectId}/runs/${off.body.run.id}`)).body.run.summary;
+		expect(offSummary.droughtRestriction).toBeUndefined();
+		expect(await seriesKeys(u, projectId, off.body.run.id, null, ['restriction_level'])).toEqual([]);
 	});
 });

@@ -46,7 +46,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 		expect(nodeFields('farm').map((f) => f.field)).toEqual([...NODE_SET_FIELDS.farm]);
 	});
 
-	it('offers a farm its supply rule and river pump (WP-3.8), never a user or gauge', () => {
+	it('offers a farm its supply rule and river pump (WP-3.8); a user only its pump capacity (engine 1.58.0); a gauge neither', () => {
 		const supply = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplyStopPct'];
 		expect(nodeFields('farm').filter((f) => supply.includes(f.field))).toEqual([
 			{ field: 'supplyRule', label: 'Supply rule' },
@@ -54,7 +54,8 @@ describe('field specs cover the engine’s op catalogue', () => {
 			{ field: 'supplyTriggerPct', label: 'Supply switch-to-river level' },
 			{ field: 'supplyStopPct', label: 'Supply switch-back level' }
 		]);
-		expect(nodeFields('user').some((f) => supply.includes(f.field))).toBe(false);
+		expect(nodeFields('user').filter((f) => supply.includes(f.field))).toEqual([{ field: 'pumpCapacityM3Day', label: 'River pump capacity' }]);
+		expect(nodeFields('gauge').some((f) => supply.includes(f.field))).toBe(false);
 		// The rule's words are run comparison's (engine compare.ts).
 		const rule = NODE_FIELD_SPECS.supplyRule.spec;
 		expect(rule.t === 'enum' && rule.options).toEqual([
@@ -99,13 +100,16 @@ describe('field specs cover the engine’s op catalogue', () => {
 						{ levelM: 100, areaM2: 0, volumeM3: 0 },
 						{ levelM: 104.5, areaM2: 42_000, volumeM3: 95_000.5 }
 					];
+				case 'restriction':
+					return { reviewDates: ['01-01'], liftDates: ['05-01'], levels: [{ label: 'Level 1', belowPct: 0.6, cuts: { crops: 0.3, domestic: 0.1 } }] };
 			}
 		};
 		const check = (table: Record<string, { spec: ValueSpec }>, err: (k: string, v: unknown) => string | null, skip: string[] = []) => {
 			for (const [k, { spec }] of Object.entries(table)) {
 				if (skip.includes(k)) continue;
 				const v = sample(spec);
-				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : spec.t === 'pe' ? peDraftOf(v, undefined) : valueText(spec, v));
+				// The rule is edited whole in its own editor (the draft holds the object), as a PE input is its draft.
+				const back = parseValue(spec, spec.t === 'months' ? (v as number[]) : spec.t === 'pe' ? peDraftOf(v, undefined) : spec.t === 'restriction' ? (v as never) : valueText(spec, v));
 				expect(back, k).toEqual({ ok: true, value: v });
 				expect(err(k, v), k).toBeNull();
 			}
