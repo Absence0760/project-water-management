@@ -4,13 +4,15 @@
 // property, else from its shape: the largest polygon round the rest is the
 // boundary) and the node it stands for, and lets the editor change any row
 // before Import. A file with a refused feature lists its problem on the row
-// and imports nothing. The list, never the map's pixels, says what went in.
+// and imports nothing. A row marked as the boundary while the project has one
+// warns that it replaces it, and Import waits for "Replace the current
+// boundary". The list, never the map's pixels, says what went in.
 // Synthetic data only: the sample model's names and invented boxes.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { box, geoFile, openMap } from '../support/map.ts';
+import { box, boundaryGeoJson, geoFile, openMap, uploadThroughSheet } from '../support/map.ts';
 import { expectNoSidewaysScroll, resizeTo } from '../support/reflow.ts';
 
 const poly = (name: string, ring: [number, number][]) => ({ type: 'Feature', properties: { name }, geometry: { type: 'Polygon', coordinates: [ring] } });
@@ -66,6 +68,8 @@ test('a mixed file: the review proposes each kind, one is changed, and the list 
 	await expect(sheet.getByLabel('What feature 4 stands for')).toHaveCount(0);
 	await expect(sheet.getByLabel('Kind of feature 4').locator('option')).toHaveText(['River', 'Other']);
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
+	// No boundary yet: the boundary row replaces nothing, so no warning and no tick.
+	await expect(sheet.getByTestId('map-import-replaces')).toHaveCount(0);
 	await expectNoViolations(page);
 
 	// Lower farm's polygon becomes a dam (still standing for Lower farm), renamed.
@@ -118,4 +122,39 @@ test('a refused feature lists its problem on its row, and the file imports nothi
 	await expect(sheet.getByLabel(/^GeoJSON file/)).toBeVisible();
 	await sheet.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
+});
+
+test('a row marked as the boundary while the project has one warns, and Import waits for the Replace tick', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Replace boundary import');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson('First catchment'));
+	const sheet = await review(page, 'wider.geojson', JSON.stringify({ type: 'FeatureCollection', features: [poly('Wider catchment', box(21.29, -33.71, 0.12))] }));
+
+	// A lone polygon isn't proposed as the boundary while there is one: nothing to warn about.
+	await expect(sheet.getByLabel('Kind of feature 1')).toHaveValue('farm_parcel');
+	await expect(sheet.getByTestId('map-import-replaces')).toHaveCount(0);
+	const importButton = sheet.getByRole('button', { name: 'Import 1 feature' });
+	await expect(importButton).toBeEnabled();
+
+	// Marked as the boundary: the warning names the current one, the tick is off and Import waits for it.
+	await sheet.getByLabel('Kind of feature 1').selectOption('catchment_boundary');
+	const warning = sheet.getByTestId('map-import-replaces');
+	await expect(warning.getByRole('paragraph')).toHaveText('Importing replaces the current catchment boundary “First catchment”: it goes from the map.');
+	const tick = warning.getByRole('checkbox', { name: 'Replace the current boundary' });
+	await expect(tick).not.toBeChecked();
+	await expect(importButton).toBeDisabled();
+	await expectNoViolations(page);
+	// Set back to a parcel, the warning goes; marked again, it is back with the Import still waiting.
+	await sheet.getByLabel('Kind of feature 1').selectOption('farm_parcel');
+	await expect(warning).toHaveCount(0);
+	await sheet.getByLabel('Kind of feature 1').selectOption('catchment_boundary');
+	await expect(importButton).toBeDisabled();
+
+	await tick.check();
+	await expect(importButton).toBeEnabled();
+	await importButton.click();
+	await expect(page.getByTestId('map-notice')).toContainText('Imported 1 feature from wider.geojson.');
+	await expect(sheet).toBeHidden();
+	await expect(page.getByTestId('map-feature-list').getByRole('group', { name: /Catchment boundary/ }).locator('.nm')).toHaveText(['Wider catchment']);
 });

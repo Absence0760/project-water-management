@@ -5,6 +5,7 @@
 // Undo, Finish, Save and Cancel; nothing is sent to the server until a save
 // sheet's confirm. Every change goes on an undo stack.
 import type { MapFeature, MapFeatureKind, MapGeometry, MapPosition } from '$lib/api/types';
+import { confirmDialog, type ConfirmOptions } from '$lib/components/common/confirm.svelte';
 import { positionText } from '../mapData';
 import { canFinish, CORNER, distinctCorners, DRAW_CHOICES, type DrawChoice, type DraftShape, editableCorners, geometryOf, shapeOf, withoutCorner } from './shape';
 
@@ -34,6 +35,7 @@ export class Draft {
 	cursor = $state<MapPosition | null>(null);
 	/** The last thing that happened, for a polite live region. */
 	said = $state('');
+	#asking = false;
 	#undo = $state<{ coords: MapPosition[]; phase: 'drawing' | 'review'; whole: MapGeometry | null }[]>([]);
 
 	get active() {
@@ -51,6 +53,17 @@ export class Draft {
 	}
 	get cornerWord() {
 		return CORNER[this.shape];
+	}
+	/**
+	 * Work that Escape mustn't drop without asking: an edit with any change, a
+	 * finished (or pasted) line or polygon, or one with two corners or more.
+	 * A placed point or a single corner is one click to make again.
+	 */
+	get unsaved() {
+		if (!this.active) return false;
+		if (this.mode === 'edit') return this.canUndo;
+		if (this.shape === 'point') return false;
+		return this.whole !== null || this.phase === 'review' || this.coords.length >= 2;
 	}
 
 	#reset() {
@@ -110,6 +123,37 @@ export class Draft {
 	cancel() {
 		this.#reset();
 		this.mode = null;
+	}
+
+	/**
+	 * Escape: cancels at once when nothing would be lost, else asks once
+	 * ("Discard this drawing?"); a second Escape while the question is up does
+	 * nothing more. True when the draft was cancelled. The Cancel button stays
+	 * the immediate way out (a named button is a deliberate act; a key can be
+	 * a slip).
+	 */
+	async escape(ask: (o: ConfirmOptions) => Promise<boolean> = confirmDialog): Promise<boolean> {
+		if (!this.active || this.#asking) return false;
+		if (!this.unsaved) {
+			this.cancel();
+			return true;
+		}
+		this.#asking = true;
+		const editing = this.mode === 'edit';
+		try {
+			const ok = await ask({
+				title: editing ? 'Discard your changes?' : 'Discard this drawing?',
+				message: editing ? 'The changes to this shape haven’t been saved.' : `The ${this.shape === 'polygon' ? 'shape' : 'line'} you drew hasn’t been saved.`,
+				confirmLabel: editing ? 'Discard changes' : 'Discard drawing',
+				cancelLabel: 'Keep drawing',
+				danger: true
+			});
+			if (!ok || !this.active) return false;
+			this.cancel();
+			return true;
+		} finally {
+			this.#asking = false;
+		}
 	}
 
 	/** A click or Enter while drawing: a corner (a point's position: the point, ready to save). */

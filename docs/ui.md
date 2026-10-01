@@ -2422,7 +2422,10 @@ map" card) stays the schematic; this is the geography.
   live region, why it can't be saved yet ("Its outline crosses itself…"), and
   **Use my location** (phones, placing), **Enter coordinates** (points) or
   **Paste a shape** (lines and polygons), **Undo**, **Finish** (while
-  drawing), **Remove the picked corner**, **Cancel** and, once drawn,
+  drawing), **Remove the picked corner**, **Cancel** (drops the drawing at
+  once; Escape, on the map or in the bar, asks "Discard this drawing?" first
+  once there is work to lose: two corners or more, a finished shape or a
+  changed edit, [maps.md § Drawing](./maps.md#drawing)) and, once drawn,
   **Save…** (**Save the shape** / **Save the position** for an edit, saved at
   once). Entering a mode gives the map the keyboard focus. Save… on a new
   shape opens **Save the drawing** (a side sheet: "This shape is" a kind its
@@ -2473,7 +2476,12 @@ map" card) stays the schematic; this is the geography.
   polygon, with its area), Kind (only the kinds its shape can be, with
   "from the file" or "from its shape" under it, and why a kind the file gave
   wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
-  boundary or river) and Problems. Two rows marked as the boundary, a
+  boundary or river) and Problems. While a row is marked as the boundary
+  and the project has one, a warning over the table says "Importing
+  replaces the current catchment boundary “X”: it goes from the map." with
+  a **Replace the current boundary** tick (off for every file); **Import**
+  waits for it, and the server refuses the import without it. Two rows
+  marked as the boundary, a
   refused feature, or a file imported already (by SHA-256) show in an alert
   over the table and disable **Import n features**; **Choose another file**
   goes back. A refused file imports nothing; a taken one closes the sheet

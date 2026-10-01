@@ -72,6 +72,24 @@ export function reviewProblems(rows: readonly ReviewRow[]): MapImportProblem[] {
 	return boundaries.length > 1 ? [{ feature: null, message: `A file holds at most one catchment boundary; features ${boundaries.join(', ')} are each marked as one.` }] : [];
 }
 
+/** The review would replace the project's current boundary: a row is marked as the boundary and the project has one. */
+export const replacesBoundary = (rows: readonly ReviewRow[], current: MapImportPreview['currentBoundary']): boolean =>
+	current !== null && rows.some((r) => r.kind === 'catchment_boundary');
+
+/** The warning over the table while the review replaces the boundary. */
+export const replaceBoundaryText = (current: { name: string }): string =>
+	`Importing replaces the current catchment boundary${current.name.trim() ? ` “${current.name.trim()}”` : ''}: it goes from the map.`;
+
+/**
+ * The import's body from the review: every row, and `replaceBoundary` only
+ * while the rows replace the boundary and the editor ticked it (the server
+ * refuses a replacing import without it).
+ */
+export function importBody(rows: readonly ReviewRow[], current: MapImportPreview['currentBoundary'], replaceTicked: boolean): { features: MapImportReviewed[]; replaceBoundary?: true } {
+	const features = reviewedFeatures(rows);
+	return replacesBoundary(rows, current) && replaceTicked ? { features, replaceBoundary: true } : { features };
+}
+
 /** The body's `features`: every row, with its kind, name and node. */
 export const reviewedFeatures = (rows: readonly ReviewRow[]): MapImportReviewed[] =>
 	rows.flatMap((r) => (r.kind ? [{ index: r.index, kind: r.kind, name: r.name.trim(), nodeId: KIND_NODES[r.kind].length ? r.nodeId : null }] : []));

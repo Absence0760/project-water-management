@@ -859,9 +859,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
 			/**
 			 * Import a file, every feature one `kind` or each its own (`features`, from the review).
-			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already.
+			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already, or a
+			 * reviewed boundary row would replace the current boundary without `replaceBoundary: true`.
 			 */
-			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[] })) =>
+			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[]; replaceBoundary?: boolean })) =>
 				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
 			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
 			areaFromMap: (id: string, nodeId: string, featureId: string) =>

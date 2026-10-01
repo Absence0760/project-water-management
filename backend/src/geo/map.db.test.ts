@@ -1,8 +1,10 @@
 // The catchment map (issue #288, WP-3.12; 152_catchment_map.sql,
 // geo/routes.ts): the API end to end and RLS with positive controls.
 //  - an editor imports a synthetic boundary (checked and measured on the
-//    server); a viewer can't; the same file twice, a projected file and a
-//    point as a boundary are refused, with reasons per feature;
+//    server); a viewer can't; the same file twice (also when a second import
+//    races past the duplicate check), a projected file and a point as a
+//    boundary are refused, with reasons per feature; a reviewed boundary row
+//    replaces the current boundary only with replaceBoundary;
 //  - points placed from coordinates, linked to a node of a fitting kind;
 //  - a polygon's area accepted into a farm records a model revision naming
 //    the feature, and typing over the area sets it back to typed;
@@ -10,6 +12,7 @@
 //    the boundary and gauges and their own farm's features, not a neighbour's;
 //  - the quaternary lookup proposes the synthetic dataset's values, marked
 //    synthetic, and water_app can't write the dataset.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -158,7 +161,8 @@ describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () 
 		expect((await viewer.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed })).status).toBe(403);
 		const res = await editor.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body).toMatchObject({ fileName: 'mixed.geojson', duplicate: false, problems: [] });
+		// No boundary yet: the boundary row replaces nothing.
+		expect(res.body).toMatchObject({ fileName: 'mixed.geojson', duplicate: false, currentBoundary: null, problems: [] });
 		expect(res.body.sha256).toMatch(/^[0-9a-f]{64}$/);
 		// The nodes, for each row's Stands for.
 		expect(res.body.nodes.map((n: { name: string }) => n.name).sort()).toEqual(['Lower farm', 'Outlet weir', 'Upper farm']);
@@ -223,6 +227,66 @@ describe('a file mixing kinds, reviewed before it is saved (issue #326 D2)', () 
 		// The preview now says the file is in already, and the import refuses it.
 		expect((await editor.call('POST', mixAt('/import/preview'), { fileName: 'mixed.geojson', text: mixed })).body.duplicate).toBe(true);
 		expect((await editor.call('POST', mixAt('/import'), { fileName: 'mixed.geojson', text: mixed, kind: 'other' })).status).toBe(409);
+	});
+
+	it('never replaces the current boundary from a review without replaceBoundary: refused (409), then replaced with it', async () => {
+		// The project has "Mixed catchment" now (the import above, which needed no flag: there was no boundary).
+		const file = JSON.stringify({ type: 'FeatureCollection', features: [poly('Wider catchment', box(21.29, -33.71, 0.12))] });
+		const pre = await editor.call('POST', mixAt('/import/preview'), { fileName: 'wider.geojson', text: file });
+		expect(pre.status).toBe(200);
+		expect(pre.body.currentBoundary).toEqual({ name: 'Mixed catchment' });
+		// A lone polygon isn't proposed as the boundary while the project has one; the editor marks it.
+		expect(pre.body.features[0].kind).toBe('farm_parcel');
+		const features = [{ index: 1, kind: 'catchment_boundary' }];
+		const boundaries = async () =>
+			(await asOwner(`SELECT name FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [mixedId])).map((r) => (r as { name: string }).name);
+		for (const flag of [{}, { replaceBoundary: false }]) {
+			const refused = await editor.call('POST', mixAt('/import'), { fileName: 'wider.geojson', text: file, features, ...flag });
+			expect(refused.status).toBe(409);
+			expect(refused.body.error).toBe('Importing this file replaces the current catchment boundary “Mixed catchment”. Tick “Replace the current boundary” to import it, or set that row to another kind.');
+			expect(await boundaries()).toEqual(['Mixed catchment']);
+		}
+		const sources = async () => (await asOwner(`SELECT 1 FROM geo_source WHERE project_id = $1 AND file_name = 'wider.geojson'`, [mixedId])).length;
+		expect(await sources()).toBe(0);
+		const res = await editor.call('POST', mixAt('/import'), { fileName: 'wider.geojson', text: file, features, replaceBoundary: true });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(await boundaries()).toEqual(['Wider catchment']);
+		expect(await sources()).toBe(1);
+	});
+
+	it('answers an identical import racing past the duplicate check with the same 409 as a repeat, keeping one source', async () => {
+		// Deterministic race: another session's uncommitted import of the same file holds the unique index
+		// (geo_source_sha_idx), so this import's duplicate SELECT sees nothing and its INSERT waits on that
+		// session; once it commits, the INSERT fails with 23505, which must read as the ordinary 409.
+		const file = JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { name: 'Race gauge' }, geometry: { type: 'Point', coordinates: [21.33, -33.64] } }] });
+		const sha = createHash('sha256').update(file, 'utf8').digest('hex');
+		const first = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await first.connect();
+		try {
+			await first.query('BEGIN');
+			await first.query(`INSERT INTO geo_source (project_id, file_name, sha256) VALUES ($1, 'race.geojson', $2)`, [mixedId, sha]);
+			const xid = (await first.query<{ x: string }>('SELECT pg_current_xact_id()::text AS x')).rows[0]!.x;
+			const pending = editor.call('POST', mixAt('/import'), { fileName: 'race.geojson', text: file, features: [{ index: 1, kind: 'gauge' }] });
+			// Wait for the real signal: the import's INSERT queued on our transaction's lock.
+			const watch = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+			await watch.connect();
+			try {
+				for (let blocked = false; !blocked; ) {
+					blocked = (await watch.query(`SELECT 1 FROM pg_locks WHERE locktype = 'transactionid' AND NOT granted AND transactionid::text = $1`, [xid])).rowCount! > 0;
+					if (!blocked) await new Promise((r) => setTimeout(r, 10));
+				}
+			} finally {
+				await watch.end();
+			}
+			await first.query('COMMIT');
+			const res = await pending;
+			expect(res.status).toBe(409);
+			expect(res.body).toEqual({ error: 'This file was imported already. Delete its features first to import it again.' });
+		} finally {
+			await first.end();
+		}
+		expect(await asOwner('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [mixedId, sha])).toHaveLength(1);
+		expect(await asOwner(`SELECT 1 FROM map_feature WHERE project_id = $1 AND name = 'Race gauge'`, [mixedId])).toHaveLength(0);
 	});
 
 	it('lists a refused feature’s problem on its row in the preview, and the import takes nothing', async () => {

@@ -153,14 +153,22 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   edge's middle to add a corner, click a corner to pick it and press Delete
   (or **Remove the picked corner**) to remove it, never below three corners
   (two points for a line). **Undo** steps back through every change (a drag
-  is one step; up to 200); **Escape** or **Cancel** drops the drawing. While
+  is one step; up to 200); **Cancel** drops the drawing at once. **Escape**
+  does too while there is nothing to lose (one corner, a placed point, an
+  edit not yet changed), but with two corners or more, a finished or pasted
+  shape, or a changed edit it asks first (the app's confirmation dialog,
+  "Discard this drawing?" / "Discard your changes?", **Keep drawing** first
+  and taking the focus; `Draft.escape`), since a key can be a slip and a
+  named button can't, the way a half-typed note asks before its sheet
+  closes. While
   drawing, clicks shape the drawing rather than picking what is under them,
   and point markers let clicks through.
 - **Keyboard** (WCAG 2.1.1): from the map's focus (entering a drawing mode
   puts it there), a crosshair marks the map's middle; the arrow keys pan the
   map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
   (places or moves the point), **Backspace** removes the last corner while
-  drawing, **Delete** the picked one after, Escape cancels. The canvas's
+  drawing, **Delete** the picked one after, Escape cancels (asking first, as
+  above; focus comes back to the map either way). The canvas's
   accessible name says which keys do what in each phase, and the draw bar
   names the last change in a polite live region ("Corner 3 at 33.6100° S,
   21.3400° E.").
@@ -237,7 +245,9 @@ did, and refuses the whole file on any problem, listing them per feature:
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
-  can't be imported twice into a project.
+  can't be imported twice into a project (409). Two identical imports at
+  once both pass the duplicate check; the unique index `geo_source_sha_idx`
+  stops the second, which gets the same 409, never a bare "already exists".
 - **A file may mix kinds** (issue #326 D2). `POST …/map/import/preview`
   reads and checks the file as the import will, saves nothing, and proposes
   each feature's kind (`proposeKinds` in `geojson.ts`):
@@ -260,13 +270,23 @@ did, and refuses the whole file on any problem, listing them per feature:
   The server checks it all again: each kind fits its geometry, each node is
   the project's and of a kind the feature can stand for, and **a file holds
   at most one boundary**, which replaces the project's current one. Any
-  problem refuses the whole file (422, per feature). The import's audit
+  problem refuses the whole file (422, per feature).
+  **Replacing the boundary is never silent:** the preview names the
+  project's current boundary (`currentBoundary`), and while a row is marked
+  as the boundary and one exists, the review shows "Importing replaces the
+  current catchment boundary “X”: it goes from the map." with a **Replace
+  the current boundary** tick, off for every file, that Import waits for.
+  The server holds the same line: a reviewed boundary row with a boundary
+  in place and no `replaceBoundary: true` is refused (409) and nothing is
+  imported. The import's audit
   event records the count of each kind (`kind: 'mixed'` when there are
   several).
 - The one-kind import (`kind` instead of `features`, kept for API callers):
   every feature that kind; a **catchment boundary** file's polygons become
   one boundary (a MultiPolygon if several), replacing the project's current
-  one. A parcel, dam or gauge named like a node of a fitting kind is linked
+  one without the flag: naming the whole file the boundary is the intent,
+  and the seeding scripts and API callers rely on it (the app's upload sheet
+  always sends `features`). A parcel, dam or gauge named like a node of a fitting kind is linked
   to it; the editor can change the link.
 
 **Shapefiles are not read yet** (WP-3.12 plans `shpjs` and proj4 in the

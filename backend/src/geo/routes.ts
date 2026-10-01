@@ -129,6 +129,14 @@ export const ImportBody = z
 		kind: z.enum(MAP_FEATURE_KINDS).optional(),
 		/** Or each feature's own kind, name and node, from the review (every feature in the file, once). */
 		features: z.array(ReviewedFeature).min(1).max(GEO_MAX_FEATURES).optional(),
+		/**
+		 * With `features`: a reviewed row marked as the boundary replaces the
+		 * project's current one only with this set (the review's "Replace the
+		 * current boundary" tick); without it that import is refused (409). The
+		 * one-kind `kind: 'catchment_boundary'` import names the whole file the
+		 * boundary and replaces it as before.
+		 */
+		replaceBoundary: z.boolean().optional(),
 		text: z.string().min(1)
 	})
 	.strict()
@@ -248,6 +256,14 @@ async function removeBoundary(db: Db, projectId: string): Promise<string | null>
 	if (rows[0]?.source_id) await dropSourceIfEmpty(db, projectId, rows[0].source_id);
 	return rows[0]?.id ?? null;
 }
+
+/** The project's catchment boundary (its name), or null when it has none. */
+async function currentBoundary(db: Db, projectId: string): Promise<{ name: string } | null> {
+	const { rows } = await db.query<{ name: string }>(`SELECT name FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at LIMIT 1`, [projectId]);
+	return rows[0] ? { name: rows[0].name } : null;
+}
+
+const DUPLICATE_FILE = 'This file was imported already. Delete its features first to import it again.';
 
 async function dropSourceIfEmpty(db: Db, projectId: string, sourceId: string) {
 	await db.query('DELETE FROM geo_source s WHERE s.id = $1 AND s.project_id = $2 AND NOT EXISTS (SELECT 1 FROM map_feature f WHERE f.source_id = s.id)', [
@@ -463,8 +479,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const parsed = parseGeoJson(body.text);
 			const sha256 = sha256Of(body.text);
 			const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
-			const { rows: b } = await db.query(`SELECT 1 FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary'`, [id]);
-			const proposals = proposeKinds(parsed.features, { hasBoundary: b.length > 0 });
+			const boundary = await currentBoundary(db, id);
+			const proposals = proposeKinds(parsed.features, { hasBoundary: boundary !== null });
 			const nodes = await projectNodes(db, id);
 			const link = nodeByName(nodes);
 			const refused = parsed.problems.flatMap((p) => (p.feature === null ? [] : [p.feature]));
@@ -484,7 +500,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 				}),
 				...[...new Set(refused)].map((index) => ({ index, geometryType: null, name: '', areaM2: null, kind: null, kindFrom: null, nodeId: null }))
 			].sort((x, y) => x.index - y.index);
-			return c.json({ fileName: body.fileName, sha256, duplicate: dup.length > 0, features, problems: parsed.problems, nodes });
+			// currentBoundary: a row imported as the boundary replaces it, so the review warns and asks for the tick.
+			return c.json({ fileName: body.fileName, sha256, duplicate: dup.length > 0, currentBoundary: boundary, features, problems: parsed.problems, nodes });
 		});
 	})
 	.post('/:id/map/import', importLimit(), async (c) => {
@@ -501,12 +518,28 @@ export const mapRoutes = new Hono<AuthEnv>()
 			if (made.problems.length) throw new ApiError(422, 'The file was not imported: fix the problems listed and upload it again.', made.problems);
 			const sha256 = sha256Of(body.text);
 			const { rows: dup } = await db.query('SELECT 1 FROM geo_source WHERE project_id = $1 AND sha256 = $2', [id, sha256]);
-			if (dup[0]) throw new ApiError(409, 'This file was imported already. Delete its features first to import it again.');
-			if (made.rows.some((r) => r.kind === 'catchment_boundary')) await removeBoundary(db, id);
-			const { rows: src } = await db.query<{ id: string }>(
-				`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
-				[id, body.fileName, sha256]
-			);
+			if (dup[0]) throw new ApiError(409, DUPLICATE_FILE);
+			if (made.rows.some((r) => r.kind === 'catchment_boundary')) {
+				// A reviewed boundary row never replaces the current boundary silently: the editor ticks it (the one-kind import names the file the boundary).
+				const boundary = body.features ? await currentBoundary(db, id) : null;
+				if (boundary && body.replaceBoundary !== true) {
+					throw new ApiError(
+						409,
+						`Importing this file replaces the current catchment boundary${boundary.name ? ` “${boundary.name}”` : ''}. Tick “Replace the current boundary” to import it, or set that row to another kind.`
+					);
+				}
+				await removeBoundary(db, id);
+			}
+			// Two identical imports at once both pass the check above; the unique index (geo_source_sha_idx) stops the second, which gets the same answer.
+			const { rows: src } = await db
+				.query<{ id: string }>(
+					`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
+					[id, body.fileName, sha256]
+				)
+				.catch((err: unknown) => {
+					if ((err as { code?: string; constraint?: string }).code === '23505' && (err as { constraint?: string }).constraint === 'geo_source_sha_idx') throw new ApiError(409, DUPLICATE_FILE);
+					throw err;
+				});
 			const sourceId = src[0]!.id;
 			const link = nodeByName(await projectNodes(db, id));
 			const ids: string[] = [];

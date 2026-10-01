@@ -2306,6 +2306,8 @@ export interface MapImportPreview {
 	sha256: string;
 	/** The same file is in the project already: the import would be refused. */
 	duplicate: boolean;
+	/** The project's catchment boundary now (its name, possibly empty), or null: a row imported as the boundary replaces it, only with `replaceBoundary: true`. */
+	currentBoundary: { name: string } | null;
 	features: MapImportPreviewFeature[];
 	problems: MapImportProblem[];
 	/** The project's nodes, for each row's Stands for. */

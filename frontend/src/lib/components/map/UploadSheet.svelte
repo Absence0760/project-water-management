@@ -6,7 +6,10 @@
 	shape) and the node it stands for. The review table lets the editor change
 	each row's kind, name and Stands for ("Set every row's kind" sets the whole
 	column) before Import; nothing is saved until then. A refused file lists
-	its problems by feature and imports nothing. The files imported so far sit
+	its problems by feature and imports nothing. A row marked as the boundary
+	while the project has one shows a warning, and Import waits for its
+	"Replace the current boundary" tick (off for every file; the server
+	refuses the import without it). The files imported so far sit
 	under it (each SHA-256 cut to 12 characters, with a copy button). The sheet
 	widens for the table; on a phone each row is a card of labelled fields.
 -->
@@ -14,7 +17,20 @@
 	import { api, ApiError, type MapFeatureKind, type MapImportPreview, type MapImportProblem, type MapSource } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { areaText, GEO_MAX_BYTES, importProblems, KIND_LABEL, KIND_NODES, problemText } from './mapData';
-	import { kindCounts, kindsFor, nodesFor, REVIEW_KINDS, reviewedFeatures, reviewProblems, reviewRows, setEveryKind, withKind, type ReviewRow } from './importReview';
+	import {
+		importBody,
+		kindCounts,
+		kindsFor,
+		nodesFor,
+		replaceBoundaryText,
+		replacesBoundary,
+		REVIEW_KINDS,
+		reviewProblems,
+		reviewRows,
+		setEveryKind,
+		withKind,
+		type ReviewRow
+	} from './importReview';
 	import SourceList from './SourceList.svelte';
 
 	let {
@@ -42,9 +58,13 @@
 	let rows = $state<ReviewRow[]>([]);
 	let everyKind = $state<MapFeatureKind | ''>('');
 	let everyNote = $state<string | null>(null);
+	/** "Replace the current boundary": off for every file; Import waits for it while a row would replace the boundary. */
+	let replaceTicked = $state(false);
 
 	const blocking = $derived(review ? [...review.problems, ...reviewProblems(rows)] : []);
 	const importable = $derived(rows.filter((r) => r.kind).length);
+	const replacing = $derived(review ? replacesBoundary(rows, review.currentBoundary) : false);
+	const needsTick = $derived(replacing && !replaceTicked);
 	const shown = $derived(blocking.length ? blocking : problems);
 	const problemsOf = (index: number) => shown.filter((p) => p.feature === index).map((p) => p.message);
 
@@ -80,6 +100,7 @@
 			rows = reviewRows(p);
 			everyKind = '';
 			everyNote = null;
+			replaceTicked = false;
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -90,11 +111,11 @@
 	/** Step two: every row as reviewed; the server checks it all again. */
 	async function importReviewed(e: SubmitEvent) {
 		e.preventDefault();
-		if (!review || blocking.length || review.duplicate || !importable) return;
+		if (!review || blocking.length || review.duplicate || !importable || needsTick) return;
 		reset();
 		busy = true;
 		try {
-			const r = await api.map.import(projectId, { fileName: review.fileName, text, features: reviewedFeatures(rows) });
+			const r = await api.map.import(projectId, { fileName: review.fileName, text, ...importBody(rows, review.currentBoundary, replaceTicked) });
 			await onimported({ fileName: r.source.fileName, ids: r.features.map((f) => f.id) });
 			chooseAnother();
 		} catch (err) {
@@ -110,6 +131,7 @@
 		rows = [];
 		file = null;
 		text = '';
+		replaceTicked = false;
 		reset();
 	}
 
@@ -167,6 +189,12 @@
 							{#each shown as p, i (i)}<li>{problemText(p)}</li>{/each}
 						</ul>
 					{/if}
+				</div>
+			{/if}
+			{#if replacing && review.currentBoundary}
+				<div class="alert alert-warning replace" data-testid="map-import-replaces">
+					<p>{replaceBoundaryText(review.currentBoundary)}</p>
+					<label class="tick"><input type="checkbox" bind:checked={replaceTicked} data-testid="map-import-replace-tick" /> Replace the current boundary</label>
 				</div>
 			{/if}
 			{#if importable}
@@ -241,7 +269,7 @@
 	{#snippet actions()}
 		{#if review}
 			<button type="button" class="btn" onclick={chooseAnother} disabled={busy}>Choose another file</button>
-			<button type="submit" form={formId} class="btn btn-primary" disabled={busy || review.duplicate || blocking.length > 0 || !importable}>
+			<button type="submit" form={formId} class="btn btn-primary" disabled={busy || review.duplicate || blocking.length > 0 || !importable || needsTick}>
 				{busy ? 'Importing…' : `Import ${importable} ${importable === 1 ? 'feature' : 'features'}`}
 			</button>
 		{:else}
@@ -273,6 +301,17 @@
 	.alert p,
 	.summary {
 		margin: 0;
+	}
+	.replace {
+		display: grid;
+		gap: 0.5rem;
+	}
+	.tick {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 24px;
+		font-weight: 600;
 	}
 	.every select {
 		max-width: 20rem;

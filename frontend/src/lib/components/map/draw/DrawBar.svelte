@@ -5,7 +5,8 @@
 	the buttons the keys and clicks also reach: Undo, Finish, Save, Cancel,
 	and the ways in that need no pointer: Paste a shape, Enter coordinates.
 	Use my location shows on phones (asked only on the tap; the position goes
-	no further than the point). Escape anywhere in the bar cancels.
+	no further than the point). Escape anywhere in the bar cancels (asking
+	first when a drawing would be lost: Draft.escape); Cancel drops it at once.
 -->
 <script lang="ts">
 	import type { MapPosition } from '$lib/api/types';
@@ -86,7 +87,7 @@
 	function onkeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape' && !(e.target instanceof HTMLSelectElement)) {
 			e.preventDefault();
-			draft.cancel();
+			void draft.escape();
 		}
 	}
 </script>

@@ -329,8 +329,8 @@
 			: draft.shape === 'point'
 				? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
 				: draft.phase === 'drawing'
-					? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels`
-					: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels; pick a ${draft.cornerWord.one} on the map to remove it with Delete`
+					? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
+					: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
 	);
 	$effect(() => {
 		const help = keysHelp;

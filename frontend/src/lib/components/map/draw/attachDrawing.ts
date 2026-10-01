@@ -12,7 +12,7 @@
 // crosshair at its middle (MapLibre's own keyboard handler), Enter adds a
 // corner (places or moves the point) at the crosshair, Backspace removes the
 // last corner while drawing (the picked one after), Delete the picked one,
-// Escape cancels.
+// Escape cancels (asking first when that would drop work: Draft.escape).
 import type { MapPosition } from '$lib/api/types';
 import type { Draft } from './draft.svelte';
 import { DRAFT_CORNER_LAYER, DRAFT_MID_LAYER } from './drawLayers';
@@ -143,7 +143,7 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement): 
 			if (draft.corner === null) return;
 			draft.removeCorner(draft.corner);
 		} else if (e.key === 'Escape') {
-			draft.cancel();
+			void draft.escape();
 		} else return;
 		e.preventDefault();
 		e.stopPropagation();

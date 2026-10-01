@@ -1,8 +1,9 @@
 // The upload sheet's review (importReview.ts, issue #326 D2): which kinds a
-// row may take, "set every row's kind", the one-boundary rule and the body.
+// row may take, "set every row's kind", the one-boundary rule, replacing the
+// current boundary only with the tick, and the body.
 import { describe, expect, it } from 'vitest';
 import type { MapImportPreview } from '$lib/api/types';
-import { kindCounts, kindsFor, nodesFor, reviewedFeatures, reviewProblems, reviewRows, setEveryKind, withKind, type ReviewNode } from './importReview';
+import { importBody, kindCounts, kindsFor, nodesFor, replaceBoundaryText, replacesBoundary, reviewedFeatures, reviewProblems, reviewRows, setEveryKind, withKind, type ReviewNode } from './importReview';
 
 const nodes: ReviewNode[] = [
 	{ id: 'g', name: 'Weir', kind: 'gauge' },
@@ -13,6 +14,7 @@ const preview: MapImportPreview = {
 	fileName: 'mixed.geojson',
 	sha256: 'a'.repeat(64),
 	duplicate: false,
+	currentBoundary: null,
 	problems: [{ feature: 4, message: 'has 3D coordinates' }],
 	nodes,
 	features: [
@@ -73,5 +75,23 @@ describe('the import review', () => {
 		expect(kindCounts(rows)).toBe('1 farm parcel, 1 gauge, 1 river');
 		expect(kindCounts(setEveryKind(rows, 'other', nodes).rows)).toBe('3 others');
 		expect(kindCounts([rows[0]!, rows[0]!].map((r) => ({ ...r, kind: 'catchment_boundary' as const })))).toBe('2 catchment boundaries');
+	});
+
+	it('warns and needs the tick only while a row is the boundary and the project has one', () => {
+		const rows = reviewRows(preview);
+		const asBoundary = rows.map((r, i) => (i === 0 ? withKind(r, 'catchment_boundary', nodes) : r));
+		const current = { name: 'Old catchment' };
+		// Control: no boundary in the project, or none in the rows, replaces nothing and sends no flag.
+		expect(replacesBoundary(asBoundary, null)).toBe(false);
+		expect(replacesBoundary(rows, current)).toBe(false);
+		expect(importBody(asBoundary, null, true)).not.toHaveProperty('replaceBoundary');
+		expect(replacesBoundary(asBoundary, current)).toBe(true);
+		expect(replaceBoundaryText(current)).toBe('Importing replaces the current catchment boundary “Old catchment”: it goes from the map.');
+		expect(replaceBoundaryText({ name: ' ' })).toBe('Importing replaces the current catchment boundary: it goes from the map.');
+		// Unticked: no flag (the server refuses it); ticked: replaceBoundary true.
+		expect(importBody(asBoundary, current, false)).toEqual({ features: reviewedFeatures(asBoundary) });
+		expect(importBody(asBoundary, current, true)).toEqual({ features: reviewedFeatures(asBoundary), replaceBoundary: true });
+		// A tick left on after the row changed back sends no flag.
+		expect(importBody(rows, current, true)).not.toHaveProperty('replaceBoundary');
 	});
 });

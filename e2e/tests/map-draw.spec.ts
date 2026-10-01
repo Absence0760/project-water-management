@@ -2,7 +2,8 @@
 // docs/maps.md § Drawing). The non-pointer ways first: the empty state's Draw
 // the boundary, a pasted WKT boundary saved through its sheet, a pasted line
 // refused for a polygon and a bow tie refused; a parcel drawn with the keys
-// (the crosshair, Enter, Backspace, Escape); a parcel reshaped from the card
+// (the crosshair, Enter, Backspace, Escape: at once with one corner, asking
+// with three, Keep drawing and Discard drawing); a parcel reshaped from the card
 // by pasting. Then one deterministic pointer case (fixed viewport, the map
 // framed on the boundary): a polygon clicked corner by corner and a point
 // placed by a click, each read back from the list, never from pixels. A
@@ -76,7 +77,7 @@ test('the empty state draws the boundary: a pasted WKT outline, refused shapes f
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature · boundary');
 });
 
-test('a parcel drawn with the keyboard: the crosshair, Enter adds a corner, Backspace removes it, Escape cancels', async ({ page, owner }) => {
+test('a parcel drawn with the keyboard: the crosshair, Enter adds a corner, Backspace removes it, Escape cancels (asking once there is work to lose)', async ({ page, owner }) => {
 	void owner;
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.setViewportSize({ width: 1440, height: 960 });
@@ -102,6 +103,21 @@ test('a parcel drawn with the keyboard: the crosshair, Enter adds a corner, Back
 	await page.keyboard.press('Enter');
 	await expect(canvas(page)).toBeFocused();
 
+	// With three corners Escape asks first; Discard drawing drops them.
+	await expect(canvas(page)).toHaveAttribute('aria-label', /Escape cancels \(asking first once two are placed\)/);
+	for (const key of ['Enter', 'ArrowRight', 'Enter', 'ArrowDown', 'Enter']) await page.keyboard.press(key);
+	await expect(page.getByTestId('map-draw-said')).toHaveText(/^Corner 3 at /);
+	await page.keyboard.press('Escape');
+	let ask = page.getByRole('alertdialog', { name: 'Discard this drawing?' });
+	await expect(ask.getByTestId('confirm-message')).toHaveText('The shape you drew hasn’t been saved.');
+	await ask.getByRole('button', { name: 'Discard drawing' }).click();
+	await expect(ask).toBeHidden();
+	await expect(bar(page)).toHaveCount(0);
+	await header(page).getByRole('button', { name: 'Draw a shape' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(canvas(page)).toBeFocused();
+	await expect(bar(page).getByRole('button', { name: 'Undo' })).toBeDisabled();
+
 	// Corners at the crosshair, the map panned between them (reduced motion: the pan is instant).
 	await page.keyboard.press('Enter');
 	await page.keyboard.press('ArrowRight');
@@ -114,6 +130,20 @@ test('a parcel drawn with the keyboard: the crosshair, Enter adds a corner, Back
 	await expect(page.getByTestId('map-draw-said')).toHaveText('Undone; 2 corners.');
 	await page.keyboard.press('Enter');
 	await expect(page.getByTestId('map-draw-said')).toHaveText(/^Corner 3 at /);
+
+	// Escape again: Keep drawing (Escape in the question answers the same) keeps all three corners and the focus.
+	await page.keyboard.press('Escape');
+	ask = page.getByRole('alertdialog', { name: 'Discard this drawing?' });
+	await ask.getByRole('button', { name: 'Keep drawing' }).click();
+	await expect(ask).toBeHidden();
+	await expect(bar(page)).toHaveAttribute('data-phase', 'drawing');
+	await expect(page.getByTestId('map-draw-said')).toHaveText(/^Corner 3 at /);
+	await expect(canvas(page)).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(ask).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(ask).toBeHidden();
+	await expect(bar(page)).toBeVisible();
 
 	await bar(page).getByRole('button', { name: 'Finish' }).click();
 	await expect(page.getByTestId('map-draw-said')).toHaveText('Shape closed with 3 corners. Drag a corner to adjust it, then save.');

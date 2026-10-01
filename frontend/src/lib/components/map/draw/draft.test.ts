@@ -75,4 +75,67 @@ describe('Draft', () => {
 		expect(d.coords).toHaveLength(3);
 		expect(new Draft().edit({ ...base, geometry: { type: 'MultiPolygon', coordinates: [[ring], [ring]] } } as MapFeature)).toBe(false);
 	});
+
+	describe('escape', () => {
+		const asks = (answer: boolean) => {
+			const calls: { title: string }[] = [];
+			return { calls, ask: (o: { title: string }) => (calls.push(o), Promise.resolve(answer)) };
+		};
+		it('cancels at once with fewer than two corners, and a placed point', async () => {
+			const d = new Draft();
+			d.draw(parcel);
+			d.add([21, -34]);
+			const a = asks(false);
+			expect(await d.escape(a.ask)).toBe(true);
+			expect(d.active).toBe(false);
+			d.place('gauge');
+			d.add([21, -33]);
+			expect(await d.escape(a.ask)).toBe(true);
+			expect(a.calls).toHaveLength(0);
+		});
+		it('asks once two corners are drawn: Keep drawing keeps every corner, Discard drops them', async () => {
+			const d = new Draft();
+			d.draw(parcel);
+			d.add([21, -34]);
+			d.add([22, -34]);
+			expect(d.unsaved).toBe(true);
+			const keep = asks(false);
+			expect(await d.escape(keep.ask)).toBe(false);
+			expect(keep.calls.map((c) => c.title)).toEqual(['Discard this drawing?']);
+			expect(d.active).toBe(true);
+			expect(d.coords).toHaveLength(2);
+			const discard = asks(true);
+			expect(await d.escape(discard.ask)).toBe(true);
+			expect(d.active).toBe(false);
+		});
+		it('asks for a finished drawing, and only once while the question is up', async () => {
+			const d = new Draft();
+			d.draw(parcel);
+			for (const p of [[21, -34], [22, -34], [22, -33]] as [number, number][]) d.add(p);
+			d.finish();
+			let answer!: (ok: boolean) => void;
+			let calls = 0;
+			const ask = () => (calls++, new Promise<boolean>((r) => (answer = r)));
+			const first = d.escape(ask);
+			expect(await d.escape(ask)).toBe(false);
+			expect(calls).toBe(1);
+			answer(true);
+			expect(await first).toBe(true);
+			expect(d.active).toBe(false);
+		});
+		it('an edit asks only once something changed', async () => {
+			const ring: [number, number][] = [[21, -34], [22, -34], [22, -33], [21, -34]];
+			const f = { id: 'f', kind: 'farm_parcel', name: 'P', nodeId: null, nodeName: null, properties: {}, areaM2: 1, center: [0, 0], sourceId: null, createdBy: null, createdAt: '', updatedAt: '', geometry: { type: 'Polygon', coordinates: [ring] } } as unknown as MapFeature;
+			const d = new Draft();
+			d.edit(f);
+			expect(d.unsaved).toBe(false);
+			d.insertCorner(0, [21.5, -34]);
+			const a = asks(false);
+			expect(await d.escape(a.ask)).toBe(false);
+			expect(a.calls.map((c) => c.title)).toEqual(['Discard your changes?']);
+			d.undo();
+			expect(await d.escape(a.ask)).toBe(true);
+			expect(a.calls).toHaveLength(1);
+		});
+	});
 });
