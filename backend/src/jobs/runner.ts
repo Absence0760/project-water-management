@@ -1,5 +1,5 @@
-// One tick of the queue: purge old jobs, reports, alerts, lapsed invites and deleted
-// notes' text, queue the data feeds
+// One tick of the queue: purge old jobs, reports, alerts, lapsed invites, deleted
+// notes' text and the erasure log's old entries, queue the data feeds
 // (feeds/schedule.ts), report schedules (reports/schedule.ts) and scheduled
 // alert checks (app_alert_schedule) that are due, then claim and run due
 // jobs one at a time until none are due or the time budget is spent, then
@@ -94,6 +94,11 @@ export const ALERT_RETENTION_DAYS = 180;
  * licence record (156_note_purge; Privacy §7). Long enough for a complaint about what was written to surface.
  */
 export const DELETED_NOTE_RETENTION_DAYS = 90;
+/**
+ * An erasure log entry (157_erasure_log) is kept this long: above the longest automated backup
+ * (`db_backup_retention_days`, at most 35), so a restore can always re-apply the erasures after its restore point.
+ */
+export const ERASURE_LOG_RETENTION_DAYS = 40;
 
 /** Queue a job_dead check for one project at once (app_alert_schedule); a failure is logged, never thrown. */
 async function scheduleAlertCheck(projectId: string): Promise<void> {
@@ -140,6 +145,8 @@ export interface TickResult {
 	invitesPurged: number;
 	/** Notes deleted more than DELETED_NOTE_RETENTION_DAYS ago, erased with their earlier texts (156_note_purge). */
 	notesPurged: number;
+	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (157_erasure_log). */
+	erasuresPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -174,6 +181,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		purged: 0,
 		invitesPurged: 0,
 		notesPurged: 0,
+		erasuresPurged: 0,
 		claimed: 0,
 		done: 0,
 		failed: 0,
@@ -188,6 +196,9 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
 	result.notesPurged = await withoutUser(
 		async (db) => (await db.query<{ n: number }>('SELECT app_purge_deleted_notes(make_interval(days => $1)) AS n', [DELETED_NOTE_RETENTION_DAYS])).rows[0]?.n ?? 0
+	);
+	result.erasuresPurged = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_purge_erasure_log(make_interval(days => $1)) AS n', [ERASURE_LOG_RETENTION_DAYS])).rows[0]?.n ?? 0
 	);
 	const noticesPurged = await purgePackNotices();
 	const erratumPurged = await purgeErratumNotices();

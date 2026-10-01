@@ -13,6 +13,14 @@ const APP_URL = process.env.DATABASE_URL!;
  */
 const NO_RLS = new Set(['schema_migrations']);
 /**
+ * Owner-only tables: RLS on, no policy, and no grant of any kind to
+ * water_app. The erasure log holds the ids of deleted accounts, projects and
+ * teams for a restore to re-apply (157_erasure_log.sql); its triggers and its
+ * purge write it as SECURITY DEFINER functions, and only the operator, as the
+ * schema owner, reads it (deployment.md § Restoring the database).
+ */
+const OWNER_ONLY = new Set(['erasure_log']);
+/**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
  * never applies to it: whoever can select from the view sees every row.
@@ -334,14 +342,30 @@ describe('schema catalogue', () => {
 			 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
 			   AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)`
 		);
-		expect(rows.map((r) => r.relname)).toEqual([]);
+		expect(rows.map((r) => r.relname).filter((t) => !OWNER_ONLY.has(t))).toEqual([]);
+	});
+
+	it('keeps owner-only tables closed to water_app: RLS on, no policy, no privilege (erasure_log)', async () => {
+		for (const table of OWNER_ONLY) {
+			const { rows: rls } = await db.query<{ on: boolean }>('SELECT relrowsecurity AS on FROM pg_class WHERE oid = $1::regclass', [`public.${table}`]);
+			expect(rls[0]?.on, `${table} RLS`).toBe(true);
+			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: policies } = await db.query('SELECT polname FROM pg_policy WHERE polrelid = $1::regclass', [`public.${table}`]);
+			expect(policies, `${table} policies`).toEqual([]);
+		}
+		// Positive control: the same check sees water_app's SELECT on an ordinary table.
+		const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', 'public.note', 'SELECT') AS ok`);
+		expect(rows[0]!.ok).toBe(true);
 	});
 
 	it('grants every app table to water_app, which owns nothing and cannot bypass RLS', async () => {
 		// Each privilege on its own: has_table_privilege with a list is true if *any* is held.
 		const missing = [];
 		for (const t of await tables()) {
-			if (t.relname === 'schema_migrations') continue;
+			if (t.relname === 'schema_migrations' || OWNER_ONLY.has(t.relname)) continue;
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
