@@ -31,7 +31,7 @@ export interface ScenarioRow {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
-	/** Where and by when written objections go, as the application's notice gives them (164_public_participation); null: not given. */
+	/** Where and by when written objections go, as the application's notice gives them (166_public_participation); null: not given. */
 	objectionAddress: string | null;
 	objectionClosingDate: string | null;
 	baseRunId: string;

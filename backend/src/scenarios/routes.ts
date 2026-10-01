@@ -266,7 +266,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (body.purposeAndNeed !== undefined) set.push(['purpose_need', body.purposeAndNeed]);
 			if (body.mitigation !== undefined) set.push(['mitigation', body.mitigation]);
 			if (body.monitoring !== undefined) set.push(['monitoring', body.monitoring]);
-			// The notice's objection details (164): an application's, frozen once it is submitted (scenario_objection_frozen).
+			// The notice's objection details (166): an application's, frozen once it is submitted (scenario_objection_frozen).
 			if (body.objectionAddress !== undefined || body.objectionClosingDate !== undefined) {
 				if (!isApplication(s)) throw new ApiError(409, 'only an application has a notice to object to');
 				if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} application's notice details are frozen; withdraw it to change them`);

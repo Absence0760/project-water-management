@@ -149,7 +149,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Changed ${who}’s role from ${role(s.from)} to ${role(s.to)}`;
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
-		// The party's appointed specialist, who signs its applications' evidence packs (165_signers).
+		// The party's appointed specialist, who signs its applications' evidence packs (167_signers).
 		case 'member.specialist':
 			return s.specialist
 				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
@@ -259,7 +259,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
-		// The reg 19 record of an application's public comments (164_public_participation): how many, and how many emails.
+		// The reg 19 record of an application's public comments (166_public_participation): how many, and how many emails.
 		case 'scenario.participation_exported':
 			return `Downloaded the public comments on an application (${Number(s.comments) || 0} comments, ${Number(s.emails) || 0} emails given for the register)`;
 		case 'signoff.created': {

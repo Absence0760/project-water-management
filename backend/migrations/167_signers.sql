@@ -1,4 +1,4 @@
--- 165_signers — who signs an evidence pack, and the registration check
+-- 167_signers — who signs an evidence pack, and the registration check
 -- (licensing positions, build list items 14 and 16; provisional position,
 -- pre-counsel research, 2026-10-01; docs/evidence-pack.md § Signing,
 -- docs/security.md § Professional sign-off, docs/data-model.md § Sign-offs).
@@ -59,7 +59,7 @@ ALTER TABLE project_member
 	ADD COLUMN specialist boolean NOT NULL DEFAULT false,
 	ADD CONSTRAINT project_member_specialist_party CHECK (NOT specialist OR party IS NOT NULL);
 COMMENT ON COLUMN project_member.specialist IS
-	'The applying party''s appointed specialist (165): signs the draft evidence packs of the applications made in their party. Set by the project owner; needs a party.';
+	'The applying party''s appointed specialist (167): signs the draft evidence packs of the applications made in their party. Set by the project owner; needs a party.';
 
 -- A party change ends the appointment, unless the same update makes it again.
 CREATE FUNCTION project_member_specialist_party() RETURNS trigger
@@ -103,7 +103,7 @@ CREATE FUNCTION app_pack_specialist(p_project uuid, p_pack uuid) RETURNS boolean
 	END
 	$$;
 COMMENT ON FUNCTION app_pack_specialist(uuid, uuid) IS
-	'Whether the signed-in member is the appointed specialist (project_member.specialist) of the applying party whose application this pack is evidence for (165).';
+	'Whether the signed-in member is the appointed specialist (project_member.specialist) of the applying party whose application this pack is evidence for (167).';
 REVOKE ALL ON FUNCTION app_pack_specialist(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_pack_specialist(uuid, uuid) TO water_app;
 
@@ -145,7 +145,7 @@ CREATE FUNCTION app_specialist_pack(p_project uuid, p_pack uuid) RETURNS jsonb
 	END
 	$$;
 COMMENT ON FUNCTION app_specialist_pack(uuid, uuid) IS
-	'A pack the signed-in specialist may sign (app_pack_specialist): lifecycle fields and its runs'' identity, stamp and digest for the sign-off statement and its checks, never the manifest (165). NULL otherwise.';
+	'A pack the signed-in specialist may sign (app_pack_specialist): lifecycle fields and its runs'' identity, stamp and digest for the sign-off statement and its checks, never the manifest (167). NULL otherwise.';
 REVOKE ALL ON FUNCTION app_specialist_pack(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_specialist_pack(uuid, uuid) TO water_app;
 
@@ -167,7 +167,7 @@ CREATE FUNCTION app_specialist_packs(p_project uuid, p_scenario uuid) RETURNS SE
 	ORDER BY p.version DESC, p.created_at DESC
 	$$;
 COMMENT ON FUNCTION app_specialist_packs(uuid, uuid) IS
-	'The draft evidence packs of one application the signed-in specialist may sign (165), newest first: lifecycle fields only.';
+	'The draft evidence packs of one application the signed-in specialist may sign (167), newest first: lifecycle fields only.';
 REVOKE ALL ON FUNCTION app_specialist_packs(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_specialist_packs(uuid, uuid) TO water_app;
 
@@ -179,7 +179,7 @@ ALTER TABLE signoff
 	-- A review is a second sign-off of a pack, never a run's.
 	ADD CONSTRAINT signoff_review_pack CHECK (kind = 'specialist' OR pack_id IS NOT NULL);
 COMMENT ON COLUMN signoff.kind IS
-	'specialist: the professional statement of whoever is responsible for the evidence (an editor, or the applicant''s appointed specialist). review: an authority-side reviewer''s second sign-off of a pack, by an editor (165). Issue needs a specialist one.';
+	'specialist: the professional statement of whoever is responsible for the evidence (an editor, or the applicant''s appointed specialist). review: an authority-side reviewer''s second sign-off of a pack, by an editor (167). Issue needs a specialist one.';
 
 -- ORed with signoff_insert (036): the appointed specialist signs their party's application's pack, as themselves.
 CREATE POLICY signoff_insert_specialist ON signoff FOR INSERT
@@ -267,7 +267,7 @@ CREATE TABLE signoff_registration_check (
 	bound_at   timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE signoff_registration_check IS
-	'The registration check that stood behind a pack sign-off when the pack was issued (165): what verify shows as "checked against the register". Written only by app_pack_bind_registration_checks.';
+	'The registration check that stood behind a pack sign-off when the pack was issued (167): what verify shows as "checked against the register". Written only by app_pack_bind_registration_checks.';
 CREATE INDEX signoff_registration_check_check_idx ON signoff_registration_check (check_id);
 
 CREATE TRIGGER registration_check_forget AFTER UPDATE OF user_id ON registration_check
@@ -332,7 +332,7 @@ CREATE FUNCTION app_signoff_registration_check(p_signoff uuid) RETURNS jsonb
 	END
 	$$;
 COMMENT ON FUNCTION app_signoff_registration_check(uuid) IS
-	'A sign-off''s registration check (165): the one bound when its pack was issued, else the signer''s current check; NULL when there is none or the caller can''t read the sign-off.';
+	'A sign-off''s registration check (167): the one bound when its pack was issued, else the signer''s current check; NULL when there is none or the caller can''t read the sign-off.';
 REVOKE ALL ON FUNCTION app_signoff_registration_check(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_signoff_registration_check(uuid) TO water_app;
 
@@ -368,7 +368,7 @@ CREATE FUNCTION app_pack_bind_registration_checks(p_project uuid, p_pack uuid, p
 	END
 	$$;
 COMMENT ON FUNCTION app_pack_bind_registration_checks(uuid, uuid, text, boolean) IS
-	'Binds each sign-off of a draft pack to its signer''s current registration check at issue, and names the specialist signers of the current statement with none (165). Editors only.';
+	'Binds each sign-off of a draft pack to its signer''s current registration check at issue, and names the specialist signers of the current statement with none (167). Editors only.';
 REVOKE ALL ON FUNCTION app_pack_bind_registration_checks(uuid, uuid, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_pack_bind_registration_checks(uuid, uuid, text, boolean) TO water_app;
 
@@ -444,4 +444,4 @@ CREATE OR REPLACE FUNCTION app_verify_pack(p_code text) RETURNS jsonb
 	END
 	$$;
 COMMENT ON FUNCTION app_verify_pack(text) IS
-	'The public verify lookup (112_evidence_pack, 122_pack_bundle, 132_verify_pack_run_engines, 165_signers; GET /verify/:code): only the printed fields of a pack that was issued, by short code or manifest hash, with its PDF and bundle hashes, its signers'' kinds and registration checks, and its runs'' engines and fits'' engines for the errata found since issue (the API maps them to errata, never returns them); NULL otherwise.';
+	'The public verify lookup (112_evidence_pack, 122_pack_bundle, 132_verify_pack_run_engines, 167_signers; GET /verify/:code): only the printed fields of a pack that was issued, by short code or manifest hash, with its PDF and bundle hashes, its signers'' kinds and registration checks, and its runs'' engines and fits'' engines for the errata found since issue (the API maps them to errata, never returns them); NULL otherwise.';

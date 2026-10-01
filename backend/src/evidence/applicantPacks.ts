@@ -273,7 +273,7 @@ export function toSpecialistDraft(m: Record<string, unknown>): SpecialistDraft {
  * parties, only packs that were issued). Anyone else, an editor who isn't a
  * party included (they read the packs themselves, GET …/packs), gets an
  * empty list or 404. `toSign` lists the drafts the caller may sign as the
- * application's appointed specialist (165_signers), empty for anyone else.
+ * application's appointed specialist (167_signers), empty for anyone else.
  */
 export const applicantPackRoutes = new Hono<AuthEnv>()
 	.get('/:id/scenarios/:sid/packs', async (c) => {
@@ -284,7 +284,7 @@ export const applicantPackRoutes = new Hono<AuthEnv>()
 				await requireRole(db, id, 'contributor');
 				await readableScenario(db, id, sid);
 				const { rows } = await db.query<{ m: Record<string, unknown> }>('SELECT m FROM app_applicant_packs($1, $2) m', [id, sid]);
-				// The drafts the caller may sign as the application's appointed specialist (165_signers): none for anyone else.
+				// The drafts the caller may sign as the application's appointed specialist (167_signers): none for anyone else.
 				const { rows: drafts } = await db.query<{ m: Record<string, unknown> }>('SELECT m FROM app_specialist_packs($1, $2) m', [id, sid]);
 				return c.json({ packs: rows.map((r) => toApplicantPackMeta(obj(r.m))), toSign: drafts.map((r) => toSpecialistDraft(obj(r.m))) });
 			},

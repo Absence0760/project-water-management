@@ -1,5 +1,5 @@
 // The public-participation record of one application, for the applicant's
-// GN R267 reg 19 report (164_public_participation; licensing positions, build
+// GN R267 reg 19 report (166_public_participation; licensing positions, build
 // list item 11; provisional position, pre-counsel research, 2026-10-01;
 // docs/api.md § Applications → Public participation, docs/scenarios.md
 // § Sharing and comments).

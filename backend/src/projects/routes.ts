@@ -484,7 +484,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 					.nullable()
 					.optional()
 					.transform((p) => (p === '' ? null : p)),
-				// The party's appointed specialist, who signs its applications' evidence packs (165_signers); needs a party.
+				// The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party.
 				specialist: z.boolean().optional()
 			})
 			.strict()

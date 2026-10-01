@@ -273,7 +273,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
-	// A registration check stays as the record of what verify showed when a pack was issued, without the account (165_signers).
+	// A registration check stays as the record of what verify showed when a pack was issued, without the account (167_signers).
 	'registration_check.user_id': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',

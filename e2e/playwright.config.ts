@@ -94,7 +94,7 @@ export default defineConfig({
 				// either way and is tested in two-step-signin.spec.ts, and the
 				// requirement in backend/src/auth/stepUp.db.test.ts. Lambda refuses it.
 				MFA_REQUIRED: 'false',
-				// The pack specs sign with invented registrations nobody checked against a register (165_signers).
+				// The pack specs sign with invented registrations nobody checked against a register (167_signers).
 				REGISTRATION_CHECK_REQUIRED: 'false'
 			}
 		},

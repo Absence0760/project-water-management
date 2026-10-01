@@ -1,4 +1,4 @@
-// The registration check (165_signers; docs/security.md § Professional
+// The registration check (167_signers; docs/security.md § Professional
 // sign-off → Registration check; provisional position, pre-counsel research,
 // 2026-10-01). A signer types their SACNASP or ECSA registration in; the host
 // checks it against the public register and the operator records that check

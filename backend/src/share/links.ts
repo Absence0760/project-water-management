@@ -54,7 +54,7 @@ export const ListQuery = z
 /** A token as the client sent it; anything malformed is simply not a live link. */
 export const ViewBody = z.object({ token: z.string().max(200) }).strict();
 export const SeriesBody = z.object({ token: z.string().max(200), key: z.string().max(64) }).strict();
-/** POST /share/comment (164_public_participation): plain text, as a note's body (notes/routes.ts NOTE_MAX). */
+/** POST /share/comment (166_public_participation): plain text, as a note's body (notes/routes.ts NOTE_MAX). */
 export const CommentBody = z
 	.object({
 		token: z.string().max(200),
@@ -75,7 +75,7 @@ export const CommentBody = z
 	})
 	.strict();
 
-/** Where and by when written objections go, as the application's notice gives it (164); null fields when not given. */
+/** Where and by when written objections go, as the application's notice gives it (166); null fields when not given. */
 export interface ShareObjection {
 	address: string | null;
 	closingDate: string | null;
@@ -333,7 +333,7 @@ export interface ShareScenario {
 	run: SharedRun | null;
 	/** Comments posted for public participation, oldest first. */
 	comments: SharedComment[];
-	/** The notice's objection address and closing date, when the applicant gave them (164); set by the route. */
+	/** The notice's objection address and closing date, when the applicant gave them (166); set by the route. */
 	objection: ShareObjection | null;
 }
 
@@ -516,7 +516,7 @@ export interface SharePack {
 	figures: SharedPackFigures | null;
 	/** Comments posted for public participation, oldest first. */
 	comments: SharedComment[];
-	/** For an application's pack, its notice's objection address and closing date when given (164); set by the route. */
+	/** For an application's pack, its notice's objection address and closing date when given (166); set by the route. */
 	objection: ShareObjection | null;
 }
 

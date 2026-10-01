@@ -59,7 +59,7 @@ export const CreateNote = z
 		visibility: z.enum(NOTE_VISIBILITIES).optional(),
 		/**
 		 * A public comment's "give my name and email to the applicant for the register of interested and affected
-		 * parties (GN R267 reg 18)" (164_public_participation). Only on a public-participation note.
+		 * parties (GN R267 reg 18)" (166_public_participation). Only on a public-participation note.
 		 */
 		registerConsent: z.boolean().optional()
 	})
@@ -234,7 +234,7 @@ async function packVisibility(db: Db, projectId: string, packId: string, asked: 
 	return visibility;
 }
 
-/** The register opt-in (164), only on a public comment: anything else is a 400, not a silent drop. */
+/** The register opt-in (166), only on a public comment: anything else is a 400, not a silent drop. */
 function registerConsent(asked: boolean | undefined, visibility: NoteVisibility): boolean {
 	if (asked && visibility !== 'public_participation') throw new ApiError(400, 'only a public comment can give your name and email to the applicant’s register');
 	return asked ?? false;

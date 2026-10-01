@@ -251,7 +251,7 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		c.header('Cache-Control', 'no-store');
 		return c.json({ ...toSharePack(row), objection: await shareObjection(hash) });
 	})
-	// A public-participation comment through the link, by any signed-in account, with no project role (164_public_participation,
+	// A public-participation comment through the link, by any signed-in account, with no project role (166_public_participation,
 	// docs/security.md § Share links → Link participants). The session is the author; the token is the only reach: the
 	// SECURITY DEFINER app_share_comment writes one note on the link's own target, while the link is live and the target open,
 	// 10 an hour per account. Plain text, never rendered as markup. Every dead or closed link is the same 404.
@@ -283,7 +283,7 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		);
 	});
 
-/** The notice's objection address and closing date for a live link's application (app_share_objection, 164), or null. */
+/** The notice's objection address and closing date for a live link's application (app_share_objection, 166), or null. */
 async function shareObjection(hash: Buffer): Promise<ReturnType<typeof toShareObjection>> {
 	const v = await withoutUser(async (db) => (await db.query<{ v: unknown }>('SELECT app_share_objection($1) AS v', [hash])).rows[0]?.v);
 	return toShareObjection(v);

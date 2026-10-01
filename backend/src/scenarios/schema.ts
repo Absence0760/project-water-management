@@ -168,7 +168,7 @@ export const CreateScenarioBody = z
 
 /**
  * Where written objections to an application go, and by when, as its notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
- * 164_public_participation). Printed beside the warning that a comment in the app is not an objection. '' or null clears.
+ * 166_public_participation). Printed beside the warning that a comment in the app is not an objection. '' or null clears.
  */
 export const objectionAddress = z
 	.string()

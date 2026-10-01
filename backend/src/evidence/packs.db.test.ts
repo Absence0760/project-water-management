@@ -569,7 +569,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.cannotSign).toBeNull();
 	});
 
-	it('issues a signed draft, stamping who and when, once the signer’s registration is checked (165: required, as in production)', async () => {
+	it('issues a signed draft, stamping who and when, once the signer’s registration is checked (167: required, as in production)', async () => {
 		const s = await sign(editor, v1.id);
 		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1', kind: 'specialist', registrationCheck: null });
 		let res: Awaited<ReturnType<typeof issue>>;
@@ -772,7 +772,7 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 			'registrationNo',
 			'signedAt'
 		]);
-		// The check bound at issue (165): who checked and when, nothing else of it (not the register's name or the note).
+		// The check bound at issue (167): who checked and when, nothing else of it (not the register's name or the note).
 		expect(res.body.pack.signers[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Pack catchment WUA', checkedAt: expect.any(String) } });
 		expect(Object.keys(res.body.pack.signers[0].registrationCheck).sort()).toEqual(['checkedAt', 'checkedByOrg']);
 		const text = JSON.stringify(res.body);

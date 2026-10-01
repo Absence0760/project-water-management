@@ -145,7 +145,7 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
 	},
 	REGISTRATION_CHECK_REQUIRED: {
-		why: 'false lets a pack be issued without a recorded check of its specialist signers\' registrations (signoffs/registrationCheck.ts, 165_signers) for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
+		why: 'false lets a pack be issued without a recorded check of its specialist signers\' registrations (signoffs/registrationCheck.ts, 167_signers) for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
 		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
 	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },

@@ -1,4 +1,4 @@
--- 164_public_participation — public participation without a project role:
+-- 166_public_participation — public participation without a project role:
 -- the objection warning's notice details, link participants, the register
 -- opt-in and the reg 19 export (licensing positions, items 7 and 9–11 of the
 -- build list; provisional position, pre-counsel research, 2026-10-01;
@@ -66,9 +66,9 @@ ALTER TABLE scenario
 	ADD COLUMN objection_closing_date date,
 	ADD CONSTRAINT scenario_objection_application CHECK ((objection_address IS NULL AND objection_closing_date IS NULL) OR origin = 'applicant');
 COMMENT ON COLUMN scenario.objection_address IS
-	'Where written objections go, as the application''s notice gives it (GN R267 reg 17(4)(b)(vii); 164). The applicant''s, optional, frozen once submitted. Printed beside the warning that a comment in the app is not an objection.';
+	'Where written objections go, as the application''s notice gives it (GN R267 reg 17(4)(b)(vii); 166). The applicant''s, optional, frozen once submitted. Printed beside the warning that a comment in the app is not an objection.';
 COMMENT ON COLUMN scenario.objection_closing_date IS
-	'The date before which written objections may be lodged, as the notice gives it (reg 17(4)(b)(vi); 164). Frozen once submitted.';
+	'The date before which written objections may be lodged, as the notice gives it (reg 17(4)(b)(vi); 166). Frozen once submitted.';
 
 -- The notice details are part of what was submitted: fixed until it is a draft again (withdraw, reopen).
 CREATE FUNCTION scenario_objection_frozen() RETURNS trigger
@@ -95,9 +95,9 @@ ALTER TABLE note
 	ADD CONSTRAINT note_register_consent_public CHECK (NOT register_consent OR visibility = 'public_participation');
 CREATE INDEX note_share_link_idx ON note (share_link_id);
 COMMENT ON COLUMN note.share_link_id IS
-	'The share link a public comment was posted through (164): set only by app_share_comment, never by water_app. NULL: posted by a member in the app.';
+	'The share link a public comment was posted through (166): set only by app_share_comment, never by water_app. NULL: posted by a member in the app.';
 COMMENT ON COLUMN note.register_consent IS
-	'The commenter agreed to give their name and email to the applicant for the register of interested and affected parties (GN R267 reg 18; 164). Fixed at insert.';
+	'The commenter agreed to give their name and email to the applicant for the register of interested and affected parties (GN R267 reg 18; 166). Fixed at insert.';
 
 -- note_insert, from 128_pack_share_notes.sql: water_app never names a share link (only app_share_comment does).
 DROP POLICY note_insert ON note;
@@ -186,7 +186,7 @@ CREATE FUNCTION app_share_comment(p_hash bytea, p_body text, p_register boolean)
 	END
 	$$;
 COMMENT ON FUNCTION app_share_comment(bytea, text, boolean) IS
-	'A public-participation comment through one live share link, by the signed-in person, with no project role (164): the only writer of note.share_link_id. 10 an hour per account.';
+	'A public-participation comment through one live share link, by the signed-in person, with no project role (166): the only writer of note.share_link_id. 10 an hour per account.';
 REVOKE ALL ON FUNCTION app_share_comment(bytea, text, boolean) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_share_comment(bytea, text, boolean) TO water_app;
 
@@ -271,7 +271,7 @@ CREATE FUNCTION app_participation_export(p_project uuid, p_scenario uuid) RETURN
 	END
 	$$;
 COMMENT ON FUNCTION app_participation_export(uuid, uuid) IS
-	'The public-participation record of one application (GN R267 reg 19(1)(a); 164): its and its packs'' public comments with author names, dates, earlier texts and moderation state, emails only where the commenter consented (reg 18). For its owner and the editors who read it; NULL otherwise.';
+	'The public-participation record of one application (GN R267 reg 19(1)(a); 166): its and its packs'' public comments with author names, dates, earlier texts and moderation state, emails only where the commenter consented (reg 18). For its owner and the editors who read it; NULL otherwise.';
 REVOKE ALL ON FUNCTION app_participation_export(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_participation_export(uuid, uuid) TO water_app;
 
@@ -289,7 +289,7 @@ CREATE FUNCTION app_share_objection(p_hash bytea) RETURNS jsonb
 	WHERE l.token_hash = p_hash AND l.target_kind IN ('scenario', 'pack') AND l.revoked_at IS NULL AND l.expires_at > now()
 	$$;
 COMMENT ON FUNCTION app_share_objection(bytea) IS
-	'Where and by when written objections go, for a live scenario link''s application or a pack link''s (164). NULL for any other token.';
+	'Where and by when written objections go, for a live scenario link''s application or a pack link''s (166). NULL for any other token.';
 REVOKE ALL ON FUNCTION app_share_objection(bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_share_objection(bytea) TO water_app;
 
@@ -313,6 +313,6 @@ CREATE FUNCTION app_subject_participation() RETURNS jsonb
 	WHERE app_current_user_id() IS NOT NULL AND n.author_id = app_current_user_id() AND n.visibility = 'public_participation'
 	$$;
 COMMENT ON FUNCTION app_subject_participation() IS
-	'The signed-in person''s own public comments: how each was posted (through a link or as a member) and whether they agreed to the I&AP register (164). Their bodies are in app_subject_export''s notes.';
+	'The signed-in person''s own public comments: how each was posted (through a link or as a member) and whether they agreed to the I&AP register (166). Their bodies are in app_subject_export''s notes.';
 REVOKE ALL ON FUNCTION app_subject_participation() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_subject_participation() TO water_app;

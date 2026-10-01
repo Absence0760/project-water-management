@@ -21,7 +21,7 @@ process.env.APP_ENCRYPTION_KEY = 'test-only-app-encryption-key-00000000000';
 // assessors off (auth/stepUp.ts): the fixtures sign owners in with a password
 // only. stepUp.db.test.ts turns it back on. Lambda refuses the setting.
 process.env.MFA_REQUIRED = 'false';
-// Their fixtures sign packs with invented registrations nobody checked (165_signers); registration-check.db.test.ts turns it back on.
+// Their fixtures sign packs with invented registrations nobody checked (167_signers); registration-check.db.test.ts turns it back on.
 process.env.REGISTRATION_CHECK_REQUIRED = 'false';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<n> in a git worktree (test-db.ts); see
