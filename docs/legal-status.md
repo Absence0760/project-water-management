@@ -241,6 +241,37 @@ row in [roadmap/step-3-licensing.md § 11](./roadmap/step-3-licensing.md).
   no deadline. Older decisions were mapped. *For counsel and the pilot
   authority:* the exact labels (its house style), and whether the R267
   "rejection" stages need their own record.
+- [ ] **D5, public participation (item 7).** *Position:* only someone who
+  timeously lodged a written objection may appeal (NWA s148(1)(f)) and is
+  told of the decision (s42(a)); the objection goes to the notice's address
+  (R267 reg 17(4)(b)(vii)); the applicant keeps the I&AP register and
+  compiles the participation report (regs 18–19). *Built
+  (166_public_participation):* every public comment box and share page says
+  a comment is not a written objection and prints the notice's address and
+  closing date when the applicant gives them; anyone signed in comments
+  through a live link with no project role (an NGO is never a viewer); the
+  applicant and the assessors download the reg 19 record (CSV and a print
+  page under Annexure D item 8's headings), with a commenter's email only
+  where they ticked the reg 18 box, with the POPIA s18 notice at the box and
+  Privacy §5. *For counsel:* whether the warning's words are enough to
+  protect an NGO's standing, whether the operator or the host is the
+  responsible party for the emails handed to the applicant, and whether the
+  record meets reg 19(1)(a) as a submission.
+- [ ] **D16, signers (item 9).** *Position:* neither the NWA nor R267
+  requires a registered signer, but consulting for a fee is practising
+  (NSP Act s20(1)); the evidence is the applicant's (s41(2)(a)(ii)).
+  *Built (167_signers):* the applicant's appointed specialist signs
+  (`specialist`), an editor may add a `review`; a sign-off, issue and
+  withdrawal need a code from the authenticator within 10 minutes; the host
+  (an owner, or a member acting for the authority) records its check of
+  the signer's registration against the public register, which verify then
+  shows ("checked … by <org>, <date>", else "self-declared"), and issue
+  waits for it while the project requires it (on by default); the dialog
+  and Terms §3 say an in-app sign-off is not the signature the authority
+  requires (ECTA s13(1)). *For counsel:* whether the sign-off wording is a
+  material Terms change; whether the host's recorded check creates any
+  assurance by the operator; whether an integrated (NEMA) application's
+  SACNASP-registration protocol (GN 320 of 2020) changes the product rule.
 
 ## Change log
 

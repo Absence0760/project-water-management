@@ -1328,14 +1328,41 @@ links](./security.md#share-links).
   The link is dead while the application is withdrawn or back to draft.
 - **Comments.** A scenario's notes have three audiences beside `team`:
   `assessors`, `parties` (the assessors and the applicant's party) and
-  `public_participation`, which any member contributor or above (an NGO
-  joins as a viewer) may post while the application is **open for
-  comment**: a live link, or decided after it was ever shared. Public comments show on
+  `public_participation`, which any member contributor or above may post
+  while the application is **open for comment**: a live link, or decided
+  after it was ever shared. Anyone else signed in comments **through the
+  link itself**, with no role in the project (a *link participant*, an NGO
+  say; `166_public_participation`, `POST /share/comment`): they read only
+  what the link shows, 10 comments an hour per account. An NGO is never
+  made a `viewer` to comment: a viewer reads every farm's figures (POPIA
+  s10; licensing positions item 7, provisional position, pre-counsel
+  research, 2026-10-01). Public comments show on
   the link with their authors' names; editors moderate by soft delete. Every
   edit of a scenario note keeps the text it replaced (`note_revision`,
   `GET …/notes/:noteId/revisions`): a participation record must be complete,
   and an application that drew public comments can't be deleted (`409`).
   The full read/write matrix is in [data-model.md § Notes](./data-model.md#notes-037_notessql).
+- **A comment is not an objection.** Every public-participation comment
+  box (the share pages, the workspace's notes with that audience) says that
+  a comment in the app is not a written objection: only a written objection
+  sent to the address in the application's notice before its closing date
+  keeps a right to appeal (NWA s148(1)(f)). The applicant enters that
+  address and date on the Application panel while it is a draft
+  (`scenario.objection_address`, `objection_closing_date`, GN R267 reg
+  17(4)(b)(vi)–(vii); frozen once submitted, `scenario_objection_frozen`),
+  and the share pages print them.
+- **The register and the reg 19 record.** A commenter may tick "Give my
+  name and email to the applicant for the register of interested and
+  affected parties (GN R267 reg 18)" (`note.register_consent`, fixed at
+  insert). The application's owner and the editors download its public
+  participation record (`GET …/scenarios/:sid/participation-export`, JSON or
+  CSV; the print page `/projects/:id/scenarios/:sid/participation`): every
+  public comment on it and its packs, with the author's display name,
+  dates, earlier texts and moderation state (a removed comment's words go
+  to the editors only), the email only where the commenter agreed, the
+  links it was shared by, laid out under the GN R267 Annexure D item 8
+  headings the app holds material for. Each download is audited
+  (`scenario.participation_exported`, with how many emails it carried).
 - **Not yet:** evidence packs as a second target (`target_kind 'pack'`, a
   `note.pack_id`) wait for `evidence_pack` (WP-3.14;
   [followups.md § Applicants](./followups.md#applicants-wp-33)).
@@ -1353,8 +1380,13 @@ names" and "mask: ids, counts and value rules"),
 `history/write-routes.db.test.ts` (each new route records its event),
 `share/scenario-share.db.test.ts` (WP-3.15: scenario links, their RLS and
 redaction, the note matrix and revisions), e2e
-`e2e/tests/scenario-share.spec.ts` (an NGO opens a link, signs in and
-comments; the assessor sees it; axe),
+`share/participation.db.test.ts` (166: link participants with their
+controls, the objection details, the throttle, the reg 19 export's
+audience and emails), e2e
+`e2e/tests/scenario-share.spec.ts` (an NGO with no role opens a link,
+signs in, reads the objection warning and the notice's address, comments
+and joins the register; the assessor sees it; the applicant's record lists
+it with the email; axe),
 the applicant's `ewrRule.set` in `applications.db.test.ts` (accepted,
 applied, classed baseline beside their own farm's proposal), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow and their view of

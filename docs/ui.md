@@ -1387,7 +1387,22 @@ it scrolls, and isn't fitted to the window.
   box for owners (163_licensing_authority; others see it as text when set):
   those members record the authority's decisions and endorse a published
   baseline. A change that would make an editor also part of an applying
-  party is refused with the server's `role_conflict` words.
+  party is refused with the server's `role_conflict` words. A member with a
+  party has a **Specialist for this party** tick box for owners (167_signers;
+  others see "Specialist for <party>"): the registered professional the
+  applicant appointed, who signs the evidence packs of the party's
+  applications.
+- **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
+  editors and owners): the host's checks of members' registrations against
+  the public SACNASP or ECSA register, newest first (member, registration
+  and the name on the register, found or not, checked when and by whom).
+  An owner, or an editor acting for the responsible authority, gets
+  **Record a check** (member, register, category, number, name on the
+  register, found, the checking organisation, the date, a note; the
+  register's address to look it up), and the owner the tick box "Issuing an
+  evidence pack waits until each specialist signer has a check from the
+  last year" (on by default). `registration-checks.spec.ts` pins it with
+  axe.
 - **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
   decides the project's licence applications, its name, kind (a catchment
   management agency or the Department of Water and Sanitation) and office,
@@ -6296,6 +6311,27 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
   applicant never does.
+- **Written objections** (166_public_participation): the warning that a
+  comment in the app is not a written objection, and the notice's
+  **Address** and **Closing date** ("Not given" until set). The owner edits
+  them while it is a draft (**Edit the notice details**: a text box and a
+  date); once submitted they are fixed. Every public comment box and share
+  page prints them.
+- **Public participation record** (the owner and the assessors, once
+  submitted): a link to `/projects/:id/scenarios/:sid/participation`
+  (`routes/projects/[id]/scenarios/[sid]/participation/+page.svelte`), the
+  application's public comments for the reg 19 report, laid out under the
+  GN R267 Annexure D item 8 headings the app holds material for: the
+  application and its notice, access and opportunity to comment (its
+  links), the written comments (author, the email only where they ticked
+  the register box, where and how posted, moderation state, earlier texts),
+  the register of interested and affected parties from the app, and
+  notifying them of the decision. **Print or save as PDF** and **Download
+  the comments (CSV)**. `scenario-share.spec.ts` checks the record.
+- **To sign as the applicant's specialist** (167_signers), in the
+  applicant's Evidence packs list: the drafts the caller may sign as the
+  party's appointed specialist, each with **Sign…** (the sign-off section
+  in a side sheet, signing as "Specialist for the applicant").
 - **Comments and share links** (WP-3.15), at the top of the panel: the
   application's **Notes** button (the notes drawer on the scenario, titled
   "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
@@ -6773,7 +6809,10 @@ baseline card links to the published run's report (**Report**, beside
     (decision D10)* line stands above it.
 
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): full name, the registration as three selects (body, SACNASP by
+  opened): first the line "This sign-off is an electronic professional
+  statement in this app. It is not your signature on any form or report the
+  authority requires; sign those as the authority asks." (`signoffForm.ts`
+  `SIGNOFF_NOT_A_SIGNATURE`, 167; Terms §3 says the same); then full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
   discipline, whose list follows the body, and choosing another body clears
   both; engine `liability/registration.ts`), registration number (its
@@ -7179,7 +7218,21 @@ their own application's in [their own view](#the-applicants-pack-view).
   evidence pack…** opens the run's sign-off dialog with the pack's version,
   manifest hash and engines, the eleventh confirmation, and first a warning
   that the signer's name, registration and date are shown publicly on the
-  verify page, for as long as the pack exists.
+  verify page, for as long as the pack exists. An editor chooses **You sign
+  as**: "Specialist for the applicant" (the professional responsible for
+  the evidence; what issue needs) or "Reviewed for the responsible
+  authority" (a second sign-off); the applicant's appointed specialist
+  signs as the specialist only (167_signers). The sign-off list prints
+  **Signed as** and, once the host recorded a check, "Registration (checked
+  against the register by <org>, <date>)" instead of "(self-declared)"; the
+  verify page does the same. The issue checklist adds "Each specialist
+  signer's registration has a current check" while the project requires it.
+- **A fresh code** (`layout/FreshCodeDialog.svelte`, its own chunk, mounted
+  by `routes/+layout.svelte`): when a sign-off, an issue or a withdrawal
+  answers `401 mfa_fresh_code`, a dialog asks for a code from the
+  authenticator app (or a recovery code), sends it to `POST
+  /auth/mfa/step-up`, and the action goes through without being started
+  again; Cancel leaves it undone.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
@@ -8164,15 +8217,25 @@ signed in or out, for someone outside the project, on a phone first.
   column: the decision's reasons (once decided), **The catchment's totals**
   (flow out, water supplied, units short of 95 % of demand, baseline and
   application; only at five or more units), **Public comments** (oldest
-  first, author and date, *edited*), and **About this page**. A signed-in
-  member gets **Add a comment** (posted for public participation, "Shown
-  with your name to everyone this application is shared with"); anyone else
-  gets **Sign in to comment**, which keeps the link in this tab's
-  `sessionStorage` (never the address bar) so the page opens it again after
-  the sign-in. A server `404` says only members can comment, a `403` that
-  it isn't open for comment. Same two-column layout from 860 px, one
+  first, author and date, *edited*), and **About this page**. The comments
+  card is `share/ShareComments.svelte` (the `share.comments` section; both
+  link kinds; 166_public_participation): first the warning "A comment here
+  is not a written objection. To object, and to keep the right to appeal
+  (National Water Act s148(1)(f)), write to the address in the
+  application's notice before its closing date.", then that address and
+  closing date when the applicant gave them. Anyone signed in, member of
+  the project or not, gets **Add a comment** (posted through the link,
+  `POST /share/comment`), with who receives it (the applicant, the
+  authority, the reg 19 report) and the tick box "Give my name and email to
+  the applicant for the register of interested and affected parties (GN
+  R267 reg 18)"; anyone signed out gets **Sign in to comment**, which keeps
+  the link in this tab's `sessionStorage` (never the address bar) so the
+  page opens it again after the sign-in, and the line that no membership is
+  needed. A server `404` says the link no longer takes comments, a `429`
+  the hourly limit. Same two-column layout from 860 px, one
   column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
-  sign in, comment, the assessor's view) with axe.
+  sign in with no role, the warning and the notice's address, comment with
+  the register tick, the assessor's view, the applicant's record) with axe.
 - **An evidence pack link** (WP-3.15, 128, `/share#t=…&k=pack`,
   `share/PackView.svelte`, words in `share/pack.ts`, the `share.pack`
   section): the same shell, states and comment flow as a scenario link,
@@ -8190,8 +8253,9 @@ signed in or out, for someone outside the project, on a phone first.
   application and the change, and the likely range from the model sets),
   and **Days below the EWR by month** (an application). Both states have
   **Check this pack** (the code, the verify page link, the hashes, the
-  signers) and, on the right, **Public comments** (a signed-in member posts
-  while it stands; closed once it doesn't, the comments kept) and **About
+  signers) and, on the right, **Public comments** (the same card: anyone
+  signed in posts while it stands; closed once it doesn't, the comments
+  kept) and **About
   this page**. `pack-share.spec.ts` pins it (link from the pack page, phone,
   sign in, comment, withdraw: the same link then shows the reason and no
   figure) with axe.

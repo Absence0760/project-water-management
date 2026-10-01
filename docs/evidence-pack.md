@@ -434,10 +434,15 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   current list. As for a run, the signer sends back the statement's hash and
   the server refuses one that isn't the current statement's. Only a draft is
   signed.
+  Who signs, the registration check and the fresh code are below
+  ([§ Signing](#signing)).
 - **Issue.** An editor issues a signed draft. The server checks, in one
   transaction: it is a draft; the stored manifest still hashes to its
-  recorded hash; the frozen report may be issued; there is a sign-off of the
-  *current* pack statement (a new known limitation or erratum since the
+  recorded hash; the frozen report may be issued; there is a `specialist`
+  sign-off of the *current* pack statement (a `review` adds to it, never
+  replaces it); while the project requires it, each such signer's
+  registration has a current check (`409 registration_not_checked`,
+  naming them; [§ Signing](#signing)) (a new known limitation or erratum since the
   signature means signing again); both runs' server stamps still match their
   rows ([security.md § Run stamps](./security.md)); no erratum found since
   the draft was made applies to either run's engine or its fit's (the pack's
@@ -484,6 +489,63 @@ share an issued pack by link ([§ Sharing and comments](#sharing-and-comments)).
 Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
 naming the pack.
+
+## Signing
+
+`167_signers`; licensing positions item 9 (provisional position,
+pre-counsel research, 2026-10-01). The licensing evidence is the
+**applicant's** (NWA s41(2)(a)(ii)), so the host's editors signing it would
+make the authority's side its author.
+
+- **The applicant's specialist signs.** The project owner ticks
+  "Specialist for this party" on a member of an applying party
+  (`project_member.specialist`, needs a party; a party change ends it): the
+  registered professional the applicant appointed. They sign the **draft**
+  packs of their party's applications (`app_pack_specialist`: the
+  application's owner is in the same party), from the Application panel's
+  "To sign as the applicant's specialist" list (the applicant shares the
+  application with them, as with any consultant). They read no pack row
+  (112): `app_specialist_pack` gives the sign-off what it needs (lifecycle,
+  the runs' identity, stamp and digest), never the manifest. Editors still
+  draft and issue, and may still sign.
+- **Kinds.** `signoff.kind`: `specialist` ("Specialist for the
+  applicant": the professional statement issue needs) or `review`
+  ("Reviewed for the responsible authority": an editor's optional second
+  sign-off, never enough on its own). A specialist signs only as
+  `specialist`; a run's sign-off is always `specialist`. Verify and the
+  sign-off lists print the kind.
+- **The registration check.** Someone at the host looks the signer up on
+  the public SACNASP or ECSA register, and an owner, or an editor an owner
+  marked as acting for the responsible authority
+  (`project_member.acts_for_authority`, 163), records what they found on the
+  Project page's Registration checks panel
+  (`POST /projects/:id/members/:userId/registration-checks`,
+  `app_record_registration_check`; insert-only). A check is current for a
+  year, while it is the latest for that registration in that project and
+  says "registered". At issue each sign-off is bound to its signer's
+  current check (`signoff_registration_check`), and verify then says
+  "checked against the register by <org>, <date>"; every other
+  registration reads "self-declared". The app checks nothing itself, and
+  the operator never checks for the host: that would be an assurance the
+  Terms disclaim. While `project.require_registration_check` is on (the
+  owner's switch, on by default; `REGISTRATION_CHECK_REQUIRED=false` turns
+  enforcement off for the tests and the e2e server only, and Lambda refuses
+  it), issue waits until each `specialist` signer of the current statement
+  has a current check.
+- **A fresh code.** A sign-off, issuing and withdrawing need a code from the
+  authenticator within the last 10 minutes, and an authenticator before a
+  first sign-off ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+- **What the sign-off is.** The dialog and Terms §3 say: "This sign-off is
+  an electronic professional statement in this app. It is not your
+  signature on any form or report the authority requires; sign those as
+  the authority asks." (ECTA s13(1) would want an advanced electronic
+  signature wherever a law requires one.)
+
+Tests: `backend/src/evidence/specialist-signers.db.test.ts` (who may sign
+as what, each with its control; the check's writers, readers, currency and
+binding; verify; the owner's switch), `evidence/packs.db.test.ts` (issue
+refused until the signer is checked), `auth/stepUp.db.test.ts` (the fresh
+code), e2e `registration-checks.spec.ts`.
 
 ## The PDF
 
@@ -781,7 +843,10 @@ does.
 
 **Comments.** A pack note is `team` (whoever reads the pack) or
 `public_participation`: any member contributor and up posts one while the
-pack is issued and has a live link (`app_pack_commentable`); editors and the
+pack is issued and has a live link (`app_pack_commentable`), and anyone
+else signed in through the link itself, with no role in the project
+(166_public_participation, [scenarios.md § Sharing and
+comments](./scenarios.md#sharing-and-comments-wp-315)); editors and the
 comment's author always read it, other members while it is open, and once
 it was shared and is superseded or withdrawn (the record of a closed
 comment period). Farmers read and write none. Every edit is kept
