@@ -3742,16 +3742,17 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       fed the pre-summarised `--reduce` totals. Trigger: the first client
       deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
       attribution with any figure served.
-- [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
-      review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
-      `settings/EvaporationProposal.svelte` repeat the same frame (heading,
-      live notice, the `aria-busy`/`data-ready` body, error with Try again,
-      no-dataset alert, synthetic-data warning, Source and method). Third
-      caller, so extract a shell taking a body snippet, after pinning each
-      panel's rendered states in its e2e spec (CLAUDE.md: pin, then fold).
-      The evaporation panel's focus-to-notice after Use is the pattern the
-      other two should take with it. Trigger: the next map proposal panel,
-      or the next fix that has to be made in all three.
+- [x] **One shell for the map-proposal panels** (found in #326 B-evap's UI
+      review). Done: `components/proposals/ProposalPanel.svelte` draws the
+      frame (heading, intro, controls, the live notice that takes the
+      keyboard after a Use, the `aria-busy`/`data-ready` body, the failure
+      with Try again) and `ProposalNoDataset`, `ProposalSynthetic` and
+      `ProposalSource` the shared alerts and citation; land cover, the dams
+      and evaporation each keep their data, rows, Use and words. Pinned
+      first by `e2e/tests/proposal-panels.spec.ts` (each panel's failure
+      and Try again) and each panel's own spec, which now also checks the
+      focus move after a Use for land cover and the dams. A new proposal
+      panel starts from `ProposalPanel` (ui-playbook.md § 4).
 - [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
       maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
       reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam
