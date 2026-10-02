@@ -78,6 +78,10 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.invite.signUpIgnore': 'As jy dit nie verwag het nie, kan jy hierdie e-pos ignoreer.',
 	// How we handle your information: {url}
 	'mail.invite.privacy': 'Hoe ons jou inligting hanteer: {url}',
+	// {organisation} decides about your information in this catchment. Questions about it: {name}, {email}.
+	'mail.invite.contact': '{organisation} besluit oor jou inligting in hierdie opvanggebied. Vrae daaroor: {name}, {email}.',
+	// Or write to {name} at: {postal}
+	'mail.invite.contactPost': 'Of skryf aan {name} by: {postal}',
 	// There is already a {product} account for {email}. Confirm that this is your email address to accept.
 	'mail.invite.confirm': 'Daar is reeds ’n {product}-rekening vir {email}. Bevestig dat dit jou e-posadres is om te aanvaar.',
 	// Confirm email and accept
@@ -156,6 +160,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.ewr.what': 'Riviervloei in gevaar volgens die voorspelling',
 	// On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.
 	'mail.alert.ewr.body': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die rivier se ekologiese reserwe (EWR) by die uitloop op {days} van die {of} voorspelde dae ({from} tot {to}) nie gehaal sal word nie. Die waarskuwing is op {threshold} dae gestel. Voorspellings verander.',
+	// This forecast is out of date: it used the rain recorded to {observedTo}, rain has since been recorded to {rainUntil}, and no newer forecast has been made yet. Check the forecast data feed.
+	'mail.alert.ewr.outOfDate': 'Hierdie voorspelling is verouderd: dit het die reën gebruik wat tot {observedTo} aangeteken is, sedertdien is reën tot {rainUntil} aangeteken, en daar is nog geen nuwer voorspelling gemaak nie. Kyk die voorspelling se datavoer na.',
 	// Data feed behind
 	'mail.alert.stale.what': 'Datavoer loop agter',
 	// These data feeds are more than {threshold} day later than usual:
@@ -166,6 +172,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.stale.line.one': '{feed}: nuutste dag {newest}, {overdue} dag laat',
 	// {feed}: newest day {newest}, {overdue} days late
 	'mail.alert.stale.line.other': '{feed}: nuutste dag {newest}, {overdue} dae laat',
+	// API data behind
+	'mail.alert.stale.seriesWhat': 'API-data loop agter',
 	// No new readings have come in through the API key for this series for more than {threshold} day:
 	'mail.alert.stale.seriesBody.one': 'Daar het al meer as {threshold} dag lank geen nuwe lesings vir hierdie datareeks deur die API-sleutel ingekom nie:',
 	// No new readings have come in through the API key for this series for more than {threshold} days:

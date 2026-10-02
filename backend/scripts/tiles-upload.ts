@@ -2,18 +2,22 @@
 // #288; docs/maps.md § Basemap). bin/tiles-dev.sh runs it after `fetch`:
 //
 //   tsx scripts/tiles-upload.ts <file.pmtiles>
+//   tsx scripts/tiles-upload.ts --terrain <file.pmtiles>
 //   tsx scripts/tiles-upload.ts --fonts <dir>
-//   tsx scripts/tiles-upload.ts --env <file>
+//   tsx scripts/tiles-upload.ts --env <file> [--terrain]
 //
 // It creates the `tiles` bucket, lets anyone read its objects (MinIO is
 // loopback-only; the map reads the file with HTTP Range from the browser) and
-// uploads the file as `south-africa.pmtiles`. With --fonts it uploads the
+// uploads the file as `south-africa.pmtiles`. With --terrain it uploads the
+// relief's DEM tiles as `terrain.pmtiles` instead (docs/maps.md § Relief).
+// With --fonts it uploads the
 // labels' glyph ranges instead (#326 A6, docs/maps.md § Labels): every
 // `<fontstack>/<range>.pbf` under <dir> to `fonts/<fontstack>/<range>.pbf`,
 // with the font licence (OFL.txt) beside them, so the map's glyphs URL is
 // `…/tiles/fonts/{fontstack}/{range}.pbf`. With --env it uploads nothing: it
-// sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in <file> (the frontend's
-// gitignored .env.development.local; `pnpm dev:tiles:up`), keeping every other
+// sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL (and, with a trailing
+// --terrain, PUBLIC_TERRAIN_URL) in <file> (the frontend's gitignored
+// .env.development.local; `pnpm dev:tiles:up`), keeping every other
 // line, and prints whether it changed. Local only: it refuses
 // STORAGE=s3 (production's tiles go to S3 behind CloudFront, a deployment
 // step, docs/deployment.md).
@@ -23,6 +27,8 @@ import { join, resolve } from 'node:path';
 
 export const TILES_BUCKET = 'tiles';
 export const TILES_KEY = 'south-africa.pmtiles';
+/** The relief's elevation tiles (Terrarium PMTiles). */
+export const TERRAIN_KEY = 'terrain.pmtiles';
 /** Where the glyph ranges go in the bucket. */
 export const FONTS_PREFIX = 'fonts';
 
@@ -38,6 +44,9 @@ const base = (endpoint: string) => `${endpoint.replace('127.0.0.1', 'localhost')
 
 /** The URL the frontend reads (PUBLIC_TILES_URL), from the MinIO endpoint. */
 export const tilesUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${TILES_KEY}`;
+
+/** The relief's URL the frontend reads (PUBLIC_TERRAIN_URL), from the MinIO endpoint. */
+export const terrainUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${TERRAIN_KEY}`;
 
 /** The glyphs URL template the frontend reads (PUBLIC_TILES_GLYPHS_URL), from the MinIO endpoint. */
 export const glyphsUrl = (endpoint = process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002') => `${base(endpoint)}/${FONTS_PREFIX}/{fontstack}/{range}.pbf`;
@@ -83,10 +92,21 @@ export function withEnv(text: string, vars: Record<string, string>): { text: str
 	return { text: out, changed: out !== text };
 }
 
+/**
+ * The frontend's env lines for the local map. The relief's DEM is optional and
+ * large (dev:tiles:terrain), so its URL is included only with `terrain`
+ * (bin/tiles-dev.sh up passes it when MinIO serves the DEM).
+ */
+export function tilesEnv(terrain: boolean): Record<string, string> {
+	const vars: Record<string, string> = { PUBLIC_TILES_URL: tilesUrl(), PUBLIC_TILES_GLYPHS_URL: glyphsUrl() };
+	if (terrain) vars.PUBLIC_TERRAIN_URL = terrainUrl();
+	return vars;
+}
+
 async function main(args: string[]): Promise<number> {
 	if (args[0] === '--env') {
 		if (!args[1]) {
-			console.error('usage: tsx scripts/tiles-upload.ts --env <file>');
+			console.error('usage: tsx scripts/tiles-upload.ts --env <file> [--terrain]');
 			return 2;
 		}
 		const path = resolve(process.env.INIT_CWD ?? process.cwd(), args[1]);
@@ -97,15 +117,16 @@ async function main(args: string[]): Promise<number> {
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
 		}
-		const { text, changed } = withEnv(before, { PUBLIC_TILES_URL: tilesUrl(), PUBLIC_TILES_GLYPHS_URL: glyphsUrl() });
+		const { text, changed } = withEnv(before, tilesEnv(args[2] === '--terrain'));
 		if (changed) writeFileSync(path, text);
 		console.log(changed ? `Set the tiles URLs in ${path}: restart pnpm dev.` : `${path} already has the tiles URLs.`);
 		return 0;
 	}
 	const fonts = args[0] === '--fonts';
-	const file = fonts ? args[1] : args[0];
+	const terrain = args[0] === '--terrain';
+	const file = fonts || terrain ? args[1] : args[0];
 	if (!file) {
-		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --fonts <dir> | --env <file>');
+		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --terrain <file.pmtiles> | --fonts <dir> | --env <file> [--terrain]');
 		return 2;
 	}
 	if ((process.env.STORAGE ?? 'local').trim() === 's3') {
@@ -148,13 +169,13 @@ async function main(args: string[]): Promise<number> {
 	await s3.send(
 		new sdk.PutObjectCommand({
 			Bucket: TILES_BUCKET,
-			Key: TILES_KEY,
+			Key: terrain ? TERRAIN_KEY : TILES_KEY,
 			Body: createReadStream(path),
 			ContentLength: statSync(path).size,
 			ContentType: 'application/vnd.pmtiles'
 		})
 	);
-	console.log(`Uploaded ${path} (${(statSync(path).size / 1024 / 1024).toFixed(0)} MB).\nPUBLIC_TILES_URL=${tilesUrl()}`);
+	console.log(`Uploaded ${path} (${(statSync(path).size / 1024 / 1024).toFixed(0)} MB).\n${terrain ? `PUBLIC_TERRAIN_URL=${terrainUrl()}` : `PUBLIC_TILES_URL=${tilesUrl()}`}`);
 	return 0;
 }
 

@@ -14,9 +14,24 @@ export async function openApplications(page: Page, projectId: string, query = ''
 	await expect(page.getByRole('heading', { level: 1, name: 'Applications' })).toBeVisible();
 }
 
-/** A published run, and an applicant (a contributor) linked to the Upper farm. */
+/** The synthetic responsible authority the e2e projects name (163_licensing_authority). */
+export const AUTHORITY = { name: 'Synthetic catchment management agency', kind: 'cma', office: 'Test office' } as const;
+
+/**
+ * The project names its responsible authority, and the caller (`request`, an owner) marks themself as acting
+ * for it, so they record its decisions (163_licensing_authority: editor and marked by an owner).
+ */
+export async function actForAuthority(request: APIRequestContext, projectId: string): Promise<void> {
+	const me = ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { id: string } }).user.id;
+	expect((await request.patch(`${API_URL}/projects/${projectId}`, { data: { settings: { responsibleAuthority: AUTHORITY } } })).status()).toBe(200);
+	const marked = await request.patch(`${API_URL}/projects/${projectId}/members/${me}`, { data: { actsForAuthority: true } });
+	expect(marked.status(), await marked.text()).toBe(200);
+}
+
+/** A published run, and an applicant (a contributor) linked to the Upper farm; the owner acts for the project's authority. */
 export async function seedApplicantProject(page: Page, name: string, applicant: TestUser) {
 	const project = await seedRunnableProject(page.request, name);
+	await actForAuthority(page.request, project.id);
 	const runId = await createRun(page.request, project.id, 'Baseline');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
 	await addMember(page.request, project.id, applicant.email, 'contributor');
@@ -46,7 +61,7 @@ const LONG = [
 
 /**
  * `n` applications from one applicant, submitted `i + 1` days apart (the first the oldest): every fourth is
- * decided by `assessor` (approved, with conditions or refused in turn), every seventh withdrawn, the rest
+ * decided by `assessor` (the authority's licence issued, licence refused or application rejected in turn, recorded), every seventh withdrawn, the rest
  * awaiting a decision. Their ids, oldest first.
  */
 export async function seedManyApplications(
@@ -58,13 +73,15 @@ export async function seedManyApplications(
 	n = 30
 ): Promise<{ id: string; name: string; status: 'submitted' | 'decided' | 'withdrawn'; days: number }[]> {
 	const out: { id: string; name: string; status: 'submitted' | 'decided' | 'withdrawn'; days: number }[] = [];
-	const outcomes = ['approved', 'approved_with_conditions', 'refused'] as const;
+	const outcomes = ['licence_issued', 'licence_refused', 'application_rejected'] as const;
 	for (let i = 0; i < n; i++) {
 		const name = `${LONG[i % LONG.length]} (${i + 1})`;
 		const id = await submitApplication(applicant, projectId, runId, upper, name, 160_000 + i * 1000);
 		let status: 'submitted' | 'decided' | 'withdrawn' = 'submitted';
 		if (i % 4 === 3) {
-			const res = await assessor.post(`${API_URL}/projects/${projectId}/scenarios/${id}/decide`, { data: { outcome: outcomes[(i >> 2) % 3], note: 'Synthetic decision.' } });
+			const res = await assessor.post(`${API_URL}/projects/${projectId}/scenarios/${id}/decide`, {
+				data: { outcome: outcomes[(i >> 2) % 3], decisionDate: '2026-09-30', reasonsReceived: true, note: 'Synthetic decision.' }
+			});
 			expect(res.status(), await res.text()).toBe(200);
 			status = 'decided';
 		} else if (i % 7 === 6) {

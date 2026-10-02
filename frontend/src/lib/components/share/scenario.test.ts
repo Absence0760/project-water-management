@@ -151,7 +151,10 @@ describe('volumeRows, statusLine, resultsNote', () => {
 
 	it('says where the application stands', () => {
 		expect(statusLine(scenario())).toMatch(/^Submitted on .*, awaiting a decision\.$/);
-		expect(statusLine(scenario({ status: 'decided', outcome: 'refused', decidedAt: '2026-10-01T10:00:00Z' }))).toMatch(/^Refused on /);
+		expect(statusLine(scenario({ status: 'decided', outcome: 'licence_refused', decidedAt: '2026-10-01T10:00:00Z' }))).toMatch(/^Licence refused on /);
+		expect(statusLine(scenario({ status: 'decided', outcome: 'licence_issued', decidedAt: '2026-10-01T10:00:00Z' }))).toMatch(/^Licence issued on /);
+		expect(statusLine(scenario({ status: 'decided', outcome: 'application_rejected', decidedAt: null }))).toBe('Application rejected.');
+		expect(statusLine(scenario({ status: 'decided', outcome: 'not_considered', decidedAt: null }))).toBe('Not considered: use already authorised.');
 	});
 
 	it('explains missing results', () => {

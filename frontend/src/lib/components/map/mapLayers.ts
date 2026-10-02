@@ -1,4 +1,4 @@
-// The Map tab's optional layers (issue #326 A6; docs/ui.md § Map): which are
+// The Map tab's optional layers (issue #326 A6, the relief; docs/ui.md § Map): which are
 // on (`layers=` in the URL, a comma list, so a view can be shared and Back
 // undoes a toggle), and the bbox the quaternary outlines are asked for
 // around the project's features. Pure (mapLayers.test.ts).
@@ -6,7 +6,7 @@ import type { MapFeature } from '$lib/api/types';
 import { boundsOfAll } from './mapData';
 
 /** The layers the tab can add, in the order the URL lists them. */
-export const MAP_LAYERS = ['quaternaries'] as const;
+export const MAP_LAYERS = ['quaternaries', 'relief'] as const;
 export type MapLayer = (typeof MAP_LAYERS)[number];
 
 /** The layers `layers=` turns on (unknown names ignored). */

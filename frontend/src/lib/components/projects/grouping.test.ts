@@ -36,7 +36,8 @@ const team = (id: string, name: string): Team => ({
 	memberCount: 1,
 	projectCount: 0,
 	settings: {},
-	portfolioThresholds: { green: 5, amber: 20, source: 'default' }
+	portfolioThresholds: { green: 5, amber: 20, source: 'default' },
+	privacyContact: null
 });
 
 const mine = proj({ name: 'Witklip', updatedAt: '2026-09-01T00:00:00Z' });

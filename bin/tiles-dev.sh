@@ -7,7 +7,9 @@
 #                             re-run: start MinIO, upload the cached extract
 #                             and fonts if MinIO doesn't serve them (fetching
 #                             them only when nothing is cached), and set the
-#                             two URLs in frontend/.env.development.local
+#                             URLs in frontend/.env.development.local; the
+#                             relief's DEM only if it is cached or served
+#                             (never fetched here: run `terrain` once for it)
 #   bin/tiles-dev.sh fetch    extract South Africa from the Protomaps daily
 #                             build into ~/.cache/water-management-tiles/ and
 #                             upload it to the local MinIO (pnpm dev:s3:up),
@@ -16,9 +18,14 @@
 #                             (SIL OFL 1.1) from the Protomaps basemaps-assets
 #                             repository at a pinned commit, uploaded under
 #                             tiles/fonts/ (no pmtiles CLI needed)
+#   bin/tiles-dev.sh terrain  the relief's DEM (docs/maps.md § Relief): extract
+#                             South Africa from the Mapterhorn planet build
+#                             (Terrarium-encoded Copernicus GLO-30) and upload
+#                             it to MinIO as tiles/terrain.pmtiles
 #   bin/tiles-dev.sh status   what is cached and whether MinIO serves it
-#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL
-#                             lines for frontend/.env.development.local
+#   bin/tiles-dev.sh env      the PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and
+#                             PUBLIC_TERRAIN_URL lines for
+#                             frontend/.env.development.local
 #
 # `fetch` needs the `pmtiles` CLI (go-pmtiles, https://github.com/protomaps/go-pmtiles
 # releases; a single static binary, put it on PATH). It reads only the byte
@@ -28,6 +35,11 @@
 # at about 1.0 GB, against 490 MB at 14 and 250 MB at 13, docs/maps.md §
 # Basemap), TILES_BBOX and TILES_BUILD (a build date, YYYYMMDD; default
 # yesterday's) override it.
+#
+# `terrain` needs the same CLI. Over South Africa the Mapterhorn build has
+# only its global layer, Copernicus GLO-30, to zoom 12 (about 30 m a pixel
+# there, the DEM's own resolution); TERRAIN_MAXZOOM (default 12: about 2.2 GB,
+# 570 MB at 11, 200 MB at 10) and TERRAIN_SOURCE (the archive's URL) override it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -36,6 +48,10 @@ FILE="$CACHE/south-africa.pmtiles"
 BBOX="${TILES_BBOX:-16.3,-35.0,33.0,-22.0}"
 MAXZOOM="${TILES_MAXZOOM:-15}"
 URL="http://localhost:9002/tiles/south-africa.pmtiles"
+TERRAIN_FILE="$CACHE/terrain.pmtiles"
+TERRAIN_MAXZOOM="${TERRAIN_MAXZOOM:-12}"
+TERRAIN_SRC="${TERRAIN_SOURCE:-https://download.mapterhorn.com/planet.pmtiles}"
+TERRAIN_URL="http://localhost:9002/tiles/terrain.pmtiles"
 GLYPHS="http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf"
 # The fonts: protomaps/basemaps-assets at a pinned commit (docs/maps.md § Sources).
 FONTS_REF="${TILES_FONTS_REF:-028c18f713baecad011301ff7a69acc39bcc2ae7}"
@@ -59,6 +75,7 @@ fetch_fonts() {
 }
 
 serves_tiles() { curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; }
+serves_terrain() { curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; }
 serves_fonts() { curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; }
 
 case "${1:-}" in
@@ -78,7 +95,18 @@ case "${1:-}" in
 		else
 			fetch_fonts
 		fi
-		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --env "$ROOT/frontend/.env.development.local")
+		# The relief's DEM is optional and ~2.2 GB: upload a cached one, never fetch it here.
+		relief=()
+		if serves_terrain; then
+			echo "MinIO serves $TERRAIN_URL"
+			relief=(--terrain)
+		elif [ -f "$TERRAIN_FILE" ]; then
+			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
+			relief=(--terrain)
+		else
+			echo "No relief DEM (optional: pnpm dev:tiles:terrain, then pnpm dev:tiles:up again)."
+		fi
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --env "$ROOT/frontend/.env.development.local" "${relief[@]}")
 		;;
 	fetch)
 		command -v pmtiles >/dev/null || { echo "pmtiles CLI not found: install go-pmtiles (https://github.com/protomaps/go-pmtiles/releases) and put it on PATH." >&2; exit 1; }
@@ -91,6 +119,15 @@ case "${1:-}" in
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
 		;;
+	terrain)
+		command -v pmtiles >/dev/null || { echo "pmtiles CLI not found: install go-pmtiles (https://github.com/protomaps/go-pmtiles/releases) and put it on PATH." >&2; exit 1; }
+		mkdir -p "$CACHE"
+		echo "Extracting $BBOX at maxzoom $TERRAIN_MAXZOOM from $TERRAIN_SRC …"
+		pmtiles extract "$TERRAIN_SRC" "$TERRAIN_FILE" --bbox="$BBOX" --maxzoom="$TERRAIN_MAXZOOM"
+		du -h "$TERRAIN_FILE"
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
+		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev and turn on Map → Layers → Relief."
+		;;
 	fonts)
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
@@ -98,15 +135,18 @@ case "${1:-}" in
 	status)
 		if [ -f "$FILE" ]; then du -h "$FILE"; else echo "No extract in $CACHE (pnpm dev:tiles:fetch)."; fi
 		if serves_tiles; then echo "MinIO serves $URL"; else echo "MinIO doesn't serve $URL (pnpm dev:s3:up, then pnpm dev:tiles:fetch)."; fi
+		if [ -f "$TERRAIN_FILE" ]; then du -h "$TERRAIN_FILE"; else echo "No relief DEM in $CACHE (pnpm dev:tiles:terrain)."; fi
+		if serves_terrain; then echo "MinIO serves $TERRAIN_URL"; else echo "MinIO doesn't serve $TERRAIN_URL (pnpm dev:tiles:terrain)."; fi
 		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
 		if serves_fonts; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
 	env)
 		echo "PUBLIC_TILES_URL=$URL"
 		echo "PUBLIC_TILES_GLYPHS_URL=$GLYPHS"
+		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh up | fetch | fonts | status | env" >&2
+		echo "usage: bin/tiles-dev.sh up | fetch | fonts | terrain | status | env" >&2
 		exit 2
 		;;
 esac

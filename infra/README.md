@@ -1100,9 +1100,13 @@ The database has two guards, both to be lifted on purpose, in this order:
 3. The retained automated backups (`delete_automated_backups = false`) expire
    with the retention period, but the final snapshot is a manual snapshot and
    is kept until someone deletes it. It holds personal information, and the
-   privacy notice (§ 7) says it is kept until deleted: delete it once no
-   longer needed (`aws rds delete-db-snapshot --db-snapshot-identifier …`)
-   and record when in the operator log.
+   privacy notice (§ 7) and the operator agreement (10.2) promise it is kept
+   for **90 days after the shutdown notice**, so an organisation can ask for
+   its projects back, and then deleted (provisional position, pre-counsel
+   research, 2026-10-01). Put the delete-by date in the operator log when
+   the notice goes out, delete it on that date
+   (`aws rds delete-db-snapshot --db-snapshot-identifier …`), and record
+   that it was done.
 
 The tfstate bucket, the KMS key, the child zone and the deploy role belong to
 the bootstrap and survive.

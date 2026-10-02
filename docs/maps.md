@@ -48,7 +48,7 @@ server and no tile CDN: the file is served from the app's own storage.
 - **Locally**: `pnpm dev:tiles:up` (`bin/tiles-dev.sh up`) does it all and
   is safe to re-run: it starts MinIO, uploads the cached extract and fonts
   when MinIO doesn't serve them (its volume wiped, or a new MinIO), runs `fetch` only when nothing is cached, and sets both
-  URLs in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
+  URLs (and the relief's, when its DEM is cached, [§ Relief](#relief)) in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
   other line kept); restart `pnpm dev` after. `pnpm dev:tiles:fetch`
   (`bin/tiles-dev.sh fetch`) re-downloads. It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
@@ -126,6 +126,71 @@ a file), never a font CDN.
 - A glyph range that fails to load leaves those characters out; nothing else
   breaks.
 
+### Relief
+
+The **Relief** layer shades the land from a digital elevation model, so
+valleys, ridges and drainage lines read on the map. It is visual only:
+nothing the model uses comes from it. Delineating catchments from a DEM is
+a separate, later piece (#326 B-delineate).
+
+- **The data**: [Mapterhorn](https://mapterhorn.com)'s planet build, a
+  global PMTiles archive of Terrarium-encoded 512 px elevation tiles
+  (WebP). Over South Africa its only source is **Copernicus GLO-30**, the
+  30 m global DEM, to zoom 12 (about 30 m a pixel there, the DEM's own
+  resolution); the archive's finer national sources are all elsewhere
+  (checked 2026-10-01 against its `download_urls.json`: none of its zoom
+  13+ files touches the bbox). Licence in [§ Sources](#sources).
+- `PUBLIC_TERRAIN_URL` (frontend env) is the file's URL. **Empty** (the
+  committed default in `frontend/.env.development` and `.env.production`):
+  the Layers box offers no Relief toggle and no DEM is fetched, so a fresh
+  clone and CI download nothing. Set, the box has a **Relief** checkbox,
+  off by default, in the URL with the other layers (`layers=relief`).
+- **The style** (`mapStyle.ts` `terrainSource`, `reliefLayer`): a
+  `raster-dem` source read through the `pmtiles` protocol and a `hillshade`
+  layer over the land and land cover, under the water, roads, quaternary
+  outlines, features and names (`reliefBeforeId`), with no basemap, on the
+  plain background. The shadows and highlights are translucent and the
+  exaggeration low, so the land colours and the overlay's strokes keep
+  their contrast. MapLibre overzooms past zoom 12. Turning the layer on or
+  off changes the live map without reloading the style. A DEM that can't be
+  read drops the relief and says so in the Layers box; the basemap and
+  features stay. The relief is not a basemap layer, so the basemap failing
+  leaves it drawn.
+- **Attribution**: while the relief is drawn, the map's attribution carries
+  "© Mapterhorn" and the notice the Copernicus licence requires for adapted
+  data (Art. 6(b), word for word; `TERRAIN_ATTRIBUTION`, checked by
+  `mapStyle.test.ts`).
+- **Locally**: `pnpm dev:s3:up`, then `pnpm dev:tiles:terrain`
+  (`bin/tiles-dev.sh terrain`, the same `pmtiles` CLI as the basemap). It
+  extracts the basemap's bbox from the planet build into
+  `~/.cache/water-management-tiles/terrain.pmtiles` and uploads it to the
+  MinIO bucket `tiles` as `terrain.pmtiles`
+  (`backend/scripts/tiles-upload.ts --terrain`). Then `pnpm dev:tiles:up`
+  sets `PUBLIC_TERRAIN_URL=http://localhost:9002/tiles/terrain.pmtiles` in
+  `frontend/.env.development.local` beside the basemap's URLs (`pnpm
+  dev:tiles:env` prints it); restart `pnpm dev`. `up` re-uploads a cached
+  DEM when MinIO doesn't serve it but never downloads one, and sets the URL
+  only when MinIO serves it, so without it the Layers box offers no Relief toggle. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
+  URL) override the defaults. Measured 2026-10-01 with
+  `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the planet build of
+  Mapterhorn 0.0.13):
+
+  | maxzoom | archive |
+  | --- | --- |
+  | 10 | 197 MB |
+  | 11 | 570 MB |
+  | 12 | 2.2 GB |
+
+  12 is the default because it is the DEM's own resolution; a lower zoom
+  is upsampled by MapLibre and looks softer up close. `TERRAIN_MAXZOOM=11`
+  keeps a laptop's cache small.
+- **Production** (not deployed yet, with the basemap): the same file in S3
+  under `tiles/terrain.pmtiles`, served by the same-origin `/tiles/*`
+  behaviour, and `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`. The
+  Copernicus licence (Art. 6(c)) also asks for its liability sentence in a
+  legal notice covering the distribution; that goes in before production
+  serves the relief. Tracked with the basemap's follow-up.
+
 ### Colours, theme and the picked name
 
 - **Colours** (`overlayColours` in `mapStyle.ts`, issue #326 E7): the
@@ -166,7 +231,7 @@ a file), never a font CDN.
 - MapLibre and the PMTiles reader are **dynamic imports**:
   `MapTab.svelte` loads `CatchmentMap.svelte` lazily, and that imports
   `lib/components/map/maplibre.ts` (MapLibre, its CSS) when it mounts; the
-  `pmtiles` chunk loads only with a tiles URL. The workspace's first load and
+  `pmtiles` chunk loads only with a tiles or terrain URL. The workspace's first load and
   every other tab are unchanged. The bundle guard measures them against a
   ceiling of their own, `mapKb` (decision D8 (b);
   `scripts/guards/check_web_bundle_budget.mjs`), outside the total, and fails
@@ -181,6 +246,9 @@ a file), never a font CDN.
   ranges; they are not CSS fonts, so `font-src` is not involved):
   same-origin in production (`/tiles/*`, `/tiles/fonts/*`), so
   `connect-src 'self'` holds and **the CSP is unchanged** by the labels.
+  The relief's DEM is the same: one more PMTiles file under `/tiles/`,
+  read with `fetch`, decoded in MapLibre's worker (no `blob:`, no
+  `img-src` change).
   Locally there is no CSP header (only SvelteKit's meta policy, which sets
   `script-src`).
 - The app loads **no third-party script, style, font or tile**: MapLibre is
@@ -838,6 +906,7 @@ fixtures only.
 | Dataset | Publisher | Licence (read) | Attribution | Version | Update cadence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
+| Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) in a legal notice before production serves it | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
 | Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
 | WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |

@@ -166,6 +166,23 @@ export const CreateScenarioBody = z
 	})
 	.strict();
 
+/**
+ * Where written objections to an application go, and by when, as its notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
+ * 166_public_participation). Printed beside the warning that a comment in the app is not an objection. '' or null clears.
+ */
+export const objectionAddress = z
+	.string()
+	.max(500)
+	.transform((s) => s.replace(/\r\n?/g, '\n').trim())
+	.refine((s) => !s.includes('\u0000'), 'cannot contain NUL characters')
+	.nullable()
+	.transform((s) => (s ? s : null));
+export const objectionClosingDate = z
+	.string()
+	.regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date, YYYY-MM-DD')
+	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s), 'must be a real date')
+	.nullable();
+
 /** PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft. */
 export const PatchScenarioBody = z
 	.object({
@@ -174,6 +191,9 @@ export const PatchScenarioBody = z
 		purposeAndNeed: promptAnswer.optional(),
 		mitigation: promptAnswer.optional(),
 		monitoring: promptAnswer.optional(),
+		/** An application's only, while it is a draft (scenario_objection_frozen). */
+		objectionAddress: objectionAddress.optional(),
+		objectionClosingDate: objectionClosingDate.optional(),
 		ops: Ops.optional(),
 		ownedNodeIds: ownedNodeIds.optional(),
 		status: z.enum(SCENARIO_STATUSES).optional()
@@ -181,19 +201,41 @@ export const PatchScenarioBody = z
 	.strict()
 	.refine(
 		(b) => Object.values(b).some((v) => v !== undefined),
-		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, ops, ownedNodeIds, status'
+		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, objectionAddress, objectionClosingDate, ops, ownedNodeIds, status'
 	);
 
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();
 
 export const ScenarioRunBody = z.object({ label: z.string().trim().max(200).optional() }).strict();
 
-/** An assessor's decision on an application (045_contributor_scope; the words are pending the licensing authority). */
-export const SCENARIO_OUTCOMES = ['approved', 'approved_with_conditions', 'refused'] as const;
+/**
+ * The responsible authority's decision on an application, in the National
+ * Water Act's and GN R267's words (163_licensing_authority; provisional
+ * position, pre-counsel research, 2026-10-01): a licence issued (every
+ * licence carries conditions, s28(1)(d)) or refused (s42), an application
+ * rejected on its formal requirements (R267 regs 9, 11, 12), or not
+ * considered because the use is already authorised (s40(4)).
+ */
+export const SCENARIO_OUTCOMES = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered'] as const;
 export type ScenarioOutcome = (typeof SCENARIO_OUTCOMES)[number];
 
-/** POST …/decide: the outcome and the assessor's reasons (scenario.decision_note, ≤ 4000 characters). */
-export const DecideBody = z.object({ outcome: z.enum(SCENARIO_OUTCOMES), note: description.default('') }).strict();
+/**
+ * POST …/decide ("Record the authority's decision"): the outcome, the
+ * authority's name (default: settings.responsibleAuthority.name), the date on
+ * its decision letter, its licence or file reference, whether its written
+ * reasons were received, and the recorder's note (scenario.decision_note,
+ * ≤ 4000 characters).
+ */
+export const DecideBody = z
+	.object({
+		outcome: z.enum(SCENARIO_OUTCOMES),
+		authority: z.string().trim().min(1).max(200).optional(),
+		decisionDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date as YYYY-MM-DD').refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d, 'not a real date'),
+		reference: z.string().trim().max(200).default(''),
+		reasonsReceived: z.boolean(),
+		note: description.default('')
+	})
+	.strict();
 
 /**
  * POST …/members: whom to share an application with. `userId`, one of the

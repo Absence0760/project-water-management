@@ -310,6 +310,17 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 	if (!hash) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	const t = await withoutUser((db) => consumeRenderToken(db, hash));
 	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
+	if (t.kind === 'applicant_pack') {
+		// The pack, still one of the requester's application's (a party: app_applicant_pack_meta, issued) (165).
+		const scenarioId = await withUser(t.userId, async (db) => {
+			const { rows } = await db.query<{ m: { scenarioId?: unknown } | null }>('SELECT app_applicant_pack_meta($1, $2) AS m', [t.projectId, t.packId]);
+			const sid = rows[0]?.m?.scenarioId;
+			if (typeof sid !== 'string') throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this evidence pack');
+			return sid;
+		});
+		await issueSession(c, t.userId, { projectId: t.projectId, packId: t.packId, scenarioId });
+		return c.json({ ok: true });
+	}
 	if (t.kind === 'pack') {
 		await withUser(t.userId, async (db) => {
 			// The pack, still readable by the requester (RLS: evidence_pack is theirs) and issued.

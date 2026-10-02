@@ -132,7 +132,9 @@ describe('allocations in the run input (engine 1.18.0)', () => {
 	it('carries what the engine reads and no name, registration number or property', async () => {
 		const res = await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmA.id, holder: 'Invented Holder', registrationNo: 'REG-SECRET', propertyRef: 'Portion 9', months: [1] });
 		expect(res.status).toBe(201);
-		const input = (await viewer.call('GET', `/projects/${projectId}/model-input`)).body.input;
+		// The owner's input; a viewer's has none, since the owners haven't let viewers read each volume (162, D3).
+		expect((await viewer.call('GET', `/projects/${projectId}/model-input`)).body.input.model).not.toHaveProperty('allocations');
+		const input = (await owner.call('GET', `/projects/${projectId}/model-input`)).body.input;
 		expect(input.model.allocations).toEqual([
 			{ id: res.body.allocation.id, nodeId: farmA.id, waterSource: 'surface', volumeM3PerYear: 1000, storageM3: null, validFrom: null, validTo: null, months: [1], maxRateM3s: null }
 		]);
@@ -174,7 +176,7 @@ describe('the allocation settings (issue #72)', () => {
 	});
 
 	it('the comparison reads against the project’s band and says what the run’s mode was; ?tolerance= still overrides', async () => {
-		const res = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
+		const res = await owner.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
 		expect(res.status).toBe(200);
 		expect(res.body.comparison.tolerance).toBe(0.2);
 		expect(res.body.run.allocationMode).toBe('cap');
@@ -185,7 +187,10 @@ describe('the allocation settings (issue #72)', () => {
 		expect(cy.capReached.length).toBeGreaterThan(0);
 		expect(cy.limitBound.length).toBeGreaterThan(0);
 		for (const y of cy.limitBound) expect([y.rateDays, y.monthsDays, y.volumeDays > 0]).toEqual([0, 0, true]);
-		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.05`)).body.comparison.tolerance).toBe(0.05);
+		expect((await owner.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.05`)).body.comparison.tolerance).toBe(0.05);
+		// A viewer the owners haven't let read each volume (162, D3): a cap run's input rests on them, so it is refused, not altered.
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/model-input`)).status).toBe(403);
+		expect((await owner.call('GET', `/projects/${projectId}/runs/${runId}/model-input`)).status).toBe(200);
 	});
 
 	it('refuses a mode that isn’t one, a band outside [0, 1), and a viewer changing either', async () => {
@@ -229,7 +234,7 @@ describe('the allocation settings (issue #72)', () => {
 		expect(left[0]).toBeCloseTo(1e9, 3);
 		expect(left[1]).toBeCloseTo(1e9 - G[0]!, 3);
 		// And the comparison says which limit held the farm back: the months and the rate, never the volume.
-		const res = await viewer.call('GET', `/projects/${projectId}/runs/${id}/allocations`);
+		const res = await owner.call('GET', `/projects/${projectId}/runs/${id}/allocations`);
 		const cy = res.body.capYears[0];
 		expect(cy.capReached).toEqual([]);
 		const sum = (k: string) => cy.limitBound.reduce((a: number, y: Record<string, number>) => a + y[k]!, 0);

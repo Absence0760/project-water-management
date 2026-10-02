@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
+import { allocationsContext, AUTHORISATION_LABEL, capYearsText, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, storageSentence, TEMPLATE_CSV, totalsSentence, VIEWER_UNITS_NOTE, unitRows, unitStatusText, volumeCell, waterYearLabel } from './allocations';
 import { fmtNum } from '$lib/format/number';
 
 const comparison = () =>
@@ -273,5 +273,19 @@ describe('capYearsText (engine 1.40.0)', () => {
 		expect(at(null, [2003, 2004, 2006])).toBe(
 			'The registered volume was used up in 2003/04, 2004/05 and 2006/07. (This run is from before the app counted the days the licence held use back; run the model again to see them.)'
 		);
+	});
+});
+
+describe('a viewer’s totals (162, decision D3)', () => {
+	it('says a source’s holders, the volume registered today and the storage, never a unit', () => {
+		expect(totalsSentence({ waterSource: 'surface', holders: 12, registeredM3PerYear: 1_250_000, storageM3: 300_000 })).toBe(
+			`Surface water: 12 registered users, ${fmtNum(1_250_000)} m³ a year registered today, ${fmtNum(300_000)} m³ of storage.`
+		);
+		expect(totalsSentence({ waterSource: 'groundwater', holders: 5, registeredM3PerYear: 0, storageM3: null })).toBe('Groundwater: 5 registered users, 0 m³ a year registered today.');
+	});
+
+	it('tells an owner who viewers must be before they see each farm', () => {
+		expect(VIEWER_UNITS_NOTE).toContain('works for, or was appointed by, your organisation');
+		expect(VIEWER_UNITS_NOTE).toContain('5 or more registered users');
 	});
 });

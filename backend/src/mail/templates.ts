@@ -170,13 +170,20 @@ export function roleName(role: string): string {
 	return Object.hasOwn(ROLE_NAME, role) ? ROLE_NAME[role]! : role;
 }
 
+/**
+ * The organisation that decides about the information an invite concerns, and whom to ask (POPIA s18(1)(b);
+ * 168_team_privacy_contact): the project's team, or the team invited to. Absent when it has set no contact.
+ */
+export type InviteContact = { organisation: string; name: string; email: string; postal: string | null };
+
 /** An invite to a project or team, in one of the three modes (InviteMode). */
 export function inviteMail(
 	to: string,
 	url: string,
 	inviterName: string,
 	target: InviteTarget,
-	mode: InviteMode = 'sign-up'
+	mode: InviteMode = 'sign-up',
+	contact: InviteContact | null = null
 ): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
 	const role = roleName(target.role);
@@ -201,7 +208,16 @@ export function inviteMail(
 					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
 				]
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
-		).concat(`How we handle your information: ${sitePage('/privacy')}`)
+		)
+			.concat(
+				contact
+					? [
+							`${contact.organisation} decides about your information in its projects. Questions about it: ${contact.name}, ${contact.email}.`,
+							...(contact.postal ? [`Or write to ${contact.name} at: ${contact.postal}`] : [])
+						]
+					: []
+			)
+			.concat(`How we handle your information: ${sitePage('/privacy')}`)
 	});
 }
 
@@ -211,7 +227,7 @@ export function listText(items: readonly string[], and = 'and'): string {
 	return `${items.slice(0, -1).join(', ')} ${and} ${items.at(-1)}`;
 }
 
-export type FarmerInviteFacts = { catchment: string; farms: string[] };
+export type FarmerInviteFacts = { catchment: string; farms: string[]; contact?: InviteContact | null };
 
 /**
  * A farmer invite (WP-2.2): "{inviter} invited you to see {farm} in
@@ -249,6 +265,13 @@ export function farmerInviteMail(
 				...(confirm
 					? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
 					: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]),
+				// Who decides about the farmer's information, when the catchment's team has said (POPIA s18(1)(b), 168).
+				...(facts.contact
+					? [
+							tr.t('mail.invite.contact', { organisation: facts.contact.organisation, name: facts.contact.name, email: facts.contact.email }),
+							...(facts.contact.postal ? [tr.t('mail.invite.contactPost', { name: facts.contact.name, postal: facts.contact.postal })] : [])
+						]
+					: []),
 				tr.t('mail.invite.privacy', { url: sitePage('/privacy') })
 			]
 		},
@@ -366,6 +389,49 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 	);
 }
 
+export type PackSentFacts = {
+	projectId: string;
+	packId: string;
+	projectName: string;
+	/** The pack's title as its report gives it (the application's name, or the baseline's). */
+	title: string;
+	version: number;
+	/** `xxxx-xxxx-xxxx` (engine packShortCode). */
+	shortCode: string;
+	/** Who sent it (their display name). */
+	sentBy: string;
+	/** settings.responsibleAuthority's name (163), or null when the project names none. */
+	authority: string | null;
+	/** The sender's note, or null. */
+	note: string | null;
+};
+
+/**
+ * The full evidence pack sent to a member acting for the responsible
+ * authority (165, licensing build item 13; provisional position, pre-counsel
+ * research, 2026-10-01; docs/evidence-pack.md § Sending it to the authority).
+ * The pack's PDF and bundle name every water user, so the mail carries
+ * neither and no download link: it links the pack's page, which needs the
+ * reader signed in and still an editor of the project before it hands out a
+ * one-minute signed download, and the public verify page. A forwarded mail
+ * opens nothing. English, as the workspace is.
+ */
+export function packSentMail(to: string, f: PackSentFacts): Mail {
+	const authority = f.authority ?? 'the responsible authority';
+	return render('pack_sent', to, `Evidence pack v${f.version} ${f.shortCode} sent to you for ${authority} — ${PRODUCT}`, {
+		heading: 'An evidence pack was sent to you',
+		paragraphs: [
+			`${f.sentBy} sent you version ${f.version} of the evidence pack “${f.title}” in ${f.projectName}, for ${authority}.`,
+			...(f.note ? [`Their note: “${f.note}”`] : []),
+			'Sign in to download its PDF and its reproduction bundle from the pack’s page. They name every water user in the catchment, so they are for the authority’s assessment: don’t pass them on.',
+			`Anyone holding a copy checks it on the verify page, with the code ${f.shortCode}.`
+		],
+		action: { label: 'Open the pack', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}/packs/${encodeURIComponent(f.packId)}`) },
+		footer: [`You get this because the owner of ${f.projectName} marked you as acting for the responsible authority. This email grants nothing by itself: the pack opens only for you, signed in.`],
+		links: [{ label: 'Verify page', url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) }]
+	});
+}
+
 export type ErratumNoticeFacts = {
 	projectId: string;
 	projectName: string;
@@ -404,6 +470,50 @@ export function erratumNoticeMail(to: string, f: ErratumNoticeFacts): Mail {
 		],
 		action: { label: 'Open the runs', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=runs`) },
 		footer: [`You get this email because you own ${f.projectName}. The list of known engine bugs is published with the methodology (docs/engine-errata.md).`]
+	});
+}
+
+export type LicenceRecordFacts = {
+	projectId: string;
+	projectName: string;
+	/** review: no outcome recorded and the 5-yearly review is due; closes: the record's closing date has passed. */
+	event: 'review' | 'closes';
+	/** The review date, or the closing date (YYYY-MM-DD). */
+	dueOn: string;
+	/** The operator's copy: no "you own" footer, and the project's id for the runbook. */
+	operator?: boolean;
+};
+
+/**
+ * The licence record needs a decision (161_licence_record, licence/record.ts):
+ * the review is due with no outcome recorded, or the record's closing date
+ * passed (it can now be deleted). Sent to the project's owners and the
+ * operator. Nothing is deleted by the app: the operator deletes on the
+ * client's written confirmation (docs/deployment.md § Runbooks). English, as
+ * the workspace is.
+ */
+export function licenceRecordMail(to: string, f: LicenceRecordFacts): Mail {
+	const review = f.event === 'review';
+	const subject = review ? `Record the licence outcome for ${f.projectName} — ${PRODUCT}` : `The licence record of ${f.projectName} can now be deleted — ${PRODUCT}`;
+	const paragraphs = review
+		? [
+				`${f.projectName} holds a licence record: an issued evidence pack or a nominated evidence run, with the names of the people who made and signed it. Its review was due on ${f.dueOn}, and no licence outcome is recorded.`,
+				'Record the licence outcome (granted, with its expiry date, refused or withdrawn), or confirm that the record is still needed. The record is then kept until three years after the licence expires, or three years after the application is refused or withdrawn; a confirmation sets the next review five years on.',
+				'Nothing is deleted until the organisation asks for it.'
+			]
+		: [
+				`The licence record of ${f.projectName} reached its closing date on ${f.dueOn}: three years after the licence expired, or after the application was refused or withdrawn.`,
+				'It can now be deleted, with its evidence packs and the names they keep. Nothing is deleted automatically: ask the operator to delete the project, in writing, or record a later outcome if the licence was renewed.'
+			];
+	return render('licence_record', to, subject, {
+		heading: review ? `Record the licence outcome for ${f.projectName}` : `The licence record of ${f.projectName} can now be deleted`,
+		paragraphs,
+		action: { label: 'Open the licence record', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=project#licence-record`) },
+		footer: [
+			f.operator
+				? `You get this email as the operator of ${PRODUCT} (project ${f.projectId}). The deletion runbook is docs/deployment.md § Runbooks.`
+				: `You get this email because you own ${f.projectName}.`
+		]
 	});
 }
 

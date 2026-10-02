@@ -28,6 +28,7 @@
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import ApplicantResults from './ApplicantResults.svelte';
 	import ScenarioStatement from './ScenarioStatement.svelte';
+	import AskAssessors from './AskAssessors.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -45,6 +46,7 @@
 		data,
 		runs,
 		canEdit,
+		actsForAuthority = false,
 		applicant = false,
 		onchange,
 		ondeleted,
@@ -55,6 +57,8 @@
 		runs: RunMeta[];
 		/** An editor or owner of the project. */
 		canEdit: boolean;
+		/** The caller acts for the responsible authority (163): with canEdit, they record its decision. */
+		actsForAuthority?: boolean;
 		/** The caller is an applicant (the contributor role): the applicant projection of the base, no comparison. */
 		applicant?: boolean;
 		onchange: (d: ScenarioWithCheck) => void;
@@ -137,6 +141,10 @@
 	/** Changes that don't apply: an edit group's one problem line counts each of its ops. */
 	const problems = $derived(data.check ? s.ops.length - data.check.applied.length : 0);
 	const baseMeta = $derived(runs.find((r) => r.id === s.baseRunId));
+	/** The assessors' words for the lines a hidden rule masked (164): editors only, and only where they differ from what the applicant reads. */
+	const unmasked = $derived(
+		(data.check?.assessorProblems ?? []).map((text, i) => ({ text, masked: data.check?.problems[i] })).filter((x) => x.masked !== undefined && x.masked !== x.text)
+	);
 
 	// --- editing the ops, with undo ------------------------------------------------
 	let past = $state.raw<ScenarioOp[][]>([]);
@@ -411,6 +419,18 @@
 			{problems === 1 ? 'it is' : 'they are'} removed or the base changes.
 		</div>
 	{/if}
+	{#if isApplication && applicant && data.check}
+		<AskAssessors {projectId} scenarioId={s.id} problems={data.check.problems} maskedRules={data.check.maskedRules} canAsk={applicant} />
+	{/if}
+	{#if unmasked.length}
+		<!-- The assessors only (164): the rules the applicant reads as "doesn't apply to the catchment as modelled", in their own words. -->
+		<div class="alert alert-info" role="status" data-testid="scenario-unmasked">
+			The applicant reads {unmasked.length === 1 ? 'this rule' : 'these rules'} without the other units’ figures. In {unmasked.length === 1 ? 'its' : 'their'} own words:
+			<ul>
+				{#each unmasked as u, i (i)}<li>{u.text}</li>{/each}
+			</ul>
+		</div>
+	{/if}
 	{#if data.check?.renamed?.length}
 		<!-- The assessors only (the applicant never learns a hidden name): what the application's names displaced. -->
 		<p class="alert alert-info" role="status" data-testid="scenario-renamed">
@@ -470,7 +490,7 @@
 	{/key}
 
 	{#if isApplication}
-		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && !isOwner} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />
+		<ApplicationPanel {projectId} scenario={s} {isOwner} canDecide={canEdit && actsForAuthority && !isOwner} {canEdit} {problems} unverifiedRuns={data.unverifiedRunIds?.length ?? 0} locked={busy} canReadPacks={!applicant} onchange={(d) => onchange(d)} onleft={ondeleted} />
 	{/if}
 
 	{#if editable && !isApplication && !overriding}

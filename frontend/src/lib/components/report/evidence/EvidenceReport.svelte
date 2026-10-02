@@ -15,7 +15,8 @@
 		type Band,
 		type EvidenceReport,
 		type EwrAssuranceSite,
-		type ModelInput
+		type ModelInput,
+		type RunSummary
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
@@ -121,6 +122,19 @@
 			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
 		});
 	});
+	/**
+	 * Page 1's headline board against full authorised use (evidence-14, licensing build item 8): the
+	 * full-allocation pair's board, worded as the modelled-use one, both runs at full allocation.
+	 */
+	const authorisedBoard = $derived.by(() => {
+		const a = report.licenceImpactAuthorised;
+		if (!app || !id.application || !a?.board) return null;
+		const full = { allocations: { mode: 'fullAllocation' } } as unknown as RunSummary;
+		return evidenceBoard(a.board, {
+			a: { run: { label: `${id.baseline.label || 'Untitled run'}, every holder at their registered volume`, startDate: id.baseline.startDate, summary: full } },
+			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: full } }
+		});
+	});
 	/** An older pack (before evidence-5) froze no board: page 1 says it isn't part of the pack. */
 	const boardNotFrozen = $derived(frozen && app && report.licenceImpact === undefined);
 
@@ -129,7 +143,8 @@
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
 	const cum = $derived(report.cumulative);
-	const OUTCOME: Record<string, string> = { approved: 'approved', approved_with_conditions: 'approved with conditions' };
+	// The authority's words (163_licensing_authority, evidence-13); a pack drafted before keeps its frozen approved / approved_with_conditions.
+	const OUTCOME: Record<string, string> = { licence_issued: 'licence issued', approved: 'approved', approved_with_conditions: 'approved with conditions' };
 	const statusText = (o: EvidenceReport['cumulative']['applications'][number]) => (o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome}` : 'submitted');
 	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
 		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');
@@ -163,7 +178,7 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} {boardNotFrozen} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->
 				<LocalityMap {report} {frozen} />
@@ -600,6 +615,15 @@
 						Modelled use per water year against the volume registered for each unit (WARMS registrations, licences), over whole water years; a part year is listed but not counted.
 						Modelled, not metered: the comparison is arithmetic, not a finding on whether a use is lawful. The report carries volumes only, never the holders’ names.
 					</p>
+					{#if al.unitYears}
+						<!-- evidence-15 (D3): only the applicant's own units one by one; the rest as totals at 5 or more units. -->
+						<p class="small muted" data-testid="evidence-allocations-others">
+							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
+							source, “Other registered users”, when at least 5 units hold that source.{#if al.othersLeftOut}
+								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: fewer than 5 hold one
+								from that water source. The project’s editors see each unit on the Allocations tab.{/if}
+						</p>
+					{/if}
 					{#if useJudged}<p class="na">{useJudged}</p>{/if}
 					{#if use.rows.some((r) => r.marks.length)}
 						<UsePlot

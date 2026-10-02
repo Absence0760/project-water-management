@@ -45,7 +45,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { minioUp, S3_ENDPOINT } from '../__tests__/minio.js';
 import { withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -265,7 +265,15 @@ describe('drafting a pack', () => {
 		expect(read.body.manifestMatches).toBe(true);
 		// The issue checklist is an editor's (only editors issue); a viewer gets null.
 		expect(read.body.issue).toBeNull();
-		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({
+			issuable: true,
+			signed: false,
+			runsVerified: true,
+			errataRecorded: true,
+			// The registration check (167): nobody signed yet, and the tests' switch is off (__tests__/setup.ts).
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 	});
 
 	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
@@ -273,7 +281,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-12');
+		expect(manifest.report.version).toBe('evidence-15');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -569,10 +577,36 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.cannotSign).toBeNull();
 	});
 
-	it('issues a signed draft, stamping who and when', async () => {
+	it('issues a signed draft, stamping who and when, once the signer’s registration is checked (167: required, as in production)', async () => {
 		const s = await sign(editor, v1.id);
-		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1' });
-		const res = await issue(owner, v1.id);
+		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1', kind: 'specialist', registrationCheck: null });
+		let res: Awaited<ReturnType<typeof issue>>;
+		vi.stubEnv('REGISTRATION_CHECK_REQUIRED', 'true');
+		try {
+			// No check of the registration recorded: refused, naming the signer, and nothing is bound.
+			const refused = await issue(owner, v1.id);
+			expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+			expect(refused.body).toMatchObject({ code: 'registration_not_checked', details: { signers: ['Dr A. Hydrologist'] } });
+			expect(await asOwner('SELECT 1 FROM signoff_registration_check b JOIN signoff s ON s.id = b.signoff_id WHERE s.pack_id = $1', [v1.id])).toEqual([]);
+			// The host checked the register and an owner records it on the Members page; an editor can't.
+			const check = {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999 / 20',
+				registerName: 'Dr A Hydrologist',
+				outcome: 'registered',
+				checkedByOrg: 'Pack catchment WUA',
+				checkedAt: new Date(Date.now() - 86_400_000).toISOString()
+			};
+			expect((await editor.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check)).status).toBe(403);
+			const recorded = await owner.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check);
+			expect(recorded.status, JSON.stringify(recorded.body)).toBe(201);
+			const listed = (await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.signoffs[0];
+			expect(listed.registrationCheck).toMatchObject({ checkedByOrg: 'Pack catchment WUA', bound: false });
+			res = await issue(owner, v1.id);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
@@ -609,6 +643,33 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((detail.manifest as PackManifest).report.verification.errata.map((e) => e.id)).not.toContain('ER-991');
 		expect(detail.manifestMatches).toBe(true);
 		// v2 (below) is drafted with ER-991 on the list, so records it: its verify lists it once, as recorded.
+	});
+
+	it('keeps an issued pack’s manifest and hash when the authority is named and endorses the baseline afterwards (163, evidence-13)', async () => {
+		const frozen = async () => (await asOwner('SELECT manifest, manifest_sha256, report_version FROM evidence_pack WHERE id = $1', [v1.id]))[0]!;
+		const before = await frozen();
+		expect(before.manifest_sha256).toBe(v1.manifestSha256);
+		expect(before.manifest.report.identity.authority).toBeNull();
+		expect(before.manifest.report.flags.map((f: { id: string }) => f.id)).toContain('notEndorsed');
+		// Name the authority, publish the baseline and endorse it, as a member acting for the authority.
+		const authority = { name: 'Pk catchment management agency', kind: 'cma', office: 'Worcester' };
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { responsibleAuthority: authority } })).status).toBe(200);
+		const pub = await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun });
+		expect(pub.status, JSON.stringify(pub.body)).toBe(201);
+		await actForAuthority(owner, projectId, owner.id);
+		const endorsed = await owner.call('POST', `/projects/${projectId}/publication/${pub.body.publication.id}/endorse`, { note: 'Accepted.' });
+		expect(endorsed.status, JSON.stringify(endorsed.body)).toBe(200);
+		// Positive control: the live report now names both, and drops the flag.
+		const live = (await viewer.call('GET', `${runPath(baseRun)}/evidence-report`)).body.report;
+		expect(live.identity.authority).toEqual(authority);
+		expect(live.identity.baseline.endorsement).toMatchObject({ endorsedBy: 'PkOwner', note: 'Accepted.' });
+		expect(live.flags.map((f: { id: string }) => f.id)).not.toContain('notEndorsed');
+		// The issued pack is as it was issued: its stored manifest, its hash, and what verify and the pack view say.
+		expect(await frozen()).toEqual(before);
+		const detail = (await viewer.call('GET', packPath(v1.id))).body;
+		expect(detail.manifestMatches).toBe(true);
+		expect((detail.manifest as PackManifest).report.identity.authority).toBeNull();
+		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.manifestSha256).toBe(v1.manifestSha256);
 	});
 
 	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
@@ -743,7 +804,19 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack.signers).toEqual([
 			expect.objectContaining({ fullName: 'Dr A. Hydrologist', registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationField: 'water_resources', registrationNo: '400999/20' })
 		]);
-		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual(['fullName', 'registrationBody', 'registrationCategory', 'registrationField', 'registrationNo', 'signedAt']);
+		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual([
+			'fullName',
+			'kind',
+			'registrationBody',
+			'registrationCategory',
+			'registrationCheck',
+			'registrationField',
+			'registrationNo',
+			'signedAt'
+		]);
+		// The check bound at issue (167): who checked and when, nothing else of it (not the register's name or the note).
+		expect(res.body.pack.signers[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Pack catchment WUA', checkedAt: expect.any(String) } });
+		expect(Object.keys(res.body.pack.signers[0].registrationCheck).sort()).toEqual(['checkedAt', 'checkedByOrg']);
 		const text = JSON.stringify(res.body);
 		for (const secret of [projectId, baseRun, v1.id, owner.email, editor.email, 'PkOwner', 'PkEditor']) expect(text).not.toContain(secret);
 		expect((await anon('GET', `/verify/${v1.manifestSha256}`)).body.pack.version).toBe(1);
@@ -1066,7 +1139,14 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 	it('refuses to issue a signed draft missing an erratum found since it was drafted (409 pack_errata_since_draft); drafted again, it issues (below)', async () => {
 		const stale = await draft(editor, baseRun, v1.id);
 		await sign(editor, stale.id);
-		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({ issuable: true, signed: true, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({
+			issuable: true,
+			signed: true,
+			runsVerified: true,
+			errataRecorded: true,
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 		errataList.push(SINCE_DRAFT);
 		const detail = (await editor.call('GET', packPath(stale.id))).body;
 		expect(detail.issue).toMatchObject({ signed: true, errataRecorded: false });

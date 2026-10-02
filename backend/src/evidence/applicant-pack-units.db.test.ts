@@ -159,4 +159,24 @@ describe("the other units in an applicant's pack", () => {
 		expect(res.body.units.others).toBeNull();
 		expect(res.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);
 	});
+
+	// Last: it unlinks the applicant's farm (164_applicant_visibility, build item 5).
+	it('are frozen at issue: the applicant’s farm, unlinked after issue, is still theirs by name in the pack', async () => {
+		const before = await applicant.call('GET', `${P()}/scenarios/${sid}/packs/${pack}`);
+		expect(before.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);
+		// The farm changes hands: its link to the applicant goes (they hold a side farm now instead).
+		expect((await owner.call('PUT', `${P()}/farmers/${applicant.id}`, { nodeIds: [side[0]!.id] })).status).toBe(200);
+		// Control: what follows the links now no longer names it (the results view's units are their links now).
+		const results = (await applicant.call('GET', `${P()}/scenarios/${sid}/results?runId=${runId}`)).body.results;
+		expect(results.units.map((u: { name: string }) => u.name)).not.toContain('Rooikloof');
+		// The pack does: it is the record of the application as issued.
+		const after = await applicant.call('GET', `${P()}/scenarios/${sid}/packs/${pack}`);
+		expect(after.status, JSON.stringify(after.body)).toBe(200);
+		expect(after.body.units.own.map((u: { name: string }) => u.name)).toEqual(['Rooikloof']);
+		// …and the other units are still the ones downstream of it, under the same anonymous name.
+		expect(after.body.units.others).toEqual(before.body.units.others);
+		expect(JSON.stringify(after.body)).not.toContain(rooikloof.id);
+		// Their new farm was never part of the application: not in the pack.
+		expect(JSON.stringify(after.body)).not.toContain(side[0]!.name);
+	});
 });

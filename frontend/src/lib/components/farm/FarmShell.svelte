@@ -17,6 +17,7 @@
 	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
+		projectId = null,
 		title = null,
 		back = null,
 		accountPage = false,
@@ -27,6 +28,8 @@
 		busy = false,
 		children
 	}: {
+		/** The catchment the page is in: the menu then offers "Who decides about your farm's information" (168). */
+		projectId?: string | null;
 		/** The header's title; "My farm" when not given. */
 		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
@@ -124,6 +127,10 @@
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
 				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
+				<!-- The catchment's organisation decides about the farm's information (POPIA s18(1)(b)): whom to ask. -->
+				{#if projectId}
+					<li><a href="{base}/farm/{encodeURIComponent(projectId)}/who-decides">{t('Who decides about your farm’s information')}</a></li>
+				{/if}
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
 				</li>

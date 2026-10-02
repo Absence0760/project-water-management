@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 
@@ -128,6 +128,26 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/members/${c.member.id}`, { role: 'editor' })
 	},
 	{
+		// The host's check of a member's registration (167_signers), recorded before the member leaves below.
+		route: `POST ${P}/members/:userId/registration-checks`,
+		records: ['registration.checked'],
+		call: (c) =>
+			c.owner.call('POST', `${at(c)}/members/${c.member.id}/registration-checks`, {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999/20',
+				registerName: 'Guard Member',
+				outcome: 'registered',
+				checkedByOrg: 'Guard WUA',
+				checkedAt: '2026-01-01'
+			})
+	},
+	{
+		route: `PUT ${P}/registration-check-required`,
+		records: ['registration.requirement'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
+	},
+	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/members/${c.member.id}`)
@@ -224,6 +244,15 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } })
 	},
 	{
+		route: `POST ${P}/publication/:pubId/endorse`,
+		records: ['publication.endorsed', 'member.authority'],
+		call: async (c) => {
+			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
+			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
+		}
+	},
+	{
 		route: `POST ${P}/share-links`,
 		records: ['share_link.created'],
 		call: async (c) => {
@@ -251,6 +280,17 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/api-keys/:keyId`,
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
+	},
+	// The licence record (161). Confirmed first: once an outcome is recorded there is no review to confirm.
+	{
+		route: `POST ${P}/licence-record/confirm`,
+		records: ['licence.confirmed'],
+		call: (c) => c.owner.call('POST', `${at(c)}/licence-record/confirm`)
+	},
+	{
+		route: `PUT ${P}/licence-record`,
+		records: ['licence.outcome'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'guard' })
 	},
 	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
 	{
@@ -360,6 +400,11 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['allocation.import_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
+	{
+		route: `PUT ${P}/allocations/viewer-units`,
+		records: ['allocation.viewer_units'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/allocations/viewer-units`, { on: true })
+	},
 	// --- the Map tab (152, issue #288) -----------------------------------------------------
 	{
 		route: `POST ${P}/map/import`,
@@ -438,7 +483,8 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { outcome: 'approved' });
+			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
 	},
 	{
@@ -464,6 +510,42 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/scenarios/:sid/members/:userId`,
 		records: ['scenario.unshared'],
 		call: (c) => (c.applicant as User).call('DELETE', `${at(c)}/scenarios/${c.applicationId}/members/${(c.consultant as User).id}`)
+	},
+	// --- "Ask the assessors why" (164_applicant_visibility) -------------------------------
+	{
+		route: `POST ${P}/scenarios/:sid/questions`,
+		records: ['application.question_asked'],
+		projectOf: (c) => c.questionProject as string,
+		call: async (c) => {
+			// A project of its own: the applicant's flow share pushes the catchment past 100 % only with five hidden farms' shares.
+			const applicant = await signUp('Gasker');
+			const projectId = (await c.owner.call('POST', '/projects', { name: 'Guard questions' })).body.project.id as string;
+			const q = `/projects/${projectId}`;
+			const outlet = node('Gauge', null);
+			const own = node('Asker farm', outlet.id, { flowShareManual: 0.05 });
+			const others = ['A', 'B', 'C', 'D', 'E'].map((n) => node(`Hidden ${n}`, outlet.id, { flowShareManual: 0.18 }));
+			expect((await c.owner.call('PUT', `${q}/model`, { nodes: [outlet, own, ...others], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+			expect((await c.owner.call('PATCH', q, { settings: { apanMm: monthly(150), flowShareMethod: 'manual' } })).status).toBe(200);
+			const rain = Array.from({ length: 40 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+			expect((await c.owner.call('PUT', `${q}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+			const runId = (await c.owner.call('POST', `${q}/runs`, { label: 'Guard questions' })).body.run.id as string;
+			expect((await c.owner.call('POST', `${q}/publication`, { runId })).status).toBe(201);
+			expect((await c.owner.call('POST', `${q}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+			expect((await c.owner.call('PUT', `${q}/farmers/${applicant.id}`, { nodeIds: [own.id] })).status).toBe(200);
+			const ops = [{ op: 'node.set', nodeId: own.id, field: 'flowShareManual', value: 0.3 }];
+			const s = await applicant.call('POST', `${q}/scenarios`, { name: 'Guard asks', baseRunId: runId, ops });
+			expect(s.body.check.maskedRules, JSON.stringify(s.body)).toHaveLength(1);
+			c.questionProject = projectId;
+			const r = await applicant.call('POST', `${q}/scenarios/${s.body.scenario.id}/questions`, { problem: 0, line: s.body.check.problems[0] });
+			c.questionId = r.body.question?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/application-questions/:qid/answer`,
+		records: ['application.question_answered'],
+		projectOf: (c) => c.questionProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.questionProject}/application-questions/${c.questionId}/answer`, { answer: 'Guard answer' })
 	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
@@ -562,6 +644,19 @@ const WRITE_ROUTES: Entry[] = [
 		needsMinio: true
 	},
 	{
+		// The issued pack sent to a member acting for the responsible authority (licensing build item 13).
+		route: `POST ${P}/packs/:packId/send`,
+		records: ['pack.sent'],
+		call: async (c) => {
+			const assessor = await signUp('Gauthority');
+			expect((await c.owner.call('POST', `/projects/${c.packProjectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+			expect((await c.owner.call('PATCH', `/projects/${c.packProjectId}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/send`, {});
+		},
+		projectOf: (c) => c.packProjectId as string,
+		needsMinio: true
+	},
+	{
 		route: `POST ${P}/packs/:packId/withdraw`,
 		records: ['pack.withdrawn'],
 		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/withdraw`, { reason: 'Guard withdrawal' }),
@@ -588,6 +683,14 @@ const WRITE_ROUTES: Entry[] = [
 		exempt: 'records a settings revision (calibration/store.ts applyCalibration) and run.created for its run; exercised end to end in calibration/calibration.db.test.ts, which needs a fitted calibration this sweep has none of'
 	},
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
+	{
+		route: `POST ${P}/runs/:runId/authorised-impact`,
+		exempt: "computes page 1's board against full authorised use for an application run and keeps it for its evidence report (licensing build item 8); no run is stored and no model, setting, run or publication changes"
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/packs/:packId/pdf`,
+		exempt: "queues the print of an applicant's own copy of an issued pack (165_applicant_copy); the pack, its standing and the model are untouched"
+	},
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (098_nomination_withdrawal.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
@@ -860,6 +963,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'POST /share/comment', exempt: 'a public comment through a share link (166_public_participation): the note is the record, with its author and the link it came through, and its edits are kept (note_revision)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/pack', exempt: 'reads one evidence pack through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'PATCH /auth/me', exempt: 'the caller’s own account settings; history rows keep a snapshot of the name as it was (actor_label)' },
@@ -879,6 +983,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/mfa/totp/confirm', exempt: 'the caller’s own authenticator turned on; recorded as mfa.enrolled in the account’s own security log, not a project’s history' },
 	{ route: 'DELETE /auth/mfa/totp', exempt: 'the caller’s own authenticator turned off; recorded as mfa.disabled in the account’s own security log, not a project’s history' },
 	{ route: 'POST /auth/mfa/recovery-codes', exempt: 'a new set of the caller’s own recovery codes; recorded as mfa.recovery_regenerated in the account’s own security log' },
+	{ route: 'POST /auth/mfa/step-up', exempt: 'a code again inside the caller’s own session (a sign-off, issuing or withdrawing a pack need one from the last 10 minutes); a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },

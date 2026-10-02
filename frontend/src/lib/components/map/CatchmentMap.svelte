@@ -22,6 +22,10 @@
 	URL the basemap draws place and water names (#326 A6), and `quaternaries`
 	(the tab's layer toggle) draws the quaternary outlines under the features,
 	a click inside one (with no feature there) picking it (`onquaternary`).
+	With a `terrainUrl` and `relief` on (the tab's Relief layer), the land is
+	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
+	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
+	and leaves everything else drawn.
 -->
 <script module lang="ts">
 	import type { MapFeatureKind } from '$lib/api/types';
@@ -45,7 +49,7 @@
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
-	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, type QuaternaryOutline } from './mapStyle';
+	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, RELIEF_LAYER, reliefBeforeId, reliefLayer, TERRAIN_SOURCE, terrainSource, type QuaternaryOutline } from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
@@ -72,7 +76,10 @@
 		glyphs = null,
 		quaternaries = null,
 		pickedQuaternary = null,
-		onquaternary
+		onquaternary,
+		terrainUrl = null,
+		relief = false,
+		onreliefError
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -99,6 +106,12 @@
 		pickedQuaternary?: string | null;
 		/** A click inside a quaternary where no feature is: its code. */
 		onquaternary?: (code: string) => void;
+		/** The relief's PMTiles URL (PUBLIC_TERRAIN_URL); null: no relief can be drawn, no DEM fetched. */
+		terrainUrl?: string | null;
+		/** Shade the land from the DEM (the tab's Relief layer). */
+		relief?: boolean;
+		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
+		onreliefError?: () => void;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -110,6 +123,9 @@
 	/** Enter adds at the mouse pointer (over the map), not the crosshair: the crosshair hides. */
 	let aimAtPointer = $state(false);
 	let tilesNote = $state(false);
+	/** The DEM couldn't be read: no relief from here on (the tab says so). */
+	let reliefFailed = false;
+	const reliefUrl = () => (relief && terrainUrl && !reliefFailed ? terrainUrl : null);
 	type Lib = typeof import('./maplibre');
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
@@ -208,16 +224,30 @@
 		syncMarkers();
 	}
 
+	/** Add or drop the relief on the live map, to match the Relief layer (a style load carries it already). */
+	function syncRelief() {
+		if (!map || status !== 'ready') return;
+		const url = reliefUrl();
+		const has = !!map.getLayer(RELIEF_LAYER);
+		if (url && !has) {
+			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url) as never);
+			map.addLayer(reliefLayer(dark) as never, reliefBeforeId(map.getStyle().layers.map((l) => l.id)));
+		} else if (!url && has) {
+			map.removeLayer(RELIEF_LAYER);
+			map.removeSource(TERRAIN_SOURCE);
+		}
+	}
+
 	onMount(() => {
 		let disposed = false;
 		let stopTheme: (() => void) | null = null;
 		(async () => {
 			try {
 				lib = await import('./maplibre');
-				if (tilesUrl) await lib.usePmtiles();
+				if (tilesUrl || terrainUrl) await lib.usePmtiles();
 				if (disposed) return;
 				const styleNow = () =>
-					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary) });
+					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary), terrain: reliefUrl() });
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
@@ -241,6 +271,10 @@
 					if (e.sourceId === 'basemap' && !tilesNote) {
 						tilesNote = true;
 						for (const id of basemapLayerIds(style)) if (m.getLayer(id)) m.removeLayer(id);
+					} else if (e.sourceId === TERRAIN_SOURCE && !reliefFailed) {
+						reliefFailed = true;
+						if (m.getLayer(RELIEF_LAYER)) m.removeLayer(RELIEF_LAYER);
+						onreliefError?.();
 					} else if (/webgl/i.test(e.error?.message ?? '')) {
 						status = 'failed';
 					}
@@ -311,6 +345,13 @@
 		void quaternaries;
 		void pickedQuaternary;
 		syncOverlay();
+	});
+
+	// The Relief layer turned on or off.
+	$effect(() => {
+		void relief;
+		void status;
+		untrack(syncRelief);
 	});
 
 	// Selecting in the list frames the feature (instantly under prefers-reduced-motion).

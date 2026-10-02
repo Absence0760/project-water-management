@@ -23,6 +23,7 @@ import type { DeclaredUncertaintyRule, OptionChange, ResolvedEnsembleOptions } f
 import type { PairedSummary } from '../uncertainty/paired';
 import type { ApplicantPrompts } from './prompts';
 import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
+import type { EvidenceAuthorisedImpact } from './authorised';
 
 /**
  * Bumped whenever the document's shape or a rule that builds it changes; a pack records it.
@@ -72,8 +73,30 @@ import type { LocalityGeometry, LocalityMapData } from '../geo/localityMap';
  * the SVG drawn from them (geo/localityMap.ts), so a pack freezes the figure and reproduce:pack draws
  * it again. Null when the project has no map features; absent from a pack drafted before it, whose
  * § 1 says the figure isn't part of it.
+ * evidence-13: the responsible authority (163_licensing_authority; provisional position, pre-counsel
+ * research, 2026-10-01): the identity block names the project's authority ("For: …",
+ * `identity.authority`) and whether it endorsed the baseline (`identity.baseline.endorsement`), and
+ * page 1 flags "Baseline not endorsed by the responsible authority" (`notEndorsed`) when it hasn't.
+ * § 4's decided applications carry the Act's outcome words (licence_issued, licence_refused,
+ * application_rejected, not_considered); a pack drafted before keeps its frozen approved /
+ * approved_with_conditions, which the report still words. A pack drafted before evidence-13 has
+ * neither field: its identity block says nothing about the authority, and it has no such flag.
+ * evidence-14: both impact bases (licensing build item 8; provisional position, pre-counsel research,
+ * 2026-10-01): page 1's licence impact board against **full authorised use**
+ * (`licenceImpactAuthorised`, evidence/authorised.ts), the baseline and the application both run with
+ * every holder at their registered volume, with the authorised volume's mix by how it is held
+ * (licence or verified existing lawful use, against registration, claimed use, general authorisation
+ * and Schedule 1); it is the headline, and the board against modelled use comes second. When there is
+ * none, a fixed row says why (not run, no registered volumes, or run on another engine or with other
+ * outcome settings). A pack drafted before it has no such board, and says so.
+ * evidence-15: § 5 names only the applicant's own units (decision D3, provisional position,
+ * pre-counsel research 2026-10-01): every other unit's registered volume and modelled use is
+ * one "Other registered users (n units)" total per water source (`EvidenceAllocationUnit.aggregate`),
+ * left out when fewer than FARMER_K (5) units hold that source (`othersLeftOut`). Baseline evidence
+ * has no applicant, so every unit is in the totals. The page-1 row still counts unit-years over the
+ * band per unit (`unitYears`). A pack drafted before evidence-15 names every unit.
  */
-export const EVIDENCE_REPORT_VERSION = 'evidence-12';
+export const EVIDENCE_REPORT_VERSION = 'evidence-15';
 
 // ---------------------------------------------------------------------------
 // What the backend reads
@@ -165,6 +188,23 @@ export interface EvidenceEnsembleInput {
 	paired: PairedSummary | null;
 }
 
+/** The project's responsible authority (settings.responsibleAuthority, 163; evidence-13). */
+export interface EvidenceAuthority {
+	name: string;
+	/** dws: the Department of Water and Sanitation; cma: a catchment management agency with the power. */
+	kind: 'dws' | 'cma';
+	/** '' = not given. */
+	office: string;
+}
+
+/** A member acting for the responsible authority endorsed the baseline's publication (163; evidence-13). */
+export interface EvidenceEndorsement {
+	endorsedAt: string;
+	/** Display name; null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
+}
+
 /** The project's publication (022_publication) of a run, the baseline's context (WP-2.3). */
 export interface EvidencePublication {
 	runId: string;
@@ -201,7 +241,7 @@ export interface EvidenceOtherApplicationInput {
 	scenarioId: string;
 	scenarioName: string;
 	status: 'submitted' | 'decided';
-	/** The assessor's outcome, when decided ('approved' | 'approved_with_conditions'). */
+	/** The authority's outcome, when decided: 'licence_issued' (the only decided outcome the table takes; evidence-13; 'approved' or 'approved_with_conditions' in a pack drafted before). */
 	outcome: string | null;
 	runId: string;
 	runCreatedAt: string;
@@ -267,6 +307,10 @@ export interface EvidenceInput {
 	nominations: EvidenceNomination[];
 	/** The current publication and the one before it, when there are any. */
 	publication: { current: EvidencePublication | null; previous: EvidencePublication | null };
+	/** The project's responsible authority (evidence-13); null or absent when it names none. */
+	authority?: EvidenceAuthority | null;
+	/** The newest endorsement of a publication of the baseline run (evidence-13); null or absent when none. */
+	baselineEndorsement?: EvidenceEndorsement | null;
 	/** Every ensemble started on the baseline, and every paired ensemble on the application run, newest first. */
 	ensembles: { baseline: EvidenceEnsembleInput[]; paired: EvidenceEnsembleInput[] };
 	/** diffInputs(baseline, application), with stored values; [] for baseline evidence. */
@@ -285,6 +329,12 @@ export interface EvidenceInput {
 	liability: { methodology: MethodologyVersion; limitations: readonly Limitation[]; errata: readonly Erratum[]; disclaimerVersion: string };
 	/** What page 1's licence impact by year class reads (application reports only); absent or null, the report says it wasn't built. */
 	impact?: EvidenceImpactInput | null;
+	/**
+	 * The full-authorised-use board (evidence-14, evidence/authorised.ts) as the backend found it for the
+	 * application run: built by an editor's POST …/authorised-impact, or why not. Absent or null on an
+	 * application report = not built.
+	 */
+	authorisedImpact?: EvidenceAuthorisedImpact | null;
 	/** The project's map features as they are now (152 map_feature, under the reader's RLS), for § 1's locality map (evidence-12); absent or [] = none. */
 	mapFeatures?: EvidenceMapFeatureInput[] | null;
 }
@@ -771,8 +821,15 @@ export interface EvidenceCapYears {
 
 /** A farm or water user with a registered volume in either run: by its unit (node) name, never the holder's (D3). */
 export interface EvidenceAllocationUnit {
+	/** The node; `others:<source>` for a total of other units (evidence-15). */
 	nodeId: string;
 	name: string;
+	/**
+	 * evidence-15: this row is the total of this many units that aren't the
+	 * applicant's, on its one water source (name "Other registered users (n
+	 * units)"); absent for a unit of its own.
+	 */
+	aggregate?: number;
 	kind: 'farm' | 'user';
 	/** One of the applicant's own units. */
 	own: boolean;
@@ -796,6 +853,18 @@ export interface EvidenceAllocations {
 	/** Registered volumes matched to no unit of the run, or to one the run lacks: counted, not compared. */
 	notMatchedA: number;
 	notMatchedB: number | null;
+	/**
+	 * evidence-15: units other than the applicant's with a volume on a water
+	 * source fewer than 5 such units hold, so left out of § 5 even as a total
+	 * (D3). Absent from an older pack's document.
+	 */
+	othersLeftOut?: number;
+	/**
+	 * evidence-15: whole unit-years judged and above the band, per run, over
+	 * every unit before the totals (the page-1 row's figures). Absent from an
+	 * older pack's document.
+	 */
+	unitYears?: { overA: number; judgedA: number; overB: number | null; judgedB: number | null };
 }
 
 /** Why the licence impact board couldn't be built; the page words it. */
@@ -847,7 +916,11 @@ export interface EvidenceReport {
 			/** Where the run stands against the project's publication (WP-2.3), persona A: "baseline provenance". */
 			published: 'this' | 'other' | 'none';
 			publishedAt: string | null;
+			/** The responsible authority's endorsement of this baseline (evidence-13); null = not endorsed. Absent from an older pack's document. */
+			endorsement?: EvidenceEndorsement | null;
 		};
+		/** Whom the report is for: the project's responsible authority (evidence-13); null when it names none. Absent from an older pack's document. */
+		authority?: EvidenceAuthority | null;
 		application: {
 			runId: string;
 			label: string;
@@ -914,6 +987,12 @@ export interface EvidenceReport {
 	allocations: EvidenceAllocations;
 	/** Page 1's licence impact by year class (issue #53 R7, evidence-5); null for baseline evidence. Absent from an older pack's document. */
 	licenceImpact?: EvidenceLicenceImpact | null;
+	/**
+	 * Page 1's headline board against full authorised use (evidence-14, evidence/authorised.ts): the
+	 * full-allocation pair's board and the authorised volume's mix, or why there is none. null for
+	 * baseline evidence; absent from a pack drafted before evidence-14.
+	 */
+	licenceImpactAuthorised?: EvidenceAuthorisedImpact | null;
 	/** § 6: the applicant's demand objects and their sources (evidence-9); null for baseline evidence. Absent from an older pack's document, which has no § 6. */
 	demandObjects?: EvidenceDemandObjects | null;
 	/**

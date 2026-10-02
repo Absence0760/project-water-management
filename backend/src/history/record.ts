@@ -166,6 +166,9 @@ export type AuditKind =
 	| 'member.removed'
 	| 'member.role'
 	| 'member.party'
+	| 'member.specialist'
+	// An owner marked or unmarked a member as acting for the responsible authority (163).
+	| 'member.authority'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'
@@ -175,6 +178,8 @@ export type AuditKind =
 	// The season decision log (issue #119, publish/decision.ts): the notice, window, run and per-farm figures.
 	| 'publication.published'
 	| 'publication.notice_changed'
+	// A member acting for the responsible authority endorsed a published baseline (163).
+	| 'publication.endorsed'
 	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
 	| 'outlook.published'
 	| 'outlook.unpublished'
@@ -199,15 +204,20 @@ export type AuditKind =
 	| 'report_schedule.configured'
 	| 'scenario.created'
 	| 'scenario.changed'
+	| 'scenario.participation_exported'
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	| 'registration.checked'
+	| 'registration.requirement'
 	// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): ids, version, short code and hash; a withdrawal its reason.
 	| 'pack.drafted'
 	| 'pack.deleted'
 	| 'pack.issued'
 	| 'pack.superseded'
 	| 'pack.withdrawn'
+	// The issued pack sent to the members acting for the responsible authority (licensing build item 13): ids, the authority's name, whether a note went.
+	| 'pack.sent'
 	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
 	| 'calibration_rules.signed_off'
 	| 'calibration_rules.sign_off_withdrawn'
@@ -216,6 +226,11 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// Whether viewers read each registered volume (162, D3): { on }.
+	| 'allocation.viewer_units'
+	// The licence record (161_licence_record): the outcome an owner recorded (with its dates and reason), or a review confirmed.
+	| 'licence.outcome'
+	| 'licence.confirmed'
 	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
 	| 'map.imported'
 	| 'map.feature_created'
@@ -229,6 +244,10 @@ export type AuditKind =
 	| 'scenario.decided'
 	| 'scenario.shared'
 	| 'scenario.unshared'
+	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.
+	// Ids, op indexes and the rules' kinds; never the line, the real words or the answer.
+	| 'application.question_asked'
+	| 'application.question_answered'
 	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
 	| 'alert_rules.changed'
 	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14

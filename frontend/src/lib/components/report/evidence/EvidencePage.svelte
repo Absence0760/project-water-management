@@ -99,6 +99,25 @@
 	/** The issued pack of this application (or of the baseline evidence) a new pack becomes a new version of. */
 	const current = $derived(packs ? issuedOf(packs, scenarioId) : null);
 	const canCreate = $derived(hasRole(project?.role, 'editor') && !!report && !report.refused && report.issuable && packs !== null);
+	// --- page 1's board against full authorised use (licensing build item 8) ---
+	const authorised = $derived(report?.licenceImpactAuthorised ?? null);
+	/** An editor runs the full-allocation pair when the board is missing or out of date (two model runs, a few seconds). */
+	const canRunAuthorised = $derived(hasRole(project?.role, 'editor') && !!authorised && (authorised.status === 'notBuilt' || authorised.status === 'stale'));
+	let runningAuthorised = $state(false);
+	let authorisedError = $state<string | null>(null);
+	async function runAuthorised() {
+		if (!runId || runningAuthorised) return;
+		runningAuthorised = true;
+		authorisedError = null;
+		try {
+			await api.evidence.authorisedImpact(projectId, runId);
+			report = await api.evidence.report(projectId, runId);
+		} catch (e) {
+			authorisedError = e instanceof Error ? e.message : String(e);
+		} finally {
+			runningAuthorised = false;
+		}
+	}
 	async function createPack() {
 		if (!runId || creating) return;
 		creating = true;
@@ -208,6 +227,23 @@
 				{/if}
 				{#if createError}<p class="alert alert-error" role="alert">{createError}</p>{/if}
 			</section>
+			{#if canRunAuthorised || authorisedError}
+				<section class="board no-print" aria-labelledby="ev-authorised-h" data-testid="evidence-authorised-run">
+					<p id="ev-authorised-h" class="board-h">Against full authorised use</p>
+					<p class="small muted">
+						Page 1’s headline board runs the baseline and the application again with every holder at their full registered volume.
+						{authorised?.status === 'stale' ? 'The one there is out of date.' : 'It hasn’t been run for this application run yet.'} A pack drafted now freezes what page 1 shows.
+					</p>
+					{#if canRunAuthorised}
+						<p>
+							<button type="button" class="btn" disabled={runningAuthorised} onclick={runAuthorised}>
+								{runningAuthorised ? 'Running both at full authorised use…' : authorised?.status === 'stale' ? 'Run it again' : 'Run at full authorised use'}
+							</button>
+						</p>
+					{/if}
+					{#if authorisedError}<p class="alert alert-error" role="alert">{authorisedError}</p>{/if}
+				</section>
+			{/if}
 			<Lazy load={loadReport}>
 				{#snippet children(EvidenceReportView)}
 					<EvidenceReportView

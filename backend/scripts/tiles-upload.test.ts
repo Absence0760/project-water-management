@@ -1,17 +1,18 @@
 // The local basemap upload (tiles-upload.ts): the URLs it prints for the
-// frontend, and which files of a fonts directory become glyph objects
-// (#326 A6): only `<fontstack>/<n>-<n+255>.pbf` and the licence; and the
-// env lines `dev:tiles:up` writes into the frontend's .env.development.local.
+// frontend (basemap, relief, glyphs), which files of a fonts directory become
+// glyph objects (#326 A6): only `<fontstack>/<n>-<n+255>.pbf` and the licence;
+// and the env lines `dev:tiles:up` writes into the frontend's .env.development.local.
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, tilesUrl, withEnv } from './tiles-upload.js';
+import { fontObjects, glyphsUrl, isRangeFile, publicReadPolicy, terrainUrl, tilesEnv, tilesUrl, withEnv } from './tiles-upload.js';
 
 describe('tiles-upload', () => {
 	it('prints localhost URLs for the tiles and the glyphs, braces kept for MapLibre', () => {
 		expect(tilesUrl('http://127.0.0.1:9002/')).toBe('http://localhost:9002/tiles/south-africa.pmtiles');
 		expect(glyphsUrl('http://127.0.0.1:9002')).toBe('http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf');
+		expect(terrainUrl('http://127.0.0.1:9002')).toBe('http://localhost:9002/tiles/terrain.pmtiles');
 	});
 
 	it('lets anyone GET an object and nothing else', () => {
@@ -55,5 +56,10 @@ describe('tiles-upload', () => {
 	it('writes a new env file from nothing, and sets the last of a repeated key', () => {
 		expect(withEnv('', { A: '1' })).toEqual({ changed: true, text: 'A=1\n' });
 		expect(withEnv('A=0\nB=2\nA=9', { A: '1' }).text).toBe('A=0\nB=2\nA=1\n');
+	});
+
+	it('adds the relief URL to the env lines only when asked (the DEM is optional)', () => {
+		expect(Object.keys(tilesEnv(false))).toEqual(['PUBLIC_TILES_URL', 'PUBLIC_TILES_GLYPHS_URL']);
+		expect(tilesEnv(true)).toEqual({ ...tilesEnv(false), PUBLIC_TERRAIN_URL: terrainUrl() });
 	});
 });

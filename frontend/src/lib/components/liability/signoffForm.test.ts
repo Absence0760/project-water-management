@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PACK_SIGNER_PUBLIC, registrationAdvice, scrolledToEnd, shortHash, signoffBlockers, statementEngines, type SignoffFields } from './signoffForm';
+import { PACK_SIGNER_PUBLIC, registrationAdvice, registrationHeading, SIGNOFF_KIND_LABEL, SIGNOFF_NOT_A_SIGNATURE, scrolledToEnd, shortHash, signoffBlockers, statementEngines, type SignoffFields } from './signoffForm';
 
 const IDS = ['identity', 'competence', 'conflict', 'inputs', 'calibration', 'ewr', 'works', 'assurance', 'plausibility', 'limitations'];
 const full: SignoffFields = {
@@ -91,6 +91,21 @@ describe('statementEngines (a run’s statement, or a pack’s two runs)', () =>
 	});
 
 	it('tells a pack’s signer, before signing, that what they sign with is public on the verify page', () => {
-		for (const what of ['full name', 'registration', 'publicly', 'verify page', 'even if it is withdrawn']) expect(PACK_SIGNER_PUBLIC).toContain(what);
+		for (const what of ['full name', 'registration', 'publicly', 'verify page', 'even if the pack is withdrawn', 'three years after the licence expires', 'the pack is deleted']) expect(PACK_SIGNER_PUBLIC).toContain(what);
+	});
+});
+
+// Licensing positions item 9 (167_signers, build items 16 and 17).
+describe('what a sign-off says it is', () => {
+	it('is not the signature the authority requires', () => {
+		expect(SIGNOFF_NOT_A_SIGNATURE).toMatch(/electronic professional statement/);
+		expect(SIGNOFF_NOT_A_SIGNATURE).toMatch(/not your signature on any form or report the authority requires/);
+	});
+	it('names who signed as what, and says "checked" only from a recorded check', () => {
+		expect(SIGNOFF_KIND_LABEL.review).toBe('Reviewed for the responsible authority');
+		expect(registrationHeading(null, (d) => d)).toBe('Registration (self-declared)');
+		expect(registrationHeading({ checkedAt: '2026-10-01', checkedByOrg: 'Rooikloof WUA' }, (d) => d)).toBe(
+			'Registration (checked against the register by Rooikloof WUA, 2026-10-01)'
+		);
 	});
 });

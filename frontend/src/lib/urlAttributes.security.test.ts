@@ -80,7 +80,12 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	settingsHref: { why: 'team page: withParam(page.url, …)', in: ['routes/teams/[id]/+page.svelte'] },
 	back: {
 		why: 'EvidencePage, the pack pages: `${base}/projects/${id}?tab=scenarios&scenario=` + encoded id, or "?tab=runs&run=" + encoded id',
-		in: ['lib/components/report/evidence/EvidencePage.svelte', 'routes/projects/[id]/packs/[packId]/+page.svelte', 'routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte']
+		in: [
+			'lib/components/report/evidence/EvidencePage.svelte',
+			'routes/projects/[id]/packs/[packId]/+page.svelte',
+			'routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte',
+			'routes/projects/[id]/scenarios/[sid]/participation/+page.svelte'
+		]
 	},
 	applicantPackHref: {
 		why: 'BUILDER: "{base}/projects/" + encoded project id + "/scenarios/" + encoded scenario id + "/packs/" + encoded pack id (packs/applicantPack.ts; a pack id the API maps as a UUID or drops)',
@@ -109,8 +114,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'register.registerUrl': {
-		why: 'SignoffSection, the public verify page: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
-		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte']
+		why: 'SignoffSection, the public verify page, the registration checks panel: liability/registration.ts constant https:// link to the ECSA or SACNASP public register',
+		in: ['lib/components/liability/SignoffSection.svelte', 'routes/verify/[[code]]/+page.svelte', 'lib/components/project/RegistrationChecksPanel.svelte']
 	},
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	FAO56_TABLE5_URL: { why: 'crops/loadFactors.ts constant https:// link to FAO-56 ch. 3 (Table 5)', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
@@ -140,8 +145,13 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 		why: 'an issued evidence pack’s PDF download: PUBLIC_API_URL + an encoded path of the project and pack ids (lib/api/client.ts packs.pdfUrl); the API answers 302 to a signed URL of its own (119_pack_render)',
 		in: ['routes/projects/[id]/packs/[packId]/+page.svelte']
 	},
+	'api.scenarios.packCopyUrl': {
+		why: 'an applicant’s printable copy of an issued pack (165_applicant_copy): PUBLIC_API_URL + an encoded path of the project, application and pack ids (lib/api/client.ts scenarios.packCopyUrl); the API answers 302 to a signed URL of its own',
+		in: ['routes/projects/[id]/scenarios/[sid]/packs/[packId]/+page.svelte']
+	},
 	'current.url': { why: 'the report PDF link: serverPdf.ts reportsApi.get sets it from api.reports.pdfUrl (PUBLIC_API_URL + an encoded path), never from the response (serverPdf.test.ts)', in: ['lib/components/report/ServerPdf.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	'api.farm.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/farm/[projectId]/+page.svelte'] },
+	'api.scenarios.participationCsvUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['routes/projects/[id]/scenarios/[sid]/participation/+page.svelte'] },
 	'api.allocations.exportUrl': { why: 'api client: PUBLIC_API_URL (build config) + an encoded path', in: ['lib/components/allocations/AllocationsTab.svelte'] },
 	// data: URLs built in code, a synthetic CSV example with a `download` attribute (never user text, never HTML).
 	exampleHref: { why: 'EWR editors: `data:text/csv;charset=utf-8,` + encodeURIComponent(synthetic CSV)', in: ['lib/components/settings/EwrHighFlowsEditor.svelte', 'lib/components/settings/EwrRuleTablesEditor.svelte'] },

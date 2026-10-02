@@ -5,20 +5,31 @@
 	codes drawn are listed here as buttons (the map is never the only place to
 	read them; a code picked here or on the map is drawn heavier), with the
 	dataset they come from and, for the repo's invented one, that it is
-	synthetic. The map labels them only when glyphs are configured.
+	synthetic. The map labels them only when glyphs are configured. With a DEM
+	configured (PUBLIC_TERRAIN_URL, docs/maps.md § Relief) a Relief toggle
+	shades the land (`layers=relief`); without one it isn't offered.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { withLayer } from './mapLayers';
+	import { type MapLayer, withLayer } from './mapLayers';
 	import { quaternaryColour } from './mapStyle';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 
-	let { quaternaries, dark }: { quaternaries: QuaternaryLayer; dark: boolean } = $props();
+	let {
+		quaternaries,
+		dark,
+		relief = null
+	}: {
+		quaternaries: QuaternaryLayer;
+		dark: boolean;
+		/** The Relief layer: whether it is on and whether its DEM failed to load. Null: no DEM configured, no toggle. */
+		relief?: { on: boolean; failed: boolean } | null;
+	} = $props();
 	const uid = $props.id();
 
-	function toggle(on: boolean) {
-		void goto(withLayer(page.url.search, 'quaternaries', on), { noScroll: true, keepFocus: true });
+	function toggle(layer: MapLayer, on: boolean) {
+		void goto(withLayer(page.url.search, layer, on), { noScroll: true, keepFocus: true });
 	}
 
 	const answer = $derived(quaternaries.answer);
@@ -33,7 +44,7 @@
 <section class="layers" aria-labelledby="{uid}-h" data-testid="map-layers">
 	<h2 class="layers-h" id="{uid}-h">Layers</h2>
 	<label class="toggle">
-		<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle(e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
+		<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
 		<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
 		Quaternary catchments
 	</label>
@@ -61,6 +72,18 @@
 			{/if}
 		</div>
 	{/if}
+	{#if relief}
+		<label class="toggle">
+			<input type="checkbox" checked={relief.on} onchange={(e) => toggle('relief', e.currentTarget.checked)} data-testid="map-layer-relief" />
+			<span class="swatch relief-swatch" aria-hidden="true"></span>
+			Relief
+		</label>
+		{#if relief.on && relief.failed}
+			<p class="err small" role="alert" data-testid="map-relief-error">The relief couldn’t be loaded, so the map is drawn without it.</p>
+		{:else if relief.on}
+			<p class="muted small" data-testid="map-relief-note">Hills shaded from the Copernicus 30 m elevation model.</p>
+		{/if}
+	{/if}
 </section>
 
 <style>
@@ -84,6 +107,16 @@
 		height: 0;
 		border-top: 2px dashed var(--qt);
 		flex: none;
+	}
+	/* A light-to-dark ramp: the shading the relief draws. */
+	.relief-swatch {
+		height: 0.8rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 2px;
+		background: linear-gradient(135deg, var(--surface) 20%, var(--text-muted) 100%);
+	}
+	.layers > p {
+		margin: 0;
 	}
 	.qt p {
 		margin: 0;

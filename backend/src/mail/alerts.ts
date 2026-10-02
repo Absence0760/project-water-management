@@ -19,6 +19,13 @@
 //     alert (staff only) says an auto run published its figures unchecked; a restriction
 //     notice says it is the WUA's own words. The WUA's operational alerts
 //     (stale or failing feeds, dead jobs) are no model figure, so they get none.
+//
+// Service messages only: no product announcement, no "try the new feature",
+// no upsell, no newsletter line, ever. Alerts rest on the organisation's
+// legitimate interest with the unsubscribe as the objection (POPIA s11(1)(f),
+// s11(3)); one promotional line would make the email direct marketing (s1,
+// s69), which needs opt-in consent. alerts.content.test.ts holds every link
+// to an allowlist (docs/security.md § Personal information).
 import { language } from '@water-management/engine/languages';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import type { AlertKind } from '../alerts/rules.js';

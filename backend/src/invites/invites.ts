@@ -28,7 +28,8 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { maskEmail, recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
-import { farmerInviteMail, inviteMail, siteLink, sitePage, type InviteMode, type Locale } from '../mail/templates.js';
+import { farmerInviteMail, inviteMail, siteLink, sitePage, type InviteContact, type InviteMode, type Locale } from '../mail/templates.js';
+import { projectPrivacyContact, toPrivacyContact } from '../teams/privacyContact.js';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { requireTeamRole } from '../teams/access.js';
@@ -203,8 +204,9 @@ export async function inviteByEmail(
 		mode = 'confirm';
 	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
+	const contact = await inviteContact(db, kind, targetId);
 	if (farmer) {
-		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms }, mode, locale);
+		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms, contact }, mode, locale);
 		return { invite: toInvite(row), mail };
 	}
 	const mail = inviteMail(
@@ -212,9 +214,25 @@ export async function inviteByEmail(
 		link,
 		row.invited_by_name,
 		{ kind, name: named[0]?.name ?? '', role },
-		mode
+		mode,
+		contact
 	);
 	return { invite: toInvite(row), mail };
+}
+
+/**
+ * Who decides about the information the invite concerns (POPIA s18(1)(b), 168_team_privacy_contact), for the
+ * email: a project's team's contact (the inviter is an owner, so app_project_privacy_contact answers), or the
+ * invited team's own (the inviter is its admin, so team_select shows the row). null when none is set.
+ */
+async function inviteContact(db: Db, kind: InviteKind, targetId: string): Promise<InviteContact | null> {
+	if (kind === 'project') return projectPrivacyContact(db, targetId);
+	const { rows } = await db.query<{ name: string; privacy_contact_name: string | null; privacy_contact_email: string | null; privacy_contact_postal: string | null }>(
+		'SELECT name, privacy_contact_name, privacy_contact_email, privacy_contact_postal FROM team WHERE id = $1',
+		[targetId]
+	);
+	const c = rows[0] ? toPrivacyContact(rows[0]) : null;
+	return c ? { organisation: rows[0]!.name, ...c } : null;
 }
 
 /**

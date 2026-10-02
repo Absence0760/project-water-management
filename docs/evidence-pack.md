@@ -35,7 +35,16 @@ applicant's own copy of their application's issued packs, with share links
 re-run of both runs from the stored bundle after issue, shown on the pack's
 page ([§ Reproduction](#reproduction), 154_pack_reproduce, 2026-10-01); and § 1's site
 locality map, frozen with its SVG's hash ([§ The locality map](#the-locality-map),
-report format `evidence-12`, 2026-10-01). What is left is
+report format `evidence-12`, 2026-10-01); and whom the report is for and
+whether the responsible authority endorsed its baseline
+([§ The responsible authority](#the-responsible-authority), report format
+`evidence-13`, 163_licensing_authority, 2026-10-01); page 1's licence
+impact against full authorised use as well as modelled use
+([§ Both impact bases](#both-impact-bases), report format `evidence-14`,
+2026-10-01); and § 5 naming only the
+applicant's own units, every other unit's registered volume and use as
+totals at 5 or more units (report format `evidence-15`, decision D3,
+2026-10-01; [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)). What is left is
 tracked in [followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 ## What a pack holds
@@ -342,6 +351,99 @@ issued pack's bundle reproduces the figure),
 to the manifest's `svgSha256`) and `evidence-pack-pdf.spec.ts` (the server
 PDF of a pack with a map).
 
+## The responsible authority
+
+Report format `evidence-13` (163_licensing_authority; provisional position,
+pre-counsel research, 2026-10-01; D1 and D14 in
+[step-3-licensing.md § 11](./roadmap/step-3-licensing.md)). Under the
+National Water Act only the responsible authority decides a licence and
+decides what evidence it accepts (s41(2)), so the report says whom it is
+for and whether that authority accepted the baseline:
+
+- **For** (`identity.authority`, the identity block's *For* row): the
+  project's `settings.responsibleAuthority` (name, DWS or a CMA, office), or
+  *No responsible authority named*.
+- **The baseline's endorsement** (`identity.baseline.endorsement`, under
+  *Baseline*): the newest endorsement of any publication of the baseline
+  run, by a member acting for the authority (`POST
+  …/publication/:pubId/endorse`): when, by whom and its note. Without one,
+  the identity block says *Not endorsed by the responsible authority* and
+  page 1 carries a caution flag, `notEndorsed`, *Baseline not endorsed by
+  the responsible authority.* (a fixed row: absence is printed, never
+  omitted, G6).
+- **§ 4's decided applications** carry the authority's outcome words; only
+  `licence_issued` counts among the other applications on the baseline (a
+  pack drafted before keeps its frozen `approved` /
+  `approved_with_conditions`, which it still words).
+
+Both are part of the report, so a pack freezes them when it is drafted: an
+authority named, or an endorsement made, after a pack is issued changes
+the live report, never the pack or its hash (`evidence/packs.db.test.ts`).
+A pack drafted before `evidence-13` has neither field; its identity block
+says nothing about the authority and it has no such flag.
+
+### Both impact bases
+
+Report format `evidence-14` (licensing build item 8; provisional position,
+pre-counsel research, 2026-10-01; D15 in
+[step-3-licensing.md § 11](./roadmap/step-3-licensing.md)). Page 1 judges
+the application twice, both labelled:
+
+- **Against full authorised use** (the headline, `licenceImpactAuthorised`):
+  the baseline and the application both run with every holder at their
+  registered volume (`allocationMode: 'fullAllocation'`). NWA s27(1)(a) and
+  (f) have the authority weigh existing lawful uses and the effect on other
+  users, and s29(1)(a)(iii) and R267's "cumulative impact" protect existing
+  *and potential* use: a proposal that passes only because other holders
+  don't take their full entitlement would hurt them as soon as they do.
+  Beside it, the authorised volume's mix by how it is held: a licence
+  (s40) and an existing lawful use verified under s35 are entitlements; a
+  WARMS registration, a claimed existing lawful use, a general authorisation
+  and Schedule 1 use are not, and the table says which.
+- **Against modelled current use** (`licenceImpact`, as before): the
+  baseline as it ran, so "existing use" is what the model found holders
+  use; it answers what changes tomorrow.
+
+The pair is two model runs, which a report request (a viewer's GET, a pack
+draft) must not carry, so an editor runs it from the evidence report
+(**Run at full authorised use**, `POST …/runs/:runId/authorised-impact`):
+the board the engine builds over it, the mix (from the allocations' rows as
+they are then) and when and on which engine are kept for that application
+run (`authorised_impact`, the newest only); the pair's runs aren't stored.
+The report reads it only when it was run on the baseline's engine with the
+project's outcome settings as they are now; otherwise, or without one, or
+when the baseline ran with no registered volumes, a fixed row says which
+(*Not assessed: …*, never left out). A pack freezes whichever page 1 had
+when it was drafted; one drafted before `evidence-14` has no such board and
+says so. Tests: `backend/src/evidence/authorised-impact.db.test.ts`,
+`packages/engine/src/evidence/authorised.test.ts`,
+`e2e/tests/evidence-allocations.spec.ts`.
+
+### Sending it to the authority
+
+Licensing build item 13 (provisional position, pre-counsel research,
+2026-10-01). The pack's PDF and reproduction bundle name every water user,
+so they go where s41(2) says the evidence goes, to the authority that
+decides, not through the applicant (whose printable copy withholds the
+others' figures, [§ Applicants](#applicants)). On an issued pack's page an
+editor picks **Send to the authority…** (`POST …/packs/:packId/send`): the
+members the project's owner marked as acting for the responsible authority
+(editors and owners with `acts_for_authority`, 163), all of them or those
+picked, never the sender, each get an email (`pack_sent`) naming the pack,
+its version, code and the authority, with the editor's note. The email
+holds **no file and no download link**: it links the pack's page, where
+the member, signed in and still an editor, downloads the PDF and bundle
+through the usual one-minute signed GET, and the public verify page, so a
+forwarded email opens nothing. Only an issued pack is sent (a superseded or
+withdrawn one is `409`), and an id that isn't a member acting for the
+authority is one refusal (`422`). The history records `pack.sent` with the
+recipients' ids, the authority's name and whether a note went (never the
+note). An address outside the app (the authority's general inbox) is not
+offered: settings.responsibleAuthority holds none, and a link that works
+without signing in would be a new way out of the app for every unit's
+figures ([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+Tests: `backend/src/evidence/pack-send.db.test.ts`, `e2e/tests/evidence-pack.spec.ts`.
+
 ## What is hashed, and what isn't
 
 The **manifest hash** is the SHA-256 of the manifest's RFC 8785 text
@@ -400,10 +502,15 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   current list. As for a run, the signer sends back the statement's hash and
   the server refuses one that isn't the current statement's. Only a draft is
   signed.
+  Who signs, the registration check and the fresh code are below
+  ([§ Signing](#signing)).
 - **Issue.** An editor issues a signed draft. The server checks, in one
   transaction: it is a draft; the stored manifest still hashes to its
-  recorded hash; the frozen report may be issued; there is a sign-off of the
-  *current* pack statement (a new known limitation or erratum since the
+  recorded hash; the frozen report may be issued; there is a `specialist`
+  sign-off of the *current* pack statement (a `review` adds to it, never
+  replaces it); while the project requires it, each such signer's
+  registration has a current check (`409 registration_not_checked`,
+  naming them; [§ Signing](#signing)) (a new known limitation or erratum since the
   signature means signing again); both runs' server stamps still match their
   rows ([security.md § Run stamps](./security.md)); no erratum found since
   the draft was made applies to either run's engine or its fit's (the pack's
@@ -436,8 +543,9 @@ draft ──issue──▶ issued ──(a new version is issued)──▶ super
   authority, not the team. A signed draft that shouldn't be issued is withdrawn,
   not deleted.
 - **Delete.** Only an unsigned draft is deleted. An issued (or superseded, or
-  withdrawn) pack is never deleted, and a project that has one can't be
-  deleted either, so its verify link keeps answering.
+  withdrawn) pack is never deleted by the app, and a project that has one
+  can't be deleted either, so its verify link keeps answering until the
+  licence record closes ([§ Retention](#retention)).
 
 **Who.** Editors and owners draft, sign, issue, supersede, withdraw and
 delete drafts. Viewers read packs (an application's only when they can read
@@ -450,6 +558,105 @@ share an issued pack by link ([§ Sharing and comments](#sharing-and-comments)).
 Each step is in the project's history: `pack.drafted`, `pack.issued`,
 `pack.superseded`, `pack.withdrawn`, `pack.deleted`, and `signoff.created`
 naming the pack.
+
+## Signing
+
+`167_signers`; licensing positions item 9 (provisional position,
+pre-counsel research, 2026-10-01). The licensing evidence is the
+**applicant's** (NWA s41(2)(a)(ii)), so the host's editors signing it would
+make the authority's side its author.
+
+- **The applicant's specialist signs.** The project owner ticks
+  "Specialist for this party" on a member of an applying party
+  (`project_member.specialist`, needs a party; a party change ends it): the
+  registered professional the applicant appointed. They sign the **draft**
+  packs of their party's applications (`app_pack_specialist`: the
+  application's owner is in the same party), from the Application panel's
+  "To sign as the applicant's specialist" list (the applicant shares the
+  application with them, as with any consultant). They read no pack row
+  (112): `app_specialist_pack` gives the sign-off what it needs (lifecycle,
+  the runs' identity, stamp and digest), never the manifest. Editors still
+  draft and issue, and may still sign.
+- **Kinds.** `signoff.kind`: `specialist` ("Specialist for the
+  applicant": the professional statement issue needs) or `review`
+  ("Reviewed for the responsible authority": an editor's optional second
+  sign-off, never enough on its own). A specialist signs only as
+  `specialist`; a run's sign-off is always `specialist`. Verify and the
+  sign-off lists print the kind.
+- **The registration check.** Someone at the host looks the signer up on
+  the public SACNASP or ECSA register, and an owner, or an editor an owner
+  marked as acting for the responsible authority
+  (`project_member.acts_for_authority`, 163), records what they found on the
+  Project page's Registration checks panel
+  (`POST /projects/:id/members/:userId/registration-checks`,
+  `app_record_registration_check`; insert-only). A check is current for a
+  year, while it is the latest for that registration in that project and
+  says "registered". At issue each sign-off is bound to its signer's
+  current check (`signoff_registration_check`), and verify then says
+  "checked against the register by <org>, <date>"; every other
+  registration reads "self-declared". The app checks nothing itself, and
+  the operator never checks for the host: that would be an assurance the
+  Terms disclaim. While `project.require_registration_check` is on (the
+  owner's switch, on by default; `REGISTRATION_CHECK_REQUIRED=false` turns
+  enforcement off for the tests and the e2e server only, and Lambda refuses
+  it), issue waits until each `specialist` signer of the current statement
+  has a current check.
+- **A fresh code.** A sign-off, issuing and withdrawing need a code from the
+  authenticator within the last 10 minutes, and an authenticator before a
+  first sign-off ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+- **What the sign-off is.** The dialog and Terms §3 say: "This sign-off is
+  an electronic professional statement in this app. It is not your
+  signature on any form or report the authority requires; sign those as
+  the authority asks." (ECTA s13(1) would want an advanced electronic
+  signature wherever a law requires one.)
+
+Tests: `backend/src/evidence/specialist-signers.db.test.ts` (who may sign
+as what, each with its control; the check's writers, readers, currency and
+binding; verify; the owner's switch), `evidence/packs.db.test.ts` (issue
+refused until the signer is checked), `auth/stepUp.db.test.ts` (the fresh
+code), e2e `registration-checks.spec.ts`.
+
+## Retention
+
+Provisional position (pre-counsel research, 2026-10-01; not legal advice,
+and no counsel has approved it). An issued pack and a sign-off keep the names
+of the people who made and signed them after their accounts are deleted:
+the sign-off is the professional's own statement, and the manifest prints
+its makers under the hash the verify page checks (POPIA s14(1)(b), s14(6)(b);
+[security.md § Personal information](./security.md#personal-information-popia)).
+"The life of the licence record" is a date the project holds
+(161_licence_record, the Project page's **Licence record** panel, [api.md §
+Licence record](./api.md#licence-record)):
+
+- **Granted**: the licence's expiry date (NWA s28(1)(e), at most 40 years)
+  **+ 3 years**, for a professional-negligence claim on the assessment
+  (Prescription Act s11(d), s12(3)).
+- **Refused or withdrawn**: the decision date **+ 3 years** (PAJA's 180
+  days, Water Tribunal appeals and prescription).
+- **No outcome recorded**: a review every **5 years**, from the first pack
+  issued or run nominated (mirroring the NWA s28(1)(f) review interval).
+  The owners record the outcome, or confirm the record is still needed,
+  which sets the next review five years on.
+
+Owners record the outcome, with a reason (the decision letter); editors
+read it. Each change is in the history (`licence.outcome`,
+`licence.confirmed`). The worker's tick (`backend/src/licence/record.ts`)
+emails the owners and the operator (`OPERATOR_EMAIL`) when a review is due,
+on the due date and then a month apart, three times in all, and once when
+the closing date passes ("This licence record can now be deleted"). It
+**never deletes** a licence record: the operator deletes the project, its
+packs and their objects on the client's written confirmation
+([deployment.md § Runbooks](./deployment.md#runbooks), "A licence record
+past its closing date"). A signer is told this before signing
+(`PACK_SIGNER_PUBLIC`).
+
+A team the operator marks as keeping **public records** (`team.public_records`,
+a government body such as DWS or a CMA, National Archives and Records
+Service of South Africa Act s13(2)(a)) keeps its members' names in its
+projects' history after an account is deleted, and its projects and the
+team are deleted only after the client confirms its disposal
+(`team.records_disposal_confirmed_on`; operator agreement 3A.2). Off for
+every team; the operator sets it by SQL, never the app.
 
 ## The PDF
 
@@ -747,7 +954,10 @@ does.
 
 **Comments.** A pack note is `team` (whoever reads the pack) or
 `public_participation`: any member contributor and up posts one while the
-pack is issued and has a live link (`app_pack_commentable`); editors and the
+pack is issued and has a live link (`app_pack_commentable`), and anyone
+else signed in through the link itself, with no role in the project
+(166_public_participation, [scenarios.md § Sharing and
+comments](./scenarios.md#sharing-and-comments-wp-315)); editors and the
 comment's author always read it, other members while it is open, and once
 it was shared and is superseded or withdrawn (the record of a closed
 comment period). Farmers read and write none. Every edit is kept
@@ -795,8 +1005,8 @@ row; they read a projection the database builds (D2's recommended default,
 | --- | --- |
 | the standing, version, issue date, code, hashes, methodology, errata, the errata found since issue (132), signers | exactly what `GET /verify/:code` answers |
 | the river's rows and EWR sites, the paired change by month, the volume rows at 5 or more farm holders | exactly what a pack link shows ([§ Sharing and comments](#sharing-and-comments)), for every standing (the applicant is the pack's party, not the public) |
-| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, for the application's owned nodes its owner still links and the nodes its proposals add |
-| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the application's own units now, as the results view; when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
+| their own units: supply and reliability, baseline beside application, with the change and its band | § 4's users, **frozen at issue**: the units the pack's report counted as the applicant's (`users[].own`, hashed into the manifest), within the application's stored own nodes (frozen at submit), and the nodes its proposals add. A farm the applicant sells or unlinks afterwards stays theirs by name in this copy (164; provisional position, pre-counsel research, 2026-10-01: the copy belongs to the application, not to whoever holds the land now) |
+| the other farms and water users downstream of the application: "Farm 3", "Water user 1", its change in share of demand supplied in whole percentage points | § 4's users (135_pack_security), only those the applicant's results view lists (downstream of their own and added nodes in the application run's stored model, `downstreamOf`), under the anonymous names `/base` and the results view give them (`projectBaseForApplicant`), so the pack adds no unit, and no link between a name and a place, the applicant doesn't already have. The manifest holds no network, so the set comes from the run's stored model and the names from the frozen own units (as the results view names them while nothing changed hands); when the run's base is no longer a published run, none are shown and the view says why. Upstream and side-branch units never appear |
 
 No units at all when the report changed a baseline assumption (the figures
 that move with it could read another unit's values out, as for the
@@ -806,8 +1016,39 @@ flags and questions, the settings, model, input diff, series hashes,
 warnings or the applicant statement, and no person but the signers. **Not
 the PDF, the manifest or the bundle:** each carries the whole report, which
 is the assessors' copy (an applicant checks any copy they are handed on the
-verify page). An anonymised printable copy for the applicant is a follow-up
-([followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
+verify page).
+
+**Their printable copy** (165_applicant_copy; provisional position,
+pre-counsel research, 2026-10-01). R267 reg 11(1) has the applicant file the
+technical report, and what they file reaches the interested and affected
+parties (Annexure D item 8), so the copy they file should withhold the
+other water users' figures. A party of the application asks for it on their
+pack view (**Make a printable copy**, `POST …/scenarios/:sid/packs/:packId/pdf`);
+an `applicant_pack_render` job, as them, prints that very view in the same
+headless Chromium as the pack's PDF ([§ The PDF](#the-pdf)): a render token
+of purpose `applicant_pack`, issued only to a party (`render_token_issue`:
+`app_applicant_pack_meta`), whose session reads that one page and nothing
+else (not the editor's pack route, the run or the application;
+[security.md § Render tokens](./security.md#render-tokens)). The PDF goes
+beside the pack's own under `packs/<project>/<pack>/applicant/<sha256>.pdf`
+and is recorded once with **its own** SHA-256, pages and time
+(`evidence_pack_applicant_copy`, written only by
+`app_record_applicant_pack_pdf` from the party's own running job); asking
+again changes nothing. `GET …/pdf` downloads it (a one-minute signed GET,
+`evidence-pack-v<n>-<code>-applicant-copy.pdf`). The printed page opens with
+"Applicant's copy: other water users' figures withheld. Not the pack. Check
+the pack at <verify address>", with the pack's code and manifest hash, and
+its footer says the same on every page. It is not hashed as the pack, never
+replaces the pack's PDF, and verify knows nothing of it: the authority
+checks the pack itself. In production the job hands the render to the
+renderer Lambda with the application's id (`render_pack` with
+`scenarioId`), which answers `copy: 'applicant'`; the worker records it once
+the packs bucket is seen to hold it, as for the pack's PDF.
+Tests: `backend/src/evidence/applicant-copy.db.test.ts` (who asks and
+downloads, the token's issuer, the render session swept over every route,
+the one record, the production answer), `backend/src/jobs/handlers/applicant-pack-render.test.ts`,
+`backend/src/reports/scope.test.ts`, and `e2e/tests/applicant-pack.spec.ts`
+(the real print through MinIO, its hash checked).
 
 **Share links.** The application's owner (not the consultant they shared it
 with) makes a link to their own pack while it is issued, and lists and
@@ -836,7 +1077,9 @@ from the Application panel, sees their farm by name and not the neighbour
 beside it, which isn't downstream, as in their results view, makes a link,
 and it opens signed out); `evidence/applicant-pack-units.db.test.ts` (the other units are the
 results view's downstream units under the same names; no upstream or side
-unit).
+unit; the applicant's farm, unlinked after issue, is still theirs by name in
+the pack while the results view, which follows the links, no longer names
+it).
 
 ## Notices
 
