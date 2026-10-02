@@ -56,7 +56,7 @@ const MODEL_JSON = `json_build_object(
 	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
 		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
 			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
-			return_pct AS "returnPct", priority, destination, enabled, schedule, population, source, note
+			return_pct AS "returnPct", priority, priority_rank AS "rank", destination, enabled, schedule, population, source, note
 		FROM demand_object WHERE project_id = $1) r)
 )`;
 
@@ -340,9 +340,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	);
 	await upsertAll(
 		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, population, source, note)
+			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source, note)
 		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, destination, enabled, schedule, population, source, note
+			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source, note
 		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
 		 ON CONFLICT (id) DO NOTHING`,
 		(m.demandObjects ?? []).map((o) => ({
@@ -358,6 +358,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			monthly_factor: o.monthlyFactor,
 			return_pct: o.returnPct,
 			priority: o.priority,
+			// Its rank within its class (engine 1.64.0); absent and null alike = 1.
+			priority_rank: o.rank ?? null,
 			destination: o.destination,
 			enabled: o.enabled,
 			// No schedule and an empty one run alike (engine 1.17.0); store both as NULL.

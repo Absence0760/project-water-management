@@ -156,15 +156,9 @@ MUTANTS = [
     ("the first schedule window wins, not the last", "    for w in sched:\n", "    for w in reversed(sched):\n"),
     (
         "'first' objects share with the crop",
-        (
-            '[("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "first"],',
-            "[],",
-        ),
-        (
-            'if ob.get("priority", "shared") == "shared"]',
-            'if ob.get("priority", "shared") in ("shared", "first")]',
-        ),
+        ("        return (0, object_rank(ob))", "        return (1, 0)"),
     ),
+    ("ranks within a class are ignored", "        return int(r)\n    return 1", "        return 1\n    return 1"),
     # River off-takes and canal seepage (§2.6a).
     ("the canal loses nothing on the way", "append((t, v * (1 - lp)))", "append((t, v))"),
     (

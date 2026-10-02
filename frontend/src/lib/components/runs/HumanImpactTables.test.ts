@@ -43,6 +43,14 @@ const text = (html: string) => {
 	return out.replace(/\s+/g, ' ');
 };
 
+describe('the demand-objects table’s priority (engine 1.64.0)', () => {
+	it('adds the rank within its class to an object that has one', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object({ rank: 2 }), object({ id: 'm', name: 'Mill', category: 'industrial' })]) } }).body);
+		expect(body).toContain('Village Domestic first, rank 2 25');
+		expect(body).toContain('Mill Industrial first 25');
+	});
+});
+
 describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', () => {
 	it('shows the floor, the days and volume below it and the litres per person, apart from the days short', () => {
 		const floored = object({ basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 2, avgBelowBasicNeedsM3Day: 4.5, avgSuppliedLitresPerPersonDay: 20 });

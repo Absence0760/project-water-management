@@ -719,6 +719,33 @@ describe('diffInputs', () => {
 		expect(text).toMatch(/^Rooikloof: demand object "Town" Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first → Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first, serves 12\D000 people$/);
 	});
 
+	it('lists a demand object’s rank within its class, and reads none and null alike (engine 1.64.0)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.rank = null;
+		expect(texts(a, b)).toEqual([]);
+		b.model.demandObjects![0]!.rank = 2;
+		expect(texts(a, b)).toEqual(['Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first rank 2']);
+	});
+
 	it('lists a demand object whose source changed (engine 1.56.0); absent and null are both not recorded', () => {
 		const a = snapshot();
 		const town = {

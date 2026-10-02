@@ -1454,15 +1454,17 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 'other'), sizing ('monthly' | 'perUnit'), monthlyM3Day (12 values ≥ 0, Oct–Sep,
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
-priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
-chars) }[]`,
+priority ('first' | 'shared' | 'last'), rank (a whole number 1–99, or
+null; engine ≥ 1.64.0, issue #343: its place within 'first' or 'last', 1
+before 2, equal ranks pro rata; null = 1; ignored on 'shared'),
+destination ('internal' | 'external'), enabled, schedule (below, or null),
+population (≥ 0 or null), source ('meter' | 'aadd' | 'perCapita' | 'other',
+or null), note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
+null, internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, a
-negative population, an unknown source, and a source whose sizing it doesn't
+negative population, a rank outside 1–99 or not whole, an unknown source, and a source whose sizing it doesn't
 have.
 
 A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
@@ -1912,12 +1914,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
-  name, category, source?, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  name, category, source?, priority, rank?, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`;
   `source`, engine ≥ 1.56.0, only on an object that records one: the model's
-  `source`, as a report grades the demand by). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  `source`, as a report grades the demand by; `rank`, engine ≥ 1.64.0, only
+  on a `first` or `last` object with a rank set: its place within its class). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and

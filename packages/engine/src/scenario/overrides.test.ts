@@ -1567,6 +1567,17 @@ describe('demand-object ops (engine ≥ 1.45.0)', () => {
 		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), source: 'survey' } }]).errors).toEqual(['ops[0].demandObject.source: must be one of meter, aadd, perCapita, other']);
 	});
 
+	it('demandObject.set rank (engine ≥ 1.64.0): a whole number 1–99, or null', () => {
+		const r = one(set('rank', 2), withObject());
+		expect(r.problems).toEqual([]);
+		expect(r.input.model.demandObjects![0]!.rank).toBe(2);
+		// Clearing a rank the object hasn't got leaves it as it is (rank 1 either way).
+		expect('rank' in one(set('rank', null), withObject()).input.model.demandObjects![0]!).toBe(false);
+		for (const bad of [0, 1.5, 100, '2']) expect(one(set('rank', bad), withObject()).problems, String(bad)).toHaveLength(1);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), rank: 3 } }]).errors).toEqual([]);
+		expect(validateScenarioOps([{ op: 'demandObject.add', demandObject: { ...demandObject('do2', 'A'), rank: 0 } }]).errors).toHaveLength(1);
+	});
+
 	it('demandObject.remove takes the object out; a removed node takes its objects with it', () => {
 		expect(one({ op: 'demandObject.remove', demandObjectId: 'do1' }, withObject()).input.model.demandObjects).toEqual([]);
 		expect(one({ op: 'demandObject.remove', demandObjectId: 'zz' }, withObject()).problems).toEqual(['op 1 (demandObject.remove): demand object zz not found']);

@@ -228,8 +228,12 @@ decide a licence application.
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
   (kept so by the operator's decision, 2026-10-01: every refused action
-  brings it back, so a person who needs it can't miss it for long); signing
-  out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  brings it back, so a person who needs it can't miss it for long), and
+  for the rest of the tab (`sessionStorage`, so a reload doesn't bring it
+  back; the operator's call, 2026-10-01). While the need stands the account
+  menu keeps a badge and leads with **Set up two-step sign-in** or **Sign in
+  again with a code**, dismissed or not, so it never drops out of sight;
+  signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with

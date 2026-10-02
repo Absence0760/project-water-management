@@ -3,6 +3,13 @@
 # § Basemap). Optional: without it the map draws its features on a plain
 # background, and nothing else needs it (CI never downloads tiles).
 #
+#   bin/tiles-dev.sh up       start the map's basemap in one step, safe to
+#                             re-run: start MinIO, upload the cached extract
+#                             and fonts if MinIO doesn't serve them (fetching
+#                             them only when nothing is cached), and set the
+#                             URLs in frontend/.env.development.local; the
+#                             relief's DEM only if it is cached or served
+#                             (never fetched here: run `terrain` once for it)
 #   bin/tiles-dev.sh fetch    extract South Africa from the Protomaps daily
 #                             build into ~/.cache/water-management-tiles/ and
 #                             upload it to the local MinIO (pnpm dev:s3:up),
@@ -84,7 +91,40 @@ fetch_fonts() {
 	(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --fonts "$FONTS")
 }
 
+serves_tiles() { curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; }
+serves_terrain() { curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; }
+serves_fonts() { curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; }
+
 case "${1:-}" in
+	up)
+		(cd "$ROOT" && docker compose up -d --wait minio)
+		if serves_tiles; then
+			echo "MinIO serves $URL"
+		elif [ -f "$FILE" ]; then
+			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE")
+		else
+			"$0" fetch
+		fi
+		if serves_fonts; then
+			echo "MinIO serves the label fonts"
+		elif [ -d "$FONTS" ]; then
+			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --fonts "$FONTS")
+		else
+			fetch_fonts
+		fi
+		# The relief's DEM is optional and ~2.2 GB: upload a cached one, never fetch it here.
+		relief=()
+		if serves_terrain; then
+			echo "MinIO serves $TERRAIN_URL"
+			relief=(--terrain)
+		elif [ -f "$TERRAIN_FILE" ]; then
+			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
+			relief=(--terrain)
+		else
+			echo "No relief DEM (optional: pnpm dev:tiles:terrain, then pnpm dev:tiles:up again)."
+		fi
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --env "$ROOT/frontend/.env.development.local" "${relief[@]}")
+		;;
 	fetch)
 		command -v pmtiles >/dev/null || { echo "pmtiles CLI not found: install go-pmtiles (https://github.com/protomaps/go-pmtiles/releases) and put it on PATH." >&2; exit 1; }
 		build="${TILES_BUILD:-$(date -u -d yesterday +%Y%m%d 2>/dev/null || date -u -v-1d +%Y%m%d)}"
@@ -94,7 +134,7 @@ case "${1:-}" in
 		du -h "$FILE"
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE")
 		fetch_fonts
-		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev)."
+		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
 		;;
 	terrain)
 		command -v pmtiles >/dev/null || { echo "pmtiles CLI not found: install go-pmtiles (https://github.com/protomaps/go-pmtiles/releases) and put it on PATH." >&2; exit 1; }
@@ -103,7 +143,7 @@ case "${1:-}" in
 		pmtiles extract "$TERRAIN_SRC" "$TERRAIN_FILE" --bbox="$BBOX" --maxzoom="$TERRAIN_MAXZOOM"
 		du -h "$TERRAIN_FILE"
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
-		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev), and turn on Map → Layers → Relief."
+		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev and turn on Map → Layers → Relief."
 		;;
 	rivers)
 		command -v ogr2ogr >/dev/null || { echo "ogr2ogr not found: install GDAL (sudo dnf install gdal)." >&2; exit 1; }
@@ -128,16 +168,16 @@ case "${1:-}" in
 		;;
 	fonts)
 		fetch_fonts
-		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev)."
+		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
 		;;
 	status)
 		if [ -f "$FILE" ]; then du -h "$FILE"; else echo "No extract in $CACHE (pnpm dev:tiles:fetch)."; fi
-		if curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; then echo "MinIO serves $URL"; else echo "MinIO doesn't serve $URL (pnpm dev:s3:up, then pnpm dev:tiles:fetch)."; fi
+		if serves_tiles; then echo "MinIO serves $URL"; else echo "MinIO doesn't serve $URL (pnpm dev:s3:up, then pnpm dev:tiles:fetch)."; fi
 		if [ -f "$TERRAIN_FILE" ]; then du -h "$TERRAIN_FILE"; else echo "No relief DEM in $CACHE (pnpm dev:tiles:terrain)."; fi
-		if curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; then echo "MinIO serves $TERRAIN_URL"; else echo "MinIO doesn't serve $TERRAIN_URL (pnpm dev:tiles:terrain)."; fi
+		if serves_terrain; then echo "MinIO serves $TERRAIN_URL"; else echo "MinIO doesn't serve $TERRAIN_URL (pnpm dev:tiles:terrain)."; fi
 		if [ -f "$RIVERS_FILE" ]; then du -h "$RIVERS_FILE"; else echo "No river network in $CACHE (pnpm dev:tiles:rivers)."; fi
 		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
-		if curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
+		if serves_fonts; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
 	env)
 		echo "PUBLIC_TILES_URL=$URL"
@@ -145,7 +185,7 @@ case "${1:-}" in
 		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh fetch | fonts | terrain | rivers | status | env" >&2
+		echo "usage: bin/tiles-dev.sh up | fetch | fonts | terrain | rivers | status | env" >&2
 		exit 2
 		;;
 esac

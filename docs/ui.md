@@ -52,7 +52,8 @@ live](#project-workspace)); Help keeps its contents in the page
 avatar, display name and email (initials only on the phone bar, `compact`)
 that opens a list (same disclosure pattern as the Data/Runs tabs' download
 menu — a button plus a hidden list, not an ARIA `menu`/`menuitem` widget)
-with three entries. At the sidebar's foot it opens upward (`up`); on the
+with three entries (four while two-step sign-in is still needed: the
+two-step sign-in banner, below). At the sidebar's foot it opens upward (`up`); on the
 phone bar, downward.
 
 - **Account** — a link to `/account` (marked `aria-current` while there).
@@ -2310,12 +2311,24 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (m³/day by month, or a count × litres a day; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
-  the modeller), **Priority** (first / with the
-  crops / last), **Destination** (used in the catchment, or piped out, which
+  the modeller), **Priority** (Before the crops / With the crops, pro rata /
+  After the crops: short words, so the edit panel's column no longer cuts
+  them off; shown only while the unit has one object), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
-  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
+  note: which meter and years, which strategy, which norm). With two or more
+  objects on the unit (engine ≥ 1.64.0, issue #343, `demandObjectOrder.ts`)
+  the Priority selects give way to a **Supply order on a short day** box
+  above the list: **The crops** and each object by name, in supply order,
+  each with a select of its place (1 is supplied first; demands at one
+  number share pro rata): Before 1, each number, Between n and n + 1, and
+  After the last, so one choice puts a demand in a place of its own anywhere.
+  An **Order:** line under it says the order in words ("Town A, then Town B,
+  then the crops"; announced politely, and each select points at it). The
+  places are stored as each object's priority and its rank within it, and
+  renumber from 1 without gaps; removing a demand closes the ranks up, and a
+  lone one keeps none. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2343,7 +2356,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
-  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  objects**: per object its unit, priority (with ", rank n" when it has a
+  rank, engine ≥ 1.64.0), demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out"). When an object has a
   basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
@@ -8066,8 +8080,12 @@ then.
   With an authenticator but a password-only session (`!sessionVerified`),
   or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
   to `/login?next=<this page>`. A refusal words it as "That needs …";
-  **Dismiss** hides it until the next refusal and moves focus to the page's
-  title. Its own chunk, loaded only while there is something to say
+  **Dismiss** hides it until the next refusal (or until the tab closes: a
+  reload keeps it hidden, `sessionStorage`) and moves focus to the page's
+  title. While the need stands, dismissed or not, the account menu's avatar
+  carries a small amber "i" badge (the trigger's name adds ", two-step
+  sign-in needed") and the menu's first entry is **Set up two-step
+  sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say
   (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying

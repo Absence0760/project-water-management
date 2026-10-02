@@ -47,16 +47,20 @@ server and no tile CDN: the file is served from the app's own storage.
   glyphs are configured ([§ Labels](#labels)); it uses no sprites.
   Attribution ("© Protomaps © OpenStreetMap contributors") stays visible
   whenever the basemap is drawn.
-- **Locally**: `pnpm dev:s3:up`, then `pnpm dev:tiles:fetch`
-  (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
+- **Locally**: `pnpm dev:tiles:up` (`bin/tiles-dev.sh up`) does it all and
+  is safe to re-run: it starts MinIO, uploads the cached extract and fonts
+  when MinIO doesn't serve them (its volume wiped, or a new MinIO), runs `fetch` only when nothing is cached, and sets both
+  URLs (and the relief's, when its DEM is cached, [§ Relief](#relief)) in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
+  other line kept); restart `pnpm dev` after. `pnpm dev:tiles:fetch`
+  (`bin/tiles-dev.sh fetch`) re-downloads. It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
   Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
   anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
-  `pnpm dev:tiles:env >> frontend/.env.development.local` sets the URL
-  (`http://localhost:9002/tiles/south-africa.pmtiles`); restart `pnpm dev`.
+  `pnpm dev:tiles:env` prints the URL
+  (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
   defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
@@ -163,9 +167,12 @@ a separate, later piece (#326 B-delineate).
   extracts the basemap's bbox from the planet build into
   `~/.cache/water-management-tiles/terrain.pmtiles` and uploads it to the
   MinIO bucket `tiles` as `terrain.pmtiles`
-  (`backend/scripts/tiles-upload.ts --terrain`). `pnpm dev:tiles:env`
-  prints `PUBLIC_TERRAIN_URL=http://localhost:9002/tiles/terrain.pmtiles`;
-  restart `pnpm dev`. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
+  (`backend/scripts/tiles-upload.ts --terrain`). Then `pnpm dev:tiles:up`
+  sets `PUBLIC_TERRAIN_URL=http://localhost:9002/tiles/terrain.pmtiles` in
+  `frontend/.env.development.local` beside the basemap's URLs (`pnpm
+  dev:tiles:env` prints it); restart `pnpm dev`. `up` re-uploads a cached
+  DEM when MinIO doesn't serve it but never downloads one, and sets the URL
+  only when MinIO serves it, so without it the Layers box offers no Relief toggle. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
   URL) override the defaults. Measured 2026-10-01 with
   `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the planet build of
   Mapterhorn 0.0.13):
@@ -285,7 +292,14 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
   (places or moves the point), **Backspace** removes the last corner while
   drawing, **Delete** the picked one after, Escape cancels (asking first, as
-  above; focus comes back to the map either way). The canvas's
+  above; focus comes back to the map either way). With the mouse over the
+  map (moved there since the map took the focus, the last arrow key and the
+  last touch), **Enter** adds at the mouse pointer instead, where a click
+  would, and the crosshair hides; an arrow key, the mouse leaving the map,
+  the focus arriving (a Tab with the mouse resting there) or a touch (and
+  the mouse events a browser makes up after a tap) brings the crosshair back
+  (`draw/attachDrawing.ts`, tested in `attachDrawing.test.ts` and
+  `e2e/tests/map-draw.spec.ts`). The canvas's
   accessible name says which keys do what in each phase, and the draw bar
   names the last change in a polite live region ("Corner 3 at 33.6100° S,
   21.3400° E.").
