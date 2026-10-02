@@ -359,6 +359,15 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'map.start_discarded':
 			return 'Discarded a model proposed from the map';
+		// A model divided into sub-catchments from the map (182, #326 C3's follow-up): counts, never a polygon.
+		case 'map.divide_proposed':
+			return `Proposed dividing the model from the map: ${plural(num(s.units) ?? 0, 'point')}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		case 'map.divide_applied': {
+			const gauges = num(s.gauges) ?? 0;
+			return `Divided the model from the map: ${plural(num(s.areas) ?? 0, 'area')}, ${plural(num(s.orders) ?? 0, 'drains-into', 'drains-into')} and ${plural(num(s.runoff) ?? 0, 'runoff to the dam', 'runoffs to the dam')} taken${gauges ? `, ${plural(gauges, 'gauge')} added` : ''}`;
+		}
+		case 'map.divide_discarded':
+			return 'Discarded a division of the model proposed from the map';
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);

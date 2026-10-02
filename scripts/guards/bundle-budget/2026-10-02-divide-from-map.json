@@ -1,0 +1,4 @@
+{
+	"addKb": 8,
+	"why": "The Map's Divide sheet (DivideSheet.svelte, divideFlow.ts), the proposal pieces (pieces.ts with adjacency tints, PieceBadge.svelte, badges and the pieces line in CatchmentMap and MapTab, the key row's end slot): measured 1597 KB on this branch against main's own 1589 KB after merging #355, #357 and #361 (main's 1 KB overlap is #362's entry)"
+}

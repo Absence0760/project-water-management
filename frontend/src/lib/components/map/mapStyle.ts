@@ -17,6 +17,7 @@
 // PMTiles file) sits over the land and under the water, only while the tab's
 // Relief layer is on.
 import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
+import type { ProposalPiece } from './pieces';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
 export const BASEMAP_ATTRIBUTION = '© Protomaps © OpenStreetMap contributors';
@@ -287,29 +288,81 @@ export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer
 /** A delineated catchment waiting for the editor's decision (#326 B-delineate): a teal apart from every overlay stroke and the quaternaries' purple. */
 export const proposalColour = (dark: boolean) => (dark ? '#3fe0d0' : '#006d77');
 
-/** The `proposal` source's data: the proposed polygon and its snapped outlet, or nothing. */
-export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition } | null | undefined) {
+/**
+ * The tints a start or divide proposal's pieces take (#326 C3's follow-up,
+ * pieces.ts pieceTintsFor: neighbours never share one). Chosen away from the
+ * hues the map already gives a meaning (parcel green, water blue, the
+ * boundary's amber, the proposal's teal: ΔE ≥ 25 from each in both themes)
+ * and apart from each other (ΔE ≥ 20, mapStyle.test.ts): vermillion, pink,
+ * yellow, grey, lavender, brown. Translucent fills under the proposal's teal
+ * dash, so they never carry meaning alone: every piece has its number on it,
+ * and the sheet's card the same number and swatch. The same in both themes
+ * (a translucent fill reads on either ground); `dark` for the map's pattern.
+ */
+export const pieceTints = (dark = false): readonly string[] => {
+	void dark;
+	return ['#d55e00', '#cc79a7', '#e6f04a', '#9e9e9e', '#b39ddb', '#8d6e63'];
+};
+/** How opaque a piece's tint is drawn, and the lit one's (its card has the focus or the pointer). */
+export const PIECE_FILL_OPACITY = 0.22;
+export const PIECE_LIT_OPACITY = 0.45;
+/** The layer the pointer finds a piece on (hover lights its card's, a click opens it). */
+export const PIECE_HIT_LAYER = 'pr-piece-fill';
+
+/**
+ * The `proposal` source's data: the proposed polygon and its snapped outlet,
+ * or, for a start or divide proposal (`pieces`), each piece on its own with
+ * its key, tint and whether it is the one lit; or nothing.
+ */
+export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null | undefined) {
+	if (!p) return { type: 'FeatureCollection' as const, features: [] };
+	const outlet = { type: 'Feature' as const, properties: { part: 'outlet' } as Record<string, unknown>, geometry: { type: 'Point' as const, coordinates: p.outlet } as MapGeometry };
+	if (!p.pieces) return { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: { part: 'area' } as Record<string, unknown>, geometry: p.geometry }, outlet] };
 	return {
 		type: 'FeatureCollection' as const,
-		features: p
-			? [
-					{ type: 'Feature' as const, properties: { part: 'area' }, geometry: p.geometry },
-					{ type: 'Feature' as const, properties: { part: 'outlet' }, geometry: { type: 'Point' as const, coordinates: p.outlet } }
-				]
-			: []
+		features: [
+			...p.pieces.flatMap((x) =>
+				x.geometry ? [{ type: 'Feature' as const, properties: { part: 'piece', key: x.key, name: x.name, tint: x.tint, lit: x.key === p.highlight } as Record<string, unknown>, geometry: x.geometry as MapGeometry }] : []
+			),
+			outlet
+		]
 	};
 }
 
-/** The proposal: a faint fill, a casing and a short dash (never the boundary's long one), the outlet a ringed dot. Over the features: it is what the editor is deciding on. */
+/**
+ * The proposal: a faint fill, a casing and a short dash (never the boundary's
+ * long one), the outlet a ringed dot. Over the features: it is what the editor
+ * is deciding on. A start or divide proposal's pieces each take a tint (the
+ * rest of the catchment the proposal's own teal) under the same dash, so the
+ * edges between them show; the lit piece is outlined again, solid, in the
+ * map's selection colour on its casing.
+ */
 export function proposalLayers(dark: boolean): Layer[] {
 	const colour = proposalColour(dark);
-	const casing = overlayColours(dark).casing;
+	const c = overlayColours(dark);
+	const casing = c.casing;
 	const src = { source: 'proposal' };
 	const area = ['==', ['get', 'part'], 'area'];
+	const piece = ['==', ['get', 'part'], 'piece'];
+	const shape = ['any', area, piece];
+	const lit = ['all', piece, ['==', ['get', 'lit'], true]];
+	const tints = pieceTints(dark);
 	return [
 		{ id: 'pr-fill', type: 'fill', ...src, filter: area, paint: { 'fill-color': colour, 'fill-opacity': 0.12 } },
-		{ id: 'pr-casing', type: 'line', ...src, filter: area, paint: { 'line-color': casing, 'line-width': 6, 'line-opacity': 0.85 } },
-		{ id: 'pr-line', type: 'line', ...src, filter: area, paint: { 'line-color': colour, 'line-width': 3, 'line-dasharray': [1.5, 1.5] } },
+		{
+			id: PIECE_HIT_LAYER,
+			type: 'fill',
+			...src,
+			filter: piece,
+			paint: {
+				'fill-color': ['match', ['get', 'tint'], ...tints.flatMap((t, i) => [i, t]), colour],
+				'fill-opacity': ['case', ['==', ['get', 'lit'], true], PIECE_LIT_OPACITY, PIECE_FILL_OPACITY]
+			}
+		},
+		{ id: 'pr-casing', type: 'line', ...src, filter: shape, paint: { 'line-color': casing, 'line-width': 6, 'line-opacity': 0.85 } },
+		{ id: 'pr-line', type: 'line', ...src, filter: shape, paint: { 'line-color': colour, 'line-width': 3, 'line-dasharray': [1.5, 1.5] } },
+		{ id: 'pr-lit-casing', type: 'line', ...src, filter: lit, paint: { 'line-color': casing, 'line-width': 8, 'line-opacity': 0.9 } },
+		{ id: 'pr-lit', type: 'line', ...src, filter: lit, paint: { 'line-color': c.selected, 'line-width': 4 } },
 		{
 			id: 'pr-outlet',
 			type: 'circle',

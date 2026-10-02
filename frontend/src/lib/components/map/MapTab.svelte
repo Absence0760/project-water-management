@@ -68,7 +68,10 @@
 	import DelineateSheet from './DelineateSheet.svelte';
 	import { openProposal } from './delineation';
 	import StartSheet from './StartSheet.svelte';
-	import { openStart, startShape, type StartDraft } from './startFlow';
+	import { openDivide, openStart, type StartDraft } from './startFlow';
+	import DivideSheet from './DivideSheet.svelte';
+	import type { DivideDraft } from './divideFlow';
+	import { piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
@@ -203,6 +206,8 @@
 	const grid = overlay('grid', GRID_ID, () => true);
 	// Until the state is in, a `start=1` link is kept (a reload, a deep link), as Delineate's is.
 	const startSheet = overlay('start', '1', () => canEdit && (!startLoaded || !!startInfo));
+	// Divide a model that has nodes (#326 C3's follow-up): the same state, its own sheet.
+	const divideSheet = overlay('divide', '1', () => canEdit && (!startLoaded || !!startInfo));
 	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
 	const checksSheet = overlay('checks', '1', () => true);
 	const checks = $derived(mapChecks(features, nodes));
@@ -245,7 +250,7 @@
 	/** The point placed is a delineation's outlet, not a feature: the draw bar asks to delineate. */
 	let delineating = $state(false);
 	function startDelineate() {
-		backToStart = false;
+		backToSheet = null;
 		measure.cancel();
 		tracing = false;
 		draft.place('gauge');
@@ -284,7 +289,7 @@
 		await returnToStart();
 	}
 	async function delineationRejected() {
-		backToStart = false;
+		backToSheet = null;
 		notice = 'Rejected the delineated catchment; nothing on the map changed.';
 		await loadDelineation();
 		delineateSheet.open = false;
@@ -312,21 +317,22 @@
 	/** The flow is offered while the model is empty. */
 	const canStart = $derived(canEdit && !!startInfo?.modelEmpty);
 	/** A tool opened from the Start sheet (Delineate, Draw, Place): once it saves, the sheet opens again where it was. */
-	let backToStart = false;
+	let backToSheet: 'start' | 'divide' | null = null;
 	async function returnToStart() {
-		if (!backToStart) return;
-		backToStart = false;
-		await goto(withParam(page.url, 'start', '1'), { noScroll: true, keepFocus: true });
+		const sheet = backToSheet;
+		if (!sheet) return;
+		backToSheet = null;
+		await goto(withParam(page.url, sheet, '1'), { noScroll: true, keepFocus: true });
 	}
 	/**
 	 * Leave the sheet for one of the map's own tools (the sheet's param goes first, in place). Every tool
 	 * clears the flag as it starts, so it is set after: a tool started any other way, or a rejected
 	 * delineation, never brings the sheet back.
 	 */
-	async function fromStart(start: () => unknown, back = true) {
-		await goto(withoutParam(page.url, 'start'), { replaceState: true, noScroll: true, keepFocus: true });
+	async function fromStart(start: () => unknown, back = true, sheet: 'start' | 'divide' = 'start') {
+		await goto(withoutParam(page.url, sheet), { replaceState: true, noScroll: true, keepFocus: true });
 		await start();
-		backToStart = back;
+		backToSheet = back ? sheet : null;
 	}
 	/** What the editor chose and ticked in the sheet: kept here, so closing it or leaving for a tool loses nothing. */
 	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {} });
@@ -338,6 +344,34 @@
 		notice = 'Discarded the proposed model; nothing in the model changed.';
 		await loadStart();
 	}
+
+	// --- divide a model that has nodes from the map (#326 C3's follow-up): editors, with a DEM on the server ---
+	const pendingDivide = $derived(openDivide(startInfo));
+	const canDivide = $derived(canEdit && !!startInfo && !startInfo.modelEmpty && startInfo.elevation);
+	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {} });
+	async function divideApplied() {
+		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
+		await Promise.all([load(), loadStart(), onModelChanged()]);
+	}
+	async function divideDiscarded() {
+		notice = 'Discarded the proposed division; nothing in the model changed.';
+		await loadStart();
+	}
+
+	// --- each proposed unit's piece told apart (pieces.ts): a card lights its piece, a piece picked on the map opens its card ---
+	/** The piece lit on the map (a card has the focus or the pointer, or the pointer is over the piece). */
+	let pieceLit = $state<string | null>(null);
+	/** The card to bring into view when its sheet opens: a piece clicked on the map. */
+	let pieceFocus = $state<string | null>(null);
+	const pieces = $derived(piecesShape(pendingStart ?? pendingDivide, pieceLit));
+	async function pickPiece(key: string) {
+		pieceFocus = key;
+		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });
+	}
+	$effect(() => {
+		// A sheet closed: nothing is lit or waiting to be focused.
+		if (!startSheet.open && !divideSheet.open) untrack(() => ((pieceLit = null), (pieceFocus = null)));
+	});
 
 	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
 	const draft = new Draft();
@@ -362,7 +396,7 @@
 	}
 	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
 	function startDraw(choiceId?: string) {
-		backToStart = false;
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
 		tracing = false;
@@ -371,7 +405,7 @@
 		void afterStart();
 	}
 	function startPlace() {
-		backToStart = false;
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
 		tracing = false;
@@ -379,7 +413,7 @@
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
-		backToStart = false;
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
 		tracing = false;
@@ -666,6 +700,9 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
+{#snippet divideLink()}
+	<a class="btn btn-sm" href={withParam(page.url, 'divide', '1')} title="Each unit’s own area and order, proposed from its point on the map" data-testid="map-divide-open">Divide the model</a>
+{/snippet}
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
@@ -776,6 +813,13 @@
 			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
 		</p>
 	{/if}
+	{#if (pendingStart || pendingDivide) && canEdit && !startSheet.open && !divideSheet.open}
+		<!-- An open start or division is drawn piece by piece: say so in words, and how to read it (the sheet's cards are its key). -->
+		<p class="alert alert-info slim" data-testid="map-pieces-pending">
+			{pendingStart ? 'A proposed model' : 'A proposed division of the model'} is drawn on the map piece by piece, each piece tinted and numbered as its card in the sheet (R: the rest of the catchment), waiting for your decision.
+			<a class="btn btn-sm" href={withParam(page.url, pendingStart ? 'start' : 'divide', '1')} data-testid="map-pieces-review">Review it</a>
+		</p>
+	{/if}
 	{#if canEdit && !tilesUrl}
 		<p class="alert alert-info slim" data-testid="map-no-tiles">No basemap is configured, so the features are drawn on a plain background (docs/maps.md says how to serve one).</p>
 	{/if}
@@ -836,13 +880,17 @@
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
-									proposal={pendingProposal ?? startShape(pendingStart)}
+									proposal={pendingProposal ?? pieces}
+									onpiecehover={(k) => (pieceLit = k)}
+									onpiecepick={canEdit ? pickPiece : undefined}
 								/>
 							{/snippet}
 						</Lazy>
 					</div>
 					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
-					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+					<!-- Divide the model (#326 C3's follow-up) at the end of the key row's first line: not in the header (a second row of actions)
+					     nor the side column (the list's room); its title says what it does. -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} end={canDivide && !pendingDivide ? divideLink : undefined} />
 				</section>
 
 				<aside class="map-side" aria-label="Features">
@@ -994,6 +1042,24 @@
 					onproposed={loadStart}
 					onapplied={startApplied}
 					ondiscarded={startDiscarded}
+					onhighlight={(k) => (pieceLit = k)}
+					focusKey={pieceFocus}
+				/>
+			{/if}
+			{#if divideSheet.open && startInfo}
+				<DivideSheet
+					bind:open={divideSheet.open}
+					{projectId}
+					{features}
+					nodes={editor.model.nodes}
+					info={startInfo}
+					bind:draft={divideDraft}
+					onplace={() => fromStart(startPlace, true, 'divide')}
+					onproposed={loadStart}
+					onapplied={divideApplied}
+					ondiscarded={divideDiscarded}
+					onhighlight={(k) => (pieceLit = k)}
+					focusKey={pieceFocus}
 				/>
 			{/if}
 			{#if place.open}

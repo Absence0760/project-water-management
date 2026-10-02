@@ -1127,10 +1127,37 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-1)") and its area from it (*from the map*), the
+  delineated from … (start-2)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
+- **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
+  in the network* by default: in the order like a water user (the units
+  above drain into it), owning no land; applied, a `gauge` node linked to
+  its point. Its card says what it measures (its whole catchment above
+  it). Without a DEM, a point outside the boundary is dropped.
+- **Each piece told apart.** The open proposal is drawn piece by piece, each
+  unit's own sub-catchment in one of six tints (`mapStyle.ts` `pieceTints`,
+  away from the parcel green, water blue and boundary amber; touching
+  pieces never share one) under the proposal's dash, its **number** on it
+  as a badge (a unit with no land beside its point, the rest of the
+  catchment R), and a line over the map saying so while the sheet is
+  closed. The
+  sheet's cards carry the same number and tint, so they are the key; a card
+  with the focus or the pointer lights its piece in the selection colour,
+  and with the sheet closed a piece under the pointer names itself over the
+  map's corner and a click opens its card ([design/start-from-map.md § Each
+  unit's piece on the map](./design/start-from-map.md#each-units-piece-on-the-map)).
+- **Divide the model** (a model that has nodes, with a DEM; `divide=1`,
+  migration 182): each point on the map stands for a node (or an unlinked
+  gauge for a new gauge node); the same partition proposes each one's own
+  area, what it drains into and a dam's runoff to its dam, **beside the
+  node's value now**, each taken only when ticked, and the rest of the
+  catchment to a unit, a new unit or nobody. A ticked value that changed
+  since the proposal is refused (409), never overwritten unseen; dividing
+  again redraws the parcel an earlier division made in place
+  ([design/start-from-map.md § Dividing a model that has
+  nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
 - **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
-  project an hour, the 20 s budget.
+  project an hour (starts and divisions together), the 20 s budget.
 
 ## River network
 

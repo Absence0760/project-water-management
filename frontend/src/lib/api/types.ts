@@ -2990,7 +2990,7 @@ export interface DelineationProposal {
 }
 
 /** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
-export type StartRole = 'dam' | 'abstraction' | 'user';
+export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
 
 /** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
 export interface StartUnit {
@@ -3000,7 +3000,7 @@ export interface StartUnit {
 	name: string;
 	point: MapPosition;
 	snapDistanceM: number | null;
-	/** Its own sub-catchment's area (m²) and outline; null without an elevation model (the outline also for a water user). */
+	/** Its own sub-catchment's area (m²) and outline; null without an elevation model, and for a water user or a gauge (they own no land). */
 	areaM2: number | null;
 	totalAreaM2: number | null;
 	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
@@ -3033,6 +3033,7 @@ export interface StartTicks {
 
 export interface StartProposal {
 	id: string;
+	mode: 'start';
 	status: 'proposed' | 'applied' | 'discarded' | 'superseded';
 	plan: StartPlan;
 	fromDem: boolean;
@@ -3047,12 +3048,64 @@ export interface StartProposal {
 	decidedAt: string | null;
 }
 
-/** GET …/map/start: whether the server has a DEM, whether the model is empty, and the latest proposals (newest first). */
+/** A node's values a division would replace, as they stood when it was proposed (182, docs/api.md § Start from the map). */
+export interface DivideCurrent {
+	areaKm2: number;
+	areaSource: 'typed' | 'map';
+	downstreamNodeId: string | null;
+	downstreamName: string | null;
+	pctRunoffToDam: number;
+}
+
+/** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
+export interface DivideUnit {
+	key: string;
+	featureName: string;
+	nodeId: string | null;
+	name: string;
+	role: StartRole;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	drainsInto: string | null;
+	current: DivideCurrent | null;
+}
+
+/** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
+export interface DividePlan {
+	mode: 'divide';
+	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' };
+	catchment: { areaM2: number; boundaryAreaM2: number | null };
+	units: DivideUnit[];
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	untouched: { nodeId: string; name: string; areaKm2: number }[];
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number;
+	zoom: number;
+	windowCells: number;
+}
+
+/** The ticks an editor sends to apply a division: every point once. */
+export interface DivideTicks {
+	units: { key: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
+	rest: { to: 'none' } | { to: 'node'; nodeId: string } | { to: 'new'; name: string };
+}
+
+export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {
+	mode: 'divide';
+	plan: DividePlan;
+}
+
+/** GET …/map/start: whether the server has a DEM, whether the model is empty or was started from the map, and the latest proposals of either mode (newest first). */
 export interface StartState {
 	elevation: boolean;
 	dataset: DelineationState['dataset'];
 	modelEmpty: boolean;
-	proposals: StartProposal[];
+	startedFromMap: boolean;
+	proposals: (StartProposal | DivideProposal)[];
 }
 
 /** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */

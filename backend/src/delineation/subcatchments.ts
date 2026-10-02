@@ -5,7 +5,8 @@
 // first other unit (or the outlet) its D8 path meets; and each unit owns
 // the cells whose path meets it before any other unit: its incremental
 // sub-catchment, outlined with its holes. The rest of the catchment is the
-// outlet's own piece.
+// outlet's own piece. A water user or a gauge inside the catchment is in the
+// order but owns no land: its cells stay with the unit below it.
 //
 // It only proposes: start.ts stores the result as a proposal the editor
 // ticks value by value; nothing here writes anything.
@@ -16,11 +17,13 @@ import { accumulate, d8, DX, DY, edgeMask, fill, OUT, snap, touchesEdge, upstrea
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
-export const START_METHOD_VERSION = 'start-1';
+export const START_METHOD_VERSION = 'start-2';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
-export type UnitRole = 'dam' | 'abstraction' | 'user';
+export type UnitRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+/** Roles that own no land: in the order, their cells left to the unit below them. */
+export const ownsLand = (role: UnitRole): boolean => role !== 'user' && role !== 'gauge';
 
 export interface UnitPoint {
 	/** The map feature's id: the proposal's key for the unit. */
@@ -142,11 +145,16 @@ export interface UnitPiece {
 	snapDistanceM: number | null;
 	/** The unit it drains into, by id; null = the outlet. */
 	drainsInto: string | null;
-	/** Its own piece: the incremental sub-catchment (null for a water user, or a piece that couldn't be outlined). */
+	/** Its own piece: the incremental sub-catchment (null for a water user or a gauge, or a piece that couldn't be outlined). */
 	geometry: Extract<Geometry, { type: 'Polygon' }> | null;
-	/** The piece's geodesic area (m²); 0 for a water user. */
+	/** The piece's geodesic area (m²); 0 for a water user or a gauge. */
 	areaM2: number;
-	/** Everything upstream of it, its own piece included (m²). */
+	/**
+	 * Everything upstream of it, its own piece included (m²): the pieces above
+	 * it summed for a unit that owns land; for a water user or a gauge, its
+	 * cells upstream counted (each at its row's cell size), since the land
+	 * just above it belongs to the unit below.
+	 */
 	totalAreaM2: number;
 }
 
@@ -351,7 +359,7 @@ export async function delineateUnits(
 			nCells,
 			dir,
 			outlet,
-			kept.map((k) => ({ cell: k.cell, owns: k.p.role !== 'user' }))
+			kept.map((k) => ({ cell: k.cell, owns: ownsLand(k.p.role) }))
 		);
 		// Each owner's box, then its piece outlined inside the box only.
 		const R = kept.length;
@@ -409,6 +417,18 @@ export async function delineateUnits(
 			const d = part.down[i]!;
 			if (d >= 0) total[d]! += total[i]!;
 		}
+		// A unit that owns no land: the cells above it, counted (the pieces above it would miss the land between).
+		kept.forEach((k, i) => {
+			if (ownsLand(k.p.role)) return;
+			const above = upstream(nCells, nCells, dir, k.cell);
+			let m2 = 0;
+			for (let y = 0; y < nCells; y++) {
+				let row = 0;
+				for (let x = 0; x < nCells; x++) row += above[y * nCells + x]!;
+				if (row) m2 += row * cellAt(toPos([0, y + 0.5])[1]) ** 2;
+			}
+			total[i] = m2;
+		});
 		const cellM = Math.round(cellSizeM);
 		return {
 			outlet: { point: cellPos(outlet), snapDistanceM: outletSnap, foundIn: req.outlet ? 'snapped' : 'boundary' },
@@ -432,7 +452,7 @@ export async function delineateUnits(
 			method:
 				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}), routed once for the whole catchment; ` +
 				`the outlet and each point snapped to the most-accumulating cell within ${snapRadiusM} m (a dam polygon: its most-accumulating cell); ` +
-				`each unit drains into the first unit its flow path meets, and owns the cells whose path meets it before any other unit; outlines traced on the cells’ edges with their holes, simplified (Douglas–Peucker, about ${cellM} m)`,
+				`each unit drains into the first unit its flow path meets, and owns the cells whose path meets it before any other unit (a water user or a gauge owns none); outlines traced on the cells’ edges with their holes, simplified (Douglas–Peucker, about ${cellM} m)`,
 			methodVersion: START_METHOD_VERSION
 		};
 	}

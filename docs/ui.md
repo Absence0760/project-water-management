@@ -2625,13 +2625,18 @@ map" card) stays the schematic; this is the geography.
   tool, and the sheet opens again once it saves; with a gauge on the map
   and no boundary, "go on to the points". **The points**: each dam, other
   point and gauge with a select (A unit with a dam / A unit at an
-  abstraction point / Another water user (no land) / Not in the model),
+  abstraction point / Another water user (no land) / Not in the model; a
+  gauge: A gauge in the network (no land), the default, / Not in the model),
   **Place a point** (into the drawing mode, back after the save), the
   outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
   the rest of the catchment."), and **Propose the network**. **The
-  proposal** (drawn dashed on the map like a delineation): the catchment's
+  proposal** (drawn on the map piece by piece: each unit's piece tinted
+  with its number on it, the rest R): the catchment's
   area, the warnings and dropped points, the outflow gauge's name, then one
-  card a unit: its name, and a tick for each value proposed (Area … saved
+  card a unit: its number badge (the piece's number and tint, so the cards
+  are the map's key; the card with the focus or the pointer lights its
+  piece), its name, a gauge's "It measures … of the catchment above it",
+  and a tick for each value proposed (Area … saved
   as its parcel; Drains into …; All of its own runoff reaches the dam),
   every tick off at first; the rest of the catchment as a unit (a tick,
   then its name and area); **Tick every value**; **How it was made**
@@ -2641,7 +2646,37 @@ map" card) stays the schematic; this is the geography.
   saved now as one change in History."). **Data and the first run**: links
   to rain from the boundary, observed flow, the dams' capacities, cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
-  says the model isn't started from the map.
+  says the model isn't started from the map and points to Divide the model.
+  With the sheet closed, a piece (or its number) under the pointer shows
+  "Proposed piece 2 / <name>" over the map's corner, a click on one opens
+  the sheet at its card, focused, and a line over the map ("A proposed
+  model is drawn on the map piece by piece, each piece tinted and numbered
+  as its card in the sheet (R: the rest of the catchment) …" with **Review
+  it**) says what the pieces are. The points step counts gauges apart ("1
+  unit and 1 gauge, plus the rest of the catchment.").
+- **Divide the model** (editors, a model with nodes, a DEM on the server;
+  #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
+  Start from the map](./maps.md#start-from-the-map)). **Divide the model**
+  at the end of the key row's first line under the map (an open division
+  is reviewed from the line over the map) opens a side
+  sheet (`divide=1`, "Divide the model from the map"), read from the
+  server: **the points**: each dam, other point and gauge with a select
+  (Not in the division / the nodes its kind may stand for / A new gauge
+  node for an unlinked gauge), a linked point on its node by default, "Two
+  points stand for …" refusing a node twice, **Place a point**, the outlet,
+  the count ("3 points in the division."), **Propose the division**; **the
+  proposal**: the warnings (dropped points, "No point stands for …: it keeps
+  its values"), **Tick every value**, the problem the server would refuse
+  (`role="alert"`, Apply disabled while it stands), one card a point with
+  its number badge, the node's name (or "A new gauge" with **Add it to the
+  model as a gauge node** and its name), and a tick for each value with the
+  value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
+  All of its own runoff reaches the dam. Now: 50 %), "(the same)" when
+  equal; the rest of the catchment ("Its area goes to": Nobody / a unit /
+  A new unit, with its name); **How it was made**; **Discard** and **Apply
+  the ticked values** (asks first: "The model takes 2 areas …, 3 drains-into
+  … Every value not ticked stays as it is."). Without a DEM the sheet says
+  dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §

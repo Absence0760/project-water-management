@@ -28,6 +28,12 @@
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
 	and leaves everything else drawn.
+	A start or divide proposal (`proposal` with `pieces`, #326 C3's follow-up)
+	is drawn piece by piece, each with its number as a badge (hidden from
+	assistive technology: the sheet's cards carry the numbers and are the
+	key); the piece in `proposal.highlight` is lit, and a piece or badge under
+	the pointer reports itself (`onpiecehover`, its name over the top-left
+	corner) and a click on one opens its card (`onpiecepick`).
 -->
 <script module lang="ts">
 	import type { MapFeatureKind } from '$lib/api/types';
@@ -59,6 +65,10 @@
 		mapStyle,
 		overlayColours,
 		overlayData,
+		PIECE_HIT_LAYER,
+		labelColours,
+		pieceTints,
+		proposalColour,
 		proposalData,
 		QUATERNARY_HIT_LAYER,
 		quaternaryData,
@@ -80,6 +90,7 @@
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
 	import { DRAFT_SOURCE, draftData, draftLayers } from './draw/drawLayers';
+	import type { ProposalPiece } from './pieces';
 	const ENGLISH: MapWords = {
 		loading: 'Drawing the map…',
 		unavailable: 'The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.',
@@ -110,7 +121,9 @@
 		terrainUrl = null,
 		relief = false,
 		onreliefError,
-		proposal = null
+		proposal = null,
+		onpiecehover,
+		onpiecepick
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -151,8 +164,15 @@
 		relief?: boolean;
 		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
 		onreliefError?: () => void;
-		/** A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet. */
-		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition } | null;
+		/**
+		 * A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet.
+		 * With `pieces` (a start or divide proposal, pieces.ts), each piece apart with its number, `highlight` the one lit.
+		 */
+		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null;
+		/** The pointer is over a piece or its number (its key), or has left them (null). */
+		onpiecehover?: (key: string | null) => void;
+		/** A piece or its number was clicked (where no feature is): its key. */
+		onpiecepick?: (key: string) => void;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -171,6 +191,15 @@
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
 	const markers = new Map<string, { marker: InstanceType<Lib['Marker']>; button: HTMLButtonElement; key: string }>();
+	/** The proposal's pieces' numbers, by piece key. */
+	const badges = new Map<string, { marker: InstanceType<Lib['Marker']>; el: HTMLSpanElement; key: string }>();
+	/** The piece under the pointer: its name shows over the top-left corner. */
+	let hoverPiece = $state<ProposalPiece | null>(null);
+	function hoverOn(p: ProposalPiece | null) {
+		if (p?.key === hoverPiece?.key) return;
+		hoverPiece = p;
+		onpiecehover?.(p?.key ?? null);
+	}
 	let dark = $state(typeof matchMedia === 'function' && typeof document !== 'undefined' && appIsDark());
 	const colours = $derived(overlayColours(dark));
 	const picked = $derived(selectedId ? features.find((f) => f.id === selectedId) : undefined);
@@ -248,6 +277,47 @@
 		}
 	}
 
+	/** The proposal's pieces' numbers: one badge each, at a point inside its piece (or the unit's point), lit with its piece. */
+	function syncBadges() {
+		if (!map || !lib) return;
+		const pieces = proposal?.pieces ?? [];
+		const keep = new Set(pieces.map((p) => p.key));
+		for (const [k, b] of badges) {
+			if (!keep.has(k)) {
+				b.marker.remove();
+				badges.delete(k);
+			}
+		}
+		const tints = pieceTints(dark);
+		for (const p of pieces) {
+			const sig = `${p.label}|${p.at.join(',')}|${p.tint}|${p.geometry ? 1 : 0}`;
+			const had = badges.get(p.key);
+			if (had && had.key === sig) {
+				had.el.dataset.lit = String(p.key === proposal?.highlight);
+				continue;
+			}
+			had?.marker.remove();
+			const el = document.createElement('span');
+			el.className = 'piece-badge';
+			el.textContent = p.label;
+			el.setAttribute('aria-hidden', 'true');
+			el.dataset.piece = p.key;
+			el.dataset.lit = String(p.key === proposal?.highlight);
+			if (p.tint >= 0) el.style.setProperty('--piece-tint', tints[p.tint]!);
+			el.addEventListener('mouseenter', () => !draft?.active && hoverOn(p));
+			el.addEventListener('mouseleave', () => hoverOn(null));
+			el.addEventListener('click', (e) => {
+				e.stopPropagation();
+				if (!draft?.active) onpiecepick?.(p.key);
+			});
+			// A unit with no land (a gauge, a user) has its number beside its point, not on it: its marker stays visible and clickable.
+			const marker = new lib.Marker({ element: el, offset: p.geometry ? [0, 0] : [20, -20] })
+				.setLngLat(p.at as [number, number])
+				.addTo(map);
+			badges.set(p.key, { marker, el, key: sig });
+		}
+	}
+
 	/** The draft's source and layers, after every style load (a theme switch replaces the style). */
 	function ensureDraft() {
 		if (!map || map.getSource(DRAFT_SOURCE)) return;
@@ -280,6 +350,7 @@
 		const rn = map.getSource('rivers') as { setData?: (d: unknown) => void } | undefined;
 		rn?.setData?.(riverNetworkData(rivers, pickedReach));
 		syncMarkers();
+		syncBadges();
 	}
 
 	// The credit shows while the layer draws HydroRIVERS reaches (`riversCredit`) or a river added from one is drawn.
@@ -388,6 +459,10 @@
 					m.on('click', (e: { point: { x: number; y: number } }) => {
 						if (draft?.active) return;
 						if (m.queryRenderedFeatures(e.point as never, { layers: OVERLAY_CLICKABLE.filter((l) => m.getLayer(l)) }).length) return;
+						if (onpiecepick && m.getLayer(PIECE_HIT_LAYER)) {
+							const key = m.queryRenderedFeatures(e.point as never, { layers: [PIECE_HIT_LAYER] })[0]?.properties?.key;
+							if (typeof key === 'string') return onpiecepick(key);
+						}
 						if (onreach && m.getLayer(RIVER_NETWORK_HIT_LAYER)) {
 							const key = m.queryRenderedFeatures(e.point as never, { layers: [RIVER_NETWORK_HIT_LAYER] })[0]?.properties?.key;
 							if (typeof key === 'string') return onreach(key);
@@ -404,12 +479,26 @@
 							if (!draft?.active) m.getCanvas().style.cursor = '';
 						});
 					}
+					// A piece under the pointer lights its card, and says its name over the corner.
+					m.on('mousemove', PIECE_HIT_LAYER, (e: { features?: { properties?: { key?: string } }[]; originalEvent?: Event }) => {
+						// Over a number, the number's piece is the one meant (a gauge's number sits on the piece below it).
+						if (draft?.active || (e.originalEvent?.target as Element | null)?.closest?.('.piece-badge')) return;
+						const key = e.features?.[0]?.properties?.key;
+						hoverOn(proposal?.pieces?.find((p) => p.key === key) ?? null);
+						m.getCanvas().style.cursor = onpiecepick ? 'pointer' : '';
+					});
+					m.on('mouseleave', PIECE_HIT_LAYER, (e: { originalEvent?: Event }) => {
+						if ((e.originalEvent as MouseEvent | undefined)?.relatedTarget instanceof Element && ((e.originalEvent as MouseEvent).relatedTarget as Element).closest('.piece-badge')) return;
+						hoverOn(null);
+						if (!draft?.active) m.getCanvas().style.cursor = '';
+					});
 					// The crosshair is for the keyboard: shown when the focus came by keyboard (focus-visible), not after a click.
 					m.getCanvas().addEventListener('focus', () => (keyFocus = m.getCanvas().matches(':focus-visible')));
 					m.getCanvas().addEventListener('keydown', () => (keyFocus = true));
 					m.getCanvas().addEventListener('blur', () => (keyFocus = false));
 					status = 'ready';
 					syncMarkers();
+					syncBadges();
 				});
 			} catch {
 				// No WebGL (a locked-down browser, some headless ones): the list does everything the map does.
@@ -421,6 +510,8 @@
 			stopTheme?.();
 			for (const m of markers.values()) m.marker.remove();
 			markers.clear();
+			for (const b of badges.values()) b.marker.remove();
+			badges.clear();
 			map?.remove();
 			map = null;
 		};
@@ -541,6 +632,8 @@
 	style:--mk-other={colours.other}
 	style:--mk-water={colours.water}
 	style:--mk-selected={colours.selected}
+	style:--mk-proposal={proposalColour(dark)}
+	style:--mk-badge-text={labelColours(dark).text}
 >
 	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map" data-drawing={drawing ? draft?.phase : undefined}>
 		{#if status === 'ready' && drawing && keyFocus && !aimAtPointer}
@@ -548,7 +641,13 @@
 			<span class="crosshair" aria-hidden="true" data-testid="map-crosshair"></span>
 		{/if}
 	</div>
-	{#if status === 'ready' && picked && !drawing}
+	{#if status === 'ready' && hoverPiece && !drawing}
+		<!-- Hidden from assistive tech, as the picked name: the sheet's cards say each piece's number and name. -->
+		<p class="picked-name" aria-hidden="true" data-testid="map-piece-name">
+			<span class="picked-kind">{hoverPiece.label === 'R' ? 'Proposed piece R' : `Proposed piece ${hoverPiece.label}`}</span>
+			<span class="picked-label">{hoverPiece.name}</span>
+		</p>
+	{:else if status === 'ready' && picked && !drawing}
 		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
 		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
 			<span class="picked-kind">{words.kind(picked.kind)}</span>
@@ -682,6 +781,30 @@
 		box-shadow: var(--shadow);
 		pointer-events: none;
 		line-height: 1.3;
+	}
+	/* A proposal piece's number (pieces.ts): its tint as a band under the number, on the casing, so it reads on any basemap; lit with its piece. */
+	.map :global(.piece-badge) {
+		display: grid;
+		place-items: center;
+		min-width: 24px;
+		height: 24px;
+		padding: 0 4px;
+		box-sizing: border-box;
+		border-radius: 12px;
+		border: 2px solid var(--mk-proposal);
+		background: linear-gradient(var(--mk-casing), var(--mk-casing)) padding-box;
+		box-shadow: inset 0 -5px 0 var(--piece-tint, var(--mk-proposal));
+		color: var(--mk-badge-text);
+		font: 700 0.8rem/1 var(--font, system-ui, sans-serif);
+		cursor: pointer;
+	}
+	.map :global(.piece-badge[data-lit='true']) {
+		border-color: var(--mk-selected);
+		border-width: 3px;
+	}
+	.drawing .map :global(.piece-badge) {
+		pointer-events: none;
+		opacity: 0.6;
 	}
 	.picked-kind {
 		font-size: 0.75rem;

@@ -246,6 +246,10 @@ export type AuditKind =
 	| 'map.start_proposed'
 	| 'map.start_applied'
 	| 'map.start_discarded'
+	// A model divided into sub-catchments from the map (182, #326 C3's follow-up): proposed, applied (counts of areas, orders, runoff and gauges taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.divide_proposed'
+	| 'map.divide_applied'
+	| 'map.divide_discarded'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

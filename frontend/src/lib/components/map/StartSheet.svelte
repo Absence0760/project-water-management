@@ -7,6 +7,10 @@
 	outlet), the proposal (every value ticked one by one, nothing applied
 	unticked), and data and the first run (the existing proposals, linked in
 	order). Typing the model in on the Network stays the other way.
+	Each proposed unit's card carries its piece's number and tint, as on the
+	map (pieces.ts): the cards are the map's key, and a card with the focus or
+	the pointer lights its piece (`onhighlight`); a piece clicked on the map
+	opens here at its card (`focusKey`).
 -->
 <script lang="ts">
 	import { tick } from 'svelte';
@@ -15,9 +19,12 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { featureName } from './mapList';
+	import PieceBadge from './PieceBadge.svelte';
+	import { proposalPieces, REST_KEY } from './pieces';
 	import {
 		applySummary,
 		candidatePoints,
+		choicesFor,
 		defaultChoice,
 		defaultOutlet,
 		drainsIntoName,
@@ -50,7 +57,9 @@
 		onplace,
 		onproposed,
 		onapplied,
-		ondiscarded
+		ondiscarded,
+		onhighlight,
+		focusKey = null
 	}: {
 		open?: boolean;
 		projectId: string;
@@ -68,11 +77,17 @@
 		onproposed: (p: StartProposal) => Promise<void> | void;
 		onapplied: (p: StartProposal) => Promise<void> | void;
 		ondiscarded: () => Promise<void> | void;
+		/** A card took the focus or the pointer (its piece's key), or let it go (null): the map lights that piece. */
+		onhighlight?: (key: string | null) => void;
+		/** A piece clicked on the map: its card is brought into view and focused. */
+		focusKey?: string | null;
 	} = $props();
 
 	const uid = $props.id();
 	const step = $derived(startStep(info, features, draft.pointsAsked));
 	const pending = $derived(openStart(info));
+	/** The open proposal's pieces by key: the cards read their number and tint from the same list the map draws (pieces.ts). */
+	const pieceOf = $derived(new Map(pending ? proposalPieces(pending.plan).map((x) => [x.key, x]) : []));
 	const boundary = $derived(features.find((f) => f.kind === 'catchment_boundary') ?? null);
 	const STEPS = ['boundary', 'points', 'review', 'data'] as const;
 
@@ -81,7 +96,9 @@
 	const gauges = $derived(outletGauges(features));
 	const choiceOf = (f: MapFeature): PointChoice => draft.picked[f.id] ?? defaultChoice(f);
 	const outlet = $derived(draft.outlet ?? defaultOutlet(features));
-	const units = $derived(candidates.filter((f) => f.id !== outlet && choiceOf(f) !== 'none').length);
+	const chosen = $derived(candidates.filter((f) => f.id !== outlet && choiceOf(f) !== 'none'));
+	const units = $derived(chosen.filter((f) => choiceOf(f) !== 'gauge').length);
+	const gaugeNodes = $derived(chosen.length - units);
 
 	let busy = $state<null | 'propose' | 'apply' | 'discard'>(null);
 	let error = $state<string | null>(null);
@@ -159,6 +176,23 @@
 			busy = null;
 		}
 	}
+	// --- the cards as the map's key: a card lights its piece, a piece picked on the map brings its card ---
+	const light = (key: string | null) => onhighlight?.(key);
+	function cardOut(e: FocusEvent, key: string) {
+		// Focus moving within the card keeps it lit.
+		if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) light(null);
+		void key;
+	}
+	$effect(() => {
+		const k = focusKey;
+		if (!k || step !== 'review') return;
+		void tick().then(() => {
+			const card = bodyEl?.closest('dialog')?.querySelector<HTMLElement>(`[data-piece-card="${CSS.escape(k)}"]`);
+			if (!card) return;
+			card.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+			card.querySelector<HTMLElement>('input, select, button')?.focus();
+		});
+	});
 	const featureNameOf = (id: string) => {
 		const f = features.find((x) => x.id === id);
 		return f ? featureName(f) : 'a point since deleted';
@@ -180,7 +214,7 @@
 
 		{#if step === 'closed'}
 			<p data-testid="start-closed">
-				The model has nodes already, so it isn’t started from the map: the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
+				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
 			<h3 class="sub">Put the catchment’s boundary on the map</h3>
@@ -213,7 +247,7 @@
 									<span class="muted small">The outlet</span>
 								{:else}
 									<select id="{uid}-role-{f.id}" value={choiceOf(f)} onchange={(e) => (draft.picked[f.id] = e.currentTarget.value as PointChoice)}>
-										{#each Object.entries(ROLE_LABEL) as [value, label] (value)}<option {value}>{label}</option>{/each}
+										{#each choicesFor(f) as value (value)}<option {value}>{ROLE_LABEL[value]}</option>{/each}
 									</select>
 								{/if}
 							</li>
@@ -231,7 +265,9 @@
 					</select>
 					<span class="hint">{boundary ? 'Where the river leaves the boundary, unless a gauge on the map marks it.' : 'Without a boundary the outlet is a gauge on the map.'}</span>
 				</div>
-				<p class="hint" data-testid="start-count">{units === 0 ? 'No units: the catchment becomes one.' : `${units} ${units === 1 ? 'unit' : 'units'}, plus the rest of the catchment.`}</p>
+				<p class="hint" data-testid="start-count">{units === 0 && gaugeNodes === 0
+						? 'No units: the catchment becomes one.'
+						: `${units} ${units === 1 ? 'unit' : 'units'}${gaugeNodes ? ` and ${gaugeNodes} ${gaugeNodes === 1 ? 'gauge' : 'gauges'}` : ''}, plus the rest of the catchment.`}</p>
 			</form>
 		{:else if step === 'review' && pending && ticks}
 			{@const p = pending.plan}
@@ -258,11 +294,23 @@
 					{#each ticks.units as t, i (t.key)}
 						{@const u = p.units[i]!}
 						{@const offer = unitOffers(u)}
-						<li class="unit" data-testid="start-unit" data-key={u.key}>
+						<li
+							class="unit"
+							data-testid="start-unit"
+							data-key={u.key}
+							data-piece-card={u.key}
+							onmouseenter={() => light(u.key)}
+							onmouseleave={() => light(null)}
+							onfocusin={() => light(u.key)}
+							onfocusout={(e) => cardOut(e, u.key)}
+						>
 							<div class="field">
-								<label for="{uid}-name-{u.key}">Name <span class="muted small">· {ROLE_LABEL[u.role].toLowerCase()}, from “{u.featureName}”</span></label>
+								<label for="{uid}-name-{u.key}" class="named"
+									><PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} /> <span>Name <span class="muted small">· {ROLE_LABEL[u.role].toLowerCase()}, from “{u.featureName}”</span></span></label
+								>
 								<input id="{uid}-name-{u.key}" bind:value={t.name} maxlength="100" aria-invalid={bad(t.name) ? 'true' : undefined} aria-describedby={bad(t.name) ? `${uid}-names` : undefined} />
 							</div>
+							{#if u.role === 'gauge' && u.totalAreaM2 !== null}<p class="hint">It measures {km2Text(u.totalAreaM2)} of the catchment above it; a gauge owns no land of its own.</p>{/if}
 							{#if offer.area}
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.area} data-testid="start-tick-area" />
@@ -288,7 +336,16 @@
 							{#if u.snapDistanceM !== null}<p class="hint">Moved {fmtNum(u.snapDistanceM, 0)} m onto the river.</p>{/if}
 						</li>
 					{/each}
-					<li class="unit" data-testid="start-rest">
+					<li
+						class="unit"
+						data-testid="start-rest"
+						data-piece-card={REST_KEY}
+						onmouseenter={() => light(REST_KEY)}
+						onmouseleave={() => light(null)}
+						onfocusin={() => light(REST_KEY)}
+						onfocusout={(e) => cardOut(e, REST_KEY)}
+					>
+						{#if pieceOf.has(REST_KEY)}<PieceBadge label="R" tint={-1} />{/if}
 						<label class="tick">
 							<input type="checkbox" bind:checked={ticks.rest.include} data-testid="start-tick-rest" />
 							<span>Add <strong>the rest of the catchment</strong> as a unit (what drains to the outlet through no unit; without it the model’s catchment is only the units’)</span>
@@ -452,6 +509,11 @@
 	.field {
 		display: grid;
 		gap: 0.25rem;
+	}
+	.named {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.tick {
 		display: flex;

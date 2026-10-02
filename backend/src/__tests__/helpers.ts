@@ -174,6 +174,24 @@ export async function retirePendingJobs(...projectIds: (string | undefined)[]) {
 }
 
 /**
+ * Settle the "pack issued / withdrawn" emails a file's issue or withdraw
+ * queued for these projects (133_pack_notices) without sending them: test
+ * cleanup, as retirePendingJobs is for jobs. The tick sends every pending
+ * notice in the shared database, so one left behind lands in a later file's
+ * outbox (alerts.db.test.ts counts every mail its tick sends, and got a
+ * "Evidence pack withdrawn: … Guard packs" mail from write-routes.db.test.ts).
+ */
+export async function settlePendingPackNotices(...projectIds: (string | undefined)[]) {
+	const ids = projectIds.filter((id): id is string => !!id);
+	if (ids.length) {
+		await asOwner(
+			`UPDATE pack_notice SET status = 'skipped', settled_at = now(), locked_until = NULL, reason = 'test cleanup' WHERE status IN ('pending', 'sending') AND project_id = ANY($1::uuid[])`,
+			[ids]
+		);
+	}
+}
+
+/**
  * Turn a run just made through the API into one saved on the legacy runoff
  * model before engine 1.0.0 removed it (issue #16), which the API can no
  * longer make: its settings say 'legacy', its summary has no runoff balance

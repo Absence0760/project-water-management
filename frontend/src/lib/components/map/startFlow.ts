@@ -3,8 +3,7 @@
 // sheet is at (read from the server's state, never kept in the sheet), which
 // features can be units and what each is by default, the ticks (every value
 // unticked until the editor ticks it), and the body apply sends.
-import type { MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
-import type { MapGeometry, MapPosition } from '$lib/api/types';
+import type { DivideProposal, MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 
 export type StartStep = 'boundary' | 'points' | 'review' | 'data' | 'closed';
@@ -30,6 +29,7 @@ export const ROLE_LABEL: Record<PointChoice, string> = {
 	dam: 'A unit with a dam',
 	abstraction: 'A unit at an abstraction point',
 	user: 'Another water user (no land)',
+	gauge: 'A gauge in the network (no land)',
 	none: 'Not in the model'
 };
 
@@ -40,8 +40,12 @@ export const STEP_LABEL: Record<Exclude<StartStep, 'closed'>, string> = {
 	data: 'Data and the first run'
 };
 
-/** The open proposal, if any (the GET lists the newest first). */
-export const openStart = (s: StartState | null): StartProposal | null => s?.proposals.find((p) => p.status === 'proposed') ?? null;
+const isStart = (p: StartProposal | DivideProposal): p is StartProposal => p.mode === 'start';
+const isDivide = (p: StartProposal | DivideProposal): p is DivideProposal => p.mode === 'divide';
+/** The open start proposal, if any (the GET lists both modes, the newest first; at most one is open). */
+export const openStart = (s: StartState | null): StartProposal | null => s?.proposals.filter(isStart).find((p) => p.status === 'proposed') ?? null;
+/** The open division, if any. */
+export const openDivide = (s: StartState | null): DivideProposal | null => s?.proposals.filter(isDivide).find((p) => p.status === 'proposed') ?? null;
 
 /**
  * Where the sheet is. A model with nodes is past the flow: at its data step
@@ -52,7 +56,7 @@ export const openStart = (s: StartState | null): StartProposal | null => s?.prop
  */
 export function startStep(s: StartState | null, features: readonly MapFeature[], pointsAsked = false): StartStep {
 	if (!s) return 'boundary';
-	if (!s.modelEmpty) return s.proposals.some((p) => p.status === 'applied') ? 'data' : 'closed';
+	if (!s.modelEmpty) return s.startedFromMap ? 'data' : 'closed';
 	if (openStart(s)) return 'review';
 	const hasBoundary = features.some((f) => f.kind === 'catchment_boundary');
 	return hasBoundary || pointsAsked ? 'points' : 'boundary';
@@ -63,8 +67,16 @@ export function candidatePoints(features: readonly MapFeature[]): MapFeature[] {
 	return features.filter((f) => (f.kind === 'dam' && f.geometry.type !== 'LineString' && f.geometry.type !== 'MultiLineString') || ((f.kind === 'other' || f.kind === 'gauge') && f.geometry.type === 'Point'));
 }
 
-/** A point's default: a dam is a dam unit, an other point an abstraction point, a gauge not in the model (it may be the outlet). */
-export const defaultChoice = (f: MapFeature): PointChoice => (f.kind === 'dam' ? 'dam' : f.kind === 'other' ? 'abstraction' : 'none');
+/**
+ * A point's default: a dam is a dam unit, an other point an abstraction
+ * point, a gauge a gauge node in the network (the outlet's is the outlet:
+ * proposeBody leaves it out). A gauge that doesn't drain to the outlet is
+ * dropped by the server, saying so.
+ */
+export const defaultChoice = (f: MapFeature): PointChoice => (f.kind === 'dam' ? 'dam' : f.kind === 'other' ? 'abstraction' : 'gauge');
+
+/** The choices a point offers: a gauge node only for a gauge (a gauge node stands for a gauge on the map). */
+export const choicesFor = (f: MapFeature): PointChoice[] => (f.kind === 'gauge' ? ['gauge', 'none'] : ['dam', 'abstraction', 'user', 'none']);
 
 /** The gauges that may be the outlet (points only). */
 export const outletGauges = (features: readonly MapFeature[]): MapFeature[] => features.filter((f) => f.kind === 'gauge' && f.geometry.type === 'Point');
@@ -140,19 +152,4 @@ export function applySummary(t: StartTicks): string {
 	const orders = t.units.filter((u) => u.drainsInto).length;
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	return `The empty model gets ${s(nodes, 'node')}, with ${s(areas, 'area')} (each saved as its unit’s parcel) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
-}
-
-/**
- * The open proposal's pieces as one shape for the map's proposal layer
- * (dashed, as a delineation's): every unit's outline and the rest's, with
- * the outlet. Null when there is nothing to draw (no outlet, no outline).
- */
-export function startShape(p: StartProposal | null): { id: string; geometry: Extract<MapGeometry, { type: 'MultiPolygon' }>; outlet: MapPosition } | null {
-	if (!p?.plan.outlet.point) return null;
-	const polys: MapPosition[][][] = [];
-	for (const u of p.plan.units) if (u.geometry) polys.push(u.geometry.coordinates);
-	const g = p.plan.rest.geometry;
-	if (g?.type === 'Polygon') polys.push(g.coordinates);
-	else if (g?.type === 'MultiPolygon') polys.push(...g.coordinates);
-	return polys.length ? { id: p.id, geometry: { type: 'MultiPolygon', coordinates: polys }, outlet: p.plan.outlet.point } : null;
 }
