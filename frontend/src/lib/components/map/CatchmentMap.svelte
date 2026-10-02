@@ -434,13 +434,15 @@
 						});
 					}
 					// A piece under the pointer lights its card, and says its name over the corner.
-					m.on('mousemove', PIECE_HIT_LAYER, (e: { features?: { properties?: { key?: string } }[] }) => {
-						if (draft?.active) return;
+					m.on('mousemove', PIECE_HIT_LAYER, (e: { features?: { properties?: { key?: string } }[]; originalEvent?: Event }) => {
+						// Over a number, the number's piece is the one meant (a gauge's number sits on the piece below it).
+						if (draft?.active || (e.originalEvent?.target as Element | null)?.closest?.('.piece-badge')) return;
 						const key = e.features?.[0]?.properties?.key;
 						hoverOn(proposal?.pieces?.find((p) => p.key === key) ?? null);
 						m.getCanvas().style.cursor = onpiecepick ? 'pointer' : '';
 					});
-					m.on('mouseleave', PIECE_HIT_LAYER, () => {
+					m.on('mouseleave', PIECE_HIT_LAYER, (e: { originalEvent?: Event }) => {
+						if ((e.originalEvent as MouseEvent | undefined)?.relatedTarget instanceof Element && ((e.originalEvent as MouseEvent).relatedTarget as Element).closest('.piece-badge')) return;
 						hoverOn(null);
 						if (!draft?.active) m.getCanvas().style.cursor = '';
 					});

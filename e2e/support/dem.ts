@@ -9,3 +9,7 @@ export const DEM_FIXTURE = fileURLToPath(new URL('../../backend/fixtures/dem/syn
 export const FIXTURE_OUTLET: [number, number] = [20.7428741, -33.5396777];
 /** Just below the dam wall: less, about 341 km². [lon, lat] */
 export const FIXTURE_DAM: [number, number] = [20.7428741, -33.4262838];
+/** On the river between the dam and the outlet: a gauge there measures the dam's catchment and the land below it. [lon, lat] */
+export const FIXTURE_MID_GAUGE: [number, number] = [20.7428741, -33.4938799];
+/** Far up the river above the dam: an abstraction point there owns the valley's head. [lon, lat] */
+export const FIXTURE_UPPER: [number, number] = [20.7428741, -33.3104464];
