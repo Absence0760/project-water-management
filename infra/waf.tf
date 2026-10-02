@@ -10,10 +10,18 @@
 # secret header, and the app rejects requests that bypass CloudFront — so
 # every API request passes through this ACL.
 #
-# Three per-IP rate rules, tightest first:
+# Four per-IP rate rules, tightest first:
 #   - /api/auth/*: 100 per 5 minutes (credential stuffing);
 #   - /api/*: waf_rate_limit_per_ip (default 1,000), the requests that cost
 #     a Lambda invocation and usually a database query;
+#   - /tiles/*: waf_tiles_rate_limit_per_ip (default 1,000), the map's
+#     archives. Each request may move up to 2 MiB (tiles_range,
+#     s3_cloudfront.tf), so the bill here is bytes, not requests: under the
+#     site-wide 5,000 alone one IP could pull ~10 GB of CloudFront egress
+#     every 5 minutes (~$330 a day) without tripping the request alarm. At
+#     1,000 it is ~2 GB per 5 minutes at worst, which the cloudfront-bytes
+#     alarm (alarms.tf) catches in its first period; real map use is a few
+#     hundred small range reads in a busy 5 minutes;
 #   - every path: waf_site_rate_limit_per_ip (default 5,000), a backstop for
 #     the static site. Its files are cached at the edge, so a person loading
 #     the SPA (a cold visit is ~150 requests of shell and chunks) or the
@@ -32,7 +40,7 @@
 # No AWS managed rule groups: AWSManagedRulesCommonRuleSet blocks request
 # bodies over 8 KB, and time-series uploads are legitimately ~1 MB.
 #
-# Cost: ~$5/month per ACL + $1/month per rule + $0.60 per 1M requests.
+# Cost: ~$5/month per ACL + $1/month per rule (5 rules) + $0.60 per 1M requests.
 # ----------------------------------------------------------------------------
 
 resource "aws_wafv2_web_acl" "frontend" {
@@ -237,11 +245,57 @@ resource "aws_wafv2_web_acl" "frontend" {
     }
   }
 
+  # The map's tiles: the bytes bound (header above). The path as CloudFront
+  # matches /tiles/* (decoded, normalised, lowercased, as the API rules).
+  rule {
+    name     = "RateLimitTilesPerIP"
+    priority = 3
+
+    action {
+      block {}
+    }
+
+    statement {
+      rate_based_statement {
+        limit              = var.waf_tiles_rate_limit_per_ip
+        aggregate_key_type = "IP"
+
+        scope_down_statement {
+          byte_match_statement {
+            search_string         = "/tiles/"
+            positional_constraint = "STARTS_WITH"
+            field_to_match {
+              uri_path {}
+            }
+            text_transformation {
+              priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "NORMALIZE_PATH"
+            }
+            text_transformation {
+              priority = 2
+              type     = "LOWERCASE"
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      sampled_requests_enabled   = true
+      cloudwatch_metrics_enabled = true
+      metric_name                = "${local.project}-frontend-RateLimitTilesPerIP"
+    }
+  }
+
   # Every path (the API's requests count here too): the static site's
   # backstop (header above).
   rule {
     name     = "RateLimitSitePerIP"
-    priority = 3
+    priority = 4
 
     action {
       block {}

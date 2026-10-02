@@ -4730,6 +4730,18 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
+- [ ] **Record which file a reference load came from (round 4 infra audit,
+      data finding 4).** A load checks the uploaded file's SHA-256, then
+      drops it: the dataset rows don't say which key and hash they came
+      from, so once the Actions log expires nobody can tell which file is
+      live or which version to restore (the reference bucket is versioned
+      for a year, deployment.md § Reference datasets, Undoing a load).
+      **Durable fix:** a migration adding a `reference_load (kind, dataset,
+      source_key, source_sha256)` table (rivers have no dataset table of
+      their own), written in the same transaction as the dataset by
+      `geo/referenceLoad.ts` and cleared by any other replace, and shown on
+      `/data-sources`. **Trigger:** the
+      first production load, or the next migration touching those tables.
 
 ## Housekeeping
 
@@ -5511,6 +5523,27 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `api.runs.series` / `run_series` consumer and how it treats a forecast
       run would stop the next one. Trigger: the next view over stored
       series.
+
+## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
+
+Measured on a scratch database with 300 000 synthetic reaches spread over
+South Africa (2026-10-02): `GET …/map/rivers` for a 2° × 2° box runs two
+sequential scans of `river_reference`, the bbox query (21 ms: the btree
+`river_reference_bbox_idx` on `(min_lon, max_lon, min_lat, max_lat)` can't
+serve a four-sided overlap, so the planner skips it) and `riverDatasets()`'
+`count(*) … GROUP BY dataset` (25 ms), on every pan. Fine at South Africa's
+network; linear in the table, so about 0.2 s a request if the operator loads
+all of Africa. `GET …/map/stations` counts its datasets the same way.
+
+- **Durable fix:** in one migration, an expression GiST index on
+  `box(point(min_lon, min_lat), point(max_lon, max_lat))` (core Postgres, no
+  PostGIS) with the query written as `box(...) && box(...)`, and a small
+  per-dataset summary table (dataset, count) the loader (`loadRivers.ts`,
+  `loadGaugeStations.ts`) writes in its transaction, read instead of the
+  count. Measure before and after with `EXPLAIN (ANALYZE, BUFFERS)` at a
+  million rows.
+- **Trigger:** a river network of more than about 500 000 reaches is loaded,
+  or the layer's request shows above 100 ms in the API's logs.
 
 ## Round-4 input hardening (map data, geometry, compute caps)
 

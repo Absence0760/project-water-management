@@ -71,7 +71,7 @@
 	import { openDivide, openStart, type StartDraft } from './startFlow';
 	import DivideSheet from './DivideSheet.svelte';
 	import type { DivideDraft } from './divideFlow';
-	import { piecesShape } from './pieces';
+	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
@@ -264,12 +264,29 @@
 	let delineateAt = $state<MapPosition | null>(null);
 	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
 	let delineateStep = $state<'ask' | 'decide'>('decide');
+	let delineateWasOpen = false;
 	$effect(() => {
 		if (!delineateSheet.open) {
 			delineateAt = null;
 			delineateStep = 'decide';
+			if (delineateWasOpen) void untrack(focusAfterDelineate);
 		}
+		delineateWasOpen = delineateSheet.open;
 	});
+	/**
+	 * The sheet closed. Its opener (the draw bar's Delineate…, the Review it link) is
+	 * usually gone by then, so the dialog had nothing to hand focus back to: the
+	 * Delineate button takes it, else the map, never <body> (WCAG 2.4.3). A focus
+	 * already placed (Accept picks the new feature's card) is left where it is.
+	 */
+	async function focusAfterDelineate() {
+		await tick();
+		const at = document.activeElement;
+		if (at && at !== document.body) return;
+		const btn = document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]');
+		if (btn) btn.focus();
+		else mapRef?.focusMap();
+	}
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
 		delineateStep = 'ask';
@@ -363,7 +380,9 @@
 	let pieceLit = $state<string | null>(null);
 	/** The card to bring into view when its sheet opens: a piece clicked on the map. */
 	let pieceFocus = $state<string | null>(null);
-	const pieces = $derived(piecesShape(pendingStart ?? pendingDivide, pieceLit));
+	// Worked out once per proposal; lighting a piece (a hover) only swaps `highlight` (litPieces), so the map redraws the proposal alone.
+	const pieceShapes = $derived(piecesShape(pendingStart ?? pendingDivide));
+	const pieces = $derived(litPieces(pieceShapes, pieceLit));
 	async function pickPiece(key: string) {
 		pieceFocus = key;
 		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });

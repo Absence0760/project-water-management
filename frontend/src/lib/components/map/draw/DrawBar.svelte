@@ -141,7 +141,7 @@
 			<h2 class="bar-h" id="{uid}-h">Tracing a dam</h2>
 			<label class="share small">
 				Water in at least
-				<select bind:value={minOccurrence} aria-label="Share of the observations counted as water" data-testid="map-trace-share">
+				<select bind:value={minOccurrence} data-testid="map-trace-share">
 					{#each [10, 25, 50, 75] as const as v (v)}<option value={v}>{v} %</option>{/each}
 				</select>
 				of the observations

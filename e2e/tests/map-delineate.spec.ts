@@ -93,6 +93,8 @@ test('a boundary is replaced only with the tick; Reject changes nothing; a point
 	await review(page).getByTestId('delineate-reject').click();
 	await expect(page.getByTestId('map-notice')).toHaveText(/Rejected the delineated catchment; nothing on the map changed\./);
 	await expect(page.getByTestId('map-summary')).toContainText('1 feature');
+	// The sheet's opener (the draw bar) is gone: focus comes back to Delineate, not to <body> (WCAG 2.4.3).
+	await expect(header(page).getByRole('button', { name: 'Delineate' })).toBeFocused();
 
 	// From the outlet: accepting as the boundary waits for the tick.
 	await delineateAt(page, FIXTURE_OUTLET);

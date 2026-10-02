@@ -173,7 +173,7 @@ pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 
-pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings in scripts/guards/check_web_bundle_budget.mjs

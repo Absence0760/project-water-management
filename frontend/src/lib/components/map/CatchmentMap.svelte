@@ -339,16 +339,22 @@
 		};
 	};
 
+	/** Hand one GeoJSON source its data (MapLibre re-tiles the whole source in its worker, so only a source whose input changed is sent). */
+	function setSource(id: string, data: () => unknown) {
+		if (!map || status !== 'ready') return;
+		(map.getSource(id) as { setData?: (d: unknown) => void } | undefined)?.setData?.(data());
+	}
+	const syncFeatures = () => setSource('features', () => overlayData(features, selectedId, fills));
+	const syncQuaternaries = () => setSource('quaternaries', () => quaternaryData(quaternaries, pickedQuaternary));
+	const syncProposal = () => setSource('proposal', () => proposalData(proposal));
+	const syncRivers = () => setSource('rivers', () => riverNetworkData(rivers, pickedReach));
+
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
-		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
-		src?.setData?.(overlayData(features, selectedId, fills));
-		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
-		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
-		const pr = map.getSource('proposal') as { setData?: (d: unknown) => void } | undefined;
-		pr?.setData?.(proposalData(proposal));
-		const rn = map.getSource('rivers') as { setData?: (d: unknown) => void } | undefined;
-		rn?.setData?.(riverNetworkData(rivers, pickedReach));
+		syncFeatures();
+		syncQuaternaries();
+		syncProposal();
+		syncRivers();
 		syncMarkers();
 		syncBadges();
 	}
@@ -517,17 +523,34 @@
 		};
 	});
 
-	// Redraw when the features or the selection change.
+	// Redraw each source when its own inputs change, never the others: hovering a piece (a new `proposal`
+	// highlight) or picking a reach must not re-send every feature, quaternary and reach (~2 MB at 60 units
+	// and 1000 reaches) to MapLibre's worker to be re-tiled (perf-hunt, round 4).
 	$effect(() => {
 		void features;
 		void selectedId;
 		void fills;
+		void status;
+		syncFeatures();
+		untrack(syncMarkers);
+	});
+	$effect(() => {
 		void quaternaries;
 		void pickedQuaternary;
+		void status;
+		syncQuaternaries();
+	});
+	$effect(() => {
 		void proposal;
+		void status;
+		syncProposal();
+		untrack(syncBadges);
+	});
+	$effect(() => {
 		void rivers;
 		void pickedReach;
-		syncOverlay();
+		void status;
+		syncRivers();
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.
