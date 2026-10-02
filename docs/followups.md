@@ -3604,9 +3604,11 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       below.
 - [ ] **The licence sentences the map's production data waits for**
       (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
-      liability sentence (Art. 6(c)) and HydroSHEDS' Exhibit B statement are
-      done (2026-10-02, on the public Data sources and credits page,
-      `/data-sources`). Still open: the terms' end-user protections for
+      liability sentence (Art. 6(c): "The organisations in charge of the
+      Copernicus programme by law or by delegation do not incur any liability
+      for any use of the Copernicus WorldDEM-30") and HydroSHEDS' Exhibit B
+      statement are done (2026-10-02, on the public Data sources and credits
+      page, `/data-sources`). Still open: the terms' end-user protections for
       HydroRIVERS (no stand-alone redistribution, no reverse engineering;
       legal-status.md § Other open items) before the river network is loaded. `scripts/release/map-data-gates.mjs`
       refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
