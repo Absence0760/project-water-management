@@ -5,6 +5,8 @@ import { moveWindow, newWindow, SPAN_LABEL, toggleWeekday, withSpan } from './de
 describe('newWindow', () => {
 	it('labels every span the engine knows', () => {
 		expect(Object.keys(SPAN_LABEL).sort()).toEqual([...DEMAND_SCHEDULE_SPANS].sort());
+		// The span that takes weekday ticks says so, so a weekly on/off pattern is findable (#342 item 4).
+		expect(SPAN_LABEL.always).toBe('Days of the week');
 	});
 	it('starts each span off, and every one but the blank date range runs as it stands', () => {
 		for (const span of DEMAND_SCHEDULE_SPANS) {

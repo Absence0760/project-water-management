@@ -7,7 +7,7 @@ import type { DemandScheduleSpan, DemandScheduleWindow } from '@water-management
 
 /** The span choices, in the order the form lists them. */
 export const SPAN_LABEL: Record<DemandScheduleSpan, string> = {
-	always: 'Every day',
+	always: 'Days of the week',
 	yearly: 'Dates each year',
 	range: 'Date range, once',
 	easter: 'Around Easter'
