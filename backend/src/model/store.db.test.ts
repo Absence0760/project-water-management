@@ -90,6 +90,10 @@ describe('model store', () => {
 			pumpCapacityM3Day: 1234.5,
 			supplyTriggerPct: 0.35,
 			supplyStopPct: 0.65,
+			// The crops on a river abstraction beside the dam (engine 1.65.0, 170_water_source), awkward numbers.
+			cropWaterSource: 'river',
+			cropRiverPumpM3Day: 0.1 + 0.2,
+			cropRiverPoolM3: 123_456.789,
 			// Hands-off flow and River to dam by month (engine 1.32.0, 114_node_operating_rules, issue #204), awkward numbers.
 			handsOffM3Day: [0.1 + 0.2, 0, 0, 1e-7, 250.5, 250.5, 250.5, 250.5, 250.5, 250.5, 123_456.789, 0],
 			handsOffEwr: true,
@@ -171,8 +175,12 @@ describe('model store', () => {
 					population: 4100.5,
 					// Where its number comes from (engine 1.56.0, migration 139).
 					source: 'perCapita',
+					// On a river abstraction of its own with no pump limit and a pool (engine 1.65.0, migration 170).
+					waterSource: 'river',
+					riverPumpM3Day: null,
+					riverPoolM3: 2500.25,
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -197,6 +205,9 @@ describe('model store', () => {
 			pumpCapacityM3Day: null,
 			supplyTriggerPct: 0.4,
 			supplyStopPct: 0.6,
+			cropWaterSource: 'dam',
+			cropRiverPumpM3Day: null,
+			cropRiverPoolM3: null,
 			handsOffM3Day: null,
 			handsOffEwr: false,
 			divertMonthlyM3Day: null,
@@ -222,6 +233,11 @@ describe('model store', () => {
 		await expect(asOwner('UPDATE demand_object SET population = -1 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_population_nonneg' });
 		// Migration 134's CHECK keeps the source in the list below the API's own check (engine 1.56.0).
 		await expect(asOwner('UPDATE demand_object SET source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'survey'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_source_known' });
+		// Migration 170's CHECKs keep the water source in the list and the pump and pool sizes, below the API's own checks (engine 1.65.0).
+		await expect(asOwner('UPDATE node SET crop_water_source = $2 WHERE id = $1', [farm.id, 'borehole'])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_water_source_known' });
+		await expect(asOwner('UPDATE node SET crop_river_pool_m3 = -1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_river_pool_size' });
+		await expect(asOwner('UPDATE demand_object SET water_source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'well'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_water_source_known' });
+		await expect(asOwner("UPDATE demand_object SET river_pump_m3_day = 'Infinity' WHERE id = $1", [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_river_pump_size' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});

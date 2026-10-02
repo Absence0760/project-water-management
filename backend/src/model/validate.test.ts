@@ -394,6 +394,24 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ ...monthly, source: 'perCapita' }))).join()).toMatch(/population × litres a day is sized per unit/);
 	});
 
+	it('takes where an object and a unit’s crops take their water (engine 1.65.0, issue #344): the dam by default, or a river abstraction with a pump and pool', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		const parsed = ModelBody.parse(body(monthly));
+		expect(parsed.demandObjects![0]).toMatchObject({ waterSource: null, riverPumpM3Day: null, riverPoolM3: null });
+		expect(parsed.nodes[1]).toMatchObject({ cropWaterSource: 'dam', cropRiverPumpM3Day: null, cropRiverPoolM3: null });
+		const river = ModelBody.parse(body({ ...monthly, waterSource: 'river', riverPumpM3Day: 864, riverPoolM3: 5000 }));
+		expect(river.demandObjects![0]).toMatchObject({ waterSource: 'river', riverPumpM3Day: 864, riverPoolM3: 5000 });
+		expect(modelProblems(river)).toEqual([]);
+		for (const bad of [{ waterSource: 'borehole' }, { riverPumpM3Day: -1 }, { riverPoolM3: -5 }, { riverPoolM3: Number.POSITIVE_INFINITY }])
+			expect(ModelBody.safeParse(body({ ...monthly, ...bad })).success, JSON.stringify(bad)).toBe(false);
+		const crops = ModelBody.parse({ ...body(monthly), nodes: [gauge, { ...unit, cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 1200 }] });
+		expect(crops.nodes[1]).toMatchObject({ cropWaterSource: 'river', cropRiverPoolM3: 1200 });
+		expect(modelProblems(crops)).toEqual([]);
+		for (const bad of [{ cropWaterSource: 'well' }, { cropRiverPumpM3Day: -1 }]) expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// Only a unit's crops have a water source (a model rule).
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, cropWaterSource: 'river' }, unit] })).join()).toMatch(/only a unit's crops have a water source/);
+	});
+
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {
