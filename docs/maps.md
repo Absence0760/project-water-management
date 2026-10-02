@@ -57,7 +57,9 @@ server and no tile CDN: the file is served from the app's own storage.
   is safe to re-run: it starts MinIO, uploads the cached extract and fonts
   when MinIO doesn't serve them (its volume wiped, or a new MinIO), runs `fetch` only when nothing is cached, and sets both
   URLs (and the relief's, when its DEM is cached, [§ Relief](#relief)) in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
-  other line kept); restart `pnpm dev` after. `pnpm dev:tiles:fetch`
+  other line kept); restart `pnpm dev` after. `pnpm dev:all` runs it as
+  `up --cached`, which never fetches: with nothing cached it starts MinIO and
+  leaves the map without a basemap. `pnpm dev:tiles:fetch`
   (`bin/tiles-dev.sh fetch`) re-downloads. It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
