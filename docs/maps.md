@@ -472,8 +472,11 @@ answer, with no database connection held.
   PATH, else the pinned `ghcr.io/osgeo/gdal` image through docker. The
   archive's attribution is "Source: EC JRC/Google", carried into each
   traced feature's description. Then
-  `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production: see
-  followups.md "Production basemap".
+  `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
+  upload it as `tiles/water.pmtiles` and set `dam_trace_water = true` in the
+  tfvars, which sets `WATER_URL=s3://<tiles bucket>/tiles/water.pmtiles` on
+  the API and lets its role read that one key ([deployment.md § Map
+  tiles](./deployment.md#map-tiles)); off by default.
 
 ## Measure
 

@@ -25,7 +25,9 @@ const list = (page: Page) => page.getByTestId('map-feature-list');
 const card = (page: Page) => page.getByTestId('map-feature-card');
 const bar = (page: Page) => page.getByTestId('map-draw-bar');
 const said = (page: Page) => page.getByTestId('map-draw-said');
-const row = (page: Page, name: string) => list(page).getByRole('button', { name: new RegExp(`^${name.replace(/[()]/g, '\\$&')}(\\b|\\s)`) });
+/** Every regular-expression metacharacter escaped, backslash included, so a name is matched literally. */
+const literal = (s: string) => s.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+const row = (page: Page, name: string) => list(page).getByRole('button', { name: new RegExp(`^${literal(name)}(\\b|\\s)`) });
 const canvas = (page: Page) => page.getByTestId('catchment-map').locator('canvas');
 
 /** Features made through the API (the drawing tools are what's under test, not the upload). */

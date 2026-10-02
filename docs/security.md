@@ -3172,6 +3172,10 @@ key there would let any read-only principal forge any user's session.
 - **Delineation's DEM read** (`delineation_dem`): the API role may
   GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
   allows the same; off by default.
+- **Tracing a dam's water read** (`dam_trace_water`, #326 C2): the same
+  for one other key, `tiles/water.pmtiles` (`api_water`); off by default.
+  The file sits under `tiles/`, so `/tiles/*` serves it by bounded ranges
+  like the other archives; GSW's terms allow redistribution.
 - **Reference loads run as the schema owner**, so they are gated like a
   deploy: `load-reference.yml` reaches AWS only in the `production`
   environment (a required reviewer, then OIDC), and the deploy role's only
