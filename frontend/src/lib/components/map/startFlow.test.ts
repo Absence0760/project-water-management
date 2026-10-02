@@ -10,8 +10,9 @@ import {
 	emptyName,
 	initialTicks,
 	openStart,
+	openDivide,
+	choicesFor,
 	proposeBody,
-	startShape,
 	startStep,
 	tickAll,
 	unitOffers
@@ -62,20 +63,21 @@ const plan = (units: StartUnit[], over: Partial<StartPlan> = {}): StartPlan => (
 });
 const proposal = (status: StartProposal['status']): StartProposal => ({
 	id: status,
+	mode: 'start',
 	status,
 	plan: plan([]),
 	fromDem: true,
 	dataset: 'DEM',
 	datasetFingerprint: '0123456789abcdef',
 	method: 'm',
-	methodVersion: 'start-1',
+	methodVersion: 'start-2',
 	decision: null,
 	createdBy: null,
 	createdAt: '',
 	decidedBy: null,
 	decidedAt: null
 });
-const state = (over: Partial<StartState> = {}): StartState => ({ elevation: true, dataset: null, modelEmpty: true, proposals: [], ...over });
+const state = (over: Partial<StartState> = {}): StartState => ({ elevation: true, dataset: null, modelEmpty: true, startedFromMap: false, proposals: [], ...over });
 
 describe('startStep', () => {
 	it('reads the step from the server: boundary, then points, then the open proposal', () => {
@@ -87,7 +89,9 @@ describe('startStep', () => {
 	});
 
 	it('is at the data step once the model was started from the map, and closed for a model typed in', () => {
-		expect(startStep(state({ modelEmpty: false, proposals: [proposal('applied')] }), [])).toBe('data');
+		expect(startStep(state({ modelEmpty: false, startedFromMap: true, proposals: [proposal('applied')] }), [])).toBe('data');
+		// Started from the map long ago (the applied start no longer among the newest listed): still the data step.
+		expect(startStep(state({ modelEmpty: false, startedFromMap: true, proposals: [] }), [])).toBe('data');
 		expect(startStep(state({ modelEmpty: false, proposals: [proposal('discarded')] }), [])).toBe('closed');
 		expect(startStep(null, [])).toBe('boundary');
 	});
@@ -105,7 +109,20 @@ describe('the points', () => {
 			feature('b', 'catchment_boundary', SQUARE)
 		];
 		expect(candidatePoints(fs).map((f) => f.id)).toEqual(['d', 'dp', 'o', 'g']);
-		expect(candidatePoints(fs).map(defaultChoice)).toEqual(['dam', 'dam', 'abstraction', 'none']);
+		// A gauge is a gauge node in the network by default (the outlet's is left out by proposeBody).
+		expect(candidatePoints(fs).map(defaultChoice)).toEqual(['dam', 'dam', 'abstraction', 'gauge']);
+	});
+
+	it('offers a gauge only as a gauge node or nothing, and any other point as a unit or user', () => {
+		expect(choicesFor(feature('g', 'gauge'))).toEqual(['gauge', 'none']);
+		expect(choicesFor(feature('d', 'dam'))).toEqual(['dam', 'abstraction', 'user', 'none']);
+	});
+
+	it('tells a start proposal from a division (the GET lists both modes)', () => {
+		const div = { ...proposal('proposed'), id: 'div', mode: 'divide' as const, plan: {} as never };
+		expect(openStart(state({ proposals: [div, proposal('superseded')] }))).toBeNull();
+		expect(openDivide(state({ proposals: [div] }))?.id).toBe('div');
+		expect(openDivide(state({ proposals: [proposal('proposed')] }))).toBeNull();
 	});
 
 	it('takes the boundary’s own outlet by default, else the only gauge', () => {
@@ -115,11 +132,12 @@ describe('the points', () => {
 	});
 
 	it('sends the units only, never the outlet gauge as one', () => {
-		expect(proposeBody({ d: 'dam', o: 'abstraction', g: 'user', x: 'none' }, 'g')).toEqual({
+		expect(proposeBody({ d: 'dam', o: 'abstraction', g: 'gauge', m: 'gauge', x: 'none' }, 'g')).toEqual({
 			outletFeatureId: 'g',
 			points: [
 				{ featureId: 'd', role: 'dam' },
-				{ featureId: 'o', role: 'abstraction' }
+				{ featureId: 'o', role: 'abstraction' },
+				{ featureId: 'm', role: 'gauge' }
 			]
 		});
 		expect(proposeBody({}, '').outletFeatureId).toBeNull();
@@ -177,23 +195,5 @@ describe('the ticks', () => {
 		expect(applySummary(t)).toBe(
 			'The empty model gets 5 nodes, with 3 areas (each saved as its unit’s parcel) and 3 drains-into from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.'
 		);
-	});
-});
-
-describe('startShape (the open proposal drawn on the map)', () => {
-	it('gathers every unit’s outline and the rest’s, with the outlet', () => {
-		const p = { ...proposal('proposed'), plan: plan([unit('a'), unit('town', { role: 'user', geometry: null })]) };
-		const shape = startShape(p)!;
-		expect(shape.geometry.type).toBe('MultiPolygon');
-		expect(shape.geometry.coordinates).toHaveLength(2);
-		expect(shape.outlet).toEqual([20, -33]);
-	});
-
-	it('is null with nothing to draw', () => {
-		expect(startShape(null)).toBeNull();
-		const bare = { ...proposal('proposed'), plan: plan([], { rest: { name: 'Rest', areaM2: null, geometry: null } }) };
-		expect(startShape(bare)).toBeNull();
-		const noOutlet = { ...proposal('proposed'), plan: plan([unit('a')], { outlet: { featureId: null, name: 'O', point: null, snapDistanceM: null, foundIn: null } }) };
-		expect(startShape(noOutlet)).toBeNull();
 	});
 });

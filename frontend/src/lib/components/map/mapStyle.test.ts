@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
+import { PIECE_TINT_COUNT } from './pieces';
 import {
 	BASEMAP_ATTRIBUTION,
 	basemapColours,
@@ -17,6 +18,8 @@ import {
 	overlayColours,
 	overlayData,
 	overlayLayers,
+	PIECE_HIT_LAYER,
+	pieceTints,
 	proposalColour,
 	proposalData,
 	proposalLayers,
@@ -371,6 +374,47 @@ describe('relief (shaded from a DEM)', () => {
 				expect(alpha, k).toBeLessThanOrEqual(0.6);
 			}
 		}
+	});
+});
+
+describe('a start or divide proposal’s pieces (#326 C3’s follow-up)', () => {
+	const sq = (x: number) => ({ type: 'Polygon' as const, coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 0]]] as [number, number][][] });
+	const pieces = [
+		{ key: 'a', label: '1', name: 'A', geometry: sq(0), at: [0.5, 0.3] as [number, number], tint: 0 },
+		{ key: 'w', label: '2', name: 'Weir', geometry: null, at: [3, 3] as [number, number], tint: 1 },
+		{ key: 'rest', label: 'R', name: 'Rest', geometry: sq(2), at: [2.5, 0.3] as [number, number], tint: -1 }
+	];
+
+	it('draws each piece with an outline on its own, with its key and tint and the lit one marked; a unit without land draws none', () => {
+		const d = proposalData({ geometry: sq(0), outlet: [9, 9], pieces, highlight: 'rest' });
+		expect(d.features.map((f) => [f.properties.part, f.properties.key, f.properties.tint, f.properties.lit])).toEqual([
+			['piece', 'a', 0, false],
+			['piece', 'rest', -1, true],
+			['outlet', undefined, undefined, undefined]
+		]);
+	});
+
+	it('fills each piece with its tint (the rest the proposal’s teal), lights the lit one in the selection colour, under the proposal’s dash', () => {
+		for (const dark of [false, true]) {
+			const layers = proposalLayers(dark);
+			const fill = layers.find((l) => l.id === PIECE_HIT_LAYER)!;
+			expect((fill.paint as Record<string, unknown>)['fill-color']).toEqual(['match', ['get', 'tint'], ...pieceTints().flatMap((t, i) => [i, t]), proposalColour(dark)]);
+			const lit = layers.find((l) => l.id === 'pr-lit')!;
+			expect((lit.paint as Record<string, unknown>)['line-color']).toBe(overlayColours(dark).selected);
+			const ids = layers.map((l) => l.id);
+			expect(ids.indexOf(PIECE_HIT_LAYER)).toBeLessThan(ids.indexOf('pr-line'));
+			expect(ids.indexOf('pr-line')).toBeLessThan(ids.indexOf('pr-lit'));
+		}
+	});
+
+	it('cycles tints that are each well apart from every other (the numbers say which is which; the tints only help the eye)', () => {
+		const t = pieceTints();
+		expect(t).toHaveLength(PIECE_TINT_COUNT);
+		for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) expect(deltaE(t[i]!, t[j]!), `${t[i]} vs ${t[j]}`).toBeGreaterThanOrEqual(20);
+	});
+
+	it('writes the numbers in a colour that reads 4.5:1 on the badge’s casing, light and dark', () => {
+		for (const dark of [false, true]) expect(contrast(labelColours(dark).text, overlayColours(dark).casing)).toBeGreaterThanOrEqual(4.5);
 	});
 });
 

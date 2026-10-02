@@ -261,6 +261,12 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.start_proposed', { units: 1, fromDem: false }))).toBe('Proposed a model from the map: 1 unit, without an elevation model');
 		expect(eventLine(ev('map.start_applied', { nodes: 4, areas: 2, orders: 1 }))).toBe('Started the model from the map: 4 nodes, 2 areas and 1 drains-into taken');
 		expect(eventLine(ev('map.start_discarded', {}))).toBe('Discarded a model proposed from the map');
+		expect(eventLine(ev('map.divide_proposed', { units: 3, dataset: 'Synthetic DEM 1' }))).toBe('Proposed dividing the model from the map: 3 points (Synthetic DEM 1)');
+		expect(eventLine(ev('map.divide_applied', { areas: 2, orders: 3, runoff: 1, gauges: 1 }))).toBe(
+			'Divided the model from the map: 2 areas, 3 drains-into and 1 runoff to the dam taken, 1 gauge added'
+		);
+		expect(eventLine(ev('map.divide_applied', { areas: 1, orders: 0, runoff: 0, gauges: 0 }))).toBe('Divided the model from the map: 1 area, 0 drains-into and 0 runoffs to the dam taken');
+		expect(eventLine(ev('map.divide_discarded', {}))).toBe('Discarded a division of the model proposed from the map');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {

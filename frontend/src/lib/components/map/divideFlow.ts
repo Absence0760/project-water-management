@@ -1,0 +1,148 @@
+// Divide a model that has nodes from the map (#326 C3's follow-up,
+// docs/design/start-from-map.md § Dividing a model that has nodes, docs/ui.md
+// § Map): the pure parts of the Map's Divide sheet. What each point on the map
+// can stand for (the model's nodes its kind may, or a new gauge), the ticks
+// (every value unticked until the editor ticks it), the problems the server
+// would refuse, and what apply will do.
+import type { NetworkNode } from '@water-management/engine';
+import type { DividePlan, DivideTicks, DivideUnit, MapFeature } from '$lib/api';
+import { fmtNum } from '$lib/format/number';
+import { KIND_NODES } from './mapData';
+import { candidatePoints } from './startFlow';
+
+/** A point's choice: a node's id, a new gauge node, or not in the division. */
+export type DivideChoice = string | 'new-gauge' | 'none';
+export const NEW_GAUGE = 'new-gauge';
+export const NONE = 'none';
+
+/** What the editor chose and ticked, kept by the Map tab (as the Start sheet's draft): each point's node, the outlet, the ticks per proposal. */
+export interface DivideDraft {
+	picked: Record<string, DivideChoice>;
+	outlet: string | null;
+	ticks: Record<string, DivideTicks>;
+}
+
+/** The model's outflow: the node that drains nowhere (exactly one, or the model can't be divided). */
+export function outflowOf(nodes: readonly Pick<NetworkNode, 'id' | 'downstreamNodeId'>[]): string | null {
+	const roots = nodes.filter((n) => n.downstreamNodeId === null);
+	return roots.length === 1 ? roots[0]!.id : null;
+}
+
+/** The nodes a point may stand for: those its kind may (map_feature's KIND_NODES), never the outflow. */
+export function nodeOptions<N extends Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId'>>(f: MapFeature, nodes: readonly N[]): N[] {
+	const outflow = outflowOf(nodes);
+	return nodes.filter((n) => n.id !== outflow && KIND_NODES[f.kind].includes(n.kind));
+}
+
+/** A point's default: the node it stands for on the map (if it may), else a new gauge for a gauge, else not in the division. */
+export function defaultDivideChoice(f: MapFeature, nodes: readonly Pick<NetworkNode, 'id' | 'kind' | 'downstreamNodeId'>[]): DivideChoice {
+	if (f.nodeId && nodeOptions(f, nodes).some((n) => n.id === f.nodeId)) return f.nodeId;
+	return f.kind === 'gauge' && !f.nodeId && f.geometry.type === 'Point' ? NEW_GAUGE : NONE;
+}
+
+/** Points that can be in a division: the Start sheet's candidates. */
+export const dividePoints = candidatePoints;
+
+/** The propose body; the outlet gauge is never also a point. */
+export function divideBody(choices: Record<string, DivideChoice>, outlet: string): { outletFeatureId: string | null; points: { featureId: string; nodeId: string | null }[] } {
+	const points = Object.entries(choices)
+		.filter(([id, c]) => c !== NONE && id !== outlet)
+		.map(([featureId, c]) => ({ featureId, nodeId: c === NEW_GAUGE ? null : c }));
+	return { outletFeatureId: outlet || null, points };
+}
+
+/** A node two points stand for (the server refuses it), by its id, or null. */
+export function doubleNode(choices: Record<string, DivideChoice>, outlet: string): string | null {
+	const seen = new Set<string>();
+	for (const [id, c] of Object.entries(choices)) {
+		if (c === NONE || c === NEW_GAUGE || id === outlet) continue;
+		if (seen.has(c)) return c;
+		seen.add(c);
+	}
+	return null;
+}
+
+/** Which values of a point were proposed, and so can be ticked. */
+export const divideOffers = (u: DivideUnit) => ({
+	add: u.nodeId === null,
+	area: u.areaM2 !== null && !!u.geometry && u.role !== 'user' && u.role !== 'gauge',
+	drainsInto: true,
+	runoffToDam: u.role === 'dam'
+});
+
+/** The ticks a division opens with: every value unticked, a new gauge named as its point. */
+export function initialDivideTicks(p: DividePlan): DivideTicks {
+	return {
+		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false, ...(u.nodeId ? {} : { name: u.name }) })),
+		rest: { to: 'none' }
+	};
+}
+
+/** Tick every value proposed (names kept as typed); the rest isn't given anywhere by it, that's a choice. */
+export function tickAllDivide(p: DividePlan, t: DivideTicks): DivideTicks {
+	const by = new Map(p.units.map((u) => [u.key, u]));
+	return {
+		units: t.units.map((x) => {
+			const o = divideOffers(by.get(x.key)!);
+			return { ...x, add: o.add, area: o.area, drainsInto: true, runoffToDam: o.runoffToDam };
+		}),
+		rest: t.rest
+	};
+}
+
+/** The name of what a point drains into (by the names as typed for a new gauge). */
+export function divideDrainsIntoName(p: DividePlan, t: DivideTicks, u: DivideUnit): string {
+	if (!u.drainsInto) return p.outlet.name;
+	const target = p.units.find((x) => x.key === u.drainsInto);
+	if (!target) return 'a point';
+	return (target.nodeId ? null : t.units.find((x) => x.key === target.key)?.name?.trim()) || target.name;
+}
+
+/** Whether a proposed value is what the node has already (ticking it changes nothing). */
+export function sameAsNow(p: DividePlan, u: DivideUnit, what: 'area' | 'drainsInto' | 'runoffToDam'): boolean {
+	const c = u.current;
+	if (!c) return false;
+	if (what === 'area') return u.areaM2 !== null && Math.abs(c.areaKm2 - u.areaM2 / 1e6) < 0.0005;
+	if (what === 'runoffToDam') return c.pctRunoffToDam === 1;
+	const target = u.drainsInto ? p.units.find((x) => x.key === u.drainsInto)?.nodeId : p.outlet.nodeId;
+	return !!target && c.downstreamNodeId === target;
+}
+
+/** What the server would refuse, as one sentence, or null. */
+export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly string[]): string | null {
+	const tick = new Map(t.units.map((x) => [x.key, x]));
+	const names = new Set(nodeNames.map((n) => n.trim().toLowerCase()));
+	for (const u of p.units) {
+		const x = tick.get(u.key)!;
+		if (!u.nodeId && x.add) {
+			const n = x.name?.trim() ?? '';
+			if (!n) return `Name the new gauge at “${u.featureName || 'its point'}”.`;
+			if (names.has(n.toLowerCase())) return `Two nodes would be called “${n}”: give the new gauge a name of its own.`;
+			names.add(n.toLowerCase());
+		}
+		if (!u.nodeId && !x.add && (x.drainsInto || x.area || x.runoffToDam)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
+		if (x.drainsInto && u.drainsInto) {
+			const target = p.units.find((y) => y.key === u.drainsInto);
+			if (target && !target.nodeId && !tick.get(target.key)?.add) return `${u.name} would drain into the new gauge ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
+		}
+	}
+	if (t.rest.to === 'new') {
+		const n = t.rest.name.trim();
+		if (!n) return 'Name the new unit for the rest of the catchment.';
+		if (names.has(n.toLowerCase())) return `Two nodes would be called “${n}”: give the rest of the catchment a name of its own.`;
+	}
+	return null;
+}
+
+/** What the confirm says will happen: counts of the ticked values. */
+export function divideSummary(t: DivideTicks): string {
+	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+	const areas = t.units.filter((u) => u.area).length + (t.rest.to === 'none' ? 0 : 1);
+	const orders = t.units.filter((u) => u.drainsInto).length;
+	const runoff = t.units.filter((u) => u.runoffToDam).length;
+	const gauges = t.units.filter((u) => u.add).length;
+	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
+}
+
+export const km2 = (m2: number | null): string => (m2 === null ? '–' : `${fmtNum(m2 / 1e6, 2)} km²`);
+export const km2Now = (k: number): string => `${fmtNum(k, 2)} km²`;

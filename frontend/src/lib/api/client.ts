@@ -165,6 +165,8 @@ import type {
 	StartRole,
 	StartState,
 	StartTicks,
+	DivideProposal,
+	DivideTicks,
 	CroplandProposals,
 	EvaporationProposals,
 	EvaporationTarget
@@ -1101,7 +1103,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; role: StartRole }[] }) =>
 				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
 			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
-			discard: (id: string, spid: string) => request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
+			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
+		},
+		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
+		divide: {
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; nodeId: string | null }[] }) =>
+				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
+			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},
 		/**
 		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
