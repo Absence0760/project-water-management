@@ -1456,10 +1456,11 @@ or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
 'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
-chars) }[]`,
+source ('meter' | 'aadd' | 'perCapita' | 'other', or null), waterSource
+('dam' | 'river', or null = the dam), riverPumpM3Day (≥ 0 or null = no
+limit), riverPoolM3 (≥ 0 or null = none), note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
+internal, true, null, null, null, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, a
 negative population, an unknown source, and a source whose sizing it doesn't
@@ -1473,6 +1474,20 @@ strategy's AADD) are volumes, so the object must be `monthly`; `perCapita`
 estimate, a workbook's typed-over demand) may be either. Null = not recorded
 (every object saved before it). It changes no number in the run; `note` keeps
 the detail (which meter, which strategy, which norm).
+
+A demand object's `waterSource` (engine ≥ 1.65.0, migration 170, issue #344,
+[model.md §2.7j](./model.md)) is where its water comes from: null or `'dam'`,
+the unit's dam side under its supply rule (every object saved before it);
+`'river'`, a river abstraction of its own beside the dam, with the pump
+`riverPumpM3Day` and the pool `riverPoolM3` (capacity only: it starts full,
+its area is estimated). A pump or pool on a dam-sourced object is kept but
+unused. `PUT` refuses an unknown source and a negative or infinite pump or
+pool. Runs of a unit with a river abstraction store, per abstraction (key the
+object's id or `crops`), `river_take@<key>` (m³/day, part of `supplied`) and,
+with a pool, `river_pool@<key>` (m³, end of the day) and
+`river_pool_evaporation@<key>` (m³/day); its `FarmSummary.riverTakes` lists
+each one's mean take, pump and pool, and the water balance gains
+`poolEvaporationM3`.
 
 A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
@@ -1510,6 +1525,17 @@ farm without a dam, `"runOfRiver"` on a farm with a dam capacity above 0, and
 a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
+
+The crops' water source (engine ≥ 1.65.0, migration 170, issue #344,
+[model.md §2.7j](./model.md)): every node carries `cropWaterSource`
+(`"dam"` | `"river"`), `cropRiverPumpM3Day` (≥ 0 or `null` = no limit) and
+`cropRiverPoolM3` (≥ 0 or `null` = none). A body without them gets `"dam"`,
+`null` and `null` (no change to any run). `PUT` refuses `"river"`, a pump or
+a pool on a node that isn't a farm, an unknown source and a negative pump or
+pool. Under `"river"` the unit's crops take from a river abstraction of their
+own beside the dam (series `river_take@crops`, and with a pool
+`river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
+serves the unit's dam-sourced demand objects only.
 
 Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114,
 issue #204, [model.md §2.7h](./model.md)): every node carries

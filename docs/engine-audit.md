@@ -514,6 +514,16 @@ warning, an import warning, a form hint or an evidence-pack gate).
     volume. Should a full allocation hold the floor too (domestic use and
     basic human needs aren't licensed uses), or keep the rescale and report
     the days it takes the object below the floor?
+16. **R2 (confirm the decisions, issue #344):** engine 1.65.0 lets each of a
+    unit's demands draw on a river abstraction of its own beside the dam
+    ([model.md §2.7j](./model.md)). Not a workbook departure: b023 has no
+    such abstraction, and with no water source set the run is the
+    workbook's. The choices to confirm: the abstractions take after the dam
+    side, from the flow passing the dam with its spill, before the unit's
+    return flows and river off-takes; they keep the unit's hands-off flow
+    (the EWR only when it says so); they share the river by the demand
+    objects' supply order; a pool refills only from the flow above what must
+    pass, starts full and gains no rain.
 
 ## References
 

@@ -2245,7 +2245,15 @@ note's link on the Summary, `notes.ts` `noteHref`).
   River to dam by month** button beside the alert, since Routing is gone), so
   they can be reset. The two boxes' help tips sit beside their labels, not in
   them, so each box's name is its words alone. Read-only for viewers (no
-  calculator).
+  calculator). Between the supply fields and the hands-off flow, on a unit
+  only, **Water for the crops** (engine ≥ 1.65.0, issue #344, [model.md
+  §2.7j](./model.md), `WaterSourceFields.svelte`): **From the dam (the supply
+  rule)**, the default, or **Its own river abstraction**, which shows that
+  abstraction's own **Number of pumps** × **m³/h per pump** calculator,
+  **River pump capacity** (m³/day, blank = no limit, which the run warns
+  about) and **Pool at the pump** (m³, blank = none; its hint says it starts
+  full and its surface is estimated from the capacity). The pump and pool
+  are kept when the source goes back to the dam, unused.
 - **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
   every twelve-month row of the one-node form (the dam release, a demand
   object's demand or profile, an other water user's demand, the hands-off flow
@@ -2313,6 +2321,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   the modeller), **Priority** (first / with the
   crops / last), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
+  **Water for** the object (engine ≥ 1.65.0, issue #344, the same
+  `WaterSourceFields` as the crops': from the dam under the supply rule, or
+  its own river abstraction with its pump calculator, capacity and pool),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
   note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
