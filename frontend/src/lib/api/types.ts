@@ -2796,3 +2796,36 @@ export interface DamProposals {
 	area: { featureId: string; featureName: string; areaM2: number; method: string } | null;
 	datasets: { dataset: string; count: number }[];
 }
+
+/** A catchment the DEM proposed upstream of a clicked outlet or dam wall (issue #326 B-delineate, docs/api.md § Delineation). */
+export interface DelineationProposal {
+	id: string;
+	status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+	from: 'outlet' | 'dam_wall';
+	click: MapPosition;
+	/** The snapped outlet: the most-accumulating cell's centre near the click. */
+	outlet: MapPosition;
+	snapDistanceM: number;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }>;
+	areaM2: number;
+	cells: number;
+	cellSizeM: number;
+	zoom: number;
+	windowCells: number;
+	dataset: string;
+	datasetFingerprint: string;
+	method: string;
+	methodVersion: string;
+	featureId: string | null;
+	createdBy: string | null;
+	createdAt: string;
+	decidedBy: string | null;
+	decidedAt: string | null;
+}
+
+/** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */
+export interface DelineationState {
+	available: boolean;
+	dataset: { label: string; attribution: string; fingerprint: string; tileType: string; maxZoom: number; bounds: [number, number, number, number] } | null;
+	proposals: DelineationProposal[];
+}

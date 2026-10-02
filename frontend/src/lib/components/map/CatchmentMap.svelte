@@ -47,7 +47,7 @@
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
-	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, RELIEF_LAYER, reliefBeforeId, reliefLayer, TERRAIN_SOURCE, terrainSource, type QuaternaryOutline } from './mapStyle';
+	import { basemapLayerIds, mapStyle, overlayColours, overlayData, proposalData, QUATERNARY_HIT_LAYER, quaternaryData, RELIEF_LAYER, reliefBeforeId, reliefLayer, TERRAIN_SOURCE, terrainSource, type QuaternaryOutline } from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
@@ -77,7 +77,8 @@
 		onquaternary,
 		terrainUrl = null,
 		relief = false,
-		onreliefError
+		onreliefError,
+		proposal = null
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -110,6 +111,8 @@
 		relief?: boolean;
 		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
 		onreliefError?: () => void;
+		/** A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet. */
+		proposal?: { geometry: MapGeometry; outlet: MapPosition } | null;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -217,6 +220,8 @@
 		src?.setData?.(overlayData(features, selectedId, fills));
 		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
 		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
+		const pr = map.getSource('proposal') as { setData?: (d: unknown) => void } | undefined;
+		pr?.setData?.(proposalData(proposal));
 		syncMarkers();
 	}
 
@@ -243,7 +248,12 @@
 				if (tilesUrl || terrainUrl) await lib.usePmtiles();
 				if (disposed) return;
 				const styleNow = () =>
-					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary), terrain: reliefUrl() });
+					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), {
+						glyphs,
+						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
+						terrain: reliefUrl(),
+						proposal: proposalData(proposal)
+					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
@@ -340,7 +350,17 @@
 		void fills;
 		void quaternaries;
 		void pickedQuaternary;
+		void proposal;
 		syncOverlay();
+	});
+
+	// A new proposal is framed, so the editor sees all of what they are deciding on.
+	let framedProposal: unknown = null;
+	$effect(() => {
+		const p = proposal;
+		if (status !== 'ready' || !p || p === framedProposal) return;
+		framedProposal = p;
+		frame(boundsOf(p.geometry), 13);
 	});
 
 	// The Relief layer turned on or off.

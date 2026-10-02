@@ -330,6 +330,15 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
+		// A catchment delineated from a click (175, issue #326 B-delineate): its area and the dataset; never the polygon.
+		case 'map.delineation_proposed': {
+			const km2 = num(s.areaKm2);
+			return `Delineated a catchment${km2 !== null ? ` of ${km2} km²` : ''} from ${s.from === 'dam_wall' ? 'a dam wall' : 'an outlet'}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		}
+		case 'map.delineation_accepted':
+			return `Accepted a delineated catchment as ${s.as === 'catchment_boundary' ? 'the catchment boundary' : 'an area'}${str(s.name) ? ` “${str(s.name)}”` : ''}`;
+		case 'map.delineation_rejected':
+			return 'Rejected a delineated catchment';
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);

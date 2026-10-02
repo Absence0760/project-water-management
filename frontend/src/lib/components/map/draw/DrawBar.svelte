@@ -22,7 +22,8 @@
 		onsave,
 		onpaste,
 		oncoords,
-		onlocated
+		onlocated,
+		delineating = false
 	}: {
 		draft: Draft;
 		/** false without WebGL: no clicks to place, so the bar leads with pasting and typed coordinates. */
@@ -34,6 +35,8 @@
 		onpaste: () => void;
 		oncoords: () => void;
 		onlocated: (at: MapPosition) => void;
+		/** The point placed is a delineation's outlet (#326 B-delineate): no kind to pick, and Save asks the server to delineate. */
+		delineating?: boolean;
 	} = $props();
 
 	const uid = $props.id();
@@ -71,6 +74,11 @@
 	const howTo = $derived.by(() => {
 		if (!mapReady) return draft.shape === 'point' ? 'The map can’t be drawn here: enter the point’s coordinates.' : 'The map can’t be drawn here: paste the shape as GeoJSON or WKT.';
 		if (draft.whole) return 'A pasted shape of several parts: save it as it is, or paste another.';
+		if (draft.shape === 'point' && delineating) {
+			return draft.coords.length
+				? `Drag the point onto the river if it missed, then Delineate…`
+				: `${phone ? 'Tap' : 'Click'} the river at the catchment’s outlet, or just below a dam wall.`;
+		}
 		if (draft.shape === 'point') {
 			return draft.coords.length
 				? `Drag the point to adjust it, or ${phone ? 'tap' : 'click'} somewhere else to move it; then save.`
@@ -100,6 +108,8 @@
 			<select id="{uid}-what" class="cap" value={draft.choice} onchange={(e) => draft.choose(e.currentTarget.value)}>
 				{#each DRAW_CHOICES as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
 			</select>
+		{:else if draft.mode === 'place' && delineating}
+			<h2 class="bar-h" id="{uid}-h">Delineating a catchment</h2>
 		{:else if draft.mode === 'place'}
 			<h2 class="bar-h" id="{uid}-h"><label for="{uid}-what">Placing a point</label></h2>
 			<select id="{uid}-what" class="cap" value={draft.kind} onchange={(e) => (draft.kind = e.currentTarget.value as typeof draft.kind)}>
@@ -133,7 +143,7 @@
 		<button type="button" class="btn btn-sm btn-ghost" onclick={() => draft.cancel()}>Cancel</button>
 		{#if draft.phase === 'review'}
 			<button type="button" class="btn btn-sm btn-primary" onclick={onsave} disabled={!!problem || saving || !draft.geometry} data-testid="map-draft-save">
-				{saving ? 'Saving…' : editing ? (draft.shape === 'point' ? 'Save the position' : 'Save the shape') : 'Save…'}
+				{saving ? 'Saving…' : editing ? (draft.shape === 'point' ? 'Save the position' : 'Save the shape') : delineating ? 'Delineate…' : 'Save…'}
 			</button>
 		{/if}
 	</div>

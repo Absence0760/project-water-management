@@ -157,7 +157,9 @@ import type {
 	QuaternaryLookup,
 	QuaternaryLayer,
 	GaugeStationLookup,
-	DamProposals
+	DamProposals,
+	DelineationProposal,
+	DelineationState
 } from './types';
 
 export class ApiError extends Error {
@@ -1068,6 +1070,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
 				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
 			}
+		},
+		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
+		delineation: {
+			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
+			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from'] }) =>
+				request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation`, body),
+			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
+			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
+				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
+			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
 		},
 		/**
 		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
