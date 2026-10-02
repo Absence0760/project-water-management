@@ -32,6 +32,9 @@ export const CropAreaFromLandCover = z
 	})
 	.strict();
 
+/** The proposals' one query parameter: a dataset label (absent = the default). */
+export const ProposalsQuery = z.object({ dataset: z.string().trim().min(1).max(50).optional() });
+
 interface UnitNode {
 	name: string;
 }
@@ -88,7 +91,7 @@ const summary = (r: CultivatedResult) => ('problem' in r ? { problem: r.problem 
 export const croplandRoutes = new Hono<AuthEnv>()
 	.get('/:id/nodes/:nodeId/cropland-proposals', async (c) => {
 		const { id, nodeId } = c.req.param();
-		const wanted = c.req.query('dataset');
+		const { dataset: wanted } = ProposalsQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const n = await unitNode(db, id, nodeId);

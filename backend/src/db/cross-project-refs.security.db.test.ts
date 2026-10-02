@@ -28,6 +28,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser, type Db } from './tx.js';
 
@@ -363,6 +364,21 @@ const CASES: Record<string, Case> = {
 	},
 	'crop_area.crop_id': { ref: (w) => w.cropId, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, h.farm2Id, ref]] },
 	'crop_area.node_id': { ref: (w) => w.farm2Id, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, ref, h.cropId]] },
+	// Where a planted area accepted from land cover came from (174: assert_same_project on node_id and crop_id).
+	'crop_area_land_cover.crop_id': {
+		ref: (w) => w.cropId,
+		insert: (h, ref) => [
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis) VALUES ($1, $2, $3, 1, 'x', 'x', 'x', 'x', 'unit')`,
+			[h.projectId, h.farm2Id, ref]
+		]
+	},
+	'crop_area_land_cover.node_id': {
+		ref: (w) => w.farm2Id,
+		insert: (h, ref) => [
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis) VALUES ($1, $2, $3, 1, 'x', 'x', 'x', 'x', 'unit')`,
+			[h.projectId, ref, h.cropId]
+		]
+	},
 	'transfer.from_node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => ['INSERT INTO transfer (id, project_id, from_node_id, to_node_id) VALUES ($1, $2, $3, $4)', [randomUUID(), h.projectId, ref, h.outletId]]
@@ -844,6 +860,19 @@ const modelOf = (w: World, patch: Record<string, unknown> = {}) => ({
 });
 const transferOf = (from: string, to: string) => ({ id: randomUUID(), fromNodeId: from, toNodeId: to, months: [1, 2, 3], maxRateM3s: 1, dailyCapM3: 0, minStoragePct: 0, enabled: true, priority: 0 });
 
+/** The synthetic land-cover grid loaded, and a farm parcel of `w`'s farm in its half-cropland block (once per project). */
+const landCoverParcels = new Map<string, string>();
+async function landCoverParcel(w: World): Promise<string> {
+	if (!landCoverParcels.size) await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
+	const had = landCoverParcels.get(w.projectId);
+	if (had) return had;
+	const square = [[[21.31, -33.69], [21.32, -33.69], [21.32, -33.68], [21.31, -33.68], [21.31, -33.69]]];
+	const f = await dual.call('POST', `/projects/${w.projectId}/map/features`, { kind: 'farm_parcel', name: 'Field', nodeId: w.farmId, geometry: { type: 'Polygon', coordinates: square } });
+	expect(f.status, JSON.stringify(f.body)).toBe(201);
+	landCoverParcels.set(w.projectId, f.body.feature.id);
+	return f.body.feature.id as string;
+}
+
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
@@ -900,6 +929,16 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 		const square = [[[21.3, -33.7], [21.302, -33.7], [21.302, -33.698], [21.3, -33.698], [21.3, -33.7]]];
 		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'dam', nodeId: r.farmId, geometry: { type: 'Polygon', coordinates: square } });
 		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+	},
+	// A planted area from land cover (issue #326 B-landcover, geo/croplandRoutes.ts): the home farm's parcel lies in the
+	// synthetic grid's half-cropland block; the crop, or the parcel, is the referenced project's.
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId': async (h, r) => {
+		await landCoverParcel(h);
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/crop-area-from-land-cover`, { cropId: r.cropId, dataset: 'synthetic' });
+	},
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId': async (h, r) => {
+		const featureId = await landCoverParcel(r);
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/crop-area-from-land-cover`, { cropId: h.cropId, dataset: 'synthetic', featureId });
 	},
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
@@ -968,6 +1007,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
 	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
+	'geo/croplandRoutes.ts:cropId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId'],
+	'geo/croplandRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':
