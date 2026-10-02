@@ -196,7 +196,7 @@ test('the run-of-river option imports the flagged units as river pumping units, 
 	// On: the workbook already in the worker is extracted again, with one more warning per unit; off again undoes it.
 	await option.check();
 	await expect(converted).toHaveCount(2);
-	await expect(notes.getByRole('paragraph').first()).toHaveText('21 notes, 10 of them warnings. Read them before relying on a run.');
+	await expect(notes.getByRole('paragraph').first()).toHaveText('22 notes, 10 of them warnings. Read them before relying on a run.');
 	await option.uncheck();
 	await expect(converted).toHaveCount(0);
 	await option.check();

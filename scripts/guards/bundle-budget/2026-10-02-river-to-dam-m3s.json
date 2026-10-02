@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "PR #375, River to dam in m³/s and read-only on a dam on the river (fieldScale/fieldUnused, MonthFields scale, the paste's scaling, the import's upstream % conversion note). Measured 1611 KB locally against 1609 on main @ a96222f54 (+2 KB); CI measured 1 KB above local (1612). Headroom ~0-1 KB."
+}
