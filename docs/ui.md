@@ -1298,8 +1298,10 @@ for every workspace tab. Its own chunk.
   asks first (`confirmWords`: the unit, the old and new value, the source;
   "Use this capacity" / "Use this area"), saves that one value on the
   server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.") and
-  reloads the saved model and the proposals. Use is disabled while the model
+  the register of dams (Z100/07). Run the model to see its effect.", which
+  takes the keyboard, since the Use button is gone) and reloads the saved
+  model and the proposals. The frame is shared with land cover and
+  evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
   unit (with **Open the Map**), no register loaded (the loader's command),
@@ -3122,8 +3124,9 @@ saves the catchment's model, and override mode there edits the scenario's
   area, the dataset, and that the land cover doesn't say what grows there or
   whether it is irrigated; "Use this area"), saves that one value on the
   server, shows a notice ("Orchard’s planted area on Upper farm is now
-  51.73 ha, from land cover. Run the model to see its effect.") and reloads
-  the saved model and the summary. Use is disabled while the model has
+  51.73 ha, from land cover. Run the model to see its effect.", which takes
+  the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
+  saved model and the summary. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
@@ -3942,7 +3945,8 @@ which checks every catchment tab).
     attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
     A-pan evaporation row**; editors) asks first (what reads the values, and
     that an earlier GR4J fit is marked "Forcing changed since fit"), saves
-    the 12 values as one settings revision, says so in a notice, and the
+    the 12 values as one settings revision, says so in a notice (focused;
+    `proposals/ProposalPanel.svelte`'s frame), and the
     form reloads the saved settings (the PE kind switches to monthly, its
     source naming the dataset). Use waits, with the reason, while the form
     has unsaved changes. When the saved settings hold the proposal it says

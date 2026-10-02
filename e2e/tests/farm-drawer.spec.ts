@@ -120,6 +120,9 @@ test.describe('phone', () => {
 		expect(box.width).toBeGreaterThan(360);
 		await expect(d.getByLabel('Orchard on Upper farm, ha')).toBeFocused();
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		// Check the drawer whole: the land-cover panel at its foot loaded (its map link is a phone target too).
+		await expect(d.getByTestId('cropland-body')).toHaveAttribute('data-ready', 'true');
+		await expect(d.getByTestId('cropland-catchment').getByRole('link')).toBeVisible();
 		await expectNoViolations(page);
 	});
 });
