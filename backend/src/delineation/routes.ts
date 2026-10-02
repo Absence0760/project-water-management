@@ -251,6 +251,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		});
 	})
 	.post('/:id/map/delineation/:pid/reject', async (c) => {
+		// An empty body only: nothing a caller sends may ride along.
+		z.object({}).strict().parse((await readJson(c, { optional: true })) ?? {});
 		const { id, pid } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');

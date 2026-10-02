@@ -5,6 +5,7 @@
 // A route whose validation refuses an empty body needs a SAMPLE here; both
 // sweeps fail until it has one.
 import { expect } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, retirePendingJobs, signUp } from './helpers.js';
 
 export type User = Awaited<ReturnType<typeof signUp>>;
@@ -134,6 +135,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'GET /projects/:id/map/quaternaries': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
 	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
+	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
+	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),
+	'POST /projects/:id/map/delineation/:pid/accept': () => ({ body: { as: 'other' } }),
 	// Needs the synthetic land-cover grid loaded (scripts/import-land-cover.ts); the ladder's parcel lies in its 0.5 block.
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
@@ -210,6 +214,9 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const cid = await plantCalibration(owner!.id, projectId);
 	const [rev] = await asOwner('SELECT id FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
 	const qid = await plantQuestion(projectId, sid);
+	// Delineation's routes read the committed synthetic DEM (off by default), and decide an open proposal planted here.
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	const pid = await plantDelineationProposal(projectId);
 	return {
 		owner: owner!,
 		editor: editor!,
@@ -245,6 +252,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			outlookId,
 			cid,
 			qid,
+			pid,
 			revId: String(rev!.id)
 		}
 	};
@@ -273,3 +281,20 @@ export async function plantQuestion(projectId: string, sid: string): Promise<str
  * later file's tick would claim them (src/__tests__/db-setup.ts).
  */
 export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);
+
+/**
+ * An open delineation proposal on `projectId` (175_delineation), planted as
+ * the schema owner so no DEM is read: the project's open one, if any, is
+ * superseded first (one open a project). Returns its id.
+ */
+export async function plantDelineationProposal(projectId: string): Promise<string> {
+	await asOwner(`UPDATE delineation_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
+	const square = { type: 'Polygon', coordinates: [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]] };
+	const [row] = await asOwner(
+		`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+			cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version)
+		 VALUES ($1, 'outlet', 21.31, -33.7, 21.31, -33.7, 0, $2, 4000000, 250, 128, 10, 1024, 'Planted', '0000000000000000', 'planted', 'delineate-1') RETURNING id`,
+		[projectId, JSON.stringify(square)]
+	);
+	return row!.id as string;
+}

@@ -25,7 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
-import { buildLadder, clearLadderJobs, plantQuestion, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
@@ -170,6 +170,12 @@ async function ladderDam(): Promise<string> {
 }
 
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	// A fresh open proposal each time: one is decided once (175).
+	'POST /projects/:id/map/delineation/:pid/accept': async () => ({
+		params: { pid: await plantDelineationProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/delineation/:pid/accept']!(ctx)
+	}),
+	'POST /projects/:id/map/delineation/:pid/reject': async () => ({ params: { pid: await plantDelineationProposal(ctx.projectId) } }),
 	// A fresh unanswered question each time: an answer is given once (164).
 	'POST /projects/:id/application-questions/:qid/answer': async () => ({
 		params: { qid: await plantQuestion(ctx.projectId, ctx.ids.sid!) },
