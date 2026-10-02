@@ -3048,7 +3048,7 @@ export interface DividePlan {
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
-	untouched: { nodeId: string; name: string }[];
+	untouched: { nodeId: string; name: string; areaKm2: number }[];
 	dropped: { featureId: string; name: string; reason: string }[];
 	warnings: string[];
 	cellSizeM: number;

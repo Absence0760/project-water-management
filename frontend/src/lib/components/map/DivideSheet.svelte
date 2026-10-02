@@ -128,8 +128,8 @@
 	});
 	const ticks = $derived<DivideTicks | null>(pending ? (draft.ticks[pending.id] ?? null) : null);
 	const problem = $derived(pending && ticks ? divideProblem(pending.plan, ticks, nodes.map((n) => n.name)) : null);
-	/** Units that may take the rest of the catchment: a unit of the model that isn't one of the points. */
-	const restTargets = $derived(pending ? nodes.filter((n) => n.kind === 'farm' && n.id !== outflowId && !pending.plan.units.some((u) => u.nodeId === n.id)) : []);
+	/** Units that may take the rest of the catchment: those no point stands for, with their area when proposed (apply checks it). */
+	const restTargets = $derived(pending ? pending.plan.untouched.map((u) => ({ id: u.nodeId, name: u.name, areaKm2: u.areaKm2 })) : []);
 	const restChoice = $derived(ticks ? (ticks.rest.to === 'node' ? ticks.rest.nodeId : ticks.rest.to) : 'none');
 	let restNewName = $state('Rest of the catchment');
 	function setRest(v: string) {

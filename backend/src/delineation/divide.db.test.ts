@@ -124,7 +124,7 @@ describe('dividing the valley', () => {
 		expect(mid).toMatchObject({ nodeId: null, current: null, areaM2: null, geometry: null });
 		expect(mid.totalAreaM2).toBeGreaterThan(pump.areaM2 + dam.areaM2);
 		expect(Math.abs((pump.areaM2 + dam.areaM2 + plan.rest.areaM2) / plan.catchment.areaM2 - 1)).toBeLessThan(0.02);
-		expect(plan.untouched).toEqual([{ nodeId: v.nodes.hill.id, name: 'Hillside' }]);
+		expect(plan.untouched).toEqual([{ nodeId: v.nodes.hill.id, name: 'Hillside', areaKm2: 3 }]);
 		// The GET lists it with its mode; the model isn't empty.
 		const get = await viewer.call('GET', v.at('/map/start'));
 		expect(get.body).toMatchObject({ elevation: true, modelEmpty: false, startedFromMap: false });
@@ -230,6 +230,12 @@ describe('dividing the valley', () => {
 		const stale = await owner.call('POST', v.at(`/map/divide/${spid}/apply`), { units: ticks(plan, { [pump.key]: { area: true } }), rest: { to: 'none' } });
 		expect(stale.status).toBe(409);
 		expect(stale.body.error).toMatch(/Top pump’s area changed since the proposal/);
+		// The same for the unit the rest of the catchment would go to.
+		model.nodes.find((n: ApiNode) => n.id === v.nodes.hill.id).areaKm2 = 9;
+		expect((await owner.call('PUT', v.at('/model'), model)).status).toBe(200);
+		const staleRest = await owner.call('POST', v.at(`/map/divide/${spid}/apply`), { units: ticks(plan), rest: { to: 'node', nodeId: v.nodes.hill.id } });
+		expect(staleRest.status).toBe(409);
+		expect(staleRest.body.error).toMatch(/Hillside’s area changed since the proposal/);
 		const after = (await owner.call('GET', v.at('/model'))).body.nodes.find((n: ApiNode) => n.id === v.nodes.pump.id);
 		expect(after.areaKm2).toBe(7);
 		// A value nobody changed still applies (its order).

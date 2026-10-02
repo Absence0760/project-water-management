@@ -141,8 +141,12 @@ export interface DividePlan {
 	units: DivideUnit[];
 	/** What drains to the outflow through no point. */
 	rest: { areaM2: number; geometry: Polygonal | null };
-	/** Units of the model with no point in the division: they keep their values. */
-	untouched: { nodeId: string; name: string }[];
+	/**
+	 * Units of the model with no point in the division: they keep their values,
+	 * and are the ones the rest of the catchment may go to (their area when
+	 * proposed, which apply checks before replacing it).
+	 */
+	untouched: { nodeId: string; name: string; areaKm2: number }[];
 	dropped: { featureId: string; name: string; reason: string }[];
 	warnings: string[];
 	cellSizeM: number;
@@ -319,7 +323,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			if (u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
 		}
 		const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
-		const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name }));
+		const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
 		const plan: DividePlan = {
 			mode: 'divide',
 			outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
@@ -440,9 +444,11 @@ export const divideRoutes = new Hono<AuthEnv>()
 				if (body.rest.to === 'node') {
 					const n = nodes.get(body.rest.nodeId);
 					if (!n) throw new ApiError(400, 'The unit for the rest of the catchment isn’t in the model.');
-					if (n.kind !== 'farm' || n.id === outflow.id || [...nodeOf.values()].includes(n.id)) {
+					const was = plan.untouched.find((u) => u.nodeId === n.id);
+					if (!was || n.kind !== 'farm' || n.id === outflow.id || [...nodeOf.values()].includes(n.id)) {
 						throw new ApiError(400, `${n.name} can’t take the rest of the catchment: pick a unit that isn’t one of the points.`);
 					}
+					if (Math.abs(n.areaKm2 - was.areaKm2) > EPS_KM2) throw changed(`${n.name}’s area`);
 					restNode = n;
 				} else {
 					restNode = { ...newNetworkNode(crypto.randomUUID(), ++sort, outflow.id), name: fresh(body.rest.name) };
