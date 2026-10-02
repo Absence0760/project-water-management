@@ -257,9 +257,9 @@
 				{/if}
 				{#if g === 'share' && share !== null}
 					<div class="field">
-						<span class="label">Share in use</span>
+						<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
 						<span class="computed">{fmtPct(share, 2)}</span>
-						<span class="hint">With the current flow-share method. Saved settings only.</span>
+						<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
 					</div>
 				{/if}
 			</div>
