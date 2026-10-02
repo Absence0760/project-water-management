@@ -202,6 +202,19 @@ describe('accepting a cultivated area as a crop’s planted area', () => {
 		expect((await stranger.call('POST', at(`/nodes/${farmA.id}/crop-area-from-land-cover`), { cropId: lucerne.id, dataset: 'synthetic' })).status).toBe(404);
 		expect(await cropArea(farmA.id, lucerne.id)).toBe(before);
 	});
+
+	it('keeps the unit’s and its demand objects’ water sources (engine 1.65.0, migration 170) through the revision it saves', async () => {
+		const model = (await editor.call('GET', at('/model'))).body;
+		const town = { id: crypto.randomUUID(), nodeId: farmA.id, name: 'Village', category: 'municipal', sizing: 'monthly', monthlyM3Day: monthly(40), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, waterSource: 'river', riverPumpM3Day: 480.5, riverPoolM3: 3000, note: '' };
+		const nodes = model.nodes.map((n: { id: string }) => (n.id === farmA.id ? { ...n, cropWaterSource: 'river', cropRiverPumpM3Day: 1500.25, cropRiverPoolM3: null } : n));
+		const put = await editor.call('PUT', at('/model'), { ...model, nodes, demandObjects: [town] });
+		expect(put.status, JSON.stringify(put.body)).toBe(200);
+		const res = await accept(editor, farmA.id, { cropId: lucerne.id, dataset: 'synthetic' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const after = (await editor.call('GET', at('/model'))).body;
+		expect(after.nodes.find((n: { id: string }) => n.id === farmA.id)).toMatchObject({ cropWaterSource: 'river', cropRiverPumpM3Day: 1500.25, cropRiverPoolM3: null });
+		expect(after.demandObjects).toEqual([{ ...town, rank: null, schedule: null, population: null, source: null }]);
+	});
 });
 
 describe('the grid and the provenance', () => {
