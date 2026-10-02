@@ -2620,8 +2620,12 @@ placed points. The server never trusts the browser with geometry:
   not the client's: the server traces the click again, and an outline sent
   as unadjusted must equal that trace. Splitting checks each part with
   `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
-  within its bounds), in one transaction, so a split can't smuggle in an
-  unrelated shape labelled as a split.
+  and each part within the shape: every edge of a part that isn't one of
+  the shape's own has its ends and middle inside or on the outline and
+  crosses none of its edges, at most 500 such edges, `geo/splitCheck.ts`;
+  before, only the bounding box was checked, so an L cut into two
+  rectangles, one outside the L, passed), in one transaction, so a split
+  can't smuggle in an unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
   (editor-only, its own 30 stored an hour, the account's attempt cap, the window cap and budget, outside any

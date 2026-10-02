@@ -27,6 +27,7 @@ import { beginModelChange, recordAudit, recordModelRevision } from '../history/r
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { partsWithin } from './splitCheck.js';
 import {
 	centerOf,
 	checkGeometry,
@@ -526,7 +527,7 @@ export const mapRoutes = new Hono<AuthEnv>()
 	})
 	.post('/:id/map/features/:fid/split', async (c) => {
 		// A polygon cut in two along a drawn line (issue #326 C2; the cut is made in the browser, draw/split.ts): both parts
-		// pass checkGeometry, and together they must be the shape (their areas add up, they lie within its bounds).
+		// pass checkGeometry, and together they must be the shape (their areas add up, each lies within it).
 		const body = SplitFeature.parse(await readJson(c));
 		const { id, fid } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
@@ -544,7 +545,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const sum = parts[0]!.areaM2 + parts[1]!.areaM2;
 			const box = bboxOf(ring);
 			const inside = parts.every((p) => p.geometry.coordinates[0]!.every(([x, y]) => x >= box[0] - 1e-6 && x <= box[2] + 1e-6 && y >= box[1] - 1e-6 && y <= box[3] + 1e-6));
-			if (!inside || Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1) {
+			// Within the bounds and adding up isn't enough: each part must lie within the shape (splitCheck.ts).
+			if (!inside || Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1 || partsWithin(ring, parts.map((p) => p.geometry.coordinates[0]!)) !== null) {
 				throw new ApiError(400, 'The two parts are not this shape cut in two: together they must cover it exactly. Draw the line again.');
 			}
 			const label = before.name ? `“${before.name}”` : KIND_LABEL[before.kind];
