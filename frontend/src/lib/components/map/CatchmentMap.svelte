@@ -110,6 +110,7 @@
 		words = ENGLISH,
 		draft = null,
 		onstatus,
+		onview,
 		glyphs = null,
 		quaternaries = null,
 		pickedQuaternary = null,
@@ -140,6 +141,8 @@
 		draft?: Draft | null;
 		/** The map's state, for the tab (no WebGL: drawing falls back to pasting and typed coordinates). */
 		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
+		/** The map's view (west, south, east, north) on load and after every move: the River network layer asks for it while the project has no features. */
+		onview?: (bbox: [number, number, number, number]) => void;
 		/** What the map says, for a translated page (the farm view); English by default. */
 		words?: MapWords;
 		/** The glyphs URL, absolute (mapStyle.ts glyphsUrl): place and water names and the quaternaries' codes. Null: no labels, no glyphs fetched. */
@@ -177,6 +180,8 @@
 
 	let el: HTMLDivElement;
 	let status = $state<'loading' | 'ready' | 'failed'>('loading');
+	/** The view (west,south,east,north) after the last move, on the wrapper as `data-view`: a settled-map signal for tests. */
+	let view = $state('');
 	$effect(() => onstatus?.(status));
 	const drawing = $derived(!!draft?.active);
 	/** The map's canvas has the keyboard focus: the crosshair shows (drawing by keyboard). */
@@ -453,8 +458,16 @@
 					ensureDraft();
 					syncOverlay();
 				});
+				const reportView = () => {
+					const b = m.getBounds();
+					const v: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+					view = v.map((x) => x.toFixed(4)).join(',');
+					onview?.(v);
+				};
+				m.on('moveend', reportView);
 				m.on('load', () => {
 					ensureDraft();
+					reportView();
 					m.on('click', OVERLAY_CLICKABLE, (e: { features?: { properties?: { id?: string } }[] }) => {
 						// Drawing: a click shapes the draft, it doesn't pick what's under it.
 						if (draft?.active) return;
@@ -647,6 +660,7 @@
 
 <div
 	class="map-wrap"
+	data-view={view || undefined}
 	class:fill
 	class:drawing
 	data-status={status}

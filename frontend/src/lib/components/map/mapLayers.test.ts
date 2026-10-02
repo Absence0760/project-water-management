@@ -2,7 +2,7 @@
 // `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { creditedFeature, creditedReach, layersOn, layersStatus, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, withLayer } from './mapLayers';
+import { creditedFeature, creditedReach, layersOn, layersStatus, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, riverViewBbox, withLayer } from './mapLayers';
 
 const poly = (x: number, y: number, d: number) =>
 	({ id: 'p', kind: 'farm_parcel', geometry: { type: 'Polygon', coordinates: [[[x, y], [x + d, y], [x + d, y + d], [x, y]]] } }) as MapFeature;
@@ -45,6 +45,19 @@ describe('quaternaryBbox', () => {
 		const [w, s, e, n] = quaternaryBbox([poly(18, -34, 6)])!;
 		expect(e - w).toBeLessThanOrEqual(QUATERNARY_BBOX_MAX_DEG);
 		expect(n - s).toBeLessThanOrEqual(QUATERNARY_BBOX_MAX_DEG);
+	});
+});
+
+describe('riverViewBbox', () => {
+	it('snaps the view outward to the grid, and refuses no view, a broken one or one wider than the server takes', () => {
+		expect(riverViewBbox([21.03, -28.62, 21.48, -28.31])).toEqual([21, -28.65, 21.5, -28.3]);
+		expect(riverViewBbox([21, -28.65, 21.5, -28.3])).toEqual([21, -28.65, 21.5, -28.3]);
+		expect(riverViewBbox(null)).toBeNull();
+		expect(riverViewBbox([Number.NaN, -28, 21, -27])).toBeNull();
+		expect(riverViewBbox([20, -29, 20 + RIVER_BBOX_MAX_DEG + 0.01, -28])).toBeNull();
+		expect(riverViewBbox([20, -29, 21, -29 + RIVER_BBOX_MAX_DEG + 0.01])).toBeNull();
+		const b = riverViewBbox([20.01, -29.99, 21.99, -28.01])!;
+		expect(b[2] - b[0]).toBeLessThanOrEqual(RIVER_BBOX_MAX_DEG);
 	});
 });
 

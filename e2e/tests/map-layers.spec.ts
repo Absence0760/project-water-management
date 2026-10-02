@@ -188,6 +188,32 @@ for (const [width, height] of [
 	});
 }
 
+test('the river network with nothing on the map yet: zoom in and it asks for the map’s view', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticRivers();
+	const project = await seedRunnableProject(page.request, 'Map layers rivers empty');
+	await openMap(page, project.id);
+	await mapReady(page);
+	await layers(page).getByRole('checkbox', { name: 'River network' }).check();
+	// The whole country is in view: too wide to ask for, so it says to zoom in, and asks nothing.
+	const rivers = page.getByTestId('map-rivers');
+	await expect(rivers).toContainText('Zoom in to see the river network here');
+	// Zoomed in far enough, it asks for the view (no features needed), at most 2° a side.
+	const asked = page.waitForRequest((r) => /\/map\/rivers\?bbox=/.test(r.url()));
+	const zoomIn = page.getByTestId('catchment-map').getByRole('button', { name: /zoom in/i });
+	const wrap = page.locator('.map-wrap');
+	// One step at a time, each waited out on the map's settled view (a click mid-animation would cancel it).
+	for (let i = 0; i < 5; i++) {
+		const before = await wrap.getAttribute('data-view');
+		await zoomIn.click();
+		await expect(wrap).not.toHaveAttribute('data-view', before ?? '');
+	}
+	const bbox = new URL((await asked).url()).searchParams.get('bbox')!.split(',').map(Number);
+	expect(bbox[2] - bbox[0]).toBeLessThanOrEqual(2);
+	expect(bbox[3] - bbox[1]).toBeLessThanOrEqual(2);
+	await expect(rivers).toContainText('No reach of the loaded river network is in view.');
+});
+
 test('Download GeoJSON hands over every feature with its name, kind, node and area', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map layers download');

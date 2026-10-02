@@ -1,25 +1,30 @@
 // The River network layer's state on the Map tab (issue #345; docs/maps.md §
 // River network): while `layers=rivers` is in the URL, the reaches around the
-// project's features are fetched once per bbox (GET …/map/rivers) and handed
-// to the map; the tab lists them beside it (the map is never the only place
+// project's features, or with no features yet the map's view once zoomed in,
+// are fetched once per bbox (GET …/map/rivers) and handed to the map; the tab lists them beside it (the map is never the only place
 // to read them), and an editor adds the picked reach as the project's river
 // feature, one reach at a time (POST …/map/rivers/add). The two requests come
 // in with the deps (MapTab passes api.map's), so the module never imports the
 // app-wide API client and its SvelteKit $env, and the tests can drive it.
 import { untrack } from 'svelte';
 import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
-import { creditedReach, reachKey, reachRef, riverBbox } from './mapLayers';
+import { creditedReach, reachKey, reachRef, riverBbox, riverViewBbox } from './mapLayers';
 import type { NetworkReach } from './mapStyle';
 
 export interface RiverLayerDeps {
 	projectId: () => string;
 	on: () => boolean;
 	features: () => readonly MapFeature[];
+	/** The map's view (west, south, east, north), used while the project has no features; null before the map reports one. */
+	view?: () => readonly [number, number, number, number] | null;
 	/** GET …/map/rivers: the reaches in `bbox`. */
 	load: (projectId: string, bbox: readonly [number, number, number, number]) => Promise<Answer>;
 	/** POST …/map/rivers/add: the project's new river feature. */
 	add: (projectId: string, dataset: string, reachId: number) => Promise<MapFeature>;
 }
+
+/** How many fetched answers the layer keeps (a few views panned between). */
+const RIVER_CACHE_MAX = 12;
 
 export class RiverLayer {
 	#deps: RiverLayerDeps;
@@ -32,12 +37,14 @@ export class RiverLayer {
 	adding = $state<string | null>(null);
 	addError = $state<string | null>(null);
 	#asked = '';
+	/** Answers already fetched, by key, so panning back over a view asks nothing again (the newest RIVER_CACHE_MAX). */
+	#cache = new Map<string, Answer>();
 
 	constructor(deps: RiverLayerDeps) {
 		this.#deps = deps;
 		$effect(() => {
 			const on = this.#deps.on();
-			const bbox = on ? riverBbox(this.#deps.features()) : null;
+			const bbox = on ? this.#bbox() : null;
 			const id = this.#deps.projectId();
 			untrack(() => {
 				if (!on) {
@@ -53,6 +60,12 @@ export class RiverLayer {
 				const key = `${id}|${bbox.join(',')}`;
 				if (key === this.#asked) return;
 				this.#asked = key;
+				const hit = this.#cache.get(key);
+				if (hit) {
+					this.answer = hit;
+					this.error = null;
+					return;
+				}
 				void this.#load(id, bbox, key);
 			});
 		});
@@ -62,9 +75,19 @@ export class RiverLayer {
 		return this.#deps.on();
 	}
 
-	/** Nothing to draw around: the map has no features yet. */
+	/** The bbox to ask for: around the features, else the map's view once zoomed in close enough. */
+	#bbox(): [number, number, number, number] | null {
+		return riverBbox(this.#deps.features()) ?? riverViewBbox(this.#deps.view?.() ?? null);
+	}
+
+	/** Whether it asks around the project's features (else the map's view). */
+	get aroundFeatures() {
+		return this.#deps.features().length > 0;
+	}
+
+	/** Nothing to ask for: no features yet, and the map's view is too wide (zoom in). */
 	get nothingAround() {
-		return this.#deps.on() && !this.#deps.features().length;
+		return this.#deps.on() && !this.#deps.features().length && !riverViewBbox(this.#deps.view?.() ?? null);
 	}
 
 	/** What the map draws (empty while off or loading). */
@@ -102,6 +125,8 @@ export class RiverLayer {
 		this.error = null;
 		try {
 			const a = await this.#deps.load(id, bbox);
+			this.#cache.set(key, a);
+			if (this.#cache.size > RIVER_CACHE_MAX) this.#cache.delete(this.#cache.keys().next().value!);
 			if (key === this.#asked) this.answer = a;
 		} catch (e) {
 			if (key === this.#asked) {
@@ -116,7 +141,7 @@ export class RiverLayer {
 	/** Ask again (after an error). */
 	retry() {
 		this.#asked = '';
-		const bbox = riverBbox(this.#deps.features());
+		const bbox = this.#bbox();
 		if (!bbox) return;
 		const id = this.#deps.projectId();
 		this.#asked = `${id}|${bbox.join(',')}`;
