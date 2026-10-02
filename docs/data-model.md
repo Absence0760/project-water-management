@@ -3606,6 +3606,22 @@ ids are rejected.
   branch's migration never reaches the main checkout's before it merges
   under its final number. Production recovery: [deployment.md § Migration
   integrity](./deployment.md#migration-integrity).
+- **A migration takes its number when it merges.** Take the next free
+  number after the highest on `origin/main`, and never reserve one ahead
+  of time for planned work: two branches that each took a number can merge
+  in the other order, and every database that applied the later file first
+  (each dev database, a worktree's, production) then refuses the earlier
+  one until it is renumbered. `pnpm check:migrations`
+  (`scripts/guards/check_migration_order.mjs`) fails when a file the branch
+  adds sorts before, or shares a number with, the highest on `origin/main`,
+  and prints the `git mv` that fixes it; CI runs it on every PR's merge ref
+  and on every push to `main`. Branch protection doesn't re-run a PR's
+  checks when `main` moves, so before merging a PR that adds a migration,
+  merge `origin/main` into it (or rerun its CI) if another migration has
+  landed since. Renumbering also means updating the places that cite the
+  file name (`git grep <old name>`). A dev database that already applied
+  the later file can take the late one by hand only when the two are
+  independent; otherwise `pnpm dev:db:reset`.
 - **Timeouts.** Each migration's transaction runs with `lock_timeout = 5s`
   (so it fails instead of queueing behind live traffic, with every later
   query queued behind it) and `statement_timeout = 240s` (under the migrate

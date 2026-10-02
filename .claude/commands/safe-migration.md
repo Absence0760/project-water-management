@@ -30,7 +30,7 @@ The actual work is done by the `migration-coordinator` agent. This command is th
 If `$ARGUMENTS` is:
 
 - A **path** under `backend/migrations/` → use that file directly.
-- A **slug** without a number → find the highest-numbered migration on `origin/main` (`git ls-tree --name-only origin/main backend/migrations/ | tail -1`) and propose `NNN_<slug>.sql` for the next slot. If the file doesn't exist yet, ask the user to draft it first (or prompt them with a starter template) — do not invent SQL on their behalf.
+- A **slug** without a number → find the highest-numbered migration on `origin/main` (`git ls-tree --name-only origin/main backend/migrations/ | tail -1`) and propose `NNN_<slug>.sql` for the next slot. Before the PR merges, `pnpm check:migrations` re-checks it against a fresh `origin/main`. If the file doesn't exist yet, ask the user to draft it first (or prompt them with a starter template) — do not invent SQL on their behalf.
 - **Empty** → run `git status` + `ls backend/migrations/` and identify the new or modified `.sql` file. If there's no candidate, abort with "no migration to coordinate."
 
 ### 2. Spawn the migration-coordinator agent
