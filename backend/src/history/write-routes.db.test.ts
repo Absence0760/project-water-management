@@ -21,6 +21,7 @@ import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
+import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -446,6 +447,19 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		// A planted area from land cover (issue #326 B-landcover): a revision whose reason names the dataset, version and method.
+		route: `POST ${P}/nodes/:nodeId/crop-area-from-land-cover`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
+			// Inside the synthetic grid's 0.5 block, linked to Farm A.
+			const square = [[[21.33, -33.67], [21.34, -33.67], [21.34, -33.66], [21.33, -33.66], [21.33, -33.67]]];
+			const f = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard field', nodeId: c.farmId, geometry: { type: 'Polygon', coordinates: square } });
+			expect(f.status).toBe(201);
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/crop-area-from-land-cover`, { cropId: c.cropId, dataset: 'synthetic' });
+		}
+	},
+	{
 		route: `POST ${P}/map/features`,
 		records: ['map.feature_created'],
 		call: async (c) => {
@@ -813,6 +827,7 @@ describe('every write route records its change', () => {
 		ctx.farmId = a.id;
 		ctx.otherFarmId = b.id;
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		ctx.cropId = crop.id;
 		const model = {
 			nodes: [outlet, a, b],
 			crops: [crop],

@@ -2761,6 +2761,55 @@ export interface GaugeStationLookup {
 	datasets: { dataset: string; count: number }[];
 }
 
+/** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */
+export interface CroplandDataset {
+	dataset: string;
+	source: string;
+	version: string;
+	/** How the cells were counted and a polygon summed, in words (cited in History and evidence packs). */
+	method: string;
+	attribution: string;
+	cellDeg: number;
+	classes: number[];
+	loadedAt: string;
+	/** The repo's invented grid: never real values. */
+	synthetic: boolean;
+}
+
+/** A polygon's land-cover summary, m², or why it couldn't be read. */
+export type CultivatedSummary = { areaM2: number; cultivatedM2: number } | { problem: string };
+
+/** A planted area accepted from land cover, as it was cited then. */
+export interface CropAreaFromLandCover {
+	areaM2: number;
+	dataset: string;
+	source: string;
+	version: string;
+	method: string;
+	basis: 'unit' | 'parcel';
+	featureName: string | null;
+	acceptedAt: string;
+	/** The saved model still holds it (not typed over since). */
+	current: boolean;
+}
+
+/** GET …/nodes/:nodeId/cropland-proposals: a unit's cultivated area from land cover, and its crops. */
+export interface CroplandProposals {
+	nodeId: string;
+	nodeName: string;
+	/** The dataset summarised (a real one before the synthetic grid); null with none loaded. */
+	dataset: CroplandDataset | null;
+	datasets: { dataset: string; version: string; synthetic: boolean }[];
+	/** The farm parcels on the map linked to the unit; no summary without a dataset. */
+	parcels: { featureId: string; name: string; areaM2?: number; cultivatedM2?: number; problem?: string }[];
+	/** The parcels summed; null without parcels, a dataset, or when one couldn't be read. */
+	unit: { areaM2: number; cultivatedM2: number } | null;
+	/** The catchment boundary's summary, for reference (no model value takes it). */
+	catchment: ({ featureId: string; name: string } & CultivatedSummary) | null;
+	/** The project's crops: what the unit holds now (m²; 0 = none) and where an accepted area came from. */
+	crops: { cropId: string; name: string; areaM2: number; accepted: CropAreaFromLandCover | null }[];
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;

@@ -367,6 +367,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 																		? o.pick([null, o.int(0, 20_000)])
 																		: field === 'source'
 																		? o.pick([null, ...DEMAND_OBJECT_SOURCES])
+																		: field === 'rank'
+																		? o.pick([null, 1, 2, 3, 0])
 																		: field === 'schedule'
 																		? o.bool(0.4)
 																			? null
@@ -396,6 +398,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					monthlyFactor: perUnit && o.bool(0.3) ? monthly(o, () => o.float(0.5, 1.5)) : null,
 					returnPct: external ? (o.bool(0.1) ? 0.2 : 0) : o.frac(),
 					priority: o.pick(DEMAND_OBJECT_PRIORITIES),
+					// Its rank within its class (engine ≥ 1.64.0).
+					rank: o.pick([null, 1, 2, 3]),
 					destination: external ? 'external' : 'internal',
 					enabled: o.bool(0.9),
 					// Where its number comes from (engine ≥ 1.56.0): now and then one that doesn't fit the sizing (a problem).

@@ -758,7 +758,8 @@ function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
  * to three on half the farms (now and then one on a gauge or user, or one
  * switched off, which the engine skips), monthly or per unit, from a trickle
  * to more than the river carries, months without any, losses, profiles, any
- * return share (0 when piped out), any priority class; half the monthly
+ * return share (0 when piped out), any priority class and ranks within one
+ * (engine ≥ 1.64.0); half the monthly
  * ones with people, so a domestic or municipal one has a basic-needs floor
  * from under to over its demand (engine ≥ 1.44.0); and every source,
  * sized as it says (engine ≥ 1.56.0).
@@ -786,6 +787,8 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				monthlyFactor: perUnit && g.bool(0.5) ? Array.from({ length: 12 }, () => g.float(0, 3)) : null,
 				returnPct: external ? 0 : g.pick([0, 1, g.frac()]),
 				priority: g.pick(['first', 'shared', 'last'] as const),
+				// Its rank within its class (engine ≥ 1.64.0), from the running count with no draw, so the rest of the seed is unchanged.
+				rank: ([null, 2, 1, null, 3, 2] as const)[out.length % 6]!,
 				destination: external ? 'external' : 'internal',
 				enabled: g.bool(0.9),
 				// The basic-needs floor (engine ≥ 1.44.0): a per-unit object's count sets it; every other

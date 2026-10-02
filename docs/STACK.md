@@ -96,7 +96,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, load the synthetic quaternaries, start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:run:frontend       # one side only
@@ -137,6 +137,8 @@ pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lo
                              # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
 pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm setup runs it);
                              # <list.csv> <overlay.kml> --dataset <label> --source "<list, edition>" loads your own DSO download, once its licence allows (maps.md § Sources)
+pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
+                             # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
@@ -259,7 +261,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
-- `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, CSP
+- `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, the cultivated area from land cover, the sources table, CSP
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)

@@ -289,6 +289,8 @@ function objectField(o: DemandObject, f: DemandObjectSetField): unknown {
 	if (f === 'population') return o.population ?? null;
 	// Likewise no source and null (not recorded, engine ≥ 1.56.0).
 	if (f === 'source') return o.source ?? null;
+	// Likewise no rank and null (rank 1, engine ≥ 1.64.0).
+	if (f === 'rank') return o.rank ?? null;
 	return o[f];
 }
 

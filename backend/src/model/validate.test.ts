@@ -378,6 +378,13 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		for (const population of [-1, Number.POSITIVE_INFINITY, 'many']) expect(ModelBody.safeParse(body({ ...monthly, population })).success, String(population)).toBe(false);
 	});
 
+	it('takes an object’s rank within its class (engine 1.64.0): none by default, a whole number 1–99', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10), priority: 'first' };
+		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.rank).toBeNull();
+		for (const rank of [1, 2, 99]) expect(ModelBody.parse(body({ ...monthly, rank })).demandObjects![0]!.rank).toBe(rank);
+		for (const rank of [0, 100, 1.5, -1, '2']) expect(ModelBody.safeParse(body({ ...monthly, rank })).success, String(rank)).toBe(false);
+	});
+
 	it('takes where an object’s number comes from (engine 1.56.0): not recorded by default, one of the four, sized as it says', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
 		const perUnit = { sizing: 'perUnit', count: 300, litresPerUnitDay: 230, category: 'domestic' };

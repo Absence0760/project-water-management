@@ -3,7 +3,8 @@
 // bulk supply piped out of the catchment). Each adds its daily abstraction
 // demand to the unit's; the unit's dam, river pump and boreholes supply the
 // total as they supply irrigation, and what the unit gets is split between
-// its crops and its objects by priority class, pro rata within a class. Each
+// its crops and its objects in supply order: by priority class, then by rank
+// within a class (engine ≥ 1.64.0), pro rata within one rank. Each
 // object returns its share of what it got below the unit the same day
 // (internal), or nothing (external). Pure; the simulation (./simulate.ts),
 // the run summary (../run.ts) and the self-checks (../verify/checks.ts) all
@@ -11,11 +12,81 @@
 // thing to each.
 import { waterYearIndex } from '../calendar';
 import { cmpStr } from '../order';
-import { BASIC_NEEDS_CATEGORIES, DEMAND_NORMS, type DemandObject, type DemandObjectPriority, type ProjectModel } from '../project';
+import { BASIC_NEEDS_CATEGORIES, DEMAND_NORMS, DEMAND_OBJECT_MAX_RANK, type DemandObject, type DemandObjectPriority, type ProjectModel } from '../project';
 import { scheduleFactors } from './demandSchedule';
 
 /** The priority classes in supply order: before the crops, with them, after them. */
 export const PRIORITY_TIER: Record<DemandObjectPriority, 0 | 1 | 2> = { first: 0, shared: 1, last: 2 };
+
+/**
+ * A demand object's rank within its class as the run uses it (engine ≥
+ * 1.64.0): a whole number in 1–DEMAND_OBJECT_MAX_RANK; null or absent is 1,
+ * and so is anything else, with a warning when `warnings` is given. 0 for a
+ * 'shared' object, which always shares with the crops.
+ */
+export function objectRank(o: Pick<DemandObject, 'name' | 'priority' | 'rank'>, warnings?: string[]): number {
+	if (PRIORITY_TIER[o.priority] === 1 || PRIORITY_TIER[o.priority] === undefined) return 0;
+	const r = o.rank;
+	if (r === null || r === undefined) return 1;
+	if (Number.isInteger(r) && r >= 1 && r <= DEMAND_OBJECT_MAX_RANK) return r;
+	warnings?.push(`demand object "${o.name}": rank ${String(r)} is not a whole number from 1 to ${DEMAND_OBJECT_MAX_RANK}; runs as 1`);
+	return 1;
+}
+
+/**
+ * A unit's supply order (engine ≥ 1.64.0, issue #343, docs/model.md §2.7f):
+ * each object's level and the crops' level, 0 supplied first, numbered
+ * densely over the (class, rank) pairs present. Objects of one level, and
+ * 'shared' objects with the crops, share pro rata. Without ranks the levels
+ * are the classes present, so a unit saved before ranks runs as it did.
+ * An unknown priority runs as 'shared' (planObjects warns).
+ */
+export function supplyLevels(objects: readonly Pick<DemandObject, 'name' | 'priority' | 'rank'>[], warnings?: string[]): { level: number[]; cropLevel: number; count: number } {
+	const keyOf = (o: Pick<DemandObject, 'name' | 'priority' | 'rank'>) => {
+		const tier = PRIORITY_TIER[o.priority] ?? 1;
+		return tier * (DEMAND_OBJECT_MAX_RANK + 1) + objectRank(o, warnings);
+	};
+	const keys = objects.map(keyOf);
+	const cropKey = DEMAND_OBJECT_MAX_RANK + 1;
+	const distinct = [...new Set([...keys, cropKey])].sort((a, b) => a - b);
+	const at = new Map(distinct.map((k, i) => [k, i]));
+	return { level: keys.map((k) => at.get(k)!), cropLevel: at.get(cropKey)!, count: distinct.length };
+}
+
+/**
+ * A unit's numbered supply order as the node form shows it (issue #343):
+ * each object's position and the crops', from 1, equal positions sharing
+ * (supplyLevels + 1).
+ */
+export function supplyOrder(objects: readonly Pick<DemandObject, 'name' | 'priority' | 'rank'>[]): { positions: number[]; crops: number } {
+	const { level, cropLevel } = supplyLevels(objects);
+	return { positions: level.map((l) => l + 1), crops: cropLevel + 1 };
+}
+
+/**
+ * The priority class and rank of each object for a numbered supply order
+ * (the inverse of supplyOrder): before the crops' position 'first', at it
+ * 'shared', after it 'last', ranked densely within its class by position.
+ * A class whose objects all hold one position gets rank null (1), the form
+ * an object saved before ranks has.
+ */
+export function fromSupplyOrder(positions: readonly number[], crops: number): { priority: DemandObjectPriority; rank: number | null }[] {
+	const priorityOf = (p: number): DemandObjectPriority => (p < crops ? 'first' : p > crops ? 'last' : 'shared');
+	const ranks = new Map<DemandObjectPriority, number[]>();
+	positions.forEach((p) => {
+		const c = priorityOf(p);
+		if (c === 'shared') return;
+		const list = ranks.get(c) ?? [];
+		if (!list.includes(p)) list.push(p);
+		ranks.set(c, list);
+	});
+	for (const list of ranks.values()) list.sort((a, b) => a - b);
+	return positions.map((p) => {
+		const priority = priorityOf(p);
+		const list = ranks.get(priority);
+		return { priority, rank: !list || list.length < 2 ? null : list.indexOf(p) + 1 };
+	});
+}
 
 /**
  * Each enabled demand object's run series, on its unit: its daily demand and
@@ -184,8 +255,13 @@ export interface PlanObjects {
 	schedule: (Float64Array | null)[];
 	/** Each object's return share of what it gets (0 when external). */
 	returnShare: Float64Array;
-	/** Each object's priority class: 0 before the crops, 1 with them, 2 after them. */
+	/**
+	 * Each object's supply level (engine ≥ 1.64.0, supplyLevels): 0 is
+	 * supplied first; the crops are at `cropLevel`; `levels` levels in all.
+	 */
 	tier: Uint8Array;
+	cropLevel: number;
+	levels: number;
 	/** Σ of the objects' demand per day. */
 	total: Float64Array;
 	/**
@@ -260,12 +336,12 @@ export function planObjects(
 		if (o.destination === 'external' && finite(o.returnPct) && o.returnPct > 0) warnings.push(`demand object "${o.name}" is piped out of the catchment, so none of it returns; its return share is ignored`);
 		const r = o.returnPct;
 		if (o.destination !== 'external' && finite(r) && (r < 0 || r > 1)) warnings.push(`demand object "${o.name}": return share ${r} is not in [0, 1]; using ${returnShare[k]}`);
-		const p = PRIORITY_TIER[o.priority];
-		if (p === undefined) warnings.push(`demand object "${o.name}": unknown priority "${String(o.priority)}"; supplied with the crops`);
-		tier[k] = p ?? 1;
+		if (PRIORITY_TIER[o.priority] === undefined) warnings.push(`demand object "${o.name}": unknown priority "${String(o.priority)}"; supplied with the crops`);
 	});
+	const order = supplyLevels(objects, warnings);
+	order.level.forEach((l, k) => (tier[k] = l));
 	for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total, floor: floors, restricted, category: objects.map((o) => o.category) };
+	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, cropLevel: order.cropLevel, levels: order.count, total, floor: floors, restricted, category: objects.map((o) => o.category) };
 }
 
 /**
@@ -294,11 +370,14 @@ export function waterYearMonths(month: ArrayLike<number>, days: number): Uint8Ar
 
 /**
  * Split what a unit was supplied today, `G`, between its crops (irrigation
- * abstraction demand `crop`) and its objects: class 0 first, then the crops
- * with class 1, then class 2, each class pro rata to its members' demand.
- * A class that can be met in full gets exactly its demand; so does every
- * member when G covers the whole demand. Writes each object's supply into
- * `out[k][t]` and returns the crops' part. Σ parts = G up to float noise.
+ * abstraction demand `crop`) and its objects in supply order: level 0
+ * first, and so on, the crops with the objects at `po.cropLevel` (the
+ * 'shared' class), each level pro rata to its members' demand. Without
+ * ranks the levels are the classes: 'first', then the crops with 'shared',
+ * then 'last'. A level that can be met in full gets exactly its demand; so
+ * does every member when G covers the whole demand. Writes each object's
+ * supply into `out[k][t]` and returns the crops' part. Σ parts = G up to
+ * float noise.
  */
 export function splitSupply(G: number, crop: number, po: PlanObjects, t: number, out: Float64Array[]): number {
 	const n = po.ids.length;
@@ -308,8 +387,9 @@ export function splitSupply(G: number, crop: number, po: PlanObjects, t: number,
 	}
 	let rem = Math.max(G, 0);
 	let cropGot = 0;
-	for (let tier = 0; tier < 3; tier++) {
-		let want = tier === 1 ? crop : 0;
+	const cl = po.cropLevel;
+	for (let tier = 0; tier < po.levels; tier++) {
+		let want = tier === cl ? crop : 0;
 		for (let k = 0; k < n; k++) if (po.tier[k] === tier) want += po.demand[k]![t]!;
 		if (!(want > 0)) {
 			for (let k = 0; k < n; k++) if (po.tier[k] === tier) out[k]![t] = 0;
@@ -317,12 +397,12 @@ export function splitSupply(G: number, crop: number, po: PlanObjects, t: number,
 		}
 		if (rem >= want) {
 			for (let k = 0; k < n; k++) if (po.tier[k] === tier) out[k]![t] = po.demand[k]![t]!;
-			if (tier === 1) cropGot = crop;
+			if (tier === cl) cropGot = crop;
 			rem -= want;
 		} else {
 			const f = rem / want;
 			for (let k = 0; k < n; k++) if (po.tier[k] === tier) out[k]![t] = po.demand[k]![t]! * f;
-			if (tier === 1) cropGot = crop * f;
+			if (tier === cl) cropGot = crop * f;
 			rem = 0;
 		}
 	}

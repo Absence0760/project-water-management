@@ -19,6 +19,7 @@ import {
 	DAM_CURVE_MAX_ROWS,
 	DEMAND_OBJECT_CATEGORIES,
 	DEMAND_OBJECT_DESTINATIONS,
+	DEMAND_OBJECT_MAX_RANK,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
 	DEMAND_OBJECT_SOURCES,
@@ -739,6 +740,7 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'monthlyFactor',
 	'returnPct',
 	'priority',
+	'rank',
 	'destination',
 	'enabled',
 	'schedule',
@@ -796,6 +798,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	monthlyFactor: nullable(monthlyOf(nonNeg)),
 	returnPct: frac,
 	priority: oneOf(DEMAND_OBJECT_PRIORITIES),
+	// Its rank within its class (engine ≥ 1.64.0); null = 1, as an object saved before ranks.
+	rank: nullable(range(1, DEMAND_OBJECT_MAX_RANK, { int: true })),
 	destination: oneOf(DEMAND_OBJECT_DESTINATIONS),
 	enabled: boolean,
 	schedule: demandSchedule,
@@ -819,8 +823,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no rank (1), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its

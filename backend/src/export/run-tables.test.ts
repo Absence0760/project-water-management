@@ -549,6 +549,18 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Source/);
 	});
 
+	it('engine 1.64.0: a Rank column when an object has a rank within its priority, blank for the rest', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [{ ...object, rank: 2 }, { ...object, id: 't', name: 'Town' }] }] })];
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Priority,Rank within priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,first,2,internal,25,20,5,80,0,1');
+		expect(lines[3]).toBe('"Farm, upper",Town,domestic,first,,internal,25,20,5,80,0,1');
+		// No object has one (every run before engine 1.64.0): no column.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Rank/);
+	});
+
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {
 		const lines = [...curtailmentLines(c)];
 		expect(lines.some((l) => l.startsWith('Equitable share of supply (fairness benchmark) [K total] (%),'))).toBe(true);

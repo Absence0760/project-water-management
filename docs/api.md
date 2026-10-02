@@ -1454,15 +1454,17 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 'other'), sizing ('monthly' | 'perUnit'), monthlyM3Day (12 values ≥ 0, Oct–Sep,
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
-priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
-chars) }[]`,
+priority ('first' | 'shared' | 'last'), rank (a whole number 1–99, or
+null; engine ≥ 1.64.0, issue #343: its place within 'first' or 'last', 1
+before 2, equal ranks pro rata; null = 1; ignored on 'shared'),
+destination ('internal' | 'external'), enabled, schedule (below, or null),
+population (≥ 0 or null), source ('meter' | 'aadd' | 'perCapita' | 'other',
+or null), note (≤ 1000 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
+null, internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, a
-negative population, an unknown source, and a source whose sizing it doesn't
+negative population, a rank outside 1–99 or not whole, an unknown source, and a source whose sizing it doesn't
 have.
 
 A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
@@ -1912,12 +1914,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
-  name, category, source?, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  name, category, source?, priority, rank?, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`;
   `source`, engine ≥ 1.56.0, only on an object that records one: the model's
-  `source`, as a report grades the demand by). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  `source`, as a report grades the demand by; `rank`, engine ≥ 1.64.0, only
+  on a `first` or `last` object with a rank set: its place within its class). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
@@ -2936,6 +2939,8 @@ only propose.
 | GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
 | POST | `/projects/:id/nodes/:nodeId/dam-capacity-from-register` | `{ registerNo }` | `200 { nodeId, damCapacityM3, registerNo, revisionId }`: the unit's `damCapacityM3` set to the registered dam's capacity, recorded as a model revision whose reason names the dam, its number, capacity, distance and source line. The server re-derives the proposals: `400` for a node that isn't a farm, a unit with no dam on the map, a register number not within 1 km of it (or not loaded), or an entry without a capacity; `404` for another project's node. The number is matched case-insensitively | editor |
 | POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
+| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[] }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
+| POST | `/projects/:id/nodes/:nodeId/crop-area-from-land-cover` | `{ cropId, dataset, featureId? }` | `200 { nodeId, cropId, areaM2, dataset, revisionId }`: the crop's planted area on the unit set to the cultivated area of the unit's parcels (or the one parcel `featureId`), re-derived on the server, recorded as a model revision whose reason cites the dataset, its version and the method, and as a `crop_area_land_cover` row (174). The client names the crop; the land cover never does. `400` for a node that isn't a farm, an unknown dataset, a unit with no parcel, a feature that isn't a parcel linked to it, parcels the land cover can't summarise or with no cropland; `404` for another project's node, crop or feature | editor |
 
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
@@ -2959,6 +2964,13 @@ only propose.
   height and completion year are for reference: the model has no field for
   them. A capacity or area accepted from a proposal is an ordinary model
   value afterwards: a later typed change replaces it (History keeps both).
+- `CroplandDataset = { dataset, source, version, method, attribution,
+  cellDeg, classes, loadedAt, synthetic }`, from `cropland_dataset` (173);
+  `method` is the counting in words, cited with every accepted value.
+  `CropAreaFromLandCover = { areaM2, dataset, source, version, method,
+  basis: 'unit' | 'parcel', featureName, acceptedAt, current }`: `current`
+  while the unit's planted area for that crop still equals `areaM2` (a typed
+  change replaces it; History keeps both).
 - Each write is in the audit log (`map.imported`, `map.feature_created`,
   `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
   geometry; delineation's `map.delineation_*` in [§ Delineation](#delineation)). Farmers and applicants get `403` on every route here (RLS lets

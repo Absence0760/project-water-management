@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -278,6 +278,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): the API refuses a negative one.
 		if (o.population !== null && o.population !== undefined && !inRange(o.population, 0, Infinity))
 			issues.push({ area: 'network', message: `${label}: the people it serves can't be negative.` });
+		// Its rank within its priority class (engine ≥ 1.64.0): a whole number 1–99, or none; the supply order writes only these.
+		if (o.rank !== null && o.rank !== undefined && !(Number.isInteger(o.rank) && o.rank >= 1 && o.rank <= DEMAND_OBJECT_MAX_RANK))
+			issues.push({ area: 'network', message: `${label}: its rank in the supply order must be a whole number from 1 to ${DEMAND_OBJECT_MAX_RANK}.` });
 		// Where its number comes from (engine ≥ 1.56.0): the sizing that source gives a volume (the form keeps them in step).
 		if (o.source !== null && o.source !== undefined) {
 			const sizing = (DEMAND_OBJECT_SOURCE_SIZING as Record<string, DemandObject['sizing'] | null | undefined>)[o.source];
