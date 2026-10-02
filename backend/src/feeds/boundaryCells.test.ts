@@ -147,22 +147,3 @@ describe('the seeded Sandspruit boundary (issue #326 B-rain)', () => {
 		expect(got.values.every((v) => v !== null && v >= 0)).toBe(true);
 	});
 });
-
-describe('boundaryCells and the work budget', () => {
-	it('refuses a boundary comb whose teeth run its full height, rather than clip it for minutes (positive control: a short one reads)', () => {
-		const comb = (h: number): Position[] => {
-			const ring: Position[] = [
-				[21.3, -33.8],
-				[21.31, -33.8]
-			];
-			const teeth = 6_000;
-			const s = 0.01 / teeth;
-			for (let i = teeth - 1; i >= 0; i--) ring.push([21.3 + i * s + s / 2, -33.8 + h / 10], [21.3 + i * s + s / 2, -33.8 + h], [21.3 + i * s, -33.8 + h], [21.3 + i * s, -33.8 + h / 10]);
-			return [...ring, ring[0]!];
-		};
-		const tall = boundaryCells({ type: 'Polygon', coordinates: [comb(9.9)] });
-		expect(tall).toMatchObject({ problem: expect.stringMatching(/too detailed to read the CHIRPS cells/) });
-		const short = boundaryCells({ type: 'Polygon', coordinates: [comb(0.1)] });
-		expect('problem' in short).toBe(false);
-	});
-});

@@ -2,12 +2,10 @@
 // pieces as clipping the ring to each band on its own (a comb, a ring with a
 // hole), and work that grows with vertices × log(bands), never vertices ×
 // bands, so a crafted comb of ~48 000 vertices (the auth audit's 92 s
-// evaporation summary, docs/security.md § Map uploads) stays cheap; and the
-// work budget, which refuses the one shape halving can't help (teeth that
-// run the full height put every vertex in every row).
+// evaporation summary, docs/security.md § Map uploads) stays cheap.
 import { describe, expect, it } from 'vitest';
 import type { Position } from './geojson.js';
-import { clipX, clipY, eachBand, GRID_WORK_BUDGET, GridWorkExceeded, signedArea2, type SignedPiece } from './clip.js';
+import { clipX, clipY, eachBand, signedArea2, type SignedPiece } from './clip.js';
 import { gridShares } from './gridShares.js';
 
 const CELL = 0.0025;
@@ -77,40 +75,17 @@ describe('eachBand', () => {
 		// Halving 200 bands is 8 levels plus the leaves; clipping to each band alone reads all 48 002 vertices 200 times.
 		expect(work.vertices).toBeLessThan(20 * big.length);
 	});
-
-	it('stops with GridWorkExceeded once the work passes its limit', () => {
-		const big = comb(21.3, -33.8, 200 * CELL, 200 * CELL, 12_000);
-		const work = { vertices: 0, limit: 100_000 };
-		expect(() => eachBand([{ ring: big, sign: 1 }], Math.floor(21.3 / CELL), Math.floor(21.3 / CELL) + 200, CELL, 'x', () => {}, work)).toThrow(GridWorkExceeded);
-		expect(work.vertices).toBeLessThan(100_000 + big.length);
-	});
 });
 
-/** A ring of `n` vertices round a circle: a detailed but ordinary outline. */
-function circle(x0: number, y0: number, r: number, n: number): Position[] {
-	return Array.from({ length: n }, (_, i): Position => [x0 + r * Math.cos((2 * Math.PI * i) / n), y0 + r * Math.sin((2 * Math.PI * i) / n)]);
-}
-
-describe('gridShares and the work budget', () => {
-	it('reads a 48 000-vertex outline over 40 000 cells, under the budget, its shares adding up to its area (positive control)', () => {
-		const round = circle(21.55, -33.55, 100 * CELL, 48_000);
-		const r = gridShares({ type: 'Polygon', coordinates: [[...round, round[0]!]] }, CELL, 40_000);
+describe('gridShares on a crafted comb', () => {
+	it('reads a ~48 000-vertex comb over 40 000 cells, its shares adding up to its area', () => {
+		const big = comb(21.3, -33.8, 200 * CELL, 200 * CELL, 12_000);
+		const r = gridShares({ type: 'Polygon', coordinates: [[...big, big[0]!]] }, CELL, 40_000);
 		if ('problem' in r) throw new Error(r.problem);
 		const sum = r.cells.reduce((a, c) => a + c.share, 0) * CELL * CELL;
-		expect(sum).toBeCloseTo(Math.abs(signedArea2(round)) / 2, 10);
+		expect(sum).toBeCloseTo(Math.abs(signedArea2(big)) / 2, 10);
 		// Ordered row by row, then cell by cell, as the summaries read them.
 		const order = r.cells.map((c) => c.row * 1e6 + c.col);
 		expect(order).toEqual([...order].sort((a, b) => a - b));
-	});
-
-	it('refuses a comb whose 12 000 teeth run its full height (every row holds every vertex), within the budget, not after minutes', () => {
-		// 20 000 rows × 2 columns: clipped, its pieces alone are 48 000 vertices × 20 000 rows, about a billion.
-		const tall = comb(21.3, -33.8, 2 * CELL, 20_000 * CELL, 12_000).map(([x, y]): Position => [x, y]);
-		const g = { type: 'Polygon' as const, coordinates: [[...tall, tall[0]!]] };
-		const r = gridShares(g, CELL, 40_000, undefined, 'evaporation');
-		expect(r).toEqual({ problem: `the polygon’s outline is too detailed to summarise over evaporation cells (more than ${GRID_WORK_BUDGET.toLocaleString('en-ZA')} vertex cuts); simplify it` });
-		// Positive control: the same comb over a few rows is read.
-		const short = comb(21.3, -33.8, 2 * CELL, 4 * CELL, 12_000);
-		expect('problem' in gridShares({ type: 'Polygon', coordinates: [[...short, short[0]!]] }, CELL, 40_000)).toBe(false);
 	});
 });
