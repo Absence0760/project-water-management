@@ -647,7 +647,7 @@ def run(doc: dict) -> dict:
                 borehole_days=0, borehole_to_dam_days=0, borehole_annual_cap_days=0, depletion_owed_days=0,
                 cap_bound_days=0, full_allocation_units=0, floor_days=0, object_shortage_days=0,
                 offtake_days=0, offtake_return_days=0, user_days=0, junior_short_days=0, senior_pass_days=0,
-                river_pump_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
+                river_pump_days=0, river_take_days=0, trigger_hold_days=0, curve_days=0, release_days=0, hands_off_days=0,
                 divert_by_month_days=0)
 
     def put(node_id, key, values):
@@ -937,6 +937,46 @@ def run(doc: dict) -> dict:
             Dn[nid] = list(dd)
     capped = alloc_mode == "cap"
 
+    # ---- river abstractions beside a unit's dam (§2.7j) -------------------
+    # Each demand with water source 'river' (the crops, or an enabled object) has its own pump (None = no
+    # limit) and a pool (capacity > 0; it starts full, its full area 7.2 × capacity^0.77, b = 0.7). Its supply
+    # level: 'first' 0, the crops and 'shared' 1, 'last' 2. The dam side serves the other demands only.
+    LEVEL = {"first": 0, "shared": 1, "last": 2}
+    riv: dict[str, list[dict]] = {}
+    for f in farms:
+        ts = []
+
+        def kit(pump_, pool_):
+            return {"pump": math.inf if pump_ is None else pump_, "pool": pool_ if pool_ is not None and pool_ > 0 else None}
+
+        if f.get("cropWaterSource") == "river":
+            ts.append({"key": "crops", "ob": None, "level": 1, **kit(f.get("cropRiverPumpM3Day"), f.get("cropRiverPoolM3"))})
+        for ob in objs[f["id"]]:
+            if ob.get("waterSource") == "river":
+                ts.append({"key": ob["id"], "ob": ob, "level": LEVEL.get(ob.get("priority", "shared"), 1), **kit(ob.get("riverPumpM3Day"), ob.get("riverPoolM3"))})
+        if ts:
+            riv[f["id"]] = ts
+    pool_q = {fid: [t["pool"] or 0.0 for t in ts] for fid, ts in riv.items()}
+    on_river_obj = {ob["id"] for ts in riv.values() for t in ts if t["ob"] is not None for ob in [t["ob"]]}
+
+    def crops_on_river(fid):
+        return any(t["ob"] is None for t in riv.get(fid, []))
+
+    # The dam side's demand: its dam-sourced demands only (the crops' abstraction, the objects not on the river).
+    Dd: dict[str, list[float]] = {}
+    for fid in riv:
+        dd = []
+        for i in range(n):
+            v = 0.0 if crops_on_river(fid) else fd[fid]["Dc"][i]
+            for ob in objs[fid]:
+                if ob["id"] not in on_river_obj:
+                    v += obj_dem[ob["id"]][i]
+            dd.append(v)
+        Dd[fid] = dd
+
+    def dam_dem(fid, i):
+        return Dd[fid][i] if fid in Dd else Dn[fid][i]
+
     # ---- network (§2.5–§2.7h) -------------------------------------------
     order = network_order(nodes, model.get("transfers", []))
     ups: dict[str, list[str]] = {x["id"]: [] for x in nodes}
@@ -1076,6 +1116,8 @@ def run(doc: dict) -> dict:
     col = {x["id"]: {k: [0.0] * n for k in names} for x in nodes}
     rule_vol = {t["id"]: [0.0] * n for t in rules + offtakes}
     obj_sup = {ob["id"]: [0.0] * n for lst in objs.values() for ob in lst}
+    # Each river abstraction's take, pool storage and pool evaporation (§2.7j).
+    river_cols = {fid: {t["key"]: {"take": [0.0] * n, "pool": [0.0] * n, "evap": [0.0] * n} for t in ts} for fid, ts in riv.items()}
     storage = {f["id"]: f["damInitialPct"] * f["damCapacityM3"] for f in farms}
     on_river = {f["id"]: False for f in farms}
     sd_store = {x["id"]: 0.0 for x in nodes}
@@ -1158,8 +1200,8 @@ def run(doc: dict) -> dict:
             pre[f["id"]] = (area, pd, e_raw, sp_raw)
 
         def draw_bound(fid):
-            """§2.6: the most the dam can be drawn for the demand today."""
-            dem = Dn[fid][i]
+            """§2.6: the most the dam can be drawn for the demand today (its dam side's, §2.7j)."""
+            dem = dam_dem(fid, i)
             prim = 0.0
             for k_, u_ in enumerate(units.get(fid, [])):
                 if u_["mode"] == "primary" and u_["target"] == "direct":
@@ -1252,7 +1294,7 @@ def run(doc: dict) -> dict:
             area, pd, e_raw, sp_raw = pre[dst]
             rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw))
             for t, c in caps:
-                need = Dn[dst][i] + (rm_dst if t.get("topUpDam") else 0.0)
+                need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, float] = {}
@@ -1350,7 +1392,10 @@ def run(doc: dict) -> dict:
                         cc[f"allocation_left_{s_}"][i] = r_[1]
                 continue
 
-            # A farm (§2.7).
+            # A farm (§2.7). With river abstractions (§2.7j) its dam side is asked for its dam-sourced demand only.
+            dem_all = dem
+            if xid in Dd:
+                dem = Dd[xid][i]
             d = fd[xid]
             cap = x["damCapacityM3"]
             s_prev = storage[xid]
@@ -1520,10 +1565,11 @@ def run(doc: dict) -> dict:
             if objs[xid]:
                 left_g = G
                 g_crop = 0.0
+                dam_obs = [ob for ob in objs[xid] if ob["id"] not in on_river_obj]
                 classes = [
-                    [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "first"],
-                    [("c", None)] + [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "shared"],
-                    [("o", ob) for ob in objs[xid] if ob.get("priority", "shared") == "last"],
+                    [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "first"],
+                    ([] if crops_on_river(xid) else [("c", None)]) + [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "shared"],
+                    [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "last"],
                 ]
                 for cls in classes:
                     want_c = [(kind, ob, d["Dc"][i] if kind == "c" else obj_dem[ob["id"]][i]) for kind, ob in cls]
@@ -1538,7 +1584,7 @@ def run(doc: dict) -> dict:
                             obj_sup[ob["id"]][i] = g_
                     left_g = max(0.0, left_g - min(tot, left_g))
                 T = beta * (1 - d["e"]) * g_crop
-                for ob in objs[xid]:
+                for ob in dam_obs:
                     r_ = 0.0 if ob.get("destination") == "external" else (ob.get("returnPct") or 0.0)
                     T += r_ * obj_sup[ob["id"]][i]
                 # basic_needs: Σ MIN(B_k, o_k) on the day's final demand (after a full allocation's factor).
@@ -1556,17 +1602,97 @@ def run(doc: dict) -> dict:
             if ret is None:
                 ret = 1
             flow = R + S - Gr + T + Sp * ret + X + passed_on
+            # River abstractions beside the dam (§2.7j): from the flow passing the dam (spill, release and
+            # returned seepage too, not the return flows) above the unit pump's keep, by supply level, the
+            # flow first and then each one's own pool; the pools refill last from the flow left.
+            g_riv = 0.0
+            pool_chg = 0.0
+            if xid in riv:
+                ts = riv[xid]
+                past = R + S - Gr + Sp * ret + X + passed_on
+                free = max(0.0, past - keep)
+                rroom = (sroom[0] if sroom else math.inf) - (G - GW)
+                q = pool_q[xid]
+                held = []
+                evs = []
+                for a, t in enumerate(ts):
+                    ev = 0.0
+                    if t["pool"]:
+                        prev = q[a]
+                        ar = 7.2 * t["pool"] ** 0.77 * min(prev / t["pool"], 1.0) ** 0.7 if prev > 0 else 0.0
+                        ev = min(k_lake[m] * apan[m] / mdays[m] / 1000 * ar, prev)
+                    evs.append(ev)
+                    held.append(q[a] - ev)
+                want_t = [d["Dc"][i] if t["ob"] is None else obj_dem[t["ob"]["id"]][i] for t in ts]
+                got = [0.0] * len(ts)
+                left_p = [t["pump"] for t in ts]
+                from_flow = 0.0
+                for lvl in range(3):
+                    idx = [a for a, t in enumerate(ts) if t["level"] == lvl]
+                    w = {a: max(0.0, min(want_t[a], left_p[a])) for a in idx}
+                    tot = sum(w.values())
+                    if not tot > 0 or not rroom > 0:
+                        continue
+                    ff = min(tot, free, rroom)
+                    for a in idx:
+                        v = w[a] * ff / tot
+                        got[a] += v
+                        left_p[a] -= v
+                        w[a] -= v
+                    free = max(0.0, free - ff)
+                    rroom -= ff
+                    from_flow += ff
+                    pw = sum(min(w[a], held[a]) for a in idx if ts[a]["pool"])
+                    if pw > 0 and rroom > 0:
+                        g_ = min(1.0, rroom / pw)
+                        dr_ = 0.0
+                        for a in idx:
+                            if ts[a]["pool"]:
+                                v = min(w[a], held[a]) * g_
+                                got[a] += v
+                                held[a] = max(0.0, held[a] - v)
+                                dr_ += v
+                        rroom -= dr_
+                rsum = sum(max(0.0, t["pool"] - held[a]) for a, t in enumerate(ts) if t["pool"])
+                refill = 0.0
+                if rsum > 0 and free > 0:
+                    g_ = min(1.0, free / rsum)
+                    for a, t in enumerate(ts):
+                        if t["pool"]:
+                            v = max(0.0, t["pool"] - held[a]) * g_
+                            held[a] += v
+                            refill += v
+                back_r = 0.0
+                for a, t in enumerate(ts):
+                    g_riv += got[a]
+                    if t["ob"] is None:
+                        back_r += beta * (1 - d["e"]) * got[a]
+                    else:
+                        obj_sup[t["ob"]["id"]][i] = got[a]
+                        r_ = 0.0 if t["ob"].get("destination") == "external" else (t["ob"].get("returnPct") or 0.0)
+                        back_r += r_ * got[a]
+                    cc_t = river_cols[xid][t["key"]]
+                    cc_t["take"][i] = got[a]
+                    if t["pool"]:
+                        pool_chg += held[a] - q[a] + evs[a]
+                        q[a] = held[a]
+                        cc_t["pool"][i] = held[a]
+                        cc_t["evap"][i] = evs[a]
+                T += back_r
+                flow = max(0.0, past - from_flow - refill) + T
+                diag["river_take_days"] += 1 if g_riv > 0 else 0
             dep = deplete(x, xid, ulist, pumped, flow, sd_store, dd_owed, cc, i)
             U0 = flow - dep
             lost = Sp * (1 - ret)
             for k_ in range(len(ulist)):
                 used_u[k_] += pumped[k_]
             if sroom:
-                spend(xid, "surface", G - GW)
+                spend(xid, "surface", G - GW + g_riv)
             if groom:
                 spend(xid, "groundwater", GW + GWd)
-            note_limit(lb_days, xid, wy, room, "surface", G - GW, sroom, dem, dem - G, o, ald)
-            note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem, dem - G, o, ald)
+            # The unit's whole use, demand and shortfall: its river abstractions' too (§2.7j).
+            note_limit(lb_days, xid, wy, room, "surface", G - GW + g_riv, sroom, dem_all, dem_all - G - g_riv, o, ald)
+            note_limit(lb_days, xid, wy, room, "groundwater", GW + GWd, groom, dem_all, dem_all - G - g_riv, o, ald)
             # Off-takes from this unit (§2.6a), by priority.
             taken = 0.0
             ots = [t for t in ot_from.get(xid, []) if rule_limit(t, o, m) > 0]
@@ -1600,15 +1726,15 @@ def run(doc: dict) -> dict:
                         back_to[rn] = back_to.get(rn, 0.0) + v * lp * rp
             back = back_to.get(xid, 0.0)
             Uo = U0 - taken + back
-            V = (H + I + j + pd + GW + GWd + arrives + back) - (G - T) - E - (Q - s_prev) - Uo - dep - lost - taken
+            V = (H + I + j + pd + GW + GWd + arrives + back) - (G + g_riv - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg
             aa = noise_short(z, Uo)
             ab = min(aa - aau, 0.0)
             for key, val in (
                 ("runoff", I), ("transfer", j), ("upstream_to_dam", K), ("upstream_below_dam", L),
                 ("runoff_to_dam", M), ("runoff_below_dam", N), ("diverted_to_dam", O), ("dam_area", area),
-                ("rain_on_dam", pd), ("dam_evaporation", E), ("dam_seepage", Sp), ("supplied", G),
+                ("rain_on_dam", pd), ("dam_evaporation", E), ("dam_seepage", Sp), ("supplied", G + g_riv),
                 ("interim_storage", P), ("dam_storage", Q), ("spill", R), ("below_dam_not_diverted", S),
-                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", dem - G), ("ewr", y_ewr),
+                ("return_flow", T), ("outflow", Uo), ("balance_residual", V), ("deficit", dem_all - (G + g_riv)), ("ewr", y_ewr),
                 ("ewr_cumulative", z), ("ewr_shortfall", aa), ("ewr_shortfall_incremental", ab),
                 ("dam_seepage_lost", lost), ("dam_release", X), ("river_abstraction", Gr), ("groundwater_used", GW),
                 ("groundwater_to_dam", GWd), ("senior_requirement", zs), ("passed_for_senior", passed),
@@ -1786,6 +1912,12 @@ def run(doc: dict) -> dict:
             for ob in objs[xid]:
                 put(xid, f"object_demand@{ob['id']}", obj_dem[ob["id"]])
                 put(xid, f"object_supplied@{ob['id']}", obj_sup[ob["id"]])
+            for t in riv.get(xid, []):
+                c_ = river_cols[xid][t["key"]]
+                put(xid, f"river_take@{t['key']}", c_["take"])
+                if t["pool"]:
+                    put(xid, f"river_pool@{t['key']}", c_["pool"])
+                    put(xid, f"river_pool_evaporation@{t['key']}", c_["evap"])
             for k in extra:
                 put(xid, k, cc[k])
             put(xid, "ewr_charge", charge[xid])
