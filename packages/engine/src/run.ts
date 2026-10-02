@@ -40,7 +40,7 @@ import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type P
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
-import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
@@ -1842,6 +1842,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			category: o.category,
 			...(o.source && (DEMAND_OBJECT_SOURCES as readonly string[]).includes(o.source) ? { source: o.source } : {}),
 			priority: o.priority,
+			// Its rank within its class as the run used it (engine ≥ 1.64.0), only when one is set on a 'first' or 'last' object.
+			...(objectRank(o) > 0 && o.rank !== null && o.rank !== undefined ? { rank: objectRank(o) } : {}),
 			destination: o.destination,
 			avgDemandM3Day: avgDemand,
 			avgSuppliedM3Day: avgSupplied,
@@ -2479,11 +2481,6 @@ export function resolveReportWindow(
 }
 
 /**
- * An other water user's pump over the run (engine ≥ 1.58.0): the mean river
- * take and the mean demand the pump left unmet, and the days it did (more
- * than float noise of the day's take).
- */
-/**
  * A unit's river abstractions' pools for the water account (engine ≥ 1.65.0):
  * their storage and evaporation summed per day, in `river.takes` order, and
  * their start (full, or a resumed run's). {} without a pool.
@@ -2507,6 +2504,11 @@ function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { stora
 	return { pool: { storage, evaporation, initialM3 } };
 }
 
+/**
+ * An other water user's pump over the run (engine ≥ 1.58.0): the mean river
+ * take and the mean demand the pump left unmet, and the days it did (more
+ * than float noise of the day's take).
+ */
 function pumpMeans(river: Float64Array, limited: Float64Array, mean: (a: ArrayLike<number>) => number): Pick<UserSummary, 'avgRiverAbstractionM3Day' | 'avgPumpLimitedM3Day' | 'daysPumpLimited'> {
 	let days = 0;
 	for (let t = 0; t < limited.length; t++) if (limited[t]! > 1e-9 * Math.max(1, river[t]!)) days++;

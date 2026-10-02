@@ -3608,6 +3608,7 @@ regression suite is unchanged.
 | `monthlyFactor` | `perUnit` only: a factor per month on the daily use (holiday peaks, dry-season stock watering); null = 1 |
 | `returnPct` | share (0–1) of what it is supplied that returns to the river below the unit the same day (treated wastewater). The register's consumptive % is 1 − this |
 | `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
+| `rank` | its place within `first` or `last` (engine ≥ 1.64.0, migration 169, issue #343; below): a whole number 1–99, 1 supplied before 2, equal ranks pro rata; null = 1; ignored on a `shared` object |
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
 | `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 105; below); null or empty = every day at its month's demand |
@@ -3620,8 +3621,8 @@ as for the crop requirement, issue #53 R1, × its schedule's factor that day):
 ```
 D   = F / e + Σ o_k                         (the unit's abstraction demand)
 G   = as §2.7 / §2.7d / §2.7e, up to D      (dam, river pump, boreholes supply the total)
-split G, class by class:  first objects → the crops (F / e) with the shared objects → last objects;
-       a class that can be met gets its demand, else what is left pro rata to its members' demand
+split G, level by level:  first objects by rank → the crops (F / e) with the shared objects → last objects by rank;
+       a level that can be met gets its demand, else what is left pro rata to its members' demand
 T   = β(1 − e) × G_crops + Σ r_k × G_k      (r_k = returnPct, 0 when external)
 ```
 
@@ -3632,6 +3633,35 @@ unit (it no longer follows from G alone), and the curtailment report's supply
 cut divides the irrigation part of the charge by the window's
 (Σ G − Σ T) ÷ Σ G. Firm yield (§2.13) replaces the unit's whole demand,
 objects included, with the draft; its `demand` shape includes them.
+
+**The supply order** (engine ≥ 1.64.0, issue #343, `network/demandObjects.ts`
+`supplyLevels`). A class alone can't put two objects before the crops one
+after the other: two municipalities on one unit whose licences differ in
+seniority would share pro rata. So an object in `first` or `last` also has a
+`rank`, and the unit's supply levels are its (class, rank) pairs in order,
+the crops at the `shared` level: rank 1 of `first`, rank 2 of `first`, …, the
+crops with every `shared` object, rank 1 of `last`, and so on. Each level is
+met in full before the next gets any; within a level the members share pro
+rata to their demand, as a class did. The node form shows the levels as one
+numbered order (the crops among them, 1 supplied first, equal numbers
+sharing) and stores it back as classes and ranks (`supplyOrder`,
+`fromSupplyOrder`), so first / shared / last are positions 1 / 2 / 3 with the
+crops at 2. A rank that is null or absent is 1, so every model saved before
+1.64.0 has one level per class and **runs to the bit as before**: the split
+takes the same steps in the same order (`demandObjects.test.ts` pins it
+against 1.63.0's three-class split on random days, and `run.demandRank.test.ts`
+runs random networks with no ranks and with every rank 1 alike). A rank on a
+`shared` object is ignored (it shares with the crops whatever its number);
+one outside 1–99 or not whole is refused on save (`doRank`) and runs as 1
+with a warning. The features that read an object's demand rather than its
+order are unchanged: the drought restriction's per-category cuts, the
+basic-needs floor, allocation caps and a transfer's room all act on the
+demand before the split. The self-check (`checkObjectsDay`) re-derives the
+levels from the model and checks that a later level got water only once
+every earlier one was met, and that a level's members, crops included, got
+one share. The run's object summary carries the rank (`DemandObjectSummary.rank`)
+when one is set, and run comparison and scenarios (`demandObject.set` with
+`rank`) read null and absent alike.
 
 **The source** (engine ≥ 1.56.0, issue #54 Q11, `project.ts`
 `DEMAND_OBJECT_SOURCES`). So a report can say by rule how solid a demand
@@ -3681,7 +3711,9 @@ replace it. The rest:
   gives domestic supply; across units, the existing senior/junior user
   priority applies. Splitting one demand into senior and junior slices is two
   objects (Q14). The client confirmed senior/junior is enough (issue #90):
-  no finer priority classes.
+  no finer priority classes across units. Within a unit, objects can be
+  ranked inside `first` and `last` (engine ≥ 1.64.0, issue #343), for two
+  demands whose licences differ in seniority.
 - *The monthly demand is what is abstracted.* A meter record or a
   reconciliation strategy's AADD usually includes losses, so only a demand
   sized per unit is grossed up. Where distribution losses go (to the river or
@@ -4253,7 +4285,7 @@ flow past     Fr = (S − Gr) + R + released + returned seepage + off-take water
 keep          = MAX(Zs, the pass-inflow release's target, the hands-off keep §2.7h)   (the unit pump's keep)
 free          = MAX(0, Fr − keep)
 pool          A = A_full × (V[t−1] ÷ cap)^0.7;   E_pool = MIN(lake evaporation × A, V[t−1]);   held = V[t−1] − E_pool
-by supply level (the demand objects' priority classes, §2.7f: 'first', then the crops with 'shared', then 'last'):
+by supply level (the unit's supply order, §2.7f: 'first' by rank, then the crops with 'shared', then 'last' by rank):
               want_a   = MIN(demand_a, pump_a)
               flow_a   = want_a × MIN(1, free ÷ Σ want, room ÷ Σ want)       pro rata within a level
               pool_a   = MIN(want_a − flow_a, held_a)                        (× MIN(1, room left ÷ Σ) under a cap)
@@ -4292,8 +4324,9 @@ in [followups.md § Hydrologist](./followups.md#hydrologist)):
   river take still needs one before an evidence pack is issued
   (`evidence-10`).
 - *Priority among river takes reuses the supply order of §2.7f*: 'first'
-  objects, then the crops with 'shared' objects, then 'last' (and the
-  ranks within a class, #343, once they land), pro rata within a level.
+  objects, then the crops with 'shared' objects, then 'last', each of
+  'first' and 'last' by its ranks (engine ≥ 1.64.0, #343), pro rata within
+  a level.
   The river is shared by level before any pool is drawn: within a level the
   flow goes first, then each abstraction's own pool. A pool is its own
   abstraction's, never another's.

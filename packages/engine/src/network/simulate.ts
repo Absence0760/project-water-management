@@ -9,7 +9,7 @@ import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
-import { poolLosses, riverTakesDay, type PlanRiver, type TakeDay } from './riverSource';
+import { poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
 import { PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { AllocationCap } from '../allocations/mode';
@@ -728,11 +728,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	});
 	// Each unit's dam-side demand today (what its sources are asked for, after the drought restriction's cut), set at the start of the day.
 	const damD = nodes.some((n) => n.river) ? new Float64Array(nodes.length) : null;
-	const takeDay: (TakeDay | null)[] = nodes.map((n) => (n.river ? { got: new Float64Array(n.river.takes.length), fromPool: new Float64Array(n.river.takes.length), refill: new Float64Array(n.river.takes.length) } : null));
+	const takeDay: (TakeDay | null)[] = nodes.map((n) => (n.river ? takeDayFor(n.river.takes.length) : null));
 	const takeWant = nodes.map((n) => (n.river ? new Float64Array(n.river.takes.length) : null));
-	// Each abstraction's supply level: a demand object's class (§2.7f), the crops with 'shared' (1).
-	const takeLevel = nodes.map((n) => (n.river ? Uint8Array.from(n.river.takes, (x) => (x.obj < 0 ? 1 : n.objects!.tier[x.obj]!)) : null));
-	const takeLevels = 3;
+	// Each abstraction's supply level: the unit's supply order (§2.7f, engine ≥ 1.64.0: class, then rank within
+	// 'first' and 'last'), the crops with 'shared'; a unit without objects has the crops' level alone.
+	const takeLevel = nodes.map((n) => (n.river ? Uint8Array.from(n.river.takes, (x) => (x.obj < 0 ? (n.objects ? n.objects.cropLevel : 0) : n.objects!.tier[x.obj]!)) : null));
+	const takeLevels = nodes.map((n) => (n.objects ? n.objects.levels : 1));
 	// The drought restriction (engine ≥ 1.54.0, ./restriction.ts, docs/model.md §2.7i): the level held, each
 	// day's level, and each unit's demand after today's cut: its abstraction demand, the crop requirement and
 	// a view of its demand objects' demand (what splitSupply reads), filled at the start of each day.
@@ -1408,7 +1409,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				let flowPast = Rr + (S - Gr) + SpRet;
 				if (Rel > 0) flowPast += Rel;
 				if (Xpass > 0) flowPast += Xpass;
-				const taken = riverTakesDay(tk, takeLevel[i]!, takeLevels, want, flowPast - keep, sRoom - (G - Ggw), q, td);
+				const taken = riverTakesDay(tk, takeLevel[i]!, takeLevels[i]!, want, flowPast - keep, sRoom - (G - Ggw), q, td);
 				let back = 0;
 				for (let a = 0; a < tk.length; a++) {
 					const x = tk[a]!;

@@ -19,6 +19,7 @@ import {
 	CROP_SET_FIELDS,
 	DEMAND_OBJECT_CATEGORIES,
 	DEMAND_OBJECT_CATEGORY_LABEL,
+	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SOURCES,
 	DEMAND_OBJECT_SET_FIELDS,
 	LAND_COVER_CLASSES,
@@ -51,6 +52,7 @@ import { kindLabel } from '$lib/series/kinds';
 import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
 import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
 import { SOURCE_OPTION_LABEL } from '$lib/components/network/demandObjectSource';
+import { PRIORITY_OPTION_LABEL } from '$lib/components/network/demandObjectOrder';
 
 export interface EnumOption {
 	value: string;
@@ -255,10 +257,9 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	lossPct: { label: 'Distribution losses', spec: pct() },
 	monthlyFactor: { label: 'Monthly profile (× the daily use)', spec: { t: 'monthly', unit: '', scale: 1, nullable: true } },
 	returnPct: { label: 'Share returned', spec: pct() },
-	priority: {
-		label: 'Priority',
-		spec: { t: 'enum', options: [{ value: 'first', label: 'First: before the hydrological unit’s crops' }, { value: 'shared', label: 'Shared: pro rata with the crops' }, { value: 'last', label: 'Last: after the crops' }] }
-	},
+	priority: { label: 'Priority', spec: { t: 'enum', options: plain(DEMAND_OBJECT_PRIORITIES, PRIORITY_OPTION_LABEL) } },
+	// Its place within its priority class (engine ≥ 1.64.0): 1 before 2, equal ranks pro rata; none = 1.
+	rank: { label: 'Rank within its priority', spec: num('', { nullable: true, nullLabel: 'none (1)', int: true }) },
 	destination: { label: 'Destination', spec: { t: 'enum', options: [{ value: 'internal', label: 'Used in the catchment' }, { value: 'external', label: 'Piped out of the catchment (nothing returns)' }] } },
 	enabled: { label: 'Modelled', spec: { t: 'bool' } },
 	// The basic-needs floor's people (engine ≥ 1.44.0): a domestic or municipal object is never cut below 25 l each a day.
@@ -266,7 +267,7 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	// Where its number comes from (engine ≥ 1.56.0); its sizing must match (a model rule, so set both in one edit group).
 	source: { label: 'Source of the number', spec: { t: 'enum', options: plain(DEMAND_OBJECT_SOURCES, SOURCE_OPTION_LABEL), nullable: true, nullLabel: 'not recorded' } },
 	// Where its water comes from (engine ≥ 1.65.0, docs/model.md §2.7j): the dam (null), or a river abstraction of its own.
-	waterSource: { label: 'Water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL), nullable: true, nullLabel: 'the dam' } },
+	waterSource: { label: 'Water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL), nullable: true, nullLabel: 'the unit’s supply' } },
 	riverPumpM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	riverPoolM3: { label: 'Pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
 	note: { label: 'Source details', spec: { t: 'text', optional: true } }

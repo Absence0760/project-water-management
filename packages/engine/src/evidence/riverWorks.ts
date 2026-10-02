@@ -20,12 +20,16 @@ import { transferRatesM3s } from '../network/transferRates';
  *   dam route "into the dam" is irrigated straight from the river, the upstream and runoff shares with
  *   no limit, past any pump capacity (b023's stand-in for a river pump, §2.7e, §2.7h);
  * - `user`: an other water user, which always takes from the river where it sits (§2.7c);
- * - `offtake`: a river off-take (a transfer rule with source 'river', §2.6a).
+ * - `offtake`: a river off-take (a transfer rule with source 'river', §2.6a);
+ * - `abstraction`: a demand's own river abstraction beside a unit's dam, the crops' or a demand
+ *   object's (engine ≥ 1.65.0, §2.7j), with its own pump; it keeps the unit's hands-off flow.
  */
 export interface RiverWorks {
-	kind: 'pump' | 'divert' | 'noDam' | 'user' | 'offtake';
-	/** The node's id, or the transfer rule's. */
+	kind: 'pump' | 'divert' | 'noDam' | 'user' | 'offtake' | 'abstraction';
+	/** The node's id, or the transfer rule's; an abstraction's is `<node id>/<'crops' or the object's id>`. */
 	id: string;
+	/** `abstraction` only: its unit's id. */
+	nodeId?: string;
 	/** The node's name; for an off-take, its source's and destination's ("Upper → Canal head"). */
 	name: string;
 	/** Its take has a limit: a pump capacity (a size ≥ 0), River to dam's capacity, or an off-take's rate. */
@@ -99,6 +103,12 @@ export function nodeRiverWorks(n: NetworkNode, model: Pick<ProjectModel, 'cropAr
 	// target, a partial keep the check doesn't credit (the conservative side: it stops issue, never passes one).
 	const routed = above0(n.pctUpstreamToDam) || above0(n.pctRunoffToDam);
 	if (split && !dam.always && (routed || divert) && demand) out.push({ kind: 'noDam', id: n.id, name: n.name, bounded: !routed, protectsEwr: handsOffCovers(n, null), ...(dam.ever ? { someDays: true } : {}) });
+	// Each demand's own river abstraction (engine ≥ 1.65.0, §2.7j): only for demand it has; a pump of 0 takes nothing.
+	const take = (key: string, label: string, pump: unknown) => {
+		if (pump !== 0) out.push({ kind: 'abstraction', id: `${n.id}/${key}`, nodeId: n.id, name: `${n.name}: ${label}`, bounded: size(pump), protectsEwr: handsOffCovers(n, null) });
+	};
+	if (n.cropWaterSource === 'river' && (model.cropAreas ?? []).some((a) => a.nodeId === n.id && a.areaM2 > 0)) take('crops', 'crops', n.cropRiverPumpM3Day);
+	for (const o of model.demandObjects ?? []) if (o.nodeId === n.id && o.enabled !== false && o.waterSource === 'river') take(o.id, o.name, o.riverPumpM3Day);
 	return out;
 }
 
@@ -222,7 +232,7 @@ export function proposedRiverWorks(
 		for (const id of t.nodeIds) nodeIds.add(id);
 		for (const id of t.transferIds) transferIds.add(id);
 	});
-	return riverWorks(after, window).filter((w) => (w.kind === 'offtake' ? transferIds.has(w.id) : nodeIds.has(w.id)));
+	return riverWorks(after, window).filter((w) => (w.kind === 'offtake' ? transferIds.has(w.id) : nodeIds.has(w.nodeId ?? w.id)));
 }
 
 /** A river abstraction in words: "Upper's river pump", "the off-take Upper → Canal". */
@@ -238,5 +248,7 @@ export function riverWorksName(w: RiverWorks): string {
 			return `${w.name} (other water user)`;
 		case 'offtake':
 			return `the off-take ${w.name}`;
+		case 'abstraction':
+			return `the river abstraction ${w.name}`;
 	}
 }

@@ -940,8 +940,8 @@ def run(doc: dict) -> dict:
     # ---- river abstractions beside a unit's dam (§2.7j) -------------------
     # Each demand with water source 'river' (the crops, or an enabled object) has its own pump (None = no
     # limit) and a pool (capacity > 0; it starts full, its full area 7.2 × capacity^0.77, b = 0.7). Its supply
-    # level: 'first' 0, the crops and 'shared' 1, 'last' 2. The dam side serves the other demands only.
-    LEVEL = {"first": 0, "shared": 1, "last": 2}
+    # level is its place in the unit's supply order (supply_key; the crops with 'shared'). The dam side serves
+    # the other demands only.
     riv: dict[str, list[dict]] = {}
     for f in farms:
         ts = []
@@ -950,10 +950,10 @@ def run(doc: dict) -> dict:
             return {"pump": math.inf if pump_ is None else pump_, "pool": pool_ if pool_ is not None and pool_ > 0 else None}
 
         if f.get("cropWaterSource") == "river":
-            ts.append({"key": "crops", "ob": None, "level": 1, **kit(f.get("cropRiverPumpM3Day"), f.get("cropRiverPoolM3"))})
+            ts.append({"key": "crops", "ob": None, "level": (1, 0), **kit(f.get("cropRiverPumpM3Day"), f.get("cropRiverPoolM3"))})
         for ob in objs[f["id"]]:
             if ob.get("waterSource") == "river":
-                ts.append({"key": ob["id"], "ob": ob, "level": LEVEL.get(ob.get("priority", "shared"), 1), **kit(ob.get("riverPumpM3Day"), ob.get("riverPoolM3"))})
+                ts.append({"key": ob["id"], "ob": ob, "level": supply_key(ob), **kit(ob.get("riverPumpM3Day"), ob.get("riverPoolM3"))})
         if ts:
             riv[f["id"]] = ts
     pool_q = {fid: [t["pool"] or 0.0 for t in ts] for fid, ts in riv.items()}
@@ -1565,11 +1565,13 @@ def run(doc: dict) -> dict:
             if objs[xid]:
                 left_g = G
                 g_crop = 0.0
+                # Supply order: by class, then by rank within 'first' and 'last' (engine >= 1.64.0);
+                # the crops with the 'shared' objects; each level pro rata. The dam side's demands only (§2.7j).
                 dam_obs = [ob for ob in objs[xid] if ob["id"] not in on_river_obj]
+                keys = sorted({supply_key(ob) for ob in dam_obs} | {(1, 0)})
                 classes = [
-                    [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "first"],
-                    ([] if crops_on_river(xid) else [("c", None)]) + [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "shared"],
-                    [("o", ob) for ob in dam_obs if ob.get("priority", "shared") == "last"],
+                    ([("c", None)] if key == (1, 0) and not crops_on_river(xid) else []) + [("o", ob) for ob in dam_obs if supply_key(ob) == key]
+                    for key in keys
                 ]
                 for cls in classes:
                     want_c = [(kind, ob, d["Dc"][i] if kind == "c" else obj_dem[ob["id"]][i]) for kind, ob in cls]
@@ -1627,7 +1629,7 @@ def run(doc: dict) -> dict:
                 got = [0.0] * len(ts)
                 left_p = [t["pump"] for t in ts]
                 from_flow = 0.0
-                for lvl in range(3):
+                for lvl in sorted({t["level"] for t in ts}):
                     idx = [a for a, t in enumerate(ts) if t["level"] == lvl]
                     w = {a: max(0.0, min(want_t[a], left_p[a])) for a in idx}
                     tot = sum(w.values())
@@ -2029,6 +2031,25 @@ def window_covers(w: dict, o: int) -> bool:
         e = easter(d.year)
         return e + w["easterFrom"] <= o <= e + w["easterTo"]
     return False
+
+
+def supply_key(ob: dict) -> tuple[int, int]:
+    """A demand object's place in its unit's supply order (§2.7f): its class,
+    then its rank within 'first' or 'last' (a whole number 1-99; none = 1,
+    engine >= 1.64.0). A 'shared' object goes with the crops, (1, 0)."""
+    p = ob.get("priority", "shared")
+    if p == "first":
+        return (0, object_rank(ob))
+    if p == "last":
+        return (2, object_rank(ob))
+    return (1, 0)
+
+
+def object_rank(ob: dict) -> int:
+    r = ob.get("rank")
+    if isinstance(r, (int, float)) and not isinstance(r, bool) and math.isfinite(r) and r == int(r) and 1 <= r <= 99:
+        return int(r)
+    return 1
 
 
 def schedule_factor(sched: list, o: int) -> float:

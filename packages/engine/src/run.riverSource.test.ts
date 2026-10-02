@@ -262,6 +262,6 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		expect(s.problems).toEqual([]);
 		const texts = diffInputs({ settings: ok.settings, model: ok.model, series: {} }, { settings: s.input.settings, model: s.input.model, series: {} }).map((c) => c.text);
 		expect(texts.some((t) => /crops’ pool at the river pump none → 2\s000 m³/.test(t))).toBe(true);
-		expect(texts.some((t) => /demand object "mill".*from a river abstraction \(pump 480 m³\/day, pool 3\s000 m³\) → .*from the dam \(a river pump 480 m³\/day, pool 3\s000 m³ kept, unused\)/.test(t))).toBe(true);
+		expect(texts.some((t) => /demand object "mill".*from a river abstraction \(pump 480 m³\/day, pool 3\s000 m³\) → .*from the unit’s supply \(a river pump 480 m³\/day, pool 3\s000 m³ kept, unused\)/.test(t))).toBe(true);
 	});
 });

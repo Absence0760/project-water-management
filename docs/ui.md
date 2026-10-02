@@ -52,7 +52,8 @@ live](#project-workspace)); Help keeps its contents in the page
 avatar, display name and email (initials only on the phone bar, `compact`)
 that opens a list (same disclosure pattern as the Data/Runs tabs' download
 menu — a button plus a hidden list, not an ARIA `menu`/`menuitem` widget)
-with three entries. At the sidebar's foot it opens upward (`up`); on the
+with three entries (four while two-step sign-in is still needed: the
+two-step sign-in banner, below). At the sidebar's foot it opens upward (`up`); on the
 phone bar, downward.
 
 - **Account** — a link to `/account` (marked `aria-current` while there).
@@ -2246,14 +2247,19 @@ note's link on the Summary, `notes.ts` `noteHref`).
   they can be reset. The two boxes' help tips sit beside their labels, not in
   them, so each box's name is its words alone. Read-only for viewers (no
   calculator). Between the supply fields and the hands-off flow, on a unit
-  only, **Water for the crops** (engine ≥ 1.65.0, issue #344, [model.md
-  §2.7j](./model.md), `WaterSourceFields.svelte`): **From the dam (the supply
-  rule)**, the default, or **Its own river abstraction**, which shows that
-  abstraction's own **Number of pumps** × **m³/h per pump** calculator,
-  **River pump capacity** (m³/day, blank = no limit, which the run warns
-  about) and **Pool at the pump** (m³, blank = none; its hint says it starts
-  full and its surface is estimated from the capacity). The pump and pool
-  are kept when the source goes back to the dam, unused.
+  only, **Water for the crops**, under its own heading (engine ≥ 1.65.0, issue
+  #344, [model.md §2.7j](./model.md), `WaterSourceFields.svelte`): **The
+  unit’s supply** (with the supply rule's words in brackets), the default,
+  or **Its own river abstraction**, which shows that abstraction's own
+  pump calculator, capacity and pool, each label naming the demand (**Number
+  of pumps for the crops**, **River pump capacity for the crops** (m³/day,
+  blank = no limit, which the run warns about), **Pool at the pump for the
+  crops** (m³, blank = none; its hint says it starts full and its surface
+  is estimated from the capacity)), so they read apart from the unit's own
+  pump in the same group; each has its history line. The pump and pool are
+  kept when the source goes back to the unit's supply, unused. The unit's
+  pump, an other water user's and each abstraction's share one
+  `PumpCapacityField.svelte` (the pumps × m³/h × 24 calculator).
 - **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
   every twelve-month row of the one-node form (the dam release, a demand
   object's demand or profile, an other water user's demand, the hands-off flow
@@ -2318,15 +2324,27 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (m³/day by month, or a count × litres a day; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
-  the modeller), **Priority** (first / with the
-  crops / last), **Destination** (used in the catchment, or piped out, which
+  the modeller), **Priority** (Before the crops / With the crops, pro rata /
+  After the crops: short words, so the edit panel's column no longer cuts
+  them off; shown only while the unit has one object), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
   **Water for** the object (engine ≥ 1.65.0, issue #344, the same
   `WaterSourceFields` as the crops': from the dam under the supply rule, or
   its own river abstraction with its pump calculator, capacity and pool),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
-  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
+  note: which meter and years, which strategy, which norm). With two or more
+  objects on the unit (engine ≥ 1.64.0, issue #343, `demandObjectOrder.ts`)
+  the Priority selects give way to a **Supply order on a short day** box
+  above the list: **The crops** and each object by name, in supply order,
+  each with a select of its place (1 is supplied first; demands at one
+  number share pro rata): Before 1, each number, Between n and n + 1, and
+  After the last, so one choice puts a demand in a place of its own anywhere.
+  An **Order:** line under it says the order in words ("Town A, then Town B,
+  then the crops"; announced politely, and each select points at it). The
+  places are stored as each object's priority and its rank within it, and
+  renumber from 1 without gaps; removing a demand closes the ranks up, and a
+  lone one keeps none. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2354,7 +2372,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
-  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  objects**: per object its unit, priority (with ", rank n" when it has a
+  rank, engine ≥ 1.64.0), demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out"). When an object has a
   basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
@@ -2930,6 +2949,41 @@ saves the catchment's model, and override mode there edits the scenario's
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
   the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
+- **From land cover** (issue #326 B-landcover,
+  `crops/CroplandProposalsBox.svelte`, rows in `crops/croplandProposals.ts`;
+  the sources and method in [maps.md § Cultivated area from land
+  cover](./maps.md#cultivated-area-from-land-cover)): under the areas, for a
+  hydrological unit (not another user) that is saved in the model (an
+  unsaved one says "Save the model to see …"). It is in the drawer, not on
+  the Crops page, because the page is sized to the window and a panel below
+  it would sit out of sight; every page that names a unit opens it. A table
+  lists each farm parcel on the map linked to the unit, largest cultivated
+  area first, with **Cultivated** ("51.7 ha of 103 ha") and **Share**, and
+  an **All parcels** footer when there are several; then the whole
+  catchment's cultivated area for reference and **Show … on map** (there
+  with or without a boundary). **Area to use** offers the parcels' sum
+  first, then each parcel with cropland ("All 2 parcels: 62.5 ha", "Lower
+  lands: 50 ha"; a lone parcel stands for the unit). A second table has one
+  row per crop, the crops planted on this unit first (largest first), at
+  most six until **Show all N crops** (`aria-expanded`): **Planted now**,
+  where an accepted area came from under the crop's name ("12.5 ha from
+  land cover (the parcel “Top camp”; synthetic, synthetic 1), used
+  2026-10-01", or "Typed over since: …" once the area no longer matches),
+  and **Use**, or "Saved" when the crop already holds the chosen area.
+  **Use** asks first (`confirmWords`: the crop, the unit, the old and new
+  area, the dataset, and that the land cover doesn't say what grows there or
+  whether it is irrigated; "Use this area"), saves that one value on the
+  server, shows a notice ("Orchard’s planted area on Upper farm is now
+  51.73 ha, from land cover. Run the model to see its effect.") and reloads
+  the saved model and the summary. Use is disabled while the model has
+  unsaved changes, the drawer's own edits included (a hint says why), and a
+  viewer gets no Use ("Only an editor can use a value."). **Source and
+  method** (a disclosure) gives the dataset's source, version, label,
+  attribution and counting method. Other states: no parcel linked (with
+  **Open the Map**), no dataset loaded (the loader's command), no cropland
+  in the parcels, no crop yet, and a "Synthetic test data" warning for the
+  committed grid. On a narrow sheet the Use buttons are 44 px targets; the
+  tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,
@@ -8062,8 +8116,12 @@ then.
   With an authenticator but a password-only session (`!sessionVerified`),
   or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
   to `/login?next=<this page>`. A refusal words it as "That needs …";
-  **Dismiss** hides it until the next refusal and moves focus to the page's
-  title. Its own chunk, loaded only while there is something to say
+  **Dismiss** hides it until the next refusal (or until the tab closes: a
+  reload keeps it hidden, `sessionStorage`) and moves focus to the page's
+  title. While the need stands, dismissed or not, the account menu's avatar
+  carries a small amber "i" badge (the trigger's name adds ", two-step
+  sign-in needed") and the menu's first entry is **Set up two-step
+  sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say
   (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying

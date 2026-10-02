@@ -21,7 +21,9 @@ Two rules hold throughout:
   quaternary's values enter the WR2012 check only through **Use**, value by
   value, and then **Save**; a dam's capacity (from the register of dams) or
   full-supply area (from its polygon) enters the model only through **Use**
-  on the Dams page and a confirmation.
+  on the Dams page and a confirmation; a unit's cultivated area (from land
+  cover) enters a crop's planted area only through **Use** in the unit's planted-areas drawer,
+  for a crop the modeller picks, and a confirmation.
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
   placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
@@ -45,16 +47,20 @@ server and no tile CDN: the file is served from the app's own storage.
   glyphs are configured ([§ Labels](#labels)); it uses no sprites.
   Attribution ("© Protomaps © OpenStreetMap contributors") stays visible
   whenever the basemap is drawn.
-- **Locally**: `pnpm dev:s3:up`, then `pnpm dev:tiles:fetch`
-  (`bin/tiles-dev.sh fetch`). It needs the `pmtiles` CLI
+- **Locally**: `pnpm dev:tiles:up` (`bin/tiles-dev.sh up`) does it all and
+  is safe to re-run: it starts MinIO, uploads the cached extract and fonts
+  when MinIO doesn't serve them (its volume wiped, or a new MinIO), runs `fetch` only when nothing is cached, and sets both
+  URLs (and the relief's, when its DEM is cached, [§ Relief](#relief)) in `frontend/.env.development.local` (`tiles-upload.ts --env`, every
+  other line kept); restart `pnpm dev` after. `pnpm dev:tiles:fetch`
+  (`bin/tiles-dev.sh fetch`) re-downloads. It needs the `pmtiles` CLI
   ([go-pmtiles](https://github.com/protomaps/go-pmtiles/releases), one static
   binary on `PATH`), extracts South Africa (`16.3,-35.0,33.0,-22.0`) from the
   Protomaps daily build at maxzoom 15 into
   `~/.cache/water-management-tiles/south-africa.pmtiles` (reading only that
   bbox's byte ranges), and uploads it to the MinIO bucket `tiles`, readable by
   anyone (MinIO is loopback-only), with `backend/scripts/tiles-upload.ts`.
-  `pnpm dev:tiles:env >> frontend/.env.development.local` sets the URL
-  (`http://localhost:9002/tiles/south-africa.pmtiles`); restart `pnpm dev`.
+  `pnpm dev:tiles:env` prints the URL
+  (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
   defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
@@ -161,9 +167,12 @@ a separate, later piece (#326 B-delineate).
   extracts the basemap's bbox from the planet build into
   `~/.cache/water-management-tiles/terrain.pmtiles` and uploads it to the
   MinIO bucket `tiles` as `terrain.pmtiles`
-  (`backend/scripts/tiles-upload.ts --terrain`). `pnpm dev:tiles:env`
-  prints `PUBLIC_TERRAIN_URL=http://localhost:9002/tiles/terrain.pmtiles`;
-  restart `pnpm dev`. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
+  (`backend/scripts/tiles-upload.ts --terrain`). Then `pnpm dev:tiles:up`
+  sets `PUBLIC_TERRAIN_URL=http://localhost:9002/tiles/terrain.pmtiles` in
+  `frontend/.env.development.local` beside the basemap's URLs (`pnpm
+  dev:tiles:env` prints it); restart `pnpm dev`. `up` re-uploads a cached
+  DEM when MinIO doesn't serve it but never downloads one, and sets the URL
+  only when MinIO serves it, so without it the Layers box offers no Relief toggle. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
   URL) override the defaults. Measured 2026-10-01 with
   `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the planet build of
   Mapterhorn 0.0.13):
@@ -283,7 +292,14 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   map under it (MapLibre's own keyboard pan), **Enter** adds a corner there
   (places or moves the point), **Backspace** removes the last corner while
   drawing, **Delete** the picked one after, Escape cancels (asking first, as
-  above; focus comes back to the map either way). The canvas's
+  above; focus comes back to the map either way). With the mouse over the
+  map (moved there since the map took the focus, the last arrow key and the
+  last touch), **Enter** adds at the mouse pointer instead, where a click
+  would, and the crosshair hides; an arrow key, the mouse leaving the map,
+  the focus arriving (a Tab with the mouse resting there) or a touch (and
+  the mouse events a browser makes up after a tap) brings the crosshair back
+  (`draw/attachDrawing.ts`, tested in `attachDrawing.test.ts` and
+  `e2e/tests/map-draw.spec.ts`). The canvas's
   accessible name says which keys do what in each phase, and the draw bar
   names the last change in a polite live region ("Corner 3 at 33.6100° S,
   21.3400° E.").
@@ -881,6 +897,101 @@ reads it.
   row of its dataset in one transaction. Production loading has the same
   missing path as the quaternaries (followups.md).
 
+## Cultivated area from land cover
+
+**From land cover**, in a hydrological unit's planted-areas drawer (issue
+#326 Part B, "B-landcover", and #342 map item 5; `farm=<nodeId>`, opened from
+the unit's name on Crops & demand, the Network, the Summary, Supply or Dams;
+[ui.md § Farm drawer](./ui.md#farm-drawer)) summarises, for one hydrological unit, the
+area a land-cover map shows as cropland inside each **farm parcel** on the map
+linked to that unit, the parcels' sum, and the catchment boundary's for
+reference. The modeller picks an area (all the unit's parcels, or one
+parcel) and a crop, and **Use** sets that crop's planted area on the unit to
+it.
+
+- **The crop stays the modeller's call** (#90 Q9). Land cover says where
+  land is cultivated; it never says what grows there, nor whether it is
+  irrigated (WorldCover's cropland class includes rain-fed and fallow land).
+  So nothing is assigned to a crop until the modeller chooses one, and the
+  confirmation says so. A unit with several crops on one parcel splits the
+  area by typing afterwards; the proposal never splits it.
+- **Pre-summarised at import, local-first.** The app never reads a raster.
+  The operator's `pnpm import:land-cover` (`backend/scripts/import-land-cover.ts`,
+  `geo/loadCropland.ts`) reads each GeoTIFF tile itself (no GDAL, no
+  dependency: classic TIFF, tiled or striped, Deflate or none, 8-bit, one
+  band, EPSG:4326) and counts every 10 m pixel into the **0.0025° grid cell**
+  its centre falls in (30 × 30 WorldCover pixels, about 250 m × 230 m in South
+  Africa): per cell, the pixels in class 40 (Cropland) over the pixels with
+  data (no-data 0 left out). Only cells with some cropland are stored
+  (`cropland_cell_reference`, 173): about 79 000 cells for the 3° tile S36E021
+  (the Western Cape's south coast, measured 2026-10-01), from 1.3 billion pixels. The grid must line up with
+  the raster (the cell a whole number of pixels, the corner on a cell edge),
+  so each cell's share is exact and no cell straddles two tiles; anything else
+  is refused with the reason. No GeoTIFF code is in a Lambda bundle.
+- **A polygon's cultivated area** (`geo/cropland.ts`) is the sum, over the
+  cells it covers, of the cell's area on the WGS84 ellipsoid × the share of
+  the cell inside the polygon (exact clipping, `geo/gridShares.ts`, the same
+  clipper as [§ Rain from the boundary](#rain-from-the-boundary),
+  `geo/clip.ts`) × the cell's cropland share. It assumes the cropland is spread
+  evenly within each cell: a parcel edge that cuts a cell takes its cropland
+  in proportion to its area, so a small parcel's figure can be off by up to a
+  cell's cropland along its edge. Parcels that overlap are counted twice, as
+  their areas are. One summary reads at most 1 000 000 cells of extent
+  (`MAX_SUMMARY_CELLS`, about 58 000 km²).
+- **Cited, value by value.** Each dataset row (`cropland_dataset`) holds its
+  source, version, method in words, attribution and cell size, and the box
+  shows them under **Source and method**. **Use** asks first, then saves one
+  value (`POST …/crop-area-from-land-cover` with the crop, the dataset and,
+  for one parcel, the feature; [api.md § Catchment map](./api.md#catchment-map)):
+  the server re-derives the area from the parcels as they are, writes the
+  crop area, records a model revision whose reason cites the dataset, its
+  version and the method ("Planted area of Lucerne on Upper farm from land
+  cover: 51.73 ha cultivated in its 2 parcels; ESA WorldCover 10 m 2021 v200
+  (…) (2021 v200; dataset “WorldCover-2021-v200”). Pre-summarised at
+  import: …"), which History, the run comparison and an evidence pack's
+  revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
+  same citation. The box shows that provenance beside each crop, and says
+  "Typed over since" once the area no longer matches it. While the model has
+  unsaved changes, Use waits. Viewers see the summary but not Use.
+- **Datasets.** The default is a real dataset before the synthetic one, then
+  the newest load; the API takes `?dataset=`.
+
+### The land-cover grid
+
+`cropland_dataset` and `cropland_cell_reference` (173) are global reference
+data: the **operator** loads them as the schema owner and the app only
+reads them.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/land-cover.synthetic.json`
+  is an invented 0.005° grid over the seeded Sandspruit map (21.185–21.395° E,
+  33.625–33.805° S): every cell 0.5 inside 21.30–21.35° E, 33.65–33.70° S
+  (the DB and e2e tests' parcels), a fixed pattern elsewhere (its
+  `_comment` gives the rule). `pnpm import:land-cover` with no argument loads
+  it (`pnpm setup` does), as dataset `synthetic`, and the box marks it
+  "Synthetic test data".
+- **Real data: ESA WorldCover, the operator's own download** (§ Sources:
+  allowed, CC BY 4.0). The 2021 v200 map tiles are 3° × 3° GeoTIFFs
+  (`ESA_WorldCover_10m_2021_v200_<S36E021>_Map.tif`, about 50 MB each) in the
+  public bucket `s3://esa-worldcover/v200/2021/map/` (no sign-in:
+  `aws s3 cp --no-sign-request …`, or HTTPS from
+  `esa-worldcover.s3.eu-central-1.amazonaws.com`). South Africa, Lesotho and
+  eSwatini take the tiles from S36 to S24 and E015 to E030 (each named by
+  its south-west corner). Then
+  `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 [--bbox 16,-35,33,-22]`.
+  Each tile takes about 15 s and is written as it's read, so a country's
+  tiles never sit in memory together; the whole load is one transaction and
+  replaces the dataset. `--cell`, `--classes`, `--source`, `--version` and
+  `--attribution` override the defaults (WorldCover's class 40 and its
+  citation). Never commit a tile or the database it filled.
+- **Production loading** has the quaternary dataset's gap: no path yet into
+  the private database (followups.md). The attribution must be shown with any
+  figure a client-facing deployment serves from it (§ Sources).
+- **SANLC** (South African National Land Cover, DFFE) would give finer crop
+  classes (pivots, orchards, vineyards), but stays **blocked** (§ Sources):
+  the GEOTERRAIMAGE licence the earlier release came under forbids derivative
+  work and products that compete with GEOTERRAIMAGE's own, and the 2018/2020
+  terms couldn't be read from outside South Africa.
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -901,3 +1012,5 @@ fixtures only.
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
+| ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
+| South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |

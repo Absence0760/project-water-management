@@ -57,7 +57,7 @@ export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
 export { hasMonthlyRates, monthlyRatesMismatch, transferRatesM3s, validMonthlyRates, WATER_YEAR_MONTHS, withMonthlyRates } from './network/transferRates';
 export { isRiverOfftake, OFFTAKE_SERIES, offtakeReturnAt } from './network/offtake';
-export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppliedKey, parseDemandObjectKey } from './network/demandObjects';
+export { BASIC_NEEDS_SERIES, basicNeedsM3Day, basicNeedsPopulation, DEMAND_OBJECT_SERIES, objectDemandKey, fromSupplyOrder, objectMonthlyM3Day, objectRank, objectSuppliedKey, parseDemandObjectKey, supplyLevels, supplyOrder } from './network/demandObjects';
 export { CROPS_TAKE_KEY, RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverTakeKey } from './network/riverSource';
 export { demandBySource, demandSourceShares, type DemandSourceShare } from './network/demandSources';
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';

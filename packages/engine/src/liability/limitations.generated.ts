@@ -151,6 +151,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.44.0, issue #123)"
 	},
 	{
+		"id": "R2",
+		"source": "finding",
+		"severity": "Low (units with a demand on a river abstraction of its own, engine 1.65.0)",
+		"title": "A demand's own river abstraction beside a unit's dam runs on choices the hydrologist hasn't confirmed",
+		"status": "Needs hydrologist (engine 1.65.0, issue #344)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,

@@ -127,6 +127,7 @@ function capacityFix(ws: readonly RiverWorks[]): string {
 	if (kinds.has('noDam')) parts.push('give a unit without a dam the run of river supply rule, with a pump capacity');
 	if (kinds.has('user')) parts.push('enter the other water user’s pump capacity (Network › the user)');
 	if (kinds.has('offtake')) parts.push('give the off-take a rate that is a number (Transfers)');
+	if (kinds.has('abstraction')) parts.push('enter the river abstraction’s pump capacity (Network › the unit › Water for the crops or the demand object)');
 	const text = parts.join('; ');
 	return text.charAt(0).toUpperCase() + text.slice(1);
 }

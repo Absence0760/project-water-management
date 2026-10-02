@@ -389,6 +389,11 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                     "returnPct": round(rng.random(), 2), "priority": rng.choice(["first", "shared", "last"]),
                     "destination": "internal", "enabled": rng.random() > 0.1, "note": "",
                 }
+                # Its rank within its class (engine >= 1.64.0): sometimes none, sometimes 1-3,
+                # from its own stream so the rest of every seed's network stays as it was.
+                own = random.Random(ob["id"])
+                if own.random() < 0.5:
+                    ob["rank"] = own.choice([1, 2, 3])
                 if rng.random() < 0.2:
                     ob["destination"] = "external"
                     ob["returnPct"] = 0

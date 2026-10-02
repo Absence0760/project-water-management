@@ -147,7 +147,13 @@ export interface TakeDay {
 	fromPool: Float64Array;
 	/** What the pool refilled from the flow. */
 	refill: Float64Array;
+	/** Scratch, one per take, kept between days so the day loop allocates nothing: what is left of each pump, and what each still wants in a level. */
+	pumpLeft: Float64Array;
+	want: Float64Array;
 }
+
+/** A unit's TakeDay for `n` river abstractions. */
+export const takeDayFor = (n: number): TakeDay => ({ got: new Float64Array(n), fromPool: new Float64Array(n), refill: new Float64Array(n), pumpLeft: new Float64Array(n), want: new Float64Array(n) });
 
 /**
  * The river abstractions' day (engine ≥ 1.65.0, docs/model.md §2.7j), after
@@ -163,7 +169,7 @@ export interface TakeDay {
  */
 export function riverTakesDay(takes: readonly PlanTake[], level: ArrayLike<number>, levels: number, want: ArrayLike<number>, free: number, room: number, held: Float64Array, out: TakeDay): number {
 	const n = takes.length;
-	const pumpLeft = new Float64Array(n);
+	const pumpLeft = out.pumpLeft;
 	for (let a = 0; a < n; a++) {
 		pumpLeft[a] = takes[a]!.pumpM3Day;
 		out.got[a] = 0;
@@ -173,7 +179,7 @@ export function riverTakesDay(takes: readonly PlanTake[], level: ArrayLike<numbe
 	let flow = Math.max(free, 0);
 	let left = room;
 	let taken = 0;
-	const w = new Float64Array(n);
+	const w = out.want;
 	for (let l = 0; l < levels; l++) {
 		let total = 0;
 		for (let a = 0; a < n; a++) {

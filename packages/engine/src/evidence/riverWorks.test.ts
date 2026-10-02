@@ -49,6 +49,26 @@ const object = (over: Partial<DemandObject> = {}): DemandObject =>
 const model = (over: Partial<ProjectModel>): ProjectModel => ({ nodes: [], crops: [], cropAreas: [], transfers: [], ...over });
 
 describe('nodeRiverWorks', () => {
+	it('a demand’s own river abstraction beside the dam (engine 1.65.0): bounded by its pump, keeping the unit’s hands-off flow, only with demand, none at 0', () => {
+		const dam = { damCapacityM3: 5000 };
+		expect(nodeRiverWorks(node({ ...dam, cropWaterSource: 'river', cropRiverPumpM3Day: null }), crops)).toEqual([
+			{ kind: 'abstraction', id: 'F/crops', nodeId: 'F', name: 'Farm: crops', bounded: false, protectsEwr: false }
+		]);
+		const withObj = { cropAreas: [], demandObjects: [object({ waterSource: 'river', riverPumpM3Day: 480 })] };
+		expect(nodeRiverWorks(node({ ...dam, handsOffEwr: true }), withObj)).toEqual([{ kind: 'abstraction', id: 'F/D1', nodeId: 'F', name: 'Farm: Packhouse', bounded: true, protectsEwr: true }]);
+		// No crops to irrigate, a pump of 0, an object switched off or on the dam: no take.
+		expect(nodeRiverWorks(node({ ...dam, cropWaterSource: 'river' }), { cropAreas: [], demandObjects: [] })).toEqual([]);
+		expect(nodeRiverWorks(node({ ...dam, cropWaterSource: 'river', cropRiverPumpM3Day: 0 }), crops)).toEqual([]);
+		expect(nodeRiverWorks(node(dam), { cropAreas: [], demandObjects: [object({ waterSource: 'river', enabled: false }), object({ id: 'D2', waterSource: 'dam' })] })).toEqual([]);
+		// A proposal that puts the packhouse on the river with no pump and no hands-off flow is the application's own unbounded take.
+		const base = model({ nodes: [node(dam)], demandObjects: [object()] });
+		const after = model({ nodes: [node(dam)], demandObjects: [object({ waterSource: 'river' })] });
+		const ops: ScenarioOp[] = [{ op: 'demandObject.set', demandObjectId: 'D1', field: 'waterSource', value: 'river' }];
+		const works = proposedRiverWorks(ops, ['proposal'], base, after);
+		expect(works.map((w) => [w.kind, w.bounded, w.protectsEwr])).toEqual([['abstraction', false, false]]);
+		expect(unboundedRiverWorks(after).map((w) => w.id)).toEqual(['F/D1']);
+	});
+
 	it('a river pump under each river rule, bounded by a size ≥ 0 only, and none at 0, under dam only, or without demand', () => {
 		for (const supplyRule of ['riverFirst', 'trigger', 'runOfRiver'] as const) {
 			expect(nodeRiverWorks(node({ supplyRule }), crops)).toEqual([{ kind: 'pump', id: 'F', name: 'Farm', bounded: false, protectsEwr: false }]);

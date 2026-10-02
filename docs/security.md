@@ -228,8 +228,12 @@ decide a licence application.
   and stays off the translated pages (the Account page has its own warning,
   the farm view's roles never need it). Dismissable until the next refusal
   (kept so by the operator's decision, 2026-10-01: every refused action
-  brings it back, so a person who needs it can't miss it for long); signing
-  out forgets it. Tests: `lib/auth/mfaPrompt.test.ts`,
+  brings it back, so a person who needs it can't miss it for long), and
+  for the rest of the tab (`sessionStorage`, so a reload doesn't bring it
+  back; the operator's call, 2026-10-01). While the need stands the account
+  menu keeps a badge and leads with **Set up two-step sign-in** or **Sign in
+  again with a code**, dismissed or not, so it never drops out of sight;
+  signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
   `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
   so the spec plays the production answers with `page.route`).
   Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
@@ -2536,7 +2540,10 @@ placed points. The server never trusts the browser with geometry:
   and `dam-area-from-map` (issue #326 B-dams), which take a register number or
   a feature id, never a value: the server re-derives the value (the register
   entry must be within 1 km of the unit's own dam on the map; the polygon must
-  be a dam linked to that unit).
+  be a dam linked to that unit). A planted area from land cover only through
+  `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
+  dataset and optionally a parcel, never a value: the server sums the
+  cropland in the unit's own linked parcels as they are now.
 - **Properties are allowlisted** (`name`, `description`, `ref`; capped):
   a GIS attribute table can carry owners' names, ID numbers or phone numbers,
   and anything else is dropped before storage (POPIA minimisation, as the
@@ -2558,7 +2565,7 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference` and `dam_register_reference` (157) are public reference data, readable by any
+  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) and the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin

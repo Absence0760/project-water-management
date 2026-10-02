@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, WATER_SOURCES, type ProjectModel } from './project';
+import { DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, WATER_SOURCES, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
@@ -72,6 +72,9 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): a number ≥ 0, or none.
 		if (o.population !== null && o.population !== undefined && !(typeof o.population === 'number' && Number.isFinite(o.population) && o.population >= 0))
 			add(`doPopulation:${o.id}`, `demand object "${o.name}": the people it serves must be a number ≥ 0`);
+		// Its rank within its priority class (engine ≥ 1.64.0): a whole number from 1 to DEMAND_OBJECT_MAX_RANK, or none (1).
+		if (o.rank !== null && o.rank !== undefined && !(Number.isInteger(o.rank) && o.rank >= 1 && o.rank <= DEMAND_OBJECT_MAX_RANK))
+			add(`doRank:${o.id}`, `demand object "${o.name}": its rank must be a whole number from 1 to ${DEMAND_OBJECT_MAX_RANK}`);
 		// Where its number comes from (engine ≥ 1.56.0): one of the sources, sized the way that source gives a volume.
 		if (o.source !== null && o.source !== undefined) {
 			if (!(DEMAND_OBJECT_SOURCES as readonly unknown[]).includes(o.source))

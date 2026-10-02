@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -190,6 +190,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				monthlyFactor: z.array(nonNeg).length(12).nullable().default(null),
 				returnPct: frac.default(0),
 				priority: z.enum(DEMAND_OBJECT_PRIORITIES).default('shared'),
+				// Its rank within its class (engine 1.64.0, issue #343): 1 before 2, equal ranks pro rata. Null = 1.
+				rank: z.number().int().min(1).max(DEMAND_OBJECT_MAX_RANK).nullable().default(null),
 				destination: z.enum(DEMAND_OBJECT_DESTINATIONS).default('internal'),
 				enabled: z.boolean().default(true),
 				// Date windows with a factor (engine 1.17.0, issue #90 Q4): the shape here, the meaning

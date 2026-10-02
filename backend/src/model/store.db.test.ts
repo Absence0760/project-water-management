@@ -175,12 +175,14 @@ describe('model store', () => {
 					population: 4100.5,
 					// Where its number comes from (engine 1.56.0, migration 139).
 					source: 'perCapita',
+					// Its rank within its class (engine 1.64.0, migration 169).
+					rank: 2,
 					// On a river abstraction of its own with no pump limit and a pool (engine 1.65.0, migration 170).
 					waterSource: 'river',
 					riverPumpM3Day: null,
 					riverPoolM3: 2500.25,
 					note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', rank: null, destination: 'external', enabled: false, schedule: null, population: null, source: null, waterSource: 'dam', riverPumpM3Day: 864, riverPoolM3: 0, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -238,6 +240,8 @@ describe('model store', () => {
 		await expect(asOwner('UPDATE node SET crop_river_pool_m3 = -1 WHERE id = $1', [farm.id])).rejects.toMatchObject({ code: '23514', constraint: 'node_crop_river_pool_size' });
 		await expect(asOwner('UPDATE demand_object SET water_source = $2 WHERE id = $1', [model.demandObjects[0]!.id, 'well'])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_water_source_known' });
 		await expect(asOwner("UPDATE demand_object SET river_pump_m3_day = 'Infinity' WHERE id = $1", [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_river_pump_size' });
+		// Migration 169's CHECK keeps the rank in 1–99 below the API's own check (engine 1.64.0).
+		await expect(asOwner('UPDATE demand_object SET priority_rank = 0 WHERE id = $1', [model.demandObjects[0]!.id])).rejects.toMatchObject({ code: '23514', constraint: 'demand_object_priority_rank_range' });
 		// The API serves the same document.
 		expect((await u.call('GET', `/projects/${projectId}/model`)).body).toEqual(JSON.parse(JSON.stringify(got)));
 	});

@@ -3666,6 +3666,30 @@ the Map tab, Settings → WR2012 check → Propose from the map;
 - [ ] **Loading the register of dams in production**: the same missing path
       as the quaternary dataset above (the loader runs as the schema owner
       from a workstation). Do both together, once either licence allows.
+- [ ] **Loading the land-cover grid in production** (issue #326
+      B-landcover; maps.md § The land-cover grid): ESA WorldCover is
+      allowed (CC BY 4.0), so this is the first map dataset with no licence
+      gate, but it has the same missing path into the private database as
+      the quaternaries (the loader reads tiles and writes as the schema owner
+      from a workstation). Durable fix: one operator path for every
+      reference dataset (a migrate-Lambda-style one-off reading the
+      operator's pre-summarised file from the private bucket), built once
+      for all four. Trigger: the first client deployment that should propose
+      planted areas. Show the WorldCover attribution with any figure served.
+- [ ] **Decision: SANLC's licence** (operator; maps.md § Sources, issue
+      #326 B-landcover, decision D-B). South African National Land Cover
+      would give crop classes WorldCover lacks (centre pivots, orchards,
+      vineyards, sugar cane), but the earlier release's GEOTERRAIMAGE licence
+      is CC BY-ND with no commercial resale and no competing products, and
+      DFFE's e-GIS pages (the 2018/2020 terms) refuse connections from
+      outside South Africa. Ask DFFE in writing whether SANLC 2020 may be
+      reused, with derivatives, in a commercial service; on a yes, record it
+      in the sources table and load it as another dataset (`--classes` with
+      its cultivated class codes; the loader takes EPSG:4326 only, so a
+      projected release is reprojected first). Until then the
+      proposals read WorldCover or the synthetic grid. Trigger: a
+      hydrologist asking which crop the land cover sees, or WorldCover's
+      cropland class proving too coarse in a client catchment.
 
 ## Crop factors (issue #54 item 1)
 
