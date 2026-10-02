@@ -400,7 +400,7 @@ variable "lambda_reserved_concurrency" {
 }
 
 variable "migrate_memory_mb" {
-  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches or land-cover cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
+  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches, land-cover cells or evaporation cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
   type        = number
   default     = 3008
   validation {
