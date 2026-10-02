@@ -195,8 +195,9 @@ identifies a piece: the tint only helps the eye (WCAG 1.4.1).
 ## Dividing a model that has nodes
 
 Built after the first release (#326 C3's follow-up). **Divide the model**
-beside the map (under the checks line; editors, a model with nodes, a DEM on
-the server; not in the header, which it would push onto a second row) opens
+at the end of the key row's first line under the map (editors, a model with
+nodes, a DEM on the server; not in the header, which it would push onto a
+second row, nor the side column, whose height the feature list needs) opens
 `divide=1`, two steps read from the server:
 
 1. **The points.** Each dam, other point and gauge on the map with a select:

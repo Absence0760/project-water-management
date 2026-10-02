@@ -2624,8 +2624,8 @@ map" card) stays the schematic; this is the geography.
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
   Start from the map](./maps.md#start-from-the-map)). **Divide the model**
-  beside the map (a line under the checks; an open division is reviewed
-  from the line over the map) opens a side
+  at the end of the key row's first line under the map (an open division
+  is reviewed from the line over the map) opens a side
   sheet (`divide=1`, "Divide the model from the map"), read from the
   server: **the points**: each dam, other point and gauge with a select
   (Not in the division / the nodes its kind may stand for / A new gauge

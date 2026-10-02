@@ -8,7 +8,9 @@
 	choice is in the URL (a history entry, so Back undoes it). Each band
 	swatch carries the colour the map was given (`data-colour`, with its token
 	and the theme it was read in on the row), so a test can check the colours
-	follow the app's theme without reading the map's pixels.
+	follow the app's theme without reading the map's pixels. `end` puts one
+	more action at the end of the first line (the Map's Divide the model),
+	where it costs the page no height.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
@@ -17,13 +19,15 @@
 	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewLabel, viewParam, type MapView } from './mapResults';
 	import type { MapResults } from './mapResults.svelte';
 	import type { MapFeature } from '$lib/api/types';
+	import type { Snippet } from 'svelte';
 
 	let {
 		results,
 		key,
 		features,
 		canEdit,
-		dark
+		dark,
+		end
 	}: {
 		results: MapResults;
 		/** The kinds' key (mapList.ts keyGroups), in the map's colours. */
@@ -31,6 +35,8 @@
 		features: readonly MapFeature[];
 		canEdit: boolean;
 		dark: boolean;
+		/** One more action at the end of the first line (on the right of the pickers). */
+		end?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -99,9 +105,13 @@
 					{/if}
 				</span>
 			{/if}
+			{#if end}<span class="end">{@render end()}</span>{/if}
 		</div>
 	{:else}
-		<p class="small muted no-run" data-testid="map-no-run">{noRunLine(canEdit, results.runs.length > 0)}</p>
+		<div class="pickers small">
+			<p class="small muted no-run" data-testid="map-no-run">{noRunLine(canEdit, results.runs.length > 0)}</p>
+			{#if end}<span class="end">{@render end()}</span>{/if}
+		</div>
 	{/if}
 
 	{#if results.on}
@@ -138,6 +148,9 @@
 		flex-wrap: wrap;
 		gap: 0.4rem 1rem;
 		align-items: center;
+	}
+	.end {
+		margin-left: auto;
 	}
 	.pick {
 		display: inline-flex;

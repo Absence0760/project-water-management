@@ -214,7 +214,7 @@
 
 		{#if step === 'closed'}
 			<p data-testid="start-closed">
-				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (beside the map, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
+				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (under the map, at the end of the key row, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
 			<h3 class="sub">Put the catchment’s boundary on the map</h3>

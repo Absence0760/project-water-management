@@ -697,6 +697,9 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
+{#snippet divideLink()}
+	<a class="btn btn-sm" href={withParam(page.url, 'divide', '1')} title="Each unit’s own area and order, proposed from its point on the map" data-testid="map-divide-open">Divide the model</a>
+{/snippet}
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
@@ -881,7 +884,9 @@
 						</Lazy>
 					</div>
 					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
-					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+					<!-- Divide the model (#326 C3's follow-up) at the end of the key row's first line: not in the header (a second row of actions)
+					     nor the side column (the list's room); its title says what it does. -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} end={canDivide && !pendingDivide ? divideLink : undefined} />
 				</section>
 
 				<aside class="map-side" aria-label="Features">
@@ -990,13 +995,6 @@
 							{:else}
 								<span class="muted">The map’s checks found no problems.</span>
 							{/if}
-						</p>
-					{/if}
-					<!-- Divide the model (#326 C3's follow-up): beside the map, not in the header, which it would push onto a second row. -->
-					{#if canDivide && !pendingDivide}
-						<p class="panel side-box checks-line small" data-testid="map-divide-line">
-							<span>Each unit’s own area and order, proposed from its point on the map</span>
-							<a class="btn btn-sm" href={withParam(page.url, 'divide', '1')} data-testid="map-divide-open">Divide the model</a>
 						</p>
 					{/if}
 				</aside>
