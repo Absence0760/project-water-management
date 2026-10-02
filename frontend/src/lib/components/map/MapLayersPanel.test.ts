@@ -47,8 +47,17 @@ function riversOn(reaches: RiverReach[], picked: RiverReach | null, added: numbe
 		featureFor: (r: RiverReach) => (added.includes(r.reachId) ? { id: `f${r.reachId}` } : null)
 	} as unknown as RiverLayer;
 }
-/** The body with Svelte's hydration comments taken out, so the text reads as a person sees it. */
-const riverHtml = (rivers: RiverLayer, canEdit: boolean) => render(MapLayers, { props: { quaternaries, rivers, dark: false, canEdit, onshowfeature: () => {} } }).body.replace(/<!--[^>]*-->/g, '');
+/**
+ * Svelte's hydration markers (`<!--[-->`, `<!--]-->`, …) cut out, so the markup
+ * reads as a person sees its text. Split at every opener, each piece keeping
+ * what follows its closer: no marker survives, however they sit together.
+ */
+function withoutComments(html: string): string {
+	const [head, ...rest] = html.split('<!--');
+	return head + rest.map((piece) => (piece.includes('-->') ? piece.slice(piece.indexOf('-->') + 3) : '')).join('');
+}
+const riverHtml = (rivers: RiverLayer, canEdit: boolean) =>
+	withoutComments(render(MapLayers, { props: { quaternaries, rivers, dark: false, canEdit, onshowfeature: () => {} } }).body);
 
 describe('the Layers box’s Relief toggle', () => {
 	it('is not offered without a DEM configured (a fresh clone, CI)', () => {
@@ -72,6 +81,14 @@ describe('the Layers box’s Relief toggle', () => {
 		const b = html({ on: true, failed: true });
 		expect(b).toMatch(/role="alert"[^>]*data-testid="map-relief-error"/);
 		expect(b).not.toContain('map-relief-note');
+	});
+});
+
+describe('withoutComments', () => {
+	it('drops every marker, nested or back to back, and keeps the text between', () => {
+		expect(withoutComments('<!--[--><p>a<!--]--><!--[0-->b</p><!--]-->')).toBe('<p>ab</p>');
+		expect(withoutComments('<!--<!---->x')).toBe('x');
+		expect(withoutComments('x<!-- unclosed')).toBe('x');
 	});
 });
 
