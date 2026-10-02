@@ -31,11 +31,17 @@
 # public, and the reference files are the operator's own downloads of
 # licensed data, read by one role (docs/security.md § Accepted IaC findings).
 #
+# Both versioned: an overwrite or delete can be undone (old tiles kept 14
+# days, old reference files a year), and expiry keeps re-uploads from being
+# billed for ever.
+#
 # Cost: storage of ~3.5 GB of tiles and a few hundred MB of reference files
-# (well under $1/month); multipart uploads that never finish are aborted after
-# 7 days so a broken 2 GB upload doesn't sit there billed. Viewer traffic is
-# CloudFront egress, bounded per request by tiles_range and per IP by the
-# WAF's site-wide rate limit.
+# (well under $1/month, plus ~$0.10 while a replaced archive's old version
+# is kept); multipart uploads that never finish are aborted after 7 days so a
+# broken 2 GB upload doesn't sit there billed. Viewer traffic is CloudFront
+# egress, bounded per request by tiles_range (2 MiB), per IP by the WAF's
+# tiles rule (waf_tiles_rate_limit_per_ip, ~2 GB per 5 minutes at worst) and
+# watched in bytes by the cloudfront-bytes alarm (alarms.tf).
 # ----------------------------------------------------------------------------
 
 locals {
@@ -82,6 +88,18 @@ resource "aws_s3_bucket_ownership_controls" "tiles" {
   }
 }
 
+# A replaced archive (a new basemap, a rebuilt DEM) or a deleted one can be
+# restored for 14 days, so a bad upload never leaves the map, Delineate or
+# Trace a dam down until a rebuild; then the old version expires (a full
+# re-upload is ~3.5 GB, ~$0.10/month while kept).
+resource "aws_s3_bucket_versioning" "tiles" {
+  bucket = aws_s3_bucket.tiles.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "tiles" {
   bucket = aws_s3_bucket.tiles.id
 
@@ -93,6 +111,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "tiles" {
       days_after_initiation = 7
     }
   }
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 14
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.tiles]
 }
 
 resource "aws_cloudfront_origin_access_control" "tiles" {
@@ -232,6 +264,19 @@ resource "aws_s3_bucket_ownership_controls" "reference" {
   }
 }
 
+# A reference file overwritten or deleted after a load can be restored for a
+# year, so a load that turned out wrong can be undone by reloading the
+# previous version's file (deployment.md § Reference datasets, Undoing a
+# load); the files are a few hundred MB, so a year of old versions costs
+# cents.
+resource "aws_s3_bucket_versioning" "reference" {
+  bucket = aws_s3_bucket.reference.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "reference" {
   bucket = aws_s3_bucket.reference.id
 
@@ -243,6 +288,20 @@ resource "aws_s3_bucket_lifecycle_configuration" "reference" {
       days_after_initiation = 7
     }
   }
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 365
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.reference]
 }
 
 # The policy names no reader: the migrate role's own policy is the grant

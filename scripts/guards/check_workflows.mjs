@@ -22,6 +22,12 @@
 //   oidc-env   every job that runs aws-actions/configure-aws-credentials is
 //              gated on `environment: production`, which is what the deploy
 //              role's trust policy pins (`environment:production` sub claim).
+//   preflight  every job gated on `environment: production` needs (directly
+//              or through other jobs) a job that runs
+//              scripts/release/preflight.mjs. Naming an environment that
+//              doesn't exist creates it with no required reviewer, so the
+//              approval gate would silently vanish; the preflight refuses
+//              first, with no environment and no AWS.
 //   gate       every job in ci.yml is in the `ci-gate` job's `needs:`, so no
 //              job can be red on a commit the gate calls green.
 //   no-cache   a workflow with a production-gated job restores no dependency
@@ -214,6 +220,28 @@ export function isProductionGated(jobLines) {
 }
 
 /**
+ * The production-gated jobs that don't need (transitively) a job running the
+ * release preflight (scripts/release/preflight.mjs).
+ * @param {string} text
+ */
+export function unpreflightedProductionJobs(text) {
+	const jobs = jobsOf(text);
+	const byId = new Map(jobs.map((j) => [j.id, j]));
+	const runsPreflight = (/** @type {{ lines: string[] }} */ j) => j.lines.some((l) => !/^\s*#/.test(l) && /\bnode\s+scripts\/release\/preflight\.mjs\b/.test(l));
+	/** @param {string} id @param {Set<string>} seen */
+	const reaches = (id, seen) => {
+		for (const n of needsOf(byId.get(id)?.lines ?? [])) {
+			if (seen.has(n)) continue;
+			seen.add(n);
+			const dep = byId.get(n);
+			if (dep && (runsPreflight(dep) || reaches(n, seen))) return true;
+		}
+		return false;
+	};
+	return jobs.filter((j) => isProductionGated(j.lines) && !reaches(j.id, new Set())).map((j) => j.id);
+}
+
+/**
  * The ids listed in a job's `needs:` (inline list, block list or scalar).
  * @param {string[]} jobLines
  */
@@ -394,6 +422,11 @@ export function checkWorkflow(file, text) {
 		if (grantsIdToken(job.lines) && !isProductionGated(job.lines) && !oidcAllowlisted(file, job)) {
 			out.push({ file, line: job.startLine, rule: 'oidc-gate', message: `job ${job.id} grants id-token: write without environment: production; gate it, or drop the grant (OIDC_ALLOWLIST is for one named non-AWS action in a job with no run steps)` });
 		}
+	}
+
+	for (const id of unpreflightedProductionJobs(text)) {
+		const job = jobsOf(text).find((j) => j.id === id);
+		out.push({ file, line: job?.startLine, rule: 'preflight', message: `job ${id} is gated on environment: production without needing a job that runs scripts/release/preflight.mjs; a missing environment would be auto-created with no reviewer` });
 	}
 
 	for (const f of prTargetHeadCheckouts(text)) out.push({ file, line: f.line, rule: 'prt-head', message: f.message });

@@ -4694,6 +4694,18 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
+- [ ] **Record which file a reference load came from (round 4 infra audit,
+      data finding 4).** A load checks the uploaded file's SHA-256, then
+      drops it: the dataset rows don't say which key and hash they came
+      from, so once the Actions log expires nobody can tell which file is
+      live or which version to restore (the reference bucket is versioned
+      for a year, deployment.md § Reference datasets, Undoing a load).
+      **Durable fix:** a migration adding a `reference_load (kind, dataset,
+      source_key, source_sha256)` table (rivers have no dataset table of
+      their own), written in the same transaction as the dataset by
+      `geo/referenceLoad.ts` and cleared by any other replace, and shown on
+      `/data-sources`. **Trigger:** the
+      first production load, or the next migration touching those tables.
 
 ## Housekeeping
 

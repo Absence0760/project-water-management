@@ -184,8 +184,10 @@ resource "aws_cloudfront_origin_access_control" "packs" {
 # The worker is in the private VPC with no internet, so it reaches S3 through
 # an S3 interface endpoint (network.tf: "add that service's VPC endpoint"),
 # like SQS, SES and Secrets Manager: security-group rules reference groups
-# only, and the endpoint policy allows only this read of this bucket's
-# packs/ by the worker. One AZ (~$7.30/month): both subnets still reach it.
+# only, and the endpoint policy (s3_endpoint below) allows each Lambda only
+# its own reads, statement by statement, so it is the only S3 path from the
+# VPC. One AZ (~$7.30/month, plus $0.01/GB processed and cross-AZ transfer
+# for the API's DEM and water reads): both subnets still reach it.
 # A free S3 gateway endpoint would need a prefix-list egress rule, which the
 # network guardrails refuse (tests/guardrails.tftest.hcl, run "network").
 

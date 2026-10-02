@@ -912,10 +912,39 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
   }
 }
 
-# Sustained blocks. Only the three rate rules block (waf.tf has no managed
+# Egress. The request alarm above prices requests, but a /tiles/* request
+# may move 2 MiB (tiles_range, s3_cloudfront.tf): ~$0.00023 of egress
+# against ~$0.0000028 of request charges, so a pull that stays under the
+# request threshold can still cost ~$330 a day per address. The WAF's tiles
+# rule (waf.tf) caps one address at ~2 GB per 5 minutes; this alarm sees that,
+# and a pull spread over many addresses, in the first 5 minutes over
+# var.cloudfront_bytes_alarm_gb_per_5min (default 0.5 GB, against tens of MB
+# for a busy 5 minutes of real use). BytesDownloaded is a default CloudFront
+# metric (no additional-metrics subscription), in us-east-1.
+resource "aws_cloudwatch_metric_alarm" "cloudfront_bytes" {
+  provider            = aws.us_east_1
+  alarm_name          = "${local.project}-cloudfront-bytes"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "BytesDownloaded"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = var.cloudfront_bytes_alarm_gb_per_5min * 1073741824
+  alarm_description   = "CloudFront sent viewers more than ${var.cloudfront_bytes_alarm_gb_per_5min} GB in 5 minutes. Egress is ~$0.085-0.110 per GB and nothing caps it across addresses; the map's tiles (/tiles/*) are the large objects. In the WAF console (us-east-1), the ACL's sampled requests show the top IPs and paths; block a puller (runbook: docs/deployment.md, Runbooks, Request flood). Real growth: raise cloudfront_bytes_alarm_gb_per_5min."
+  alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.frontend.id
+    Region         = "Global"
+  }
+}
+
+# Sustained blocks. Only the four rate rules block (waf.tf has no managed
 # rule groups), so a block means one IP went over 100 auth requests,
-# waf_rate_limit_per_ip API requests, or waf_site_rate_limit_per_ip requests
-# in all, in 5 minutes. 100 blocked in a period is a whole auth-rule
+# waf_rate_limit_per_ip API requests, waf_tiles_rate_limit_per_ip tile
+# requests, or waf_site_rate_limit_per_ip requests in all, in 5 minutes. 100 blocked in a period is a whole auth-rule
 # window's worth; in each of 3 periods running (15 minutes) it is someone
 # persisting (credential stuffing, a scraper) or a real client stuck behind
 # a limit: the report renderer (<= 2 Lambda egress IPs, one

@@ -38,6 +38,9 @@
 //                runbook instead of half-way through a deploy.
 //
 // Usage (CI):     node scripts/release/preflight.mjs <web|backend>
+//                 node scripts/release/preflight.mjs environment   (the
+//                 environment and config checks alone, for a production-gated
+//                 workflow that deploys no release: load-reference.yml)
 //   env: RELEASE_TAG, GITHUB_EVENT_NAME, GITHUB_REPOSITORY, GH_TOKEN,
 //        REQUIRED_CONFIG (comma-separated env var names that must be set),
 //        CI_WAIT_SECONDS (default 1800), GITHUB_OUTPUT.
@@ -271,6 +274,43 @@ function tryRun(cmd, args) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * The environment gate: `production` exists, has a required reviewer and
+ * the custom branch and tag policy. Pushes each problem onto `errors`.
+ * @param {string} repo
+ * @param {string[]} errors
+ */
+function checkEnvironment(repo, errors) {
+	const envRes = tryRun('gh', ['api', `repos/${repo}/environments/production`]);
+	if (envRes.ok) {
+		const envJson = JSON.parse(envRes.out);
+		const problem = environmentProblem(envJson);
+		if (problem) errors.push(problem);
+		/** @type {{ name: string, type?: string }[] | null} */
+		let policies = null;
+		let readPolicies = true;
+		if (envJson.deployment_branch_policy?.custom_branch_policies) {
+			const pol = tryRun('gh', ['api', '--paginate', `repos/${repo}/environments/production/deployment-branch-policies?per_page=100`, '--jq', '.branch_policies[] | "\\(.type // "branch") \\(.name)"']);
+			if (!pol.ok) {
+				readPolicies = false;
+				errors.push(`could not read the production environment's deployment branch policies: ${pol.out.trim().split('\n')[0]}`);
+			} else {
+				// one "<type> <name>" per line: raw strings, whatever the page count
+				policies = pol.out.split('\n').filter((l) => l.trim()).map((l) => {
+					const [type, ...name] = l.trim().split(' ');
+					return { type, name: name.join(' ') };
+				});
+			}
+		}
+		const bp = readPolicies ? branchPolicyProblem(envJson, policies) : null;
+		if (bp) errors.push(bp);
+	} else if (/Not Found|HTTP 404/.test(envRes.out)) {
+		errors.push(/** @type {string} */ (environmentProblem(null)));
+	} else {
+		errors.push(`could not read the production environment, so the approval gate cannot be confirmed: ${envRes.out.trim().split('\n')[0]}`);
+	}
+}
+
 async function main() {
 	const component = process.argv[2];
 	const env = process.env;
@@ -292,6 +332,18 @@ async function main() {
 		}
 		process.exit(errors.length ? 1 : 0);
 	};
+
+	// `environment`: the gate alone, for a workflow that deploys no release
+	// but still reaches production (load-reference.yml): the environment
+	// checks and the config, no tag, release or CI.
+	if (component === 'environment') {
+		if (!repo) errors.push('GITHUB_REPOSITORY is not set');
+		else checkEnvironment(repo, errors);
+		const missingEnv = missingConfig((env.REQUIRED_CONFIG ?? '').split(',').map((x) => x.trim()).filter(Boolean), env);
+		if (missingEnv.length) errors.push(`not configured: ${missingEnv.join(', ')}. Follow ${RUNBOOK} (apply, then step 9: templates/scripts/export-tf-vars.sh infra/).`);
+		if (!errors.length) outputs.deploy = 'true';
+		return finish();
+	}
 
 	if (!COMPONENTS.includes(component)) {
 		errors.push(`unknown component "${component}" (expected one of ${COMPONENTS.join(', ')})`);
@@ -342,34 +394,7 @@ async function main() {
 	}
 
 	// environment
-	const envRes = tryRun('gh', ['api', `repos/${repo}/environments/production`]);
-	if (envRes.ok) {
-		const envJson = JSON.parse(envRes.out);
-		const problem = environmentProblem(envJson);
-		if (problem) errors.push(problem);
-		/** @type {{ name: string, type?: string }[] | null} */
-		let policies = null;
-		let readPolicies = true;
-		if (envJson.deployment_branch_policy?.custom_branch_policies) {
-			const pol = tryRun('gh', ['api', '--paginate', `repos/${repo}/environments/production/deployment-branch-policies?per_page=100`, '--jq', '.branch_policies[] | "\\(.type // "branch") \\(.name)"']);
-			if (!pol.ok) {
-				readPolicies = false;
-				errors.push(`could not read the production environment's deployment branch policies: ${pol.out.trim().split('\n')[0]}`);
-			} else {
-				// one "<type> <name>" per line: raw strings, whatever the page count
-				policies = pol.out.split('\n').filter((l) => l.trim()).map((l) => {
-					const [type, ...name] = l.trim().split(' ');
-					return { type, name: name.join(' ') };
-				});
-			}
-		}
-		const bp = readPolicies ? branchPolicyProblem(envJson, policies) : null;
-		if (bp) errors.push(bp);
-	} else if (/Not Found|HTTP 404/.test(envRes.out)) {
-		errors.push(/** @type {string} */ (environmentProblem(null)));
-	} else {
-		errors.push(`could not read the production environment, so the approval gate cannot be confirmed: ${envRes.out.trim().split('\n')[0]}`);
-	}
+	checkEnvironment(repo, errors);
 
 	// tags: the release-tag ruleset
 	const rs = tryRun('gh', ['api', '--paginate', `repos/${repo}/rulesets?includes_parents=true&per_page=100`, '--jq', '.[] | select(.target == "tag") | .id']);
