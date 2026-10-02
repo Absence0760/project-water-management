@@ -266,6 +266,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// A delineation proposal (175): who proposed and decided it is a pointer only; the acts are audited.
 	'delineation_proposal.created_by': 'set null',
 	'delineation_proposal.decided_by': 'set null',
+	// A start-from-the-map proposal (178): the same.
+	'start_proposal.created_by': 'set null',
+	'start_proposal.decided_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',

@@ -71,6 +71,9 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	// A catchment the DEM proposed (175_delineation): the project's record; map.delineation_* audit events are exported.
 	'delineation_proposal.created_by': { excluded: 'the project’s delineation proposal; its maker only, and map.delineation_proposed is in auditEvents' },
 	'delineation_proposal.decided_by': { excluded: 'the project’s delineation proposal; who decided it only, and map.delineation_accepted / _rejected are in auditEvents' },
+	// A model proposed from the map (178_start_proposal): the project's record; map.start_* audit events are exported.
+	'start_proposal.created_by': { excluded: 'the project’s start-from-the-map proposal; its maker only, and map.start_proposed is in auditEvents' },
+	'start_proposal.decided_by': { excluded: 'the project’s start-from-the-map proposal; who decided it only, and map.start_applied / _discarded are in auditEvents' },
 	'api_key.created_by': { excluded: 'the project’s key; api_key.created is in auditEvents; never key material' },
 	'api_key.revoked_by': { excluded: 'the project’s key; api_key.revoked is in auditEvents' },
 	'audit_event.actor_user_id': { section: 'auditEvents' },

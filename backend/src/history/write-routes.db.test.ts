@@ -518,6 +518,49 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['map.delineation_accepted'],
 		call: (c) => c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId3}/accept`, { as: 'other' })
 	},
+	// --- start a model from the map (178, issue #326 C3): on an empty project of its own ----
+	{
+		route: `POST ${P}/map/start`,
+		records: ['map.start_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+			c.startProject = (await c.owner.call('POST', '/projects', { name: 'Guard start' })).body.project.id;
+			const sat = `/projects/${c.startProject}`;
+			const [olon, olat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			const [dlon, dlat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 99.5);
+			const gauge = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'gauge', name: 'Guard weir', lon: olon, lat: olat })).body.feature.id;
+			const dam = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'dam', name: 'Guard dam', lon: dlon, lat: dlat })).body.feature.id;
+			const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+			const r = await c.owner.call('POST', `${sat}/map/start`, body);
+			c.startBody = body;
+			c.startId = (await c.owner.call('POST', `${sat}/map/start`, body)).body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/discard`,
+		records: ['map.start_discarded'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const r = await c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId}/discard`);
+			const again = await c.owner.call('POST', `/projects/${c.startProject}/map/start`, c.startBody);
+			c.startId2 = again.body.proposal?.id;
+			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: true }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/apply`,
+		records: ['map.start_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) =>
+			c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId2}/apply`, {
+				outletName: 'Guard weir',
+				units: c.startUnits,
+				rest: { include: true, name: 'Rest of the catchment', area: true }
+			})
+	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{
 		route: `POST ${P}/scenarios/:sid/submit`,
