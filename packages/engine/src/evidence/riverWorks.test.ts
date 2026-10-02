@@ -114,8 +114,10 @@ describe('nodeRiverWorks', () => {
 
 	it('reads the dam over the run (§2.7g): one not in service from the start, or silted empty by the end, leaves days with no dam', () => {
 		const win = { startDate: '2000-10-01', endDate: '2010-09-30' };
-		const dam = { pctUpstreamToDam: 1, damCapacityM3: 1e5, divertCapacityM3Day: 200 };
+		const dam = { pctUpstreamToDam: 0.5, damCapacityM3: 1e5, divertCapacityM3Day: 200 };
 		expect(nodeRiverWorks(node(dam), crops, win).map((x) => x.kind)).toEqual(['divert']);
+		// A dam on the river takes no River to dam (engine ≥ 1.68.0), so it lists none.
+		expect(nodeRiverWorks(node({ ...dam, pctUpstreamToDam: 1 }), crops, win).map((x) => x.kind)).toEqual([]);
 		const later = nodeRiverWorks(node({ ...dam, damInServiceFrom: '2005-01-01' }), crops, win);
 		expect(later.map((x) => `${x.kind}:${x.bounded}`)).toEqual(['divert:true', 'noDam:false']);
 		expect(later[1]!.someDays).toBe(true);

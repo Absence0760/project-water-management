@@ -1298,7 +1298,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const sup = supplyOf(n, []).supply;
 		// Hands-off flow and River to dam by month (engine ≥ 1.32.0).
 		const ops = operatingOf(n, []);
-		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
+		const divertOf = { divertCapacityM3Day: ops.divertCapacityM3Day ?? n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		const RA = g('river_abstraction');
 		if (!!sup !== !!RA) return `${n.id}: river_abstraction column ${RA ? 'without' : 'missing for'} a supply rule that pumps from the river`;
 		let onRiver = false;
@@ -2262,7 +2262,7 @@ export function checkOperatingRules(input: ModelInput, out: ModelOutput): string
 		const H = g('inflow_upstream');
 		const I = g('runoff');
 		if (!H || !I) return `${n.id}: the columns H and I are needed to check its operating rules`;
-		const divertOf = { divertCapacityM3Day: n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
+		const divertOf = { divertCapacityM3Day: ops.divertCapacityM3Day ?? n.divertCapacityM3Day, ...(ops.divertM3DayByMonth ? { divertM3DayByMonth: ops.divertM3DayByMonth } : {}) };
 		// The day's dam capacity factor (engine ≥ 1.30.0), as runModel resolves it: a dam with capacity 0 today is none.
 		const ks = capacityScaleOf(n, day0, out.days, []);
 		for (let t = 0; t < out.days; t++) {

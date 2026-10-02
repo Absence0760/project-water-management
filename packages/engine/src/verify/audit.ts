@@ -26,9 +26,9 @@ import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
 import { riverSourcesOf } from '../network/riverSource';
-import { operatingOf } from '../network/supply';
+import { onRiverDam, operatingOf } from '../network/supply';
 import { upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
-import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
+import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, onRiverDamForRun, runEfficiency } from './workings';
 
 // ── Expressions ──────────────────────────────────────────────────────────────
 
@@ -241,8 +241,10 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	if (riverSourcesOf(n, demandObjectsByNode(model, []).get(n.id), []).river) why.add('river abstractions beside the dam');
 	// Operating rules (engine ≥ 1.32.0): they change O by month and by the day's flow.
 	const ops = operatingOf(n, []);
+	// A dam on the river takes no River to dam (engine ≥ 1.68.0); an older run's took it as entered.
+	const onRiver = onRiverDamForRun(n, run.engineVersion);
 	if (ops.handsOff) why.add('a hands-off flow');
-	if (ops.divertM3DayByMonth) why.add('River to dam by month');
+	if (ops.divertM3DayByMonth || (!onRiver && onRiverDam(n) && Array.isArray(n.divertMonthlyM3Day))) why.add('River to dam by month');
 	const cap = n.damCapacityM3 > 0 ? n.damCapacityM3 : 0;
 	if (cap > 0 && resolveDamCurve(n)) why.add('a dam survey curve');
 	if (cap > 0 && (run.apanDailyDays ?? 0) > 0) why.add("a daily A-pan series (the dam's evaporation)");
@@ -277,7 +279,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 		...(lostShare ? [{ id: 'seepage_return', label: 'Share of the seepage returning below the dam', unit: null, value: seepReturn }] : []),
 		{ id: 'pct_upstream', label: '% of upstream inflow to the dam', unit: null, value: n.pctUpstreamToDam },
 		{ id: 'pct_runoff', label: '% of runoff to the dam', unit: null, value: n.pctRunoffToDam },
-		...(Number.isFinite(n.divertCapacityM3Day) ? [{ id: 'divert', label: 'Diversion capacity', unit: 'm³/day', value: n.divertCapacityM3Day }] : []),
+		...(onRiver ? [{ id: 'divert', label: 'Diversion capacity (0: the dam is on the river)', unit: 'm³/day', value: 0 }] : Number.isFinite(n.divertCapacityM3Day) ? [{ id: 'divert', label: 'Diversion capacity', unit: 'm³/day', value: n.divertCapacityM3Day }] : []),
 		{ id: 'efficiency', label: 'Irrigation efficiency e', unit: null, value: e },
 		{ id: 'beta', label: 'Loss return fraction β (share of the losses (1 − e) × G reaching the river)', unit: null, value: n.lossReturnFraction }
 	];
@@ -313,7 +315,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 			'diverted_to_dam',
 			'Diverted to the dam',
 			'm³/day',
-			Number.isFinite(n.divertCapacityM3Day) ? min(P('divert'), add(C('upstream_below_dam'), C('runoff_below_dam'))) : add(C('upstream_below_dam'), C('runoff_below_dam'))
+			onRiver || Number.isFinite(n.divertCapacityM3Day) ? min(P('divert'), add(C('upstream_below_dam'), C('runoff_below_dam'))) : add(C('upstream_below_dam'), C('runoff_below_dam'))
 		),
 		formula('dam_area', 'Dam surface area', 'm²', cap > 0 ? mul(P('area_full'), pow(min(div(max(prev('dam_storage'), 0), P('capacity')), 1), P('b'))) : 0),
 		formula('rain_on_dam', 'Rain on the dam', 'm³/day', div(mul(max(C('rain'), 0), C('dam_area')), 1000)),

@@ -93,23 +93,25 @@ OUTFLOW_GAUGE = "Outlet Gauge"
 NO_ELEMENT_SHEET = {"Hotel Farm"}
 
 # [Farm spec]: hi/lo MAP area (km2), total area (km2), external fragmentation,
-# % upstream inflow above dam, % farm runoff into dam, dam capacity (m3),
+# % upstream inflow above dam (as b023 holds it: its formula sends that share
+# past the dam, so the importer stores 1 − it, docs/model.md §3 Q1),
+# % farm runoff into dam, dam capacity (m3),
 # initial %, min % for transfers, diversion back to dam (m3/day), irrigation return flow %.
 FARM_SPEC: list[dict[str, Any]] = [
-    {"name": "Alpha Farm", "hi": 6.0, "lo": 4.0, "total": 10.0, "ext": 0.12, "up": 0, "runoff": 0.3, "cap": 250000, "init": 0.5, "min": 0, "divert": 8640, "ret": 0.2},
+    {"name": "Alpha Farm", "hi": 6.0, "lo": 4.0, "total": 10.0, "ext": 0.12, "up": 1, "runoff": 0.3, "cap": 250000, "init": 0.5, "min": 0, "divert": 8640, "ret": 0.2},
     {"name": "Bravo Farm", "hi": 8.5, "lo": 5.5, "total": 14.0, "ext": 0.17, "up": 0.5, "runoff": 0.25, "cap": 600000, "init": 0.6, "min": 0.3, "divert": 21600, "ret": 0.2},
     # A "Specific" method farm with no external fragmentation and no dam: blanks read as 0.
-    {"name": "Charlie Farm", "hi": 3.2, "lo": 6.8, "total": 10.0, "ext": None, "up": 0, "runoff": 0, "cap": None, "init": None, "min": None, "divert": 0, "ret": 0},
-    {"name": "Echo Farm", "hi": 9.0, "lo": 7.0, "total": 16.0, "ext": 0.2, "up": 0, "runoff": 0.4, "cap": 1500000, "init": 0.5, "min": 0.25, "divert": 21600, "ret": 0.15},
+    {"name": "Charlie Farm", "hi": 3.2, "lo": 6.8, "total": 10.0, "ext": None, "up": 1, "runoff": 0, "cap": None, "init": None, "min": None, "divert": 0, "ret": 0},
+    {"name": "Echo Farm", "hi": 9.0, "lo": 7.0, "total": 16.0, "ext": 0.2, "up": 1, "runoff": 0.4, "cap": 1500000, "init": 0.5, "min": 0.25, "divert": 21600, "ret": 0.15},
     # The diversion typed as text, as a pasted cell can be.
-    {"name": "Foxtrot Farm", "hi": 5.0, "lo": 5.0, "total": 10.0, "ext": 0.13, "up": 0, "runoff": 0.1, "cap": 80000, "init": 0.4, "min": 0, "divert": "4320", "ret": 0},
+    {"name": "Foxtrot Farm", "hi": 5.0, "lo": 5.0, "total": 10.0, "ext": 0.13, "up": 1, "runoff": 0.1, "cap": 80000, "init": 0.4, "min": 0, "divert": "4320", "ret": 0},
     # Total area 8.5 km2 is not hi + lo (8.0): the importer keeps both as typed.
-    {"name": "Golf Farm", "hi": 4.4, "lo": 3.6, "total": 8.5, "ext": 0.11, "up": 0, "runoff": 0.9, "cap": 120000, "init": 1.0, "min": 0.2, "divert": 0, "ret": 0.3},
-    {"name": "Hotel Farm", "hi": 7.0, "lo": 8.0, "total": 15.0, "ext": 0.16, "up": 0.25, "runoff": 0.2, "cap": 45000, "init": 0.5, "min": 0, "divert": 8640, "ret": 0.1},
+    {"name": "Golf Farm", "hi": 4.4, "lo": 3.6, "total": 8.5, "ext": 0.11, "up": 1, "runoff": 0.9, "cap": 120000, "init": 1.0, "min": 0.2, "divert": 0, "ret": 0.3},
+    {"name": "Hotel Farm", "hi": 7.0, "lo": 8.0, "total": 15.0, "ext": 0.16, "up": 0.75, "runoff": 0.2, "cap": 45000, "init": 0.5, "min": 0, "divert": 8640, "ret": 0.1},
     # b023's stand-in for a unit that pumps straight from the river: a 20 m3
-    # pool that takes all the upstream inflow, with a large diversion capacity.
+    # pool that takes all the upstream inflow (0 % in b023's terms), with a large diversion capacity.
     # The importer warns "probable run-of-river" (issue #54, 2d).
-    {"name": "India Farm", "hi": 1.5, "lo": 1.0, "total": 2.5, "ext": 0.04, "up": 1, "runoff": 0.2, "cap": 20, "init": 1.0, "min": 0, "divert": 12960, "ret": 0.1},
+    {"name": "India Farm", "hi": 1.5, "lo": 1.0, "total": 2.5, "ext": 0.04, "up": 0, "runoff": 0.2, "cap": 20, "init": 1.0, "min": 0, "divert": 12960, "ret": 0.1},
 ]
 FRAGMENTATION_METHOD = "Specific"
 HI_LO_SPLIT = (0.8, 0.2)

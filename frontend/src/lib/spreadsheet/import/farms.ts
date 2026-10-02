@@ -49,6 +49,41 @@ export interface FarmSpecTable {
 
 const METHODS: FlowShareMethod[] = ['area', 'hiLo', 'manual'];
 
+/**
+ * The defined name a workbook whose "Upstream inflow above dam %" formula has
+ * been fixed carries (the fixed workbooks' `upstream` fix): its values already
+ * mean the share into the dam.
+ */
+export const UPSTREAM_INTO_DAM_MARKER = 'zFarmSpec_UpstrInflowIntoDam';
+
+/**
+ * convert_upstream_pct(): b023 applied "Upstream inflow above dam %" to the
+ * water passing below the dam (docs/model.md §3 Q1), and its values were
+ * entered against that formula, so the import stores 1 − the value: the share
+ * into the dam, as the engine reads it, keeping what the workbook ran (100 %
+ * there was an off-channel dam). A workbook carrying UPSTREAM_INTO_DAM_MARKER
+ * has the fixed formula, and its values import as they are.
+ */
+function convertUpstreamPct(wb: B023Workbook, farms: Map<string, FarmSpec>, report: Report, sheet: string): void {
+	if (!farms.size) return;
+	if (wb.has(UPSTREAM_INTO_DAM_MARKER)) {
+		report.note(
+			'upstream-pct-as-entered',
+			"[Farm spec] Upstream inflow above dam %: this workbook's formula is the fixed one (the share into the dam), so its values are imported as they are (docs/model.md §3 Q1)",
+			{ sheet }
+		);
+		return;
+	}
+	for (const f of farms.values()) f.pctUpstreamToDam = 1 - f.pctUpstreamToDam;
+	report.note(
+		'upstream-pct-converted',
+		"[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import " +
+			"stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % " +
+			'here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)',
+		{ sheet }
+	);
+}
+
 /** read_farm_spec(). */
 export function readFarmSpec(wb: B023Workbook, report: Report): FarmSpecTable {
 	const { sheet, rows, names } = wb.tableRows('zFarmSpec_FarmNameLst');
@@ -83,6 +118,7 @@ export function readFarmSpec(wb: B023Workbook, report: Report): FarmSpecTable {
 		farms.set(name, spec);
 	});
 
+	convertUpstreamPct(wb, farms, report, sheet);
 	const methodRaw = clean(wb.cellNamed('rFarmSpec_SelectedMethod'));
 	const methods = wb.named('rFarmSpec_Methods').map((row) => clean(row[0]!)); // Area, Hi/Lo, Specific
 	const idx = methods.indexOf(methodRaw);

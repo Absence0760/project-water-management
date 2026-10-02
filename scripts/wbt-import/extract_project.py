@@ -365,6 +365,34 @@ def read_network(wb: Workbook) -> tuple[list[dict[str, Any]], str]:
     return elements, outflow
 
 
+# The defined name a workbook whose "Upstream inflow above dam %" formula has been
+# fixed carries (Fixed/fixes/apply_fixes.py, fix 'upstream'): its values already
+# mean the share into the dam.
+UPSTREAM_INTO_DAM_MARKER = "zFarmSpec_UpstrInflowIntoDam"
+
+
+def convert_upstream_pct(wb: Workbook, farms: dict[str, dict[str, Any]]) -> None:
+    """b023 applied "Upstream inflow above dam %" to the water passing below the dam (docs/model.md §3 Q1), and its
+    values were entered against that formula, so the import stores 1 − the value: the share into the dam, as the
+    engine reads it, keeping what the workbook ran (100 % there was an off-channel dam). A workbook carrying
+    UPSTREAM_INTO_DAM_MARKER has the fixed formula, and its values import as they are."""
+    if not farms:
+        return
+    if UPSTREAM_INTO_DAM_MARKER in wb.wb.defined_names:
+        wb.notes.append(
+            "[Farm spec] Upstream inflow above dam %: this workbook's formula is the fixed one (the share into the dam), "
+            "so its values are imported as they are (docs/model.md §3 Q1)"
+        )
+        return
+    for f in farms.values():
+        f["pctUpstreamToDam"] = 1 - f["pctUpstreamToDam"]
+    wb.notes.append(
+        "[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import "
+        "stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % "
+        "here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)"
+    )
+
+
 def read_farm_spec(wb: Workbook) -> tuple[dict[str, dict[str, Any]], str, dict[str, float], float]:
     sheet, rows, names = table_rows(wb, "zFarmSpec_FarmNameLst")
     col = lambda n: wb.ref(n)[1]  # noqa: E731
@@ -391,6 +419,7 @@ def read_farm_spec(wb: Workbook) -> tuple[dict[str, dict[str, Any]], str, dict[s
     for r, name in zip(rows, names):
         row = wb.block(sheet, cmin, r, cmax, r)[0]
         farms[name] = {k: num(row[c - cmin]) for k, c in cols.items()}
+    convert_upstream_pct(wb, farms)
     method_raw = clean(wb.cell("rFarmSpec_SelectedMethod"))
     methods = [clean(v[0]) for v in wb.named("rFarmSpec_Methods")]  # Area, Hi/Lo, Specific
     method = {0: "area", 1: "hiLo", 2: "manual"}.get(methods.index(method_raw) if method_raw in methods else 0)

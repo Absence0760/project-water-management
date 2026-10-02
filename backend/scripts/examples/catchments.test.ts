@@ -103,6 +103,13 @@ describe('example catchments: showcase the current features', () => {
 		expect(examples.some((ex) => ex.model.nodes.some((n) => n.damSeepagePerDay > 0))).toBe(true);
 	});
 
+	it('River to dam only fills off-channel dams: a dam on the river has none (engine 1.68.0), and some farm diverts', () => {
+		const divert = examples.flatMap((ex) => ex.model.nodes.filter((n) => n.kind === 'farm' && n.divertCapacityM3Day > 0).map((n) => ({ ex: ex.name, n })));
+		for (const { ex, n } of divert) expect(n.pctUpstreamToDam, `${ex} ${n.name}`).toBeLessThan(1);
+		expect(divert.length).toBeGreaterThan(0);
+		for (const ex of examples) expect(runs.get(ex.name)!.summary.warnings.filter((w) => w.includes('River to dam isn')), ex.name).toEqual([]);
+	});
+
 	it('farms irrigate with different systems (N1) and the losses partly return', () => {
 		const efficiencies = new Set(examples.flatMap((ex) => ex.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.irrigationEfficiency)));
 		expect(efficiencies.size).toBeGreaterThanOrEqual(4);

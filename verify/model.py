@@ -1415,6 +1415,8 @@ def run(doc: dict) -> dict:
             N = I - M
             dm = x.get("divertMonthlyM3Day")
             dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)
+            if x["pctUpstreamToDam"] >= 1:
+                dcap = 0.0  # a dam on the river takes no River to dam (§2.7 row O, engine >= 1.68.0)
             O = 0.0 if rule_ == "runOfRiver" else min(dcap, L + N)
             # The senior users' pass (§2.7c): O first, then K and M pro rata.
             passed = 0.0
