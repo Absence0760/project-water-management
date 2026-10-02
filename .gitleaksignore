@@ -7,6 +7,9 @@
 # Reviewed 2026-09-30:
 #   - vault-service-token on a user-summary field read in the engine self-check
 #     (the rule reads a one-letter variable, a dot and a 24-letter name as a Vault token).
+# Reviewed 2026-10-02:
+#   - generic-api-key on comparisons with the River to dam field name (divertCapacityM3Day)
+#     in its first commit; the later lines carry gitleaks:allow.
 # Add a line only after checking the match is not a real secret.
 05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:202
 05502c16a1e39963a5b9d38b8b52e7050f8977c1:infra/tests/guardrails.tftest.hcl:generic-api-key:217
@@ -38,3 +41,7 @@ frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:187
 frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:192
 5068aeb36ca5932d5debae988821d89b7b53afd4:frontend/src/lib/components/network/nodePaste.ts:generic-api-key:24
 1e469efcfd8a2555954977dd19eb33b2723c2525:packages/engine/src/verify/checks.ts:vault-service-token:1021
+056065f4abcc45dd5ab03b6e94a7a3fada79c32c:frontend/src/lib/components/network/NodeDetail.svelte:generic-api-key:197
+056065f4abcc45dd5ab03b6e94a7a3fada79c32c:frontend/src/lib/components/network/fields.test.ts:generic-api-key:122
+056065f4abcc45dd5ab03b6e94a7a3fada79c32c:frontend/src/lib/components/network/fields.ts:generic-api-key:308
+056065f4abcc45dd5ab03b6e94a7a3fada79c32c:frontend/src/lib/components/network/nodePaste.test.ts:generic-api-key:53
