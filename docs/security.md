@@ -2323,7 +2323,12 @@ In short:
   that guard. The same guard checks the chart library: the uPlot build the
   app bundles writes series labels (typed names) and its legend read-out
   through `textContent`, never markup. Also banned there: `setHTMLUnsafe`,
-  `parseHTMLUnsafe`, `DOMParser.parseFromString`. Mail templates escape
+  `parseHTMLUnsafe`, `DOMParser.parseFromString`. The one exception is the
+  map's attribution control: MapLibre sets a source's `attribution` as
+  innerHTML (behind its own weak sanitiser), so every value put into one
+  (`mapStyle.ts` `terrainSource`, `riversCredit`) goes through
+  `escapeAttribution` (round-4 hardening; `mapStyle.test.ts`). Today they
+  are all build-time constants. Mail templates escape
   every interpolated value (`mail/templates.ts` `escapeHtml`,
   `templates.test.ts`).
 - **No script URLs.** Svelte escapes attribute text, not what it means:
@@ -2589,16 +2594,47 @@ placed points. The server never trusts the browser with geometry:
   API, so it is editor-only, capped at 30 a project an hour (429), bounded
   by a window cap and a 20 s budget under the Lambda's timeout, and run
   outside any database transaction. The decoders (WebP, PNG, PMTiles) read
-  only the operator's file and fail closed on anything malformed. The
-  proposal's polygon passes the same `checkGeometry` as every map polygon
-  before it is stored.
+  only the operator's file and fail closed on anything malformed, within
+  fixed bounds (§ Map data files below). The proposal's polygon passes the same
+  `checkGeometry` as every map polygon before it is stored.
+- **Map data files** (round-4 hardening): the hand-written readers bound
+  what a file can make them do, so a corrupt or hostile archive (a
+  compromised upstream, a wrong upload) is refused with the reader's own
+  error and a 503, never an out-of-memory crash. Tiles are at most 1024 px
+  a side, checked before any pixel is allocated (`MAX_TILE_SIDE`; a WebP of
+  single-symbol codes decodes any size from a few bytes), and at least
+  64 px (`MIN_TILE_SIDE`, else a window is millions of reads); PNG image
+  data inflates to its rows at most; a WebP keeps only the prefix-code
+  groups its meta image names (at most 4096). PMTiles caps every length the
+  archive gives before reading it (directories 4 MiB, metadata 1 MiB,
+  tiles 2 MiB) and every gzip inflation (`PMTILES_LIMITS`), and refuses a
+  directory claiming more entries than its bytes hold. Over HTTP the DEM
+  reader follows no redirect and refuses a server that ignores Range or
+  sends more than asked. `delineation/hostile.test.ts` feeds the decoders
+  seeded mutations of the fixtures (truncations, bit flips, random splices,
+  huge fields) plus the specific bombs. The land-cover import's GeoTIFF
+  blocks inflate to their pixels at most (operator-run). The CHIRPS
+  reader's GDAL metadata scan is linear (`gdalItems`; the regex it replaced
+  backtracked quadratically on a crafted megabyte).
+- **Geometry cost** (round-4 hardening): `checkGeometry`'s crossing sweep
+  counts every comparison against `GEO_MAX_PAIR_CHECKS` (a 50 000-vertex
+  sawtooth whose edges all overlap in longitude took ~9 s of blocked event
+  loop before; now refused in under 0.1 s) and checks a polygon's rings
+  against each other, so a hole can't cross its outer ring or another hole.
+  Placing a dam's outline on the DEM (`rasterize`, start from the map and
+  divide) adds each edge only to the rows it spans, rather than testing
+  every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.
 - **Tracing a dam** (#326 C2, [maps.md § Assisted
   drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
   configuration, read with the same fail-closed decoders; a user supplies a
   longitude, latitude and one of four shares. A trace reads at most a
   512-cell window (a handful of tiles, cached per process), takes
-  milliseconds and stores nothing, so it is editor-only with no rate limit
-  of its own. A traced outline saved names its method on the server's word,
+  milliseconds and stores nothing; it is editor-only and capped at 300 a
+  project and 600 a user an hour, every attempt counted before the work
+  under a row lock (so parallel requests can't all pass), the re-trace when
+  a traced outline is saved included (`186_map_compute_throttle.sql`,
+  `delineation/throttle.ts`, 429 with Retry-After; `throttle.db.test.ts`).
+  It had no cap before (round-4 hardening). A traced outline saved names its method on the server's word,
   not the client's: the server traces the click again, and an outline sent
   as unadjusted must equal that trace. Splitting checks each part with
   `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
@@ -2716,6 +2752,7 @@ PDF someone else asked for kept the person as a recipient
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
 | The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
+| Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |

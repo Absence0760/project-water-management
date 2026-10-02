@@ -230,9 +230,9 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 	if (md && md.type === 2) {
 		if (md.count > 1024 * 1024) throw new FeedFormatError('the grid’s GDAL metadata is implausibly large');
 		const xml = new TextDecoder().decode(await bytesOf(md));
-		for (const m of xml.matchAll(/<Item\b[^>]*\brole="(scale|offset)"[^>]*>([^<]*)<\/Item>/gi)) {
-			const v = Number(m[2]!.trim());
-			if (m[2]!.trim() === '' || v !== (m[1]!.toLowerCase() === 'scale' ? 1 : 0)) {
+		for (const { role, text } of gdalItems(xml)) {
+			const v = Number(text.trim());
+			if (text.trim() === '' || v !== (role === 'scale' ? 1 : 0)) {
 				throw new FeedFormatError('the grid applies a scale or offset to its samples, which is not supported');
 			}
 		}
@@ -256,6 +256,35 @@ export async function openGrid(read: RangeRead): Promise<GridInfo | null> {
 			};
 		}
 	};
+}
+
+/**
+ * The scale and offset `<Item role="…">value</Item>` entries of GDAL's
+ * metadata XML. A scan with indexOf, linear in the text: the regex it
+ * replaces backtracked quadratically on a megabyte of `<Item` with no `>`.
+ */
+export function gdalItems(xml: string): { role: 'scale' | 'offset'; text: string }[] {
+	const lower = xml.toLowerCase();
+	const out: { role: 'scale' | 'offset'; text: string }[] = [];
+	let i = 0;
+	for (;;) {
+		i = lower.indexOf('<item', i);
+		if (i < 0) break;
+		const after = lower[i + 5];
+		const gt = lower.indexOf('>', i);
+		if (gt < 0) break;
+		const start = i;
+		i = gt + 1;
+		// `<Item` as a whole name (`\b`): followed by space, `/` or `>`.
+		if (after !== undefined && !/[\s/>]/.test(after)) continue;
+		const role = /\brole="(scale|offset)"/.exec(lower.slice(start, gt))?.[1] as 'scale' | 'offset' | undefined;
+		if (!role) continue;
+		const lt = lower.indexOf('<', i);
+		if (lt < 0 || !lower.startsWith('</item>', lt)) continue;
+		out.push({ role, text: xml.slice(i, lt) });
+		i = lt + 7;
+	}
+	return out;
 }
 
 /** The pixel (row, col) holding a point, or null outside the grid. */

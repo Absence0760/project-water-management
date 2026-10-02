@@ -5511,3 +5511,38 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `api.runs.series` / `run_series` consumer and how it treats a forecast
       run would stop the next one. Trigger: the next view over stored
       series.
+
+## Round-4 input hardening (map data, geometry, compute caps)
+
+What the round-4 `sec-input` pass fixed is in docs/security.md (§ Input
+handling: Delineation, Map data files, Geometry cost). Left open:
+
+- [ ] **A work budget on summing a polygon over a grid.** `gridShares`
+      (land cover, evaporation; a viewer's read) clips every vertex to every
+      row it is summed over. Halving the rows and cells (the `sec-access`
+      round-4 branch, `eachBand`) fixes the ordinary case, but a comb whose
+      every edge runs the polygon's whole height keeps all its vertices in
+      every row: a valid 50 000-vertex one over 0.0025° × 178° is about
+      72 000 rows × 50 000 vertices, billions of steps, and `maxCells`
+      doesn't stop it (one column). The durable fix is a budget on the
+      vertices the clipping makes (`eachBand`'s `work` counter, refused past
+      a few million) with a test of that comb. Trigger: the halving lands on
+      main (it was left to that branch to avoid two rewrites of one file).
+- [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
+      outer ring or another hole, but not a hole wholly inside another hole
+      (its area is subtracted twice). A full check is a point-in-ring test
+      per pair of holes, quadratic in the number of holes, so it needs a
+      cap on holes first. Trigger: a real file with nested holes, or an area
+      found below a polygon's outer ring minus its holes.
+- [ ] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
+      `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
+      gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it
+      `@sha256:` and add it to the pins guard. Trigger: the next change to
+      that script.
+- [ ] **No published checksums for the downloaded sources.** HydroRIVERS'
+      zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
+      builds have no checksum the scripts verify (whether each publisher
+      offers one was not checked in this round); the scripts are HTTPS-only (redirects
+      too) and the readers fail closed, and the production load hashes
+      what the operator prepared. Trigger: any of them starts publishing
+      checksums.
