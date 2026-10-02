@@ -176,7 +176,8 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * loaded by the operator as the schema owner (152_catchment_map.sql,
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
- * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
+ * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
+ * and the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`).
  * An applicant's "Ask the assessors why" question is filed and answered only
  * through 164_applicant_visibility's app_ask_assessors (the project and the
  * name from the application) and app_answer_assessors_question (an editor,
@@ -194,6 +195,8 @@ const READ_ONLY = new Set([
 	'pack_reproduction',
 	'gauge_station_reference',
 	'dam_register_reference',
+	'cropland_dataset',
+	'cropland_cell_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',
@@ -208,11 +211,13 @@ const READ_ONLY = new Set([
  * run or scenario, viewers and above like model_run (040_yield.sql). time_series
  * holds flow volumes that reveal neighbours' use (020); its site_node_id
  * (084_gauge_records) names a gauge, and series_revision (viewers and above,
- * 030) keeps that site since 085. Every table with a node column needs a
+ * 030) keeps that site since 085. crop_area_land_cover is where a planted area accepted from land cover came
+ * from, the modeller's provenance (174_crop_area_land_cover.sql), viewers and
+ * above. Every table with a node column needs a
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result']);
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
