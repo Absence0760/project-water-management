@@ -134,6 +134,7 @@
 				height={hero.height}
 				alt={t('An illustrated catchment: rain over the mountains, two farm dams, an orchard and a vineyard, and a river winding down to a gauging weir.')}
 				decoding="async"
+				elementtiming="hero"
 				bind:this={img}
 				loading={priority ? 'eager' : 'lazy'}
 				fetchpriority={priority ? 'high' : 'auto'}
