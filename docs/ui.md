@@ -2310,12 +2310,24 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (m³/day by month, or a count × litres a day; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
-  the modeller), **Priority** (first / with the
-  crops / last), **Destination** (used in the catchment, or piped out, which
+  the modeller), **Priority** (Before the crops / With the crops, pro rata /
+  After the crops: short words, so the edit panel's column no longer cuts
+  them off; shown only while the unit has one object), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
-  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
+  note: which meter and years, which strategy, which norm). With two or more
+  objects on the unit (engine ≥ 1.64.0, issue #343, `demandObjectOrder.ts`)
+  the Priority selects give way to a **Supply order on a short day** box
+  above the list: **The crops** and each object by name, in supply order,
+  each with a select of its place (1 is supplied first; demands at one
+  number share pro rata): Before 1, each number, Between n and n + 1, and
+  After the last, so one choice puts a demand in a place of its own anywhere.
+  An **Order:** line under it says the order in words ("Town A, then Town B,
+  then the crops"; announced politely, and each select points at it). The
+  places are stored as each object's priority and its rank within it, and
+  renumber from 1 without gaps; removing a demand closes the ranks up, and a
+  lone one keeps none. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2343,7 +2355,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
-  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  objects**: per object its unit, priority (with ", rank n" when it has a
+  rank, engine ≥ 1.64.0), demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out"). When an object has a
   basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**

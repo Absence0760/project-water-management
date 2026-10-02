@@ -216,7 +216,9 @@ bottom:
    basic-needs floor (*"…, serves 2 000 people"*), and from engine 1.56.0
    where its number comes from (*"…, from meter records"*; not recorded says
    nothing, and absent and null are the same), so a change of people or of
-   source is listed like any other field.
+   source is listed like any other field. From engine 1.64.0 a ranked
+   object's priority reads with its rank (*"…, priority first rank 2"*);
+   absent and null are both no rank.
    **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list
    of EWR sites differs (a gauge added or removed, turned into a unit, or
    ticked or unticked as an EWR site), one network line names both runs'
