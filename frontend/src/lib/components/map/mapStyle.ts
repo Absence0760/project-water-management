@@ -11,7 +11,10 @@
 // basemap draws no labels and fetches no glyphs, as before. With no tiles
 // URL (a fresh clone, CI) the map is a plain background with the features
 // drawn. The quaternary outlines (#326 A6) are a layer of their own over the
-// basemap, under the features, empty until the tab's toggle fills them.
+// basemap, under the features, empty until the tab's toggle fills them. The
+// relief (shaded from a DEM, PUBLIC_TERRAIN_URL: Terrarium tiles in one more
+// PMTiles file) sits over the land and under the water, only while the tab's
+// Relief layer is on.
 import type { MapFeature, MapGeometry } from '$lib/api/types';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
@@ -125,6 +128,50 @@ export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 	};
 }
 
+/**
+ * Shown on the map whenever the relief is: the notice the Copernicus DEM
+ * licence asks for on adapted data (Art. 6(b)), and the tiles' compiler.
+ */
+export const TERRAIN_ATTRIBUTION =
+	'Relief: <a href="https://mapterhorn.com/attribution">© Mapterhorn</a>, produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved';
+
+/** The relief's source id and layer id (#326: shaded relief from a DEM, docs/maps.md § Relief). */
+export const TERRAIN_SOURCE = 'terrain';
+export const RELIEF_LAYER = 'tr-hillshade';
+
+/**
+ * The relief's source: one PMTiles file of Terrarium-encoded 512 px elevation
+ * tiles (the Mapterhorn build, Copernicus GLO-30 over South Africa), read over
+ * HTTP Range like the basemap. MapLibre overzooms past the file's maxzoom.
+ */
+export const terrainSource = (url: string) => ({ type: 'raster-dem', url: `pmtiles://${url}`, encoding: 'terrarium', tileSize: 512, attribution: TERRAIN_ATTRIBUTION });
+
+/**
+ * The shaded relief: soft, translucent shadows and highlights, so the land
+ * and land-cover colours still read through it and the overlay's strokes,
+ * on their casings, keep their contrast (mapStyle.test.ts).
+ */
+export function reliefLayer(dark: boolean): Layer {
+	return {
+		id: RELIEF_LAYER,
+		type: 'hillshade',
+		source: TERRAIN_SOURCE,
+		paint: dark
+			? { 'hillshade-exaggeration': 0.45, 'hillshade-shadow-color': 'rgba(0, 0, 0, 0.55)', 'hillshade-highlight-color': 'rgba(255, 255, 255, 0.10)', 'hillshade-accent-color': 'rgba(0, 0, 0, 0.25)' }
+			: { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(40, 46, 38, 0.45)', 'hillshade-highlight-color': 'rgba(255, 255, 255, 0.35)', 'hillshade-accent-color': 'rgba(40, 46, 38, 0.2)' }
+	};
+}
+
+/**
+ * Where the relief goes in a style's layer order: over the land and land
+ * cover, under the water, roads and everything after them (the basemap's
+ * water, else the first layer that isn't land: the quaternaries and features
+ * with no basemap). Undefined: on top (an empty style).
+ */
+export function reliefBeforeId(layerIds: readonly string[]): string | undefined {
+	return layerIds.find((id) => id === 'bm-water') ?? layerIds.find((id) => !['background', 'bm-earth', 'bm-landcover', 'bm-landuse'].includes(id));
+}
+
 /** The basemap layers' ids, to drop when the tiles can't be read. */
 export const basemapLayerIds = (style: Style) => style.layers.filter((l) => l.id.startsWith('bm-')).map((l) => l.id);
 
@@ -235,13 +282,16 @@ export interface StyleOptions {
 	glyphs?: string | null;
 	/** The quaternary outlines to draw (null or empty: none). */
 	quaternaries?: ReturnType<typeof quaternaryData>;
+	/** The relief's PMTiles URL, when the relief is shown (PUBLIC_TERRAIN_URL and the Relief layer on). Null: no relief, nothing fetched. */
+	terrain?: string | null;
 }
 
 /**
  * The basemap with the overlay over it: one style, so a theme switch
  * (`setStyle`) redraws both and keeps the features and the selection. Order,
- * bottom up: the basemap, the quaternary outlines, the features, then every
- * label (so a results fill never hides a name).
+ * bottom up: the basemap's land, the relief (when on), the rest of the
+ * basemap, the quaternary outlines, the features, then every label (so a
+ * results fill never hides a name).
  */
 export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnType<typeof overlayData>, opts: StyleOptions = {}): Style {
 	const base = basemapStyle(tilesUrl, dark);
@@ -252,6 +302,12 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 		sources: { ...base.sources, quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) }, features: { type: 'geojson', data } },
 		layers: [...base.layers, ...qt.under, ...overlayLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
+	if (opts.terrain) {
+		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain);
+		const before = reliefBeforeId(style.layers.map((l) => l.id));
+		const at = before ? style.layers.findIndex((l) => l.id === before) : style.layers.length;
+		style.layers.splice(at, 0, reliefLayer(dark));
+	}
 	if (glyphs) style.glyphs = glyphs;
 	return style;
 }

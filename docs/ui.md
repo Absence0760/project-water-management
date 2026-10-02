@@ -2586,6 +2586,13 @@ map" card) stays the schematic; this is the geography.
   the map only when glyphs are configured. No features: "Nothing on the map
   yet to show the quaternaries around."; none near: "No quaternary catchment
   in the loaded dataset is near this catchment." (or that none is loaded).
+  With a DEM configured (`PUBLIC_TERRAIN_URL`, [maps.md §
+  Relief](./maps.md#relief)) a **Relief** checkbox follows, with a
+  light-to-dark swatch (`layers=relief`): on, the land is shaded from the
+  Copernicus 30 m elevation model ("Hills shaded from the Copernicus 30 m
+  elevation model."), or "The relief couldn’t be loaded, so the map is
+  drawn without it." when the DEM can't be read. Without a DEM there is no
+  checkbox.
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a

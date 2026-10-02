@@ -3589,7 +3589,13 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       measured extract size) first. With it, the labels' glyphs (#326 A6):
       the `fonts/` tree from `bin/tiles-dev.sh fonts` under `tiles/fonts/`,
       and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
-      (maps.md § Labels); no CSP change.
+      (maps.md § Labels); no CSP change. And the relief: `terrain.pmtiles`
+      from `bin/tiles-dev.sh terrain` under `tiles/`,
+      `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`, and the Copernicus
+      licence's liability sentence ("The organisations in charge of the
+      Copernicus programme by law or by delegation do not incur any
+      liability for any use of the Copernicus WorldDEM-30", Art. 6(c)) in
+      the app's legal notice first (maps.md § Relief).
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading
