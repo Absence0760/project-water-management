@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "The Map's Divide sheet (DivideSheet.svelte, divideFlow.ts), the proposal pieces (pieces.ts, PieceBadge.svelte, badges in CatchmentMap): measured 1588 KB against 1582 KB after the change"
+}
