@@ -46,19 +46,32 @@ test('an owner without an authenticator sees the banner on the workspace, and it
 	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
 });
 
-test('Dismiss hides the banner; a role that doesn’t need it never sees one', async ({ page, owner }) => {
-	void owner;
+test('Dismiss hides the banner, a reload keeps it hidden, and the account menu’s badge stays; a role that doesn’t need it sees neither', async ({ page, owner }) => {
 	await page.goto('/');
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
+	await expect(page.locator('[data-mfa-badge]')).toHaveCount(0);
 
 	await mfaStatusAs(page, { required: true });
 	await page.reload();
 	const banner = page.getByRole('region', { name: 'Two-step sign-in' });
 	await expect(banner).toBeVisible();
+	const menu = page.getByRole('button', { name: `Account menu for ${owner.displayName}, two-step sign-in needed` });
+	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
 	await banner.getByRole('button', { name: 'Dismiss' }).click();
 	await expect(banner).toHaveCount(0);
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeFocused();
+
+	await page.reload();
+	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
+	await expect(menu).toHaveAttribute('data-mfa-badge', 'setup');
+	await expect(page.locator('[data-mfa-prompt]')).toHaveCount(0);
+	await expectNoViolations(page);
+
+	await menu.click();
+	await page.getByRole('link', { name: 'Set up two-step sign-in' }).click();
+	await expect(page).toHaveURL('/account#two-step');
+	await expect(page.locator('#two-step')).toHaveAttribute('data-two-step', 'off');
 });
 
 test('a delete refused with 403 mfa_step_up offers “Sign in again”, which signs out and comes back after', async ({ page, owner, baseURL }) => {

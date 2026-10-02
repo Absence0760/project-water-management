@@ -379,11 +379,14 @@ work. Optional pieces:
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
 pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
 pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
-pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
-pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
+pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO
+                            # lacks them (first time: downloads the SA extract, about 1 GB at maxzoom 15, needs the pmtiles CLI on PATH),
+                            # and sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in frontend/.env.development.local (PUBLIC_TERRAIN_URL
+                            # too once the relief DEM is cached: it never downloads that); safe to re-run
+pnpm dev:tiles:fetch        # re-download the tiles, then the labels' fonts
 pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
-pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB at maxzoom 12; TERRAIN_MAXZOOM=11 for ~570 MB)
-pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and PUBLIC_TERRAIN_URL; restart pnpm dev
+pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB at maxzoom 12; TERRAIN_MAXZOOM=11 for ~570 MB); then dev:tiles:up again
+pnpm dev:tiles:status       # what is cached and what MinIO serves
 ```
 
 The fonts come from the Protomaps `basemaps-assets` repository at a pinned
