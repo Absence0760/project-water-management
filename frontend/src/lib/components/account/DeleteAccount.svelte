@@ -9,15 +9,12 @@
 	// the account is gone this browser forgets it, as signing out does, and
 	// the sign-in page says it was deleted (?deleted=1). docs/ui.md § Account.
 	import { tick } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import type { SoleHoldings } from '$lib/api/types';
-	import { session } from '$lib/auth/session.svelte';
+	import { forgetSession } from '$lib/auth/signOut';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import PasswordInput from '$lib/components/common/PasswordInput.svelte';
-	import { clearAllSaved } from '$lib/components/farm/savedCopy';
-	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { soleHoldingsOf } from './deleteAccount';
@@ -57,14 +54,10 @@
 			} else error = errorText(err);
 			return;
 		}
-		// Gone: forget it here as signing out does (AccountMenu finishSignOut), then say so on the sign-in page.
+		// Gone: forget it here as signing out does (lib/auth/signOut.ts), then say so on the sign-in page.
 		password = '';
 		open = false;
-		clearAllSaved();
-		clearNoteCounts();
-		session.user = null;
-		await tick();
-		await goto(`${base}/login?deleted=1`, { replaceState: true });
+		await forgetSession('/login?deleted=1', { replaceState: true });
 	}
 </script>
 
