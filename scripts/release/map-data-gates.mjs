@@ -20,7 +20,9 @@
 //     (backend/src/geo/referenceLoad.ts parseLoadRequest checks them again),
 //     the kind must be one the Sources table allows (land-cover, rivers), and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
-//     first (the HydroSHEDS licence, § 2.2).
+//     first (the HydroSHEDS licence, § 2.2), and the Terms' clause on map
+//     data licensed to us (§9: no stand-alone redistribution, no reverse
+//     engineering; the licence's § 2.1.2 and § 2.1.3).
 //
 // "In the app's legal text" means some file under frontend/src (tests left
 // out) carries the sentence, wherever the legal notice puts it.
@@ -37,7 +39,9 @@ export const REQUIRED_TEXT = {
 	// License COPDEM 30, Art. 6(c).
 	terrain: 'do not incur any liability for any use of the Copernicus WorldDEM-30',
 	// HydroSHEDS version 1 License Agreement, Exhibit B.
-	rivers: 'WWF has not evaluated the data as altered and incorporated within'
+	rivers: 'WWF has not evaluated the data as altered and incorporated within',
+	// The same licence's end-user terms (§ 2.1.2, § 2.1.3): the Terms' §9 clause on map data licensed to us.
+	riversTerms: 'you may not decompile, reverse engineer or disassemble it'
 };
 
 /** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones). */
@@ -99,6 +103,9 @@ export function loadProblems(env, hasText = legalTextHas) {
 	if (!/^([1-9]|1[0-5])$/.test(order)) problems.push('min_order is a Strahler order, 1 to 15');
 	if (kind === 'rivers' && !hasText(REQUIRED_TEXT.rivers)) {
 		problems.push('rivers need HydroSHEDS’ Exhibit B statement in the app’s legal text first (docs/maps.md § Sources, the HydroRIVERS row)');
+	}
+	if (kind === 'rivers' && !hasText(REQUIRED_TEXT.riversTerms)) {
+		problems.push('rivers need the Terms’ clause on map data licensed to us (§9: no stand-alone redistribution, no reverse engineering) first (the HydroSHEDS licence, § 2.1.2; docs/legal-status.md)');
 	}
 	return problems;
 }

@@ -150,6 +150,16 @@
 		gauging records. They are provided by others, as they are; we don’t control their accuracy, availability or terms, and your use
 		of them is also subject to their own terms. The service is hosted on Amazon Web Services.
 	</p>
+	<!-- Map data licensed to us (HydroRIVERS first, docs/maps.md § Sources): the end-user terms the HydroSHEDS licence
+	     asks for (§ 2.1.2, terms at least as protective as its own; § 2.1.3, no reverse engineering), written for any
+	     licensed source. Pre-counsel wording (docs/legal-status.md, 2026-10-02); a material change (LEGAL_VERSION 2026-10-03). -->
+	<p>
+		<strong>Map data licensed to us.</strong> Some of the map data the service shows is licensed to us by others, such as the
+		HydroRIVERS river network from WWF’s HydroSHEDS database. You may use it within the service, and as part of your projects and
+		the results, reports and maps you make with it. You may not copy, extract or distribute that data on its own, as a stand-alone
+		dataset, and you may not decompile, reverse engineer or disassemble it. It remains the property of its licensors, who provide it
+		as it is, without any warranty, and are not liable for your use of it.
+	</p>
 
 	<h2 id="ours">10. Our software</h2>
 	<p>
@@ -163,7 +173,7 @@
 		You may stop using the service at any time and ask us to delete your account. We may suspend or end your access if you break
 		these terms, if the law requires it, or to protect the service or other people, and we will tell you why unless we can’t. We
 		may also stop offering the service; if we do, we will give at least 30 days’ notice where we can, so you can download your
-		data. Sections 3, 6, 12–15 and 17 survive the end of this agreement.
+		data. Sections 3, 6, 9, 12–15 and 17 survive the end of this agreement.
 	</p>
 
 	<h2 id="warranties">12. Disclaimer of warranties</h2>
