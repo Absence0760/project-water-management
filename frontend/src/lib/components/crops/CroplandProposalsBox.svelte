@@ -178,7 +178,7 @@
 					</table>
 				</div>
 			{/if}
-			<p class="small" data-testid="cropland-catchment">
+			<p class="small catchment" data-testid="cropland-catchment">
 				{#if data.catchment}
 					{#if 'problem' in data.catchment}
 						The catchment boundary can’t be summarised: {data.catchment.problem}.
@@ -290,6 +290,12 @@
 	.small {
 		font-size: 0.85rem;
 		margin: 0;
+	}
+	/* The map link may stand alone on its line (no catchment sum): a 24 px target, not the 0.85rem text's line box (WCAG 2.5.8). */
+	.catchment a {
+		display: inline-block;
+		min-height: 24px;
+		line-height: 24px;
 	}
 	.table-wrap {
 		width: 100%;
