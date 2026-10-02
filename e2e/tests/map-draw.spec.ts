@@ -6,7 +6,8 @@
 // with three, Keep drawing and Discard drawing); a parcel reshaped from the card
 // by pasting. Then one deterministic pointer case (fixed viewport, the map
 // framed on the boundary): a polygon clicked corner by corner and a point
-// placed by a click, each read back from the list, never from pixels. A
+// placed by a click, each read back from the list, never from pixels, and
+// Enter with the mouse over the map placing at the pointer, as a click would. A
 // phone's Use my location fills the Place sheet. Axe while drawing, light and
 // dark.
 import type { Page } from '@playwright/test';
@@ -227,6 +228,23 @@ test('with the mouse: a polygon clicked corner by corner and a point placed by a
 	await expect(place).toBeHidden();
 	await expect(bar(page)).toHaveCount(0);
 	await expect(row(page, 'Clicked dam')).toContainText('° S');
+
+	// With the mouse over the map, Enter places the point at the pointer (where a click there would), not the crosshair;
+	// an arrow key goes back to the crosshair.
+	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	const q = at(0.7, 0.3);
+	await page.mouse.move(q.x, q.y);
+	await page.keyboard.press('Enter');
+	const said = page.getByTestId('map-draw-said');
+	await expect(said).toHaveText(/^Point at /);
+	const byEnter = await said.textContent();
+	await expect(page.getByTestId('map-crosshair')).toHaveCount(0);
+	await page.mouse.click(q.x, q.y);
+	await expect(said).toHaveText(byEnter!);
+	await page.keyboard.press('ArrowRight');
+	await expect(page.getByTestId('map-crosshair')).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(bar(page)).toHaveCount(0);
 });
 
 test('on a phone, Use my location places the point there, asked only on the tap', async ({ page, owner }) => {

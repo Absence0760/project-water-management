@@ -1,8 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
-import { dismissMfaPrompt, loadMfaPrompt, mfaPrompt, mfaStatusSeen, noteMfaRefusal, promptKind, refusalKind, resetMfaPrompt, type MfaPromptState } from './mfaPrompt.svelte';
+import {
+	dismissMfaPrompt,
+	loadMfaPrompt,
+	mfaPrompt,
+	mfaStatusSeen,
+	noteMfaRefusal,
+	pendingKind,
+	promptKind,
+	refusalKind,
+	resetMfaPrompt,
+	type MfaPromptState
+} from './mfaPrompt.svelte';
 
-const state = (over: Partial<MfaPromptState> = {}): MfaPromptState => ({ user: 'u1', status: null, refused: null, dismissed: false, ...over });
+const state = (over: Partial<MfaPromptState> = {}): MfaPromptState => ({ user: 'u1', status: null, refused: null, dismissed: null, ...over });
 const status = (required: boolean, enrolled: boolean, sessionVerified: boolean) => ({ required, enrolled, sessionVerified });
 
 describe('promptKind', () => {
@@ -25,9 +36,26 @@ describe('promptKind', () => {
 	});
 	it('nothing before the status is known, when dismissed, signed out, or for another account', () => {
 		expect(promptKind(state(), 'u1')).toBeNull();
-		expect(promptKind(state({ status: status(true, false, false), dismissed: true }), 'u1')).toBeNull();
+		expect(promptKind(state({ status: status(true, false, false), dismissed: 'setup' }), 'u1')).toBeNull();
 		expect(promptKind(state({ status: status(true, false, false) }), null)).toBeNull();
 		expect(promptKind(state({ status: status(true, false, false) }), 'u2')).toBeNull();
+	});
+});
+
+describe('pendingKind (the account menu’s badge)', () => {
+	it('stays while the need stands, dismissed or not', () => {
+		expect(pendingKind(state({ status: status(true, false, false), dismissed: 'setup' }), 'u1')).toBe('setup');
+		expect(pendingKind(state({ status: status(true, true, false), dismissed: 'step-up' }), 'u1')).toBe('step-up');
+		expect(pendingKind(state({ status: status(false, false, false), refused: 'setup', dismissed: 'setup' }), 'u1')).toBe('setup');
+	});
+	it('goes once it is resolved, and is never another account’s (positive control above)', () => {
+		expect(pendingKind(state({ status: status(true, true, true) }), 'u1')).toBeNull();
+		expect(pendingKind(state({ status: status(false, false, false) }), 'u1')).toBeNull();
+		expect(pendingKind(state({ status: status(true, false, false) }), 'u2')).toBeNull();
+		expect(pendingKind(state({ status: status(true, false, false) }), null)).toBeNull();
+	});
+	it('a dismissed set-up prompt doesn’t hide a step-up one', () => {
+		expect(promptKind(state({ status: status(true, true, false), dismissed: 'setup' }), 'u1')).toBe('step-up');
 	});
 });
 
@@ -47,7 +75,7 @@ describe('refusalKind', () => {
 
 describe('the shared state', () => {
 	beforeEach(() => {
-		Object.assign(mfaPrompt, { user: null, status: null, refused: null, dismissed: false });
+		Object.assign(mfaPrompt, { user: null, status: null, refused: null, dismissed: null });
 	});
 
 	it('a refusal shows the prompt again after a dismissal, and a later status that resolves it clears it', () => {
@@ -98,9 +126,82 @@ it('signing out forgets the session’s refusal and status, so the next sign-in 
 	resetMfaPrompt();
 	noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_step_up'));
 	resetMfaPrompt();
-	expect(mfaPrompt).toEqual({ user: null, status: null, refused: null, dismissed: false });
+	expect(mfaPrompt).toEqual({ user: null, status: null, refused: null, dismissed: null });
 	const read = vi.fn(async () => status(true, true, true));
 	await loadMfaPrompt('u1', read);
 	expect(read).toHaveBeenCalledTimes(1);
 	expect(promptKind(mfaPrompt, 'u1')).toBeNull();
+});
+
+describe('the dismissal outlasts a reload of the tab', () => {
+	const store = new Map<string, string>();
+	beforeEach(() => {
+		store.clear();
+		vi.stubGlobal('sessionStorage', {
+			getItem: (k: string) => store.get(k) ?? null,
+			setItem: (k: string, v: string) => void store.set(k, v),
+			removeItem: (k: string) => void store.delete(k)
+		});
+		resetMfaPrompt();
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	/** A reload: the module's memory is gone, the tab's storage isn't. */
+	const reload = () => Object.assign(mfaPrompt, { user: null, status: null, refused: null, dismissed: null });
+
+	it('a dismissed banner stays hidden after a reload, and the badge stays', () => {
+		mfaStatusSeen('u1', status(true, false, false));
+		dismissMfaPrompt();
+		reload();
+		mfaStatusSeen('u1', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u1')).toBeNull();
+		expect(pendingKind(mfaPrompt, 'u1')).toBe('setup');
+	});
+
+	it('without a dismissal, a reload shows it (positive control)', () => {
+		mfaStatusSeen('u1', status(true, false, false));
+		reload();
+		mfaStatusSeen('u1', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
+	});
+
+	it('a refusal, signing out, or another account brings it back', () => {
+		mfaStatusSeen('u1', status(true, false, false));
+		dismissMfaPrompt();
+		noteMfaRefusal('u1', new ApiError(403, 'x', undefined, 'mfa_required'));
+		reload();
+		mfaStatusSeen('u1', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
+
+		dismissMfaPrompt();
+		reload();
+		mfaStatusSeen('u2', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u2')).toBe('setup');
+
+		mfaStatusSeen('u1', status(true, false, false));
+		dismissMfaPrompt();
+		resetMfaPrompt();
+		mfaStatusSeen('u1', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
+	});
+
+	it('storage that throws keeps the dismissal in memory only', () => {
+		vi.stubGlobal('sessionStorage', {
+			getItem: () => {
+				throw new Error('blocked');
+			},
+			setItem: () => {
+				throw new Error('blocked');
+			},
+			removeItem: () => {
+				throw new Error('blocked');
+			}
+		});
+		mfaStatusSeen('u1', status(true, false, false));
+		dismissMfaPrompt();
+		expect(promptKind(mfaPrompt, 'u1')).toBeNull();
+		reload();
+		mfaStatusSeen('u1', status(true, false, false));
+		expect(promptKind(mfaPrompt, 'u1')).toBe('setup');
+	});
 });
