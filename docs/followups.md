@@ -3695,15 +3695,33 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       DWS (Dam Safety Office) for written permission for commercial use
       before a client deployment loads the real list. Trigger: the first
       client who wants register capacities proposed.
-- [ ] **Sub-catchments at every dam and abstraction point** (#326
-      B-delineate's stretch, not built; design/delineation.md § Not built).
-      Today an editor delineates each dam wall by hand, which gives its whole
-      upstream area. The model wants each unit's *incremental* area (what
-      drains to it and not to a unit upstream), which needs the network's
-      order: delineate every unit's point at once on one routed window,
-      subtract the upstream units' masks, and propose each unit's area as a
-      polygon with Use. Trigger: C3 (start a catchment from the map), or a
-      client delineating more than a few units.
+- [x] **Sub-catchments at every dam and abstraction point** (#326
+      B-delineate's stretch): built with C3, start a catchment from the map
+      (migration 178, `delineation/subcatchments.ts`,
+      design/start-from-map.md). One routed window, each unit's incremental
+      area with its holes, the order from the D8 tree.
+- [ ] **Sub-catchments for a model that already has nodes** (#326 C3,
+      design/start-from-map.md § Not built). Start from the map only fills
+      an empty model, so nothing typed is ever overwritten; re-dividing an
+      existing network today is one unit at a time (Delineate → Accept as an
+      area → Use this area), which gives a unit's *whole* upstream area, not
+      its own piece. Durable fix: a per-unit "propose its own area" on the
+      card, from the same partition (the units' points from their linked dam
+      or point features), each value a Use as now. Trigger: a hydrologist
+      re-dividing an imported or typed model.
+- [ ] **Each proposed unit's outline told apart on the map** (#326 C3, the
+      ui-designer review of the Start sheet): the open proposal is drawn as
+      one dashed shape, so with many units a card can't be matched to its
+      piece. Durable fix: draw each piece as its own feature, labelled with
+      its name once the self-hosted glyphs are configured, and highlight a
+      card's piece while the card has the focus or the pointer. Trigger: the
+      first catchment started from the map with more than a handful of units.
+- [ ] **Intermediate gauges in a model started from the map** (#326 C3,
+      design/start-from-map.md § Not built): a gauge on the map other than
+      the outlet is "not in the model" in the flow; it is added on the
+      Network afterwards. Durable fix: a gauge role in the points step,
+      partitioning like a water user (no land of its own). Trigger: the
+      first catchment started from the map with a gauge inside it.
 - [ ] **Delineation of catchments larger than about 100 km across**
       (design/delineation.md § Where it runs): the API refuses rather than
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job

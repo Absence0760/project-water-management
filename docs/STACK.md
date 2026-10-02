@@ -35,7 +35,10 @@ sides share.
   Terrarium DEM (PMTiles, its own WebP/PNG decoders, no dependency) named by
   `DEM_URL`: empty (the default) is off; the committed synthetic DEM
   (`backend/fixtures/dem/`) or the Relief's DEM after `pnpm dev:tiles:terrain`
-  ([maps.md § Delineation](./maps.md#delineation)).
+  ([maps.md § Delineation](./maps.md#delineation)); the same routing divides
+  a catchment into units at the map's dams and abstraction points to start
+  an empty model (`start.ts`, `subcatchments.ts`,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)).
   Tracing a dam (`src/delineation/damTrace.ts`) reads a water occurrence
   raster through the same readers, named by `WATER_URL`: empty (the default)
   is off; the committed synthetic raster (`backend/fixtures/water/`) or JRC

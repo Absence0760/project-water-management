@@ -154,6 +154,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/map/dam-trace': () => ({ body: { lon: 21.3191414, lat: -33.6724971 } }),
 	// Splitting the ladder's parcel (21.30–21.32° E) down its middle; once it is split, a second call is refused past the role check (the halves no longer add up to it).
 	'POST /projects/:id/map/features/:fid/split': () => ({ body: { parts: splitHalves(21.3, -33.7, 0.02) } }),
+	// Start from the map (178): the ladder's model has nodes, so a proposal is refused (409) after the role check; apply takes ticks for the planted proposal's no units.
+	'POST /projects/:id/map/start': () => ({ body: { points: [] } }),
+	'POST /projects/:id/map/start/:spid/apply': () => ({ body: { outletName: 'Ladder outlet', units: [], rest: { include: false, name: 'Rest', area: false } } }),
 	// Needs the synthetic land-cover grid loaded (scripts/import-land-cover.ts); the ladder's parcel lies in its 0.5 block.
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
 	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
@@ -237,6 +240,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	// Tracing a dam (issue #326 C2) reads the committed synthetic water occurrence raster (off by default).
 	process.env.WATER_URL = fileURLToPath(new URL('../../fixtures/water/synthetic-water.pmtiles', import.meta.url));
 	const pid = await plantDelineationProposal(projectId);
+	const spid = await plantStartProposal(projectId);
 	return {
 		owner: owner!,
 		editor: editor!,
@@ -273,6 +277,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			cid,
 			qid,
 			pid,
+			spid,
 			revId: String(rev!.id)
 		}
 	};
@@ -301,6 +306,33 @@ export async function plantQuestion(projectId: string, sid: string): Promise<str
  * later file's tick would claim them (src/__tests__/db-setup.ts).
  */
 export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);
+
+/**
+ * An open start-from-the-map proposal on `projectId` (178_start_proposal),
+ * planted as the schema owner so no DEM is read: no units, the rest of the
+ * catchment without an area. The project's open one, if any, is superseded
+ * first (one open a project). Returns its id.
+ */
+export async function plantStartProposal(projectId: string): Promise<string> {
+	await asOwner(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
+	const plan = {
+		fromDem: false,
+		outlet: { featureId: null, name: 'Outflow gauge', point: null, snapDistanceM: null, foundIn: null },
+		catchment: { areaM2: null, boundaryAreaM2: null },
+		units: [],
+		rest: { name: 'Rest of the catchment', areaM2: null, geometry: null },
+		dropped: [],
+		warnings: [],
+		cellSizeM: null,
+		zoom: null,
+		windowCells: null
+	};
+	const [row] = await asOwner(
+		`INSERT INTO start_proposal (project_id, plan, from_dem, method, method_version) VALUES ($1, $2, false, 'planted', 'start-1') RETURNING id`,
+		[projectId, JSON.stringify(plan)]
+	);
+	return row!.id as string;
+}
 
 /**
  * An open delineation proposal on `projectId` (175_delineation), planted as

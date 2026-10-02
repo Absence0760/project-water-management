@@ -27,7 +27,7 @@ import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
-import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, SAMPLE, splitHalves, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, plantStartProposal, SAMPLE, splitHalves, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
@@ -184,6 +184,12 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		...SAMPLE['POST /projects/:id/map/delineation/:pid/accept']!(ctx)
 	}),
 	'POST /projects/:id/map/delineation/:pid/reject': async () => ({ params: { pid: await plantDelineationProposal(ctx.projectId) } }),
+	// A fresh open proposal each time: one is decided once (178).
+	'POST /projects/:id/map/start/:spid/apply': async () => ({
+		params: { spid: await plantStartProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/start/:spid/apply']!(ctx)
+	}),
+	'POST /projects/:id/map/start/:spid/discard': async () => ({ params: { spid: await plantStartProposal(ctx.projectId) } }),
 	// A fresh unanswered question each time: an answer is given once (164).
 	'POST /projects/:id/application-questions/:qid/answer': async () => ({
 		params: { qid: await plantQuestion(ctx.projectId, ctx.ids.sid!) },
@@ -482,6 +488,11 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 			why: 'a strict body; the ladder has no application whose rule turns on farms hidden from its applicant, so a legit ask is 409 on its team scenario (scenarios/questions.db.test.ts asks one)',
 			legit: 409
 		}
+	],
+	['POST /projects/:id/map/start', { why: 'a strict body; the ladder’s model has nodes, and starting from the map only fills an empty model, so a legit call is 409 (delineation/start.db.test.ts proposes on an empty one)', legit: 409 }],
+	[
+		'POST /projects/:id/map/start/:spid/apply',
+		{ why: 'a strict body; the ladder’s model has nodes, so applying a proposal is 409 (delineation/start.db.test.ts applies one to an empty model)', legit: 409 }
 	],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[

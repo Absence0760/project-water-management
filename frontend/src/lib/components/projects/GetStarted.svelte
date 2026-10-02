@@ -60,7 +60,10 @@
 			<span class="n" aria-hidden="true">2</span>
 			<div>
 				<h3>Build the network and crops</h3>
-				<p>Add hydrological units and gauges with areas and dam sizes, then crops, crop factors and irrigated hectares.</p>
+				<p>
+					Add hydrological units and gauges with areas and dam sizes, then crops, crop factors and irrigated hectares. Or start it from the Map:
+					delineate the catchment, place its dams, and the units, their areas and their order are proposed.
+				</p>
 			</div>
 		</li>
 		<li>
