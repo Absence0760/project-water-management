@@ -1,0 +1,193 @@
+// Catchments delineated from a click (issue #326 B-delineate;
+// 175_delineation.sql, delineation/routes.ts), end to end against Postgres
+// and the committed synthetic DEM (backend/fixtures/dem/):
+//  - off (DEM_URL empty): the GET says unavailable and a POST is 409;
+//  - an editor's click proposes the valley above the outlet, with the
+//    dataset and method recorded; a viewer reads it and can't propose;
+//  - a new click supersedes the open proposal; a refusal is 422 with its
+//    reason and saves nothing;
+//  - accepting as the boundary when there is one is refused without
+//    `replaceBoundary` (and with it replaces it); accepting twice is 409;
+//    accepting as an area keeps the boundary; rejecting closes it;
+//  - deleting the accepted feature keeps the proposal and clears the link;
+//  - a stranger gets 404, and another project's proposal can't be decided;
+//  - the hourly cap answers 429.
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { asOwner, signUp } from '../__tests__/helpers.js';
+import { BASIN_AREA_M2, DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+import { DELINEATIONS_PER_HOUR } from './routes.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+let owner: User;
+let editor: User;
+let viewer: User;
+let stranger: User;
+let projectId: string;
+let otherProjectId: string;
+const FIXTURE = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+const before = process.env.DEM_URL;
+
+const at = (p: string, pid = projectId) => `/projects/${pid}${p}`;
+const point = (x: number, y: number) => {
+	const [lon, lat] = fixtureLonLat(x + 0.5, y + 0.5);
+	return { lon, lat };
+};
+const OUTLET = point(OUTLET_CELL.x, OUTLET_CELL.y);
+const DAM = point(DAM_CELL.x, DAM_CELL.y + 1);
+const SQUARE = [[[20.6, -33.5], [20.61, -33.5], [20.61, -33.49], [20.6, -33.49], [20.6, -33.5]]];
+
+beforeAll(async () => {
+	[owner, editor, viewer, stranger] = (await Promise.all(['Lowner', 'Leditor', 'Lviewer', 'Lstranger'].map((n) => signUp(n)))) as [User, User, User, User];
+	projectId = (await owner.call('POST', '/projects', { name: 'Delineation' })).body.project.id;
+	for (const [u, role] of [
+		[editor, 'editor'],
+		[viewer, 'viewer']
+	] as const)
+		expect((await owner.call('POST', at('/members'), { email: u.email, role })).status).toBe(201);
+	otherProjectId = (await stranger.call('POST', '/projects', { name: 'Elsewhere' })).body.project.id;
+}, 60_000);
+
+afterAll(() => {
+	if (before === undefined) delete process.env.DEM_URL;
+	else process.env.DEM_URL = before;
+});
+
+describe('delineation off', () => {
+	it('says unavailable and refuses a click while DEM_URL is empty', async () => {
+		process.env.DEM_URL = '';
+		const get = await viewer.call('GET', at('/map/delineation'));
+		expect(get.status).toBe(200);
+		expect(get.body).toEqual({ available: false, dataset: null, proposals: [] });
+		const post = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(post.status).toBe(409);
+		expect(post.body.error).toMatch(/Delineation is off/);
+	});
+
+	it('says unavailable when DEM_URL names a file that is not there', async () => {
+		process.env.DEM_URL = '/nonexistent/dem.pmtiles';
+		expect((await viewer.call('GET', at('/map/delineation'))).body.available).toBe(false);
+	});
+});
+
+describe('with the synthetic DEM', () => {
+	let firstId: string;
+	let secondId: string;
+
+	beforeAll(() => {
+		process.env.DEM_URL = FIXTURE;
+	});
+
+	it('proposes the valley above the outlet for an editor, with the dataset and method recorded, and audits it', async () => {
+		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		const p = res.body.proposal;
+		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-1', featureId: null, createdBy: 'Leditor', decidedAt: null });
+		expect(Math.abs(p.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
+		expect(p.geometry.type).toBe('Polygon');
+		expect(p.dataset).toMatch(/Synthetic DEM/);
+		expect(p.datasetFingerprint).toMatch(/^[0-9a-f]{16}$/);
+		expect(p.method).toMatch(/D8/);
+		expect(p.click).toEqual([OUTLET.lon, OUTLET.lat]);
+		firstId = p.id;
+		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.delineation_proposed'`, [projectId]);
+		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-1' });
+		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
+	});
+
+	it('lets a viewer read it, never propose', async () => {
+		const res = await viewer.call('GET', at('/map/delineation'));
+		expect(res.status).toBe(200);
+		expect(res.body.available).toBe(true);
+		expect(res.body.dataset).toMatchObject({ tileType: 'png', maxZoom: 10, label: expect.stringMatching(/Synthetic DEM/) });
+		expect(res.body.proposals.map((p: { id: string }) => p.id)).toEqual([firstId]);
+		expect((await viewer.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' })).status).toBe(403);
+		expect((await viewer.call('POST', at(`/map/delineation/${firstId}/reject`))).status).toBe(403);
+	});
+
+	it('supersedes the open proposal with a new click', async () => {
+		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall' });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		secondId = res.body.proposal.id;
+		expect(res.body.proposal.areaM2).toBeLessThan(0.8 * BASIN_AREA_M2);
+		const list = (await viewer.call('GET', at('/map/delineation'))).body.proposals;
+		expect(list.map((p: { id: string; status: string }) => [p.id, p.status])).toEqual([
+			[secondId, 'proposed'],
+			[firstId, 'superseded']
+		]);
+		expect((await editor.call('POST', at(`/map/delineation/${firstId}/accept`), { as: 'other' })).status).toBe(409);
+	});
+
+	it('refuses a click outside the DEM with 422 and its reason, saving nothing', async () => {
+		const res = await editor.call('POST', at('/map/delineation'), { lon: 25, lat: -30, from: 'outlet' });
+		expect(res.status).toBe(422);
+		expect(res.body.details).toEqual({ reason: 'outside' });
+		expect(res.body.error).toMatch(/outside the elevation model/);
+		expect((await viewer.call('GET', at('/map/delineation'))).body.proposals).toHaveLength(2);
+	});
+
+	it('accepts as an area, keeping any boundary, and links the feature', async () => {
+		const res = await editor.call('POST', at(`/map/delineation/${secondId}/accept`), { as: 'other' });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body.proposal).toMatchObject({ status: 'accepted', decidedBy: 'Leditor' });
+		expect(res.body.feature).toMatchObject({ kind: 'other', name: 'Catchment above the dam wall (delineated)' });
+		expect(res.body.feature.properties.description).toMatch(/Delineated from Synthetic DEM/);
+		expect(res.body.proposal.featureId).toBe(res.body.feature.id);
+		expect((await editor.call('POST', at(`/map/delineation/${secondId}/accept`), { as: 'other' })).status).toBe(409);
+	});
+
+	it('never replaces a boundary silently: 409 without the tick, replaced with it', async () => {
+		const b = await editor.call('POST', at('/map/features'), { kind: 'catchment_boundary', name: 'Drawn boundary', geometry: { type: 'Polygon', coordinates: SQUARE } });
+		expect(b.status).toBe(201);
+		const p = (await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' })).body.proposal;
+		const refused = await editor.call('POST', at(`/map/delineation/${p.id}/accept`), { as: 'catchment_boundary' });
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/already has a boundary “Drawn boundary”/);
+		const kept = await editor.call('GET', at('/map/features'));
+		expect(kept.body.features.find((f: { kind: string }) => f.kind === 'catchment_boundary').name).toBe('Drawn boundary');
+		const ok = await editor.call('POST', at(`/map/delineation/${p.id}/accept`), { as: 'catchment_boundary', replaceBoundary: true, name: 'Delineated valley' });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const after = (await editor.call('GET', at('/map/features'))).body.features.filter((f: { kind: string }) => f.kind === 'catchment_boundary');
+		expect(after.map((f: { name: string }) => f.name)).toEqual(['Delineated valley']);
+		// Deleting the feature keeps the proposal and clears its link.
+		expect((await editor.call('DELETE', at(`/map/features/${ok.body.feature.id}`))).status).toBe(204);
+		const list = (await viewer.call('GET', at('/map/delineation'))).body.proposals;
+		expect(list.find((x: { id: string }) => x.id === p.id)).toMatchObject({ status: 'accepted', featureId: null });
+	});
+
+	it('rejects an open proposal once', async () => {
+		const p = (await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' })).body.proposal;
+		const res = await editor.call('POST', at(`/map/delineation/${p.id}/reject`));
+		expect(res.status).toBe(200);
+		expect(res.body.proposal).toMatchObject({ status: 'rejected', decidedBy: 'Leditor' });
+		expect((await editor.call('POST', at(`/map/delineation/${p.id}/reject`))).status).toBe(409);
+		const kinds = await asOwner(`SELECT kind FROM audit_event WHERE project_id = $1 AND kind LIKE 'map.delineation_%' ORDER BY id`, [projectId]);
+		expect(new Set(kinds.map((k) => k.kind))).toEqual(new Set(['map.delineation_proposed', 'map.delineation_accepted', 'map.delineation_rejected']));
+	});
+
+	it('keeps strangers and other projects out', async () => {
+		expect((await stranger.call('GET', at('/map/delineation'))).status).toBe(404);
+		expect((await stranger.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' })).status).toBe(404);
+		// A proposal of this project, addressed through another: 404.
+		expect((await stranger.call('POST', at(`/map/delineation/${firstId}/reject`, otherProjectId))).status).toBe(404);
+		expect((await editor.call('POST', at('/map/delineation/not-a-uuid/reject'))).status).toBe(404);
+		// Positive control: the editor reads this project's proposals.
+		expect((await editor.call('GET', at('/map/delineation'))).body.proposals.length).toBeGreaterThan(0);
+	});
+
+	it('caps delineations per project per hour (429)', async () => {
+		const { rows } = { rows: await asOwner(`SELECT count(*)::integer AS n FROM delineation_proposal WHERE project_id = $1`, [projectId]) };
+		const have = rows[0]!.n as number;
+		// Age-in rows straight into the table (as the owner) up to the cap; the next click is refused before any work.
+		await asOwner(
+			`INSERT INTO delineation_proposal (project_id, status, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+				cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, decided_at)
+			 SELECT $1, 'rejected', 'outlet', 20.7, -33.5, 20.7, -33.5, 0, '{"type":"Polygon","coordinates":[]}', 1, 1, 128, 10, 1024, 'x', '0000000000000000', 'x', 'x', now()
+			 FROM generate_series(1, $2)`,
+			[projectId, DELINEATIONS_PER_HOUR - have]
+		);
+		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(res.status).toBe(429);
+	});
+});

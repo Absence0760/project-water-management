@@ -28,7 +28,8 @@
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
 		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
-		"import:dam-register": "tsx scripts/import-dam-register.ts"
+		"import:dam-register": "tsx scripts/import-dam-register.ts",
+		"gen:dem-fixture": "tsx scripts/dem-fixture.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1141.0",

@@ -19,6 +19,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
+import { fileURLToPath } from 'node:url';
+import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -461,6 +463,36 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/map/features/:fid`,
 		records: ['map.feature_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/map/features/${c.mapPointId}`)
+	},
+	// --- delineation from a click (175, issue #326 B-delineate) -----------------------------
+	{
+		route: `POST ${P}/map/delineation`,
+		records: ['map.delineation_proposed'],
+		call: async (c) => {
+			process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+			const [lon, lat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			const r = await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' });
+			c.delineationId = r.body.proposal?.id;
+			const again = await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' });
+			c.delineationId2 = again.body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/delineation/:pid/reject`,
+		records: ['map.delineation_rejected'],
+		call: async (c) => {
+			// The first proposal was superseded by the second; reject the open one, then propose a third to accept.
+			const r = await c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId2}/reject`);
+			const [lon, lat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			c.delineationId3 = (await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' })).body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/delineation/:pid/accept`,
+		records: ['map.delineation_accepted'],
+		call: (c) => c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId3}/accept`, { as: 'other' })
 	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{

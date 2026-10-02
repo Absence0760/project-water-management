@@ -15,7 +15,7 @@ export class ApiError extends Error {
 	params?: Record<string, number | string>;
 
 	constructor(
-		readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429,
+		readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 503,
 		message: string,
 		readonly details?: unknown
 	) {

@@ -191,7 +191,7 @@ export interface MapFeature {
 	updatedAt: string;
 }
 
-const toFeature = (r: FeatureRow): MapFeature => ({
+export const toFeature = (r: FeatureRow): MapFeature => ({
 	id: r.id,
 	kind: r.kind,
 	name: r.name,
@@ -215,7 +215,7 @@ const SELECT_FEATURES = `
 	LEFT JOIN app_user u ON u.id = f.created_by
 	WHERE f.project_id = $1`;
 
-async function loadFeature(db: Db, projectId: string, fid: string): Promise<FeatureRow> {
+export async function loadFeature(db: Db, projectId: string, fid: string): Promise<FeatureRow> {
 	if (!UUID.test(fid)) throw notFound();
 	const { rows } = await db.query<FeatureRow>(`${SELECT_FEATURES} AND f.id = $2`, [projectId, fid]);
 	if (!rows[0]) throw notFound();
@@ -248,7 +248,7 @@ async function assertNodeFits(db: Db, projectId: string, kind: MapFeatureKind, n
 }
 
 /** The project's one catchment boundary goes, and its import with it when that was the import's last feature. */
-async function removeBoundary(db: Db, projectId: string): Promise<string | null> {
+export async function removeBoundary(db: Db, projectId: string): Promise<string | null> {
 	const { rows } = await db.query<{ id: string; source_id: string | null }>(
 		`DELETE FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' RETURNING id, source_id`,
 		[projectId]
@@ -258,7 +258,7 @@ async function removeBoundary(db: Db, projectId: string): Promise<string | null>
 }
 
 /** The project's catchment boundary (its name), or null when it has none. */
-async function currentBoundary(db: Db, projectId: string): Promise<{ name: string } | null> {
+export async function currentBoundary(db: Db, projectId: string): Promise<{ name: string } | null> {
 	const { rows } = await db.query<{ name: string }>(`SELECT name FROM map_feature WHERE project_id = $1 AND kind = 'catchment_boundary' ORDER BY created_at LIMIT 1`, [projectId]);
 	return rows[0] ? { name: rows[0].name } : null;
 }
