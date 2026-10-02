@@ -6,8 +6,10 @@
 	// with itself), so a saved capacity reloads into the m³/day field with the
 	// calculator empty. Below them, the hands-off flow (engine ≥ 1.32.0, issue
 	// #204, §2.7h): a flow by month and/or the EWR left in the river before the
-	// pump or River to dam takes anything. The node is the editor's own
-	// object, so edits land in the model directly.
+	// pump or River to dam takes anything. Then where the crops take their
+	// water (engine ≥ 1.65.0, issue #344, §2.7j): the dam under the supply
+	// rule, or a river abstraction of their own (WaterSourceFields). The node
+	// is the editor's own object, so edits land in the model directly.
 	import { SUPPLY_DEFAULTS, SUPPLY_RULE_LABEL, SUPPLY_RULES, type NetworkNode, type SupplyRule } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
@@ -15,6 +17,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { operatingIssues, supplyIssues } from '$lib/model/validate';
 	import MonthFields from './MonthFields.svelte';
+	import WaterSourceFields from './WaterSourceFields.svelte';
 	import { handsOffPreview, handsOffTicked, noDamSupplyHint, pumpM3Day, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
@@ -111,6 +114,24 @@
 			</div>
 		{/if}
 	</div>
+	{#if node.kind === 'farm'}
+		<!-- Where the crops take their water (engine ≥ 1.65.0, issue #344): the dam under the rule above, or their own river abstraction. -->
+		<div class="grid crops-source">
+			<WaterSourceFields
+				idBase="ws-crops-{node.id}"
+				who="the crops"
+				helpKey="node.cropWaterSource"
+				source={node.cropWaterSource}
+				pump={node.cropRiverPumpM3Day}
+				pool={node.cropRiverPoolM3}
+				{readonly}
+				onsource={(v) => (node.cropWaterSource = v)}
+				onpump={(v) => (node.cropRiverPumpM3Day = v)}
+				onpool={(v) => (node.cropRiverPoolM3 = v)}
+			/>
+		</div>
+		<FieldHistoryLine field="node:{node.id}:cropWaterSource" {unit} />
+	{/if}
 	<div class="hands-off" data-testid="hands-off-{node.id}">
 		<h3 class="sub">Hands-off flow <HelpTip key="node.handsOffM3Day" /></h3>
 		<label class="check">
@@ -162,6 +183,9 @@
 	}
 	.wide {
 		grid-column: 1 / -1;
+	}
+	.crops-source {
+		margin-top: 0.5rem;
 	}
 	.field :global(input),
 	.field select {
