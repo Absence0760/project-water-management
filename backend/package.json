@@ -31,7 +31,8 @@
 		"import:rivers": "tsx scripts/import-rivers.ts",
 		"import:dam-register": "tsx scripts/import-dam-register.ts",
 		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
-		"import:land-cover": "tsx scripts/import-land-cover.ts"
+		"import:land-cover": "tsx scripts/import-land-cover.ts",
+		"import:evaporation": "tsx scripts/import-evaporation.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1141.0",
@@ -55,6 +56,7 @@
 		"@types/nodemailer": "8.0.2",
 		"@types/pg": "8.23.1",
 		"esbuild": "0.28.2",
+		"h5wasm": "0.10.3",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
 		"vitest": "^5.0.2"
