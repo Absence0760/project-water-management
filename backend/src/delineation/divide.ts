@@ -31,7 +31,6 @@ import { loadModel, saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
-import { recordRefused, refusedInLastHour } from './attempts.js';
 import { DelineationRefused } from './delineate.js';
 import {
 	BOUNDARY_MISMATCH,
@@ -267,8 +266,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) === 0) throw new ApiError(409, NOT_EMPTY_NEEDED);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
-			// Shared with start; refused and failed runs count too (attempts.ts).
-			if (rows[0]!.n + (await refusedInLastHour(db, id, ['start', 'divide'])) >= START_PROPOSALS_PER_HOUR) throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
+			if (rows[0]!.n >= START_PROPOSALS_PER_HOUR) throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
 			return readInputs(db, id, body);
 		});
 		const dem = configuredDem();
@@ -281,7 +279,6 @@ export const divideRoutes = new Hono<AuthEnv>()
 				points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry }))
 			});
 		} catch (err) {
-			await withUser(userId, (db) => recordRefused(db, id, 'divide', err instanceof DelineationRefused ? err.code : 'unreadable'));
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 			logEvent('error', { event: 'divide_proposal_failed', ...safeError(err) });
 			throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');

@@ -250,8 +250,6 @@ export type AuditKind =
 	| 'map.divide_proposed'
 	| 'map.divide_applied'
 	| 'map.divide_discarded'
-	// A delineation, start or division the elevation model refused or couldn't read, after the compute (delineation/attempts.ts): which tool and the reason's code, never the click. The hourly caps count it.
-	| 'map.elevation_refused'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

@@ -11,18 +11,12 @@
 //  - refused: a value changed since the proposal (409), an order into a new
 //    gauge that isn't added, a loop, a point standing for the outflow or for
 //    another node (400), an empty model (409), no DEM (422); a viewer can't
-//    propose (403), a stranger gets 404; a start apply of a division (409);
-//  - a run the DEM couldn't read (503) is recorded and counts toward the cap
-//    it shares with starting (attempts.ts).
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+//    propose (403), a stranger gets 404; a start apply of a division (409).
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { loopIn, roleOf } from './divide.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
-import { START_PROPOSALS_PER_HOUR } from './start.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type ApiNode = { id: string; name: string; kind: string; downstreamNodeId: string | null; areaKm2: number; pctRunoffToDam: number };
@@ -284,32 +278,6 @@ describe('dividing the valley', () => {
 		} finally {
 			process.env.DEM_URL = FIXTURE;
 		}
-	});
-
-	it('records a run the DEM couldn’t read and counts it toward the cap shared with starting (attempts.ts)', async () => {
-		const v = await valley('Divide, refused');
-		const bad = join(mkdtempSync(join(tmpdir(), 'dem-')), 'corrupt.pmtiles');
-		writeFileSync(bad, Buffer.alloc(4096, 7));
-		process.env.DEM_URL = bad;
-		try {
-			const failed = await owner.call('POST', v.at('/map/divide'), v.body);
-			expect(failed.status, JSON.stringify(failed.body)).toBe(503);
-		} finally {
-			process.env.DEM_URL = FIXTURE;
-		}
-		const ev = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [v.id]);
-		expect(ev.map((r) => r.subject)).toEqual([{ tool: 'divide', reason: 'unreadable' }]);
-		// The rest of the hour's allowance as refused starts: nothing stored, yet the next division is refused before any work.
-		await asOwner(
-			`INSERT INTO audit_event (project_id, actor_label, kind, subject)
-			 SELECT $1, 'x', 'map.elevation_refused', '{"tool":"start","reason":"too_large"}' FROM generate_series(1, $2)`,
-			[v.id, START_PROPOSALS_PER_HOUR - 1]
-		);
-		expect(await asOwner('SELECT 1 FROM start_proposal WHERE project_id = $1', [v.id])).toHaveLength(0);
-		expect((await owner.call('POST', v.at('/map/divide'), v.body)).status).toBe(429);
-		// A delineation's refusals are its own allowance, not this one (a positive control: the same count of them doesn't refuse).
-		await asOwner(`UPDATE audit_event SET subject = '{"tool":"delineation","reason":"too_large"}' WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [v.id]);
-		expect((await owner.call('POST', v.at('/map/divide'), v.body)).status).toBe(201);
 	});
 
 	it('keeps a division’s mode, as its plan (182)', async () => {

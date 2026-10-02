@@ -368,11 +368,6 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'map.divide_discarded':
 			return 'Discarded a division of the model proposed from the map';
-		// A delineation, start or division the elevation model refused or couldn't read (delineation/attempts.ts): it counts toward the hourly cap.
-		case 'map.elevation_refused': {
-			const what = s.tool === 'start' ? 'A model proposed from the map' : s.tool === 'divide' ? 'Dividing the model from the map' : 'A delineation';
-			return `${what} was refused by the elevation model${str(s.reason) ? ` (${str(s.reason).replace(/_/g, ' ')})` : ''}`;
-		}
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);
