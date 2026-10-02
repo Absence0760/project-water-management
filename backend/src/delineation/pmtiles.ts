@@ -38,6 +38,25 @@ interface Entry {
 const COMPRESSION_NONE = 1;
 const COMPRESSION_GZIP = 2;
 
+/**
+ * Upper bounds on what an archive can make the reader fetch or inflate, so a
+ * corrupt or hostile archive is refused with a PmtilesError rather than run
+ * the process out of memory (docs/security.md § Map data files). A real
+ * DEM's root directory is under 16 KiB, its leaves a few hundred KiB, its
+ * metadata a few KiB and a 512 px WebP tile a few hundred KiB.
+ */
+export const PMTILES_LIMITS = {
+	/** A directory (root or leaf) as stored, and inflated. */
+	directoryBytes: 4 * 1024 * 1024,
+	directoryInflated: 16 * 1024 * 1024,
+	/** The metadata JSON, stored and inflated. */
+	metadataBytes: 1024 * 1024,
+	metadataInflated: 4 * 1024 * 1024,
+	/** One tile, stored and inflated (CloudFront's range cap is 2 MiB too). */
+	tileBytes: 2 * 1024 * 1024,
+	tileInflated: 8 * 1024 * 1024
+} as const;
+
 function readVarint(b: Uint8Array, p: { i: number }): number {
 	let v = 0;
 	let mul = 1;
@@ -89,15 +108,30 @@ export function tileId(z: number, x: number, y: number): number {
 	return acc + d;
 }
 
-function decompress(b: Uint8Array, compression: number): Uint8Array {
+function decompress(b: Uint8Array, compression: number, maxOut: number): Uint8Array {
 	if (compression === COMPRESSION_NONE) return b;
-	if (compression === COMPRESSION_GZIP) return new Uint8Array(gunzipSync(b));
+	if (compression === COMPRESSION_GZIP) {
+		try {
+			return new Uint8Array(gunzipSync(b, { maxOutputLength: maxOut }));
+		} catch (e) {
+			if ((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') throw new PmtilesError(`a part of the archive inflates past ${maxOut} bytes`);
+			throw new PmtilesError('a part of the archive is not valid gzip');
+		}
+	}
 	throw new PmtilesError(`compression ${compression} is not supported (gzip or none)`);
+}
+
+/** A length the archive gives, refused past `max` (or when it isn't a whole number). */
+function boundedLength(length: number, max: number, what: string): number {
+	if (!Number.isSafeInteger(length) || length < 0 || length > max) throw new PmtilesError(`${what} of ${length} bytes (at most ${max})`);
+	return length;
 }
 
 function parseDirectory(b: Uint8Array): Entry[] {
 	const p = { i: 0 };
 	const n = readVarint(b, p);
+	// Each entry takes at least four bytes (one per field), so a count the bytes can't hold is a corrupt directory, refused before allocating it.
+	if (n * 4 > b.length - p.i) throw new PmtilesError(`a directory claims ${n} entries in ${b.length} bytes`);
 	const entries: Entry[] = Array.from({ length: n }, () => ({ tileId: 0, offset: 0, length: 0, runLength: 0 }));
 	let last = 0;
 	for (const e of entries) e.tileId = last += readVarint(b, p);
@@ -165,7 +199,8 @@ export class PmtilesReader {
 	async getMetadata(): Promise<Record<string, unknown>> {
 		const h = await this.getHeader();
 		if (!h.metadataLength) return {};
-		const raw = decompress(await this.read(h.metadataOffset, h.metadataLength), h.internalCompression);
+		const length = boundedLength(h.metadataLength, PMTILES_LIMITS.metadataBytes, 'metadata');
+		const raw = decompress(await this.read(h.metadataOffset, length), h.internalCompression, PMTILES_LIMITS.metadataInflated);
 		try {
 			const m = JSON.parse(new TextDecoder().decode(raw)) as unknown;
 			return m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
@@ -179,11 +214,12 @@ export class PmtilesReader {
 			// The header and root directory sit in the first 16 KiB (spec § 2).
 			const first = await this.read(0, 16384);
 			const header = parseHeader(first);
+			boundedLength(header.rootLength, PMTILES_LIMITS.directoryBytes, 'a root directory');
 			const rootBytes =
 				header.rootOffset + header.rootLength <= first.length
 					? first.subarray(header.rootOffset, header.rootOffset + header.rootLength)
 					: await this.read(header.rootOffset, header.rootLength);
-			return { header, root: parseDirectory(decompress(rootBytes, header.internalCompression)) };
+			return { header, root: parseDirectory(decompress(rootBytes, header.internalCompression, PMTILES_LIMITS.directoryInflated)) };
 		})();
 		this.header.catch(() => (this.header = undefined));
 		return this.header;
@@ -197,11 +233,15 @@ export class PmtilesReader {
 		for (let depth = 0; depth < 4; depth++) {
 			const e = findEntry(dir, id);
 			if (!e) return null;
-			if (e.runLength > 0) return decompress(await this.read(header.tileDataOffset + e.offset, e.length), header.tileCompression);
+			if (e.runLength > 0) {
+				const length = boundedLength(e.length, PMTILES_LIMITS.tileBytes, 'a tile');
+				return decompress(await this.read(header.tileDataOffset + e.offset, length), header.tileCompression, PMTILES_LIMITS.tileInflated);
+			}
 			const at = header.leafOffset + e.offset;
 			let leaf = this.leaves.get(at);
 			if (!leaf) {
-				leaf = this.read(at, e.length).then((b) => parseDirectory(decompress(b, header.internalCompression)));
+				const length = boundedLength(e.length, PMTILES_LIMITS.directoryBytes, 'a leaf directory');
+				leaf = this.read(at, length).then((b) => parseDirectory(decompress(b, header.internalCompression, PMTILES_LIMITS.directoryInflated)));
 				leaf.catch(() => this.leaves.delete(at));
 				if (this.leaves.size > 256) this.leaves.clear();
 				this.leaves.set(at, leaf);
