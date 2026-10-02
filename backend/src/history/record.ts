@@ -250,6 +250,8 @@ export type AuditKind =
 	| 'map.divide_proposed'
 	| 'map.divide_applied'
 	| 'map.divide_discarded'
+	// Sub-catchments from clicks on the rivers, saved as areas (no table of their own; docs/maps.md § Sub-catchments from clicks): the features' ids, how many, their area and the dataset; never a polygon.
+	| 'map.subcatchments_saved'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'
