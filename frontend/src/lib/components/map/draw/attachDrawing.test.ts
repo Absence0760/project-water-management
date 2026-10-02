@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { attachDrawing, type DrawMap } from './attachDrawing';
 import { Draft } from './draft.svelte';
 import { DRAW_CHOICES } from './shape';
+import type { MapFeature } from '$lib/api/types';
 
 const parcel = DRAW_CHOICES.find((c) => c.id === 'farm_parcel')!;
 
@@ -25,6 +26,7 @@ function setup() {
 		getCenter: () => ({ lng: 21, lat: -34 }),
 		// A screen point 100 px across is 0.01° of longitude, down is south.
 		unproject: ([x, y]) => ({ lng: 20 + x / 10000, lat: -33 - y / 10000 }),
+		project: ([lng, lat]) => ({ x: (lng - 20) * 10000, y: (-33 - lat) * 10000 }),
 		queryRenderedFeatures: () => [],
 		doubleClickZoom: { enable() {}, disable() {} },
 		dragPan: { enable() {}, disable() {} },
@@ -36,14 +38,15 @@ function setup() {
 		removeEventListener: () => (onKey = null)
 	} as unknown as HTMLElement;
 	const fire = (type: string, e: unknown = {}) => handlers.get(type)?.forEach((h) => h(e));
-	const press = (key: string) => onKey?.({ key, target: canvas, preventDefault() {}, stopPropagation() {} } as unknown as KeyboardEvent);
+	const press = (key: string, altKey = false) => onKey?.({ key, altKey, target: canvas, preventDefault() {}, stopPropagation() {} } as unknown as KeyboardEvent);
 	const draft = new Draft();
 	draft.draw(parcel);
 	const aims: boolean[] = [];
 	const detach = attachDrawing(map, draft, keysOn, (p) => aims.push(p));
 	const move = (x: number, y: number) => fire('mousemove', { point: { x, y }, lngLat: map.unproject([x, y]) });
 	const focus = () => canvasListeners.get('focus')?.();
-	return { draft, press, move, fire, focus, aims, detach };
+	const click = (x: number, y: number, altKey = false) => fire('click', { point: { x, y }, lngLat: map.unproject([x, y]), originalEvent: { altKey }, preventDefault() {} });
+	return { draft, press, move, fire, focus, aims, detach, click };
 }
 
 describe('attachDrawing: where Enter adds', () => {
@@ -111,5 +114,75 @@ describe('attachDrawing: where Enter adds', () => {
 		move(10, 10);
 		detach();
 		expect(aims).toEqual([true, false]);
+	});
+});
+
+describe('attachDrawing: snapping (#326 C2)', () => {
+	// A parcel whose corners are at screen (100, 100) … (300, 300): 21.01–21.03° E, 33.01–33.03° S.
+	const neighbour: MapFeature = {
+		id: 'n',
+		kind: 'farm_parcel',
+		name: 'Neighbour',
+		nodeId: null,
+		nodeName: null,
+		geometry: { type: 'Polygon', coordinates: [[[20.01, -33.01], [20.03, -33.01], [20.03, -33.03], [20.01, -33.03], [20.01, -33.01]]] },
+		properties: {},
+		areaM2: null,
+		center: [20.02, -33.02],
+		sourceId: null,
+		createdBy: null,
+		createdAt: '',
+		updatedAt: ''
+	};
+
+	it('a click near another feature’s corner lands on it, and the live region says so; Alt places it exactly', () => {
+		const { draft, click } = setup();
+		draft.snapFeatures = [neighbour];
+		click(105, 96);
+		expect(draft.coords).toEqual([[20.01, -33.01]]);
+		expect(draft.said).toBe('Corner 1 at 33.0100° S, 20.0100° E, on “Neighbour”’s corner.');
+		click(205, 96, true);
+		expect(draft.coords[1]).toEqual([20.0205, -33.0096]);
+	});
+
+	it('a click near an edge lands on the edge; with snapping off, where it is', () => {
+		const { draft, click } = setup();
+		draft.snapFeatures = [neighbour];
+		click(200, 95);
+		expect(draft.coords).toEqual([[20.02, -33.01]]);
+		draft.snapOn = false;
+		click(200, 205);
+		expect(draft.coords[1]).toEqual([20.02, -33.0205]);
+	});
+
+	it('Enter snaps at the crosshair and the pointer; Alt+Enter doesn’t', () => {
+		const { draft, press, move } = setup();
+		draft.snapFeatures = [neighbour];
+		move(296, 303);
+		press('Enter');
+		expect(draft.coords).toEqual([[20.03, -33.03]]);
+		press('Enter', true);
+		expect(draft.coords[1]).toEqual([20.0296, -33.0303]);
+	});
+
+	it('follows the shared outline between two snapped corners, and the hint shows while moving', () => {
+		const { draft, click, move } = setup();
+		draft.snapFeatures = [neighbour];
+		// The middle of the north edge, then the middle of the east edge: the corner between comes along.
+		click(200, 103);
+		click(297, 200);
+		expect(draft.coords).toEqual([
+			[20.02, -33.01],
+			[20.03, -33.01],
+			[20.03, -33.02]
+		]);
+		expect(draft.said).toMatch(/\(1 corner followed along it\)\.$/);
+		move(102, 300);
+		expect(draft.snapHint?.at).toEqual([20.01, -33.03]);
+		move(600, 600);
+		expect(draft.snapHint).toBeNull();
+		draft.follow = false;
+		click(101, 199);
+		expect(draft.coords).toHaveLength(4);
 	});
 });

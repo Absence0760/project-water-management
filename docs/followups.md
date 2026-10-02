@@ -3610,6 +3610,12 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       grant its role `s3:GetObject` on that one key (it reaches S3 through
       the VPC's gateway endpoint); until then production offers no
       Delineate. The Art. 6(c) sentence covers the delineated polygons too.
+      Tracing a dam (#326 C2, maps.md § Assisted drawing) needs the same for
+      its own file: `water.pmtiles` from `bin/tiles-dev.sh water` under
+      `tiles/`, `WATER_URL=s3://<bucket>/tiles/water.pmtiles` on the API
+      Lambda and `s3:GetObject` on that key (no CloudFront behaviour: only
+      the API reads it); until then production offers no Trace a dam. GSW's
+      licence is settled (maps.md § Sources: allowed).
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading

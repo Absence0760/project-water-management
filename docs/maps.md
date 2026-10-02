@@ -353,6 +353,121 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   chunk, adds no dependency, and needs no CSP change: no `blob:`, no
   `eval`, no new origin.
 
+## Assisted drawing
+
+Three helpers on top of the drawing mode (issue #326 C2; the screen is in
+[ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Catchment
+map](./api.md#catchment-map)). Delineating a catchment from its outlet is
+the fourth ([§ Delineation](#delineation)). Each is a proposal: what it
+makes is drawn as the draft, and saved only by the same Save the drawing /
+Split / Save the shape as any drawing, through the server's checks
+(`checkGeometry`) and an audit event.
+
+- **Snap** (`draw/snap.ts`, used by `draw/attachDrawing.ts`; tested in
+  `snap.test.ts`, `attachDrawing.test.ts` and `e2e/tests/map-assisted.spec.ts`).
+  While drawing, placing a point, dragging a corner or adding one on an
+  edge, a position within 12 px (the corners' own hit area) of another
+  feature's corner lands exactly on that corner; else, within 12 px of its
+  edge, on the edge (the foot of the perpendicular, in screen space; Web
+  Mercator is conformal, so over a few pixels screen and lon/lat move in
+  step). A corner wins over a nearer edge, so a shared corner is met
+  exactly. Every feature on the map is a target (the boundary, parcels,
+  dams, rivers, other areas and lines, and points), but the one being
+  edited. A ring marks where the pointer would snap; the live region names
+  it ("Corner 3 at …, on “Upper farm”’s corner."). **Snap to features** in
+  the draw bar turns it off for the rest of the tab; **Alt** held with a
+  click (or **Alt+Enter** at the keyboard crosshair) places one corner
+  exactly where it is. The keyboard path snaps as the pointer does: Enter
+  at the crosshair (or at the mouse) snaps to what is within 12 px of it.
+- **Follow edges** (on with Snap, while drawing a new shape or line; never
+  for a split's cut or a measurement): two corners in a row snapped to the
+  same outline or line take that outline's corners between them, the
+  shorter way round a closed outline (`traceAlong`). So a parcel drawn
+  against its neighbour or the boundary shares their edge corner for
+  corner, with no gap or overlap for [§ Checks](#checks) to find. Closing a
+  polygon whose first and last corners sit on one outline follows it too.
+  Turn it off (or hold Alt) to cut straight across, e.g. a chord of the
+  boundary.
+- **Split a polygon** along a drawn line (`draw/split.ts`, the card's
+  **Split along a line**, for a polygon of one outline without holes). Draw
+  (or paste) a line that goes into the shape once and out once: its ends
+  outside the shape or on its edge (a snapped end lands on it). The two
+  parts are shaded on the map; a line that misses, stays inside, crosses
+  the edge more than twice or runs outside between its crossings is
+  refused with a sentence, and Split… waits. **Split…** opens a sheet with
+  the parts' names. A parcel (dam, other area) keeps its id, name and link
+  on its first part, and its second part is a new feature of the same kind
+  ("<name> (part 2)", linked to nothing). The **catchment boundary** stays
+  whole: both parts are new features, *areas* (`other`, the sub-catchments
+  to link to units and take their areas from) or farm parcels, named
+  "<boundary> part 1/2" unless renamed. The server
+  (`POST …/map/features/:fid/split`) checks each part as any polygon, and
+  that together they are the shape: their geodesic areas add up to its
+  area within 0.1 % (plus 1 m²) and they lie within its bounds; one
+  `map.feature_split` event names both parts. A unit whose area was taken
+  from the split shape keeps that area until **Use** is pressed again.
+  Splitting into more than two is done a cut at a time.
+- **Trace a dam** (`backend/src/delineation/damTrace.ts`; **Trace a dam**
+  in the header, editors, only when the server has the water data). Click
+  inside a dam's water (or **Enter coordinates** in the draw bar: the
+  non-pointer way), with the share of observations a cell must be water in
+  to count (10, 25 (the default), 50 or 75 %). The server reads a window of
+  the water occurrence raster round the point (256 cells, about 8 km, grown
+  once to 512), moves a click within about 60 m of water onto it, floods
+  the cells at or over the share that touch the clicked one by an edge
+  (two dams meeting at a corner stay two), fills islands (an outline has no
+  holes here), outlines the cells and simplifies the outline by half a cell
+  (`trace-dam-1`). Water that reaches the edge of the larger window ("isn't
+  a dam this can trace"), or the edge of the data, dry land and a point
+  outside the data are refused with a sentence. Nothing is stored: the
+  outline comes back as the draft, a dam to adjust (snapping and all), and
+  the bar says where it came from ("Traced from …: water in at least 25 %
+  of the observations, about 4.3 ha. A proposal: check it against the map
+  before you save it."). **Save…** saves it as a dam (or an other area)
+  with `traced` (the click, the share, and whether it was adjusted): the
+  server traces the click again with its own raster, refuses an outline
+  sent as unadjusted that isn't that trace, and writes the method in the
+  feature's description ("Traced from <dataset> (trace-dam-1): water in at
+  least 25 % of the observations, clicked at …; then adjusted by hand.
+  Check it against the map. Source: EC JRC/Google.") and the
+  `map.feature_created` event (`from: 'dam_trace'`, the dataset, the share,
+  `edited`). A traced outline is the water's edge as the satellite saw it
+  over 1984–2024, not the full supply level: a dam that seldom fills traces
+  smaller at a high share; the share is the hydrologist's call.
+
+### Water occurrence dataset
+
+`WATER_URL` (backend env; empty in the committed file: Trace a dam is off)
+names a PMTiles archive of Terrarium-encoded PNG tiles whose "height" is
+the occurrence in percent (R = 128, G = the share 0–100, B = 0; anything
+outside 0–100, a transparent pixel or GSW's 255, is no data), read with
+delineation's own PMTiles and PNG readers (`delineation/dem.ts`): a local
+file, `http(s)://` (ranged GETs) or `s3://bucket/key`. `WATER_LABEL` names
+it on every traced outline (default: the archive's name). The reads are a
+few tiles a trace (cached per process), between the role check and the
+answer, with no database connection held.
+
+- **Committed: synthetic only.** `backend/fixtures/water/synthetic-water.pmtiles`
+  (`pnpm gen:water-fixture`, the water in `backend/src/delineation/waterFixture.ts`):
+  over the e2e tests' catchment (21.3–21.4° E, 33.6–33.7° S), an invented
+  dam whose edge is wet 35 % of the time and its middle 85 %, with an
+  island; a one-cell stream wet 15 % of the time to a pond (joined only at
+  10 %); and a lake the raster's east edge cuts off. Locally:
+  `WATER_URL=fixtures/water/synthetic-water.pmtiles` in
+  `backend/.env.development.local` (the e2e API has it), and Enter
+  coordinates −33.6724971, 21.3191414.
+- **Real data: JRC Global Surface Water v1.5 occurrence** (§ Sources:
+  allowed). `pnpm dev:tiles:water` downloads the 10° tiles that meet
+  `TILES_BBOX` (about 100 MB over South Africa), warps them to Web Mercator
+  at zoom 12 (about 32 m a cell there; GSW is 0.00025°, about 25–28 m) with
+  each cell the mean of the source cells in it, encodes them as Terrarium
+  PNG tiles and uploads `tiles/water.pmtiles` to MinIO; GDAL comes from
+  PATH, else the pinned `ghcr.io/osgeo/gdal` image through docker. The
+  archive's attribution is "Source: EC JRC/Google", carried into each
+  traced feature's description. Then
+  `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production: see
+  followups.md "Production basemap".
+
 ## Measure
 
 **Measure** in the Map tab's header (#326 A7; anyone who can see the map)
@@ -1009,9 +1124,9 @@ the app can analyse; this layer is.
   (#326 D-B6's "accept value by value").
 - **What the added rivers feed.** The gauges-off-the-rivers check
   ([§ Checks](#checks)) measures against them like any drawn river, and the
-  farm view shows them (rivers are an orientation kind). Snapping a drawn
-  point to them (#326 C2) and checking B-delineate's stream network against
-  them are for when those land: neither exists yet.
+  farm view shows them (rivers are an orientation kind), and a corner or
+  point drawn near one snaps to it ([§ Assisted drawing](#assisted-drawing)).
+  Checking B-delineate's stream network against them is not built yet.
 - **Who sees it.** A viewer reads the layer; an editor adds. A farmer gets
   403 and a non-member 404.
 
@@ -1165,6 +1280,8 @@ fixtures only.
 | Delineation DEM: the Relief DEM above (Copernicus GLO-30, Mapterhorn's Terrarium tiles), read by the API | as above | as above: Art. 4 allows adaptation, which deriving flow directions and catchment polygons is | the Art. 6(b) notice on the delineation sheet; the dataset label and fingerprint on every proposal | as above | as above | allowed (in use locally; production with the basemap) |
 | HydroSHEDS v1 flow direction (3″, conditioned from SRTM), considered for delineation, not used | WWF / McGill University ([hydrosheds.org](https://www.hydrosheds.org/products/hydrosheds)) | "freely available for scientific, educational and commercial use" under the HydroSHEDS licence agreement in its technical documentation (product page read 2026-10-01; the site's own terms of use are non-commercial but cover the website) | per its licence agreement | v1 | none | not used: passes D-B, but 90 m against GLO-30's 30 m and a second download (design/delineation.md § The DEM) |
 | MERIT Hydro, considered for delineation | University of Tokyo ([MERIT Hydro](https://global-hydrodynamics.github.io/MERIT_Hydro/)) | dual: CC BY-NC 4.0 (non-commercial) or ODbL 1.0, under which data derived from it in a commercial product must be released under the ODbL (read 2026-10-01) | – | – | – | rejected: non-commercial, or share-alike on our output (D-B) |
+| JRC Global Surface Water v1.5 (1984–2024), occurrence: tracing a dam ([§ Assisted drawing](#assisted-drawing)) | European Commission Joint Research Centre, with Google ([global-surface-water.appspot.com](https://global-surface-water.appspot.com/download)); Pekel, J.-F. et al. (2016), *Nature* 540, 418–422 | "All data here is produced under the Copernicus Programme and is provided free of charge, without restriction of use" (the download page, read 2026-10-02), under the Copernicus Regulation's free, full and open data policy; commercial use allowed | "Source: EC JRC/Google" on a published map; the archive's attribution, written into every traced feature's description; cite Pekel et al. (2016) in published material | v1.5 (`occurrence_<lon>_<lat>_v1_5_2024.tif`) | yearly releases so far (v1.4 2021, v1.5 2024); refreshed when the operator re-fetches | **Allowed.** The operator's own download (`pnpm dev:tiles:water`), never committed; built and tested against the synthetic raster |
+| Synthetic water occurrence fixture (`backend/fixtures/water/synthetic-water.pmtiles`) | this repo (invented water, `pnpm gen:water-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Synthetic DEM fixture (`backend/fixtures/dem/synthetic-dem.pmtiles`) | this repo (invented terrain, `pnpm -C backend gen:dem-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |

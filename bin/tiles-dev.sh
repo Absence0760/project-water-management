@@ -28,6 +28,13 @@
 #                             with ogr2ogr, and load it into this checkout's
 #                             database (`pnpm import:rivers`); not tiles, but
 #                             the same operator-run, never-in-CI fetch
+#   bin/tiles-dev.sh water    tracing a dam's data (issue #326 C2, docs/maps.md
+#                             § Assisted drawing): download JRC Global Surface
+#                             Water v1.5's occurrence (the 10° tiles that meet
+#                             the bbox), turn it into Terrarium PNG tiles at
+#                             zoom 12 with GDAL, and upload it to MinIO as
+#                             tiles/water.pmtiles; then WATER_URL in
+#                             backend/.env.development.local
 #   bin/tiles-dev.sh status   what is cached and whether MinIO serves it
 #   bin/tiles-dev.sh env      the PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and
 #                             PUBLIC_TERRAIN_URL lines for
@@ -47,6 +54,13 @@
 # there, the DEM's own resolution); TERRAIN_MAXZOOM (default 12: about 2.2 GB,
 # 570 MB at 11, 200 MB at 10) and TERRAIN_SOURCE (the archive's URL) override it.
 #
+# `water` needs GDAL (gdalwarp and gdal_translate: `sudo dnf install gdal`) or
+# docker (it runs the pinned GDAL image, $GDAL_IMAGE, when gdalwarp isn't on
+# PATH), and the pmtiles CLI. GSW is free of charge and without restriction of
+# use (Copernicus; attribution "Source: EC JRC/Google"). Over South Africa its
+# six 10° occurrence tiles are about 100 MB together; the archive is a few
+# tens of MB. WATER_SOURCE (the download folder's URL) and TILES_BBOX override it.
+#
 # `rivers` needs ogr2ogr (GDAL: `sudo dnf install gdal`) and the database up
 # (pnpm dev:db:up). HydroRIVERS is © WWF, free for commercial use with the
 # attribution docs/maps.md § Sources records (HydroSHEDS licence). RIVERS_URL
@@ -64,6 +78,10 @@ TERRAIN_FILE="$CACHE/terrain.pmtiles"
 TERRAIN_MAXZOOM="${TERRAIN_MAXZOOM:-12}"
 TERRAIN_SRC="${TERRAIN_SOURCE:-https://download.mapterhorn.com/planet.pmtiles}"
 TERRAIN_URL="http://localhost:9002/tiles/terrain.pmtiles"
+WATER_SRC="${WATER_SOURCE:-https://s3.waw4-1.cloudferro.com/swift/v1/global-surface-water/download2024/Aggregated/VER1-5/occurrence}"
+WATER_FILE="$CACHE/water.pmtiles"
+WATER_URL="http://localhost:9002/tiles/water.pmtiles"
+GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.11.3}"
 RIVERS_SRC="${RIVERS_URL:-https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_af_shp.zip}"
 RIVERS_ZIP="$CACHE/$(basename "$RIVERS_SRC")"
 RIVERS_FILE="$CACHE/rivers.geojson"
@@ -93,6 +111,7 @@ fetch_fonts() {
 
 serves_tiles() { curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; }
 serves_terrain() { curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; }
+serves_water() { curl -fsS -o /dev/null -r 0-15 "$WATER_URL" 2>/dev/null; }
 serves_fonts() { curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; }
 
 case "${1:-}" in
@@ -166,6 +185,49 @@ case "${1:-}" in
 		(cd "$ROOT/backend" && NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsx scripts/import-rivers.ts "$RIVERS_FILE" --dataset HydroRIVERS-v10 --source "$RIVERS_SOURCE" --min-order "$RIVERS_MIN_ORDER")
 		echo "Now: Map → Layers → River network."
 		;;
+	water)
+		command -v pmtiles >/dev/null || { echo "pmtiles CLI not found: install go-pmtiles (https://github.com/protomaps/go-pmtiles/releases) and put it on PATH." >&2; exit 1; }
+		if command -v gdalwarp >/dev/null; then
+			gdal() { (cd "$CACHE/gsw" && "$@"); }
+		elif command -v docker >/dev/null; then
+			gdal() { docker run --rm -u "$(id -u):$(id -g)" -v "$CACHE/gsw":/w -w /w "$GDAL_IMAGE" "$@"; }
+		else
+			echo "GDAL not found: install it (sudo dnf install gdal), or docker to run $GDAL_IMAGE." >&2
+			exit 1
+		fi
+		mkdir -p "$CACHE/gsw"
+		IFS=, read -r west south east north <<<"$BBOX"
+		# GSW's 10° tiles are named by their west and north edges: 20E_30S covers 20–30° E, 30–40° S.
+		tiles=()
+		for lon in $(seq "$(awk -v v="$west" 'BEGIN{print int((v+180)/10)*10-180}')" 10 "$(awk -v v="$east" 'BEGIN{print int((v+180-1e-9)/10)*10-180}')"); do
+			for lat in $(seq "$(awk -v v="$north" 'BEGIN{t=int((v+90)/10)*10-90; if (t<v) t+=10; print t}')" -10 "$(awk -v v="$south" 'BEGIN{print int((v+90)/10)*10-90+10}')"); do
+				name="occurrence_$([ "$lon" -lt 0 ] && echo "$((-lon))W" || echo "${lon}E")_$([ "$lat" -le 0 ] && echo "$((-lat))S" || echo "${lat}N")_v1_5_2024.tif"
+				if [ ! -f "$CACHE/gsw/$name" ]; then
+					echo "Downloading $name …"
+					if curl -fsSL -o "$CACHE/gsw/$name.part" "$WATER_SRC/$name"; then mv "$CACHE/gsw/$name.part" "$CACHE/gsw/$name"; else rm -f "$CACHE/gsw/$name.part"; echo "  none there (open sea): skipped"; continue; fi
+				fi
+				tiles+=("$name")
+			done
+		done
+		[ ${#tiles[@]} -gt 0 ] || { echo "No GSW tiles meet $BBOX." >&2; exit 1; }
+		rm -f "$CACHE/gsw/water.vrt" "$CACHE/gsw/water-3857.tif" "$CACHE/gsw/water.mbtiles"
+		echo "Warping ${#tiles[@]} tiles to zoom 12 (Web Mercator) …"
+		gdal gdalbuildvrt -q water.vrt "${tiles[@]}"
+		# Zoom 12's pixel (38.2 m at the equator, ~32 m over South Africa), aligned to the tile grid; a cell's share is the mean of the source cells in it.
+		gdal gdalwarp -q -overwrite -t_srs EPSG:3857 -te "$west" "$south" "$east" "$north" -te_srs EPSG:4326 -tr 38.21851414258813 38.21851414258813 -tap \
+			-r average -srcnodata 255 -dstnodata 255 -ot Byte -co COMPRESS=DEFLATE -co BIGTIFF=IF_SAFER water.vrt water-3857.tif
+		# Terrarium with the share as the height: R = 128, G = the share (0–100; 255 is no data), B = 0.
+		gdal gdal_translate -q -b 1 -b 1 -b 1 -scale_1 0 255 128 128 -scale_2 0 255 0 255 -scale_3 0 255 0 0 -a_nodata none \
+			-of MBTILES -co TILE_FORMAT=PNG -co ZOOM_LEVEL_STRATEGY=LOWER -co "NAME=JRC Global Surface Water occurrence v1.5 (1984-2024)" -co VERSION=1.5 water-3857.tif water.mbtiles
+		rm -f "$WATER_FILE"
+		pmtiles convert -q "$CACHE/gsw/water.mbtiles" "$WATER_FILE"
+		pmtiles show --metadata "$WATER_FILE" | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{const m=JSON.parse(s);m.attribution="Source: EC JRC/Google";process.stdout.write(JSON.stringify(m));})' >"$CACHE/gsw/water-metadata.json"
+		pmtiles edit -q "$WATER_FILE" --metadata="$CACHE/gsw/water-metadata.json"
+		rm -f "$CACHE/gsw/water-3857.tif" "$CACHE/gsw/water.mbtiles" "$CACHE/gsw/water.vrt"
+		du -h "$WATER_FILE"
+		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --water "$WATER_FILE")
+		echo "Now: put WATER_URL=$WATER_URL in backend/.env.development.local and restart pnpm dev; the Map offers Trace a dam."
+		;;
 	fonts)
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:up (sets the URLs in frontend/.env.development.local), then restart pnpm dev."
@@ -176,6 +238,8 @@ case "${1:-}" in
 		if [ -f "$TERRAIN_FILE" ]; then du -h "$TERRAIN_FILE"; else echo "No relief DEM in $CACHE (pnpm dev:tiles:terrain)."; fi
 		if serves_terrain; then echo "MinIO serves $TERRAIN_URL"; else echo "MinIO doesn't serve $TERRAIN_URL (pnpm dev:tiles:terrain)."; fi
 		if [ -f "$RIVERS_FILE" ]; then du -h "$RIVERS_FILE"; else echo "No river network in $CACHE (pnpm dev:tiles:rivers)."; fi
+		if [ -f "$WATER_FILE" ]; then du -h "$WATER_FILE"; else echo "No water occurrence in $CACHE (pnpm dev:tiles:water)."; fi
+		if serves_water; then echo "MinIO serves $WATER_URL"; else echo "MinIO doesn't serve $WATER_URL (pnpm dev:tiles:water)."; fi
 		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
 		if serves_fonts; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
@@ -185,7 +249,7 @@ case "${1:-}" in
 		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh up | fetch | fonts | terrain | rivers | status | env" >&2
+		echo "usage: bin/tiles-dev.sh up | fetch | fonts | terrain | water | rivers | status | env" >&2
 		exit 2
 		;;
 esac

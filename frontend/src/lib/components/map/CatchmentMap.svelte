@@ -244,7 +244,20 @@
 		map.addSource(DRAFT_SOURCE, { type: 'geojson', data: draftData(draftView()) as never });
 		for (const l of draftLayers(dark)) map.addLayer(l as never);
 	}
-	const draftView = () => (draft?.active ? { shape: draft.shape, coords: draft.coords, phase: draft.phase, whole: draft.whole, cursor: draft.cursor, corner: draft.corner } : null);
+	const draftView = () => {
+		if (!draft?.active) return null;
+		const split = draft.splitResult;
+		return {
+			shape: draft.shape,
+			coords: draft.coords,
+			phase: draft.phase,
+			whole: draft.whole,
+			cursor: draft.cursor,
+			corner: draft.corner,
+			snap: draft.snapHint?.at ?? null,
+			parts: split && 'parts' in split ? split.parts : null
+		};
+	};
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -453,6 +466,9 @@
 		src?.setData?.(draftData(v));
 	});
 
+	/** With snapping on (#326 C2): how Enter snaps, and how to place exactly. */
+	const snapKeys = (d: Draft) => (d.snapOn && d.snapTargets.length ? ' (on the nearest feature’s corner or edge within reach; Alt+Enter places it exactly)' : '');
+
 	// The canvas says what the keys do while drawing.
 	const keysHelp = $derived(
 		!draft?.active
@@ -460,9 +476,9 @@
 			: 'measuring' in draft
 				? `${label}, measuring: the arrow keys move the map under the crosshair, Enter adds a point there, Backspace removes the last, Escape ends the measurement`
 				: draft.shape === 'point'
-					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
+					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there${snapKeys(draft)}, Escape cancels`
 					: draft.phase === 'drawing'
-						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
+						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there${snapKeys(draft)}, Backspace removes the last, Escape cancels (asking first once two are placed)`
 						: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
 	);
 	$effect(() => {

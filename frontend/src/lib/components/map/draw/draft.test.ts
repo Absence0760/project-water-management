@@ -139,3 +139,80 @@ describe('Draft', () => {
 		});
 	});
 });
+
+const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geometry']): MapFeature => ({
+	id,
+	kind,
+	name: 'Shape',
+	nodeId: null,
+	nodeName: null,
+	geometry,
+	properties: {},
+	areaM2: 1,
+	center: [0, 0],
+	sourceId: null,
+	createdBy: null,
+	createdAt: '',
+	updatedAt: ''
+});
+const squareGeometry = { type: 'Polygon' as const, coordinates: [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]] as [number, number][][] };
+
+describe('Draft: assisted drawing (#326 C2)', () => {
+	it('splits a polygon: a line drawn across it previews two parts; a line that misses says why', () => {
+		const d = new Draft();
+		expect(d.split(feature('g', 'gauge', { type: 'Point', coordinates: [0, 0] }))).toBe(false);
+		expect(d.split(feature('p', 'farm_parcel', squareGeometry))).toBe(true);
+		expect(d.mode).toBe('split');
+		expect(d.shape).toBe('line');
+		expect(d.splitResult).toBeNull();
+		d.add([1, -1]);
+		d.add([1, 3]);
+		d.finish();
+		const r = d.splitResult;
+		expect(r && 'parts' in r ? r.parts.map((p) => p.length) : r).toEqual([4, 4]);
+		d.undo();
+		d.coords = [];
+		d.add([0.5, 0.5]);
+		d.add([1.5, 0.5]);
+		d.finish();
+		expect(d.splitResult).toEqual({ problem: expect.stringContaining('right across the shape') });
+		// A split's cut never follows an outline, whatever Follow edges says.
+		expect(d.following).toBe(false);
+	});
+
+	it('holds a traced outline as a drawing of a dam, ready to save; knows when it was adjusted', () => {
+		const d = new Draft();
+		const trace = { minOccurrence: 25, dataset: 'Synthetic', methodVersion: 'trace-dam-1' } as never;
+		expect(d.trace(squareGeometry, trace)).toBe(true);
+		expect(d.mode).toBe('draw');
+		expect(d.kind).toBe('dam');
+		expect(d.phase).toBe('review');
+		expect(d.traced).toBe(trace);
+		expect(d.tracedEdited).toBe(false);
+		expect(d.geometry).toEqual(squareGeometry);
+		d.beginChange();
+		d.moveCorner(1, [3, 0]);
+		expect(d.tracedEdited).toBe(true);
+		d.undo();
+		expect(d.tracedEdited).toBe(false);
+		d.cancel();
+		expect(d.traced).toBeNull();
+	});
+
+	it('closing a polygon whose first and last corners are on one outline follows it', () => {
+		const d = new Draft();
+		d.draw(parcel);
+		const line = { featureId: 'b', part: 0, label: 'the catchment boundary', coords: squareGeometry.coordinates[0]!.slice(0, 4), closed: true };
+		// On the west edge, inside, then on the south edge: closing goes round the south-west corner.
+		d.add([0, 1], { at: [0, 1], line, pos: 3.5, what: 'edge' });
+		d.add([1, 1]);
+		d.add([1, 0], { at: [1, 0], line, pos: 0.5, what: 'edge' });
+		d.finish();
+		expect(d.coords).toEqual([
+			[0, 1],
+			[1, 1],
+			[1, 0],
+			[0, 0]
+		]);
+	});
+});

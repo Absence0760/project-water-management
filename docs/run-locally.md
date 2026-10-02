@@ -391,6 +391,7 @@ pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: st
 pnpm dev:tiles:fetch        # re-download the tiles, then the labels' fonts
 pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
 pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB at maxzoom 12; TERRAIN_MAXZOOM=11 for ~570 MB); then dev:tiles:up again
+pnpm dev:tiles:water        # tracing a dam's data (JRC Global Surface Water occurrence, ~100 MB of downloads; GDAL or docker); then WATER_URL in backend/.env.development.local
 pnpm dev:tiles:status       # what is cached and what MinIO serves
 ```
 
@@ -402,6 +403,16 @@ terrain: Enter coordinates 20.7428741, −33.5396777 for its outlet), or
 `DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` after
 `pnpm dev:tiles:terrain` for the real one, and restart `pnpm dev`
 ([maps.md § Delineation](./maps.md#delineation)).
+
+**Trace a dam** needs water occurrence data on the backend (`WATER_URL`,
+empty in the committed file). Put
+`WATER_URL=fixtures/water/synthetic-water.pmtiles` in
+`backend/.env.development.local` for the committed synthetic raster
+(invented water: Enter coordinates −33.6724971, 21.3191414 for its dam), or
+`WATER_URL=http://localhost:9002/tiles/water.pmtiles` after
+`pnpm dev:tiles:water` (JRC Global Surface Water; GDAL, or docker for its
+image), and restart `pnpm dev` ([maps.md § Assisted
+drawing](./maps.md#assisted-drawing)).
 
 The fonts come from the Protomaps `basemaps-assets` repository at a pinned
 commit (`TILES_FONTS_REF` overrides it), cached in

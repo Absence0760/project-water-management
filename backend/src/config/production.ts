@@ -287,6 +287,11 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: demUrl }
 	},
 	DEM_LABEL: { why: 'The DEM’s name on each proposal; empty takes the archive’s own. A label, never a credential or a switch.' },
+	WATER_URL: {
+		why: 'The water occurrence raster tracing a dam reads (delineation/damTrace.ts, issue #326 C2): empty turns it off. The same forms and checks as DEM_URL; only the API traces.',
+		checks: { api: demUrl }
+	},
+	WATER_LABEL: { why: 'The water occurrence dataset’s name on each traced outline; empty takes the archive’s own. A label, never a credential or a switch.' },
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	PACKS_BUCKET: {
 		why: 'The evidence packs bucket (Object Lock; infra/packs.tf). The renderer stores a pack PDF; the worker HEADs it before recording the hash the renderer answered with (jobs/handlers/pack-render.ts); the API stores a pack’s reproduction bundle when it issues the pack (evidence/bundle.ts) and signs both downloads as CloudFront URLs on /packs/*.',

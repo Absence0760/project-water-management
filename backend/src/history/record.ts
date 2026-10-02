@@ -236,6 +236,8 @@ export type AuditKind =
 	| 'map.feature_created'
 	| 'map.feature_changed'
 	| 'map.feature_deleted'
+	// A polygon split in two along a drawn line (issue #326 C2): the shape, what its parts are, their ids and areas; never the geometry.
+	| 'map.feature_split'
 	// A catchment delineated from a click (175, issue #326 B-delineate): proposed, accepted (as which feature) or rejected. Ids, the click's kind, the area and the dataset; never the polygon.
 	| 'map.delineation_proposed'
 	| 'map.delineation_accepted'

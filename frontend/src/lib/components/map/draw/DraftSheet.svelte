@@ -4,10 +4,11 @@
 	Nothing is saved until **Save**: the shape goes through the same
 	`POST /map/features` as a placed point, with the server's checks (closed,
 	non-crossing rings, limits) and its audit event. A refusal shows here and
-	the drawing stays on the map.
+	the drawing stays on the map. A traced dam outline (#326 C2) is saved with
+	where and how it was traced, so the server records the method.
 -->
 <script lang="ts">
-	import { api, type MapFeature, type MapFeatureKind, type MapGeometry, type MapNodeArea } from '$lib/api';
+	import { api, type MapFeature, type MapFeatureInput, type MapFeatureKind, type MapGeometry, type MapNodeArea } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { KIND_LABEL, KIND_NODES } from '../mapData';
 	import { KINDS_FOR_SHAPE, shapeOf } from './shape';
@@ -19,6 +20,7 @@
 		geometry,
 		kind: initialKind,
 		hasBoundary,
+		traced = null,
 		onsaved
 	}: {
 		open?: boolean;
@@ -28,12 +30,14 @@
 		kind: MapFeatureKind;
 		/** A boundary exists: saving another replaces it, so the sheet says so. */
 		hasBoundary: boolean;
+		/** The outline was traced from the water occurrence data: saved with it (a dam or an other area only). */
+		traced?: MapFeatureInput['traced'] | null;
 		onsaved: (f: MapFeature) => Promise<void> | void;
 	} = $props();
 
 	const uid = $props.id();
 	const formId = `${uid}-form`;
-	const kinds = $derived(KINDS_FOR_SHAPE[shapeOf(geometry)]);
+	const kinds = $derived(traced ? KINDS_FOR_SHAPE[shapeOf(geometry)].filter((k) => k === 'dam' || k === 'other') : KINDS_FOR_SHAPE[shapeOf(geometry)]);
 	// Seeded once from the draw bar's choice; the sheet's own select changes it after.
 	// svelte-ignore state_referenced_locally
 	let kind = $state<MapFeatureKind>(initialKind);
@@ -49,7 +53,7 @@
 		saving = true;
 		error = null;
 		try {
-			const f = await api.map.create(projectId, { kind, name: name.trim(), nodeId: nodeId || null, geometry });
+			const f = await api.map.create(projectId, { kind, name: name.trim(), nodeId: nodeId || null, geometry, ...(traced ? { traced } : {}) });
 			await onsaved(f);
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -82,6 +86,7 @@
 			</div>
 		{/if}
 		<p class="hint">Its area is computed on the server when it is saved (geodesic, WGS84).</p>
+		{#if traced}<p class="hint" data-testid="map-draft-traced">Saved with how it was traced (the dataset, the share of observations{traced.edited ? ', and that you adjusted it' : ''}), in its description and the history.</p>{/if}
 		{#if error}<p class="err" role="alert" data-testid="map-draft-error">{error}</p>{/if}
 	</form>
 

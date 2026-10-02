@@ -1552,7 +1552,12 @@ they are. Two pieces are not deployed yet, each in
   same file from the API Lambda: `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles`
   in its environment and `s3:GetObject` on that key for its role (not in
   Terraform yet; empty until then: no Delineate offered;
-  [maps.md § Delineation](./maps.md#delineation), followups.md).
+  [maps.md § Delineation](./maps.md#delineation), followups.md). Tracing a
+  dam (#326 C2) is the same again with its own file: `tiles/water.pmtiles`
+  from `bin/tiles-dev.sh water`, `WATER_URL=s3://<bucket>/tiles/water.pmtiles`
+  on the API Lambda and `s3:GetObject` on that key (empty until then: no
+  Trace a dam offered; [maps.md § Assisted drawing](./maps.md#assisted-drawing)).
+  The browser never reads it, so it needs no CloudFront behaviour.
 - **Quaternary dataset**: `quaternary_reference` is empty in production
   until the operator loads one, so the lookup says no dataset is loaded.
   There is no production loading path yet, and WR2012's licence terms are a

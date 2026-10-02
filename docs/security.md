@@ -2588,6 +2588,18 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
+- **Tracing a dam** (#326 C2, [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
+  configuration, read with the same fail-closed decoders; a user supplies a
+  longitude, latitude and one of four shares. A trace reads at most a
+  512-cell window (a handful of tiles, cached per process), takes
+  milliseconds and stores nothing, so it is editor-only with no rate limit
+  of its own. A traced outline saved names its method on the server's word,
+  not the client's: the server traces the click again, and an outline sent
+  as unadjusted must equal that trace. Splitting checks each part with
+  `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
+  within its bounds), in one transaction, so a split can't smuggle in an
+  unrelated shape labelled as a split.
 
 ## Personal information (POPIA)
 
