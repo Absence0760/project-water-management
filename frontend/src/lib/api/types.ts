@@ -2724,6 +2724,34 @@ export interface QuaternaryLayer {
 	datasets: { dataset: string; count: number }[];
 }
 
+/** A reach of the loaded river network (GET …/map/rivers, issue #345). */
+export interface RiverReach {
+	dataset: string;
+	/** The source's own id (HydroRIVERS' HYRIV_ID). */
+	reachId: number;
+	/** '' when the source names none (HydroRIVERS never does). */
+	name: string;
+	strahler: number | null;
+	upstreamKm2: number | null;
+	lengthKm: number | null;
+	dischargeM3s: number | null;
+	/** The repo's invented network: never real rivers. */
+	synthetic: boolean;
+	source: string;
+	geometry: MapGeometry;
+	/** The project's river feature made from this reach (POST …/map/rivers/add), or null. */
+	featureId: string | null;
+}
+
+/** The river network around a bbox (GET …/map/rivers, issue #345): the highest orders first, at most 1000. */
+export interface RiverLayer {
+	bbox: [number, number, number, number];
+	reaches: RiverReach[];
+	/** More met the bbox than one answer carries (the smallest streams are left out). */
+	truncated: boolean;
+	datasets: { dataset: string; count: number }[];
+}
+
 /** A gauging station proposed as the observed-flow source (GET …/map/stations, issue #326 B-gauge). Never applied by the server. */
 export interface GaugeStationProposal {
 	/** The DWS station code, e.g. A2H012 (Z… in the synthetic dataset). */

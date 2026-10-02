@@ -15,6 +15,12 @@
 #                             South Africa from the Mapterhorn planet build
 #                             (Terrarium-encoded Copernicus GLO-30) and upload
 #                             it to MinIO as tiles/terrain.pmtiles
+#   bin/tiles-dev.sh rivers   the River network layer's data (issue #345,
+#                             docs/maps.md § River network): download
+#                             HydroRIVERS v1.0 (Africa), cut it to the bbox
+#                             with ogr2ogr, and load it into this checkout's
+#                             database (`pnpm import:rivers`); not tiles, but
+#                             the same operator-run, never-in-CI fetch
 #   bin/tiles-dev.sh status   what is cached and whether MinIO serves it
 #   bin/tiles-dev.sh env      the PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and
 #                             PUBLIC_TERRAIN_URL lines for
@@ -33,6 +39,12 @@
 # only its global layer, Copernicus GLO-30, to zoom 12 (about 30 m a pixel
 # there, the DEM's own resolution); TERRAIN_MAXZOOM (default 12: about 2.2 GB,
 # 570 MB at 11, 200 MB at 10) and TERRAIN_SOURCE (the archive's URL) override it.
+#
+# `rivers` needs ogr2ogr (GDAL: `sudo dnf install gdal`) and the database up
+# (pnpm dev:db:up). HydroRIVERS is © WWF, free for commercial use with the
+# attribution docs/maps.md § Sources records (HydroSHEDS licence). RIVERS_URL
+# (the zip), TILES_BBOX and RIVERS_MIN_ORDER (a Strahler order, default 1:
+# every reach) override it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -45,6 +57,11 @@ TERRAIN_FILE="$CACHE/terrain.pmtiles"
 TERRAIN_MAXZOOM="${TERRAIN_MAXZOOM:-12}"
 TERRAIN_SRC="${TERRAIN_SOURCE:-https://download.mapterhorn.com/planet.pmtiles}"
 TERRAIN_URL="http://localhost:9002/tiles/terrain.pmtiles"
+RIVERS_SRC="${RIVERS_URL:-https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_af_shp.zip}"
+RIVERS_ZIP="$CACHE/$(basename "$RIVERS_SRC")"
+RIVERS_FILE="$CACHE/rivers.geojson"
+RIVERS_MIN_ORDER="${RIVERS_MIN_ORDER:-1}"
+RIVERS_SOURCE="HydroRIVERS v1.0 (Lehner & Grill 2013, www.hydrosheds.org), incorporating data from the HydroSHEDS version 1 database © World Wildlife Fund, Inc. (2006-2022), used under license"
 GLYPHS="http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf"
 # The fonts: protomaps/basemaps-assets at a pinned commit (docs/maps.md § Sources).
 FONTS_REF="${TILES_FONTS_REF:-028c18f713baecad011301ff7a69acc39bcc2ae7}"
@@ -88,6 +105,27 @@ case "${1:-}" in
 		(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts --terrain "$TERRAIN_FILE")
 		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev), and turn on Map → Layers → Relief."
 		;;
+	rivers)
+		command -v ogr2ogr >/dev/null || { echo "ogr2ogr not found: install GDAL (sudo dnf install gdal)." >&2; exit 1; }
+		mkdir -p "$CACHE"
+		if [ ! -f "$RIVERS_ZIP" ]; then
+			echo "Downloading $RIVERS_SRC (about 110 MB) …"
+			curl -fSL -o "$RIVERS_ZIP.part" "$RIVERS_SRC"
+			mv "$RIVERS_ZIP.part" "$RIVERS_ZIP"
+		fi
+		rm -rf "$CACHE/rivers-shp" && mkdir -p "$CACHE/rivers-shp"
+		unzip -q -o "$RIVERS_ZIP" -d "$CACHE/rivers-shp"
+		shp=$(find "$CACHE/rivers-shp" -name '*.shp' | head -n 1)
+		[ -n "$shp" ] || { echo "No shapefile in $RIVERS_ZIP." >&2; exit 1; }
+		echo "Cutting $(basename "$shp") to $BBOX …"
+		rm -f "$RIVERS_FILE"
+		# -spat keeps every reach that meets the bbox (whole, not clipped); five decimals is about 1 m.
+		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat ${BBOX//,/ } -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS \
+			-lco COORDINATE_PRECISION=5 "$RIVERS_FILE" "$shp"
+		du -h "$RIVERS_FILE"
+		(cd "$ROOT/backend" && NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsx scripts/import-rivers.ts "$RIVERS_FILE" --dataset HydroRIVERS-v10 --source "$RIVERS_SOURCE" --min-order "$RIVERS_MIN_ORDER")
+		echo "Now: Map → Layers → River network."
+		;;
 	fonts)
 		fetch_fonts
 		echo "Now: pnpm dev:tiles:env >> frontend/.env.development.local (then restart pnpm dev)."
@@ -97,6 +135,7 @@ case "${1:-}" in
 		if curl -fsS -o /dev/null -r 0-15 "$URL" 2>/dev/null; then echo "MinIO serves $URL"; else echo "MinIO doesn't serve $URL (pnpm dev:s3:up, then pnpm dev:tiles:fetch)."; fi
 		if [ -f "$TERRAIN_FILE" ]; then du -h "$TERRAIN_FILE"; else echo "No relief DEM in $CACHE (pnpm dev:tiles:terrain)."; fi
 		if curl -fsS -o /dev/null -r 0-15 "$TERRAIN_URL" 2>/dev/null; then echo "MinIO serves $TERRAIN_URL"; else echo "MinIO doesn't serve $TERRAIN_URL (pnpm dev:tiles:terrain)."; fi
+		if [ -f "$RIVERS_FILE" ]; then du -h "$RIVERS_FILE"; else echo "No river network in $CACHE (pnpm dev:tiles:rivers)."; fi
 		if [ -d "$FONTS" ]; then du -sh "$FONTS"; else echo "No fonts in $FONTS (pnpm dev:tiles:fonts)."; fi
 		if curl -fsS -o /dev/null "http://localhost:9002/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf" 2>/dev/null; then echo "MinIO serves the label fonts"; else echo "MinIO doesn't serve the label fonts (pnpm dev:tiles:fonts)."; fi
 		;;
@@ -106,7 +145,7 @@ case "${1:-}" in
 		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh fetch | fonts | terrain | status | env" >&2
+		echo "usage: bin/tiles-dev.sh fetch | fonts | terrain | rivers | status | env" >&2
 		exit 2
 		;;
 esac

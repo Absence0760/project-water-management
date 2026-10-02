@@ -2592,7 +2592,22 @@ map" card) stays the schematic; this is the geography.
   Copernicus 30 m elevation model ("Hills shaded from the Copernicus 30 m
   elevation model."), or "The relief couldn’t be loaded, so the map is
   drawn without it." when the DEM can't be read. Without a DEM there is no
-  checkbox.
+  checkbox. **River network** (issue #345, `layers=rivers`, a dashed
+  cyan-blue swatch) sits between them: on, the map draws the loaded river
+  network around the features, dashed and wider for a higher order, and the
+  box says "10 reaches around the catchment, the biggest first, from
+  synthetic." (with **Synthetic test data, never real rivers.**; "(the
+  smallest streams left out; there are more)" past 1000) and lists the
+  reaches as toggle buttons ("Reach 90000002 · order 3 · 655 km²", " · on
+  the map" once added; the first twelve, then **Show all N**), in a box that
+  scrolls on its own and gives way before the feature list does. A reach
+  picked there or clicked on the map is drawn on top in the selection
+  colour, and its facts and source show above the list (scrolled into view
+  after a click on the map), with **Add to the map as a river** for an editor (it
+  becomes one of the project's rivers; notice "Added “Reach 90000003” to the
+  map as a river, from the river network.") or "On the map as a river." and
+  **Show it**. The key's Lines gain "river network" while it is on
+  ([maps.md § River network](./maps.md#river-network)).
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a

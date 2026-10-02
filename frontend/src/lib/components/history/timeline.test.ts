@@ -248,6 +248,9 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.viewer_units', { on: false }))).toBe('Showed viewers registered volumes as totals only');
 		expect(eventLine(ev('map.imported', { fileName: 'parcels.geojson', features: 2, kind: 'farm_parcel' }))).toBe('Imported 2 map features from parcels.geojson');
 		expect(eventLine(ev('map.feature_created', { kind: 'gauge', name: 'Weir' }))).toBe('Placed a gauge “Weir” on the map');
+		expect(eventLine(ev('map.feature_created', { kind: 'river', name: 'Reach 90000003', from: 'river_network', dataset: 'synthetic', reachId: 90000003 }))).toBe(
+			'Added a river “Reach 90000003” from the river network (synthetic, reach 90000003)'
+		);
 		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');
 		expect(eventLine(ev('map.feature_changed', { kind: 'catchment_boundary', name: 'Upper', moved: false }))).toBe('Changed the catchment boundary “Upper” on the map');
 		expect(eventLine(ev('map.feature_deleted', { kind: 'river', name: 'Spruit' }))).toBe('Deleted a river “Spruit” from the map');

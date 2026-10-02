@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
 import { areaSourceOf, areaSourceText, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, shortHash } from './mapList';
-import { overlayColours } from './mapStyle';
+import { overlayColours, riverNetworkColour } from './mapStyle';
 
 const ring = [
 	[0, 0],
@@ -91,5 +91,9 @@ it('keys every overlay colour from mapStyle, in Areas, Lines and Points', () => 
 		const points = groups.find((g) => g.label === 'Points')!.items;
 		expect(points.find((i) => i.label === 'dam')!.colour).toBe(c.water);
 		expect(points.find((i) => i.label === 'gauge')!.colour).toBe(c.water);
+		// The River network layer's line joins the Lines only while the layer is on (#345).
+		expect(groups.find((g) => g.label === 'Lines')!.items.map((i) => i.label)).toEqual(['river']);
+		const on = keyGroups(c, { riverNetwork: riverNetworkColour(dark) }).find((g) => g.label === 'Lines')!.items;
+		expect(on).toEqual([expect.objectContaining({ label: 'river' }), { label: 'river network', swatch: 'dashed', colour: riverNetworkColour(dark) }]);
 	}
 });

@@ -11,7 +11,8 @@
 // basemap draws no labels and fetches no glyphs, as before. With no tiles
 // URL (a fresh clone, CI) the map is a plain background with the features
 // drawn. The quaternary outlines (#326 A6) are a layer of their own over the
-// basemap, under the features, empty until the tab's toggle fills them. The
+// basemap, under the features, empty until the tab's toggle fills them; the
+// river network (#345) is another, over them and under the features. The
 // relief (shaded from a DEM, PUBLIC_TERRAIN_URL: Terrarium tiles in one more
 // PMTiles file) sits over the land and under the water, only while the tab's
 // Relief layer is on.
@@ -277,11 +278,67 @@ export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer
 	};
 }
 
+/**
+ * The river network's colour (issue #345): a cyan-blue, so it reads as water
+ * beside the project's own rivers (the overlay's water blue) yet stays apart
+ * from them, and dashed and thinner, so colour is never the only difference;
+ * at least 3:1 on the basemap, and well apart from every other stroke.
+ */
+export const riverNetworkColour = (dark: boolean) => (dark ? '#3ec1f0' : '#006b9e');
+
+/** A reach the River network layer draws (GET …/map/rivers): its key, Strahler order and line. */
+export interface NetworkReach {
+	key: string;
+	strahler: number | null;
+	geometry: MapGeometry;
+}
+
+/** The `rivers` source's data: each reach with its key, order (1 when not given) and whether it is the one picked. */
+export function riverNetworkData(reaches: readonly NetworkReach[] | null | undefined, picked: string | null = null) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (reaches ?? []).map((r) => ({ type: 'Feature' as const, properties: { key: r.key, order: r.strahler ?? 1, picked: r.key === picked }, geometry: r.geometry }))
+	};
+}
+
+/** The layer a click on a reach hits (a wide, invisible line: the dashed one is too thin to aim at). */
+export const RIVER_NETWORK_HIT_LAYER = 'rn-hit';
+
+/**
+ * The river network: dashed, wider for a higher order; over the quaternaries,
+ * under the features. The picked reach is drawn again on top of the others,
+ * solid in the map's selection colour on a casing, so it stands out even
+ * among bigger rivers.
+ */
+export function riverNetworkLayers(dark: boolean): Layer[] {
+	const src = { source: 'rivers' };
+	const picked = ['==', ['get', 'picked'], true];
+	const c = overlayColours(dark);
+	return [
+		{ id: RIVER_NETWORK_HIT_LAYER, type: 'line', ...src, paint: { 'line-color': riverNetworkColour(dark), 'line-width': 12, 'line-opacity': 0.01 } },
+		{
+			id: 'rn-line',
+			type: 'line',
+			...src,
+			layout: { 'line-cap': 'round' },
+			paint: {
+				'line-color': riverNetworkColour(dark),
+				'line-width': ['interpolate', ['linear'], ['get', 'order'], 1, 1.25, 6, 3],
+				'line-dasharray': [3, 1.5]
+			}
+		},
+		{ id: 'rn-picked-casing', type: 'line', ...src, filter: picked, layout: { 'line-cap': 'round' }, paint: { 'line-color': c.casing, 'line-width': 7, 'line-opacity': 0.85 } },
+		{ id: 'rn-picked', type: 'line', ...src, filter: picked, layout: { 'line-cap': 'round' }, paint: { 'line-color': c.selected, 'line-width': 3.5 } }
+	];
+}
+
 export interface StyleOptions {
 	/** The glyphs URL (absolute; glyphsUrl()): place and water names, and the quaternaries' codes. Null: no labels. */
 	glyphs?: string | null;
 	/** The quaternary outlines to draw (null or empty: none). */
 	quaternaries?: ReturnType<typeof quaternaryData>;
+	/** The river network's reaches to draw (issue #345; null or empty: none). */
+	rivers?: ReturnType<typeof riverNetworkData>;
 	/** The relief's PMTiles URL, when the relief is shown (PUBLIC_TERRAIN_URL and the Relief layer on). Null: no relief, nothing fetched. */
 	terrain?: string | null;
 }
@@ -290,7 +347,7 @@ export interface StyleOptions {
  * The basemap with the overlay over it: one style, so a theme switch
  * (`setStyle`) redraws both and keeps the features and the selection. Order,
  * bottom up: the basemap's land, the relief (when on), the rest of the
- * basemap, the quaternary outlines, the features, then every label (so a
+ * basemap, the quaternary outlines, the river network, the features, then every label (so a
  * results fill never hides a name).
  */
 export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnType<typeof overlayData>, opts: StyleOptions = {}): Style {
@@ -299,8 +356,13 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 	const qt = quaternaryLayers(dark, !!glyphs);
 	const style: Style = {
 		...base,
-		sources: { ...base.sources, quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) }, features: { type: 'geojson', data } },
-		layers: [...base.layers, ...qt.under, ...overlayLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
+		sources: {
+			...base.sources,
+			quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) },
+			rivers: { type: 'geojson', data: opts.rivers ?? riverNetworkData(null) },
+			features: { type: 'geojson', data }
+		},
+		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
 	if (opts.terrain) {
 		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain);

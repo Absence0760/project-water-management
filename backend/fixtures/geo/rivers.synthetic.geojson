@@ -1,0 +1,294 @@
+{
+ "type": "FeatureCollection",
+ "name": "rivers.synthetic",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000001,
+    "ORD_STRA": 3,
+    "UPLAND_SKM": 412.5,
+    "LENGTH_KM": 10.49,
+    "DIS_AV_CMS": 1.21,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000001"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.3,
+      -33.66
+     ],
+     [
+      21.33,
+      -33.7
+     ],
+     [
+      21.36,
+      -33.74
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000002,
+    "ORD_STRA": 3,
+    "UPLAND_SKM": 655,
+    "LENGTH_KM": 10.06,
+    "DIS_AV_CMS": 1.84,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000002"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.36,
+      -33.74
+     ],
+     [
+      21.38,
+      -33.78
+     ],
+     [
+      21.41,
+      -33.82
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000003,
+    "ORD_STRA": 2,
+    "UPLAND_SKM": 168.2,
+    "LENGTH_KM": 9.97,
+    "DIS_AV_CMS": 0.47,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000003"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.22,
+      -33.6
+     ],
+     [
+      21.26,
+      -33.63
+     ],
+     [
+      21.3,
+      -33.66
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000004,
+    "ORD_STRA": 2,
+    "UPLAND_SKM": 201.7,
+    "LENGTH_KM": 8.68,
+    "DIS_AV_CMS": 0.58,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000004"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.36,
+      -33.6
+     ],
+     [
+      21.33,
+      -33.63
+     ],
+     [
+      21.3,
+      -33.66
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000005,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 61.3,
+    "LENGTH_KM": 3.82,
+    "DIS_AV_CMS": 0.16,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000005"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.2,
+      -33.57
+     ],
+     [
+      21.22,
+      -33.6
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000006,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 54.9,
+    "LENGTH_KM": 5.24,
+    "DIS_AV_CMS": 0.14,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000006"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.25,
+      -33.56
+     ],
+     [
+      21.22,
+      -33.6
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000007,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 72.4,
+    "LENGTH_KM": 4.34,
+    "DIS_AV_CMS": 0.21,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000007"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.39,
+      -33.57
+     ],
+     [
+      21.36,
+      -33.6
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000008,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 66,
+    "LENGTH_KM": 4.34,
+    "DIS_AV_CMS": 0.18,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000008"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.33,
+      -33.57
+     ],
+     [
+      21.36,
+      -33.6
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000009,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 38.6,
+    "LENGTH_KM": 9.51,
+    "DIS_AV_CMS": 0.09,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000009"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.26,
+      -33.76
+     ],
+     [
+      21.31,
+      -33.75
+     ],
+     [
+      21.36,
+      -33.74
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000010,
+    "ORD_STRA": 2,
+    "UPLAND_SKM": 129.8,
+    "LENGTH_KM": 9.45,
+    "DIS_AV_CMS": 0.33,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000010"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      21.45,
+      -33.7
+     ],
+     [
+      21.4,
+      -33.72
+     ],
+     [
+      21.36,
+      -33.74
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "HYRIV_ID": 90000011,
+    "ORD_STRA": 1,
+    "UPLAND_SKM": 24.1,
+    "LENGTH_KM": 7.24,
+    "DIS_AV_CMS": 0.05,
+    "source": "SYNTHETIC test data, invented for this repository (not HydroRIVERS): reach 90000011"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [
+      22.5,
+      -33.5
+     ],
+     [
+      22.55,
+      -33.55
+     ]
+    ]
+   }
+  }
+ ]
+}

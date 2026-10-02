@@ -379,6 +379,8 @@ work. Optional pieces:
 pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
 pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
 pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
+pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
+pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm dev:s3:up              # MinIO, then a basemap (needs the pmtiles CLI on PATH; downloads the SA extract, about 1 GB at maxzoom 15):
 pnpm dev:tiles:fetch        # the tiles, then the labels' fonts
 pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
@@ -391,8 +393,9 @@ commit (`TILES_FONTS_REF` overrides it), cached in
 `~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under
 `tiles/fonts/` with their licence (`OFL.txt`). With
 `PUBLIC_TILES_GLYPHS_URL` empty (the committed default) the map draws no
-names and fetches no fonts. The **Quaternary catchments** layer works with
-neither: it draws the synthetic outlines and lists their codes beside the map.
+names and fetches no fonts. The **Quaternary catchments** and **River
+network** layers work with neither: they draw the synthetic outlines and
+reaches and list them beside the map.
 
 The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
 33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a

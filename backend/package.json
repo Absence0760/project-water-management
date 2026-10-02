@@ -28,6 +28,7 @@
 		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
 		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
 		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
+		"import:rivers": "tsx scripts/import-rivers.ts",
 		"import:dam-register": "tsx scripts/import-dam-register.ts"
 	},
 	"dependencies": {

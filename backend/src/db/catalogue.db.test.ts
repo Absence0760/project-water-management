@@ -194,6 +194,7 @@ const READ_ONLY = new Set([
 	'pack_reproduction',
 	'gauge_station_reference',
 	'dam_register_reference',
+	'river_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
 	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
 	'registration_check',
