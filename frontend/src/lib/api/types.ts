@@ -3116,6 +3116,37 @@ export interface StartState {
 	proposals: (StartProposal | DivideProposal)[];
 }
 
+/** One click's piece (POST …/map/subcatchments): its incremental catchment, the land draining to it before any other click. */
+export interface ClickPiece {
+	/** The click's index in the request. */
+	click: number;
+	/** The click, snapped onto the channel. */
+	point: MapPosition;
+	snapDistanceM: number | null;
+	/** The click whose piece this one flows into next; null for the lowest click. */
+	drainsInto: number | null;
+	/** Null when it is open, or its cells couldn't be outlined as a valid polygon (the area still counts them). */
+	geometry: { type: 'Polygon'; coordinates: MapPosition[][] } | null;
+	/** Null when it is open. */
+	areaM2: number | null;
+	/** Everything upstream of the click, its own piece included; null when it, or a piece above it, is open. */
+	totalAreaM2: number | null;
+	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
+	open: boolean;
+}
+
+/** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
+export interface ClickPieces {
+	pieces: ClickPiece[];
+	dropped: { click: number; reason: string }[];
+	/** The lowest click's index: it owns what drains to it through no other click. */
+	lowest: number;
+	cellSizeM: number;
+	dataset: { label: string; fingerprint: string };
+	method: string;
+	methodVersion: string;
+}
+
 /** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */
 export interface DelineationState {
 	available: boolean;

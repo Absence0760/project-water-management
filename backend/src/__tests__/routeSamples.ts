@@ -150,6 +150,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
 	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),
 	'POST /projects/:id/map/delineation/:pid/accept': () => ({ body: { as: 'other' } }),
+	// Sub-catchments from clicks: the synthetic DEM's outlet and a click just below its dam wall.
+	'POST /projects/:id/map/subcatchments': () => ({ body: { clicks: [{ lon: 20.7428741, lat: -33.5396777 }, { lon: 20.7428741, lat: -33.4262838 }] } }),
+	'POST /projects/:id/map/subcatchments/save': () => ({ body: { clicks: [{ lon: 20.7428741, lat: -33.5396777 }, { lon: 20.7428741, lat: -33.4262838 }] } }),
 	// Tracing a dam (issue #326 C2): the ladder turns WATER_URL on with the committed synthetic raster, and this is inside its dam.
 	'POST /projects/:id/map/dam-trace': () => ({ body: { lon: 21.3191414, lat: -33.6724971 } }),
 	// Splitting the ladder's parcel (21.30–21.32° E) down its middle; once it is split, a second call is refused past the role check (the halves no longer add up to it).

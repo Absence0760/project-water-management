@@ -28,6 +28,9 @@
 	// With a DEM on the server, editors can Delineate (`delineate=1`, #326
 	// B-delineate, docs/design/delineation.md): click the river, and the
 	// catchment above it is proposed, drawn dashed, until they accept or reject it.
+	// With the same DEM, Sub-catchments (ClickBar, clickPieces.svelte.ts) makes
+	// each click on a river an outlet: the map draws every click's incremental
+	// catchment, numbered by click, and Save keeps them as areas.
 	// On an empty model, editors can Start the model from the map (`start=1`,
 	// #326 C3, docs/design/start-from-map.md): units at the dams and
 	// abstraction points, their sub-catchments and order proposed and ticked
@@ -66,6 +69,8 @@
 	import { BAND_WORD } from './mapStatus';
 	import PlaceSheet from './PlaceSheet.svelte';
 	import DelineateSheet from './DelineateSheet.svelte';
+	import ClickBar from './ClickBar.svelte';
+	import { ClickDivider, clickShape } from './clickPieces.svelte';
 	import { openProposal } from './delineation';
 	import StartSheet from './StartSheet.svelte';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
@@ -250,6 +255,7 @@
 	/** The point placed is a delineation's outlet, not a feature: the draw bar asks to delineate. */
 	let delineating = $state(false);
 	function startDelineate() {
+		dividing = false;
 		backToSheet = null;
 		measure.cancel();
 		tracing = false;
@@ -383,6 +389,69 @@
 	// Worked out once per proposal; lighting a piece (a hover) only swaps `highlight` (litPieces), so the map redraws the proposal alone.
 	const pieceShapes = $derived(piecesShape(pendingStart ?? pendingDivide));
 	const pieces = $derived(litPieces(pieceShapes, pieceLit));
+
+	// --- sub-catchments from clicks: each click on a river an outlet, its incremental catchment drawn numbered by click ---
+	const divider = new ClickDivider(
+		(clicks) => api.subcatchments.pieces(projectId, clicks),
+		(clicks) => api.subcatchments.save(projectId, clicks)
+	);
+	/** The mode is on: each point placed is an outlet, added at once, and the draw bar gives way to the click bar. */
+	let dividing = $state(false);
+	let clickLit = $state<string | null>(null);
+	const clickPieces = $derived(dividing ? clickShape(divider.result, clickLit) : null);
+	function startDividing() {
+		if (dividing) return void doneDividing();
+		backToSheet = null;
+		measure.cancel();
+		delineating = false;
+		tracing = false;
+		draft.place('other');
+		draft.snapOn = false;
+		dividing = true;
+		void afterStart();
+	}
+	// A point placed (a click, Enter at the crosshair) is an outlet straight away; the draft is ready for the next one.
+	$effect(() => {
+		const g = draft.geometry;
+		if (!dividing || draft.mode !== 'place' || g?.type !== 'Point') return;
+		untrack(() => {
+			draft.place('other');
+			draft.snapOn = false;
+			void divider.add(g.coordinates);
+		});
+	});
+	// Another tool took the map (Draw, Place, Cancel in a sheet): the mode ends, its clicks kept until it is opened again.
+	$effect(() => {
+		if (dividing && draft.mode !== 'place') untrack(() => (dividing = false));
+	});
+	async function doneDividing() {
+		if (divider.unsaved) {
+			const ok = await confirmDialog({
+				title: 'Drop these clicks?',
+				message: 'The sub-catchments from your clicks haven’t been saved.',
+				confirmLabel: 'Drop them',
+				cancelLabel: 'Keep clicking',
+				danger: true
+			});
+			if (!ok) return;
+		}
+		divider.clear();
+		dividing = false;
+		clickLit = null;
+		draft.cancel();
+		await tick();
+		document.querySelector<HTMLButtonElement>('[data-testid="map-start-subcatchments"]')?.focus();
+	}
+	async function saveClicks() {
+		const r = await divider.save();
+		if (!r) return;
+		notice = `Saved ${r.summary} on the map as areas. Link each to its unit and Use its area, or rename it on its card.`;
+		dividing = false;
+		clickLit = null;
+		draft.cancel();
+		await load();
+		if (r.features[0]) await pickInPlace(r.features[0].id);
+	}
 	async function pickPiece(key: string) {
 		pieceFocus = key;
 		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });
@@ -428,6 +497,7 @@
 		measure.cancel();
 		delineating = false;
 		tracing = false;
+		dividing = false;
 		draft.place('gauge');
 		void afterStart();
 	}
@@ -478,6 +548,7 @@
 	function startTrace() {
 		measure.cancel();
 		delineating = false;
+		dividing = false;
 		draft.place('dam');
 		tracing = true;
 		void afterStart();
@@ -737,6 +808,14 @@
 		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating && !tracing} data-testid="map-start-place">Place a point</button>
 		{#if delineation?.available}
 			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
+			<button
+				type="button"
+				class="btn"
+				onclick={startDividing}
+				aria-pressed={dividing}
+				title="Click the rivers: each click gets the land that drains to it before any other click"
+				data-testid="map-start-subcatchments">Sub-catchments</button
+			>
 		{/if}
 		{#if damTrace?.available}
 			<button type="button" class="btn" onclick={startTrace} aria-pressed={tracing} data-testid="map-start-trace">Trace a dam</button>
@@ -861,7 +940,9 @@
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
-					{#if canEdit && draft.active}
+					{#if canEdit && dividing}
+						<ClickBar {divider} mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} />
+					{:else if canEdit && draft.active}
 						<DrawBar
 							{draft}
 							mapReady={mapState === 'ready'}
@@ -903,9 +984,9 @@
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
 									onview={(b) => (mapView = b)}
-									proposal={pendingProposal ?? pieces}
-									onpiecehover={(k) => (pieceLit = k)}
-									onpiecepick={canEdit ? pickPiece : undefined}
+									proposal={clickPieces ?? pendingProposal ?? pieces}
+									onpiecehover={(k) => (dividing ? (clickLit = k) : (pieceLit = k))}
+									onpiecepick={canEdit && !dividing ? pickPiece : undefined}
 								/>
 							{/snippet}
 						</Lazy>

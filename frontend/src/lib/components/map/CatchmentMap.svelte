@@ -171,7 +171,7 @@
 		 * A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet.
 		 * With `pieces` (a start or divide proposal, pieces.ts), each piece apart with its number, `highlight` the one lit.
 		 */
-		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null;
+		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition; outlets?: readonly MapPosition[]; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null;
 		/** The pointer is over a piece or its number (its key), or has left them (null). */
 		onpiecehover?: (key: string | null) => void;
 		/** A piece or its number was clicked (where no feature is): its key. */

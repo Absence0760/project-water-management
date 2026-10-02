@@ -171,17 +171,23 @@ export interface UnitPiece {
 	 * just above it belongs to the unit below.
 	 */
 	totalAreaM2: number;
+	/**
+	 * Only with `outlet: 'lowest'`: its catchment runs past the routed window (or the DEM's data), so its piece is not whole.
+	 * Its outline is null and its areas count only the cells inside the window; the water from above it enters as an inflow.
+	 */
+	open?: boolean;
 }
 
 export interface Subcatchments {
-	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' };
+	/** `id`: with `outlet: 'lowest'`, the point taken as the outlet (it owns the rest, and is not among the units). */
+	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string };
 	/** The whole catchment above the outlet: its outline and geodesic area. */
 	catchment: { geometry: Extract<Geometry, { type: 'Polygon' }>; areaM2: number };
 	units: UnitPiece[];
 	/** Points not proposed as units, with why. */
 	dropped: { id: string; reason: string }[];
 	/** The outlet's own piece: what drains to it through no unit. */
-	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number };
+	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number; open?: boolean };
 	cellSizeM: number;
 	zoom: number;
 	windowCells: number;
@@ -225,8 +231,11 @@ function piecePolygon(outer: Pt[], holes: Pt[][], toPos: (p: Pt) => Position): {
 }
 
 export interface SubcatchmentRequest {
-	/** The outlet's position (a gauge, or a delineation's snapped outlet), snapped; null = the most-drained cell inside `boundary`. */
-	outlet: Position | null;
+	/**
+	 * The outlet's position (a gauge, or a delineation's snapped outlet), snapped; null = the most-drained cell inside `boundary`;
+	 * 'lowest' = the point (all must be points) that most water drains through, once snapped: clicks on the rivers, each one's piece its incremental catchment.
+	 */
+	outlet: Position | null | 'lowest';
 	boundary: Geometry | null;
 	points: readonly UnitPoint[];
 }
@@ -243,7 +252,13 @@ export async function delineateUnits(
 	const windows = opts.windows ?? WINDOWS;
 	const snapRadiusM = opts.snapRadiusM ?? SNAP_RADIUS_M;
 	const boundaryRings = req.boundary ? polygonRings(req.boundary) : [];
-	if (!req.outlet && !boundaryRings.length) throw new DelineationRefused('outside', 'Pick the outlet gauge, or put the catchment boundary on the map first.');
+	const lowest = req.outlet === 'lowest';
+	const fixedOutlet = req.outlet === 'lowest' ? null : req.outlet;
+	const clicks = lowest ? req.points.flatMap((p) => (p.geometry.type === 'Point' ? [p.geometry.coordinates] : [])) : [];
+	if (lowest && !clicks.length) throw new DelineationRefused('outside', 'Click a river first.');
+	if (!lowest && !fixedOutlet && !boundaryRings.length) throw new DelineationRefused('outside', 'Pick the outlet gauge, or put the catchment boundary on the map first.');
+	/** What the outlet is called in a refusal. */
+	const theOutlet = lowest ? 'the lowest click' : 'the outlet';
 	const info = await dem.info();
 	const [w, s, e, n] = info.bounds;
 	const inside = ([lon, lat]: Position) => lon >= w && lon <= e && lat >= s && lat <= n;
@@ -253,12 +268,12 @@ export async function delineateUnits(
 	let lonMax = -Infinity;
 	let latMin = Infinity;
 	let latMax = -Infinity;
-	for (const r of boundaryRings) for (const [lo, la] of r) (lonMin = Math.min(lonMin, lo)), (lonMax = Math.max(lonMax, lo)), (latMin = Math.min(latMin, la)), (latMax = Math.max(latMax, la));
-	const centre: Position = req.outlet ?? [(lonMin + lonMax) / 2, (latMin + latMax) / 2];
-	if (!inside(centre)) throw new DelineationRefused('outside', `The outlet is outside the elevation model (${info.label} covers ${w}° to ${e}° E, ${s}° to ${n}° N).`);
+	for (const r of [...boundaryRings, clicks]) for (const [lo, la] of r) (lonMin = Math.min(lonMin, lo)), (lonMax = Math.max(lonMax, lo)), (latMin = Math.min(latMin, la)), (latMax = Math.max(latMax, la));
+	const centre: Position = fixedOutlet ?? [(lonMin + lonMax) / 2, (latMin + latMax) / 2];
+	if (!inside(centre)) throw new DelineationRefused('outside', `${lowest ? 'The clicks are' : 'The outlet is'} outside the elevation model (${info.label} covers ${w}° to ${e}° E, ${s}° to ${n}° N).`);
 	const probe = toPx(centre[0], centre[1], 2 ** z);
 	const here = await dem.tile(z, Math.floor(probe[0]), Math.floor(probe[1]));
-	if (!here) throw new DelineationRefused('no_data', 'The elevation model has no data at the outlet.');
+	if (!here) throw new DelineationRefused('no_data', `The elevation model has no data at ${lowest ? 'the clicks' : 'the outlet'}.`);
 	const size = here.size;
 	const W = worldPx(z, size);
 	const [gx, gy] = toPx(centre[0], centre[1], W);
@@ -267,7 +282,7 @@ export async function delineateUnits(
 	const radius = Math.max(1, Math.round(snapRadiusM / cellSizeM));
 	// The boundary's reach from the centre, in cells: the first window must hold it.
 	let reach = 0;
-	for (const r of boundaryRings) {
+	for (const r of [...boundaryRings, clicks]) {
 		for (const [lo, la] of r) {
 			const [px, py] = toPx(lo, la, W);
 			reach = Math.max(reach, Math.abs(px - gx), Math.abs(py - gy));
@@ -311,19 +326,41 @@ export async function delineateUnits(
 		// The outlet.
 		let outlet: number;
 		let outletSnap: number | null = null;
-		if (req.outlet) {
-			const c = snapAt(req.outlet);
+		let outletId: string | undefined;
+		if (lowest) {
+			// The click most water drains through, once snapped; the first of equals.
+			outlet = -1;
+			for (const p of req.points) {
+				if (p.geometry.type !== 'Point') continue;
+				const c = snapAt(p.geometry.coordinates);
+				if (c === null || (outlet >= 0 && acc[c]! <= acc[outlet]!)) continue;
+				outlet = c;
+				outletId = p.id;
+				outletSnap = movedM(p.geometry.coordinates, c);
+			}
+			if (outlet < 0) throw new DelineationRefused('no_data', 'The elevation model has no data around the clicks.');
+		} else if (fixedOutlet) {
+			const c = snapAt(fixedOutlet);
 			if (c === null) throw new DelineationRefused('no_data', 'The elevation model has no data around the outlet.');
 			outlet = c;
-			outletSnap = movedM(req.outlet, c);
+			outletSnap = movedM(fixedOutlet, c);
 		} else {
 			outlet = mostDrained(rasterize(nCells, nCells, boundaryRings.map((r) => r.map(toGrid))), acc, edge);
 			if (outlet < 0) throw new DelineationRefused('no_data', 'The elevation model has no data inside the boundary.');
 		}
 		const catchment = upstream(nCells, nCells, dir, outlet);
 		const touch = touchesEdge(grid, edge, catchment, noData);
-		if (touch.noData) throw new DelineationRefused('no_data', 'The catchment above the outlet runs past the edge of the elevation model’s data, so it can’t be divided whole.');
-		if (touch.edge) {
+		// Clicks: a catchment past the window is not refused. The pieces past it are open (inflows), the others whole; refused only when every piece is open.
+		let truncated = false;
+		if (lowest && (touch.edge || touch.noData)) {
+			const next = windows[wi + 1];
+			const elapsed = now() - started;
+			// A bigger window can close a piece at the window's border, never one at the DEM's no-data.
+			if (!touch.noData && next !== undefined && elapsed * (1 + (next / nCells) ** 2) <= budget) continue;
+			truncated = true;
+		}
+		if (touch.noData && !lowest) throw new DelineationRefused('no_data', `The catchment above ${theOutlet} runs past the edge of the elevation model’s data, so it can’t be divided whole.`);
+		if (touch.edge && !lowest) {
 			const next = windows[wi + 1];
 			const elapsed = now() - started;
 			if (next === undefined || elapsed * (1 + (next / nCells) ** 2) > budget) {
@@ -336,12 +373,15 @@ export async function delineateUnits(
 		}
 		let catchmentCells = 0;
 		for (let i = 0; i < catchment.length; i++) catchmentCells += catchment[i]!;
-		if (catchmentCells < 9) throw new DelineationRefused('too_small', 'Almost nothing drains to the outlet: pick a gauge on the river itself.');
+		if (catchmentCells < 9) {
+			throw new DelineationRefused('too_small', lowest ? 'Almost nothing drains to the lowest click: click on the river itself.' : 'Almost nothing drains to the outlet: pick a gauge on the river itself.');
+		}
 		// The units' cells: snapped points, a dam polygon's most-drained cell; dropped with a reason when they can't be units.
 		const dropped: { id: string; reason: string }[] = [];
 		const taken = new Map<number, string>([[outlet, '']]);
 		const kept: { p: UnitPoint; cell: number; snapDistanceM: number | null }[] = [];
 		for (const p of req.points) {
+			if (p.id === outletId) continue;
 			let cell: number | null = null;
 			let moved: number | null = null;
 			if (p.geometry.type === 'Point') {
@@ -358,12 +398,15 @@ export async function delineateUnits(
 				}
 			}
 			if (cell === null || !catchment[cell]) {
-				dropped.push({ id: p.id, reason: 'isn’t upstream of the outlet (it drains elsewhere, or is off the elevation model)' });
+				dropped.push({
+					id: p.id,
+					reason: lowest ? 'doesn’t drain to the lowest click (it is on another river, or off the elevation model)' : 'isn’t upstream of the outlet (it drains elsewhere, or is off the elevation model)'
+				});
 				continue;
 			}
 			const clash = taken.get(cell);
 			if (clash !== undefined) {
-				dropped.push({ id: p.id, reason: clash === '' ? 'snaps to the outlet itself' : 'snaps to the same place on the river as another point' });
+				dropped.push({ id: p.id, reason: clash === '' ? `snaps to ${lowest ? 'the same place on the river as the lowest click' : 'the outlet itself'}` : 'snaps to the same place on the river as another point' });
 				continue;
 			}
 			taken.set(cell, p.id);
@@ -392,7 +435,7 @@ export async function delineateUnits(
 			if (x > b[2]!) b[2] = x;
 			if (y > b[3]!) b[3] = y;
 		}
-		const piece = (o: number): { geometry: Poly | null; areaM2: number } => {
+		const pieceOf = (o: number): { geometry: Poly | null; areaM2: number } => {
 			if (!count[o]) return { geometry: null, areaM2: 0 };
 			const [bx0, by0, bx1, by1] = box[o]! as [number, number, number, number];
 			const bw = bx1 - bx0 + 1;
@@ -414,11 +457,41 @@ export async function delineateUnits(
 			// A piece that can't be made a valid polygon keeps its area from the cells and offers no outline.
 			return poly ?? { geometry: null, areaM2: cellArea };
 		};
+		// Open owners: any of their cells beside the window's edge or the DEM's no-data (only when the catchment was cut).
+		const open = new Uint8Array(R + 1);
+		if (truncated) {
+			for (let i = 0; i < part.owner.length; i++) {
+				const o = part.owner[i]!;
+				if (o < 0 || open[o]) continue;
+				const x = i % nCells;
+				const y = (i - x) / nCells;
+				for (let d = 0; d < 8; d++) {
+					const xx = x + DX[d]!;
+					const yy = y + DY[d]!;
+					if (xx >= 0 && yy >= 0 && xx < nCells && yy < nCells && edge[yy * nCells + xx]) {
+						open[o] = 1;
+						break;
+					}
+				}
+			}
+			if (open.every((v, o) => v || (o < R && !ownsLand(kept[o]!.p.role)))) {
+				throw new DelineationRefused(
+					touch.noData ? 'no_data' : 'too_large',
+					`Every click’s catchment runs past ${touch.noData ? 'the edge of the elevation model’s data' : `the ${Math.round((nCells * cellSizeM) / 1000)} km the app routes around the clicks`}, so none is whole. Click a smaller river, or click further down a river you have clicked upstream: the piece between the two clicks is whole, and the water from above the upper one enters as an inflow.`
+				);
+			}
+		}
+		// An open piece isn't outlined (it would be cut at the window, and the API doesn't show it): no geometry, no area.
+		const piece = (o: number): { geometry: Poly | null; areaM2: number } => (open[o] ? { geometry: null, areaM2: 0 } : pieceOf(o));
 		const pieces = kept.map((_, i) => piece(i));
 		const rest = piece(R);
-		const { outer } = traceRings(nCells, nCells, catchment);
-		const whole = piecePolygon(outer, [], toPos);
-		if (!whole) throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Type the units in instead.');
+		const outer = truncated ? [] : traceRings(nCells, nCells, catchment).outer;
+		// Cut at the window (clicks with open pieces), the catchment is not whole: it isn't outlined, and its area is unknown
+		// (NaN; every total below an open piece is unknown too, clicks.ts). Its geometry is then a whole piece's, never shown.
+		const whole = truncated ? null : piecePolygon(outer, [], toPos);
+		const firstWhole = [...pieces, rest].find((p) => p.geometry)?.geometry;
+		const catchmentShape = whole ?? (truncated && firstWhole ? { geometry: firstWhole, areaM2: Number.NaN } : null);
+		if (!catchmentShape) throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Type the units in instead.');
 		// Totals: each unit's piece plus everything that drains into it, summed down the tree.
 		const total = pieces.map((p) => p.areaM2);
 		const order = kept.map((_, i) => i);
@@ -446,8 +519,8 @@ export async function delineateUnits(
 		});
 		const cellM = Math.round(cellSizeM);
 		return {
-			outlet: { point: cellPos(outlet), snapDistanceM: outletSnap, foundIn: req.outlet ? 'snapped' : 'boundary' },
-			catchment: whole,
+			outlet: { point: cellPos(outlet), snapDistanceM: outletSnap, foundIn: lowest ? 'lowest' : fixedOutlet ? 'snapped' : 'boundary', ...(outletId !== undefined ? { id: outletId } : {}) },
+			catchment: catchmentShape,
 			units: kept.map((k, i) => ({
 				id: k.p.id,
 				role: k.p.role,
@@ -456,10 +529,11 @@ export async function delineateUnits(
 				drainsInto: part.down[i]! < 0 ? null : kept[part.down[i]!]!.p.id,
 				geometry: pieces[i]!.geometry,
 				areaM2: pieces[i]!.areaM2,
-				totalAreaM2: total[i]!
+				totalAreaM2: total[i]!,
+				...(open[i] ? { open: true } : {})
 			})),
 			dropped,
-			rest,
+			rest: open[R] ? { ...rest, open: true } : rest,
 			cellSizeM,
 			zoom: z,
 			windowCells: nCells,
