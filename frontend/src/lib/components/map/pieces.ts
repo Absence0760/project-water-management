@@ -161,3 +161,13 @@ export function piecesShape(p: { id: string; plan: StartPlan | DividePlan } | nu
 	if (!polys.length) return null;
 	return { id: p.id, geometry: { type: 'MultiPolygon', coordinates: polys }, outlet: p.plan.outlet.point, pieces, highlight };
 }
+
+/**
+ * The same shape with another piece lit: the pieces, outline and outlet kept
+ * as they are (the same objects), so lighting a piece on hover costs no
+ * recomputation and the map redraws only the proposal's source.
+ */
+export function litPieces(shape: PiecesShape | null, highlight: string | null): PiecesShape | null {
+	if (!shape) return null;
+	return shape.highlight === highlight ? shape : { ...shape, highlight };
+}

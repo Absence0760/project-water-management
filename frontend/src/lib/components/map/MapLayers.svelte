@@ -18,7 +18,7 @@
 	import { page } from '$app/state';
 	import type { MapFeature } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
-	import { type MapLayer, reachFacts, reachKey, reachLabel, withLayer } from './mapLayers';
+	import { type MapLayer, layersStatus, reachFacts, reachKey, reachLabel, withLayer } from './mapLayers';
 	import { quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
@@ -72,6 +72,14 @@
 	const pickedReach = $derived(rivers.pickedReach);
 	const pickedFeature = $derived(pickedReach ? rivers.featureFor(pickedReach) : null);
 
+	const status = $derived(
+		layersStatus(
+			{ on: quaternaries.on, idle: quaternaries.nothingAround, failed: !!quaternaries.error, count: answer ? answer.quaternaries.length : null },
+			{ on: rivers.on, idle: rivers.nothingAround, failed: !!rivers.error, count: rv ? rv.reaches.length : null },
+			pickedReach ? reachLabel(pickedReach) : null
+		)
+	);
+
 	async function addPicked() {
 		if (!pickedReach) return;
 		const f = await rivers.add(pickedReach);
@@ -81,6 +89,7 @@
 
 <section class="layers" aria-labelledby="{uid}-h" data-testid="map-layers">
 	<h2 class="layers-h" id="{uid}-h">Layers</h2>
+	<p class="visually-hidden" role="status" data-testid="map-layers-status">{status}</p>
 	<label class="toggle">
 		<input type="checkbox" checked={quaternaries.on} onchange={(e) => toggle('quaternaries', e.currentTarget.checked)} data-testid="map-layer-quaternaries" />
 		<span class="swatch" style:--qt={quaternaryColour(dark)} aria-hidden="true"></span>
@@ -93,7 +102,7 @@
 			{:else if quaternaries.error}
 				<p class="err" role="alert">The quaternaries couldn’t be loaded: {quaternaries.error} <button type="button" class="btn btn-sm" onclick={() => quaternaries.retry()}>Try again</button></p>
 			{:else if !answer}
-				<p class="muted" role="status">Loading the quaternaries…</p>
+				<p class="muted">Loading the quaternaries…</p>
 			{:else if !answer.quaternaries.length}
 				<p class="muted" data-testid="map-quaternaries-none">
 					{answer.datasets.length ? 'No quaternary catchment in the loaded dataset is near this catchment.' : 'No quaternary dataset is loaded (docs/maps.md § Quaternary dataset).'}
@@ -122,7 +131,7 @@
 			{:else if rivers.error}
 				<p class="err" role="alert">The river network couldn’t be loaded: {rivers.error} <button type="button" class="btn btn-sm" onclick={() => rivers.retry()}>Try again</button></p>
 			{:else if !rv}
-				<p class="muted" role="status">Loading the river network…</p>
+				<p class="muted">Loading the river network…</p>
 			{:else if !rv.reaches.length}
 				<p class="muted" data-testid="map-rivers-none">
 					{rv.datasets.length ? 'No reach of the loaded river network is near this catchment.' : 'No river network is loaded (docs/maps.md § River network).'}
