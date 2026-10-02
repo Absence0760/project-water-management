@@ -321,9 +321,13 @@ export const PIECE_HIT_LAYER = 'pr-piece-fill';
  * or, for a start or divide proposal (`pieces`), each piece on its own with
  * its key, tint and whether it is the one lit; or nothing.
  */
-export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null | undefined) {
+export function proposalData(
+	p: { geometry: MapGeometry; outlet: MapPosition; outlets?: readonly MapPosition[]; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null | undefined
+) {
 	if (!p) return { type: 'FeatureCollection' as const, features: [] };
 	const outlet = { type: 'Feature' as const, properties: { part: 'outlet' } as Record<string, unknown>, geometry: { type: 'Point' as const, coordinates: p.outlet } as MapGeometry };
+	// Sub-catchments from clicks: every other click is an outlet too, marked the same way.
+	const more = (p.outlets ?? []).map((at) => ({ ...outlet, geometry: { type: 'Point' as const, coordinates: at } as MapGeometry }));
 	if (!p.pieces) return { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: { part: 'area' } as Record<string, unknown>, geometry: p.geometry }, outlet] };
 	return {
 		type: 'FeatureCollection' as const,
@@ -331,7 +335,8 @@ export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition; pi
 			...p.pieces.flatMap((x) =>
 				x.geometry ? [{ type: 'Feature' as const, properties: { part: 'piece', key: x.key, name: x.name, tint: x.tint, lit: x.key === p.highlight } as Record<string, unknown>, geometry: x.geometry as MapGeometry }] : []
 			),
-			outlet
+			outlet,
+			...more
 		]
 	};
 }

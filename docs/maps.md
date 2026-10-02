@@ -1193,6 +1193,68 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
   project an hour (starts and divisions together), the 20 s budget.
 
+## Sub-catchments from clicks
+
+**Sub-catchments** in the Map's header (editors, with a DEM on the server;
+`backend/src/delineation/clicks.ts`, the Map's `ClickBar.svelte`; the screen
+in [ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Sub-catchments
+from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
+clicking the rivers, with no boundary, no points to place and no roles to
+pick first.
+
+- **What a click is.** An outlet on a river: the server moves it to the
+  most-drained cell within about 150 m, as Delineation does. Its piece is
+  its **incremental catchment**: the cells whose water reaches it before
+  any other click. A click upstream of an earlier one carves its piece out
+  of that one; a click below them all becomes the lowest and takes what
+  lies between. Quaternary boundaries play no part: the clicks alone divide
+  the land.
+- **How.** The partition behind Start from the map (`subcatchments.ts`
+  `delineateUnits` with `outlet: 'lowest'`): one window around the clicks,
+  filled and routed once (Priority-Flood+ε, D8), the lowest click (the one
+  most water drains through) as the outlet and every other click as a unit
+  that owns land. Each piece drains into the first click its flow path
+  meets. A click that doesn't drain to the lowest one (on another river) or
+  snaps onto the same cell as another is dropped, with why.
+- **Inflow points: large rivers.** A click whose catchment runs past the
+  window routed around the clicks (about 100 km across, after growing it
+  within the 20 s budget) or the DEM's data is **open**: it has no piece,
+  and the water from above it enters the piece below as an inflow, which is
+  how a reach of a large river is modelled anyway. So on the Orange, click
+  the main stem where the modelled reach begins and again where it ends:
+  the lower click gets the land between them (measured on the real DEM near
+  Upington: an upper and a lower click 13 km apart, the upper an inflow
+  point, the lower 1 046 km² with the side streams entering that stretch,
+  4.8 s). The totals below an inflow point are unknown ("more upstream than
+  was routed"). Only when every click is open is the request refused.
+- **Clicking on the channel.** A click moves at most about 150 m to the
+  channel, the same as Delineation. A river line can sit further off the
+  channel the DEM sees: on the Orange near Upington a HydroRIVERS tributary
+  vertex was 265 m off, and the click found a gully (under 0.05 km²)
+  instead of its 573 km² catchment. A click with under 1 km² upstream is
+  flagged on its line ("very little drains here: it probably missed the
+  channel"); Undo and click closer, with the Relief layer or the basemap's
+  waterways. The snap is deliberately not wider: near a confluence a wider
+  one would move a tributary's click onto the main river, which no line
+  would flag.
+- **Every click is one request.** The map redraws all the pieces after each
+  one; nothing is stored. Undo goes back to the answer before it without
+  asking again. A click the server refuses (off the DEM, the lowest click's
+  catchment past the largest window) is taken back with the reason.
+- **Save** routes the same clicks again on the server (never trusting a
+  geometry from the browser) and saves each piece as an *other* polygon,
+  "Sub-catchment *n*" by its click's number, its description the outlet,
+  where it drains, the area upstream (or "more upstream than was routed"),
+  the inflow points entering it, the dataset and the method version.
+  Link each to its unit and **Use** its area as with any other polygon.
+- **Limits.** The clicks and every whole piece must fit the largest window
+  (about 100 km across, 20 s); pieces past it are inflow points (above). At
+  most 50 clicks a request. Inflow points are not saved: model what comes
+  from above them as an inflow. Each preview and each
+  save count against the account's elevation-model cap (60 an hour, 2 at
+  once, shared with Delineate, Start and Divide; security.md § Map
+  uploads), which bounds a working hour at about 60 clicks.
+
 ## River network
 
 The Map tab's **River network** layer (issue #345, the client checklist's

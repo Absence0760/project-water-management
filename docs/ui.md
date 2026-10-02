@@ -2545,7 +2545,8 @@ map" card) stays the schematic; this is the geography.
   example-sandspruit-map-2026-10-01.geojson."; [maps.md §
   Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on), **Delineate** (with a DEM on the server; below), **Trace
+  while it is on), **Delineate** and **Sub-catchments** (with a DEM on the
+  server; below), **Trace
   a dam** (with water occurrence data on the server; below) and
   **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
@@ -2725,6 +2726,39 @@ map" card) stays the schematic; this is the geography.
   outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
   the map
   changed.
+- **Sub-catchments** (editors, with a DEM on the server, beside Delineate;
+  `ClickBar.svelte`, `clickPieces.svelte.ts`, [maps.md § Sub-catchments
+  from clicks](./maps.md#sub-catchments-from-clicks)). Pressed, the map
+  takes the focus in the drawing mode (the crosshair; snapping off, since
+  the server snaps to the channel) and a **click bar** takes the draw bar's
+  place: "Sub-catchments from clicks", how ("Click a river (or press Enter at
+  the crosshair) for each outlet. Each one gets the land that drains to it
+  before any other click."), a polite line for the last change ("2
+  sub-catchments.", "Click 3 is not a piece: it …", "Took back click 3."),
+  and one line per click, numbered as its badge on the map: its area, where
+  its water goes ("drains into 2", or "the lowest click: everything above
+  it drains out here"), the area upstream in all (or "more upstream than
+  was routed") and the inflow points entering it, or why it is not a piece:
+  an inflow point ("an inflow point: its catchment runs past the area routed
+  around the clicks, so no piece; …"), or a click that doesn't drain to the
+  lowest. A click with under 1 km² upstream adds "very little drains here:
+  it probably missed the channel; Undo and click closer to the river". A line with the focus or the pointer lights its piece, and a piece
+  under the pointer lights itself. Under the lines: the count and total
+  area, the dataset, and "A proposal from the elevation model: check each
+  piece against the map before you save." **Enter coordinates** (a
+  disclosure, open when the map can't be drawn) adds an outlet by latitude
+  and longitude. Every click redraws all the pieces (each tinted apart from
+  its neighbours, as Start's, every click's outlet a ringed dot); the map is
+  framed on the first answer and then stays where the editor is clicking. A
+  click the server refuses is taken back with the reason ("Click not added:
+  …"). **Undo the last click** goes back to the answer before it at once,
+  **Clear** drops them all, **Save the *n* as areas** saves each piece as an
+  *other* polygon ("Saved 2 sub-catchments, 547.19 km² in all on the map as
+  areas. Link each to its unit and Use its area, or rename it on its card.",
+  the first one picked), and **Done** (or Escape in the bar) leaves the mode,
+  asking first ("Drop these clicks?": Keep clicking / Drop them) when there
+  are clicks; the header button takes the focus back. Another drawing tool
+  ends the mode.
 - **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
   [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
   library decision). A **draw bar** sits over the map while a shape is drawn,

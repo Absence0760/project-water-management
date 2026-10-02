@@ -161,6 +161,7 @@ import type {
 	DamProposals,
 	DelineationProposal,
 	DelineationState,
+	ClickPieces,
 	DamTraceProposal,
 	DamTraceState,
 	MinOccurrence,
@@ -1108,6 +1109,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
 			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+		},
+		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
+		subcatchments: {
+			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number }[]) =>
+				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
 		start: {

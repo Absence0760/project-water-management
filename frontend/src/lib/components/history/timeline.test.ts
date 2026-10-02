@@ -274,6 +274,10 @@ describe('what an item says', () => {
 		);
 		expect(eventLine(ev('map.divide_applied', { areas: 1, orders: 0, runoff: 0, gauges: 0 }))).toBe('Divided the model from the map: 1 area, 0 drains-into and 0 runoffs to the dam taken');
 		expect(eventLine(ev('map.divide_discarded', {}))).toBe('Discarded a division of the model proposed from the map');
+		expect(eventLine(ev('map.subcatchments_saved', { pieces: 3, areaKm2: 41.2, dataset: 'Synthetic DEM 1' }))).toBe(
+			'Saved 3 sub-catchments from clicks on the rivers, 41.2 km² in all (Synthetic DEM 1)'
+		);
+		expect(eventLine(ev('map.subcatchments_saved', { pieces: 1 }))).toBe('Saved 1 sub-catchment from clicks on the rivers');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {

@@ -368,6 +368,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		}
 		case 'map.divide_discarded':
 			return 'Discarded a division of the model proposed from the map';
+		// Sub-catchments from clicks on the rivers, saved as areas: how many and their area; never a polygon.
+		case 'map.subcatchments_saved': {
+			const km2 = num(s.areaKm2);
+			return `Saved ${plural(num(s.pieces) ?? 0, 'sub-catchment')} from clicks on the rivers${km2 !== null ? `, ${km2} km² in all` : ''}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		}
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);

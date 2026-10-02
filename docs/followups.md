@@ -3770,6 +3770,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job
       kind on the worker (300 s) with a larger window cap, the same code.
       Trigger: a client asking to delineate a large river's catchment.
+      (Sub-catchments from clicks don't wait on it: a click past the window
+      is an inflow point, maps.md § Sub-catchments from clicks.)
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on

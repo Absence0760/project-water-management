@@ -3046,6 +3046,41 @@ map feature like any other.
   `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
   kind, the area, the dataset; never the polygon). A stranger gets `404`.
 
+### Sub-catchments from clicks
+
+Each click on a river is an outlet, and its piece is its incremental
+catchment: the land whose water reaches it before any other click
+(`backend/src/delineation/clicks.ts`, [maps.md § Sub-catchments from
+clicks](./maps.md#sub-catchments-from-clicks)). The lowest click (the one
+most water drains through) owns everything else above it. Nothing is stored
+until **save**, which routes the same clicks again and never takes a
+geometry from the request. Off while `DEM_URL` is empty (`GET
+…/map/delineation`'s `available` says so).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/map/subcatchments` | `{ clicks: { lon, lat }[] }` (1 to 50) | `200 ClickPieces`; nothing is stored. `422 { error }` with a sentence when the DEM refuses (the clicks outside it, the lowest click's catchment past the largest window, about 100 km, almost nothing draining to it, no valid outline); `409` when it is off; `429` past the account's elevation-model cap (shared with delineate, start and divide, counted as delineation); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/subcatchments/save` | the same | `201 { features: MapFeature[], dropped, summary }`: one `other` polygon per whole piece with an outline (inflow points are not saved; the summary names them), named "Sub-catchment *n*" (*n* its click's number), its area from the polygon and its description the outlet, where it drains, the area upstream, the dataset and the method version. The same refusals; `422` when no piece could be outlined | editor |
+
+- `ClickPieces = { pieces: ClickPiece[], dropped: { click, reason }[],
+  lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
+  `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
+  geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
+  totalAreaM2, open }`. `click` and `drainsInto` are indexes into the request's
+  clicks (`drainsInto` null for the lowest); `point` is where the click
+  snapped onto the channel; `totalAreaM2` everything upstream of it. `open`:
+  an inflow point, its catchment past the routed window (about 100 km) or
+  the DEM's data, with `geometry`, `areaM2` and `totalAreaM2` null; the
+  totals of every piece below an inflow point are null too. Only when every
+  click is open is the request refused (422). A click
+  that doesn't drain to the lowest one (another river) or snaps onto the
+  same cell as another is in `dropped` with why. The method is Start from
+  the map's (`start-2`).
+- Save is in the audit log (`map.subcatchments_saved`: the features' ids,
+  how many, the inflow points left out, their area, the dataset; never a
+  polygon). The preview is not
+  (it changes nothing). A stranger gets `404`.
+
 ## Start from the map
 
 An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,

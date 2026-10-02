@@ -33,6 +33,7 @@ import { delineationRoutes } from './delineation/routes.js';
 import { traceRoutes } from './delineation/traceRoutes.js';
 import { startRoutes } from './delineation/start.js';
 import { divideRoutes } from './delineation/divide.js';
+import { clickRoutes } from './delineation/clicks.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
@@ -196,6 +197,7 @@ export function createApp() {
 	projects.route('/', traceRoutes);
 	projects.route('/', startRoutes);
 	projects.route('/', divideRoutes);
+	projects.route('/', clickRoutes);
 	projects.route('/', croplandRoutes);
 	projects.route('/', evaporationRoutes);
 	projects.route('/', reportRoutes);
