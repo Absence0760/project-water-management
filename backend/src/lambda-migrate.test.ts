@@ -71,7 +71,7 @@ describe('a reference load (docs/deployment.md § Reference datasets)', () => {
 		expect(JSON.parse((err as Error).message)).toMatchObject({ code: 'not_found', reason: 'no object at that key in the reference bucket' });
 	});
 
-	it('the bundle carries the reference loaders but no raster code (geo/loadCropland.ts, the feeds’ GeoTIFF reader)', async () => {
+	it('the bundle carries the reference loaders but no raster or HDF5 code (geo/loadCropland.ts, the feeds’ GeoTIFF reader, geo/loadEvaporation.ts and h5wasm)', async () => {
 		const { build } = await import('esbuild');
 		const out = await build({
 			entryPoints: [fileURLToPath(new URL('./lambda-migrate.ts', import.meta.url))],
@@ -86,7 +86,8 @@ describe('a reference load (docs/deployment.md § Reference datasets)', () => {
 		const inputs = Object.keys(out.metafile.inputs);
 		expect(inputs.some((f) => f.endsWith('src/geo/referenceLoad.ts'))).toBe(true);
 		expect(inputs.some((f) => f.endsWith('src/geo/croplandGrid.ts'))).toBe(true);
-		expect(inputs.filter((f) => /geo\/loadCropland\.ts$|feeds\/sources\/tiff\.ts$/.test(f))).toEqual([]);
+		expect(inputs.some((f) => f.endsWith('src/geo/evaporationGrid.ts'))).toBe(true);
+		expect(inputs.filter((f) => /geo\/loadCropland\.ts$|feeds\/sources\/tiff\.ts$|geo\/loadEvaporation\.ts$|h5wasm/.test(f))).toEqual([]);
 	}, 60_000);
 });
 

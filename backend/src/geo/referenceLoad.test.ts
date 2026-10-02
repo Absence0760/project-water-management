@@ -15,9 +15,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { loadFailureSummary } from '../lambda-migrate.js';
-import { LoadError, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject } from './referenceLoad.js';
+import { limitsFor, LoadError, MAX_OBJECT_BYTES, parseLoadRequest, readReferenceText, REFERENCE_KINDS, type ReadObject } from './referenceLoad.js';
 
 const MAPS_MD = fileURLToPath(new URL('../../../docs/maps.md', import.meta.url));
+const GATES = new URL('../../../scripts/release/map-data-gates.mjs', import.meta.url).href;
 const sha = (b: Uint8Array | string) => createHash('sha256').update(b).digest('hex');
 const ok = { kind: 'land-cover', key: 'reference/land-cover/worldcover-2021.json.gz', sha256: 'a'.repeat(64), dataset: 'WorldCover-2021-v200' };
 const rivers = { kind: 'rivers', key: 'reference/rivers/hydrorivers-za.geojson.gz', sha256: 'b'.repeat(64), dataset: 'HydroRIVERS-v10', source: 'HydroRIVERS v1.0 © WWF' };
@@ -48,6 +49,23 @@ describe('which kinds load', () => {
 	it('the allowed kinds parse (positive control for the refusals)', () => {
 		expect(parseLoadRequest(ok)).toEqual({ ...ok, source: null, minOrder: 1 });
 		expect(parseLoadRequest({ ...rivers, minOrder: 3 })).toEqual({ ...rivers, minOrder: 3 });
+		const evaporation = { kind: 'evaporation', key: 'reference/evaporation/dpet-1991-2020.json.gz', sha256: 'c'.repeat(64), dataset: 'dPET-1991-2020' };
+		expect(parseLoadRequest(evaporation)).toEqual({ ...evaporation, source: null, minOrder: 1 });
+	});
+
+	it('evaporation takes the JSON grid of monthly means only, never the NetCDF years', () => {
+		for (const key of ['reference/evaporation/2015_daily_pet.nc', 'reference/evaporation/grid.tif']) {
+			const e = thrown(() => parseLoadRequest({ kind: 'evaporation', key, sha256: 'c'.repeat(64), dataset: 'dPET' }));
+			expect(e.publicReason).toMatch(/grid of monthly means/);
+		}
+	});
+
+	it('the release gate offers exactly the allowed kinds (map-data-gates.mjs LOADABLE)', async () => {
+		const { LOADABLE } = (await import(GATES)) as { LOADABLE: string[] };
+		const allowed = Object.entries(REFERENCE_KINDS)
+			.filter(([, spec]) => spec.status === 'allowed')
+			.map(([kind]) => kind);
+		expect([...LOADABLE].sort()).toEqual(allowed.sort());
 	});
 
 	it.each(['quaternaries', 'dam-register', 'gauge-stations'])('%s is refused in production, naming the decision that would unblock it', (kind) => {
@@ -60,7 +78,7 @@ describe('which kinds load', () => {
 
 	it('an unknown kind is refused with the list, not the input', () => {
 		const e = thrown(() => parseLoadRequest({ ...ok, kind: 'sanlc<script>' }));
-		expect(e.publicReason).toMatch(/^kind must be one of land-cover, rivers, quaternaries/);
+		expect(e.publicReason).toMatch(/^kind must be one of land-cover, evaporation, rivers, quaternaries/);
 		expect(e.publicReason).not.toContain('sanlc');
 		expect(thrown(() => parseLoadRequest({ ...ok, kind: '__proto__' })).code).toBe('refused');
 		expect(thrown(() => parseLoadRequest({ ...ok, kind: 'toString' })).code).toBe('refused');
@@ -146,6 +164,22 @@ describe('reading the file', () => {
 		const e = await thrownAsync(readReferenceText(parseLoadRequest({ ...ok, sha256: sha(bomb) }), object(bomb), { object: 1024 * 1024, text: 64 * 1024 }));
 		expect(e.code).toBe('too_large');
 		expect(e.publicReason).toMatch(/unzipped/);
+	});
+
+	it('evaporation is read under its own, smaller caps', async () => {
+		const lim = limitsFor('evaporation');
+		expect(lim.object).toBeLessThan(MAX_OBJECT_BYTES);
+		expect(limitsFor('land-cover').object).toBe(MAX_OBJECT_BYTES);
+		const req = parseLoadRequest({ kind: 'evaporation', key: 'reference/evaporation/g.json.gz', sha256: 'c'.repeat(64), dataset: 'dPET' });
+		const e = await thrownAsync(readReferenceText(req, async () => ({ contentLength: lim.object + 1, bytes: async () => new Uint8Array(0) })));
+		expect(e.code).toBe('too_large');
+		expect(e.publicReason).toBe('the file is over 32 MiB');
+		// Its unzipped cap too (a gzip bomb), here lowered so the test stays small.
+		const bomb = gzipSync(Buffer.alloc(1024 * 1024));
+		const bombReq = { ...req, sha256: sha(bomb) };
+		const b = await thrownAsync(readReferenceText(bombReq, object(bomb), { object: lim.object, text: 64 * 1024 }));
+		expect(b.code).toBe('too_large');
+		expect(b.publicReason).toMatch(/unzipped/);
 	});
 
 	it('refuses a .gz that is not gzip', async () => {
