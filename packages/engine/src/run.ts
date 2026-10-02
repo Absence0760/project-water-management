@@ -39,7 +39,7 @@ import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
-import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
@@ -1814,6 +1814,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			category: o.category,
 			...(o.source && (DEMAND_OBJECT_SOURCES as readonly string[]).includes(o.source) ? { source: o.source } : {}),
 			priority: o.priority,
+			// Its rank within its class as the run used it (engine ≥ 1.64.0), only when one is set on a 'first' or 'last' object.
+			...(objectRank(o) > 0 && o.rank !== null && o.rank !== undefined ? { rank: objectRank(o) } : {}),
 			destination: o.destination,
 			avgDemandM3Day: avgDemand,
 			avgSuppliedM3Day: avgSupplied,

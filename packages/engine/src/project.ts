@@ -1879,10 +1879,13 @@ export const DEMAND_OBJECT_SOURCE_SIZING: Record<DemandObjectSource, DemandObjec
 /**
  * When a demand object is supplied against the unit's crops on a short day
  * (docs/model.md §2.7f): 'first' before them, 'shared' pro rata with them,
- * 'last' after them. Within one class, objects share pro rata.
+ * 'last' after them. Within one class, objects go by their rank (engine ≥
+ * 1.64.0, DemandObject.rank), and objects of one rank share pro rata.
  */
 export const DEMAND_OBJECT_PRIORITIES = ['first', 'shared', 'last'] as const;
 export type DemandObjectPriority = (typeof DEMAND_OBJECT_PRIORITIES)[number];
+/** The highest rank a demand object takes within its priority class (engine ≥ 1.64.0, DemandObject.rank). */
+export const DEMAND_OBJECT_MAX_RANK = 99;
 
 /**
  * Where a demand object's water ends up: 'internal' — used in the catchment,
@@ -1945,6 +1948,16 @@ export interface DemandObject {
 	/** Share (0–1) of what it is supplied that returns to the river below the unit the same day (treated wastewater). 0 when external. */
 	returnPct: number;
 	priority: DemandObjectPriority;
+	/**
+	 * Its place within its priority class (engine ≥ 1.64.0, issue #343,
+	 * docs/model.md §2.7f): of a unit's 'first' objects, rank 1 is supplied
+	 * before rank 2, and so on; likewise its 'last' objects, after the crops.
+	 * Equal ranks share pro rata. A whole number ≥ 1; null or absent = 1,
+	 * so every object saved before it runs as it did. Ignored on a 'shared'
+	 * object, which always shares with the crops. Together the classes and
+	 * ranks give the unit's numbered supply order (supplyOrder).
+	 */
+	rank?: number | null;
 	destination: DemandObjectDestination;
 	/** false = kept on record but not modelled (no demand, no results). */
 	enabled: boolean;
@@ -2292,6 +2305,8 @@ export interface DemandObjectSummary {
 	/** Where its number comes from (engine ≥ 1.56.0); absent = not recorded, and on older runs. */
 	source?: DemandObjectSource;
 	priority: DemandObjectPriority;
+	/** Its rank within its priority class (engine ≥ 1.64.0); absent when it has none (it runs as 1), and on older runs. */
+	rank?: number;
 	destination: DemandObjectDestination;
 	avgDemandM3Day: number;
 	avgSuppliedM3Day: number;

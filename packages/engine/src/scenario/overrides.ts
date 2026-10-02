@@ -715,6 +715,8 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (field === 'population' && op.value === null && (o.population === null || o.population === undefined)) break;
 			// Likewise no source and null (not recorded, engine ≥ 1.56.0).
 			if (field === 'source' && op.value === null && (o.source === null || o.source === undefined)) break;
+			// Likewise no rank and null (rank 1, engine ≥ 1.64.0).
+			if (field === 'rank' && op.value === null && (o.rank === null || o.rank === undefined)) break;
 			(o as unknown as Record<string, unknown>)[field] = demandObjectValue(field, op.value);
 			break;
 		}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DemandObject } from '../project';
-import { demandObjectsByNode, objectMonthlyM3Day, objectReturnShare, parseDemandObjectKey, planObjects, splitSupply, objectDemandKey, objectSuppliedKey } from './demandObjects';
+import { demandObjectsByNode, fromSupplyOrder, objectMonthlyM3Day, objectRank, objectReturnShare, parseDemandObjectKey, planObjects, splitSupply, objectDemandKey, objectSuppliedKey, supplyLevels, supplyOrder } from './demandObjects';
 
 const obj = (over: Partial<DemandObject> = {}): DemandObject => ({
 	id: 'o1',
@@ -124,6 +124,110 @@ describe('splitSupply', () => {
 		const o3 = out();
 		expect(splitSupply(430, 200, po, 0, o3)).toBe(200);
 		expect(o3.map((x) => x[0])).toEqual([100, 100, 30]);
+	});
+});
+
+describe('the supply order (engine 1.64.0, issue #343)', () => {
+	it('maps first / shared / last onto 1 / 2 / 3 with the crops at 2, numbering only the classes present', () => {
+		expect(supplyOrder([obj({ priority: 'first' }), obj({ priority: 'shared' }), obj({ priority: 'last' })])).toEqual({ positions: [1, 2, 3], crops: 2 });
+		expect(supplyOrder([obj({ priority: 'last' }), obj({ priority: 'shared' })])).toEqual({ positions: [2, 1], crops: 1 });
+		expect(supplyOrder([])).toEqual({ positions: [], crops: 1 });
+	});
+
+	it('orders within a class by rank, none being 1, and ignores a rank on a shared object', () => {
+		const o = [obj({ priority: 'first', rank: 2 }), obj({ priority: 'first', rank: null }), obj({ priority: 'shared', rank: 5 }), obj({ priority: 'last', rank: 3 }), obj({ priority: 'last', rank: 1 })];
+		expect(supplyOrder(o)).toEqual({ positions: [2, 1, 3, 5, 4], crops: 3 });
+		expect(objectRank(obj({ priority: 'shared', rank: 5 }))).toBe(0);
+	});
+
+	it('runs a rank that isn’t a whole number from 1 to 99 as 1, with a warning', () => {
+		for (const rank of [0, 1.5, 100, NaN]) {
+			const w: string[] = [];
+			expect(objectRank(obj({ priority: 'first', rank }), w)).toBe(1);
+			expect(w[0]).toMatch(/rank/);
+		}
+		// An unknown priority runs with the crops, as before.
+		expect(supplyLevels([obj({ priority: 'oops' as never })])).toEqual({ level: [0], cropLevel: 0, count: 1 });
+	});
+
+	it('turns a numbered order back into classes and ranks, which give the same order', () => {
+		// Two municipalities before the crops in order, a third with them, livestock after.
+		const back = fromSupplyOrder([1, 2, 3, 4], 3);
+		expect(back).toEqual([
+			{ priority: 'first', rank: 1 },
+			{ priority: 'first', rank: 2 },
+			{ priority: 'shared', rank: null },
+			{ priority: 'last', rank: null }
+		]);
+		expect(supplyOrder(back.map((x) => obj(x)))).toEqual({ positions: [1, 2, 3, 4], crops: 3 });
+		// Gaps and equal numbers: dense, equal stays equal, a lone class keeps no rank.
+		expect(fromSupplyOrder([1, 1, 7, 9], 5)).toEqual([
+			{ priority: 'first', rank: null },
+			{ priority: 'first', rank: null },
+			{ priority: 'last', rank: 1 },
+			{ priority: 'last', rank: 2 }
+		]);
+		for (let seed = 1; seed <= 200; seed++) {
+			let x = seed;
+			const rnd = (n: number) => ((x = (x * 1103515245 + 12345) % 2147483648), x % n);
+			const positions = Array.from({ length: 1 + rnd(6) }, () => 1 + rnd(5));
+			const crops = 1 + rnd(5);
+			const round = supplyOrder(fromSupplyOrder(positions, crops).map((y) => obj(y)));
+			// The same weak order, renumbered densely.
+			const all = [...positions, crops];
+			const dense = (p: number) => [...new Set(all)].sort((a, b) => a - b).indexOf(p) + 1;
+			expect(round, `seed ${seed}`).toEqual({ positions: positions.map(dense), crops: dense(crops) });
+		}
+	});
+});
+
+describe('splitSupply without ranks (bit-identical to engine 1.63.0)', () => {
+	// The three-class split as engine 1.63.0 had it, verbatim but for the field names.
+	function before(G: number, crop: number, demand: number[], tier: number[], out: number[]): number {
+		const total = demand.reduce((s, v) => s + v, 0);
+		if (G >= crop + total) {
+			demand.forEach((d, k) => (out[k] = d));
+			return crop;
+		}
+		let rem = Math.max(G, 0);
+		let cropGot = 0;
+		for (let t = 0; t < 3; t++) {
+			let want = t === 1 ? crop : 0;
+			for (let k = 0; k < demand.length; k++) if (tier[k] === t) want += demand[k]!;
+			if (!(want > 0)) {
+				for (let k = 0; k < demand.length; k++) if (tier[k] === t) out[k] = 0;
+				continue;
+			}
+			if (rem >= want) {
+				for (let k = 0; k < demand.length; k++) if (tier[k] === t) out[k] = demand[k]!;
+				if (t === 1) cropGot = crop;
+				rem -= want;
+			} else {
+				const f = rem / want;
+				for (let k = 0; k < demand.length; k++) if (tier[k] === t) out[k] = demand[k]! * f;
+				if (t === 1) cropGot = crop * f;
+				rem = 0;
+			}
+		}
+		return cropGot;
+	}
+
+	it('gives every object and the crops the same bits as before on random days', () => {
+		const P = ['first', 'shared', 'last'] as const;
+		let x = 7;
+		const rnd = () => ((x = (x * 1103515245 + 12345) % 2147483648), x / 2147483648);
+		for (let c = 0; c < 2000; c++) {
+			const n = 1 + Math.floor(rnd() * 5);
+			const objs = Array.from({ length: n }, (_, k) => obj({ id: `o${k}`, priority: P[Math.floor(rnd() * 3)]!, monthlyM3Day: new Array(12).fill(rnd() < 0.2 ? 0 : rnd() * 1000) }));
+			const po = planObjects(objs, 1, [0], null, 0, []);
+			const crop = rnd() < 0.2 ? 0 : rnd() * 2000;
+			const G = rnd() * (crop + po.total[0]! + 100);
+			const got = objs.map(() => new Float64Array(1));
+			const want = new Array<number>(n).fill(NaN);
+			const tier = objs.map((o) => ({ first: 0, shared: 1, last: 2 })[o.priority]);
+			expect(splitSupply(G, crop, po, 0, got)).toBe(before(G, crop, po.demand.map((d) => d[0]!), tier, want));
+			expect(got.map((g) => g[0])).toEqual(want);
+		}
 	});
 });
 
