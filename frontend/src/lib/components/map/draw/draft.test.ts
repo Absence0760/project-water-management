@@ -1,7 +1,7 @@
 // The draft (draft.svelte.ts): drawing, finishing, undo, editing corners, pasting, placing a point.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { Draft } from './draft.svelte';
+import { cutText, Draft } from './draft.svelte';
 import { DRAW_CHOICES } from './shape';
 
 const parcel = DRAW_CHOICES.find((c) => c.id === 'farm_parcel')!;
@@ -170,6 +170,8 @@ describe('Draft: assisted drawing (#326 C2)', () => {
 		d.finish();
 		const r = d.splitResult;
 		expect(r && 'parts' in r ? r.parts.map((p) => p.length) : r).toEqual([4, 4]);
+		// The live region says which part is where, and how big.
+		expect(d.said).toMatch(/^Cut in two: part 1, the (western|eastern), about .+ km², and part 2, the (western|eastern), about .+ km²\.$/);
 		d.undo();
 		d.coords = [];
 		d.add([0.5, 0.5]);
@@ -197,6 +199,13 @@ describe('Draft: assisted drawing (#326 C2)', () => {
 		expect(d.tracedEdited).toBe(false);
 		d.cancel();
 		expect(d.traced).toBeNull();
+		// Drawn as something else, it is no longer the trace.
+		d.trace(squareGeometry, trace);
+		d.choose('other-area');
+		expect(d.traced).toBe(trace);
+		d.choose('farm_parcel');
+		expect(d.traced).toBeNull();
+		expect(d.said).toBe('No longer a traced dam outline: it saves as a drawing.');
 	});
 
 	it('closing a polygon whose first and last corners are on one outline follows it', () => {
@@ -214,5 +223,15 @@ describe('Draft: assisted drawing (#326 C2)', () => {
 			[1, 0],
 			[0, 0]
 		]);
+	});
+});
+
+describe('cutText', () => {
+	it('names each part by where it lies against the other', () => {
+		const west: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+		const east: [number, number][] = [[1, 0], [2, 0], [2, 1], [1, 1]];
+		expect(cutText([west, east])).toMatch(/^part 1, the western, about .+, and part 2, the eastern, about .+$/);
+		const north: [number, number][] = [[0, 1], [1, 1], [1, 2], [0, 2]];
+		expect(cutText([north, west])).toMatch(/^part 1, the northern, .+part 2, the southern/);
 	});
 });

@@ -21,13 +21,16 @@ type User = Awaited<ReturnType<typeof signUp>>;
 let owner: User;
 let editor: User;
 let viewer: User;
+let stranger: User;
 let projectId: string;
+let strangerProjectId: string;
 const at = (p = '') => `/projects/${projectId}/map${p}`;
 const square = (w: number, s: number, d: number) => ({ type: 'Polygon', coordinates: [[[w, s], [w + d, s], [w + d, s + d], [w, s + d], [w, s]]] });
 const before = process.env.WATER_URL;
 
 beforeAll(async () => {
-	[owner, editor, viewer] = (await Promise.all(['Aowner', 'Aeditor', 'Aviewer'].map((n) => signUp(n)))) as [User, User, User];
+	[owner, editor, viewer, stranger] = (await Promise.all(['Aowner', 'Aeditor', 'Aviewer', 'Astranger'].map((n) => signUp(n)))) as [User, User, User, User];
+	strangerProjectId = (await stranger.call('POST', '/projects', { name: 'Elsewhere' })).body.project.id;
 	projectId = (await owner.call('POST', '/projects', { name: 'Assisted drawing' })).body.project.id;
 	for (const [u, role] of [
 		[editor, 'editor'],
@@ -93,7 +96,40 @@ describe('splitting a polygon', () => {
 	});
 });
 
+describe('who may split, and what (positive control: the editor’s splits above)', () => {
+	it('another project’s editor can’t split this project’s parcel, through either project; an unknown feature is 404', async () => {
+		const p = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Guarded', geometry: square(21.33, -33.62, 0.01) });
+		const fid = p.body.feature.id as string;
+		const body = { parts: splitHalves(21.33, -33.62, 0.01) };
+		expect((await stranger.call('POST', at(`/features/${fid}/split`), body)).status).toBe(404);
+		// Through the stranger's own project, where they are owner: the feature isn't there.
+		expect((await stranger.call('POST', `/projects/${strangerProjectId}/map/features/${fid}/split`, body)).status).toBe(404);
+		expect((await editor.call('POST', at(`/features/${crypto.randomUUID()}/split`), body)).status).toBe(404);
+		const [row] = await asOwner('SELECT area_m2 FROM map_feature WHERE id = $1', [fid]);
+		expect(row!.area_m2).toBeCloseTo(p.body.feature.areaM2, 3);
+	});
+});
+
 describe('tracing a dam', () => {
+	it('is not even visible to a non-member: 404 for the state and the trace', async () => {
+		expect((await stranger.call('GET', at('/dam-trace'))).status).toBe(404);
+		expect((await stranger.call('POST', at('/dam-trace'), { lon: DAM_CLICK[0], lat: DAM_CLICK[1] })).status).toBe(404);
+	});
+
+	it('an unreadable raster is off in the state and a 503 with a fixed sentence for a trace, never its cause', async () => {
+		const url = process.env.WATER_URL;
+		process.env.WATER_URL = '/nonexistent/water-raster-for-a-test.pmtiles';
+		try {
+			expect((await viewer.call('GET', at('/dam-trace'))).body).toEqual({ available: false, dataset: null });
+			const r = await editor.call('POST', at('/dam-trace'), { lon: DAM_CLICK[0], lat: DAM_CLICK[1] });
+			expect(r.status).toBe(503);
+			expect(r.body.error).toBe('The water occurrence data could not be read just now. Try again; if it keeps failing, the operator should check WATER_URL.');
+			expect(JSON.stringify(r.body)).not.toMatch(/nonexistent|ENOENT/);
+		} finally {
+			process.env.WATER_URL = url;
+		}
+	});
+
 	it('says whether it is on, to a viewer too', async () => {
 		const res = await viewer.call('GET', at('/dam-trace'));
 		expect(res.status).toBe(200);

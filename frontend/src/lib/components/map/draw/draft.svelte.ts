@@ -13,7 +13,8 @@
 // occurrence data as a drawing to adjust, with how it was made.
 import type { DamTraceProposal, MapFeature, MapFeatureKind, MapGeometry, MapPosition } from '$lib/api/types';
 import { confirmDialog, type ConfirmOptions } from '$lib/components/common/confirm.svelte';
-import { positionText } from '../mapData';
+import { areaText, positionText } from '../mapData';
+import { shapeAreaM2 } from '../measure/measure';
 import { canFinish, CORNER, distinctCorners, DRAW_CHOICES, type DrawChoice, type DraftShape, editableCorners, geometryOf, shapeOf, withoutCorner } from './shape';
 import { sameLine, snapLines, traceAlong, type SnapHit } from './snap';
 import { splitPolygon, type SplitResult } from './split';
@@ -123,6 +124,11 @@ export class Draft {
 		if (!c) return;
 		this.choice = c.id;
 		this.kind = c.kind;
+		// A traced outline is a dam's (or an other area's): drawn as anything else it is no longer the trace.
+		if (this.traced && c.id !== 'dam' && c.id !== 'other-area') {
+			this.traced = null;
+			this.said = 'No longer a traced dam outline: it saves as a drawing.';
+		}
 		if (c.shape !== this.shape && this.whole) this.whole = null;
 		this.shape = c.shape;
 	}
@@ -185,6 +191,13 @@ export class Draft {
 		this.#tracedAs = JSON.stringify(this.geometry);
 		this.said = `Traced a dam outline with ${this.coords.length} corners. Adjust it if it needs it, then save.`;
 		return true;
+	}
+
+	/** A split's cut is drawn: the live region says what it makes (the parts' areas), or why it can't be cut. */
+	#sayCut() {
+		const r = this.splitResult;
+		if (!r) return;
+		this.said = 'parts' in r ? `Cut in two: ${cutText(r.parts)}.` : r.problem;
 	}
 
 	/** The traced outline was changed before saving (its method says so). */
@@ -274,6 +287,7 @@ export class Draft {
 		this.phase = 'review';
 		this.cursor = null;
 		this.said = `${this.shape === 'polygon' ? 'Shape closed' : 'Line finished'} with ${this.coords.length} ${this.cornerWord.many}. Drag a ${this.cornerWord.one} to adjust it, then save.`;
+		this.#sayCut();
 		return true;
 	}
 
@@ -323,6 +337,7 @@ export class Draft {
 		this.corner = null;
 		this.cursor = null;
 		this.said = e ? `Pasted: ${this.coords.length} ${this.coords.length === 1 ? this.cornerWord.one : this.cornerWord.many}.` : 'Pasted a shape of several parts.';
+		this.#sayCut();
 		return true;
 	}
 
@@ -341,3 +356,21 @@ export class Draft {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Where a part lies against the other, in words: the bigger difference of their middles, west–east or north–south. */
+function sideOf(part: readonly MapPosition[], other: readonly MapPosition[]): string {
+	const mid = (c: readonly MapPosition[]) => [c.reduce((s, p) => s + p[0], 0) / c.length, c.reduce((s, p) => s + p[1], 0) / c.length] as const;
+	const [ax, ay] = mid(part);
+	const [bx, by] = mid(other);
+	const dx = (ax - bx) * Math.cos((((ay + by) / 2) * Math.PI) / 180);
+	const dy = ay - by;
+	return Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'western' : 'eastern') : dy < 0 ? 'southern' : 'northern';
+}
+
+/** A split's two parts in words, by where each lies and its area: "part 1, the western, about 51.6 km², and part 2, the eastern, about 51.6 km²". */
+export function cutText(parts: readonly [readonly MapPosition[], readonly MapPosition[]]): string {
+	return parts.map((p, i) => `part ${i + 1}, the ${partSide(parts, i)}, about ${areaText(shapeAreaM2(p))}`).join(', and ');
+}
+
+/** Where part i lies against the other ("western", "northern"). */
+export const partSide = (parts: readonly [readonly MapPosition[], readonly MapPosition[]], i: number) => sideOf(parts[i]!, parts[1 - i]!);

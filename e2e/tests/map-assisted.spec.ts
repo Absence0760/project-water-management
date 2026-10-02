@@ -13,10 +13,11 @@
 // Axe on the split preview and the traced drawing, light and dark.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { seedRunnableProject } from '../support/api.ts';
+import { addMember, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { box, openMap } from '../support/map.ts';
+import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { WATER_DAM, WATER_DRY } from '../support/water.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
@@ -115,7 +116,9 @@ test('splitting: the boundary into two named areas (it stays whole), a parcel in
 
 	// Right across it, north to south down the middle.
 	await paste(page, 'LINESTRING(21.35 -33.75, 21.35 -33.55)');
-	await expect(page.getByTestId('map-split-parts')).toHaveText('Cut in two: parts of 4 and 4 corners.');
+	// Which part is which, in words: where each lies and its area (also said in the live region).
+	await expect(page.getByTestId('map-split-parts')).toHaveText(/^Cut in two: part 1, the (western|eastern), about 5\d\.\d+ km², and part 2, the (western|eastern), about 5\d\.\d+ km²\.$/);
+	await expect(said(page)).toHaveText(/^Cut in two: part 1, the /);
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
 		await expectNoViolations(page);
@@ -125,6 +128,7 @@ test('splitting: the boundary into two named areas (it stays whole), a parcel in
 	const sheet = page.getByRole('dialog', { name: 'Split the shape' });
 	await expect(sheet.getByLabel('The parts are')).toHaveValue('other');
 	await expect(sheet.getByLabel(/^Part 1/)).toHaveValue('Synthetic catchment part 1');
+	await expect(sheet.getByText(/^Part 1 \(the (western|eastern) part, about/)).toBeVisible();
 	await sheet.getByLabel(/^Part 1/).fill('West unit');
 	await sheet.getByLabel(/^Part 2/).fill('East unit');
 	await sheet.getByTestId('split-submit').click();
@@ -162,8 +166,11 @@ test('tracing a dam from typed coordinates: dry land is refused; the outline com
 
 	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
 	await expect(bar(page).getByRole('heading', { name: 'Tracing a dam' })).toBeVisible();
+	// No snapping while placing a trace's point: it would pull a click in the water onto a shoreline.
+	await expect(bar(page).getByLabel('Snap to features')).toHaveCount(0);
 	await page.getByTestId('map-enter-coordinates').click();
 	const sheet = page.getByRole('dialog', { name: 'Trace a dam' });
+	await expect(page).toHaveURL(/[?&]trace=1(&|$)/);
 	await sheet.getByLabel('Latitude').fill(String(WATER_DRY[1]));
 	await sheet.getByLabel('Longitude').fill(String(WATER_DRY[0]));
 	await sheet.getByTestId('trace-submit').click();
@@ -177,6 +184,9 @@ test('tracing a dam from typed coordinates: dry land is refused; the outline com
 	await expect(bar(page)).toHaveAttribute('data-phase', 'review');
 	await expect(bar(page).getByLabel('Drawing')).toHaveValue('dam');
 	await expect(page.getByTestId('map-trace-source')).toContainText('Traced from Synthetic water occurrence');
+	// The sheet's Trace went with the sheet: the next step, Save…, has the focus; the URL lost trace=1.
+	await expect(bar(page).getByRole('button', { name: 'Save…' })).toBeFocused();
+	await expect(page).not.toHaveURL(/[?&]trace=/);
 	await expect(page.getByTestId('map-trace-source')).toContainText('water in at least 50 % of the observations');
 	await expect(said(page)).toHaveText(/^Traced a dam outline with \d+ corners\./);
 	for (const scheme of ['light', 'dark'] as const) {
@@ -196,4 +206,67 @@ test('tracing a dam from typed coordinates: dry land is refused; the outline com
 	const dam = (await features(page, project.id)).find((f) => f.name === 'Traced dam')!;
 	expect(dam.kind).toBe('dam');
 	expect(dam.properties.description).toMatch(/^Traced from Synthetic water occurrence .*water in at least 50 % of the observations/);
+});
+
+test('one placing mode at a time: Trace a dam, then Place a point or Delineate, leaves tracing', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map trace modes');
+	await place(page, project.id, boundary);
+	await openMap(page, project.id);
+	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'true');
+	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	await expect(bar(page).getByLabel('Placing a point')).toBeVisible();
+	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'false');
+	await expect(header(page).getByRole('button', { name: 'Place a point' })).toHaveAttribute('aria-pressed', 'true');
+	await page.getByTestId('map-enter-coordinates').click();
+	await expect(page.getByRole('dialog', { name: 'Place a point' })).toBeVisible();
+	await page.getByRole('dialog', { name: 'Place a point' }).getByRole('button', { name: 'Close' }).click();
+	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await header(page).getByRole('button', { name: 'Delineate' }).click();
+	await expect(bar(page).getByRole('heading', { name: 'Delineating a catchment' })).toBeVisible();
+	await expect(header(page).getByRole('button', { name: 'Trace a dam' })).toHaveAttribute('aria-pressed', 'false');
+	await bar(page).getByRole('button', { name: 'Cancel' }).click();
+
+	// A traced outline drawn as something else is no longer the trace, and says so.
+	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await page.getByTestId('map-enter-coordinates').click();
+	const sheet = page.getByRole('dialog', { name: 'Trace a dam' });
+	await sheet.getByLabel('Latitude').fill(String(WATER_DAM[1]));
+	await sheet.getByLabel('Longitude').fill(String(WATER_DAM[0]));
+	await sheet.getByTestId('trace-submit').click();
+	await expect(page.getByTestId('map-trace-source')).toBeVisible();
+	await bar(page).getByLabel('Drawing').selectOption('farm_parcel');
+	await expect(page.getByTestId('map-trace-source')).toHaveCount(0);
+	await expect(said(page)).toHaveText('No longer a traced dam outline: it saves as a drawing.');
+	await bar(page).getByRole('button', { name: 'Save…' }).click();
+	await expect(page.getByRole('dialog', { name: 'Save the drawing' }).getByLabel('This shape is')).toHaveValue('farm_parcel');
+});
+
+test('on a phone the assisted tools fit and pass axe; a viewer gets neither Trace a dam nor Split along a line', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Map assisted phone');
+	await place(page, project.id, boundary);
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openMap(page, project.id);
+	await row(page, 'Synthetic catchment').click();
+	await card(page).getByRole('button', { name: 'Split along a line' }).click();
+	await paste(page, 'LINESTRING(21.35 -33.75, 21.35 -33.55)');
+	await expect(page.getByTestId('map-split-parts')).toBeVisible();
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+	await bar(page).getByRole('button', { name: 'Cancel' }).click();
+	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
+	await expect(bar(page).getByLabel('Share of the observations counted as water')).toHaveValue('25');
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+
+	const viewer = await signIn('Assisted viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await openMap(viewer.page, project.id);
+	await expect(header(viewer.page).getByRole('button', { name: 'Draw a shape' })).toHaveCount(0);
+	await expect(header(viewer.page).getByRole('button', { name: 'Trace a dam' })).toHaveCount(0);
+	await row(viewer.page, 'Synthetic catchment').click();
+	await expect(card(viewer.page).getByRole('heading', { name: 'Synthetic catchment' })).toBeVisible();
+	await expect(card(viewer.page).getByRole('button', { name: 'Split along a line' })).toHaveCount(0);
 });

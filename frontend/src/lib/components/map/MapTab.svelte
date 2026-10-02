@@ -192,6 +192,8 @@
 	const place = overlay('place', '1', () => canEdit);
 	// Until the state is in, a `delineate=1` link is kept (a reload, a deep link), so the param isn't dropped before it can be judged.
 	const delineateSheet = overlay('delineate', '1', () => canEdit && (!delineationLoaded || !!delineation?.available));
+	// Trace a dam from typed coordinates (#326 C2): a sheet in the URL like Place and Delineate, kept until the state is in.
+	const traceSheet = overlay('trace', '1', () => canEdit && (!damTraceLoaded || !!damTrace?.available));
 	const grid = overlay('grid', GRID_ID, () => true);
 	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
 	const checksSheet = overlay('checks', '1', () => true);
@@ -235,6 +237,7 @@
 	let delineating = $state(false);
 	function startDelineate() {
 		measure.cancel();
+		tracing = false;
 		draft.place('gauge');
 		delineating = true;
 		void afterStart();
@@ -285,8 +288,9 @@
 	/** The features the map draws: the one being edited is drawn as the draft instead. */
 	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
 	// What a corner can snap to (#326 C2): every feature on the map (the draft leaves out the one being edited).
+	// Not while placing a trace's point: snapping would pull a click inside the water onto a shoreline drawn already.
 	$effect(() => {
-		draft.snapFeatures = features;
+		draft.snapFeatures = tracing ? [] : features;
 	});
 
 	async function afterStart() {
@@ -299,6 +303,7 @@
 	function startDraw(choiceId?: string) {
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
 		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
 		void afterStart();
@@ -306,12 +311,14 @@
 	function startPlace() {
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		draft.place('gauge');
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		if (draft.edit(f)) void afterStart();
 	}
 	// --- split a polygon along a drawn line (#326 C2): the cut is drawn as a line, the parts previewed, saved together ---
@@ -332,12 +339,16 @@
 
 	// --- trace a dam (#326 C2): on when the server has water occurrence data; a point inside the water, then the outline as a drawing ---
 	let damTrace = $state<DamTraceState | null>(null);
+	let damTraceLoaded = $state(false);
 	async function loadDamTrace() {
 		if (!canEdit) return;
 		try {
 			damTrace = await api.map.damTraceState(projectId);
 		} catch {
+			// Unavailable is the same as off: the tool isn't offered.
 			damTrace = null;
+		} finally {
+			damTraceLoaded = true;
 		}
 	}
 	$effect(() => {
@@ -347,7 +358,6 @@
 	/** The point placed is inside a dam's water, not a feature: the draw bar asks to trace. */
 	let tracing = $state(false);
 	let minOccurrence = $state<MinOccurrence>(25);
-	let traceSheetOpen = $state(false);
 	function startTrace() {
 		measure.cancel();
 		delineating = false;
@@ -359,17 +369,20 @@
 		if (!draft.active || draft.mode !== 'place') tracing = false;
 	});
 	/** The server's outline becomes the drawing: a dam, to adjust and save. */
-	function traced(t: DamTraceProposal) {
-		traceSheetOpen = false;
+	async function traced(t: DamTraceProposal) {
+		traceSheet.open = false;
 		tracing = false;
 		draft.trace(t.geometry, t);
 		mapRef?.frameGeometry(t.geometry);
+		// The control that asked (Trace the outline, or the sheet's Trace) is gone: the next step is Save….
+		await tick();
+		document.querySelector<HTMLElement>('[data-testid="map-draft-save"]')?.focus();
 	}
 	async function traceAt(at: MapPosition) {
 		drawSaving = true;
 		drawError = null;
 		try {
-			traced(await api.map.traceDam(projectId, { lon: at[0], lat: at[1], minOccurrence }));
+			await traced(await api.map.traceDam(projectId, { lon: at[0], lat: at[1], minOccurrence }));
 		} catch (err) {
 			drawError = msg(err);
 		} finally {
@@ -594,7 +607,7 @@
 	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
 		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
-		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating} data-testid="map-start-place">Place a point</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating && !tracing} data-testid="map-start-place">Place a point</button>
 		{#if delineation?.available}
 			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
 		{/if}
@@ -720,7 +733,7 @@
 							onsave={saveDraft}
 							onpaste={() => (pasteOpen = true)}
 							oncoords={() =>
-								tracing ? (traceSheetOpen = true) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
+								tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
 							onlocated={located}
 							{delineating}
 							{tracing}
@@ -904,8 +917,8 @@
 			{#if splitOpen && draft.mode === 'split' && draft.feature && draft.splitResult && 'parts' in draft.splitResult}
 				<SplitSheet bind:open={splitOpen} {projectId} feature={draft.feature} parts={draft.splitResult.parts} onsaved={splitDone} />
 			{/if}
-			{#if traceSheetOpen && damTrace}
-				<TraceSheet bind:open={traceSheetOpen} {projectId} info={damTrace} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />
+			{#if traceSheet.open && damTrace}
+				<TraceSheet bind:open={traceSheet.open} {projectId} info={damTrace} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />
 			{/if}
 			{#if pasteOpen && draft.active}
 				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />

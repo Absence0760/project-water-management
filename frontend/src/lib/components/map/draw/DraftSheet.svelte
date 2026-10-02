@@ -40,7 +40,7 @@
 	const kinds = $derived(traced ? KINDS_FOR_SHAPE[shapeOf(geometry)].filter((k) => k === 'dam' || k === 'other') : KINDS_FOR_SHAPE[shapeOf(geometry)]);
 	// Seeded once from the draw bar's choice; the sheet's own select changes it after.
 	// svelte-ignore state_referenced_locally
-	let kind = $state<MapFeatureKind>(initialKind);
+	let kind = $state<MapFeatureKind>(traced && initialKind !== 'dam' && initialKind !== 'other' ? 'dam' : initialKind);
 	let name = $state('');
 	let nodeId = $state('');
 	let saving = $state(false);

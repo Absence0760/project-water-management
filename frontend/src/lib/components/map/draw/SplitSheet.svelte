@@ -13,6 +13,7 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { areaText, KIND_LABEL } from '../mapData';
 	import { shapeAreaM2 } from '../measure/measure';
+	import { partSide } from './draft.svelte';
 
 	let {
 		open = $bindable(false),
@@ -76,7 +77,7 @@
 		{/if}
 		{#each [0, 1] as const as i (i)}
 			<div class="field">
-				<label for="{uid}-n{i}">Part {i + 1} <span class="u">(about {areaText(shapeAreaM2(parts[i]))})</span></label>
+				<label for="{uid}-n{i}">Part {i + 1} <span class="u">(the {partSide(parts, i)} part, about {areaText(shapeAreaM2(parts[i]))})</span></label>
 				<input id="{uid}-n{i}" maxlength="100" bind:value={names[i]} />
 			</div>
 		{/each}

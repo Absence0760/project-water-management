@@ -18,7 +18,7 @@
 <script lang="ts">
 	import type { MapPosition, MinOccurrence } from '$lib/api/types';
 	import { areaText, KIND_LABEL, POINT_KINDS } from '../mapData';
-	import type { Draft } from './draft.svelte';
+	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';
 
 	let {
@@ -58,7 +58,7 @@
 		split && 'problem' in split ? split.problem : draft.whole ? null : draft.phase === 'review' || draft.shape === 'point' ? draftProblem(draft.shape, draft.coords) : null
 	);
 	/** Snapping applies to every drawing but a measurement (which has no bar) and a pasted shape of several parts. */
-	const canSnap = $derived(!draft.whole && mapReady);
+	const canSnap = $derived(!draft.whole && mapReady && !tracing && draft.snapTargets.length > 0);
 	const canFollow = $derived(draft.mode === 'draw' && draft.shape !== 'point' && draft.phase === 'drawing');
 	const editing = $derived(draft.mode === 'edit');
 	const name = $derived(draft.feature ? draft.feature.name || KIND_LABEL[draft.feature.kind] : '');
@@ -141,7 +141,7 @@
 			<h2 class="bar-h" id="{uid}-h">Tracing a dam</h2>
 			<label class="share small">
 				Water in at least
-				<select bind:value={minOccurrence} data-testid="map-trace-share">
+				<select bind:value={minOccurrence} aria-label="Share of the observations counted as water" data-testid="map-trace-share">
 					{#each [10, 25, 50, 75] as const as v (v)}<option value={v}>{v} %</option>{/each}
 				</select>
 				of the observations
@@ -167,13 +167,13 @@
 		</p>
 	{/if}
 	{#if split && 'parts' in split}
-		<p class="small" data-testid="map-split-parts">Cut in two: parts of {split.parts[0].length} and {split.parts[1].length} corners.</p>
+		<p class="small" data-testid="map-split-parts">Cut in two: {cutText(split.parts)}.</p>
 	{/if}
 	{#if canSnap}
 		<div class="snap small">
 			<label><input type="checkbox" bind:checked={draft.snapOn} data-testid="map-snap" /> Snap to features</label>
 			{#if canFollow}<label><input type="checkbox" bind:checked={draft.follow} disabled={!draft.snapOn} data-testid="map-follow" /> Follow edges</label>{/if}
-			{#if draft.snapOn}<span class="muted">Hold Alt to place one {draft.shape === 'point' ? 'point' : corner.one} exactly.</span>{/if}
+			{#if draft.snapOn && !phone}<span class="muted">Hold Alt to place one {draft.shape === 'point' ? 'point' : corner.one} exactly.</span>{/if}
 		</div>
 	{/if}
 	{#if problem && (draft.phase === 'review' || draft.coords.length)}<p class="problem small" data-testid="map-draw-problem">{problem}</p>{/if}
