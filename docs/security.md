@@ -2576,7 +2576,8 @@ placed points. The server never trusts the browser with geometry:
   are `SET NULL` (the features are the project's; catalogue guard). A map
   feature holds no personal information about its creator, so the
   data-subject export doesn't list them. `delineation_proposal.created_by`
-  and `decided_by` (175) are `SET NULL` the same way.
+  and `decided_by` (175), and `start_proposal`'s (178), are `SET NULL` the
+  same way.
 - **Delineation** (#326 B-delineate, [maps.md §
   Delineation](./maps.md#delineation)): the DEM is read from `DEM_URL`,
   operator configuration, never a URL a user gives, so a click can't point
@@ -2588,6 +2589,15 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
+- **Start from the map** (#326 C3, [maps.md § Start from the
+  map](./maps.md#start-from-the-map)): the same DEM and the same bounds
+  (editor-only, its own 30 an hour, the window cap and budget, outside any
+  transaction). A user names only feature ids of their own project's map
+  (read under RLS, so another project's are "not on this map") and roles.
+  Apply writes only into an empty model, re-checks the ticks against the
+  stored plan (a value can't be ticked that wasn't proposed) and runs the
+  model's own validation before saving; the plan is immutable and the
+  decision final (178 `start_proposal_final`).
 
 ## Personal information (POPIA)
 
@@ -2712,6 +2722,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | The Map's records of who made them: a map import, a feature, a delineation proposed or decided (175) | `geo_source.imported_by`, `map_feature.created_by`, `delineation_proposal.created_by` and `decided_by` | With the project (superseded and rejected proposals past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); a proposal's polygon, dataset and method hold nothing about the person; its decision stays final (175 `delineation_proposal_final`, only the foreign key clears `decided_by`) | Deleted |
+| A model proposed from the map (178): who proposed and decided it | `start_proposal.created_by` and `decided_by` | With the project (superseded and discarded ones past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); the plan (units, areas, outlines from the project's map) and the decision hold nothing about the person; the decision stays final (178 `start_proposal_final`) | Deleted |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
 | Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |

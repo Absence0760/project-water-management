@@ -955,6 +955,46 @@ to a point on a river. The design, the method and its accuracy are in
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
 
+## Start from the map
+
+On an empty model, editors get **Start the model from the map** (issue #326
+C3 and the B-delineate stretch; the design, the method and what isn't built
+in [design/start-from-map.md](./design/start-from-map.md); the screen in
+[ui.md § Map](./ui.md#map-tabmap), the API in
+[api.md § Start from the map](./api.md#start-from-the-map)).
+
+- **The flow.** A sheet (`start=1`) with four steps, each read from the
+  server so a reload lands on it: the boundary (Delineate, Draw or Upload),
+  the points (each dam, other point and gauge is *a unit with a dam*, *a unit
+  at an abstraction point*, *another water user* or *not in the model*; the
+  outlet is a gauge or the boundary's own), the proposal (each value ticked
+  on its own: the unit's area, what it drains into, all of a dam unit's
+  runoff to its dam, the rest of the catchment as a unit), and data and the
+  first run (the existing proposals, linked in order: rain from the
+  boundary, the nearest gauging station, the dams from the register, land
+  cover, then Runs). Typing the model in on the Network stays the other
+  way; upload works at every step.
+- **Sub-catchments.** With a DEM, the server routes one window around the
+  catchment once (the same fill and D8 as Delineation), snaps the outlet and
+  every point to the channel (a dam polygon: its most-drained cell), and
+  gives each unit the cells whose flow meets it before any other unit: its
+  own piece, outlined with its holes (a unit upstream lying wholly inside
+  it). Each unit drains into the first unit its flow path meets. A water
+  user is in the order but owns no land. The rest of the catchment is the
+  outlet's own piece. A point that doesn't drain to the outlet, or snaps
+  onto another, is dropped with the reason; a DEM catchment more than 10 %
+  off the boundary's area is warned about.
+- **Without a DEM** (`DEM_URL` empty): the units come from the points with
+  no area and all drain into the outflow gauge; the rest of the catchment is
+  the boundary.
+- **Applying** writes only what is ticked, only into an empty model (409
+  once it has nodes), as one model revision: the nodes, each ticked area
+  saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
+  delineated from … (start-1)") and its area from it (*from the map*), the
+  points linked to their nodes. The proposal keeps the plan and the ticks.
+- **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
+  project an hour, the 20 s budget.
+
 ## River network
 
 The Map tab's **River network** layer (issue #345, the client checklist's
