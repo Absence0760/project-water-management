@@ -130,7 +130,8 @@ export function shortLine(farm: FarmProjection): string {
 	const days = count(DAYS, s.shortDays);
 	const head = months ? t('Short on {days} in {months}', { days, months }) : t('Short on {days}', { days });
 	const one = s.shortDays === 1;
-	if (farm.damCapacityM3 <= 0) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
+	// No dam, or a dam that serves none of the unit's demands (each draws on the river, engine ≥ 1.65.0): the river's days.
+	if (farm.damCapacityM3 <= 0 || s.onlyRiver) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
 	const stop = farm.damMinPct > 0;
 	if (s.shortDaysAtStopLevel >= s.shortDays) {
 		return t(
@@ -234,7 +235,7 @@ export function daysLeftLine(farm: FarmProjection, unit: VolumeUnit, long = fals
 	if (!d || d.usableM3 == null || farm.damMinPct <= 0) return null;
 	if (d.usableM3 <= 0) return [atStopLevel()];
 	if (d.usableDays == null || !(d.use14M3Day > 0)) return null;
-	return tRich(long ? 'At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.' : 'At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
+	return tRich(long ? 'At the use your dam carries over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.' : 'At the use your dam carries over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
 }
 
 /** null for a farm with no dam: no dam card and no dam page. */

@@ -89,7 +89,7 @@ level of an outlook published, the page shows *This season* (§12, "E3: the seas
 | --- | --- | --- |
 | "86 % of what you needed" | `season.fraction` = Σ `supplied` ÷ Σ `demand` (`windowSummary`) | whole %, with the tiny-number rules (§8) |
 | "324.2 ML of 376.5 ML since 1 Oct" | `season.suppliedM3`, `season.demandM3` | the user's volume unit (§8) |
-| "Short on 16 days in Nov and Dec, all when your dam was down to its stop level" | days with `deficit` > 0 in the season, and the months they fall in | a count. For a dam farm the engine is only ever short when the dam is at its stop level (model.md §2.7, G), so "all when…" is always true for a dam farm; a farm with no dam reads "…when the river was too low to take from" |
+| "Short on 16 days in Nov and Dec, all when your dam was down to its stop level" | days with `deficit` > 0 in the season, and the months they fall in | a count. For a dam farm the engine is only ever short when the dam is at its stop level (model.md §2.7, G), so "all when…" is always true for a dam farm; a farm with no dam reads "…when the river was too low to take from", and so does a unit whose dam serves none of its demands, each drawing on its own river abstraction (`season.onlyRiver`, model.md §2.7j). A unit with demands on both sides counts a short day at the stop level when the dam sat there, whichever side was short (docs/followups.md: the per-side shortfall) |
 | "Last 30 days: >99 % · 113.3 ML of 113.8 ML" | `last30` (the same shape) | as above |
 | "Worked out by the model, not read from your meter. It assumes 75 % of the water you pump reaches the crop (sprinklers). Wrong? Tell your WUA." | the node's `irrigationEfficiency`, named by the nearest of the engine's SABI 2021 systems (`IRRIGATION_SYSTEMS`: drip 0.90 "drip"; micro 0.82 and pivot 0.85 "micro or centre pivot"; sprinkler 0.80 and 0.75 "sprinklers"; surface 0.70 "flood") | Always on the supply card (§11 F4, F22) |
 | 12-month bars, needed and received | `run_series` `demand`, `supplied`, summed by calendar month on the client | ML per month; "Show the numbers" lists all 12 months with years |
@@ -125,7 +125,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 | "83.6 ML of 350 ML" | last `dam_storage`, `damCapacityM3` | volume unit |
 | "You can still use 32.4 ML" | `dam_storage − damCapacityM3 × damMinPct`, floored at 0 | Exactly what the engine lets irrigation draw (model.md §2.7, G). Not shown when `damMinPct = 0` (below) |
 | "Up 9 points in 30 days (was 15 %)"; "up 32.4 ML" | `dam_storage` 30 days before `dataUntil` | whole percentage points |
-| "At your use over the last 14 days (about 5.1 ML a day), the water above the stop level lasts about 6 days if nothing flows in. A rough guide." | usable ÷ mean `supplied` over the last 14 days [32 412 ÷ 5 074 = 6.4] | whole days under 14, then weeks. Not shown when the 14-day use is 0 (§11 F12) |
+| "At the use your dam carries over the last 14 days (about 5.1 ML a day), the water above the stop level lasts about 6 days if nothing flows in. A rough guide." | usable ÷ the mean the dam would have to give over the last 14 days with nothing flowing in: `supplied` less `groundwater_used` and each `river_take@` (a river abstraction beside the dam, model.md §2.7j), which the dam never serves (`farmProjection.ts` `damDraw`); the supply rule's river pump and off-take water stay in, since without inflow the dam meets that demand [32 412 ÷ 5 074 = 6.4] | whole days under 14, then weeks. Not shown when the 14-day use is 0 (§11 F12) |
 | "Last full and spilling 27 Jul 2023" | the last day with `spill` > 0 | a date, or "not in the last 12 months" |
 | "Same day last season 17 %" | `lastSeason.damPct` (E4) | whole % |
 | 12-month dam line, stop level dashed | `run_series` `dam_storage` ÷ capacity | – |
@@ -579,7 +579,10 @@ settled something this spec left open:*
   1.0.0 removed that model, only a stored run from before it can be one.*
 - *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop
   level); "all when your dam was down to its stop level" reads for dam farms
-  only, as §3 Q1 says.*
+  only, as §3 Q1 says. A dam farm whose demands all draw on the river
+  (`season.onlyRiver`, engine ≥ 1.65.0; absent on views published before
+  2026-10-02) reads as a farm with no dam: 0 days at the stop level, the
+  river's wording.*
 - *Share links are WP-2.3 phase 2, not built (followups.md).*
 
 **WP-2.6** (the view):

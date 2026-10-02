@@ -7,6 +7,7 @@ import {
 	catchmentView,
 	farmProjection,
 	PROJECTION_SERIES,
+	PROJECTION_SERIES_PREFIXES,
 	ProjectionInputError,
 	upgradeLegacyModel,
 	type CatchmentView,
@@ -297,8 +298,9 @@ async function loadProjectionRun(
 	const nodes = (model.nodes ?? []) as NetworkNode[];
 	const keys = [...new Set(Object.values(PROJECTION_SERIES).flat())];
 	const { rows: series } = await db.query<{ node_id: string | null; key: string; values: (number | null)[] }>(
-		`SELECT node_id, key, "values" FROM run_series WHERE run_id = $1 AND key = ANY($2::text[])`,
-		[runId, keys]
+		// The prefixed keys (a river abstraction's take, river_take@<key>) by LIKE, the prefix's _ and % escaped.
+		`SELECT node_id, key, "values" FROM run_series WHERE run_id = $1 AND (key = ANY($2::text[]) OR key LIKE ANY($3::text[]))`,
+		[runId, keys, PROJECTION_SERIES_PREFIXES.map((p) => `${p.replace(/[\\_%]/g, '\\$&')}%`)]
 	);
 	const byKey = new Map(series.map((s) => [`${s.node_id ?? ''}|${s.key}`, s.values]));
 	const c = r.calibration;

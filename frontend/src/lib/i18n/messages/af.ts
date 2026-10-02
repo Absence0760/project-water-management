@@ -225,6 +225,20 @@ export const af: Catalogue = {
 	'20707b22': 'Laai tans die raaisel…',
 	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
 	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
+	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
+	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
+	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
+	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
+	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
+	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
+	// Licence records, and the names they keep, are kept until a set date and then deleted.
+	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
+	// Outside the organisation, registered water use is shown only as totals, never with a name.
+	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
+	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
+	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
+	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
+	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -429,10 +443,10 @@ export const af: Catalogue = {
 	'100c3cb5': '{points} hoër in 30 dae (was {was})',
 	// Down {points} in 30 days (was {was})
 	'ef59dc0c': '{points} laer in 30 dae (was {was})',
-	// At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
-	'1cc72e56': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
-	// At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
-	'00f9df75': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
+	// At the use your dam carries over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
+	'3a3d3a40': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
+	// At the use your dam carries over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
+	'226e7cd7': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
 	// irrigation stops at {pct}
 	'e54e8052': 'besproeiing stop by {pct}',
 	// {storage} of {capacity}
