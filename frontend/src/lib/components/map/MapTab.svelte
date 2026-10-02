@@ -36,7 +36,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
+	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -74,6 +74,8 @@
 	import DraftSheet from './draw/DraftSheet.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
 	import PasteSheet from './draw/PasteSheet.svelte';
+	import SplitSheet from './draw/SplitSheet.svelte';
+	import TraceSheet from './draw/TraceSheet.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
@@ -196,6 +198,8 @@
 	const place = overlay('place', '1', () => canEdit);
 	// Until the state is in, a `delineate=1` link is kept (a reload, a deep link), so the param isn't dropped before it can be judged.
 	const delineateSheet = overlay('delineate', '1', () => canEdit && (!delineationLoaded || !!delineation?.available));
+	// Trace a dam from typed coordinates (#326 C2): a sheet in the URL like Place and Delineate, kept until the state is in.
+	const traceSheet = overlay('trace', '1', () => canEdit && (!damTraceLoaded || !!damTrace?.available));
 	const grid = overlay('grid', GRID_ID, () => true);
 	// Until the state is in, a `start=1` link is kept (a reload, a deep link), as Delineate's is.
 	const startSheet = overlay('start', '1', () => canEdit && (!startLoaded || !!startInfo));
@@ -243,6 +247,7 @@
 	function startDelineate() {
 		backToStart = false;
 		measure.cancel();
+		tracing = false;
 		draft.place('gauge');
 		delineating = true;
 		void afterStart();
@@ -343,6 +348,11 @@
 	let pasteOpen = $state(false);
 	/** The features the map draws: the one being edited is drawn as the draft instead. */
 	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
+	// What a corner can snap to (#326 C2): every feature on the map (the draft leaves out the one being edited).
+	// Not while placing a trace's point: snapping would pull a click inside the water onto a shoreline drawn already.
+	$effect(() => {
+		draft.snapFeatures = tracing ? [] : features;
+	});
 
 	async function afterStart() {
 		drawError = null;
@@ -355,6 +365,7 @@
 		backToStart = false;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
 		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
 		void afterStart();
@@ -363,6 +374,7 @@
 		backToStart = false;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		draft.place('gauge');
 		void afterStart();
 	}
@@ -370,7 +382,76 @@
 		backToStart = false;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		if (draft.edit(f)) void afterStart();
+	}
+	// --- split a polygon along a drawn line (#326 C2): the cut is drawn as a line, the parts previewed, saved together ---
+	let splitOpen = $state(false);
+	function startSplit(f: MapFeature) {
+		measure.cancel();
+		delineating = false;
+		tracing = false;
+		if (draft.split(f)) void afterStart();
+	}
+	async function splitDone(parts: [MapFeature, MapFeature]) {
+		notice = `Split ${featureName(draft.feature ?? parts[0])} in two: ${parts.map((f) => (f.name ? `“${f.name}”` : KIND_LABEL[f.kind].toLowerCase())).join(' and ')}.`;
+		splitOpen = false;
+		draft.cancel();
+		await load();
+		await pickInPlace(parts[0].id);
+	}
+
+	// --- trace a dam (#326 C2): on when the server has water occurrence data; a point inside the water, then the outline as a drawing ---
+	let damTrace = $state<DamTraceState | null>(null);
+	let damTraceLoaded = $state(false);
+	async function loadDamTrace() {
+		if (!canEdit) return;
+		try {
+			damTrace = await api.map.damTraceState(projectId);
+		} catch {
+			// Unavailable is the same as off: the tool isn't offered.
+			damTrace = null;
+		} finally {
+			damTraceLoaded = true;
+		}
+	}
+	$effect(() => {
+		void projectId;
+		untrack(loadDamTrace);
+	});
+	/** The point placed is inside a dam's water, not a feature: the draw bar asks to trace. */
+	let tracing = $state(false);
+	let minOccurrence = $state<MinOccurrence>(25);
+	function startTrace() {
+		measure.cancel();
+		delineating = false;
+		draft.place('dam');
+		tracing = true;
+		void afterStart();
+	}
+	$effect(() => {
+		if (!draft.active || draft.mode !== 'place') tracing = false;
+	});
+	/** The server's outline becomes the drawing: a dam, to adjust and save. */
+	async function traced(t: DamTraceProposal) {
+		traceSheet.open = false;
+		tracing = false;
+		draft.trace(t.geometry, t);
+		mapRef?.frameGeometry(t.geometry);
+		// The control that asked (Trace the outline, or the sheet's Trace) is gone: the next step is Save….
+		await tick();
+		document.querySelector<HTMLElement>('[data-testid="map-draft-save"]')?.focus();
+	}
+	async function traceAt(at: MapPosition) {
+		drawSaving = true;
+		drawError = null;
+		try {
+			await traced(await api.map.traceDam(projectId, { lon: at[0], lat: at[1], minOccurrence }));
+		} catch (err) {
+			drawError = msg(err);
+		} finally {
+			drawSaving = false;
+		}
 	}
 	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
 	async function saveDraft() {
@@ -378,6 +459,14 @@
 		if (!g) return;
 		if (draft.mode === 'draw') {
 			draftSheetOpen = true;
+			return;
+		}
+		if (draft.mode === 'split') {
+			splitOpen = true;
+			return;
+		}
+		if (draft.mode === 'place' && tracing) {
+			if (g.type === 'Point') await traceAt(g.coordinates);
 			return;
 		}
 		if (draft.mode === 'place' && delineating) {
@@ -583,9 +672,12 @@
 	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
 		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
-		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating} data-testid="map-start-place">Place a point</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating && !tracing} data-testid="map-start-place">Place a point</button>
 		{#if delineation?.available}
 			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
+		{/if}
+		{#if damTrace?.available}
+			<button type="button" class="btn" onclick={startTrace} aria-pressed={tracing} data-testid="map-start-trace">Trace a dam</button>
 		{/if}
 		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
 		{#if canStart}
@@ -708,9 +800,12 @@
 							error={drawError}
 							onsave={saveDraft}
 							onpaste={() => (pasteOpen = true)}
-							oncoords={() => (delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true }))}
+							oncoords={() =>
+								tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
 							onlocated={located}
 							{delineating}
+							{tracing}
+							bind:minOccurrence
 						/>
 					{/if}
 					<div class="map-body">
@@ -782,6 +877,10 @@
 										<button type="button" class="btn btn-sm" onclick={() => startEdit(target)} data-testid="map-edit-shape">
 											{picked.geometry.type === 'Point' ? 'Move the point' : 'Edit the shape'}
 										</button>
+									{/if}
+									{#if editableCorners(picked.geometry)?.shape === 'polygon' && draft.mode !== 'split'}
+										{@const target = picked}
+										<button type="button" class="btn btn-sm" onclick={() => startSplit(target)} data-testid="map-split-shape">Split along a line</button>
 									{/if}
 									{@render deleteButton(picked)}
 								</div>
@@ -904,7 +1003,22 @@
 				/>
 			{/if}
 			{#if draftSheetOpen && draft.geometry}
-				<DraftSheet bind:open={draftSheetOpen} {projectId} {nodes} geometry={draft.geometry} kind={draft.kind} hasBoundary={!!boundary} onsaved={drafted} />
+				<DraftSheet
+					bind:open={draftSheetOpen}
+					{projectId}
+					{nodes}
+					geometry={draft.geometry}
+					kind={draft.kind}
+					hasBoundary={!!boundary}
+					traced={draft.traced ? { lon: draft.traced.click[0], lat: draft.traced.click[1], minOccurrence: draft.traced.minOccurrence, edited: draft.tracedEdited } : null}
+					onsaved={drafted}
+				/>
+			{/if}
+			{#if splitOpen && draft.mode === 'split' && draft.feature && draft.splitResult && 'parts' in draft.splitResult}
+				<SplitSheet bind:open={splitOpen} {projectId} feature={draft.feature} parts={draft.splitResult.parts} onsaved={splitDone} />
+			{/if}
+			{#if traceSheet.open && damTrace}
+				<TraceSheet bind:open={traceSheet.open} {projectId} info={damTrace} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />
 			{/if}
 			{#if pasteOpen && draft.active}
 				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />

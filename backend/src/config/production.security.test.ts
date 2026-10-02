@@ -79,7 +79,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		REPORT_DOWNLOADS: 'cloudfront',
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
 		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey,
-		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles'
+		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
+		WATER_URL: 's3://water-management-tiles-000000000000/tiles/water.pmtiles'
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -351,7 +352,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 		ALERTS_ENABLED: 'true is a real decision in both',
 		REPORTS_BUCKET: 'a name only: each role’s IAM policy grants Terraform’s bucket alone, so a wrong one fails every put',
 		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket',
-		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)'
+		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)',
+		WATER_URL: 'empty in the committed file: tracing a dam off, a valid production choice too (a local value is refused, as DEM_URL)'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {
@@ -415,13 +417,16 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['migrate', 'NODE_EXTRA_CA_CERTS', undefined],
 			['api', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
 			['api', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
-			['api', 'DEM_URL', 'https://127.0.0.1/terrain.pmtiles']
+			['api', 'DEM_URL', 'https://127.0.0.1/terrain.pmtiles'],
+			['api', 'WATER_URL', 'fixtures/water/synthetic-water.pmtiles'],
+			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {
 		for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames('api', prod('api', { DEM_URL: v })), String(v)).not.toContain('DEM_URL');
+		for (const v of [undefined, '', 's3://water-tiles/tiles/water.pmtiles']) expect(problemNames('api', prod('api', { WATER_URL: v })), String(v)).not.toContain('WATER_URL');
 	});
 
 	it('refuses a committed placeholder in any setting, classified or not', () => {

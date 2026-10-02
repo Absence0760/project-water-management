@@ -3598,7 +3598,9 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       through `deploy-frontend.yml` behind a gate that takes only same-origin
       `/tiles/` paths, and delineation's DEM (`delineation_dem`: `DEM_URL` on
       the API and its role's read of `tiles/terrain.pmtiles`, refused on an
-      API Lambda under 1 024 MB or 25 s). CSP unchanged. What's left is the
+      API Lambda under 1 024 MB or 25 s). CSP unchanged. Tracing a dam's
+      water occurrence followed the same pattern (#326 C2: `dam_trace_water`,
+      `WATER_URL` and the read of `tiles/water.pmtiles`). What's left is the
       operator's (uploading, the variables, the tfvars:
       [deployment.md § Map tiles](./deployment.md#map-tiles)) and the item
       below.

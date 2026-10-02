@@ -2648,6 +2648,36 @@ export interface MapFeatureInput {
 	lon?: number;
 	lat?: number;
 	geometry?: MapGeometry;
+	/** A dam outline traced from the water occurrence data (issue #326 C2): where and how, and whether it was adjusted after. POST only. */
+	traced?: { lon: number; lat: number; minOccurrence: MinOccurrence; edited: boolean };
+}
+
+/** The share of observations (%) a cell must be water in to count when tracing a dam (issue #326 C2). */
+export type MinOccurrence = 10 | 25 | 50 | 75;
+
+/** GET …/map/dam-trace: whether the server has water occurrence data, and which. */
+export interface DamTraceState {
+	available: boolean;
+	dataset: { label: string; attribution: string; fingerprint: string; maxZoom: number; bounds: [number, number, number, number] } | null;
+}
+
+/** POST …/map/dam-trace: the outline of the water round a click, proposed (nothing saved; docs/api.md § Catchment map). */
+export interface DamTraceProposal {
+	click: MapPosition;
+	/** The water cell the trace started from (the click, or the nearest water within about 60 m). */
+	seed: MapPosition;
+	snapDistanceM: number;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }>;
+	areaM2: number;
+	cells: number;
+	cellSizeM: number;
+	zoom: number;
+	minOccurrence: MinOccurrence;
+	dataset: string;
+	attribution: string;
+	datasetFingerprint: string;
+	method: string;
+	methodVersion: string;
 }
 
 /** One problem in an imported file (422 `details`): the feature's place from 1, or null for the file. */

@@ -284,6 +284,18 @@ data "aws_iam_policy_document" "s3_endpoint" {
       identifiers = [aws_iam_role.lambda.arn]
     }
   }
+  # Tracing a dam's reads of the water occurrence (map_data.tf), the same way:
+  # nothing passes without the role's own grant (api_water, only when
+  # dam_trace_water is on).
+  statement {
+    sid       = "ApiReadsDamTraceWater"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tiles.arn}/${local.water_key}"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
   # A reference-dataset load reads its one file (map_data.tf, lambda-migrate.ts).
   statement {
     sid       = "MigrateReadsReferenceFiles"

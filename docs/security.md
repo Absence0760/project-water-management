@@ -2592,6 +2592,18 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
+- **Tracing a dam** (#326 C2, [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
+  configuration, read with the same fail-closed decoders; a user supplies a
+  longitude, latitude and one of four shares. A trace reads at most a
+  512-cell window (a handful of tiles, cached per process), takes
+  milliseconds and stores nothing, so it is editor-only with no rate limit
+  of its own. A traced outline saved names its method on the server's word,
+  not the client's: the server traces the click again, and an outline sent
+  as unadjusted must equal that trace. Splitting checks each part with
+  `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
+  within its bounds), in one transaction, so a split can't smuggle in an
+  unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
   (editor-only, its own 30 an hour, the window cap and budget, outside any
@@ -3171,6 +3183,10 @@ key there would let any read-only principal forge any user's session.
 - **Delineation's DEM read** (`delineation_dem`): the API role may
   GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
   allows the same; off by default.
+- **Tracing a dam's water read** (`dam_trace_water`, #326 C2): the same
+  for one other key, `tiles/water.pmtiles` (`api_water`); off by default.
+  The file sits under `tiles/`, so `/tiles/*` serves it by bounded ranges
+  like the other archives; GSW's terms allow redistribution.
 - **Reference loads run as the schema owner**, so they are gated like a
   deploy: `load-reference.yml` reaches AWS only in the `production`
   environment (a required reviewer, then OIDC), and the deploy role's only

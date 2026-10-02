@@ -1549,6 +1549,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | --- | --- | --- | --- |
 | `tiles/south-africa.pmtiles` (the basemap, ~1 GB at maxzoom 15) | `pnpm dev:tiles:fetch` | `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` | none (the OSM attribution is always on the map) |
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
+| `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
@@ -1566,6 +1567,7 @@ the old file and the PMTiles reader notices a replaced archive by its
 aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
 aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
 
@@ -1588,6 +1590,16 @@ refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
 delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 ([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
 which the defaults (1 024 MB, 30 s) hold with room to spare.
+
+**Tracing a dam** (#326 C2, [maps.md § Assisted
+drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API
+Lambda the same way. Set `dam_trace_water = true` in the tfvars and apply
+once the file is uploaded: Terraform sets
+`WATER_URL=s3://<tiles_bucket>/tiles/water.pmtiles` on the API and lets its
+role read that one key (`api_water`), and the Map offers **Trace a dam**. A
+trace reads a handful of small tiles in milliseconds, so it asks nothing of
+the Lambda's size. Unlike the DEM it waits for no legal sentence (GSW's
+licence is settled), and it is independent of `delineation_dem`.
 
 **The cost bound.** Every object under `/tiles/` is public (anyone can
 fetch it, as the browser does), and the archives are gigabytes. The
