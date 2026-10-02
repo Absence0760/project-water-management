@@ -2588,16 +2588,7 @@ placed points. The server never trusts the browser with geometry:
   latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
   API, so it is editor-only, capped at 30 a project an hour (429), bounded
   by a window cap and a 20 s budget under the Lambda's timeout, and run
-  outside any database transaction. The cap counts every run that cost the
-  compute: the proposals stored, and each click the DEM refused (422) or
-  couldn't read (503), recorded as `map.elevation_refused` (the tool and the
-  reason's code, never the click; `delineation/attempts.ts`). Requests
-  arriving at the same moment each see the count before any finishes, so a
-  burst can pass the cap by at most the API's reserved concurrency (10).
-  The cap is per project and creating projects is free, so what bounds one
-  account across projects is the WAF's API rate and that concurrency; a
-  per-user ledger and keeping this compute from filling the API's slots are
-  followups.md items. The decoders (WebP, PNG, PMTiles) read
+  outside any database transaction. The decoders (WebP, PNG, PMTiles) read
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
@@ -2615,9 +2606,8 @@ placed points. The server never trusts the browser with geometry:
   unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
-  (editor-only, its own 30 an hour, shared with dividing and counting
-  refused and failed runs the same way, the window cap and budget, outside
-  any transaction). A user names only feature ids of their own project's map
+  (editor-only, its own 30 an hour, the window cap and budget, outside any
+  transaction). A user names only feature ids of their own project's map
   (read under RLS, so another project's are "not on this map") and roles.
   Apply writes only into an empty model, re-checks the ticks against the
   stored plan (a value can't be ticked that wasn't proposed) and runs the
