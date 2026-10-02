@@ -28,6 +28,7 @@ import { stationRoutes } from './geo/stationRoutes.js';
 import { riverRoutes } from './geo/rivers.js';
 import { croplandRoutes } from './geo/croplandRoutes.js';
 import { damRoutes } from './geo/damRoutes.js';
+import { delineationRoutes } from './delineation/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
 import { noteRoutes } from './notes/routes.js';
@@ -187,6 +188,7 @@ export function createApp() {
 	projects.route('/', stationRoutes);
 	projects.route('/', riverRoutes);
 	projects.route('/', damRoutes);
+	projects.route('/', delineationRoutes);
 	projects.route('/', croplandRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);

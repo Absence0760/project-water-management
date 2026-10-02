@@ -254,6 +254,9 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');
 		expect(eventLine(ev('map.feature_changed', { kind: 'catchment_boundary', name: 'Upper', moved: false }))).toBe('Changed the catchment boundary “Upper” on the map');
 		expect(eventLine(ev('map.feature_deleted', { kind: 'river', name: 'Spruit' }))).toBe('Deleted a river “Spruit” from the map');
+		expect(eventLine(ev('map.delineation_proposed', { from: 'dam_wall', areaKm2: 340.7, dataset: 'Synthetic DEM 1' }))).toBe('Delineated a catchment of 340.7 km² from a dam wall (Synthetic DEM 1)');
+		expect(eventLine(ev('map.delineation_accepted', { as: 'catchment_boundary', name: 'Valley' }))).toBe('Accepted a delineated catchment as the catchment boundary “Valley”');
+		expect(eventLine(ev('map.delineation_rejected', {}))).toBe('Rejected a delineated catchment');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {

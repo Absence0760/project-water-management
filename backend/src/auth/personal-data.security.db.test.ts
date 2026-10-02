@@ -23,6 +23,7 @@
 // deletion, and still finds the owner (who stays) afterwards.
 import { runEnsemble } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
@@ -232,6 +233,14 @@ beforeAll(async () => {
 		kind: 'other',
 		text: JSON.stringify({ type: 'Feature', properties: { name: 'Pd feature' }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
 	});
+	// A delineation they proposed and rejected (175): created_by and decided_by are set null on deletion; the proposal stays
+	// with the project. Against the committed synthetic DEM (its valley's outlet).
+	const demBefore = process.env.DEM_URL;
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	const proposal = await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
+	await call(subject, 'POST', `/projects/${projectId}/map/delineation/${proposal.proposal.id}/reject`, {});
+	if (demBefore === undefined) delete process.env.DEM_URL;
+	else process.env.DEM_URL = demBefore;
 	// An application, decided by the subject.
 	const [applicant, consultant] = (await Promise.all([`PdApplicant${tag}`, `PdConsultant${tag}`].map((n) => signUp(n)))) as [User, User];
 	for (const u of [applicant, consultant]) {

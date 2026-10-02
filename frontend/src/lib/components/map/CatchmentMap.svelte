@@ -56,6 +56,7 @@
 		mapStyle,
 		overlayColours,
 		overlayData,
+		proposalData,
 		QUATERNARY_HIT_LAYER,
 		quaternaryData,
 		RELIEF_LAYER,
@@ -100,7 +101,8 @@
 		onreach,
 		terrainUrl = null,
 		relief = false,
-		onreliefError
+		onreliefError,
+		proposal = null
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -139,6 +141,8 @@
 		relief?: boolean;
 		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
 		onreliefError?: () => void;
+		/** A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet. */
+		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition } | null;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -248,6 +252,8 @@
 		src?.setData?.(overlayData(features, selectedId, fills));
 		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
 		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
+		const pr = map.getSource('proposal') as { setData?: (d: unknown) => void } | undefined;
+		pr?.setData?.(proposalData(proposal));
 		const rn = map.getSource('rivers') as { setData?: (d: unknown) => void } | undefined;
 		rn?.setData?.(riverNetworkData(rivers, pickedReach));
 		syncMarkers();
@@ -280,7 +286,8 @@
 						glyphs,
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
-						terrain: reliefUrl()
+						terrain: reliefUrl(),
+						proposal: proposalData(proposal)
 					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
@@ -383,9 +390,19 @@
 		void fills;
 		void quaternaries;
 		void pickedQuaternary;
+		void proposal;
 		void rivers;
 		void pickedReach;
 		syncOverlay();
+	});
+
+	// A new proposal is framed, so the editor sees all of what they are deciding on.
+	let framedProposal: string | null = null;
+	$effect(() => {
+		const p = proposal;
+		if (status !== 'ready' || !p || p.id === framedProposal) return;
+		framedProposal = p.id;
+		frame(boundsOf(p.geometry), 13);
 	});
 
 	// The Relief layer turned on or off.

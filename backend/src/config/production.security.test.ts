@@ -308,7 +308,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 	const DEV_VALUE_OK: Record<string, string> = {
 		ALERTS_ENABLED: 'true is a real decision in both',
 		REPORTS_BUCKET: 'a name only: each role’s IAM policy grants Terraform’s bucket alone, so a wrong one fails every put',
-		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket'
+		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket',
+		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {
@@ -369,9 +370,16 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['migrate', 'MASTER_SECRET_ARN', undefined],
 			['migrate', 'DB_HOST', 'localhost'],
 			['migrate', 'WATER_APP_PASSWORD', 'water_app'],
-			['migrate', 'NODE_EXTRA_CA_CERTS', undefined]
+			['migrate', 'NODE_EXTRA_CA_CERTS', undefined],
+			['api', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
+			['api', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
+			['api', 'DEM_URL', 'https://127.0.0.1/terrain.pmtiles']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
+	});
+
+	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {
+		for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames('api', prod('api', { DEM_URL: v })), String(v)).not.toContain('DEM_URL');
 	});
 
 	it('refuses a committed placeholder in any setting, classified or not', () => {

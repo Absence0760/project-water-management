@@ -16,7 +16,7 @@
 // relief (shaded from a DEM, PUBLIC_TERRAIN_URL: Terrarium tiles in one more
 // PMTiles file) sits over the land and under the water, only while the tab's
 // Relief layer is on.
-import type { MapFeature, MapGeometry } from '$lib/api/types';
+import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
 export const BASEMAP_ATTRIBUTION = '© Protomaps © OpenStreetMap contributors';
@@ -278,6 +278,42 @@ export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer
 	};
 }
 
+/** A delineated catchment waiting for the editor's decision (#326 B-delineate): a teal apart from every overlay stroke and the quaternaries' purple. */
+export const proposalColour = (dark: boolean) => (dark ? '#3fe0d0' : '#006d77');
+
+/** The `proposal` source's data: the proposed polygon and its snapped outlet, or nothing. */
+export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition } | null | undefined) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: p
+			? [
+					{ type: 'Feature' as const, properties: { part: 'area' }, geometry: p.geometry },
+					{ type: 'Feature' as const, properties: { part: 'outlet' }, geometry: { type: 'Point' as const, coordinates: p.outlet } }
+				]
+			: []
+	};
+}
+
+/** The proposal: a faint fill, a casing and a short dash (never the boundary's long one), the outlet a ringed dot. Over the features: it is what the editor is deciding on. */
+export function proposalLayers(dark: boolean): Layer[] {
+	const colour = proposalColour(dark);
+	const casing = overlayColours(dark).casing;
+	const src = { source: 'proposal' };
+	const area = ['==', ['get', 'part'], 'area'];
+	return [
+		{ id: 'pr-fill', type: 'fill', ...src, filter: area, paint: { 'fill-color': colour, 'fill-opacity': 0.12 } },
+		{ id: 'pr-casing', type: 'line', ...src, filter: area, paint: { 'line-color': casing, 'line-width': 6, 'line-opacity': 0.85 } },
+		{ id: 'pr-line', type: 'line', ...src, filter: area, paint: { 'line-color': colour, 'line-width': 3, 'line-dasharray': [1.5, 1.5] } },
+		{
+			id: 'pr-outlet',
+			type: 'circle',
+			...src,
+			filter: ['==', ['get', 'part'], 'outlet'],
+			paint: { 'circle-radius': 6, 'circle-color': colour, 'circle-stroke-color': casing, 'circle-stroke-width': 2 }
+		}
+	];
+}
+
 /**
  * The river network's colour (issue #345): a cyan-blue, so it reads as water
  * beside the project's own rivers (the overlay's water blue) yet stays apart
@@ -341,6 +377,8 @@ export interface StyleOptions {
 	rivers?: ReturnType<typeof riverNetworkData>;
 	/** The relief's PMTiles URL, when the relief is shown (PUBLIC_TERRAIN_URL and the Relief layer on). Null: no relief, nothing fetched. */
 	terrain?: string | null;
+	/** A delineation proposal to draw (proposalData()); none when omitted. */
+	proposal?: ReturnType<typeof proposalData>;
 }
 
 /**
@@ -360,9 +398,10 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...base.sources,
 			quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) },
 			rivers: { type: 'geojson', data: opts.rivers ?? riverNetworkData(null) },
-			features: { type: 'geojson', data }
+			features: { type: 'geojson', data },
+			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) }
 		},
-		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
+		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
 	if (opts.terrain) {
 		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain);

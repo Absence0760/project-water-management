@@ -124,6 +124,21 @@ const pemPublicKey: Check = (v) =>
 
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
+/** The delineation DEM (delineation/dem.ts): empty (off) or an S3 object; never a local file or host, which a Lambda doesn't have. */
+const demUrl: Check = (v) => {
+	if (!set(v)) return null;
+	const t = v.trim();
+	if (/^s3:\/\/[^/]+\/.+/.test(t)) return null;
+	if (/^https:\/\//.test(t)) {
+		try {
+			return isLocalHost(new URL(t).hostname) ? 'points at a local host' : null;
+		} catch {
+			return 'is not a URL';
+		}
+	}
+	return 'must be empty (off) or s3://<bucket>/<key> (or https://)';
+};
+
 const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
 
 export const SETTINGS: Record<string, Setting> = {
@@ -267,6 +282,11 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'Signs report downloads (its public half is in the distribution’s key group). From the API’s runtime secret.',
 		checks: { api: pemPrivateKey }
 	},
+	DEM_URL: {
+		why: 'The DEM catchment delineation reads (delineation/dem.ts, issue #326 B-delineate): empty turns it off. Only the API delineates; the other Lambdas never call configuredDem.',
+		checks: { api: demUrl }
+	},
+	DEM_LABEL: { why: 'The DEM’s name on each proposal; empty takes the archive’s own. A label, never a credential or a switch.' },
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	PACKS_BUCKET: {
 		why: 'The evidence packs bucket (Object Lock; infra/packs.tf). The renderer stores a pack PDF; the worker HEADs it before recording the hash the renderer answered with (jobs/handlers/pack-render.ts); the API stores a pack’s reproduction bundle when it issues the pack (evidence/bundle.ts) and signs both downloads as CloudFront URLs on /packs/*.',

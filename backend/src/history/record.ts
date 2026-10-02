@@ -236,6 +236,10 @@ export type AuditKind =
 	| 'map.feature_created'
 	| 'map.feature_changed'
 	| 'map.feature_deleted'
+	// A catchment delineated from a click (175, issue #326 B-delineate): proposed, accepted (as which feature) or rejected. Ids, the click's kind, the area and the dataset; never the polygon.
+	| 'map.delineation_proposed'
+	| 'map.delineation_accepted'
+	| 'map.delineation_rejected'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

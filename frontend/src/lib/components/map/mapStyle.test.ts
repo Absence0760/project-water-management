@@ -17,6 +17,9 @@ import {
 	overlayColours,
 	overlayData,
 	overlayLayers,
+	proposalColour,
+	proposalData,
+	proposalLayers,
 	quaternaryColour,
 	quaternaryData,
 	quaternaryLayers,
@@ -141,13 +144,14 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', ...overlayLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
 			quaternaries: { type: 'geojson', data: quaternaryData(null) },
 			rivers: { type: 'geojson', data: riverNetworkData(null) },
-			features: { type: 'geojson', data }
+			features: { type: 'geojson', data },
+			proposal: { type: 'geojson', data: proposalData(null) }
 		});
 	});
 
@@ -366,6 +370,39 @@ describe('relief (shaded from a DEM)', () => {
 				const alpha = Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(String(paint[k]))?.[1]);
 				expect(alpha, k).toBeLessThanOrEqual(0.6);
 			}
+		}
+	});
+});
+
+describe('the delineation proposal (#326 B-delineate)', () => {
+	const geometry = { type: 'Polygon' as const, coordinates: [[[20, -33], [21, -33], [21, -34], [20, -33]]] as [number, number][][] };
+	const data = overlayData([], null);
+
+	it('draws nothing without a proposal, and the polygon and its outlet with one', () => {
+		expect(proposalData(null).features).toEqual([]);
+		const d = proposalData({ geometry, outlet: [20.5, -33.9] });
+		expect(d.features.map((f) => [f.properties.part, f.geometry.type])).toEqual([
+			['area', 'Polygon'],
+			['outlet', 'Point']
+		]);
+	});
+
+	it('is a source of every style, drawn over the features', () => {
+		const st = mapStyle('https://x/t.pmtiles', false, data, { glyphs: 'https://x/{fontstack}/{range}.pbf', proposal: proposalData({ geometry, outlet: [20.5, -33.9] }) });
+		expect(st.sources).toHaveProperty('proposal');
+		const ids = st.layers.map((l) => l.id);
+		expect(ids.indexOf('pr-line')).toBeGreaterThan(ids.indexOf('ov-boundary'));
+		expect(mapStyle(null, false, data).sources).toHaveProperty('proposal');
+	});
+
+	it('is dashed short (never the boundary’s long dash), and its colour reads 3:1 on the basemap and its casing, light and dark', () => {
+		for (const dark of [false, true]) {
+			const line = proposalLayers(dark).find((l) => l.id === 'pr-line')!;
+			expect((line.paint as Record<string, unknown>)['line-dasharray']).toEqual([1.5, 1.5]);
+			const b = basemapColours(dark);
+			const colour = proposalColour(dark);
+			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(colour, g), `${colour} on ${g}`).toBeGreaterThanOrEqual(3);
+			expect(contrast(colour, overlayColours(dark).casing)).toBeGreaterThanOrEqual(3);
 		}
 	});
 });

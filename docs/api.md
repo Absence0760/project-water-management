@@ -2975,9 +2975,35 @@ only propose.
   change replaces it; History keeps both).
 - Each write is in the audit log (`map.imported`, `map.feature_created`,
   `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
-  geometry). Farmers and applicants get `403` on every route here (RLS lets
+  geometry; delineation's `map.delineation_*` in [§ Delineation](#delineation)). Farmers and applicants get `403` on every route here (RLS lets
   them read the boundary, gauges, rivers and their own farm's features, for a
   later farm view).
+
+## Delineation
+
+A catchment proposed from the DEM upstream of a clicked point, then accepted
+or rejected (issue #326 B-delineate, `175_delineation.sql`,
+`backend/src/delineation/`, [maps.md § Delineation](./maps.md#delineation),
+[design/delineation.md](./design/delineation.md)). Off while the server's
+`DEM_URL` is empty. Nothing here changes the model: an accepted polygon is a
+map feature like any other.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[] }`: the newest 10, any status. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall' }` | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon); nothing is saved. `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour; `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
+| POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+
+- `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
+  'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
+  geometry (a Polygon), areaM2, cells, cellSizeM, zoom, windowCells,
+  dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
+  createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
+  `featureId` the accepted feature (`null` again once it is deleted).
+- Each write is in the audit log (`map.delineation_proposed`,
+  `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
+  kind, the area, the dataset; never the polygon). A stranger gets `404`.
 
 ## Notes
 

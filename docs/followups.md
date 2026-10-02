@@ -3595,7 +3595,12 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       licence's liability sentence ("The organisations in charge of the
       Copernicus programme by law or by delegation do not incur any
       liability for any use of the Copernicus WorldDEM-30", Art. 6(c)) in
-      the app's legal notice first (maps.md § Relief).
+      the app's legal notice first (maps.md § Relief). Delineation reads the
+      same file from the API (#326 B-delineate, maps.md § Delineation): set
+      `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles` on the API Lambda and
+      grant its role `s3:GetObject` on that one key (it reaches S3 through
+      the VPC's gateway endpoint); until then production offers no
+      Delineate. The Art. 6(c) sentence covers the delineated polygons too.
 - [ ] **Loading the quaternary dataset in production**: the loader runs as
       the schema owner from a workstation; the database is in a private VPC.
       Add a one-off path (a migrate-Lambda-style invocation, or a job reading
@@ -3669,6 +3674,20 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       DWS (Dam Safety Office) for written permission for commercial use
       before a client deployment loads the real list. Trigger: the first
       client who wants register capacities proposed.
+- [ ] **Sub-catchments at every dam and abstraction point** (#326
+      B-delineate's stretch, not built; design/delineation.md § Not built).
+      Today an editor delineates each dam wall by hand, which gives its whole
+      upstream area. The model wants each unit's *incremental* area (what
+      drains to it and not to a unit upstream), which needs the network's
+      order: delineate every unit's point at once on one routed window,
+      subtract the upstream units' masks, and propose each unit's area as a
+      polygon with Use. Trigger: C3 (start a catchment from the map), or a
+      client delineating more than a few units.
+- [ ] **Delineation of catchments larger than about 100 km across**
+      (design/delineation.md § Where it runs): the API refuses rather than
+      cut one off, within its 30 s Lambda. Durable path: a `delineate` job
+      kind on the worker (300 s) with a larger window cap, the same code.
+      Trigger: a client asking to delineate a large river's catchment.
 - [ ] **Loading the register of dams in production**: the same missing path
       as the quaternary dataset above (the loader runs as the schema owner
       from a workstation). Do both together, once either licence allows.

@@ -263,6 +263,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// A map feature and its import are the project's; who placed or imported them is cleared (152_catchment_map.sql).
 	'geo_source.imported_by': 'set null',
 	'map_feature.created_by': 'set null',
+	// A delineation proposal (175): who proposed and decided it is a pointer only; the acts are audited.
+	'delineation_proposal.created_by': 'set null',
+	'delineation_proposal.decided_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',
