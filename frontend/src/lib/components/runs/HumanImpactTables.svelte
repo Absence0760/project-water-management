@@ -85,7 +85,7 @@
 						<td>{unit}</td>
 						<th scope="row">{o.name} <span class="muted small">{DEMAND_OBJECT_CATEGORY_LABEL[o.category] ?? o.category}</span></th>
 						{#if sources.length}<td class:muted={!o.source}>{sourceLabel(o.source)}</td>{/if}
-						<td>{PRIORITY[o.priority] ?? o.priority}</td>
+						<td>{PRIORITY[o.priority] ?? o.priority}{o.rank !== undefined ? `, rank ${o.rank}` : ''}</td>
 						<td class="num">{fmtNum(o.avgDemandM3Day)}</td>
 						<td class="num">{fmtNum(o.avgSuppliedM3Day)}</td>
 						<td class="num">{fmtPct(o.fractionSupplied)}</td>

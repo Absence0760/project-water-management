@@ -4,7 +4,9 @@
 	// supplied from the unit's own dam, river pump and boreholes with its crops.
 	// Each is a monthly m³/day or a count × litres per unit per day (grossed up
 	// for losses, × a monthly profile), with a return share, a priority against
-	// the crops, a destination and an on/off schedule by date
+	// the crops (with two or more objects, the unit's numbered supply order,
+	// engine ≥ 1.64.0, issue #343, demandObjectOrder.ts), a destination and an
+	// on/off schedule by date
 	// (DemandScheduleFields, engine ≥ 1.17.0). A domestic or municipal one has
 	// a basic-needs floor of 25 l a person a day that a restriction never cuts
 	// through (engine ≥ 1.44.0, issue #123): its people are a per-unit count, or
@@ -18,6 +20,7 @@
 		DEMAND_OBJECT_CATEGORY_LABEL,
 		DEMAND_OBJECT_SOURCES,
 		objectMonthlyM3Day,
+		supplyOrder,
 		type DemandObject,
 		type DemandObjectCategory,
 		type DemandObjectDestination,
@@ -32,6 +35,7 @@
 	import MonthFields from './MonthFields.svelte';
 	import { floorLine, peopleHint } from './demandObjectFloor';
 	import { setSizing, setSource, sizingFixedBy, SOURCE_OPTION_LABEL } from './demandObjectSource';
+	import { orderRows, positionChoices, PRIORITY_OPTION_LABEL, setPriority, setSupplyPosition, showsSupplyOrder, supplyOrderText } from './demandObjectOrder';
 
 	let {
 		node,
@@ -48,11 +52,6 @@
 		onremove?: (id: string) => void;
 	} = $props();
 
-	const PRIORITY_LABEL: Record<DemandObjectPriority, string> = {
-		first: 'First: before the hydrological unit’s crops',
-		shared: 'Shared: pro rata with the crops',
-		last: 'Last: after the crops'
-	};
 	const DESTINATION_LABEL: Record<DemandObjectDestination, string> = {
 		internal: 'Used in the catchment',
 		external: 'Piped out of the catchment (nothing returns)'
@@ -61,6 +60,14 @@
 	const unitWord = (c: DemandObjectCategory) => (c === 'livestock' ? 'head' : c === 'domestic' || c === 'municipal' ? 'people' : 'units');
 	const label = $derived(node.name || 'this hydrological unit');
 	let newCategory = $state<DemandObjectCategory>('municipal');
+
+	/** The unit's numbered supply order (two or more objects): each object's position and the crops'. */
+	const ordered = $derived(showsSupplyOrder(objects));
+	/** How many places the order has now (the crops' among them). */
+	const levels = $derived.by(() => {
+		const { positions, crops } = supplyOrder(objects);
+		return Math.max(crops, ...positions);
+	});
 
 	/** Its mean abstraction demand over the year, m³/day (the engine's own sizing). */
 	const meanOf = (o: DemandObject) => objectMonthlyM3Day(o, []).reduce((s, v) => s + v, 0) / 12;
@@ -80,6 +87,34 @@
 	{#if objects.length === 0}
 		<p class="muted small">No demand objects on {label}.</p>
 	{:else}
+		{#if ordered}
+			<fieldset class="order" data-testid="supply-order-{node.id}">
+				<legend><span class="lbl">Supply order on a short day<HelpTip key="demandObject.priority" /></span></legend>
+				<p class="muted small">1 is supplied first; demands at one number share pro rata. Pick “between” to put one in a place of its own.</p>
+				<ol class="order-list">
+					{#each orderRows(objects) as row (row.which)}
+						{@const id = row.which === 'crops' ? `do-order-crops-${node.id}` : `do-order-${objects[row.which]!.id}`}
+						<li>
+							<label for={id}>{row.which === 'crops' ? 'The crops' : objects[row.which]!.name || 'Unnamed demand'}</label>
+							<select
+								{id}
+								disabled={readonly}
+								value={String(row.position)}
+								aria-describedby="supply-order-text-{node.id}"
+								onchange={(e) => {
+									setSupplyPosition(objects, row.which, Number(e.currentTarget.value));
+									// Show what was kept, even when the choice changed nothing.
+									e.currentTarget.value = String(orderRows(objects).find((r) => r.which === row.which)!.position);
+								}}
+							>
+								{#each positionChoices(levels) as c (c.value)}<option value={String(c.value)}>{c.label}</option>{/each}
+							</select>
+						</li>
+					{/each}
+				</ol>
+				<p class="muted small" id="supply-order-text-{node.id}" data-testid="supply-order-text-{node.id}" aria-live="polite">Order: {supplyOrderText(objects)}.</p>
+			</fieldset>
+		{/if}
 		<ul class="list">
 			{#each objects as o, i (o.id)}
 				<li data-testid="demand-object-{o.id}">
@@ -120,12 +155,14 @@
 							</select>
 							{#if sizingFixedBy(o)}<span class="muted small" id="do-size-hint-{o.id}">Set by the source.</span>{/if}
 						</div>
-						<div class="field">
-							<span class="lbl"><label for="do-pri-{o.id}">Priority</label><HelpTip key="demandObject.priority" /></span>
-							<select id="do-pri-{o.id}" disabled={readonly} value={o.priority} onchange={(e) => (o.priority = e.currentTarget.value as DemandObjectPriority)}>
-								{#each Object.entries(PRIORITY_LABEL) as [p, text] (p)}<option value={p}>{text}</option>{/each}
-							</select>
-						</div>
+						{#if !ordered}
+							<div class="field">
+								<span class="lbl"><label for="do-pri-{o.id}">Priority</label><HelpTip key="demandObject.priority" /></span>
+								<select id="do-pri-{o.id}" disabled={readonly} value={o.priority} onchange={(e) => setPriority(o, e.currentTarget.value as DemandObjectPriority)}>
+									{#each Object.entries(PRIORITY_OPTION_LABEL) as [p, text] (p)}<option value={p}>{text}</option>{/each}
+								</select>
+							</div>
+						{/if}
 						<div class="field">
 							<label for="do-dest-{o.id}">Destination</label>
 							<select id="do-dest-{o.id}" disabled={readonly} value={o.destination} onchange={(e) => setDestination(o, e.currentTarget.value as DemandObjectDestination)}>
@@ -252,6 +289,33 @@
 		font-size: 0.85rem;
 		color: var(--text-2);
 	}
+	.order {
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.5rem 0.75rem;
+		margin: 0 0 0.75rem;
+	}
+	.order legend {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+	}
+	.order-list {
+		list-style: none;
+		padding: 0;
+		margin: 0.25rem 0;
+		display: grid;
+		gap: 0.25rem;
+	}
+	.order-list li {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(8rem, 12rem);
+		gap: 0.5rem;
+		align-items: center;
+	}
+	.order-list label {
+		overflow-wrap: anywhere;
+	}
 	.row-actions,
 	.add {
 		display: flex;
@@ -263,6 +327,7 @@
 		.field :global(input),
 		.field select,
 		.add select,
+		.order-list select,
 		.btn {
 			min-height: 44px;
 		}

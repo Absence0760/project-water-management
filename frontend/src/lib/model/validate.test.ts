@@ -330,6 +330,12 @@ describe('validateModel', () => {
 			[{ source: 'meter', sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, true],
 			[{ source: 'aadd', sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, true],
 			[{ source: 'survey' }, true],
+			// Its rank within its priority (engine 1.64.0): none, or a whole number 1–99.
+			[{ rank: null }, false],
+			[{ rank: 3 }, false],
+			[{ rank: 0 }, true],
+			[{ rank: 1.5 }, true],
+			[{ rank: 100 }, true],
 			// A schedule (engine 1.17.0): a good window, a bad date, too many windows.
 			[{ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }] }, false],
 			[{ schedule: [{ label: '', span: 'yearly', from: '02-30', to: '03-01', easterFrom: null, easterTo: null, weekdays: null, factor: 0 }] }, true],

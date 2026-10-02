@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "issue #343: the supply order box on the node form (demandObjectOrder.ts, the engine's supplyLevels/fromSupplyOrder); measured 1552 KB against 1551 KB"
+}
