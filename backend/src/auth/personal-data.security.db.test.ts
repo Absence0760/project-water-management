@@ -54,7 +54,9 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 		// 159: a restore re-applies erasures from this list; the id only, purged after 40 days (above the 35-day backups).
 		'erasure_log.subject_id': 'the erasure log: the deleted account’s random id only, so a restore can delete it again; purged after 40 days',
 		// 101: the daily cap on adding by email counts by the adder's id, not linked to the account.
-		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends'
+		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends',
+		// 186: the hourly cap on dam traces counts by the user's id, not linked to the account.
+		'map_compute_throttle.bucket': 'the hourly cap on dam traces, keyed by the user’s id; gone when its one-hour window ends'
 	},
 	email: {
 		// Keyed by the typed address, not the account: a day without attempts forgets it.

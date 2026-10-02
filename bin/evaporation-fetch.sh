@@ -24,6 +24,11 @@ LAST="${2:-2020}"
 BASE="${EVAP_URL:-https://data.bris.ac.uk/datasets/qb8ujazzda0s2aykkv0oq0ctp}"
 BBOX="${EVAP_BBOX:-16,-35.2,33.2,-22}"
 DATASET="${EVAP_DATASET:-dPET-$FIRST-$LAST}"
+# Checked before use: HTTPS only (redirects too), a numeric box, a plain label.
+NUM='-?[0-9]+(\.[0-9]+)?'
+[[ "$BASE" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/[^[:space:]]*$ ]] || { echo "EVAP_URL must be an https:// URL (got: $BASE)" >&2; exit 2; }
+[[ "$BBOX" =~ ^$NUM,$NUM,$NUM,$NUM$ ]] || { echo "EVAP_BBOX must be west,south,east,north in degrees (got: $BBOX)" >&2; exit 2; }
+[[ "$DATASET" =~ ^[A-Za-z0-9][A-Za-z0-9\ ._-]{0,49}$ ]] || { echo "EVAP_DATASET must be 1-50 letters, digits, spaces, dots, dashes or underscores (got: $DATASET)" >&2; exit 2; }
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/water-management-tiles/evaporation"
 mkdir -p "$CACHE"
 
@@ -35,7 +40,7 @@ for ((y = FIRST; y <= LAST; y++)); do
 	nc="$CACHE/${y}_daily_pet.nc"
 	if [ ! -f "$nc" ]; then
 		echo "$y: downloading ${y}_daily_pet.nc (about 2.4 GB) …"
-		curl -fSL -C - -o "$nc.part" "$BASE/${y}_daily_pet.nc"
+		curl --proto '=https' --proto-redir '=https' -fSL -C - -o "$nc.part" "$BASE/${y}_daily_pet.nc"
 		mv "$nc.part" "$nc"
 	fi
 	(cd "$ROOT/backend" && pnpm exec tsx scripts/import-evaporation.ts --reduce "$CACHE" "$nc" --bbox "$BBOX")

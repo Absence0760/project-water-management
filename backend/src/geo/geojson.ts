@@ -192,39 +192,48 @@ function segmentsCross(p1: Position, p2: Position, p3: Position, p4: Position): 
 }
 
 /**
- * Whether a closed ring crosses or touches itself (other than neighbouring
- * edges sharing their vertex). A sweep over the edges sorted by their least
- * longitude, comparing only edges whose extents overlap; past
- * GEO_MAX_PAIR_CHECKS comparisons the ring is refused as too complex, so a
- * hostile ring can't cost quadratic time.
+ * Whether closed rings cross or touch themselves or each other (other than
+ * a ring's neighbouring edges sharing their vertex). A sweep over the edges
+ * sorted by their least longitude, comparing only edges whose extents
+ * overlap. Every comparison counts against GEO_MAX_PAIR_CHECKS, the ones
+ * skipped by latitude too, so past it the shape is refused as too complex:
+ * a hostile ring (a zigzag whose edges all overlap in longitude) can't cost
+ * quadratic time.
  */
-export function ringSelfIntersects(ring: readonly Position[]): boolean {
-	const n = ring.length - 1; // edges; the ring is closed
-	const edges = Array.from({ length: n }, (_, i) => i).sort((a, b) => Math.min(ring[a]![0], ring[a + 1]![0]) - Math.min(ring[b]![0], ring[b + 1]![0]));
-	const active: number[] = [];
+export function ringsIntersect(rings: readonly (readonly Position[])[]): boolean {
+	const edges: { r: number; i: number; n: number; minX: number }[] = [];
+	rings.forEach((ring, r) => {
+		const n = ring.length - 1; // edges; the ring is closed
+		for (let i = 0; i < n; i++) edges.push({ r, i, n, minX: Math.min(ring[i]![0], ring[i + 1]![0]) });
+	});
+	edges.sort((a, b) => a.minX - b.minX);
+	const active: (typeof edges)[number][] = [];
 	let checks = 0;
-	for (const i of edges) {
-		const a = ring[i]!;
-		const b = ring[i + 1]!;
-		const minX = Math.min(a[0], b[0]);
-		for (let k = active.length - 1; k >= 0; k--) {
-			const j = active[k]!;
-			if (Math.max(ring[j]![0], ring[j + 1]![0]) < minX) {
-				active.splice(k, 1);
-				continue;
-			}
-			const adjacent = Math.abs(i - j) === 1 || Math.abs(i - j) === n - 1;
-			if (adjacent) continue;
-			const c = ring[j]!;
-			const d = ring[j + 1]!;
-			if (Math.max(a[1], b[1]) < Math.min(c[1], d[1]) || Math.max(c[1], d[1]) < Math.min(a[1], b[1])) continue;
+	for (const e of edges) {
+		const ring = rings[e.r]!;
+		const a = ring[e.i]!;
+		const b = ring[e.i + 1]!;
+		let kept = 0;
+		for (let k = 0; k < active.length; k++) {
+			const o = active[k]!;
+			const other = rings[o.r]!;
+			const c = other[o.i]!;
+			const d = other[o.i + 1]!;
+			if (Math.max(c[0], d[0]) < e.minX) continue; // passed: dropped from the sweep
+			active[kept++] = o;
 			if (++checks > GEO_MAX_PAIR_CHECKS) throw new Refused('has a ring too complex to check; simplify it');
+			if (o.r === e.r && (Math.abs(e.i - o.i) === 1 || Math.abs(e.i - o.i) === e.n - 1)) continue;
+			if (Math.max(a[1], b[1]) < Math.min(c[1], d[1]) || Math.max(c[1], d[1]) < Math.min(a[1], b[1])) continue;
 			if (segmentsCross(a, b, c, d)) return true;
 		}
-		active.push(i);
+		active.length = kept;
+		active.push(e);
 	}
 	return false;
 }
+
+/** Whether one closed ring crosses or touches itself (ringsIntersect of the ring alone). */
+export const ringSelfIntersects = (ring: readonly Position[]): boolean => ringsIntersect([ring]);
 
 /** Whether point `p` lies inside ring `r` (ray casting; on the edge counts as outside). */
 export function pointInRing(p: Position, r: readonly Position[]): boolean {
@@ -244,13 +253,14 @@ function ring(a: unknown, count: { n: number }): Position[] {
 	const [f, l] = [r[0]!, r[r.length - 1]!];
 	if (f[0] !== l[0] || f[1] !== l[1]) throw new Refused('has a polygon ring that is not closed (its last position must repeat its first)');
 	if (planarArea(r) === 0) throw new Refused('has a polygon ring with no area');
-	if (ringSelfIntersects(r)) throw new Refused('has a polygon ring that crosses itself');
 	return r;
 }
 
 function polygon(a: unknown, count: { n: number }): Position[][] {
 	if (!Array.isArray(a) || a.length === 0) throw new Refused('a polygon has no rings');
 	const rings = a.map((r) => ring(r, count));
+	// One sweep over every ring: a ring that crosses itself, or a hole that crosses its outer ring or another hole.
+	if (ringsIntersect(rings)) throw new Refused(rings.length === 1 ? 'has a polygon ring that crosses itself' : 'has polygon rings that cross themselves or each other');
 	for (const hole of rings.slice(1)) {
 		if (!pointInRing(hole[0]!, rings[0]!)) throw new Refused('has a hole outside its polygon');
 	}

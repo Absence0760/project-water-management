@@ -69,7 +69,10 @@ server and no tile CDN: the file is served from the app's own storage.
   (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
-  defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
+  defaults. The script checks every such override before use (a numeric
+  bbox, whole-number zooms and orders, an 8-digit build date, a 40-hex fonts
+  commit, `https://` source URLs) and exits 2 otherwise; every download is
+  HTTPS only, redirects included. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
   or tracing a parcel (drawing, below) needs a closer zoom than 13. Measured
   2026-10-01 with `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the
   Protomaps build of 2026-09-30, the bbox above), which reads only the
@@ -555,10 +558,13 @@ did, and refuses the whole file on any problem, listing them per feature:
   takes the types that fit it (a boundary or parcel is polygons, a gauge a
   point, a river lines; a dam a point or polygon).
 - **Rings**: closed, at least 4 positions, with an area, not crossing or
-  touching themselves, each hole starting inside its outer ring, not across
-  the antimeridian. The self-crossing check is a sweep with a budget of 5
-  million segment comparisons per ring, past which the ring is refused as too
-  complex, so a hostile file can't cost quadratic time.
+  touching themselves or each other (a hole can't cross its outer ring or
+  another hole), each hole starting inside its outer ring, not across the
+  antimeridian. The crossing check is one sweep over a polygon's rings with
+  a budget of 5 million segment comparisons, every comparison counted, past
+  which the polygon is refused as too complex, so a hostile file can't cost
+  quadratic time ([security.md § Input handling](./security.md#input-handling),
+  Geometry cost).
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
@@ -1493,7 +1499,8 @@ only reads them.
   `~/.cache/water-management-tiles/evaporation/` so a re-run skips it),
   deletes the year, then averages the years and loads them as
   `dPET-<first>-<last>`. `EVAP_BBOX`, `EVAP_DATASET` and `EVAP_URL` override
-  the box, the label and the source. By hand:
+  the box, the label and the source (checked first: a numeric box, a plain
+  label, an `https://` URL; the download refuses a redirect to plain HTTP). By hand:
   `pnpm import:evaporation --reduce <dir> <year>_daily_pet.nc …` then
   `pnpm import:evaporation <dir>/*.dpet-monthly.json --dataset <label>`
   (`--source`, `--version`, `--attribution` override the dPET defaults). The

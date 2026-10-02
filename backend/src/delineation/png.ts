@@ -3,7 +3,7 @@
 // fixture uses (backend/scripts/dem-fixture.ts writes it with `encodePng`).
 // Node's zlib does the compression; nothing else is needed.
 import { deflateSync, inflateSync } from 'node:zlib';
-import type { Rgba } from './webp.js';
+import { MAX_TILE_SIDE, type Rgba } from './webp.js';
 
 export class PngError extends Error {}
 
@@ -58,13 +58,20 @@ export function decodePng(buf: Uint8Array): Rgba {
 			if (colour !== 2 && colour !== 6) fail('a colour type other than RGB or RGBA');
 			if (buf[o + 20] !== 0) fail('interlacing');
 			channels = colour === 2 ? 3 : 4;
+			if (width > MAX_TILE_SIDE || height > MAX_TILE_SIDE) fail(`an image of ${width} × ${height} px (tiles are at most ${MAX_TILE_SIDE} px a side)`);
 		} else if (type === 'IDAT') idat.push(data);
 		else if (type === 'IEND') break;
 		o += 12 + len;
 	}
 	if (!width || !height || !channels) fail('no IHDR');
-	const raw = inflateSync(Buffer.concat(idat));
 	const stride = width * channels;
+	// The image data never inflates past its rows (a filter byte each): a deflate bomb stops there.
+	let raw: Buffer;
+	try {
+		raw = inflateSync(Buffer.concat(idat), { maxOutputLength: height * (stride + 1) });
+	} catch (e) {
+		return fail((e as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE' ? 'more image data than its size holds' : 'image data that does not inflate');
+	}
 	if (raw.length < height * (stride + 1)) fail('too little image data');
 	const cur = new Uint8Array(stride);
 	let prev = new Uint8Array(stride);
