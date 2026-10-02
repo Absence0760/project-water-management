@@ -264,10 +264,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'river-pool',
 		term: 'Pool at the pump',
-		short: 'A pool in the river at a run-of-river pump’s intake: the pump draws it down once the flow it may take is used, and it refills from the flow above what must pass.',
+		short: 'A pool at a run-of-river pump’s intake: drawn down once the flow the pump may take is used, refilled from the flow above what must pass.',
 		units: 'm³',
 		category: 'network',
-		fields: ['node.poolCapacityM3', 'node.poolInitialPct', 'node.poolAreaM2', 'run.pool_storage', 'run.pool_drawn', 'run.pool_evaporation']
+		fields: ['node.poolCapacityM3', 'node.poolInitialPct', 'node.poolAreaM2', 'run.pool_storage', 'run.pool_drawn', 'run.pool_evaporation', 'run.pool_area']
 	},
 	{
 		id: 'drought-restriction',

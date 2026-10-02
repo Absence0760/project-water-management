@@ -96,6 +96,8 @@ const RUN_KEYS = [
 	'groundwater_to_dam',
 	// The river pump of a farm's supply rule (engine 0.42.0, WP-3.8); an other water user's pump (engine 1.58.0)
 	'river_abstraction', 'pump_limited',
+	// A pool at a run-of-river pump (engine 1.64.0, network/supply.ts POOL_SERIES)
+	'pool_storage', 'pool_drawn', 'pool_evaporation', 'pool_area',
 	// The drought restriction rule (engine 1.54.0, WP-3.8)
 	'restriction_level', 'restricted_demand',
 	// Land cover (engine 0.24.0, WP-1.35)

@@ -28,6 +28,7 @@ import {
 	BOREHOLE_DEFAULTS,
 	OPERATING_DEFAULTS,
 	SUPPLY_DEFAULTS,
+	POOL_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -228,12 +229,13 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damAreaExponent: DAM_AREA_EXPONENT,
 			damSeepagePerDay: f.seepage ?? 0,
 			// Not an other water user (WP-1.33), no boreholes (WP-1.34), no dam survey curve or release rule (WP-3.5),
-			// the dam only with no river pump or hands-off flow (WP-3.8), every gauge an EWR site, no GN 538 property (engine 1.12.0): the inert defaults.
+			// the dam only with no river pump, pool (engine 1.64.0) or hands-off flow (WP-3.8), every gauge an EWR site, no GN 538 property (engine 1.12.0): the inert defaults.
 			...USER_DEFAULTS,
 			...BOREHOLE_DEFAULTS,
 			...DAM_STORAGE_DEFAULTS,
 			...DEVELOPMENT_DEFAULTS,
 			...SUPPLY_DEFAULTS,
+			...POOL_DEFAULTS,
 			...OPERATING_DEFAULTS,
 			ewrSite: true,
 			gaPropertyAreaHa: null,

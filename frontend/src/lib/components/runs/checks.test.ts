@@ -167,6 +167,11 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		groundwater_used: 0,
 		groundwater_to_dam: 0,
 		river_abstraction: 0,
+		// A pool at a run-of-river pump (engine 1.64.0): only on a unit that has one.
+		pool_area: 0,
+		pool_evaporation: 0,
+		pool_drawn: 0,
+		pool_storage: 0,
 		// River off-takes (engine 1.14.0): only on a unit an off-take draws on or reaches.
 		offtake_out: 0,
 		offtake_in: 0,
