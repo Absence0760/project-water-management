@@ -268,7 +268,9 @@ jobs:
           # second in the retention window, and a manual snapshot would
           # outlive it (the privacy notice's backup period).
           echo "Restore point before these migrations (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          # Synchronous invoke; the function's own timeout is 300 s. No
+          # Synchronous invoke; the function's own timeout is 900 s (for
+          # reference loads, load-reference.yml; a migration's statements stop
+          # at 240 s), and the CLI waits past it rather than retry. No
           # --log-type Tail: this log is public (the repo is), and the
           # function's log and error text can quote SQL or data. Only names
           # and codes are printed; the detail is in CloudWatch, which is not.
@@ -276,7 +278,7 @@ jobs:
             --function-name "$MIGRATE_FUNCTION_NAME" \
             --cli-binary-format raw-in-base64-out \
             --payload '{}' \
-            --cli-read-timeout 320 \
+            --cli-read-timeout 920 \
             migrate-result.json > migrate-meta.json
           # Each field is checked against the shape it must have (a migration
           # file name, a code, a log stream) and dropped if it doesn't match,

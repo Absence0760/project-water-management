@@ -550,6 +550,7 @@ environment's job is the required reviewer (§ 1), not storage.
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
 | secret `WAF_CAPTCHA_API_KEY` | `waf_captcha_api_key` (the CAPTCHA API key for the site's domain; it ships in the public bundle, but the provider marks it sensitive) |
+| `PUBLIC_TILES_URL`, `PUBLIC_TILES_GLYPHS_URL`, `PUBLIC_TERRAIN_URL` | not outputs: set by hand once the files are in the tiles bucket (§ Map tiles); unset, the map draws the plain background |
 
 `PUBLIC_API_URL` is not a GitHub variable: the build reads `/api` from the
 committed `frontend/.env.production`.
@@ -1533,32 +1534,132 @@ first deploy):
 
 The Map tab (issue #288, [maps.md](./maps.md)) needs nothing deployed to
 work: features, uploads, areas and the lookup run on the API and RDS as
-they are. Two pieces are not deployed yet, each in
-[followups.md § Catchment map](./followups.md#catchment-map-issue-288):
+they are. Its basemap, labels, relief and delineation need the **map tiles**,
+and its proposals need **reference datasets** in the database; both are
+operator steps after the first apply. `infra/map_data.tf` holds the two
+buckets they use, kept apart because one is public and the other is not.
 
-- **Basemap**: `PUBLIC_TILES_URL` is empty in `frontend/.env.production`, so
-  production draws the plain background. Serving one means the PMTiles file
-  in S3 under `tiles/`, a same-origin CloudFront behaviour `/tiles/*` (Range
-  and `ETag` forwarded, long cache) and the URL in the web release; the CSP
-  needs no change (`connect-src 'self'`, `worker-src 'self'`).
-  The labels' glyph ranges (#326 A6) ride the same behaviour: the
-  `fonts/` tree `bin/tiles-dev.sh fonts` builds, in S3 under
-  `tiles/fonts/`, and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
-  (empty until then: no names on the map). The relief's DEM
-  ([maps.md § Relief](./maps.md#relief)) is one more file there,
-  `tiles/terrain.pmtiles`, with `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`,
-  once the Copernicus licence's liability sentence is in the app's legal
-  notice (empty until then: no Relief layer offered). Delineation reads the
-  same file from the API Lambda: `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles`
-  in its environment and `s3:GetObject` on that key for its role (not in
-  Terraform yet; empty until then: no Delineate offered;
-  [maps.md § Delineation](./maps.md#delineation), followups.md).
-- **Quaternary dataset**: `quaternary_reference` is empty in production
-  until the operator loads one, so the lookup says no dataset is loaded.
-  There is no production loading path yet, and WR2012's licence terms are a
-  decision to check first. Never load the synthetic dataset into
-  production: its values are invented (the app marks them, but they have no
-  place there).
+### Map tiles
+
+The tiles bucket (`tiles_bucket` output) holds what the browser reads, under
+`tiles/`, served same-origin at the site's `/tiles/*` (an ordered CloudFront
+behaviour with its own OAC, `infra/s3_cloudfront.tf`):
+
+| Object | Built by | Frontend variable | Licence step first |
+| --- | --- | --- | --- |
+| `tiles/south-africa.pmtiles` (the basemap, ~1 GB at maxzoom 15) | `pnpm dev:tiles:fetch` | `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` | none (the OSM attribution is always on the map) |
+| `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
+| `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
+
+The local commands leave the files in `~/.cache/water-management-tiles/`.
+Upload them with your own SSO session (no workflow or Lambda can write the
+bucket). **An upload is itself the release** of that file: the `/tiles/*`
+behaviour serves whatever is in the bucket to anyone, by byte range,
+whether or not the frontend variable is set. So upload `terrain.pmtiles`
+only once the Art. 6(c) sentence is live in the app's legal text; the
+frontend gate and `delineation_dem` come after that, not instead of it.
+Then invalidate the cache, since CloudFront keeps byte ranges of
+the old file and the PMTiles reader notices a replaced archive by its
+`ETag`:
+
+```bash
+aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
+```
+
+Then set the repository variables in the table (`gh variable set
+PUBLIC_TILES_URL --body /tiles/south-africa.pmtiles`, and so on) and
+release the web (`deploy-frontend.yml` reads them). Its **Map tiles gate**
+(`scripts/release/map-data-gates.mjs frontend`) refuses anything but those
+same-origin paths, and refuses the relief until the Art. 6(c) sentence is in
+the legal text under `frontend/src`. The CSP needs no change: the tiles
+and glyphs are fetched same-origin (`connect-src 'self'`), and MapLibre's
+worker is the app's own (`worker-src 'self'`).
+
+**Delineation** reads the same `terrain.pmtiles` from the API Lambda, by
+ranged S3 GetObject through the S3 interface endpoint. Set
+`delineation_dem = true` in the tfvars and apply, once the file is uploaded
+and the Art. 6(c) sentence is live: Terraform then sets
+`DEM_URL=s3://<tiles_bucket>/tiles/terrain.pmtiles` on the API and lets its
+role read that one key (`api_dem`), and the Map offers **Delineate**. It
+refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
+delineation peaks near 460 MB at its window cap and keeps a 20 s budget
+([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
+which the defaults (1 024 MB, 30 s) hold with room to spare.
+
+**The cost bound.** Every object under `/tiles/` is public (anyone can
+fetch it, as the browser does), and the archives are gigabytes. The
+`tiles_range` CloudFront Function lets through an archive only by one
+closed byte range of at most 2 MiB (a PMTiles read is a 16 KiB header, then
+directories and tiles far smaller), glyph ranges and the licence whole, and
+answers 404 for anything else, before S3. So one request moves at most
+2 MiB, and the WAF's site-wide per-IP limit (`waf_site_rate_limit_per_ip`,
+5 000 per 5 minutes) bounds one address at about 10 GB per 5 minutes in the
+worst case, about $1.10 of CloudFront egress in South Africa (real map use
+is a few hundred KB a pan). The `cloudfront-requests` alarm and the daily
+budget (§ Budget alerts) catch a sustained pull from many addresses.
+Storage is ~3.5 GB (under $0.10/month), and multipart uploads left
+unfinished are aborted after 7 days.
+
+### Reference datasets
+
+The map's proposals read global reference tables that the operator loads
+as the schema owner: locally `pnpm import:<kind>` against the dev database
+([maps.md](./maps.md)). Production's database is in a private VPC, so a
+production load runs in the **migrate Lambda**, which already holds the
+owner's credentials: it reads one file from the private **reference
+bucket** (`reference_bucket` output, `reference/<kind>/…`), checks it
+hashes to the SHA-256 the operator gave, and replaces that dataset in one
+transaction with the same parsers and writes the local scripts use
+(`backend/src/geo/referenceLoad.ts`). The bucket grants nothing in its
+policy; the migrate role's own policy reads `reference/*`, and nothing can
+write it but the operator's SSO session. Loads run through
+**`load-reference.yml`** (Actions → Load a reference dataset, or `gh
+workflow run`): its `check` job validates the inputs and the licence gates
+before anyone approves, and its `load` job runs in the `production`
+environment (the required reviewer, then OIDC; no AWS key anywhere) and
+prints counts only. A failure prints a code and a fixed reason; the detail
+is in the migrate Lambda's CloudWatch log, and the dataset stays as it was.
+
+Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
+workflow offers those kinds alone, its gate refuses the rest, and the
+Lambda refuses them again by name (`referenceLoad.test.ts` checks the
+Lambda's list against the Sources table):
+
+| Kind | Licence (maps.md § Sources) | The file | How to make it |
+| --- | --- | --- | --- |
+| `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
+| `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the terms of service carry the end-user protections (no stand-alone redistribution, no reverse engineering; check that yourself) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
+| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+
+```bash
+sha256sum worldcover.json.gz
+aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldcover-2021.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
+```
+
+For rivers add `-f source="<the attribution line>"` (the one
+`bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
+streams, `-f min_order=<n>`. Approve the run in the `production`
+environment. Never load the synthetic fixtures into production (the label
+`synthetic` is refused).
+
+Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
+(a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
+the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
+accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
+peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
+files of 475 000 reaches and 6.9 million cells). A country's WorldCover
+grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
+HydroRIVERS reaches are tens of MB. A load costs cents (3 GB × a few
+minutes of Lambda) and runs one at a time (reserved concurrency 1, the
+workflow's concurrency group). Migrations use the same memory and timeout,
+billed only while they run. Don't run a load while a backend deploy is
+migrating: the migrate Lambda's reserved concurrency of 1 turns the second
+invocation away (the workflow fails with a throttle, nothing is loaded), and
+a load writes only its own dataset's rows, so retrying afterwards is safe.
 
 ## Runbooks
 
