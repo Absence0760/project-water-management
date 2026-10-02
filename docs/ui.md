@@ -2948,6 +2948,41 @@ saves the catchment's model, and override mode there edits the scenario's
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
   the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
+- **From land cover** (issue #326 B-landcover,
+  `crops/CroplandProposalsBox.svelte`, rows in `crops/croplandProposals.ts`;
+  the sources and method in [maps.md § Cultivated area from land
+  cover](./maps.md#cultivated-area-from-land-cover)): under the areas, for a
+  hydrological unit (not another user) that is saved in the model (an
+  unsaved one says "Save the model to see …"). It is in the drawer, not on
+  the Crops page, because the page is sized to the window and a panel below
+  it would sit out of sight; every page that names a unit opens it. A table
+  lists each farm parcel on the map linked to the unit, largest cultivated
+  area first, with **Cultivated** ("51.7 ha of 103 ha") and **Share**, and
+  an **All parcels** footer when there are several; then the whole
+  catchment's cultivated area for reference and **Show … on map** (there
+  with or without a boundary). **Area to use** offers the parcels' sum
+  first, then each parcel with cropland ("All 2 parcels: 62.5 ha", "Lower
+  lands: 50 ha"; a lone parcel stands for the unit). A second table has one
+  row per crop, the crops planted on this unit first (largest first), at
+  most six until **Show all N crops** (`aria-expanded`): **Planted now**,
+  where an accepted area came from under the crop's name ("12.5 ha from
+  land cover (the parcel “Top camp”; synthetic, synthetic 1), used
+  2026-10-01", or "Typed over since: …" once the area no longer matches),
+  and **Use**, or "Saved" when the crop already holds the chosen area.
+  **Use** asks first (`confirmWords`: the crop, the unit, the old and new
+  area, the dataset, and that the land cover doesn't say what grows there or
+  whether it is irrigated; "Use this area"), saves that one value on the
+  server, shows a notice ("Orchard’s planted area on Upper farm is now
+  51.73 ha, from land cover. Run the model to see its effect.") and reloads
+  the saved model and the summary. Use is disabled while the model has
+  unsaved changes, the drawer's own edits included (a hint says why), and a
+  viewer gets no Use ("Only an editor can use a value."). **Source and
+  method** (a disclosure) gives the dataset's source, version, label,
+  attribution and counting method. Other states: no parcel linked (with
+  **Open the Map**), no dataset loaded (the loader's command), no cropland
+  in the parcels, no crop yet, and a "Synthetic test data" warning for the
+  committed grid. On a narrow sheet the Use buttons are 44 px targets; the
+  tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,

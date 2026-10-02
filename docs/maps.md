@@ -21,9 +21,11 @@ Two rules hold throughout:
   quaternary's values enter the WR2012 check only through **Use**, value by
   value, and then **Save**; a dam's capacity (from the register of dams) or
   full-supply area (from its polygon) enters the model only through **Use**
-  on the Dams page and a confirmation; a reach of the river network becomes
-  one of the project's rivers only through **Add to the map as a river**,
-  one reach at a time.
+  on the Dams page and a confirmation; a unit's cultivated area (from land
+  cover) enters a crop's planted area only through **Use** in the unit's planted-areas drawer,
+  for a crop the modeller picks, and a confirmation; a reach of the river
+  network becomes one of the project's rivers only through **Add to the map
+  as a river**, one reach at a time.
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
   placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
@@ -1001,6 +1003,101 @@ reads it.
   still the only river data the app can analyse (the checks, and later
   snapping and B-delineate).
 
+## Cultivated area from land cover
+
+**From land cover**, in a hydrological unit's planted-areas drawer (issue
+#326 Part B, "B-landcover", and #342 map item 5; `farm=<nodeId>`, opened from
+the unit's name on Crops & demand, the Network, the Summary, Supply or Dams;
+[ui.md § Farm drawer](./ui.md#farm-drawer)) summarises, for one hydrological unit, the
+area a land-cover map shows as cropland inside each **farm parcel** on the map
+linked to that unit, the parcels' sum, and the catchment boundary's for
+reference. The modeller picks an area (all the unit's parcels, or one
+parcel) and a crop, and **Use** sets that crop's planted area on the unit to
+it.
+
+- **The crop stays the modeller's call** (#90 Q9). Land cover says where
+  land is cultivated; it never says what grows there, nor whether it is
+  irrigated (WorldCover's cropland class includes rain-fed and fallow land).
+  So nothing is assigned to a crop until the modeller chooses one, and the
+  confirmation says so. A unit with several crops on one parcel splits the
+  area by typing afterwards; the proposal never splits it.
+- **Pre-summarised at import, local-first.** The app never reads a raster.
+  The operator's `pnpm import:land-cover` (`backend/scripts/import-land-cover.ts`,
+  `geo/loadCropland.ts`) reads each GeoTIFF tile itself (no GDAL, no
+  dependency: classic TIFF, tiled or striped, Deflate or none, 8-bit, one
+  band, EPSG:4326) and counts every 10 m pixel into the **0.0025° grid cell**
+  its centre falls in (30 × 30 WorldCover pixels, about 250 m × 230 m in South
+  Africa): per cell, the pixels in class 40 (Cropland) over the pixels with
+  data (no-data 0 left out). Only cells with some cropland are stored
+  (`cropland_cell_reference`, 173): about 79 000 cells for the 3° tile S36E021
+  (the Western Cape's south coast, measured 2026-10-01), from 1.3 billion pixels. The grid must line up with
+  the raster (the cell a whole number of pixels, the corner on a cell edge),
+  so each cell's share is exact and no cell straddles two tiles; anything else
+  is refused with the reason. No GeoTIFF code is in a Lambda bundle.
+- **A polygon's cultivated area** (`geo/cropland.ts`) is the sum, over the
+  cells it covers, of the cell's area on the WGS84 ellipsoid × the share of
+  the cell inside the polygon (exact clipping, `geo/gridShares.ts`, the same
+  clipper as [§ Rain from the boundary](#rain-from-the-boundary),
+  `geo/clip.ts`) × the cell's cropland share. It assumes the cropland is spread
+  evenly within each cell: a parcel edge that cuts a cell takes its cropland
+  in proportion to its area, so a small parcel's figure can be off by up to a
+  cell's cropland along its edge. Parcels that overlap are counted twice, as
+  their areas are. One summary reads at most 1 000 000 cells of extent
+  (`MAX_SUMMARY_CELLS`, about 58 000 km²).
+- **Cited, value by value.** Each dataset row (`cropland_dataset`) holds its
+  source, version, method in words, attribution and cell size, and the box
+  shows them under **Source and method**. **Use** asks first, then saves one
+  value (`POST …/crop-area-from-land-cover` with the crop, the dataset and,
+  for one parcel, the feature; [api.md § Catchment map](./api.md#catchment-map)):
+  the server re-derives the area from the parcels as they are, writes the
+  crop area, records a model revision whose reason cites the dataset, its
+  version and the method ("Planted area of Lucerne on Upper farm from land
+  cover: 51.73 ha cultivated in its 2 parcels; ESA WorldCover 10 m 2021 v200
+  (…) (2021 v200; dataset “WorldCover-2021-v200”). Pre-summarised at
+  import: …"), which History, the run comparison and an evidence pack's
+  revisions list carry, and keeps a `crop_area_land_cover` row (174) with the
+  same citation. The box shows that provenance beside each crop, and says
+  "Typed over since" once the area no longer matches it. While the model has
+  unsaved changes, Use waits. Viewers see the summary but not Use.
+- **Datasets.** The default is a real dataset before the synthetic one, then
+  the newest load; the API takes `?dataset=`.
+
+### The land-cover grid
+
+`cropland_dataset` and `cropland_cell_reference` (173) are global reference
+data: the **operator** loads them as the schema owner and the app only
+reads them.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/land-cover.synthetic.json`
+  is an invented 0.005° grid over the seeded Sandspruit map (21.185–21.395° E,
+  33.625–33.805° S): every cell 0.5 inside 21.30–21.35° E, 33.65–33.70° S
+  (the DB and e2e tests' parcels), a fixed pattern elsewhere (its
+  `_comment` gives the rule). `pnpm import:land-cover` with no argument loads
+  it (`pnpm setup` does), as dataset `synthetic`, and the box marks it
+  "Synthetic test data".
+- **Real data: ESA WorldCover, the operator's own download** (§ Sources:
+  allowed, CC BY 4.0). The 2021 v200 map tiles are 3° × 3° GeoTIFFs
+  (`ESA_WorldCover_10m_2021_v200_<S36E021>_Map.tif`, about 50 MB each) in the
+  public bucket `s3://esa-worldcover/v200/2021/map/` (no sign-in:
+  `aws s3 cp --no-sign-request …`, or HTTPS from
+  `esa-worldcover.s3.eu-central-1.amazonaws.com`). South Africa, Lesotho and
+  eSwatini take the tiles from S36 to S24 and E015 to E030 (each named by
+  its south-west corner). Then
+  `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 [--bbox 16,-35,33,-22]`.
+  Each tile takes about 15 s and is written as it's read, so a country's
+  tiles never sit in memory together; the whole load is one transaction and
+  replaces the dataset. `--cell`, `--classes`, `--source`, `--version` and
+  `--attribution` override the defaults (WorldCover's class 40 and its
+  citation). Never commit a tile or the database it filled.
+- **Production loading** has the quaternary dataset's gap: no path yet into
+  the private database (followups.md). The attribution must be shown with any
+  figure a client-facing deployment serves from it (§ Sources).
+- **SANLC** (South African National Land Cover, DFFE) would give finer crop
+  classes (pivots, orchards, vineyards), but stays **blocked** (§ Sources):
+  the GEOTERRAIMAGE licence the earlier release came under forbids derivative
+  work and products that compete with GEOTERRAIMAGE's own, and the 2018/2020
+  terms couldn't be read from outside South Africa.
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -1023,3 +1120,5 @@ fixtures only.
 | HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Water Management], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", in the app's documentation or legal notice; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted), with conditions before production serves it**: the Exhibit B statement in the legal notice, and the terms of service carrying the end-user protections (no stand-alone redistribution of the data, no reverse engineering). Loaded locally from the operator's download; never committed |
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
+| ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
+| South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |

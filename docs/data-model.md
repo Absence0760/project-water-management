@@ -1594,6 +1594,31 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `river-network:<dataset>:<reach_id>` in `properties.ref` (how the layer
   knows it is on the map, and how the add refuses a second copy); no new
   column.
+- **`cropland_dataset`** and **`cropland_cell_reference`**
+  (`173_cropland_reference.sql`, issue #326 B-landcover,
+  [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)):
+  the land-cover grid the planted-area proposals read. A dataset row:
+  `dataset` (primary key, 1–50; `synthetic` for the committed fixture),
+  `source`, `version`, `method` (the counting in words), `attribution`,
+  `cell_deg`, `classes` (the product's class codes counted as cultivated),
+  `loaded_at`. A cell row: `dataset` (cascades with it), `row_idx`, `col_idx`
+  (the cell with south-west corner `col_idx × cell_deg`, `row_idx × cell_deg`;
+  primary key `(dataset, row_idx, col_idx)`, also a polygon's range lookup)
+  and `fraction` (0 < f ≤ 1, the share of the cell that is cropland). Only
+  cells with cropland are stored. Global, loaded by the operator as the
+  schema owner (`pnpm import:land-cover`), readable by anyone signed in,
+  written by no app role.
+- **`crop_area_land_cover`** (`174_crop_area_land_cover.sql`): where a
+  planted area accepted from land cover came from. Primary key
+  `(node_id, crop_id)`; `project_id`, `area_m2` (the value accepted),
+  `dataset`, `source`, `version`, `method` (copied from the dataset then, so
+  a reload doesn't rewrite what was cited), `basis` (`unit` or `parcel`),
+  `feature_name` (the parcel, for `parcel`), `accepted_at`. Not keyed to
+  `crop_area`, which a model save rewrites whole: it is current while
+  `crop_area.area_m2` equals `area_m2`, and goes with its project, unit or
+  crop. Viewers read, editors write, same-project trigger on `node_id` and
+  `crop_id`, covering indexes on `project_id` and `crop_id`. Farmers don't
+  read it (the catalogue guard's `FARMERS_NEVER_READ`).
 
 ### Import reports (017_project_import.sql)
 
