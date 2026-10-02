@@ -2364,6 +2364,15 @@ export interface RiverTakeSummary {
 	/** With a pool: its capacity (m³) and mean storage at the end of the day. */
 	poolM3?: number;
 	avgPoolStorageM3?: number;
+	/**
+	 * Mean demand its pump capacity left unmet although the river (or its
+	 * pool) had the water, within its supply level and the allocation room
+	 * (engine ≥ 1.66.0, docs/model.md §2.7j), part of the unit's deficit; only
+	 * with a pump capacity, absent on older runs.
+	 */
+	avgPumpLimitedM3Day?: number;
+	/** Days the pump capacity left demand unmet (engine ≥ 1.66.0); only with a pump capacity. */
+	daysPumpLimited?: number;
 }
 
 /** One demand object over the whole run (engine ≥ 1.7.0), m³/day means like FarmSummary. */
