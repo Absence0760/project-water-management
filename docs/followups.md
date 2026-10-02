@@ -3627,10 +3627,13 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       below.
 - [ ] **The licence sentences the map's production data waits for**
       (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
-      liability sentence (Art. 6(c)) before the relief or delineation is
-      served, and HydroSHEDS' Exhibit B statement (plus the terms' end-user
-      protections: no stand-alone redistribution, no reverse engineering)
-      before the river network is loaded. `scripts/release/map-data-gates.mjs`
+      liability sentence (Art. 6(c): "The organisations in charge of the
+      Copernicus programme by law or by delegation do not incur any liability
+      for any use of the Copernicus WorldDEM-30") and HydroSHEDS' Exhibit B
+      statement are done (2026-10-02, on the public Data sources and credits
+      page, `/data-sources`). Still open: the terms' end-user protections for
+      HydroRIVERS (no stand-alone redistribution, no reverse engineering;
+      legal-status.md § Other open items) before the river network is loaded. `scripts/release/map-data-gates.mjs`
       refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
       in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
       `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
@@ -3663,13 +3666,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refuses it until then.
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
-      on two conditions to meet before a deployment serves it: the
-      HydroSHEDS Exhibit B statement in the app's legal notice (or its
-      documentation), and the terms of service carrying the end-user
+      on two conditions to meet before a deployment serves it. The
+      HydroSHEDS Exhibit B statement is done (2026-10-02): the public Data
+      sources and credits page (`/data-sources`) carries it, and the map's
+      attribution control credits HydroRIVERS, linking there, while its
+      reaches are drawn. Open: the terms of service carrying the end-user
       protections the agreement asks for (§ 2.1.2: no stand-alone
-      redistribution of the data, no reverse engineering). Then load it with
-      `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate refuses
-      the load until the Exhibit B statement is in the legal text).
+      redistribution of the data, no reverse engineering), a material Terms
+      change for the operator (legal-status.md § Other open items). Then load it
+      with `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate
+      refuses the load until the Exhibit B statement is in the legal text).
       Trigger: the first deployment that wants the River network layer.
 - [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
       Sources, issue #345, D-B). Its page answers 403 outside South Africa
@@ -3895,6 +3901,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.
+- [x] **A river abstraction's pump-limited demand** (2026-10-02, engine
+      1.66.0, follow-up from PR #350). Each abstraction with a pump capacity
+      publishes `river_pump_limited@<key>`: the demand its pump left unmet
+      while the flow its level left, or its own pool, still had the water
+      (within the allocation room), as an other water user's `pump_limited`
+      does (§2.7c). `RiverTakeSummary.avgPumpLimitedM3Day` and
+      `daysPumpLimited`; the Units & supply **River abstractions** table and
+      the summary CSV's River abstractions block show them
+      ([model.md §2.7j](./model.md)). Nothing else in the run changes.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per

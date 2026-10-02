@@ -34,7 +34,9 @@ export function asMapFeatures(features: readonly FarmMapFeature[]): MapFeature[]
 		...f,
 		nodeId: null,
 		nodeName: null,
-		properties: {},
+		// The server says which river carries HydroRIVERS' credit (it sends no properties); the map's
+		// creditedFeature reads it here.
+		properties: (f.credit ? { credit: f.credit } : {}) as Record<string, string>,
 		sourceId: null,
 		createdBy: null,
 		createdAt: '',

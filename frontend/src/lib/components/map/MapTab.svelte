@@ -570,14 +570,17 @@
 	const quaternaries = new QuaternaryLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('quaternaries'),
-		features: () => features
+		features: () => features,
+		load: api.map.quaternaries
 	});
 
 	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
 	const rivers = new RiverLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('rivers'),
-		features: () => features
+		features: () => features,
+		load: api.map.rivers,
+		add: api.map.addRiver
 	});
 	/** A reach clicked on the map: picked, and its facts and Add brought into view (as a feature pick shows its card). */
 	async function reachFromMap(key: string) {
@@ -870,6 +873,7 @@
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
+									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
 									{terrainUrl}
@@ -1275,10 +1279,19 @@
 				flex-direction: column;
 				min-height: 0;
 			}
+			/* The picked feature's card scrolls in its box and gives way with the layers (each in proportion to
+			   its size) so the column always fits: the list keeps its 8rem and the checks line its height. As
+			   `flex: none` (before 2026-10-02) a full card held its 55% and pushed the column past a 1280×800
+			   window once a reach was picked too (map-layers.spec.ts › the side column still fits). */
 			.card {
-				flex: none;
+				flex: 0 1 auto;
+				min-height: 0;
 				max-height: 55%;
 				overflow-y: auto;
+			}
+			/* A picked feature's card keeps room for its heading and first facts (the hint alone is shorter). */
+			.card:has(:global(.card-h)) {
+				min-height: 6rem;
 			}
 			.list-box {
 				flex: 1;

@@ -110,7 +110,7 @@ describe('routeAccess', () => {
 	});
 
 	it('opens the legal pages and the methods page to anyone, signed in or out', () => {
-		for (const p of ['/privacy', '/terms', '/methods']) {
+		for (const p of ['/privacy', '/terms', '/methods', '/data-sources']) {
 			expect(routeAccess(p, '', false)).toBe('show');
 			expect(routeAccess(p, '', true)).toBe('show');
 		}

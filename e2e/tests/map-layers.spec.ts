@@ -138,6 +138,52 @@ for (const [width, height] of [
 	});
 }
 
+/** The side column's fit: the page doesn't scroll, every box ends inside the column, the list keeps its room. */
+const sideFit = (page: Page) =>
+	page.evaluate(() => {
+		const side = document.querySelector('.map-side')!.getBoundingClientRect();
+		const boxes = [...document.querySelectorAll('.map-side > *')].map((e) => ({ cls: e.className, bottom: e.getBoundingClientRect().bottom }));
+		return {
+			scroll: document.documentElement.scrollHeight,
+			inner: window.innerHeight,
+			sideBottom: side.bottom,
+			overflowing: boxes.filter((b) => b.bottom > side.bottom + 0.5).map((b) => b.cls),
+			list: document.querySelector('.list-box')!.getBoundingClientRect().height,
+			card: document.querySelector('[data-testid="map-feature-card"]')!.getBoundingClientRect().height
+		};
+	});
+
+// Reported on PR #348: with a feature picked (its card at full size) as well as a reach, the side column ran
+// past the window at 1280×800. The card and the layers give way (each scrolls in its box), never the list's room.
+for (const [width, height] of [
+	[1440, 960],
+	[1280, 800]
+] as const) {
+	test(`with a feature and a reach picked the side column still fits a ${width}×${height} window`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width, height });
+		await loadSyntheticQuaternaries();
+		await loadSyntheticRivers();
+		const project = await seedRunnableProject(page.request, `Map side fit ${width}`);
+		await openMap(page, project.id);
+		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
+		await openMap(page, project.id, '&layers=quaternaries,rivers');
+		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
+		await page.getByTestId('map-reach-list').getByRole('button').first().click();
+		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
+		await page.getByTestId('map-feature-list').getByRole('button', { name: /Upper farm/ }).first().click();
+		await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
+		const fit = await sideFit(page);
+		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
+		expect(fit.overflowing).toEqual([]);
+		expect(fit.sideBottom).toBeLessThanOrEqual(fit.inner);
+		expect(fit.list).toBeGreaterThanOrEqual(8 * 14);
+		// The card keeps enough to read its heading and first facts.
+		expect(fit.card).toBeGreaterThanOrEqual(6 * 14);
+	});
+}
+
 test('Download GeoJSON hands over every feature with its name, kind, node and area', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map layers download');

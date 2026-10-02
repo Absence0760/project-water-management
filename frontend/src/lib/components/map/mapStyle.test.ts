@@ -5,7 +5,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
 import { PIECE_TINT_COUNT } from './pieces';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 import {
+	RIVERS_CREDIT_LAYER,
+	RIVERS_CREDIT_SOURCE,
+	riversCredit,
 	BASEMAP_ATTRIBUTION,
 	basemapColours,
 	basemapLayerIds,
@@ -296,6 +300,27 @@ describe('the river network (#345)', () => {
 		const ids = mapStyle(null, false, overlayData([], null)).layers.map((l) => l.id);
 		expect(ids.indexOf('qt-line')).toBeLessThan(ids.indexOf('rn-line'));
 		expect(ids.indexOf('rn-line')).toBeLessThan(ids.indexOf('ov-parcel-fill'));
+	});
+
+	it('links the relief’s credit to the Copernicus licence notice on the data sources page when given its URL', () => {
+		const style = mapStyle(null, false, overlayData([], null), { terrain: '/tiles/terrain.pmtiles', dataSourcesHref: '/data-sources' });
+		const attribution = (style.sources[TERRAIN_SOURCE] as { attribution: string }).attribution;
+		expect(attribution).toContain(TERRAIN_ATTRIBUTION);
+		expect(attribution).toContain('<a href="/data-sources#copernicus-dem">licence notice</a>');
+		expect((mapStyle(null, false, overlayData([], null), { terrain: '/t.pmtiles' }).sources[TERRAIN_SOURCE] as { attribution: string }).attribution).toBe(TERRAIN_ATTRIBUTION);
+	});
+
+	it('credits HydroRIVERS on the attribution control only when asked: its own empty source and an invisible layer reading it', () => {
+		const html = riversCredit('/data-sources', HYDRORIVERS_MAP_ATTRIBUTION);
+		expect(html).toBe(`<a href="/data-sources#hydrorivers">${HYDRORIVERS_MAP_ATTRIBUTION}</a>`);
+		const credited = mapStyle(null, false, overlayData([], null), { riversCredit: html });
+		expect(credited.sources[RIVERS_CREDIT_SOURCE]).toEqual({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: html });
+		expect(credited.layers.find((l) => l.id === RIVERS_CREDIT_LAYER.id)).toEqual({ id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } });
+		const plain = mapStyle(null, false, overlayData([], null), { riversCredit: null });
+		expect(plain.sources[RIVERS_CREDIT_SOURCE]).toBeUndefined();
+		expect(plain.layers.some((l) => l.id === RIVERS_CREDIT_LAYER.id)).toBe(false);
+		// The river network's own source never carries it: it is in the style whether drawn or not.
+		expect((credited.sources.rivers as Record<string, unknown>).attribution).toBeUndefined();
 	});
 
 	it('feeds each reach with its key and order (1 when not given), marking the picked one', () => {
