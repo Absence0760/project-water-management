@@ -3,7 +3,11 @@
 // DEM_ATTEMPTS.inFlight at once (parallel requests can't all pass the count);
 // DEM_ATTEMPTS.perHour across every project; a dead attempt's slot frees after
 // the lease; one account's count never touches another's (positive controls).
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -86,9 +90,32 @@ describe('through the routes', () => {
 	});
 
 	it('a divide refused for want of a model (409) is refused before it counts', async () => {
-		const res = await owner.call('POST', `/projects/${projectId}/map/divide`, { points: [] });
-		expect([400, 409]).toContain(res.status);
+		const res = await owner.call('POST', `/projects/${projectId}/map/divide`, { points: [{ featureId: crypto.randomUUID(), nodeId: null }] });
+		expect(res.status).toBe(409);
 		expect(await rowsOf(owner)).toHaveLength(1);
+	});
+
+	it('a failed delineation (503, a DEM that can’t be read) counts too, for an editor who isn’t the owner, and is finished', async () => {
+		const editor = await signUp('DAeditor');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
+		const bad = join(mkdtempSync(join(tmpdir(), 'dem-')), 'corrupt.pmtiles');
+		writeFileSync(bad, Buffer.alloc(4096, 7));
+		process.env.DEM_URL = bad;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const res = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: 20.6, lat: -33.5, from: 'outlet' });
+			expect(res.status).toBe(503);
+		} finally {
+			error.mockRestore();
+		}
+		// A refusal (422: the click is outside the DEM) counts as well.
+		process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+		const outside = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: 30, lat: -25, from: 'outlet' });
+		expect(outside.status).toBe(422);
+		expect(await rowsOf(editor)).toEqual([
+			{ kind: 'delineation', finished: true },
+			{ kind: 'delineation', finished: true }
+		]);
 	});
 
 	it('answers 429 from the account cap before any work, whichever project', async () => {
