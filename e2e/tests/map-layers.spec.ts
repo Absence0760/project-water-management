@@ -4,14 +4,16 @@
 // around the catchment are listed beside the map (the synthetic dataset's six
 // region Z cells), never read from pixels. Download GeoJSON hands over a file
 // with every feature. Measure, driven from the keyboard, writes its distance
-// and area in words; the distance is checked against the listed points.
-// Axe with the layer on and while measuring, light and dark.
+// and area in words; the distance is checked against the listed points. The
+// River network (#345): its reaches listed biggest first, one picked and
+// added as the project's river, which the list then marks on the map. Axe
+// with the layers on and while measuring, light and dark.
 import { readFile } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, loadSyntheticQuaternaries, openMap, parcelsGeoJson, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openMap, parcelsGeoJson, uploadThroughSheet } from '../support/map.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const layers = (page: Page) => page.getByTestId('map-layers');
@@ -67,6 +69,74 @@ test('the quaternary outlines: a toggle in the URL, the codes around the catchme
 	await expect(layers(page).getByRole('checkbox', { name: 'Quaternary catchments' })).not.toBeChecked();
 	await expect(page.getByTestId('map-quaternaries')).toHaveCount(0);
 });
+
+test('the river network: its reaches listed biggest first, one picked and added as a river, then marked on the map', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticRivers();
+	const project = await seedRunnableProject(page.request, 'Map layers rivers');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+
+	const toggle = layers(page).getByRole('checkbox', { name: 'River network' });
+	await expect(toggle).not.toBeChecked();
+	await toggle.check();
+	await expect(page).toHaveURL(/[?&]layers=rivers(&|$)/);
+	// The boundary padded to 21.2–21.5 E, 33.5–33.8 S meets ten of the eleven synthetic reaches (the far one is at 22.5 E).
+	await expect(page.getByTestId('map-rivers-summary')).toHaveText('10 reaches around the catchment, the biggest first, from synthetic. Synthetic test data, never real rivers.');
+	const reaches = page.getByTestId('map-reach-list').getByRole('button');
+	await expect(reaches).toHaveCount(10);
+	await expect(reaches.first()).toHaveText('Reach 90000002 · order 3 · 655 km²');
+	// The river network joins the key's lines while it is on.
+	await expect(page.getByTestId('map-key').first()).toContainText('river network');
+
+	await page.getByTestId('map-reach-list').getByRole('button', { name: 'Reach 90000003 · order 2 · 168 km²' }).click();
+	const picked = page.getByTestId('map-reach-picked');
+	await expect(picked).toContainText('Reach 90000003: Strahler order 2, 168 km² upstream');
+	await expect(picked).toContainText('Source: SYNTHETIC test data');
+	await picked.getByRole('button', { name: 'Add to the map as a river' }).click();
+	await expect(page.getByTestId('map-notice')).toHaveText(/^Added “Reach 90000003” to the map as a river, from the river network\./);
+	await expect(page.getByTestId('map-summary')).toContainText('2 features');
+	await expect(picked).toContainText('On the map as a river.');
+	await expect(page.getByTestId('map-reach-list').getByRole('button', { name: 'Reach 90000003 · order 2 · 168 km² · on the map' })).toBeVisible();
+	// Show it picks the new river feature.
+	await picked.getByRole('button', { name: 'Show it' }).click();
+	await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Reach 90000003');
+	// Back (past the pick) turns the layer off.
+	await page.goBack();
+	await page.goBack();
+	await expect(page).not.toHaveURL(/layers=/);
+	await expect(page.getByTestId('map-rivers')).toHaveCount(0);
+});
+
+for (const [width, height] of [
+	[1440, 960],
+	[1280, 800]
+] as const) {
+	test(`with both layers on and a reach picked the page still fits a ${width}×${height} window, the list keeping its room`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width, height });
+		await loadSyntheticQuaternaries();
+		await loadSyntheticRivers();
+		const project = await seedRunnableProject(page.request, `Map layers fit ${width}`);
+		await openMap(page, project.id);
+		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
+		// No feature picked (the upload picked one): the reviewer's measured case, the card at its smallest.
+		await openMap(page, project.id, '&layers=quaternaries,rivers');
+		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
+		await page.getByTestId('map-reach-list').getByRole('button').first().click();
+		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
+		const fit = await page.evaluate(() => ({
+			scroll: document.documentElement.scrollHeight,
+			inner: window.innerHeight,
+			list: document.querySelector('.list-box')!.getBoundingClientRect().height,
+			checksBottom: document.querySelector('[data-testid="map-checks-line"]')!.getBoundingClientRect().bottom
+		}));
+		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
+		expect(fit.list).toBeGreaterThanOrEqual(8 * 16);
+		expect(fit.checksBottom).toBeLessThanOrEqual(fit.inner);
+	});
+}
 
 test('Download GeoJSON hands over every feature with its name, kind, node and area', async ({ page, owner }) => {
 	void owner;
@@ -138,10 +208,14 @@ for (const scheme of ['light', 'dark'] as const) {
 		void owner;
 		await page.emulateMedia({ colorScheme: scheme });
 		await loadSyntheticQuaternaries();
+		await loadSyntheticRivers();
 		const project = await seedRunnableProject(page.request, `Map layers axe ${scheme}`);
-		await openMap(page, project.id, '&layers=quaternaries');
+		await openMap(page, project.id, '&layers=quaternaries,rivers');
 		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 		await expect(codes(page).getByRole('button')).toHaveCount(6);
+		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
+		await page.getByTestId('map-reach-list').getByRole('button').first().click();
+		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
 		await expectNoViolations(page);
 		await header(page).getByRole('button', { name: 'Measure' }).click();
 		await expect(measureBar(page)).toBeVisible();

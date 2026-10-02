@@ -22,6 +22,8 @@
 	URL the basemap draws place and water names (#326 A6), and `quaternaries`
 	(the tab's layer toggle) draws the quaternary outlines under the features,
 	a click inside one (with no feature there) picking it (`onquaternary`).
+	`rivers` (the River network layer, #345) draws the network's reaches over
+	them, dashed, a click on one (with no feature there) picking it (`onreach`).
 	With a `terrainUrl` and `relief` on (the tab's Relief layer), the land is
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
@@ -49,7 +51,23 @@
 	import type { MapFeature } from '$lib/api/types';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
 	import { appIsDark, watchAppTheme } from './appTheme';
-	import { basemapLayerIds, mapStyle, overlayColours, overlayData, QUATERNARY_HIT_LAYER, quaternaryData, RELIEF_LAYER, reliefBeforeId, reliefLayer, TERRAIN_SOURCE, terrainSource, type QuaternaryOutline } from './mapStyle';
+	import {
+		basemapLayerIds,
+		mapStyle,
+		overlayColours,
+		overlayData,
+		QUATERNARY_HIT_LAYER,
+		quaternaryData,
+		RELIEF_LAYER,
+		reliefBeforeId,
+		reliefLayer,
+		RIVER_NETWORK_HIT_LAYER,
+		riverNetworkData,
+		TERRAIN_SOURCE,
+		terrainSource,
+		type NetworkReach,
+		type QuaternaryOutline
+	} from './mapStyle';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
@@ -77,6 +95,9 @@
 		quaternaries = null,
 		pickedQuaternary = null,
 		onquaternary,
+		rivers = null,
+		pickedReach = null,
+		onreach,
 		terrainUrl = null,
 		relief = false,
 		onreliefError
@@ -106,6 +127,12 @@
 		pickedQuaternary?: string | null;
 		/** A click inside a quaternary where no feature is: its code. */
 		onquaternary?: (code: string) => void;
+		/** The river network's reaches to draw (#345); null or empty: none. */
+		rivers?: readonly NetworkReach[] | null;
+		/** The reach picked in the tab's list, drawn heavier. */
+		pickedReach?: string | null;
+		/** A click on a reach where no feature is: its key. */
+		onreach?: (key: string) => void;
 		/** The relief's PMTiles URL (PUBLIC_TERRAIN_URL); null: no relief can be drawn, no DEM fetched. */
 		terrainUrl?: string | null;
 		/** Shade the land from the DEM (the tab's Relief layer). */
@@ -221,6 +248,8 @@
 		src?.setData?.(overlayData(features, selectedId, fills));
 		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
 		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
+		const rn = map.getSource('rivers') as { setData?: (d: unknown) => void } | undefined;
+		rn?.setData?.(riverNetworkData(rivers, pickedReach));
 		syncMarkers();
 	}
 
@@ -247,7 +276,12 @@
 				if (tilesUrl || terrainUrl) await lib.usePmtiles();
 				if (disposed) return;
 				const styleNow = () =>
-					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), { glyphs, quaternaries: quaternaryData(quaternaries, pickedQuaternary), terrain: reliefUrl() });
+					mapStyle(tilesNote ? null : tilesUrl, dark, overlayData(features, selectedId, fills), {
+						glyphs,
+						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
+						rivers: riverNetworkData(rivers, pickedReach),
+						terrain: reliefUrl()
+					});
 				const style = styleNow();
 				const m = new lib.MapLibreMap({
 					container: el,
@@ -300,14 +334,19 @@
 						const id = e.features?.[0]?.properties?.id;
 						if (id) onselect(id);
 					});
-					// A click inside a quaternary picks it, unless a feature (or a marker, which stops the click) is there.
+					// A click on a reach picks it, else a click inside a quaternary picks that, unless a feature (or a marker, which stops the click) is there.
 					m.on('click', (e: { point: { x: number; y: number } }) => {
-						if (draft?.active || !onquaternary || !m.getLayer(QUATERNARY_HIT_LAYER)) return;
+						if (draft?.active) return;
 						if (m.queryRenderedFeatures(e.point as never, { layers: OVERLAY_CLICKABLE.filter((l) => m.getLayer(l)) }).length) return;
+						if (onreach && m.getLayer(RIVER_NETWORK_HIT_LAYER)) {
+							const key = m.queryRenderedFeatures(e.point as never, { layers: [RIVER_NETWORK_HIT_LAYER] })[0]?.properties?.key;
+							if (typeof key === 'string') return onreach(key);
+						}
+						if (!onquaternary || !m.getLayer(QUATERNARY_HIT_LAYER)) return;
 						const code = m.queryRenderedFeatures(e.point as never, { layers: [QUATERNARY_HIT_LAYER] })[0]?.properties?.code;
 						if (typeof code === 'string') onquaternary(code);
 					});
-					for (const id of OVERLAY_CLICKABLE) {
+					for (const id of onreach ? [...OVERLAY_CLICKABLE, RIVER_NETWORK_HIT_LAYER] : OVERLAY_CLICKABLE) {
 						m.on('mouseenter', id, () => {
 							if (!draft?.active) m.getCanvas().style.cursor = 'pointer';
 						});
@@ -344,6 +383,8 @@
 		void fills;
 		void quaternaries;
 		void pickedQuaternary;
+		void rivers;
+		void pickedReach;
 		syncOverlay();
 	});
 
