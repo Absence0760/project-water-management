@@ -18,6 +18,15 @@
 // NODE_EXTRA_CA_CERTS. The returned payload lists applied migration names
 // only — never credentials.
 //
+// It also loads the map's reference datasets in production (docs/deployment.md
+// § Reference datasets): an event `{ "load": { kind, key, sha256, dataset,
+// source?, minOrder? } }` (from .github/workflows/load-reference.yml) runs no
+// migration and no role sync; it reads one file from the private reference
+// bucket (REFERENCE_BUCKET, through the S3 endpoint), checks it against the
+// SHA-256 the operator gave, and replaces that dataset as the owner
+// (geo/referenceLoad.ts, which refuses every kind docs/maps.md § Sources
+// doesn't mark allowed). It answers with counts only.
+//
 // The deploy workflow's logs are public (the repo is), so a failure's
 // payload is a summary too: a stable code, migration names and where the
 // detail is. The detail itself (Postgres's error text, which can quote SQL or
@@ -29,6 +38,7 @@ import { assertLambdaEnv } from './config/production.js';
 import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
 import { getSecretString } from './config/secretsManager.js';
 import { migrate, MigrateError, type MigrateErrorCode } from '../scripts/migrate.js';
+import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type LoadErrorCode, type LoadResult, type ReadObject } from './geo/referenceLoad.js';
 
 // Its runtime secret (the water_app password) once per cold start
 // (config/runtimeSecrets.ts), then refuse to start without its settings
@@ -153,7 +163,72 @@ async function syncAppRole(url: string, appPassword: string): Promise<MigrateRes
 	}
 }
 
-export async function handler(_event?: unknown, context?: LogContext): Promise<MigrateResult> {
+/**
+ * What a failed reference load returns (the thrown error's message, JSON),
+ * which load-reference.yml prints to its public log: a code, the request's
+ * kind and dataset only if they were well-formed, a fixed reason, and where
+ * the detail is.
+ */
+export interface LoadFailure {
+	code: LoadErrorCode;
+	reason: string | null;
+	logGroup: string | null;
+	logStream: string | null;
+	requestId: string | null;
+}
+
+export function loadFailureSummary(err: unknown, context?: LogContext): LoadFailure {
+	const l = err instanceof LoadError ? err : null;
+	return {
+		code: l?.code ?? 'load_failed',
+		reason: l?.publicReason ?? null,
+		logGroup: context?.logGroupName ?? null,
+		logStream: context?.logStreamName ?? null,
+		requestId: context?.awsRequestId ?? null
+	};
+}
+
+/** The reference bucket through the runtime's S3 client (a lazy import, like delineation/dem.ts). */
+const readFromReferenceBucket: ReadObject = async (key) => {
+	const bucket = requireEnv('REFERENCE_BUCKET');
+	const sdk = await import('@aws-sdk/client-s3');
+	const s3 = new sdk.S3Client({});
+	try {
+		const r = await s3.send(new sdk.GetObjectCommand({ Bucket: bucket, Key: key }));
+		const body = r.Body;
+		if (!body) return null;
+		return { contentLength: r.ContentLength ?? 0, bytes: async () => new Uint8Array(await body.transformToByteArray()) };
+	} catch (e) {
+		if ((e as { name?: string }).name === 'NoSuchKey') return null;
+		throw e;
+	}
+};
+
+/** One reference-dataset load (docs/deployment.md § Reference datasets). */
+export async function loadReference(raw: unknown, context?: LogContext, read: ReadObject = readFromReferenceBucket): Promise<LoadResult> {
+	try {
+		const req = parseLoadRequest(raw);
+		const text = await readReferenceText(req, read);
+		const client = new pg.Client({ connectionString: ownerUrl(await readMasterSecret(requireEnv('MASTER_SECRET_ARN'))) });
+		await client.connect();
+		try {
+			const result = await loadReferenceText(client, req, text, (line) => console.log(line));
+			console.log(`${req.kind}: ${result.written} row(s) loaded as "${req.dataset}" from ${req.key}`);
+			return result;
+		} finally {
+			await client.end();
+		}
+	} catch (err) {
+		console.error('reference load failed:', err);
+		const failure = new Error(JSON.stringify(loadFailureSummary(err, context)));
+		failure.name = 'LoadFailed';
+		failure.stack = `${failure.name}: ${failure.message}`;
+		throw failure;
+	}
+}
+
+export async function handler(event?: unknown, context?: LogContext): Promise<MigrateResult | LoadResult> {
+	if (event && typeof event === 'object' && 'load' in event) return loadReference((event as { load: unknown }).load, context);
 	try {
 		return await run();
 	} catch (err) {

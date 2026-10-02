@@ -71,7 +71,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		PACKS_BUCKET: 'water-management-packs-000000000000',
 		REPORT_DOWNLOADS: 'cloudfront',
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
-		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey
+		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey,
+		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles'
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -109,7 +110,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		DB_NAME: 'water',
 		MASTER_SECRET_ARN: 'arn:aws:secretsmanager:af-south-1:000000000000:secret:rds!db-0000-AbCdEf',
 		...runtimeSecret('migrate'),
-		NODE_EXTRA_CA_CERTS: CA
+		NODE_EXTRA_CA_CERTS: CA,
+		REFERENCE_BUCKET: 'water-management-reference-000000000000'
 	}
 };
 
