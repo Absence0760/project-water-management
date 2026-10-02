@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, WATER_SOURCE_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { newNetworkNode, OFFTAKE_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
 import { validateModel, type ModelIssue } from './validate';
@@ -13,44 +13,7 @@ export function emptyModel(): ProjectModel {
 }
 
 export function newNode(sortOrder: number, downstreamNodeId: string | null): NetworkNode {
-	return {
-		id: crypto.randomUUID(),
-		name: '',
-		kind: downstreamNodeId === null ? 'gauge' : 'farm',
-		downstreamNodeId,
-		sortOrder,
-		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
-		pctUpstreamToDam: 1,
-		pctRunoffToDam: 0,
-		damCapacityM3: 0,
-		damInitialPct: 0,
-		damMinPct: 0,
-		divertCapacityM3Day: 0,
-		// Drip (0.90, the client's default, issue #90) with half its losses returning (audit N1).
-		...NEW_FARM_IRRIGATION,
-		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
-		damAreaFullM2: null,
-		damAreaExponent: DAM_AREA_EXPONENT,
-		damSeepagePerDay: 0,
-		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
-		...USER_DEFAULTS,
-		...BOREHOLE_DEFAULTS,
-		// No survey curve, no release, all seepage returning (WP-3.5).
-		...DAM_STORAGE_DEFAULTS,
-		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.30.0).
-		...DEVELOPMENT_DEFAULTS,
-		// The dam only, no river pump (WP-3.8).
-		...SUPPLY_DEFAULTS,
-		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
-		...OPERATING_DEFAULTS,
-		// The crops on the dam (engine 1.65.0).
-		...WATER_SOURCE_DEFAULTS,
-		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
-		ewrSite: true
-	};
+	return newNetworkNode(crypto.randomUUID(), sortOrder, downstreamNodeId);
 }
 
 export function newCrop(): CropDef {

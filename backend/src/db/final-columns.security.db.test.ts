@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from './tx.js';
+import { plantStartProposal } from '../__tests__/routeSamples.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -35,7 +36,9 @@ const CLAIMED = new Map<string, string>([
 	['scenario.decided_at', '045/052 scenario guard: decided is a terminal status, the decision never changes (probe: scenarios)'],
 	['scenario.decided_by', '045/052 scenario guard, as decided_at'],
 	['delineation_proposal.decided_at', '175 delineation_proposal_final: an accepted or rejected proposal never changes its decision (probe: delineation)'],
-	['delineation_proposal.decided_by', '175 delineation_proposal_final: only the foreign key clears it']
+	['delineation_proposal.decided_by', '175 delineation_proposal_final: only the foreign key clears it'],
+	['start_proposal.decided_at', '178 start_proposal_final: an applied or discarded proposal never changes its decision (probe: start from the map)'],
+	['start_proposal.decided_by', '178 start_proposal_final: only the foreign key clears it']
 ]);
 
 let owner: User;
@@ -321,5 +324,24 @@ describe('delineation', () => {
 			if (prev === undefined) delete process.env.DEM_URL;
 			else process.env.DEM_URL = prev;
 		}
+	});
+});
+
+describe('start from the map', () => {
+	it('refuses to undo or rewrite a decided proposal, or its plan (positive control: an editor discards it)', async () => {
+		const spid = await plantStartProposal(projectId);
+		await expectRefused("UPDATE start_proposal SET plan = '{}'::jsonb WHERE id = $1", [spid]);
+		expect((await owner.call('POST', `/projects/${projectId}/map/start/${spid}/discard`, {})).status).toBe(200);
+		for (const [sql, params] of [
+			["UPDATE start_proposal SET status = 'proposed', decided_at = NULL, decided_by = NULL WHERE id = $1", [spid]],
+			["UPDATE start_proposal SET status = 'applied', decision = '{}'::jsonb WHERE id = $1", [spid]],
+			["UPDATE start_proposal SET decided_at = decided_at + interval '1 day' WHERE id = $1", [spid]],
+			['UPDATE start_proposal SET decided_by = $2 WHERE id = $1', [spid, coOwner.id]],
+			['UPDATE start_proposal SET decided_by = NULL WHERE id = $1', [spid]]
+		] as const) {
+			await expectRefused(sql, [...params]);
+		}
+		const [row] = await asOwner('SELECT status, decided_by FROM start_proposal WHERE id = $1', [spid]);
+		expect(row).toEqual({ status: 'discarded', decided_by: owner.id });
 	});
 });

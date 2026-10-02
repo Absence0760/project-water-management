@@ -257,6 +257,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.delineation_proposed', { from: 'dam_wall', areaKm2: 340.7, dataset: 'Synthetic DEM 1' }))).toBe('Delineated a catchment of 340.7 km² from a dam wall (Synthetic DEM 1)');
 		expect(eventLine(ev('map.delineation_accepted', { as: 'catchment_boundary', name: 'Valley' }))).toBe('Accepted a delineated catchment as the catchment boundary “Valley”');
 		expect(eventLine(ev('map.delineation_rejected', {}))).toBe('Rejected a delineated catchment');
+		expect(eventLine(ev('map.start_proposed', { units: 2, fromDem: true, dataset: 'Synthetic DEM 1' }))).toBe('Proposed a model from the map: 2 units (Synthetic DEM 1)');
+		expect(eventLine(ev('map.start_proposed', { units: 1, fromDem: false }))).toBe('Proposed a model from the map: 1 unit, without an elevation model');
+		expect(eventLine(ev('map.start_applied', { nodes: 4, areas: 2, orders: 1 }))).toBe('Started the model from the map: 4 nodes, 2 areas and 1 drains-into taken');
+		expect(eventLine(ev('map.start_discarded', {}))).toBe('Discarded a model proposed from the map');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
