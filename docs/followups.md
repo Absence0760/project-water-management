@@ -3733,15 +3733,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       proposals read WorldCover or the synthetic grid. Trigger: a
       hydrologist asking which crop the land cover sees, or WorldCover's
       cropland class proving too coarse in a client catchment.
-- [ ] **Loading the evaporation grid in production** (issue #326 B-evap;
-      maps.md § The evaporation grid): dPET is allowed (CC BY 4.0, from
-      ERA5-Land, also CC BY 4.0), with the same missing path into the
-      private database as the land-cover grid and the quaternaries (the
-      loader writes as the schema owner from a workstation). Same durable
-      fix as the item above: one operator path for every reference dataset,
-      fed the pre-summarised `--reduce` totals. Trigger: the first client
-      deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
-      attribution with any figure served.
+- [x] **Loading the evaporation grid in production** (issue #326 B-evap,
+      2026-10-02, PR feat/evaporation-production-load): `pnpm
+      import:evaporation <years> --dataset <label> --out <file>.json.gz`
+      averages the reduced dPET years into the grid of monthly means on the
+      operator's machine, and `load-reference.yml` (kind `evaporation`)
+      loads that file into RDS through the migrate Lambda
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+      Only a reference-ET grid loads (an A-pan grid's source has no allowed
+      Sources row); its caps are 32 MiB uploaded, 64 MiB unzipped. The
+      dPET/ERA5-Land attribution is stored on the dataset row and shown
+      under every proposal; its credit on the /data-sources page waits for
+      that page (PR #354).
 - [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
       review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
       `settings/EvaporationProposal.svelte` repeat the same frame (heading,

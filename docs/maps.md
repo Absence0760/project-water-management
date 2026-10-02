@@ -1288,9 +1288,14 @@ only reads them.
   (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
   lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
   station pans. No open A-pan grid passes D-B today (§ Sources).
-- **Production loading** has the quaternary dataset's gap: no path yet into
-  the private database (followups.md). The attribution must be shown with any
-  figure a client-facing deployment serves from it (§ Sources).
+- **Production loading**: `pnpm import:evaporation <dir>/*.dpet-monthly.json
+  --dataset <label> --out dpet.json.gz` writes the averaged grid in the
+  fixture form instead of loading it, and `load-reference.yml` (kind
+  `evaporation`) loads that file through the migrate Lambda
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+  Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
+  until its source has an allowed row here. The attribution, stored on the
+  dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
 
