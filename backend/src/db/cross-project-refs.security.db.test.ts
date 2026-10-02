@@ -873,6 +873,30 @@ async function landCoverParcel(w: World): Promise<string> {
 	return f.body.feature.id as string;
 }
 
+/**
+ * Start from the map (178) only proposes for an empty model, and A and B have
+ * nodes: each call makes a fresh empty project of the editor's with a
+ * boundary (no DEM: the plan comes from the points), and names a feature made
+ * in it (control, r = h) or in the referenced project (attack).
+ */
+async function startProposal(h: World, r: World, field: 'outletFeatureId' | 'featureId'): Promise<Res> {
+	const home = (await dual.call('POST', '/projects', { name: `Start ${randomUUID()}` })).body.project.id as string;
+	const square = [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]];
+	await dual.call('POST', `/projects/${home}/map/features`, { kind: 'catchment_boundary', name: 'B', geometry: { type: 'Polygon', coordinates: square } });
+	const at = r === h ? home : r.projectId;
+	const f = await dual.call('POST', `/projects/${at}/map/features`, { kind: field === 'outletFeatureId' ? 'gauge' : 'dam', lon: 21.31, lat: -33.69 });
+	expect(f.status, JSON.stringify(f.body)).toBe(201);
+	const id = f.body.feature.id as string;
+	const prev = process.env.DEM_URL;
+	process.env.DEM_URL = '';
+	try {
+		return await dual.call('POST', `/projects/${home}/map/start`, field === 'outletFeatureId' ? { outletFeatureId: id, points: [] } : { points: [{ featureId: id, role: 'dam' }] });
+	} finally {
+		if (prev === undefined) delete process.env.DEM_URL;
+		else process.env.DEM_URL = prev;
+	}
+}
+
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
@@ -940,6 +964,8 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 		const featureId = await landCoverParcel(r);
 		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/crop-area-from-land-cover`, { cropId: h.cropId, dataset: 'synthetic', featureId });
 	},
+	'POST /projects/:id/map/start outletFeatureId': (h, r) => startProposal(h, r, 'outletFeatureId'),
+	'POST /projects/:id/map/start points.featureId': (h, r) => startProposal(h, r, 'featureId'),
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
 			...modelOf(h),
@@ -1007,6 +1033,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
 	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
 	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
+	'delineation/start.ts:outletFeatureId': ['POST /projects/:id/map/start outletFeatureId'],
+	'delineation/start.ts:featureId': ['POST /projects/:id/map/start points.featureId'],
 	'geo/croplandRoutes.ts:cropId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId'],
 	'geo/croplandRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',

@@ -1599,6 +1599,25 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   delete (the route prunes superseded and rejected rows past the newest 50
   a project; accepted ones stay as their features' provenance). No node
   column, so farmers never read it. Covering indexes on every foreign key.
+- **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
+  proposed for an empty project from its map, and the editor's decision.
+  `id`, `project_id` (cascade), `status` (`proposed` | `applied` |
+  `discarded` | `superseded`; at most one `proposed` per project, partial
+  unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
+  areas and outlines, the order, the rest of the catchment, the outlet, the
+  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
+  `method_version` (`start-1`), `decision` (jsonb, set exactly when
+  `applied`: the ticks, the node and parcel ids, the revision),
+  `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
+  `decided_at` (set exactly when applied or discarded). The plan never
+  changes and a decision is final (`start_proposal_final`). RLS: viewers
+  read, editors insert, update and delete (the route prunes superseded and
+  discarded rows past the newest 50 a project). What apply makes is
+  ordinary model data: nodes, `farm_parcel` features linked to them, and
+  `node.area_source = 'map'` for a ticked area. No node column, so farmers
+  never read it.
 - **`river_reference`** (`171_river_network.sql`, issue #345,
   [maps.md § River network](./maps.md#river-network)): the river network
   the Map tab's River network layer draws and proposes rivers from. Primary

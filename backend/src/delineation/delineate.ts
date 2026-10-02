@@ -26,7 +26,7 @@ export const MIN_CELLS = 9;
 /** Wall-clock budget for one delineation, under the API Lambda's 30 s timeout. */
 export const TIME_BUDGET_MS = 20_000;
 
-const EARTH_RADIUS_M = 6378137;
+export const EARTH_RADIUS_M = 6378137;
 
 export type RefusalCode = 'outside' | 'no_data' | 'too_large' | 'too_small' | 'outline';
 
@@ -58,18 +58,18 @@ export interface Delineation {
 	methodVersion: string;
 }
 
-const worldPx = (z: number, size: number) => 2 ** z * size;
-const toPx = (lon: number, lat: number, W: number): [number, number] => {
+export const worldPx = (z: number, size: number) => 2 ** z * size;
+export const toPx = (lon: number, lat: number, W: number): [number, number] => {
 	const s = Math.sin((Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI) / 180);
 	return [((lon + 180) / 360) * W, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * W];
 };
-const toLonLat = (x: number, y: number, W: number): Position => [
+export const toLonLat = (x: number, y: number, W: number): Position => [
 	Math.round(((x / W) * 360 - 180) * 1e7) / 1e7,
 	Math.round(((Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / W))) * 180) / Math.PI) * 1e7) / 1e7
 ];
 
 /** The DEM's elevations over [x0, x0+n) × [y0, y0+n) global pixels at zoom z (NaN where it has no tile). */
-async function readWindow(dem: Dem, z: number, size: number, x0: number, y0: number, n: number): Promise<Grid> {
+export async function readWindow(dem: Dem, z: number, size: number, x0: number, y0: number, n: number): Promise<Grid> {
 	const grid: Grid = { nx: n, ny: n, z: new Float64Array(n * n).fill(Number.NaN) };
 	const tiles = 2 ** z;
 	const tx0 = Math.floor(x0 / size);
