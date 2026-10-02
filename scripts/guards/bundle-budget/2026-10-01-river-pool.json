@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Pool at a run-of-river pump (PR #341, engine 1.64.0): the engine's pool simulation, checks and columns, the pool fields in SupplyFields and their help article and tip. Measured 1554 KB against main's 1551 KB after merging origin/main (#338)."
+}
