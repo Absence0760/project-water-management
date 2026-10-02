@@ -13,7 +13,11 @@
 //   without `required`).
 //
 // The banner itself (layout/MfaBanner.svelte) is its own chunk, loaded only
-// when there is something to say. This module holds no words.
+// when there is something to say. Dismissing it lasts until the next refusal
+// or until this tab closes (sessionStorage, so a reload doesn't bring it
+// back); while the need stands the account menu keeps a badge
+// (layout/AccountMenu.svelte, `pendingKind`), so it is never out of sight.
+// This module holds no words.
 import type { MfaStatus } from '$lib/api/types';
 
 export type MfaPromptKind = 'setup' | 'step-up';
@@ -26,21 +30,50 @@ export interface MfaPromptState {
 	status: Seen | null;
 	/** A request was refused for want of a second factor, since the last read that resolved it. */
 	refused: MfaPromptKind | null;
-	/** Dismissed until the next refusal. */
-	dismissed: boolean;
+	/** The prompt dismissed (until the next refusal, or the tab closes), if any: a different prompt still shows. */
+	dismissed: MfaPromptKind | null;
 }
 
-export const mfaPrompt = $state<MfaPromptState>({ user: null, status: null, refused: null, dismissed: false });
+export const mfaPrompt = $state<MfaPromptState>({ user: null, status: null, refused: null, dismissed: null });
 
-/** Which prompt to show for this state, or none. Pure. */
-export function promptKind(p: MfaPromptState, user: string | null): MfaPromptKind | null {
-	if (!user || p.user !== user || p.dismissed) return null;
+/** What the person still needs to do (dismissed or not), or nothing: the account menu's badge. Pure. */
+export function pendingKind(p: MfaPromptState, user: string | null): MfaPromptKind | null {
+	if (!user || p.user !== user) return null;
 	if (p.refused) return p.refused;
 	const s = p.status;
 	if (!s?.required) return null;
 	if (!s.enrolled) return 'setup';
 	if (!s.sessionVerified) return 'step-up';
 	return null;
+}
+
+/** Which banner to show for this state, or none: the pending prompt unless it was dismissed. Pure. */
+export function promptKind(p: MfaPromptState, user: string | null): MfaPromptKind | null {
+	const kind = pendingKind(p, user);
+	return kind && p.dismissed !== kind ? kind : null;
+}
+
+// The dismissal, kept for this tab (a reload reads it back). Storage can be
+// missing or throw (a private window, blocked site data): then it lasts until
+// the reload, as before.
+const DISMISSED_KEY = 'wm.mfa-prompt-dismissed';
+
+function storedDismissal(user: string): MfaPromptKind | null {
+	try {
+		const saved = JSON.parse(globalThis.sessionStorage?.getItem(DISMISSED_KEY) ?? 'null') as { user?: unknown; kind?: unknown } | null;
+		return saved?.user === user && (saved.kind === 'setup' || saved.kind === 'step-up') ? saved.kind : null;
+	} catch {
+		return null;
+	}
+}
+
+function storeDismissal(value: { user: string; kind: MfaPromptKind } | null): void {
+	try {
+		if (value) globalThis.sessionStorage?.setItem(DISMISSED_KEY, JSON.stringify(value));
+		else globalThis.sessionStorage?.removeItem(DISMISSED_KEY);
+	} catch {
+		// Kept in memory only.
+	}
 }
 
 /** The prompt a refused request calls for: a 403 with one of the two codes, else null. */
@@ -58,7 +91,7 @@ function forUser(user: string) {
 	mfaPrompt.user = user;
 	mfaPrompt.status = null;
 	mfaPrompt.refused = null;
-	mfaPrompt.dismissed = false;
+	mfaPrompt.dismissed = storedDismissal(user);
 }
 
 /** A read of GET /auth/mfa for `user` (the layout's, or the Account page's). Clears a refusal the status now resolves. */
@@ -76,7 +109,8 @@ export function noteMfaRefusal(user: string | null, err: unknown): void {
 	forUser(user);
 	// A step-up after a set-up refusal means they have set one up since: the newer answer wins.
 	mfaPrompt.refused = kind;
-	mfaPrompt.dismissed = false;
+	mfaPrompt.dismissed = null;
+	storeDismissal(null);
 }
 
 /** Signed out: what was known belonged to that session (a refusal, a password-only sign-in). */
@@ -84,11 +118,17 @@ export function resetMfaPrompt(): void {
 	mfaPrompt.user = null;
 	mfaPrompt.status = null;
 	mfaPrompt.refused = null;
-	mfaPrompt.dismissed = false;
+	mfaPrompt.dismissed = null;
+	storeDismissal(null);
 }
 
+/** Hide the banner showing now, until the next refusal or the tab closes; the account menu's badge stays. */
 export function dismissMfaPrompt(): void {
-	mfaPrompt.dismissed = true;
+	const user = mfaPrompt.user;
+	const kind = promptKind(mfaPrompt, user);
+	if (!user || !kind) return;
+	mfaPrompt.dismissed = kind;
+	storeDismissal({ user, kind });
 }
 
 let reading: { user: string; at: Promise<void> } | null = null;

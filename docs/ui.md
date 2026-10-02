@@ -52,7 +52,8 @@ live](#project-workspace)); Help keeps its contents in the page
 avatar, display name and email (initials only on the phone bar, `compact`)
 that opens a list (same disclosure pattern as the Data/Runs tabs' download
 menu — a button plus a hidden list, not an ARIA `menu`/`menuitem` widget)
-with three entries. At the sidebar's foot it opens upward (`up`); on the
+with three entries (four while two-step sign-in is still needed: the
+two-step sign-in banner, below). At the sidebar's foot it opens upward (`up`); on the
 phone bar, downward.
 
 - **Account** — a link to `/account` (marked `aria-current` while there).
@@ -8064,8 +8065,12 @@ then.
   With an authenticator but a password-only session (`!sessionVerified`),
   or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
   to `/login?next=<this page>`. A refusal words it as "That needs …";
-  **Dismiss** hides it until the next refusal and moves focus to the page's
-  title. Its own chunk, loaded only while there is something to say
+  **Dismiss** hides it until the next refusal (or until the tab closes: a
+  reload keeps it hidden, `sessionStorage`) and moves focus to the page's
+  title. While the need stands, dismissed or not, the account menu's avatar
+  carries a small amber "i" badge (the trigger's name adds ", two-step
+  sign-in needed") and the menu's first entry is **Set up two-step
+  sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say
   (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
