@@ -879,6 +879,8 @@
 							readonly={!canEdit}
 							onsave={saveModel}
 							bind:reason={saveReason}
+							{projectId}
+							onModelChanged={reloadInputs}
 						/>
 					{/snippet}
 				</Lazy>

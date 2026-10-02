@@ -25,6 +25,7 @@ import { feedRoutes } from './feeds/routes.js';
 import { MAP_IMPORT_PATH, mapRoutes } from './geo/routes.js';
 import { quaternaryLayerRoutes } from './geo/quaternaryLayer.js';
 import { stationRoutes } from './geo/stationRoutes.js';
+import { croplandRoutes } from './geo/croplandRoutes.js';
 import { damRoutes } from './geo/damRoutes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
@@ -184,6 +185,7 @@ export function createApp() {
 	projects.route('/', quaternaryLayerRoutes);
 	projects.route('/', stationRoutes);
 	projects.route('/', damRoutes);
+	projects.route('/', croplandRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);

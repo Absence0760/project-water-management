@@ -157,7 +157,8 @@ import type {
 	QuaternaryLookup,
 	QuaternaryLayer,
 	GaugeStationLookup,
-	DamProposals
+	DamProposals,
+	CroplandProposals
 } from './types';
 
 export class ApiError extends Error {
@@ -1086,6 +1087,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					'POST',
 					`${p(id)}/nodes/${enc(nodeId)}/dam-area-from-map`,
 					{ featureId }
+				)
+		},
+		/**
+		 * A unit's cultivated area from land cover (issue #326 B-landcover, docs/api.md § Catchment map), proposed as
+		 * the planted area of a crop the modeller picks. Each accept is one value, saved to the model as a revision citing the dataset.
+		 */
+		cropland: {
+			get: (id: string, nodeId: string, dataset?: string) =>
+				request<CroplandProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/cropland-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
+			cropAreaFromLandCover: (id: string, nodeId: string, body: { cropId: string; dataset: string; featureId?: string }) =>
+				request<{ nodeId: string; cropId: string; areaM2: number; dataset: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/crop-area-from-land-cover`,
+					body
 				)
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
