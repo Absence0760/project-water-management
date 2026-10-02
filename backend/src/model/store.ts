@@ -226,7 +226,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
 			supply_stop_pct: n.supplyStopPct ?? 0.6,
-			// A pool at the river pump's intake (engine ≥ 1.64.0, migration 158); absent = none.
+			// A pool at the river pump's intake (engine ≥ 1.64.0, migration 169); absent = none.
 			pool_capacity_m3: n.poolCapacityM3 || null,
 			pool_initial_pct: n.poolInitialPct ?? POOL_DEFAULTS.poolInitialPct,
 			pool_area_m2: n.poolAreaM2 ?? POOL_DEFAULTS.poolAreaM2,

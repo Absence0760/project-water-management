@@ -106,7 +106,7 @@ describe('model store', () => {
 		// and a river pump capacity (engine 1.58.0; 060's column, a user's too).
 		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15', pumpCapacityM3Day: 864.25 });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091), pumping run of river from a
-		// pool at its intake (engine 1.64.0, 158_node_pool), awkward numbers.
+		// pool at its intake (engine 1.64.0, 169_node_pool), awkward numbers.
 		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: 600, poolCapacityM3: 0.1 + 0.2, poolInitialPct: 1 / 3, poolAreaM2: 123_456.789 });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
 		const maize = { id: crypto.randomUUID(), name: 'Maize', sortOrder: 1, cropFactor: monthly(0.8) };
@@ -222,7 +222,7 @@ describe('model store', () => {
 		expect(got.landCover).toEqual([model.landCover[1], model.landCover[0]]);
 		expect(got.boreholes).toEqual([model.boreholes[1], model.boreholes[0]]);
 		expect(got.demandObjects).toEqual([model.demandObjects[1], model.demandObjects[0]]);
-		// Migration 158's CHECKs refuse a pool of 0 m³ (none is NULL) and a start above full, below the API's own checks.
+		// Migration 169's CHECKs refuse a pool of 0 m³ (none is NULL) and a start above full, below the API's own checks.
 		await expect(asOwner('UPDATE node SET pool_capacity_m3 = 0 WHERE id = $1', [canal.id])).rejects.toMatchObject({ code: '23514' });
 		await expect(asOwner('UPDATE node SET pool_initial_pct = 1.5 WHERE id = $1', [canal.id])).rejects.toMatchObject({ code: '23514' });
 		// Migration 127's CHECK refuses a negative population below the API's own check (engine 1.44.0).

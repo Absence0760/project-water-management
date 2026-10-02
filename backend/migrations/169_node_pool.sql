@@ -1,4 +1,4 @@
--- 158_node_pool — a pool at a run-of-river unit's pump intake (engine 1.64.0,
+-- 169_node_pool — a pool at a run-of-river unit's pump intake (engine 1.64.0,
 -- docs/model.md §2.7j, docs/data-model.md § Nodes).
 --
 -- pool_capacity_m3: the pool's capacity (m3), a natural pool or a weir pool

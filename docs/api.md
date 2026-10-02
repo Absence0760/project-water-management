@@ -1511,7 +1511,7 @@ a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
 
-A pool at a run-of-river pump (engine ≥ 1.64.0, migration 158,
+A pool at a run-of-river pump (engine ≥ 1.64.0, migration 169,
 [model.md §2.7j](./model.md)): every node carries `poolCapacityM3` (> 0, or
 `null` / 0 = none), `poolInitialPct` (0–1) and `poolAreaM2` (≥ 0, or `null` =
 estimated from the capacity). A body without them gets `null`, 1 and `null`

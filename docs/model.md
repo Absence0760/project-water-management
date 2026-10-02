@@ -4219,7 +4219,7 @@ notes name this case ("farms without dams pump directly from passing
 flow/pools"). The pool is optional: `poolCapacityM3` null (the default)
 or 0 is none, and the unit runs exactly as before.
 
-**Fields** (run-of-river farms only; migration 158):
+**Fields** (run-of-river farms only; migration 169):
 
 | Field | Meaning |
 | --- | --- |
