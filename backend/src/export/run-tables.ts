@@ -1571,7 +1571,7 @@ export function* columnGuideLines(): Generator<string> {
  * River abstractions beside a unit's dam (engine ≥ 1.65.0, docs/model.md
  * §2.7j): each one's pump, its mean take and, with a pool, the pool's
  * capacity and mean storage; with a pump capacity (engine ≥ 1.66.0) the mean
- * demand its pump left unmet although the river had it, and the days it did.
+ * demand its pump left unmet although the river or its pool had it, and the days it did.
  * The pump-limited columns only when some abstraction has them, blank for one
  * without a capacity; the pool columns only when one has a pool.
  */

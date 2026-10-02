@@ -1444,10 +1444,21 @@ export function buildNetworkPlan(
 	const lakeK = settings.lakeEvapFactorMonthly;
 	// A day the daily A-pan series covers (engine ≥ 0.38.0, issue #45) takes that day's A-pan instead of the month's mean.
 	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
+	// Whether any day of the run has an A-pan above 0 (the daily series' day, else the month's mean).
+	let anyApan = false;
 	for (let t = 0; t < days; t++) {
 		const m = waterYearIndex(month[t]!);
 		const a = apanDay ? apanDay[t]! : NaN;
 		lakeEvapMmDay[t] = a === a ? (lakeK ? lakeK[m]! : settings.lakeEvapFactor) * a : ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
+		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
+	}
+	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
+	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4).
+	if (!anyApan && days > 0) {
+		const pooled = (model.demandObjects ?? []).some((o) => o.enabled !== false && o.waterSource === 'river' && typeof o.riverPoolM3 === 'number' && o.riverPoolM3 > 0);
+		const open = nodes.filter((n) => n.kind === 'farm' && (n.damCapacityM3 > 0 || (n.cropWaterSource === 'river' && typeof n.cropRiverPoolM3 === 'number' && n.cropRiverPoolM3 > 0)));
+		if (open.length || pooled)
+			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;

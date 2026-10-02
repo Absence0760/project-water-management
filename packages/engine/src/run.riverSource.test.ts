@@ -315,3 +315,26 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		expect(texts.some((t) => /demand object "mill".*from a river abstraction \(pump 480 m³\/day, pool 3\s000 m³\) → .*from the unit’s supply \(a river pump 480 m³\/day, pool 3\s000 m³ kept, unused\)/.test(t))).toBe(true);
 	});
 });
+
+describe('a run with no A-pan on any day warns that open water evaporates nothing (engine 1.67.0, persona-hydrologist round 4)', () => {
+	const WARN = /A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation/;
+	const warned = (i: ModelInput) => runModelWith(i, () => ({ naturalFlowM3Day: [1000, 1000] })).summary.warnings.some((w) => WARN.test(w));
+
+	it('on a unit with a dam, or a river abstraction with a pool', () => {
+		expect(warned(input(dam, [], 0, 2))).toBe(true);
+		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 500 })], 0, 2))).toBe(true);
+		expect(warned(input({ cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 500 }, [], 0, 2))).toBe(true);
+	});
+
+	it('not with an A-pan on some day, nor without a dam or a pool', () => {
+		// The January A-pan set (input's `need`): the dam evaporates, nothing to say.
+		expect(warned(input(dam, [], 50, 2))).toBe(false);
+		// A daily A-pan series covers it as well as the monthly row.
+		const daily = input(dam, [], 0, 2);
+		daily.series.evap_apan_mm = { startDate: '2021-01-01', values: [5, 5] };
+		expect(warned(daily)).toBe(false);
+		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null })], 0, 2))).toBe(false);
+		// A pool on a demand that draws on the dam is inert: no pool.
+		expect(warned(input({}, [obj('town', 100, { riverPoolM3: 500 })], 0, 2))).toBe(false);
+	});
+});
