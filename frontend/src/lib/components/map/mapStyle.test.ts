@@ -454,6 +454,16 @@ describe('the delineation proposal (#326 B-delineate)', () => {
 	const geometry = { type: 'Polygon' as const, coordinates: [[[20, -33], [21, -33], [21, -34], [20, -33]]] as [number, number][][] };
 	const data = overlayData([], null);
 
+	it('marks every other click as an outlet too (sub-catchments from clicks)', () => {
+		const sqr = { type: 'Polygon' as const, coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]] as [number, number][][] };
+		const d = proposalData({ geometry: sqr, outlet: [0.5, 0], outlets: [[0.5, 0.5], [0.5, 0.9]], pieces: [{ key: '0', label: '1', name: 'Sub-catchment 1', geometry: sqr, at: [0.5, 0.5], tint: 0 }] });
+		expect(d.features.filter((f) => f.properties.part === 'outlet').map((f) => (f.geometry as { coordinates: unknown }).coordinates)).toEqual([
+			[0.5, 0],
+			[0.5, 0.5],
+			[0.5, 0.9]
+		]);
+	});
+
 	it('draws nothing without a proposal, and the polygon and its outlet with one', () => {
 		expect(proposalData(null).features).toEqual([]);
 		const d = proposalData({ geometry, outlet: [20.5, -33.9] });
