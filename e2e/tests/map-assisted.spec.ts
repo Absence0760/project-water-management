@@ -70,9 +70,7 @@ test('snapping: a click near a parcel’s corner lands on it; Alt, and Snap to f
 
 	// Alt with the click: exactly where it is, no snap.
 	await bar(page).getByRole('button', { name: 'Undo' }).click();
-	await page.keyboard.down('Alt');
-	await page.mouse.click(near.x, near.y);
-	await page.keyboard.up('Alt');
+	await canvas(page).click({ position: { x: near.x - b.x, y: near.y - b.y }, modifiers: ['Alt'] });
 	await expect(said(page)).toHaveText(/^Corner 1 at [\d.]+° S, [\d.]+° E\.$/);
 	await expect(said(page)).not.toHaveText(/33\.6500° S, 21\.3500° E/);
 
@@ -221,7 +219,7 @@ test('one placing mode at a time: Trace a dam, then Place a point or Delineate, 
 	await expect(header(page).getByRole('button', { name: 'Place a point' })).toHaveAttribute('aria-pressed', 'true');
 	await page.getByTestId('map-enter-coordinates').click();
 	await expect(page.getByRole('dialog', { name: 'Place a point' })).toBeVisible();
-	await page.getByRole('dialog', { name: 'Place a point' }).getByRole('button', { name: 'Close' }).click();
+	await page.getByRole('dialog', { name: 'Place a point' }).getByRole('button', { name: 'Close' }).last().click();
 	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
 	await header(page).getByRole('button', { name: 'Delineate' }).click();
 	await expect(bar(page).getByRole('heading', { name: 'Delineating a catchment' })).toBeVisible();
