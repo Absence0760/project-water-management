@@ -2634,7 +2634,7 @@ placed points. The server never trusts the browser with geometry:
   Apply writes only into an empty model, re-checks the ticks against the
   stored plan (a value can't be ticked that wasn't proposed) and runs the
   model's own validation before saving; the plan is immutable and the
-  decision final (178 `start_proposal_final`). **Dividing** a model that has
+  decision final (178 `start_proposal_final`). Since 185 a proposal of either kind is kept as proposed in the database too, not only by the routes: every column but the decision's is fixed (the polygon, area, dataset, method, project), the maker is the signed-in user on insert and only its account's deletion clears it, an accepted or applied proposal can't be deleted but with its project, and the triggers' "is that account gone?" check runs as SECURITY DEFINER, so app_user's RLS can't hide a live decider (`final-columns.security.db.test.ts`). **Dividing** a model that has
   nodes (182) is the same surface: feature and node ids of the project's own
   map and model only (another project's are "not on this map" / "not in the
   model", `cross-project-refs.security.db.test.ts`), the shared cap, and an

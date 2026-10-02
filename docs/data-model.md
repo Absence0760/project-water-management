@@ -1596,8 +1596,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
   accepted or rejected). RLS: viewers read, editors insert, update and
-  delete (the route prunes superseded and rejected rows past the newest 50
-  a project; accepted ones stay as their features' provenance). No node
+  delete all but an accepted one (the route prunes superseded and rejected
+  rows past the newest 50 a project; accepted ones stay as their features'
+  provenance, 185). Every column but the decision's never changes (what
+  was proposed, its project; `created_by` only cleared with its account),
+  and an insert's `created_by` is the signed-in user
+  (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
@@ -1613,10 +1617,13 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
-  `decided_at` (set exactly when applied or discarded). The plan never
-  changes and a decision is final (`start_proposal_final`). RLS: viewers
-  read, editors insert, update and delete (the route prunes superseded and
-  discarded rows past the newest 50 a project). What apply makes is
+  `decided_at` (set exactly when applied or discarded). The plan, the mode
+  and every other column but the decision's never change (185: dataset,
+  method, project; `created_by` only cleared with its account, and set to
+  the signed-in user on insert), and a decision is final
+  (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
+  editors insert, update and delete all but an applied one (the route
+  prunes superseded and discarded rows past the newest 50 a project). What apply makes is
   ordinary model data: nodes, `farm_parcel` features linked to them, and
   `node.area_source = 'map'` for a ticked area. A division's plan
   (`divide.ts` `DividePlan`) also keeps each node's values when proposed
