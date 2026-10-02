@@ -239,6 +239,12 @@ beforeAll(async () => {
 	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
 	const proposal = await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
 	await call(subject, 'POST', `/projects/${projectId}/map/delineation/${proposal.proposal.id}/reject`, {});
+	// A start-from-the-map proposal they made and discarded (178), on an empty project of the owner's where they edit: the same.
+	const emptyId = (await call(owner, 'POST', '/projects', { name: `Pd start ${tag}` })).project.id;
+	await call(owner, 'POST', `/projects/${emptyId}/members`, { email: subject.email, role: 'editor' });
+	const weir = (await call(owner, 'POST', `/projects/${emptyId}/map/features`, { kind: 'gauge', name: 'Pd weir', lon: 20.7428741, lat: -33.5396777 })).feature.id;
+	const start = await call(subject, 'POST', `/projects/${emptyId}/map/start`, { outletFeatureId: weir, points: [] });
+	await call(subject, 'POST', `/projects/${emptyId}/map/start/${start.proposal.id}/discard`, {});
 	if (demBefore === undefined) delete process.env.DEM_URL;
 	else process.env.DEM_URL = demBefore;
 	// An application, decided by the subject.

@@ -145,7 +145,13 @@ export const RELIEF_LAYER = 'tr-hillshade';
  * tiles (the Mapterhorn build, Copernicus GLO-30 over South Africa), read over
  * HTTP Range like the basemap. MapLibre overzooms past the file's maxzoom.
  */
-export const terrainSource = (url: string) => ({ type: 'raster-dem', url: `pmtiles://${url}`, encoding: 'terrarium', tileSize: 512, attribution: TERRAIN_ATTRIBUTION });
+export const terrainSource = (url: string, dataSourcesHref?: string) => ({
+	type: 'raster-dem',
+	url: `pmtiles://${url}`,
+	encoding: 'terrarium',
+	tileSize: 512,
+	attribution: dataSourcesHref ? `${TERRAIN_ATTRIBUTION} (<a href="${dataSourcesHref}#copernicus-dem">licence notice</a>)` : TERRAIN_ATTRIBUTION
+});
 
 /**
  * The shaded relief: soft, translucent shadows and highlights, so the land
@@ -379,6 +385,10 @@ export interface StyleOptions {
 	terrain?: string | null;
 	/** A delineation proposal to draw (proposalData()); none when omitted. */
 	proposal?: ReturnType<typeof proposalData>;
+	/** The river network's credit (riversCredit()), while reaches from a credited dataset are drawn; none when omitted. */
+	riversCredit?: string | null;
+	/** The data sources page's URL: the relief's credit links its Copernicus section (the Art. 6(c) liability sentence). */
+	dataSourcesHref?: string;
 }
 
 /**
@@ -404,14 +414,33 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
 	if (opts.terrain) {
-		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain);
+		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain, opts.dataSourcesHref);
 		const before = reliefBeforeId(style.layers.map((l) => l.id));
 		const at = before ? style.layers.findIndex((l) => l.id === before) : style.layers.length;
 		style.layers.splice(at, 0, reliefLayer(dark));
 	}
+	if (opts.riversCredit) {
+		style.sources[RIVERS_CREDIT_SOURCE] = riversCreditSource(opts.riversCredit);
+		style.layers.push(RIVERS_CREDIT_LAYER);
+	}
 	if (glyphs) style.glyphs = glyphs;
 	return style;
 }
+
+/**
+ * The river network's credit on the map (HydroRIVERS' licence, docs/maps.md
+ * § Sources): MapLibre's attribution control lists a source's attribution
+ * only while a layer reads it, so the credit is its own empty source with
+ * one invisible layer, added while reaches from HydroRIVERS are drawn and
+ * removed after (CatchmentMap syncRiversCredit), as the relief's is. The
+ * `rivers` source itself is always in the style, drawn or not.
+ */
+export const RIVERS_CREDIT_SOURCE = 'rivers-credit';
+export const RIVERS_CREDIT_LAYER: Layer = { id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } };
+export const riversCreditSource = (attribution: string) => ({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution });
+
+/** The credit's HTML for the attribution control: the short line, linking to its full statement on the data sources page. */
+export const riversCredit = (dataSourcesHref: string, text: string) => `<a href="${dataSourcesHref}#hydrorivers">${text}</a>`;
 
 /**
  * The `features` source's data: polygons and lines (points are drawn as

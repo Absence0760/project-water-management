@@ -3041,6 +3041,40 @@ map feature like any other.
   `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
   kind, the area, the dataset; never the polygon). A stranger gets `404`.
 
+## Start from the map
+
+An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,
+`backend/src/delineation/start.ts` and `subcatchments.ts`, [maps.md § Start
+from the map](./maps.md#start-from-the-map),
+[design/start-from-map.md](./design/start-from-map.md)): the server proposes
+units at the map's dams and abstraction points, each unit's own
+sub-catchment (area and outline), who drains into whom, and the rest of the
+catchment; the editor applies the values they tick. With `DEM_URL` empty the
+proposal has the units only (no areas, everything draining into the outflow
+gauge), and the rest of the catchment is the boundary.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, proposals: StartProposal[] }`: the newest 5, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes | viewer |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' }[] }` (at most 50, each once) | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point. `400` for no boundary and no outlet, an outlet that isn't a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's); `429` past 30 a project an hour; `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, drainsInto, runoffToDam }[], rest: { include, name, area } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node), and the rest of the catchment if included, in one model revision ("Started from the map: …"). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method) and becomes its area with `area_source = 'map'`; an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam = 1` (dam units only). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, or a model that has nodes | editor |
+| POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+
+- `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
+  'superseded', plan, fromDem, dataset, datasetFingerprint, method,
+  methodVersion, decision, createdBy, createdAt, decidedBy, decidedAt }`.
+  `plan = { fromDem, outlet: { featureId, name, point, snapDistanceM,
+  foundIn }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
+  (upstream first), rest: { name, areaM2, geometry }, dropped: { featureId,
+  name, reason }[], warnings: string[], cellSizeM, zoom, windowCells }`;
+  `StartUnit = { key (the feature's id), featureName, role, name, point,
+  snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
+  for the outflow gauge), drainsIntoProposed }`. `decision` (once applied):
+  the ticks, the node and parcel ids made, the revision id.
+- Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
+  `map.start_discarded`: ids and counts; never a polygon). A stranger gets
+  `404`.
+
 ## Notes
 
 Plain-text notes and comments on a node, a run, a settings group, a
@@ -3189,7 +3223,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 50 MB; streamed like every CSV, [Export](#export)) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
-| GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center, credit? }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author; `credit: 'hydrorivers'` (2026-10-02) on a river added from a HydroRIVERS reach, so the map shows that licence's credit (maps.md § Sources), absent otherwise. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 

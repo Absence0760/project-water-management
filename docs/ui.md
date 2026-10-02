@@ -255,6 +255,28 @@ the same list the sign-up form and the re-acceptance notice show translated
 (`TermsSummary.svelte`). Research-based wording the operator accepted without
 counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
 
+**Data sources and credits** (`/data-sources`, `routes/data-sources`, the
+same frame, prerendered; 2026-10-02): the third-party data the service
+serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
+DEM, HydroRIVERS, ESA WorldCover, CHIRPS, the map's label fonts), each with
+what it is used for, its publisher, its licence and the credit that licence
+asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
+Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit
+(`lib/components/legal/dataCredits.ts`; `dataCredits.test.ts` checks each
+against [maps.md § Sources](./maps.md#sources)). A notice, not part of the
+terms, so changing it bumps no `LEGAL_VERSION`. Linked from the footer of
+the legal pages ("Data sources"), from Terms §9, and from the map's
+attribution control while HydroRIVERS reaches are drawn (the River network
+layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
+Inc. (2006-2022), used under license", linking to its section, and on any
+map, the farm map included, that draws a river added from a HydroRIVERS
+reach), and from the relief's credit ("licence notice", to the Copernicus
+section). Its line under the title is the day the licences were last read
+(`LICENCES_READ`, the Sources table's date). Not linked from the landing
+page's footer: its links are translated (`t()`), and this English-only page
+is reached from the legal pages it sits with; a link there is a new farmer-facing
+string through the i18n agents if the landing page ever needs it.
+
 **Sign-up assent.** Directly above the sign-up button (invitations
 included): a bordered box, **The main things you agree to**, with the four
 points in the reader's language (and, in another language, "The Terms are
@@ -2518,7 +2540,13 @@ map" card) stays the schematic; this is the geography.
   column and a window at least 620 px high the layout is a dashboard: exactly
   the height left below its measured top, less the 1rem gutter and the save
   bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
-  and the page doesn't scroll. Without WebGL the map says it can't be drawn
+  and the page doesn't scroll. In the side column the picked feature's card
+  (at most 55 %, at least 6rem while a feature is picked) and the layers box
+  (at most 35 %) each scroll in their box and give way, in proportion to
+  their size, before the list goes below 8rem; the checks line keeps its height (`map-layers.spec.ts` pins it at
+  1440×960 and 1280×800 with a feature and a reach picked; until
+  2026-10-02 the card held its full height and the column ran past a
+  1280×800 window). Without WebGL the map says it can't be drawn
   and the list does everything; when the tiles can't be read the map drops
   them and says so.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
@@ -2566,10 +2594,46 @@ map" card) stays the schematic; this is the geography.
   **Edit the shape** (a single line or one-ring polygon) or **Move the
   point** (editors) puts it in the drawing mode, and **Delete** asks first.
   With nothing picked: "Select a feature on the map or in the list to see it
-  here."; with nothing on the map, the empty state leads with drawing (#326
-  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
-  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
-  file (WGS84), or place a point.".
+  here."; with nothing on the map, the empty state leads with delineating
+  and drawing (#326 D4): with a DEM, "Nothing on the map yet. Start with the
+  catchment: delineate it from its outlet on the river, or draw its
+  boundary.", a primary **Delineate from the outlet** and **Draw the
+  boundary** (without one, "Start with the catchment boundary: draw it on
+  the map." and a primary **Draw the boundary**), then "Or upload it as a
+  GeoJSON file (WGS84), or place a point." and, for an editor of an empty
+  model, **Start the model from the map**.
+- **Start the model from the map** (editors, while the model has no nodes;
+  issue #326 C3, `StartSheet.svelte`, `startFlow.ts`, [maps.md § Start from
+  the map](./maps.md#start-from-the-map)). From the empty state's link, or
+  the header's **Start from the map** (**Review the proposed model** while
+  one is open, drawn dashed on the map). What the editor chose and ticked
+  is kept by the Map tab, so closing the sheet or leaving it for a tool
+  loses nothing; a tool opened from the sheet brings it back once it
+  saves, and one started any other way never does. A side sheet (`start=1`) with the steps listed at its
+  top (The boundary · The points · The proposal · Data and the first run,
+  the current one `aria-current="step"`), each read from the server:
+  **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
+  boundary**, **Upload a GeoJSON file**; each closes the sheet into that
+  tool, and the sheet opens again once it saves; with a gauge on the map
+  and no boundary, "go on to the points". **The points**: each dam, other
+  point and gauge with a select (A unit with a dam / A unit at an
+  abstraction point / Another water user (no land) / Not in the model),
+  **Place a point** (into the drawing mode, back after the save), the
+  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
+  the rest of the catchment."), and **Propose the network**. **The
+  proposal** (drawn dashed on the map like a delineation): the catchment's
+  area, the warnings and dropped points, the outflow gauge's name, then one
+  card a unit: its name, and a tick for each value proposed (Area … saved
+  as its parcel; Drains into …; All of its own runoff reaches the dam),
+  every tick off at first; the rest of the catchment as a unit (a tick,
+  then its name and area); **Tick every value**; **How it was made**
+  (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
+  the reason by the names, while a name is empty or used twice),
+  which asks first ("The empty model gets 3 nodes, with 2 areas … It is
+  saved now as one change in History."). **Data and the first run**: links
+  to rain from the boundary, observed flow, the dams' capacities, cultivated
+  area, the Network and **Run the model**. With nodes typed in, the sheet
+  says the model isn't started from the map.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
@@ -4773,7 +4837,7 @@ read it before.
   restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
   [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
-  demand-object and other-user tables, once under the run summary with no
+  demand-object, river-abstraction and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
@@ -5203,6 +5267,17 @@ read it before.
   the days it did, whole-run means. Drawn on Units & supply too, beside the
   curtailment table (which has no pump columns); the run Summary's Other uses
   line names it.
+- **River abstractions** (engine ≥ 1.65.0, only when a unit has a demand on
+  the river, model.md §2.7j; drawn after Demand objects, the unit tables
+  together, in the order the Summary's Other uses line names them): per
+  abstraction its unit, its name (**Crops** for the crops' take, whose
+  engine name repeats the unit), its pump capacity
+  ("no limit" without one), the mean it pumped and, with a pool, the pool's
+  capacity and mean storage; from engine 1.66.0, when one has a pump
+  capacity, the demand its pump left unmet while the river or its pool had
+  the water (`river_pump_limited@`) and the days it did ("–" for one without
+  a capacity). The summary CSV has the same block; the run Summary's Other
+  uses line names it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the

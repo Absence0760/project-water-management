@@ -71,7 +71,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   bucket keeps `GetObject` only, so a missing report stays `403`. A new
   top-level file or directory in `frontend/static`, or a new prerendered
   page (`PRERENDERED`: the landing page once per language, `/welcome` and
-  `/welcome/af`, issue #137, so a new language adds its `/welcome/<code>`),
+  `/welcome/af`, issue #137, so a new language adds its `/welcome/<code>`;
+  also `/privacy`, `/terms`, `/methods` and `/data-sources`),
   must be added to those lists:
   `infra/scripts/cloudfront-functions.test.mjs` (`pnpm test:guards`) runs the
   function and fails until it is. `tests/edge.tftest.hcl` pins the policy and

@@ -524,7 +524,10 @@ warning, an import warning, a form hint or an evidence-pack gate).
     return flows and river off-takes; they keep the unit's hands-off flow
     (the EWR only when it says so); they share the river by the demand
     objects' supply order; a pool refills only from the flow above what must
-    pass, starts full and gains no rain.
+    pass, starts full and gains no rain. Engine 1.66.0 adds a measure on top,
+    changing no flow: each abstraction's pump-limited demand (what its pump
+    left unmet while the flow its level left, or its own pool, had it); to
+    confirm with the rest that this is the reading a hydrologist wants.
 
 ## References
 

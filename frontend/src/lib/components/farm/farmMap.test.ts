@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { FarmMapFeature } from '$lib/api/types';
 import { BAND_TOKEN } from '$lib/components/map/mapStatus';
 import { vaalbankFixture } from './fixture';
+import { creditedFeature } from '$lib/components/map/mapLayers';
 import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCard, kindWord, mapWords, placeText, showsMap } from './farmMap';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');
@@ -109,5 +110,16 @@ describe('the map’s words', () => {
 	it('gives the shared map component features with no node or properties', () => {
 		const [f] = asMapFeatures(FEATURES.slice(0, 1));
 		expect(f).toMatchObject({ id: 'p1', kind: 'farm_parcel', nodeId: null, nodeName: null, properties: {} });
+	});
+});
+
+describe('asMapFeatures and the HydroRIVERS credit', () => {
+	it('keeps the server’s credit flag where the map reads it, and gives other features no properties', () => {
+		const base = { id: 'r', kind: 'river' as const, name: 'River', geometry: { type: 'LineString' as const, coordinates: [[21, -33], [21.1, -33.1]] as [number, number][] }, areaM2: null, center: [21, -33] as [number, number] };
+		const [credited, plain] = asMapFeatures([{ ...base, credit: 'hydrorivers' }, { ...base, id: 's' }]);
+		expect(credited!.properties).toEqual({ credit: 'hydrorivers' });
+		expect(plain!.properties).toEqual({});
+		expect(creditedFeature(credited!)).toBe(true);
+		expect(creditedFeature(plain!)).toBe(false);
 	});
 });

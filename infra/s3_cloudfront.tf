@@ -161,7 +161,8 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   rewrite the API's own 403/404 JSON responses into index.html. The
 #   prerendered pages (PRERENDERED), the landing page in each language
 #   (issues #57, #137), the legal pages and the methods page, are served from
-#   their own HTML: /welcome, /welcome/af, /privacy, /terms, /methods →
+#   their own HTML: /welcome, /welcome/af, /privacy, /terms, /methods,
+#   /data-sources →
 #   <path>.html (static HTML for crawlers and link previews). A language
 #   added to the table (packages/engine/src/languages.ts) adds its
 #   /welcome/<code> here; the test below fails until it does.
@@ -213,10 +214,10 @@ resource "aws_cloudfront_function" "spa_rewrite" {
   comment = "Serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
   publish = true
   code    = <<-EOT
-    var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods'];
+    var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods', '/data-sources'];
     var STATIC_DIRS = ['_app', 'fonts', 'help', 'landing'];
     var STATIC_FILES = [
-      'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html',
+      'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html', 'data-sources.html',
       'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
       'icon-maskable-512.png', 'robots.txt', 'site.webmanifest'
     ];

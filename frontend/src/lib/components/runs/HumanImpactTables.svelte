@@ -4,7 +4,7 @@
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
 	// for a run that has any of them (humanImpacts.ts), on Units & supply
 	// (issue #137) and in the printable report.
-	import { DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
+	import { CROPS_TAKE_KEY, DEMAND_NORMS, DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
@@ -41,6 +41,12 @@
 	// Other water users with a pump capacity (engine ≥ 1.58.0, WP-3.8): their own table, drawn even when the
 	// curtailment table lists the users (it has no pump columns), so Units & supply shows the pump's limit.
 	const pumpUsers = $derived((summary.users ?? []).filter((u) => u.avgPumpLimitedM3Day !== undefined));
+	// Each unit's river abstractions beside its dam (engine ≥ 1.65.0, docs/model.md §2.7j), with what each pump
+	// left unmet while the river had it (engine ≥ 1.66.0: columns only when one has a pump capacity) and, with a
+	// pool, the pool's mean storage.
+	const takes = $derived((summary.farms ?? []).flatMap((f) => (f.riverTakes ?? []).map((k) => ({ unit: f.name, nodeId: f.nodeId, k }))));
+	const takesLimited = $derived(takes.some(({ k }) => k.avgPumpLimitedM3Day !== undefined));
+	const takesPool = $derived(takes.some(({ k }) => k.poolM3 !== undefined));
 </script>
 
 {#if objects.length}
@@ -104,6 +110,53 @@
 							{/if}
 						{/if}
 						<td class="num">{o.destination === 'external' ? 'piped out' : fmtNum(o.avgReturnedM3Day)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+{/if}
+
+{#if takes.length}
+	<h3 id="river-takes-h">River abstractions</h3>
+	<p class="muted small">
+		Demands on the hydrological units that pump from the river beside the dam, each with its own pump (daily averages over the run).
+		{#if takesLimited}The demand a pump left unmet counts only days the river or its pool had the water; on other days the river is what ran short.{/if}
+	</p>
+	<div class="table-wrap">
+		<table class="data river-takes" data-testid="river-takes" aria-labelledby="river-takes-h">
+			<thead>
+				<tr>
+					<th scope="col">Hydrological unit</th>
+					<th scope="col">River abstraction</th>
+					<th scope="col" class="num">Pump capacity<br /><span class="u">m³/day</span></th>
+					<th scope="col" class="num">Pumped<br /><span class="u">m³/day</span></th>
+					{#if takesLimited}
+						<th scope="col" class="num">Left unmet by the pump<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Days the pump limited it</th>
+					{/if}
+					{#if takesPool}
+						<th scope="col" class="num">Pool<br /><span class="u">m³</span></th>
+						<th scope="col" class="num">Pool storage<br /><span class="u">m³</span></th>
+					{/if}
+				</tr>
+			</thead>
+			<tbody>
+				{#each takes as { unit, nodeId, k } (`${nodeId}|${k.key}`)}
+					<tr>
+						<td>{unit}</td>
+						<!-- The crops' take is named "<unit>: crops" by the engine; the unit has its own column. -->
+						<th scope="row">{k.key === CROPS_TAKE_KEY ? 'Crops' : k.name}</th>
+						<td class="num">{k.pumpM3Day === null ? 'no limit' : fmtNum(k.pumpM3Day)}</td>
+						<td class="num">{fmtNum(k.avgTakeM3Day)}</td>
+						{#if takesLimited}
+							<td class="num" class:neg={(k.avgPumpLimitedM3Day ?? 0) > 0.5}>{k.avgPumpLimitedM3Day === undefined ? '–' : fmtNum(k.avgPumpLimitedM3Day)}</td>
+							<td class="num">{k.daysPumpLimited === undefined ? '–' : fmtNum(k.daysPumpLimited, 0)}</td>
+						{/if}
+						{#if takesPool}
+							<td class="num">{k.poolM3 === undefined ? '–' : fmtNum(k.poolM3, 0)}</td>
+							<td class="num">{k.avgPoolStorageM3 === undefined ? '–' : fmtNum(k.avgPoolStorageM3, 0)}</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>

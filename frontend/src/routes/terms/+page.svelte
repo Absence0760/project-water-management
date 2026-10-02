@@ -148,7 +148,8 @@
 	<p>
 		The service can read public data sources, such as CHIRPS satellite rainfall and the Department of Water and Sanitation’s
 		gauging records. They are provided by others, as they are; we don’t control their accuracy, availability or terms, and your use
-		of them is also subject to their own terms. The service is hosted on Amazon Web Services.
+		of them is also subject to their own terms. The service is hosted on Amazon Web Services. The data sources it uses, and the
+		credit each one’s licence asks for, are listed on the <a href="{base}/data-sources">data sources</a> page.
 	</p>
 	<!-- Map data licensed to us (HydroRIVERS first, docs/maps.md § Sources): the end-user terms the HydroSHEDS licence
 	     asks for (§ 2.1.2, terms at least as protective as its own; § 2.1.3, no reverse engineering), written for any

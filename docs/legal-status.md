@@ -161,12 +161,19 @@ Tracked in issue #103.
 
 ### Other open items
 
-- [ ] **HydroSHEDS attribution and end-user terms** (the River network
-  layer, issue #345; [maps.md § Sources](./maps.md#sources)). HydroRIVERS'
-  licence allows commercial use, but before a deployment serves it the
-  app's legal notice (or documentation) must carry the agreement's Exhibit B
-  statement, and the terms of service the end-user protections it asks for
-  (no stand-alone redistribution of the data, no reverse engineering).
+- [ ] **HydroSHEDS end-user terms** (the River network layer, issue #345;
+  [maps.md § Sources](./maps.md#sources)). HydroRIVERS' licence allows
+  commercial use, but before a deployment serves it the terms of service
+  must carry the end-user protections the agreement asks for (§ 2.1.2: no
+  stand-alone redistribution of the data, no reverse engineering). The
+  attribution half is done (2026-10-02): the Exhibit B statement is on the
+  public Data sources and credits page (`/data-sources`), with the
+  Copernicus DEM's Art. 6(c) liability sentence and the WorldCover credit.
+  The clause itself is not drafted into the Terms: it is a material change,
+  so it needs a `LEGAL_VERSION` bump on the day it goes live and a
+  translated line in the re-acceptance notice's "What changed" list, and
+  `LEGAL_VERSION` was last bumped on 2026-10-02 itself. The operator's call
+  when to make that change (a §7 Acceptable use line is the natural place).
   Tracked in followups.md § Catchment map.
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
@@ -461,6 +468,10 @@ cl. 3). The licensing ones are rows in
   unanswered link 30 days). A new kind of personal information, so a
   material change: `LEGAL_VERSION` 2026-10-01 (every account accepts again;
   nothing is in production yet).
+- 2026-10-02: Terms §9 links the new Data sources and credits page
+  (`/data-sources`: each third-party dataset's licence and the credit it
+  asks for). A pointer to a notice, not a change to anyone's rights or
+  duties: a clarification, so no `LEGAL_VERSION` bump.
 - 2026-10-01: Privacy §10 says a signed-in person can delete the account
   themselves (Account → Delete my account, issue #112, 143), and §7 that the
   account page says when they must hand a project or team over first. The

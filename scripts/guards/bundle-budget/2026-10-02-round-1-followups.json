@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Round-1 follow-ups: the River abstractions table on Units & supply (HumanImpactTables), the /data-sources credits page and the map's HydroRIVERS and relief credits (CatchmentMap, dataCredits.ts) and the river layer's deps; CI measured 1580 KB on this branch merged with main ddf98529 against main's own 1574 KB"
+}

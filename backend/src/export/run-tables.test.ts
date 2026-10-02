@@ -5,6 +5,7 @@ import {
 	chirpsFactorLines,
 	curtailmentLines,
 	demandObjectLines,
+	riverTakeLines,
 	droughtRestrictionLines,
 	ewrAssuranceLines,
 	otherUserLines,
@@ -535,6 +536,23 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect([...demandObjectLines(summary)]).toEqual([]);
 		expect([...summaryCsvLines(meta, { ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [withFloor] }] })]).toContain('Demand objects (whole run)');
 		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
+	});
+
+	it('engine 1.66.0: lists the river abstractions with what each pump left unmet', () => {
+		const town = { key: 'town', name: 'Town', avgTakeM3Day: 400, pumpM3Day: 500, avgPumpLimitedM3Day: 33.5, daysPumpLimited: 4 };
+		const crops = { key: 'crops', name: 'Farm: crops', avgTakeM3Day: 900, pumpM3Day: null, poolM3: 1000, avgPoolStorageM3: 750 };
+		const lines = [...riverTakeLines({ ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [crops, town] }] })];
+		expect(lines[0]).toBe('River abstractions (whole run)');
+		expect(lines[1]).toBe(
+			'Hydrological unit,River abstraction,Pump capacity (m³/day),Average pumped (m³/day),Average demand the pump capacity left unmet (m³/day),Days the pump capacity left demand unmet,Pool capacity (m³),Average pool storage (m³)'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Crops,no limit,900,,,1000,750');
+		expect(lines[3]).toBe('"Farm, upper",Town,500,400,33.5,4,,');
+		// No pump capacity anywhere (or a run before 1.66.0): no pump-limited columns; no abstractions: no block.
+		expect([...riverTakeLines({ ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [crops] }] })][1]).not.toMatch(/unmet/);
+		expect([...riverTakeLines(summary)]).toEqual([]);
+		expect([...summaryCsvLines(meta, { ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [town] }] })]).toContain('River abstractions (whole run)');
+		expect([...summaryCsvLines(meta, summary)]).not.toContain('River abstractions (whole run)');
 	});
 
 	it('engine 1.56.0: a Source column when an object records one, "not recorded" for the rest', () => {

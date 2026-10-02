@@ -1556,6 +1556,54 @@ export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
 export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, lossReturnFraction: 0.5 } as const;
 
 /**
+ * A new network node with every default a newly created node takes: a gauge
+ * when it drains nowhere (the outflow), else a hydrological unit. Shared by
+ * the Network's Add (frontend model/editor.svelte.ts newNode) and the server's
+ * "start from the map" (backend delineation/start.ts), so both make the same
+ * node. Only creation reads it; a run never does, so it is not a model change.
+ */
+export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: string | null): NetworkNode {
+	return {
+		id,
+		name: '',
+		kind: downstreamNodeId === null ? 'gauge' : 'farm',
+		downstreamNodeId,
+		sortOrder,
+		areaKm2: 0,
+		areaHiKm2: 0,
+		areaLoKm2: 0,
+		flowShareManual: null,
+		pctUpstreamToDam: 1,
+		pctRunoffToDam: 0,
+		damCapacityM3: 0,
+		damInitialPct: 0,
+		damMinPct: 0,
+		divertCapacityM3Day: 0,
+		// Drip (0.90, the client's default, issue #90) with half its losses returning (audit N1).
+		...NEW_FARM_IRRIGATION,
+		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
+		damAreaFullM2: null,
+		damAreaExponent: DAM_AREA_EXPONENT,
+		damSeepagePerDay: 0,
+		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
+		...USER_DEFAULTS,
+		...BOREHOLE_DEFAULTS,
+		// No survey curve, no release, all seepage returning (WP-3.5).
+		...DAM_STORAGE_DEFAULTS,
+		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.30.0).
+		...DEVELOPMENT_DEFAULTS,
+		// The dam only, no river pump (WP-3.8).
+		...SUPPLY_DEFAULTS,
+		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
+		...OPERATING_DEFAULTS,
+		// The crops on the dam (engine 1.65.0).
+		...WATER_SOURCE_DEFAULTS,
+		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
+		ewrSite: true
+	};
+}
+
+/**
  * The efficiency and loss return that replace an engine < 0.16.0 node's
  * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
  * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
@@ -2364,6 +2412,15 @@ export interface RiverTakeSummary {
 	/** With a pool: its capacity (m³) and mean storage at the end of the day. */
 	poolM3?: number;
 	avgPoolStorageM3?: number;
+	/**
+	 * Mean demand its pump capacity left unmet although the river (or its
+	 * pool) had the water, within its supply level and the allocation room
+	 * (engine ≥ 1.66.0, docs/model.md §2.7j), part of the unit's deficit; only
+	 * with a pump capacity, absent on older runs.
+	 */
+	avgPumpLimitedM3Day?: number;
+	/** Days the pump capacity left demand unmet (engine ≥ 1.66.0); only with a pump capacity. */
+	daysPumpLimited?: number;
 }
 
 /** One demand object over the whole run (engine ≥ 1.7.0), m³/day means like FarmSummary. */

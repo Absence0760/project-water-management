@@ -341,6 +341,17 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Accepted a delineated catchment as ${s.as === 'catchment_boundary' ? 'the catchment boundary' : 'an area'}${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'map.delineation_rejected':
 			return 'Rejected a delineated catchment';
+		// A model started from the map (178, issue #326 C3): counts, never a polygon.
+		case 'map.start_proposed': {
+			const n = num(s.units) ?? 0;
+			return `Proposed a model from the map: ${plural(n, 'unit')}${s.fromDem === false ? ', without an elevation model' : str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		}
+		case 'map.start_applied': {
+			const areas = num(s.areas) ?? 0;
+			return `Started the model from the map: ${plural(num(s.nodes) ?? 0, 'node')}, ${plural(areas, 'area')} and ${plural(num(s.orders) ?? 0, 'drains-into', 'drains-into')} taken`;
+		}
+		case 'map.start_discarded':
+			return 'Discarded a model proposed from the map';
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);

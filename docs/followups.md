@@ -3604,10 +3604,13 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       below.
 - [ ] **The licence sentences the map's production data waits for**
       (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
-      liability sentence (Art. 6(c)) before the relief or delineation is
-      served, and HydroSHEDS' Exhibit B statement (plus the terms' end-user
-      protections: no stand-alone redistribution, no reverse engineering)
-      before the river network is loaded. `scripts/release/map-data-gates.mjs`
+      liability sentence (Art. 6(c): "The organisations in charge of the
+      Copernicus programme by law or by delegation do not incur any liability
+      for any use of the Copernicus WorldDEM-30") and HydroSHEDS' Exhibit B
+      statement are done (2026-10-02, on the public Data sources and credits
+      page, `/data-sources`). Still open: the terms' end-user protections for
+      HydroRIVERS (no stand-alone redistribution, no reverse engineering;
+      legal-status.md § Other open items) before the river network is loaded. `scripts/release/map-data-gates.mjs`
       refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
       in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
       `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
@@ -3640,13 +3643,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refuses it until then.
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
-      on two conditions to meet before a deployment serves it: the
-      HydroSHEDS Exhibit B statement in the app's legal notice (or its
-      documentation), and the terms of service carrying the end-user
+      on two conditions to meet before a deployment serves it. The
+      HydroSHEDS Exhibit B statement is done (2026-10-02): the public Data
+      sources and credits page (`/data-sources`) carries it, and the map's
+      attribution control credits HydroRIVERS, linking there, while its
+      reaches are drawn. Open: the terms of service carrying the end-user
       protections the agreement asks for (§ 2.1.2: no stand-alone
-      redistribution of the data, no reverse engineering). Then load it with
-      `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate refuses
-      the load until the Exhibit B statement is in the legal text).
+      redistribution of the data, no reverse engineering), a material Terms
+      change for the operator (legal-status.md § Other open items). Then load it
+      with `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate
+      refuses the load until the Exhibit B statement is in the legal text).
       Trigger: the first deployment that wants the River network layer.
 - [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
       Sources, issue #345, D-B). Its page answers 403 outside South Africa
@@ -3693,15 +3699,33 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       DWS (Dam Safety Office) for written permission for commercial use
       before a client deployment loads the real list. Trigger: the first
       client who wants register capacities proposed.
-- [ ] **Sub-catchments at every dam and abstraction point** (#326
-      B-delineate's stretch, not built; design/delineation.md § Not built).
-      Today an editor delineates each dam wall by hand, which gives its whole
-      upstream area. The model wants each unit's *incremental* area (what
-      drains to it and not to a unit upstream), which needs the network's
-      order: delineate every unit's point at once on one routed window,
-      subtract the upstream units' masks, and propose each unit's area as a
-      polygon with Use. Trigger: C3 (start a catchment from the map), or a
-      client delineating more than a few units.
+- [x] **Sub-catchments at every dam and abstraction point** (#326
+      B-delineate's stretch): built with C3, start a catchment from the map
+      (migration 178, `delineation/subcatchments.ts`,
+      design/start-from-map.md). One routed window, each unit's incremental
+      area with its holes, the order from the D8 tree.
+- [ ] **Sub-catchments for a model that already has nodes** (#326 C3,
+      design/start-from-map.md § Not built). Start from the map only fills
+      an empty model, so nothing typed is ever overwritten; re-dividing an
+      existing network today is one unit at a time (Delineate → Accept as an
+      area → Use this area), which gives a unit's *whole* upstream area, not
+      its own piece. Durable fix: a per-unit "propose its own area" on the
+      card, from the same partition (the units' points from their linked dam
+      or point features), each value a Use as now. Trigger: a hydrologist
+      re-dividing an imported or typed model.
+- [ ] **Each proposed unit's outline told apart on the map** (#326 C3, the
+      ui-designer review of the Start sheet): the open proposal is drawn as
+      one dashed shape, so with many units a card can't be matched to its
+      piece. Durable fix: draw each piece as its own feature, labelled with
+      its name once the self-hosted glyphs are configured, and highlight a
+      card's piece while the card has the focus or the pointer. Trigger: the
+      first catchment started from the map with more than a handful of units.
+- [ ] **Intermediate gauges in a model started from the map** (#326 C3,
+      design/start-from-map.md § Not built): a gauge on the map other than
+      the outlet is "not in the model" in the flow; it is added on the
+      Network afterwards. Durable fix: a gauge role in the points step,
+      partitioning like a water user (no land of its own). Trigger: the
+      first catchment started from the map with a gauge inside it.
 - [ ] **Delineation of catchments larger than about 100 km across**
       (design/delineation.md § Where it runs): the API refuses rather than
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job
@@ -3853,6 +3877,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.
+- [x] **A river abstraction's pump-limited demand** (2026-10-02, engine
+      1.66.0, follow-up from PR #350). Each abstraction with a pump capacity
+      publishes `river_pump_limited@<key>`: the demand its pump left unmet
+      while the flow its level left, or its own pool, still had the water
+      (within the allocation room), as an other water user's `pump_limited`
+      does (§2.7c). `RiverTakeSummary.avgPumpLimitedM3Day` and
+      `daysPumpLimited`; the Units & supply **River abstractions** table and
+      the summary CSV's River abstractions block show them
+      ([model.md §2.7j](./model.md)). Nothing else in the run changes.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per

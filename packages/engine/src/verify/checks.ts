@@ -23,7 +23,7 @@ import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
 import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
-import { riverPoolEvaporationKey, riverPoolKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
+import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
 import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
@@ -122,6 +122,8 @@ interface RiverColumns {
 	got: number[][];
 	pool: (number[] | null)[];
 	evap: (number[] | null)[];
+	/** The pump-limited column (engine ≥ 1.66.0), exactly with a pump capacity; null without one. */
+	pumpLimited: (number[] | null)[];
 }
 
 /**
@@ -131,24 +133,33 @@ interface RiverColumns {
  */
 function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): RiverColumns | string | null {
 	const river = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
-	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, RIVER_TAKE_SERIES.poolEvaporation.prefix];
+	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, RIVER_TAKE_SERIES.poolEvaporation.prefix, RIVER_TAKE_SERIES.pumpLimited.prefix];
 	const stray = out.series.find(
 		(x) =>
 			x.nodeId === n.id &&
 			prefixes.some((p) => x.key.startsWith(p)) &&
-			!river?.takes.some((k) => x.key === riverTakeKey(k.key) || (k.pool && (x.key === riverPoolKey(k.key) || x.key === riverPoolEvaporationKey(k.key))))
+			!river?.takes.some(
+				(k) =>
+					x.key === riverTakeKey(k.key) ||
+					(k.pool && (x.key === riverPoolKey(k.key) || x.key === riverPoolEvaporationKey(k.key))) ||
+					(hasPumpLimit(k) && x.key === riverPumpLimitedKey(k.key))
+			)
 	);
 	if (stray) return `${n.id}: a ${stray.key} column without the river abstraction behind it`;
 	if (!river) return null;
-	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, objOnRiver: river.objOnRiver, got: [], pool: [], evap: [] };
+	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, objOnRiver: river.objOnRiver, got: [], pool: [], evap: [], pumpLimited: [] };
 	for (const k of river.takes) {
 		const g = get.get(`${n.id}|${riverTakeKey(k.key)}`);
 		const p = k.pool ? get.get(`${n.id}|${riverPoolKey(k.key)}`) : null;
 		const e = k.pool ? get.get(`${n.id}|${riverPoolEvaporationKey(k.key)}`) : null;
 		if (!g || (k.pool && (!p || !e))) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
+		// Its pump's limit (engine ≥ 1.66.0): exactly with a pump capacity.
+		const pl = hasPumpLimit(k) ? get.get(`${n.id}|${riverPumpLimitedKey(k.key)}`) : null;
+		if (!pl && hasPumpLimit(k)) return `${n.id}: river abstraction ${k.key} has a pump capacity and no pump-limited column`;
 		cols.got.push(g);
 		cols.pool.push(p ?? null);
 		cols.evap.push(e ?? null);
+		cols.pumpLimited.push(pl ?? null);
 	}
 	return cols;
 }
@@ -976,6 +987,16 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		const b = grid(g, farmEwr(g.nodeId!), g.nodeId ?? '?', fs.daysEwrNotMet);
 		if (b) return b;
 	}
+	// River abstractions' pumps (engine ≥ 1.66.0): the summary's pump-limited means and days present exactly
+	// with the column, the mean its daily mean, the days within the run.
+	for (const f of out.summary.farms) {
+		for (const k of f.riverTakes ?? []) {
+			const PL = get.get(`${f.nodeId}|${riverPumpLimitedKey(k.key)}`);
+			if (!!PL !== (k.avgPumpLimitedM3Day !== undefined) || !!PL !== (k.daysPumpLimited !== undefined)) return `river abstraction ${f.nodeId}/${k.key}: pump-limited means ${PL ? 'missing' : 'without the column'}`;
+			if (PL && (!close(k.avgPumpLimitedM3Day!, sum(PL) / out.days, 1e-10, sumAbs(PL) / out.days) || !(k.daysPumpLimited! >= 0 && k.daysPumpLimited! <= PL.filter((v) => v > 0).length)))
+				return `river abstraction ${f.nodeId}/${k.key}: pump-limited mean ${k.avgPumpLimitedM3Day} or ${k.daysPumpLimited} days differ from the daily series`;
+		}
+	}
 
 	// EWR agreement with the observed record: it counts every observed day once,
 	// either scored or left out by a calibration exclusion; on the scored days
@@ -1370,6 +1391,11 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			let gRivT = 0;
 			let poolChg = 0;
 			const asks: number[] = [];
+			// Per take (engine ≥ 1.66.0): what it pumped from the flow (its take less what its pool gave) and its pool
+			// once its level had drawn it (before any refill). A pool is drawn or refilled on a day, never both: it is
+			// drawn only once its level has used the flow, which leaves nothing to refill it.
+			const fromFlow: number[] = [];
+			const heldAfter: number[] = [];
 			if (riv) {
 				const cropAsk = rule ? (f * (1 - checkedCut(rule, lvl, 'crops'))) / e : f / e;
 				const objAsk = (k: number) => (rule ? checkedObjectDemand(objs!.demand[k]![t]!, checkedCut(rule, lvl, objs!.category[k]!), objs!.floor[k]!) : objs!.demand[k]![t]!);
@@ -1389,6 +1415,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					if (v < -tol(0) || v > Math.min(ask, x.pumpM3Day) + tol(ask)) return `${where}: river abstraction ${x.key} pumped ${v}, outside [0, MIN(its demand ${ask}, pump ${x.pumpM3Day})]`;
 					if (x.obj >= 0 && !near(objs!.supplied[x.obj]![t]!, v, v)) return `${where}: demand object ${x.key} was supplied ${objs!.supplied[x.obj]![t]}, not the ${v} its river abstraction pumped`;
 					gRivT += v;
+					fromFlow[a] = v;
+					heldAfter[a] = 0;
 					if (x.pool) {
 						const vp = rivPrev[a]!;
 						const area = vp > 0 ? x.pool.areaFullM2 * Math.pow(Math.min(vp / x.pool.capM3, 1), DAM_AREA_EXPONENT) : 0;
@@ -1396,6 +1424,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 						const ev = riv.evap[a]![t]!;
 						if (!near(ev, evWant, vp)) return `${where}: pool of river abstraction ${x.key} evaporated ${ev}, not ${evWant} (its start-of-day surface ${area} m²)`;
 						const vq = riv.pool[a]![t]!;
+						const drawn = Math.max(0, vp - ev - vq);
+						fromFlow[a] = v - drawn;
+						heldAfter[a] = Math.min(vq, vp - ev);
 						poolChg += vq - vp + ev;
 						rivPrev[a] = vq;
 					}
@@ -1561,6 +1592,24 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				const free = Math.max(0, past - keepR);
 				const sc = Math.max(past, keepR, gRivT);
 				if (flowTaken > free + tol(sc)) return `${where}: the river abstractions took ${flowTaken} from the flow passing the dam, more than the ${free} above the ${keepR} it must leave`;
+				// Each pump's limit (engine ≥ 1.66.0): within the take's shortfall, only once its pump is spent, and, with
+				// no cap, at least the flow left over (the flow its level left can't be less than what was left at the end).
+				for (let a = 0; a < riv.takes.length; a++) {
+					const PLa = riv.pumpLimited[a];
+					if (!PLa) continue;
+					const k = riv.takes[a]!;
+					const pl = PLa[t]!;
+					const got = riv.got[a]![t]!;
+					const short = Math.max(0, asks[a]! - got);
+					if (pl < -tol(0) || pl > short + tol(asks[a]!)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, outside [0, its shortfall ${short}]`;
+					const spent = got >= k.pumpM3Day - tol(Math.max(k.pumpM3Day, asks[a]!));
+					if (pl > tol(asks[a]!) && !spent) return `${where}: river abstraction ${k.key} pump-limited ${pl} with its pump not spent (${got} of ${k.pumpM3Day})`;
+					if (!RS && spent && pl < Math.min(short, free - flowTaken) - tol(sc)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, less than its shortfall ${short} while ${free - flowTaken} of the flow was left`;
+					// No more than was there for it after its level: the flow it may take less what it took from it (the
+					// abstractions at its level and above took at least that), plus its own pool after its draw.
+					const there = Math.max(0, free - fromFlow[a]!) + heldAfter[a]!;
+					if (pl > there + tol(sc)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, more than the ${there} left for it after its level (flow and its pool)`;
+				}
 				if (!RS && free - flowTaken > tol(sc)) {
 					for (let a = 0; a < riv.takes.length; a++) {
 						const k = riv.takes[a]!;

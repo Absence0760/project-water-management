@@ -39,14 +39,14 @@ export const LANDING_ROUTE = '/welcome/[[lang=locale]]';
 
 /**
  * The prerendered static pages: the landing page, the legal pages
- * (/privacy, /terms) and the methods page (/methods, the engine audit's
- * public summary). Reachable either way, rendered at once (their HTML is
+ * (/privacy, /terms), the methods page (/methods, the engine audit's
+ * public summary) and the data sources' credits (/data-sources). Reachable either way, rendered at once (their HTML is
  * written at build time), and served from their .html by CloudFront.
  */
-export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods'];
+export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods', '/data-sources'];
 
 /** The same pages by route id (the root layout matches by route: while prerendering, `base` is relative). */
-export const STATIC_ROUTES = [LANDING_ROUTE, '/privacy', '/terms', '/methods'];
+export const STATIC_ROUTES = [LANDING_ROUTE, '/privacy', '/terms', '/methods', '/data-sources'];
 
 /** Routes reachable without signing in. */
 export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS, ...STATIC_PATHS];
