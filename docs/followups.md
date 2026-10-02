@@ -5475,3 +5475,24 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `api.runs.series` / `run_series` consumer and how it treats a forecast
       run would stop the next one. Trigger: the next view over stored
       series.
+
+## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
+
+Measured on a scratch database with 300 000 synthetic reaches spread over
+South Africa (2026-10-02): `GET …/map/rivers` for a 2° × 2° box runs two
+sequential scans of `river_reference`, the bbox query (21 ms: the btree
+`river_reference_bbox_idx` on `(min_lon, max_lon, min_lat, max_lat)` can't
+serve a four-sided overlap, so the planner skips it) and `riverDatasets()`'
+`count(*) … GROUP BY dataset` (25 ms), on every pan. Fine at South Africa's
+network; linear in the table, so about 0.2 s a request if the operator loads
+all of Africa. `GET …/map/stations` counts its datasets the same way.
+
+- **Durable fix:** in one migration, an expression GiST index on
+  `box(point(min_lon, min_lat), point(max_lon, max_lat))` (core Postgres, no
+  PostGIS) with the query written as `box(...) && box(...)`, and a small
+  per-dataset summary table (dataset, count) the loader (`loadRivers.ts`,
+  `loadGaugeStations.ts`) writes in its transaction, read instead of the
+  count. Measure before and after with `EXPLAIN (ANALYZE, BUFFERS)` at a
+  million rows.
+- **Trigger:** a river network of more than about 500 000 reaches is loaded,
+  or the layer's request shows above 100 ms in the API's logs.
