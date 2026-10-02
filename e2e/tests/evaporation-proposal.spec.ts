@@ -10,7 +10,7 @@
 // are read, never the map. Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, seedRunnableProject } from '../support/api.ts';
+import { addMember, putSeries, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { loadSyntheticEvaporation } from '../support/evaporation.ts';
@@ -94,6 +94,16 @@ test('an editor uses the boundary’s reference ET as GR4J’s monthly PE; Histo
 	const [wrapBox, labelBox] = [await wrap.boundingBox(), await row(v, 'proposed').getByRole('rowheader').boundingBox()];
 	expect(Math.abs(labelBox!.x - wrapBox!.x)).toBeLessThan(2);
 	await expectNoViolations(v, { include: '[data-testid="evaporation-proposal"]' });
+});
+
+test('with a daily A-pan record, the confirmation says demand and the dams keep it and GR4J stops reading it (round 4)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Evaporation with a pan record');
+	await putSeries(page.request, project.id, { kind: 'evap_apan_mm', unit: 'mm', startDate: '2021-10-01', values: [6, 7, 8] });
+	await drawBoundary(page, project.id);
+	await openPanel(page, project.id);
+	await panel(page).getByRole('button', { name: 'Use as GR4J’s monthly PE' }).click();
+	await answerConfirm(page, false, /keep reading the A-pan row and the daily A-pan record \(1 Oct 2021 to 3 Oct 2021\); GR4J stops reading both\./);
 });
 
 test('Use waits for unsaved settings, and a project with no boundary is told to draw one', async ({ page, owner }) => {
