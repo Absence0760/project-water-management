@@ -12,6 +12,7 @@ import {
 	pointInGeometry,
 	proposeKinds,
 	ringSelfIntersects,
+	ringsIntersect,
 	type Geometry,
 	type Position
 } from './geojson.js';
@@ -216,5 +217,41 @@ describe('proposing each feature’s kind (issue #326 D2)', () => {
 			{ kind: 'river', from: 'geometry', note: 'the file says “Gauge”, which can’t be a LineString' },
 			{ kind: 'gauge', from: 'geometry', note: 'the file says “road”, which isn’t a kind the map knows' }
 		]);
+	});
+});
+
+/** A sawtooth of `n` edges across [-1, 1] stacked northwards, closed round the west: a simple ring whose edges all overlap in longitude. */
+export const sawtooth = (n: number, x0 = -1, x1 = 1, dy = 1e-6): Position[] => {
+	const ring: Position[] = [];
+	for (let k = 0; k < n; k++) ring.push([k % 2 ? x1 : x0, k * dy]);
+	const top = ring[ring.length - 1]![1];
+	ring.push([x0 - 1, top], [x0 - 1, 0], ring[0]!);
+	return ring;
+};
+
+describe('the self-intersection sweep is bounded (round-4 hardening)', () => {
+	it('refuses a 50 000-vertex sawtooth (every edge overlapping in longitude) in well under a second; it used to take ~9 s', () => {
+		const t = performance.now();
+		const r = checkGeometry({ type: 'Polygon', coordinates: [sawtooth(GEO_MAX_VERTICES - 10)] });
+		expect(performance.now() - t).toBeLessThan(1_000);
+		expect(r).toEqual({ problem: expect.stringMatching(/too complex/) });
+	});
+
+	it('still takes a 50 000-vertex circle, and a short sawtooth', () => {
+		const n = GEO_MAX_VERTICES - 1;
+		const circle: Position[] = Array.from({ length: n }, (_, i) => [20 + 0.5 * Math.cos((2 * Math.PI * i) / n), -33 + 0.5 * Math.sin((2 * Math.PI * i) / n)]);
+		circle.push(circle[0]!);
+		const t = performance.now();
+		expect(checkGeometry({ type: 'Polygon', coordinates: [circle] })).toHaveProperty('geometry');
+		expect(performance.now() - t).toBeLessThan(2_000);
+		expect(checkGeometry({ type: 'Polygon', coordinates: [sawtooth(200)] })).toHaveProperty('geometry');
+	});
+
+	it('refuses a hole that crosses its outer ring or another hole, and takes holes that stay apart', () => {
+		const outer = box(0, 0, 4, 4);
+		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 5, 2)] })).toEqual({ problem: expect.stringMatching(/cross themselves or each other/) });
+		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(1.5, 1.5, 3, 3)] })).toEqual({ problem: expect.stringMatching(/cross/) });
+		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(2.5, 2.5, 3, 3)] })).toHaveProperty('geometry');
+		expect(ringsIntersect([box(0, 0, 1, 1), box(2, 2, 3, 3)])).toBe(false);
 	});
 });

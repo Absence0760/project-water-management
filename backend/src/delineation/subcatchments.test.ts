@@ -5,7 +5,7 @@ import { openDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 import { OUT } from './flow.js';
-import { delineateUnits, mostDrained, ownsLand, partition, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
+import { delineateUnits, mostDrained, ownsLand, partition, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -233,5 +233,18 @@ describe('delineateUnits (synthetic DEM)', () => {
 		const e2 = await delineateUnits(dem, { outlet: at(OUTLET_CELL.x, OUTLET_CELL.y), boundary: null, points: [] }, { windows: [64] }).catch((e: unknown) => e);
 		expect(e2).toBeInstanceOf(DelineationRefused);
 		expect((e2 as DelineationRefused).code).toBe('too_large');
+	});
+});
+
+describe('rasterize is bounded (round-4 hardening)', () => {
+	it('refuses an outline whose edges cross more rows than the budget, quickly', () => {
+		// A 50 000-edge zigzag up and down the whole 3 072-row window: 150 million crossings.
+		const ring: [number, number][] = [];
+		for (let k = 0; k < 50_000; k++) ring.push([k * 0.05, k % 2 ? 3071 : 1]);
+		ring.push(ring[0]!);
+		const t = performance.now();
+		expect(() => rasterize(3072, 3072, [ring])).toThrow(DelineationRefused);
+		expect(performance.now() - t).toBeLessThan(2_000);
+		expect(RASTER_MAX_CROSSINGS).toBeGreaterThan(3072 * 50);
 	});
 });
