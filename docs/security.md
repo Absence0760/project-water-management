@@ -2529,7 +2529,13 @@ placed points. The server never trusts the browser with geometry:
   inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
   50 000 positions per feature; the self-crossing sweep stops at 5 million
   comparisons and refuses the ring, so a crafted file can't cost quadratic
-  time. The import route has its own body limit (7 MB of JSON, `app.ts`
+  time. Summing a polygon over a grid (land cover, evaporation, the CHIRPS
+  cells) clips its rings into rows and then cells by halving the range
+  (`geo/clip.ts eachBand`), so the work grows with the vertices times
+  log(cells), not vertices × cells: before, clipping the whole row piece to
+  every cell let a 48 000-position comb (1.3 MB, valid) cost about 92 s of
+  CPU in one viewer GET of `evaporation-proposals` (`geo/clip.test.ts` bounds
+  the work). The import route has its own body limit (7 MB of JSON, `app.ts`
   exempts that one path from the general 4 MB), and the parse is
   `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
   there is no archive to bomb), no external references.
