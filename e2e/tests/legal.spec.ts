@@ -151,6 +151,7 @@ test('the header has only the logo, and the footer’s Contact opens the terms�
 test('the landing footer, the sign-in pages and the sign-up form link both pages', async ({ page }) => {
 	await page.goto('/');
 	const footer = page.getByRole('contentinfo');
+	await expect(footer.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/data-sources');
 	await footer.getByRole('link', { name: 'Privacy notice' }).click();
 	await expect(page).toHaveURL('/privacy');
 	await page.getByRole('link', { name: 'Water Management, home' }).click();
@@ -230,11 +231,18 @@ test('/data-sources is prerendered HTML with each licence’s credit, reached fr
 		'This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
 		'The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30',
 		'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
-		'© Protomaps © OpenStreetMap contributors'
+		'© Protomaps © OpenStreetMap contributors',
+		'Source: EC JRC/Google',
+		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.'
 	])
 		expect(html, text).toContain(text);
 	await page.goto('/terms');
-	await page.locator('#third-party ~ p').getByRole('link', { name: 'data sources' }).click();
+	// §9 binds users to the end-user terms licensed map data needs (HydroRIVERS: no stand-alone copy, no reverse engineering).
+	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' })).toContainText(
+		'you may not decompile, reverse engineer or disassemble it'
+	);
+	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' }).getByRole('link', { name: 'data sources' })).toHaveAttribute('href', /^(\.)?\/data-sources$/);
+	await page.locator('#third-party + p').getByRole('link', { name: 'data sources' }).click();
 	await expect(page).toHaveURL('/data-sources');
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });

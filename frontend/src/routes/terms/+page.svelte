@@ -153,13 +153,14 @@
 	</p>
 	<!-- Map data licensed to us (HydroRIVERS first, docs/maps.md § Sources): the end-user terms the HydroSHEDS licence
 	     asks for (§ 2.1.2, terms at least as protective as its own; § 2.1.3, no reverse engineering), written for any
-	     licensed source. Pre-counsel wording (docs/legal-status.md, 2026-10-02); a material change (LEGAL_VERSION 2026-10-03). -->
+	     licensed source. Pre-counsel wording (docs/legal-status.md § Change log, 2026-10-03); a material change (LEGAL_VERSION 2026-10-03). -->
 	<p>
 		<strong>Map data licensed to us.</strong> Some of the map data the service shows is licensed to us by others, such as the
 		HydroRIVERS river network from WWF’s HydroSHEDS database. You may use it within the service, and as part of your projects and
 		the results, reports and maps you make with it. You may not copy, extract or distribute that data on its own, as a stand-alone
 		dataset, and you may not decompile, reverse engineer or disassemble it. It remains the property of its licensors, who provide it
-		as it is, without any warranty, and are not liable for your use of it.
+		as it is, without any warranty, and are not liable for your use of it. The <a href="{base}/data-sources">data sources</a> page
+		lists each source and its licence.
 	</p>
 
 	<h2 id="ours">10. Our software</h2>

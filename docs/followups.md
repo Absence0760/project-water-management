@@ -3604,17 +3604,19 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       operator's (uploading, the variables, the tfvars:
       [deployment.md § Map tiles](./deployment.md#map-tiles)) and the item
       below.
-- [ ] **The licence sentences the map's production data waits for**
+- [x] **The licence sentences the map's production data waits for**
       (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
       liability sentence (Art. 6(c): "The organisations in charge of the
       Copernicus programme by law or by delegation do not incur any liability
       for any use of the Copernicus WorldDEM-30") and HydroSHEDS' Exhibit B
       statement are done (2026-10-02, on the public Data sources and credits
-      page, `/data-sources`). Still open: the terms' end-user protections for
-      HydroRIVERS (no stand-alone redistribution, no reverse engineering;
-      legal-status.md § Other open items) before the river network is loaded. `scripts/release/map-data-gates.mjs`
-      refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
-      in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
+      page, `/data-sources`), and so are the terms' end-user protections for
+      HydroRIVERS (2026-10-03: Terms §9's clause on map data licensed to us,
+      no stand-alone redistribution, no reverse engineering; `LEGAL_VERSION`
+      2026-10-03, legal-status.md). `scripts/release/map-data-gates.mjs`
+      refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentences
+      are in `frontend/src`'s legal text (rivers: the Exhibit B statement and
+      the §9 clause); they are, so what is left is the operator's at deploy time: uploading `terrain.pmtiles` (which the
       `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
       the operator's to do only after the Art. 6(c) sentence is live
       (Terraform can't see the frontend, and the upload is outside it). Trigger: the first deployment that wants the relief,
@@ -3645,16 +3647,17 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refuses it until then.
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
-      on two conditions to meet before a deployment serves it. The
-      HydroSHEDS Exhibit B statement is done (2026-10-02): the public Data
-      sources and credits page (`/data-sources`) carries it, and the map's
-      attribution control credits HydroRIVERS, linking there, while its
-      reaches are drawn. Open: the terms of service carrying the end-user
-      protections the agreement asks for (§ 2.1.2: no stand-alone
-      redistribution of the data, no reverse engineering), a material Terms
-      change for the operator (legal-status.md § Other open items). Then load it
-      with `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate
-      refuses the load until the Exhibit B statement is in the legal text).
+      on two conditions, both met. The HydroSHEDS Exhibit B statement
+      (2026-10-02): the public Data sources and credits page
+      (`/data-sources`) carries it, and the map's attribution control
+      credits HydroRIVERS, linking there, while its reaches are drawn. The
+      end-user protections the agreement asks for (2026-10-03, § 2.1.2 and
+      § 2.1.3): Terms §9's clause on map data licensed to us (no stand-alone
+      copying or distribution, no reverse engineering; the licensors keep
+      ownership and give no warranty), pre-counsel wording, `LEGAL_VERSION`
+      2026-10-03 (legal-status.md). What is left is loading it with
+      `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate checks
+      both texts are in the legal text).
       Trigger: the first deployment that wants the River network layer.
 - [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
       Sources, issue #345, D-B). Its page answers 403 outside South Africa
