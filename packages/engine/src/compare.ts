@@ -1234,6 +1234,10 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['pumpCapacityM3Day', 'river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['supplyTriggerPct', 'supply switch-to-river level', pct],
 	['supplyStopPct', 'supply switch-back level', pct],
+	// The crops' water source (engine ≥ 1.65.0, docs/model.md §2.7j): the dam or a river abstraction, its pump and pool.
+	['cropWaterSource', 'crops’ water source', (v) => (v === 'river' ? 'a river abstraction' : 'the dam')],
+	['cropRiverPumpM3Day', 'crops’ river pump capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v)} m³/day`)],
+	['cropRiverPoolM3', 'crops’ pool at the river pump', (v) => (v === null || v === undefined ? 'none' : `${fmtValue(v)} m³`)],
 	// Hands-off flow (engine ≥ 1.32.0); its monthly amounts and River to dam by month are diffed below.
 	['handsOffEwr', 'hands-off keeps the EWR', (v) => (v === true ? 'yes' : 'no')],
 	// EWR site flag (engine ≥ 1.5.0), gauges; the site list as a whole is diffed below.
@@ -1451,9 +1455,18 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			x.sizing === 'perUnit'
 				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
+		// Where its water comes from (engine ≥ 1.65.0): absent and null are the dam; a pump and pool on a dam-sourced
+		// object are kept but unused. Every stored field is compared, so a change to any of them is listed.
+		const riverOf = (x: DemandObject) => [x.waterSource ?? null, x.riverPumpM3Day ?? null, x.riverPoolM3 ?? null];
+		const riverWords = (x: DemandObject) => {
+			const [src, pump, pool] = riverOf(x);
+			const kit = `${pump === null ? 'pump no limit' : `pump ${fmtValue(pump)} m³/day`}${pool === null ? '' : `, pool ${fmtValue(pool)} m³`}`;
+			if (src === 'river') return `, from a river abstraction (${kit})`;
+			return src === 'dam' || pump !== null || pool !== null ? `, from the dam${pump !== null || pool !== null ? ` (a river ${kit} kept, unused)` : ''}` : '';
+		};
 		const sourceWords = (v: string) => ({ meter: 'meter records', aadd: 'a strategy’s AADD', perCapita: 'count × litres a day', other: 'another source' } as Record<string, string>)[v] ?? v;
 		const describe = (x: DemandObject) =>
-			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.source ? `, from ${sourceWords(x.source)}` : ''}${x.enabled ? '' : ', off'}`;
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.population != null ? `, serves ${fmtValue(x.population, 0)} people` : ''}${x.source ? `, from ${sourceWords(x.source)}` : ''}${riverWords(x)}${x.enabled ? '' : ', off'}`;
 		// No schedule, null and an empty one all run the same (engine ≥ 1.17.0). Each window in a fixed
 		// key order, since a model read back from jsonb has its keys in Postgres's order, not the editor's.
 		const scheduleOf = (x: DemandObject) =>
@@ -1468,7 +1481,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			// The people it serves (engine ≥ 1.44.0): absent and null alike are none.
 			const populationChanged = (x.population ?? null) !== (y.population ?? null);
 			// Where the number comes from (engine ≥ 1.56.0): absent and null alike are not recorded.
-			const sourceChanged = (x.source ?? null) !== (y.source ?? null);
+			const sourceChanged = (x.source ?? null) !== (y.source ?? null) || !same(riverOf(x), riverOf(y));
 			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
 			// Where the number comes from is part of the run's record (a scenario's demandObject.set may change it, engine ≥ 1.45.0).
 			const noteChanged = (x.note ?? '').trim() !== (y.note ?? '').trim();

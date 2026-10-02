@@ -225,7 +225,11 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		'object_demand@': 'demand objects',
 		'object_supplied@': 'demand objects',
 		// The basic-needs floor (engine 1.44.0) is written only on a unit with a demand object.
-		basic_needs: 'demand objects'
+		basic_needs: 'demand objects',
+		// River abstractions (engine 1.65.0) refuse the farm by the model itself.
+		'river_take@': 'river abstractions beside the dam',
+		'river_pool@': 'river abstractions beside the dam',
+		'river_pool_evaporation@': 'river abstractions beside the dam'
 	};
 	const base = (key: string) => (key.includes('@') ? key.slice(0, key.indexOf('@') + 1) : key);
 

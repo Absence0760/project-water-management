@@ -38,11 +38,12 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOffta
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
+import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
-import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
 import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
@@ -337,6 +338,7 @@ function runNetwork(
 			p.initialDepletionStoreM3 = r.depletionStoreM3;
 			if (r.depletionDeficitM3) p.initialDepletionDeficitM3 = r.depletionDeficitM3;
 			p.initialOnRiver = r.onRiver;
+			if (r.poolStorageM3 && p.river) p.initialPoolM3 = r.poolStorageM3;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
 		});
@@ -586,7 +588,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -689,6 +691,17 @@ function runNetwork(
 			const floor = basicNeeds[i];
 			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
+		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage and evaporation.
+		const riv = plan.nodes[i]!.river;
+		if (riv && r.riverTakes) {
+			riv.takes.forEach((x, a) => {
+				push(node.id, riverTakeKey(x.key), RIVER_TAKE_SERIES.take.label(x.name), RIVER_TAKE_SERIES.take.unit, r.riverTakes!.got[a]!);
+				if (x.pool) {
+					push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
+					push(node.id, riverPoolEvaporationKey(x.key), RIVER_TAKE_SERIES.poolEvaporation.label(x.name), RIVER_TAKE_SERIES.poolEvaporation.unit, r.riverTakes!.poolEvaporation[a]!);
+				}
+			});
+		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
 		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
 		if (node.kind === 'user') {
@@ -758,6 +771,18 @@ function runNetwork(
 			...groundwaterMeans(plan.nodes[i]!, r),
 			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
 			...(plan.nodes[i]!.objects ? { demandObjects: objectSummaries(plan.nodes[i]!.objects!, r.objectSupplied!, input.model.demandObjects ?? [], mean) } : {}),
+			// Its river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j).
+			...(plan.nodes[i]!.river && r.riverTakes
+				? {
+						riverTakes: plan.nodes[i]!.river!.takes.map((x, a) => ({
+							key: x.key,
+							name: x.name,
+							avgTakeM3Day: mean(r.riverTakes!.got[a]!),
+							pumpM3Day: Number.isFinite(x.pumpM3Day) ? x.pumpM3Day : null,
+							...(x.pool ? { poolM3: x.pool.capM3, avgPoolStorageM3: mean(r.riverTakes!.pool[a]!) } : {})
+						}))
+					}
+				: {}),
 			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
 			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate, plan.nodes[i]!.capacityScale ? (t) => node.damCapacityM3 * plan.nodes[i]!.capacityScale![t]! : undefined) ?? {})
 		});
@@ -998,6 +1023,7 @@ function runNetwork(
 				groundwaterToDam: r.groundwaterToDam,
 				depletion: r.depletion,
 				storage: r.storage,
+				...poolAccount(plan.nodes[i]!, r, days),
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
@@ -1044,6 +1070,7 @@ function runNetwork(
 				depletionStoreM3: net.depletionStoreM3[i]!,
 				...(net.depletionDeficitM3[i]! > 0 ? { depletionDeficitM3: net.depletionDeficitM3[i]! } : {}),
 				onRiver: net.onRiver[i] === 1,
+				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
@@ -1525,6 +1552,7 @@ export function buildNetworkPlan(
 				...supplyOf(n, warnings, start === undefined ? undefined : { start, end: start + days - 1 }),
 				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
+				...riverSourcesOf(n, objectsBy.get(n.id), warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
@@ -2455,6 +2483,30 @@ export function resolveReportWindow(
  * take and the mean demand the pump left unmet, and the days it did (more
  * than float noise of the day's take).
  */
+/**
+ * A unit's river abstractions' pools for the water account (engine ≥ 1.65.0):
+ * their storage and evaporation summed per day, in `river.takes` order, and
+ * their start (full, or a resumed run's). {} without a pool.
+ */
+function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; evaporation: Float64Array; initialM3: number } } {
+	const tk = p.river?.takes;
+	if (!tk || !r.riverTakes || !tk.some((x) => x.pool)) return {};
+	const storage = new Float64Array(days);
+	const evaporation = new Float64Array(days);
+	let initialM3 = 0;
+	tk.forEach((x, a) => {
+		if (!x.pool) return;
+		initialM3 += p.initialPoolM3 ? p.initialPoolM3[a]! : x.pool.capM3;
+		const q = r.riverTakes!.pool[a]!;
+		const e = r.riverTakes!.poolEvaporation[a]!;
+		for (let t = 0; t < days; t++) {
+			storage[t]! += q[t]!;
+			evaporation[t]! += e[t]!;
+		}
+	});
+	return { pool: { storage, evaporation, initialM3 } };
+}
+
 function pumpMeans(river: Float64Array, limited: Float64Array, mean: (a: ArrayLike<number>) => number): Pick<UserSummary, 'avgRiverAbstractionM3Day' | 'avgPumpLimitedM3Day' | 'daysPumpLimited'> {
 	let days = 0;
 	for (let t = 0; t < limited.length; t++) if (limited[t]! > 1e-9 * Math.max(1, river[t]!)) days++;

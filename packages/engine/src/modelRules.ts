@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, type ProjectModel } from './project';
+import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, WATER_SOURCES, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
@@ -87,6 +87,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 					);
 			}
 		}
+		// Where its water comes from (engine ≥ 1.65.0, docs/model.md §2.7j): the dam or a river abstraction, whose pump and pool are sizes.
+		waterSourceIssues(o.waterSource, o.riverPumpM3Day, o.riverPoolM3, (k, why) => add(`${k}:${o.id}`, `demand object "${o.name}": ${why}`));
 		// Its schedule (engine ≥ 1.17.0): each window runs as entered, and not too many of them.
 		if (Array.isArray(o.schedule)) {
 			if (o.schedule.length > DEMAND_SCHEDULE_MAX_WINDOWS) add(`doScheduleCount:${o.id}`, `demand object "${o.name}": its schedule has ${o.schedule.length} windows, at most ${DEMAND_SCHEDULE_MAX_WINDOWS}`);
@@ -116,6 +118,10 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
+		// The crops' water source (engine ≥ 1.65.0, docs/model.md §2.7j): a unit's; the dam or a river abstraction.
+		const cropRiver = (n.cropWaterSource !== null && n.cropWaterSource !== undefined && n.cropWaterSource !== 'dam') || (n.cropRiverPumpM3Day ?? null) !== null || (n.cropRiverPoolM3 ?? null) !== null;
+		if (n.kind !== 'farm' && cropRiver) add(`cropSourceKind:${n.id}`, `"${n.name}": only a unit's crops have a water source`);
+		else waterSourceIssues(n.cropWaterSource, n.cropRiverPumpM3Day, n.cropRiverPoolM3, (k, why) => add(`crop${k[0]!.toUpperCase()}${k.slice(1)}:${n.id}`, `"${n.name}": the crops' ${why}`));
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
 		// Hands-off flow and River to dam by month (engine ≥ 1.32.0): a farm's, 12 monthly values each.
@@ -212,3 +218,16 @@ function drainsInto(m: ProjectModel, from: string, to: string, except: string): 
 
 /** The model's broken rules as distinct sentences (empty = valid): what a save or an import is refused with. */
 export const modelRuleProblems = (m: ProjectModel): string[] => [...new Set(modelRuleIssues(m).values())];
+
+/**
+ * A demand's water source fields (engine ≥ 1.65.0): the source one of
+ * WATER_SOURCES (or none: the dam), the river pump a size ≥ 0 or none (no
+ * limit), the pool a size ≥ 0 or none. A pump or pool kept on a demand that
+ * draws on the dam is inert, so it is allowed.
+ */
+function waterSourceIssues(source: unknown, pump: unknown, pool: unknown, add: (key: string, why: string) => void): void {
+	const size = (v: unknown) => v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0);
+	if (source !== null && source !== undefined && !(WATER_SOURCES as readonly unknown[]).includes(source)) add('waterSource', `water source must be one of ${WATER_SOURCES.join(', ')}`);
+	if (!size(pump)) add('riverPump', 'river pump capacity must be a size ≥ 0 m³/day, or none for no limit');
+	if (!size(pool)) add('riverPool', 'pool at the river pump must be a size ≥ 0 m³, or none');
+}

@@ -210,7 +210,8 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	// The draft is the node's whole demand, so its demand objects (engine ≥ 1.7.0) go too. An allocation
 	// cap on it goes as well (engine ≥ 1.18.0): a yield is what the dam can give, not what is registered;
 	// the other units keep theirs, so a capped farm upstream leaves the dam more.
-	const { borehole: _borehole, damCurve: _curve, objects: _objects, allocationCap: _cap, ...rest } = base;
+	// Its river abstractions (engine ≥ 1.65.0) go with the demands they serve: the draft is on the dam.
+	const { borehole: _borehole, damCurve: _curve, objects: _objects, allocationCap: _cap, river: _river, initialPoolM3: _pools, ...rest } = base;
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,

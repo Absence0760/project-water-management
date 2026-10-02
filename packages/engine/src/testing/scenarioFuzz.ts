@@ -5,7 +5,7 @@
 // target an earlier op removed, so applyScenario's problem path runs too.
 // A pure function of the seed.
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SOURCES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, type ModelInput, type NetworkNode } from '../project';
+import { BOREHOLE_RULES, DAM_RELEASE_RULES, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SOURCES, DEMAND_PARTS, LAND_COVER_CLASSES, SUPPLY_RULES, USER_PRIORITIES, WATER_SOURCES, type ModelInput, type NetworkNode } from '../project';
 import { Rng } from '../random';
 import { randomDroughtRestriction } from './fuzz';
 import { CROP_SET_FIELDS, DEMAND_OBJECT_SET_FIELDS, LAND_COVER_SET_FIELDS, NODE_SET_FIELDS, SCALABLE_SERIES_KINDS, type NodeSetField, type ScenarioOp, type SettingsPath } from '../scenario/ops';
@@ -52,7 +52,12 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			// Any rule: trigger on a dam-less farm, or run of river on one with a dam, is a problem applyScenario reports.
 			return g.pick(SUPPLY_RULES);
 		case 'pumpCapacityM3Day':
+		case 'cropRiverPumpM3Day':
 			return g.pick([null, 0, g.logFloat(1, 1e5)]);
+		case 'cropRiverPoolM3':
+			return g.pick([null, 0, g.logFloat(10, 1e6)]);
+		case 'cropWaterSource':
+			return g.pick(WATER_SOURCES);
 		case 'handsOffM3Day':
 		case 'divertMonthlyM3Day':
 			return g.bool(0.3) ? null : monthly(g, () => (g.bool(0.2) ? 0 : g.logFloat(1, 1e5)));
@@ -367,6 +372,12 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 																		? o.pick([null, o.int(0, 20_000)])
 																		: field === 'source'
 																		? o.pick([null, ...DEMAND_OBJECT_SOURCES])
+																		: field === 'waterSource'
+																		? o.pick([null, 'dam', 'river', 'river'] as const)
+																		: field === 'riverPumpM3Day'
+																		? o.pick([null, 0, o.logFloat(1, 1e5)])
+																		: field === 'riverPoolM3'
+																		? o.pick([null, 0, o.logFloat(10, 1e6)])
 																		: field === 'schedule'
 																		? o.bool(0.4)
 																			? null
@@ -400,6 +411,8 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 					enabled: o.bool(0.9),
 					// Where its number comes from (engine ≥ 1.56.0): now and then one that doesn't fit the sizing (a problem).
 					source: o.pick([null, perUnit ? 'perCapita' : o.pick(['meter', 'aadd'] as const), 'other', o.pick(DEMAND_OBJECT_SOURCES)]),
+					// Where its water comes from (engine ≥ 1.65.0): the dam, or now and then a river abstraction with a pool.
+					...(o.bool(0.3) ? { waterSource: 'river' as const, riverPumpM3Day: o.pick([null, o.logFloat(1, 1e5)]), riverPoolM3: o.pick([null, o.logFloat(10, 1e6)]) } : { waterSource: null, riverPumpM3Day: null, riverPoolM3: null }),
 					note: ''
 				}
 			});
