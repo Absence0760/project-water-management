@@ -15,7 +15,9 @@
 	With a `draft` active (#326 C1, D1: drawing, placing or editing) the map is
 	in drawing mode (draw/attachDrawing.ts): clicks and keys shape the draft,
 	the features underneath stop taking clicks, and a crosshair marks the
-	middle while the map has the keyboard focus (Enter adds a corner there).
+	middle while the map has the keyboard focus (Enter adds a corner there;
+	with the mouse over the map, Enter adds at the pointer instead, and the
+	crosshair hides until an arrow key brings it back).
 	Measuring (#326 A7) is the same mode with a MeasureDraft. With a glyphs
 	URL the basemap draws place and water names (#326 A6), and `quaternaries`
 	(the tab's layer toggle) draws the quaternary outlines under the features,
@@ -121,6 +123,8 @@
 	const drawing = $derived(!!draft?.active);
 	/** The map's canvas has the keyboard focus: the crosshair shows (drawing by keyboard). */
 	let keyFocus = $state(false);
+	/** Enter adds at the mouse pointer (over the map), not the crosshair: the crosshair hides. */
+	let aimAtPointer = $state(false);
 	let tilesNote = $state(false);
 	/** The DEM couldn't be read: no relief from here on (the tab says so). */
 	let reliefFailed = false;
@@ -400,7 +404,7 @@
 	$effect(() => {
 		if (status !== 'ready' || !drawing || !map || !draft) return;
 		const m = map;
-		return untrack(() => attachDrawing(m as never, draft, el));
+		return untrack(() => attachDrawing(m as never, draft, el, (p) => (aimAtPointer = p)));
 	});
 
 	// Draw the draft as it changes.
@@ -447,7 +451,7 @@
 	style:--mk-selected={colours.selected}
 >
 	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map" data-drawing={drawing ? draft?.phase : undefined}>
-		{#if status === 'ready' && drawing && keyFocus}
+		{#if status === 'ready' && drawing && keyFocus && !aimAtPointer}
 			<!-- Where Enter adds a corner: the map's middle; the arrow keys move the map under it. -->
 			<span class="crosshair" aria-hidden="true" data-testid="map-crosshair"></span>
 		{/if}

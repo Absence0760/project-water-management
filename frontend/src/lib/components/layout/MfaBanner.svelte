@@ -11,16 +11,11 @@
 	// - `step-up`: an authenticator, but this session signed in with the
 	//   password only (or an action was refused with 403 mfa_step_up): sign
 	//   out and back to the sign-in page, which returns here afterwards.
-	import { tick } from 'svelte';
-	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { focusPageStart } from '$lib/a11y/focusPage';
-	import { api } from '$lib/api';
 	import { dismissMfaPrompt, mfaPrompt, type MfaPromptKind } from '$lib/auth/mfaPrompt.svelte';
-	import { session } from '$lib/auth/session.svelte';
-	import { clearAllSaved } from '$lib/components/farm/savedCopy';
-	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
+	import { loginReturningTo, signOutTo } from '$lib/auth/signOut';
 
 	let { kind }: { kind: MfaPromptKind } = $props();
 
@@ -36,18 +31,8 @@
 	/** Sign out, then the sign-in page (password, then the code), back to this page after. */
 	async function signInAgain() {
 		signingOut = true;
-		const next = page.url.pathname + page.url.search;
-		try {
-			await api.auth.logout();
-		} catch {
-			// Drop the local session either way.
-		}
-		clearAllSaved();
-		clearNoteCounts();
-		session.user = null;
+		await signOutTo(loginReturningTo(page.url.pathname + page.url.search));
 		signingOut = false;
-		await tick();
-		await goto(`${base}/login?next=${encodeURIComponent(next)}`);
 	}
 </script>
 

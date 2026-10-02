@@ -7,17 +7,14 @@
 	// (routes/+layout.svelte). The card styles every farm page shares live here.
 	// The language switch (EN | AF, WP-2.5) sits in the header, as the design's
 	// board 1 has it.
-	import { tick, type Snippet } from 'svelte';
-	import { goto } from '$app/navigation';
+	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
+	import { signOutTo } from '$lib/auth/signOut';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
-	import { clearAllSaved, keepsCopy, setKeepsCopy } from './savedCopy';
+	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
 		projectId = null,
@@ -68,17 +65,8 @@
 
 	async function signOut() {
 		menuOpen = false;
-		try {
-			await api.auth.logout();
-		} catch {
-			// Signed out locally whatever the server said.
-		}
-		clearAllSaved();
 		clearFarmMemo();
-		clearNoteCounts();
-		session.user = null;
-		await tick();
-		await goto(`${base}/login`);
+		await signOutTo();
 	}
 
 	function onKeydown(e: KeyboardEvent) {
