@@ -398,7 +398,7 @@ describe('a start or divide proposal’s pieces (#326 C3’s follow-up)', () => 
 		for (const dark of [false, true]) {
 			const layers = proposalLayers(dark);
 			const fill = layers.find((l) => l.id === PIECE_HIT_LAYER)!;
-			expect((fill.paint as Record<string, unknown>)['fill-color']).toEqual(['match', ['get', 'tint'], ...pieceTints().flatMap((t, i) => [i, t]), proposalColour(dark)]);
+			expect((fill.paint as Record<string, unknown>)['fill-color']).toEqual(['match', ['get', 'tint'], ...pieceTints(dark).flatMap((t, i) => [i, t]), proposalColour(dark)]);
 			const lit = layers.find((l) => l.id === 'pr-lit')!;
 			expect((lit.paint as Record<string, unknown>)['line-color']).toBe(overlayColours(dark).selected);
 			const ids = layers.map((l) => l.id);
@@ -407,10 +407,15 @@ describe('a start or divide proposal’s pieces (#326 C3’s follow-up)', () => 
 		}
 	});
 
-	it('cycles tints that are each well apart from every other (the numbers say which is which; the tints only help the eye)', () => {
-		const t = pieceTints();
-		expect(t).toHaveLength(PIECE_TINT_COUNT);
-		for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) expect(deltaE(t[i]!, t[j]!), `${t[i]} vs ${t[j]}`).toBeGreaterThanOrEqual(20);
+	it('has tints well apart from each other, and from every hue the map already gives a meaning, light and dark', () => {
+		for (const dark of [false, true]) {
+			const t = pieceTints(dark);
+			expect(t).toHaveLength(PIECE_TINT_COUNT);
+			for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) expect(deltaE(t[i]!, t[j]!), `${t[i]} vs ${t[j]}`).toBeGreaterThanOrEqual(20);
+			// Never read as a parcel (green), water (blue), the boundary (amber) or the proposal's own teal.
+			const c = overlayColours(dark);
+			for (const x of t) for (const m of [c.parcel, c.water, c.boundary, proposalColour(dark)]) expect(deltaE(x, m), `${x} vs ${m}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(25);
+		}
 	});
 
 	it('writes the numbers in a colour that reads 4.5:1 on the badge’s casing, light and dark', () => {

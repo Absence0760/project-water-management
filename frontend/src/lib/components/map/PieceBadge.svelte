@@ -9,10 +9,11 @@
 
 	let { label, tint }: { label: string; tint: number } = $props();
 	const colour = $derived(tint >= 0 ? pieceTints()[tint] : null);
+	// No tint: the rest of the catchment, or a unit with no land (no piece of its own): a dashed ring.
 </script>
 
 <span class="badge" class:rest={!colour} style:--piece-tint={colour} data-testid="piece-badge">
-	<span class="visually-hidden">{label === 'R' ? 'Piece R:' : `Unit ${label}:`}</span>
+	<span class="visually-hidden">Piece {label}:</span>
 	<span aria-hidden="true">{label}</span>
 </span>
 

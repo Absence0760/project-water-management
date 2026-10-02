@@ -1014,9 +1014,12 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   its point. Its card says what it measures (its whole catchment above
   it). Without a DEM, a point outside the boundary is dropped.
 - **Each piece told apart.** The open proposal is drawn piece by piece, each
-  unit's own sub-catchment in one of six tints (Okabe–Ito, `mapStyle.ts`
-  `pieceTints`) under the proposal's dash, its **number** on it as a badge
-  (a unit with no land at its point, the rest of the catchment R). The
+  unit's own sub-catchment in one of six tints (`mapStyle.ts` `pieceTints`,
+  away from the parcel green, water blue and boundary amber; touching
+  pieces never share one) under the proposal's dash, its **number** on it
+  as a badge (a unit with no land beside its point, the rest of the
+  catchment R), and a line over the map saying so while the sheet is
+  closed. The
   sheet's cards carry the same number and tint, so they are the key; a card
   with the focus or the pointer lights its piece in the selection colour,
   and with the sheet closed a piece under the pointer names itself over the

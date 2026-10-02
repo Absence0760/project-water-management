@@ -2612,12 +2612,17 @@ map" card) stays the schematic; this is the geography.
   area, the Network and **Run the model**. With nodes typed in, the sheet
   says the model isn't started from the map and points to Divide the model.
   With the sheet closed, a piece (or its number) under the pointer shows
-  "Proposed unit 2 / <name>" over the map's corner, and a click on one opens
-  the sheet at its card, focused.
+  "Proposed piece 2 / <name>" over the map's corner, a click on one opens
+  the sheet at its card, focused, and a line over the map ("A proposed
+  model is drawn on the map piece by piece, each piece tinted and numbered
+  as its card in the sheet (R: the rest of the catchment) …" with **Review
+  it**) says what the pieces are. The points step counts gauges apart ("1
+  unit and 1 gauge, plus the rest of the catchment.").
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
-  Start from the map](./maps.md#start-from-the-map)). The header's **Divide
-  the model** (**Review the division** while one is open) opens a side
+  Start from the map](./maps.md#start-from-the-map)). **Divide the model**
+  beside the map (a line under the checks; an open division is reviewed
+  from the line over the map) opens a side
   sheet (`divide=1`, "Divide the model from the map"), read from the
   server: **the points**: each dam, other point and gauge with a select
   (Not in the division / the nodes its kind may stand for / A new gauge

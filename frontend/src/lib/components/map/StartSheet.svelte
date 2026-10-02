@@ -20,7 +20,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { featureName } from './mapList';
 	import PieceBadge from './PieceBadge.svelte';
-	import { PIECE_TINT_COUNT, REST_KEY } from './pieces';
+	import { proposalPieces, REST_KEY } from './pieces';
 	import {
 		applySummary,
 		candidatePoints,
@@ -86,6 +86,8 @@
 	const uid = $props.id();
 	const step = $derived(startStep(info, features, draft.pointsAsked));
 	const pending = $derived(openStart(info));
+	/** The open proposal's pieces by key: the cards read their number and tint from the same list the map draws (pieces.ts). */
+	const pieceOf = $derived(new Map(pending ? proposalPieces(pending.plan).map((x) => [x.key, x]) : []));
 	const boundary = $derived(features.find((f) => f.kind === 'catchment_boundary') ?? null);
 	const STEPS = ['boundary', 'points', 'review', 'data'] as const;
 
@@ -94,7 +96,9 @@
 	const gauges = $derived(outletGauges(features));
 	const choiceOf = (f: MapFeature): PointChoice => draft.picked[f.id] ?? defaultChoice(f);
 	const outlet = $derived(draft.outlet ?? defaultOutlet(features));
-	const units = $derived(candidates.filter((f) => f.id !== outlet && choiceOf(f) !== 'none').length);
+	const chosen = $derived(candidates.filter((f) => f.id !== outlet && choiceOf(f) !== 'none'));
+	const units = $derived(chosen.filter((f) => choiceOf(f) !== 'gauge').length);
+	const gaugeNodes = $derived(chosen.length - units);
 
 	let busy = $state<null | 'propose' | 'apply' | 'discard'>(null);
 	let error = $state<string | null>(null);
@@ -210,7 +214,7 @@
 
 		{#if step === 'closed'}
 			<p data-testid="start-closed">
-				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (in the Map’s header, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
+				The model has nodes already, so it isn’t started from the map. <strong>Divide the model from the map</strong> (beside the map, with an elevation model on the server) proposes each unit’s own area and order from its point; the map’s per-feature tools (Delineate, Accept as an area, Use this area) change one unit at a time, and the Network the rest.
 			</p>
 		{:else if step === 'boundary'}
 			<h3 class="sub">Put the catchment’s boundary on the map</h3>
@@ -261,7 +265,9 @@
 					</select>
 					<span class="hint">{boundary ? 'Where the river leaves the boundary, unless a gauge on the map marks it.' : 'Without a boundary the outlet is a gauge on the map.'}</span>
 				</div>
-				<p class="hint" data-testid="start-count">{units === 0 ? 'No units: the catchment becomes one.' : `${units} ${units === 1 ? 'unit' : 'units'}, plus the rest of the catchment.`}</p>
+				<p class="hint" data-testid="start-count">{units === 0 && gaugeNodes === 0
+						? 'No units: the catchment becomes one.'
+						: `${units} ${units === 1 ? 'unit' : 'units'}${gaugeNodes ? ` and ${gaugeNodes} ${gaugeNodes === 1 ? 'gauge' : 'gauges'}` : ''}, plus the rest of the catchment.`}</p>
 			</form>
 		{:else if step === 'review' && pending && ticks}
 			{@const p = pending.plan}
@@ -300,7 +306,7 @@
 						>
 							<div class="field">
 								<label for="{uid}-name-{u.key}" class="named"
-									><PieceBadge label={String(i + 1)} tint={i % PIECE_TINT_COUNT} /> <span>Name <span class="muted small">· {ROLE_LABEL[u.role].toLowerCase()}, from “{u.featureName}”</span></span></label
+									><PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} /> <span>Name <span class="muted small">· {ROLE_LABEL[u.role].toLowerCase()}, from “{u.featureName}”</span></span></label
 								>
 								<input id="{uid}-name-{u.key}" bind:value={t.name} maxlength="100" aria-invalid={bad(t.name) ? 'true' : undefined} aria-describedby={bad(t.name) ? `${uid}-names` : undefined} />
 							</div>
@@ -339,7 +345,7 @@
 						onfocusin={() => light(REST_KEY)}
 						onfocusout={(e) => cardOut(e, REST_KEY)}
 					>
-						{#if p.rest.geometry}<PieceBadge label="R" tint={-1} />{/if}
+						{#if pieceOf.has(REST_KEY)}<PieceBadge label="R" tint={-1} />{/if}
 						<label class="tick">
 							<input type="checkbox" bind:checked={ticks.rest.include} data-testid="start-tick-rest" />
 							<span>Add <strong>the rest of the catchment</strong> as a unit (what drains to the outlet through no unit; without it the model’s catchment is only the units’)</span>

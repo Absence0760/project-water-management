@@ -23,8 +23,42 @@ export interface ProposalPiece {
 	geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null;
 	/** Where its badge goes: inside the piece, else the unit's point. */
 	at: MapPosition;
-	/** Which of the tints its piece is filled with (the rest: none, -1). */
+	/** Which of the tints its piece is filled with; -1 for none (the rest of the catchment, a unit with no land). */
 	tint: number;
+}
+
+type Box = [number, number, number, number];
+function boxOf(g: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }>): Box {
+	const b: Box = [Infinity, Infinity, -Infinity, -Infinity];
+	const rings = g.type === 'Polygon' ? g.coordinates : g.coordinates.flat();
+	for (const r of rings) for (const [x, y] of r) (b[0] = Math.min(b[0], x)), (b[1] = Math.min(b[1], y)), (b[2] = Math.max(b[2], x)), (b[3] = Math.max(b[3], y));
+	return b;
+}
+/** Boxes that touch or overlap, by a hair: taken as neighbours (more than the true neighbours, never fewer). */
+const touching = (a: Box, b: Box) => {
+	const e = 1e-9;
+	return a[0] <= b[2] + e && b[0] <= a[2] + e && a[1] <= b[3] + e && b[1] <= a[3] + e;
+};
+
+/**
+ * Tints for pieces so that neighbours differ (#326 C3's follow-up, the UI
+ * review: a cycling palette gave two touching pieces one colour). Greedy, in
+ * the plan's order: each takes the first tint none of its neighbours has, and
+ * where all six are taken (only in a dense knot), the one fewest neighbours
+ * share. Neighbours are pieces whose boxes touch, so never fewer than the
+ * true ones. A unit with no land has no piece and no tint (-1).
+ */
+export function pieceTintsFor(geometries: readonly (Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null)[]): number[] {
+	const boxes = geometries.map((g) => (g ? boxOf(g) : null));
+	const tints: number[] = [];
+	boxes.forEach((b, i) => {
+		if (!b) return void tints.push(-1);
+		const count = new Array<number>(PIECE_TINT_COUNT).fill(0);
+		for (let j = 0; j < i; j++) if (boxes[j] && tints[j]! >= 0 && touching(b, boxes[j]!)) count[tints[j]!]!++;
+		const free = count.indexOf(0);
+		tints.push(free >= 0 ? free : count.indexOf(Math.min(...count)));
+	});
+	return tints;
 }
 
 /** How many tints the pieces cycle through (mapStyle.ts pieceTints). */
@@ -81,15 +115,21 @@ function ringArea(r: readonly MapPosition[]): number {
 	return a / 2;
 }
 
-/** Each unit's piece in the plan's order (its number), then the rest of the catchment's, when it has an outline. */
+/**
+ * Each unit's piece in the plan's order (its number), then the rest of the
+ * catchment's, when it has an outline and a place for its badge. The map and
+ * the sheets' cards both read these, so a card's number and tint are its
+ * piece's.
+ */
 export function proposalPieces(plan: StartPlan | DividePlan): ProposalPiece[] {
+	const tints = pieceTintsFor(plan.units.map((u) => u.geometry));
 	const pieces: ProposalPiece[] = plan.units.map((u, i) => ({
 		key: u.key,
 		label: String(i + 1),
 		name: u.name,
 		geometry: u.geometry,
 		at: (u.geometry && interiorPoint(u.geometry)) ?? u.point,
-		tint: i % PIECE_TINT_COUNT
+		tint: tints[i]!
 	}));
 	const rest = plan.rest.geometry;
 	if (rest) {

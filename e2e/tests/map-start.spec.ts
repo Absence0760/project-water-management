@@ -200,16 +200,16 @@ test('a gauge inside the catchment becomes a gauge node; each piece has its numb
 	const mid = startSheet(page).getByLabel(/^Mid weir/);
 	await expect(mid).toHaveValue('gauge');
 	await expect(mid.locator('option')).toHaveText(['A gauge in the network (no land)', 'Not in the model']);
-	await expect(startSheet(page).getByTestId('start-count')).toHaveText('2 units, plus the rest of the catchment.');
+	await expect(startSheet(page).getByTestId('start-count')).toHaveText('1 unit and 1 gauge, plus the rest of the catchment.');
 	await startSheet(page).getByTestId('start-propose').click();
 
 	// The review: the dam (1) drains into the gauge (2), which measures the land above it and owns none.
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'review');
 	const units = page.getByTestId('start-review').getByTestId('start-unit');
 	await expect(units).toHaveCount(2);
-	await expect(units.nth(0).getByTestId('piece-badge')).toHaveText('Unit 1: 1');
+	await expect(units.nth(0).getByTestId('piece-badge')).toHaveText('Piece 1: 1');
 	await expect(units.nth(0)).toContainText('Drains into Mid weir');
-	await expect(units.nth(1).getByTestId('piece-badge')).toHaveText('Unit 2: 2');
+	await expect(units.nth(1).getByTestId('piece-badge')).toHaveText('Piece 2: 2');
 	await expect(units.nth(1)).toContainText(/It measures 4\d\d\.\d\d km² of the catchment above it/);
 	await expect(units.nth(1).getByTestId('start-tick-area')).toHaveCount(0);
 	await expect(page.getByTestId('start-review').getByTestId('start-rest').getByTestId('piece-badge')).toHaveText('Piece R: R');
@@ -217,8 +217,9 @@ test('a gauge inside the catchment becomes a gauge node; each piece has its numb
 
 	// On the map (when it can draw): a number per piece, and a card with the focus lights its piece.
 	const mapBox = page.getByTestId('catchment-map').locator('xpath=..');
-	await expect(mapBox).toHaveAttribute('data-status', /^(ready|failed)$/);
-	if ((await mapBox.getAttribute('data-status')) === 'ready') {
+	// The map draws in CI's browser (map-draw.spec.ts asserts the same), so the pieces are checked, never skipped.
+	await expect(mapBox).toHaveAttribute('data-status', 'ready');
+	{
 		const badges = page.locator('.piece-badge');
 		await expect(badges).toHaveText(['1', '2', 'R']);
 		await units.nth(0).getByRole('textbox').focus();
@@ -226,8 +227,13 @@ test('a gauge inside the catchment becomes a gauge node; each piece has its numb
 		// With the sheet closed, a number under the pointer names its piece; a click opens its card.
 		await startSheet(page).getByRole('button', { name: 'Close', exact: true }).click();
 		await expect(page.locator('.piece-badge[data-lit="true"]')).toHaveCount(0);
+		// Closed, the page says in words what the pieces are; the gauge's own marker stays clickable beside its number.
+		await expect(page.getByTestId('map-pieces-pending')).toContainText('numbered as its card in the sheet');
+		await page.getByRole('button', { name: 'Gauge: Mid weir' }).click();
+		await expect(page).toHaveURL(/[?&]feature=/);
+		await expect(page).not.toHaveURL(/[?&]start=1/);
 		await badges.filter({ hasText: '2' }).hover();
-		await expect(page.getByTestId('map-piece-name')).toContainText('Proposed unit 2');
+		await expect(page.getByTestId('map-piece-name')).toContainText('Proposed piece 2');
 		await expect(page.getByTestId('map-piece-name')).toContainText('Mid weir');
 		await badges.filter({ hasText: '2' }).click();
 		await expect(page).toHaveURL(/[?&]start=1(&|$)/);

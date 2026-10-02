@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StartPlan, StartUnit } from '$lib/api';
 import type { MapPosition } from '$lib/api/types';
-import { interiorPoint, PIECE_TINT_COUNT, piecesShape, proposalPieces, REST_KEY } from './pieces';
+import { interiorPoint, PIECE_TINT_COUNT, pieceTintsFor, piecesShape, proposalPieces, REST_KEY } from './pieces';
 import { unitOffers } from './startFlow';
 
 const square = (x0: number, y0: number, s: number): MapPosition[] => [
@@ -67,7 +67,7 @@ describe('interiorPoint (where a piece’s number goes)', () => {
 });
 
 describe('proposalPieces', () => {
-	it('numbers the units in the plan’s order, cycling the tints, and marks the rest R', () => {
+	it('numbers the units in the plan’s order, every touching piece a tint of its own while there are tints left, and marks the rest R', () => {
 		const units = Array.from({ length: PIECE_TINT_COUNT + 1 }, (_, i) => unit(`u${i}`));
 		const pieces = proposalPieces(plan(units));
 		expect(pieces.map((p) => p.label)).toEqual([...units.map((_, i) => String(i + 1)), 'R']);
@@ -83,6 +83,21 @@ describe('proposalPieces', () => {
 
 	it('leaves the rest out when it has no outline', () => {
 		expect(proposalPieces(plan([unit('a')], null)).map((p) => p.key)).toEqual(['a']);
+	});
+});
+
+describe('pieceTintsFor (neighbours never share a tint)', () => {
+	it('gives touching pieces different tints, lets apart ones share, and a unit with no land none', () => {
+		// A row of squares, each touching the next: alternate tints are enough, and far-apart ones reuse 0.
+		const row = [0, 1, 2].map((x) => poly(square(x, 0, 1)));
+		expect(pieceTintsFor(row)).toEqual([0, 1, 0]);
+		expect(pieceTintsFor([poly(square(0, 0, 1)), poly(square(5, 5, 1)), null])).toEqual([0, 0, -1]);
+	});
+
+	it('when all six are taken around a piece, takes the one fewest neighbours share', () => {
+		// Seven squares stacked on one spot all touch: the seventh repeats the first tint, never a neighbour's twice.
+		const knot = Array.from({ length: PIECE_TINT_COUNT + 1 }, () => poly(square(0, 0, 1)));
+		expect(pieceTintsFor(knot)).toEqual([0, 1, 2, 3, 4, 5, 0]);
 	});
 });
 

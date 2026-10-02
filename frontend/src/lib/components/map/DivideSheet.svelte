@@ -42,7 +42,7 @@
 	} from './divideFlow';
 	import { featureName } from './mapList';
 	import PieceBadge from './PieceBadge.svelte';
-	import { PIECE_TINT_COUNT, REST_KEY } from './pieces';
+	import { proposalPieces, REST_KEY } from './pieces';
 	import { openDivide, outletGauges } from './startFlow';
 
 	let {
@@ -81,6 +81,8 @@
 
 	const uid = $props.id();
 	const pending = $derived(openDivide(info));
+	/** The open division's pieces by key: the cards read their number and tint from the same list the map draws (pieces.ts). */
+	const pieceOf = $derived(new Map(pending ? proposalPieces(pending.plan).map((x) => [x.key, x]) : []));
 	const outflowId = $derived(outflowOf(nodes));
 	const outflow = $derived(nodes.find((n) => n.id === outflowId) ?? null);
 	const step = $derived<'off' | 'outflow' | 'points' | 'review'>(!info.elevation ? 'off' : !outflow ? 'outflow' : pending ? 'review' : 'points');
@@ -272,7 +274,7 @@
 							onfocusout={cardOut}
 						>
 							<p class="named">
-								<PieceBadge label={String(i + 1)} tint={i % PIECE_TINT_COUNT} />
+								<PieceBadge label={pieceOf.get(u.key)?.label ?? String(i + 1)} tint={pieceOf.get(u.key)?.tint ?? -1} />
 								<strong>{u.nodeId ? u.name : 'A new gauge'}</strong>
 								<span class="muted small">from “{u.featureName}”</span>
 							</p>
@@ -320,7 +322,7 @@
 					{/each}
 					<li class="unit" data-testid="divide-rest" data-piece-card={REST_KEY} onmouseenter={() => light(REST_KEY)} onmouseleave={() => light(null)} onfocusin={() => light(REST_KEY)} onfocusout={cardOut}>
 						<p class="named">
-							{#if p.rest.geometry}<PieceBadge label="R" tint={-1} />{/if}
+							{#if pieceOf.has(REST_KEY)}<PieceBadge label="R" tint={-1} />{/if}
 							<strong>The rest of the catchment</strong>
 							<span class="muted small">{km2(p.rest.areaM2)}: what drains to the outlet through no point</span>
 						</p>

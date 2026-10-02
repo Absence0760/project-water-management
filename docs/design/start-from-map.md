@@ -168,23 +168,25 @@ No engine change, so no ENGINE_VERSION bump.
 
 The open proposal (a start or a division) is drawn piece by piece
 (`frontend/…/map/pieces.ts`, `mapStyle.ts` `proposalLayers`), never as one
-shape: each unit's own sub-catchment filled with one of six tints (the
-Okabe–Ito set, cycling in the plan's order; the rest of the catchment the
-proposal's teal) under the proposal's short dash, so the edges between
-pieces show. Every piece has its **number** on it (a badge inside the
+shape: each unit's own sub-catchment filled with one of six tints (away
+from the map's meaningful hues: no green, blue or amber; touching pieces
+always different, `pieceTintsFor`; the rest of the catchment the proposal's
+teal) under the proposal's short dash, so the edges between pieces show. Every piece has its **number** on it (a badge inside the
 piece, at the middle of the widest stretch through its centroid's latitude,
 so inside a crescent or beside a hole; a unit with no land, a water user or
-a gauge, at its point; the rest of the catchment **R**). The number is what
+a gauge, beside its point, so its marker stays visible and clickable; the
+rest of the catchment **R**). The number is what
 identifies a piece: the tint only helps the eye (WCAG 1.4.1).
 
 - **The cards are the key.** Each card in the sheet carries the same number
   and tint (`PieceBadge.svelte`; its text is "Unit 2: 2" to a screen
-  reader). A card with the focus or the pointer **lights its piece**: a
+  reader, "Piece" rather than "Unit", since a gauge is one too). A card with the focus or the pointer **lights its piece**: a
   denser tint and a solid outline in the map's selection colour on its
   casing, and its badge's border in the same colour.
-- **From the map.** With the sheet closed, a piece or its number under the
-  pointer says its name over the map's top-left corner ("Proposed unit 2 /
-  Mid weir"), and a click on one opens the sheet at its card, focused. The
+- **From the map.** With the sheet closed, a line over the map says in
+  words what the numbered pieces are, with **Review it**; a piece or its
+  number under the pointer says its name over the map's top-left corner
+  ("Proposed piece 2 / Mid weir"), and a click on one opens the sheet at its card, focused. The
   badges are hidden from assistive technology and take no focus: the sheet's
   cards do everything they do (the map is never the only way).
 - Labels are DOM badges, not map symbols, so they need no glyphs (which the
@@ -193,7 +195,8 @@ identifies a piece: the tint only helps the eye (WCAG 1.4.1).
 ## Dividing a model that has nodes
 
 Built after the first release (#326 C3's follow-up). **Divide the model**
-in the Map's header (editors, a model with nodes, a DEM on the server) opens
+beside the map (under the checks line; editors, a model with nodes, a DEM on
+the server; not in the header, which it would push onto a second row) opens
 `divide=1`, two steps read from the server:
 
 1. **The points.** Each dam, other point and gauge on the map with a select:

@@ -278,9 +278,9 @@
 				badges.delete(k);
 			}
 		}
-		const tints = pieceTints();
+		const tints = pieceTints(dark);
 		for (const p of pieces) {
-			const sig = `${p.label}|${p.at.join(',')}|${p.tint}`;
+			const sig = `${p.label}|${p.at.join(',')}|${p.tint}|${p.geometry ? 1 : 0}`;
 			const had = badges.get(p.key);
 			if (had && had.key === sig) {
 				had.el.dataset.lit = String(p.key === proposal?.highlight);
@@ -300,7 +300,10 @@
 				e.stopPropagation();
 				if (!draft?.active) onpiecepick?.(p.key);
 			});
-			const marker = new lib.Marker({ element: el }).setLngLat(p.at as [number, number]).addTo(map);
+			// A unit with no land (a gauge, a user) has its number beside its point, not on it: its marker stays visible and clickable.
+			const marker = new lib.Marker({ element: el, offset: p.geometry ? [0, 0] : [20, -20] })
+				.setLngLat(p.at as [number, number])
+				.addTo(map);
 			badges.set(p.key, { marker, el, key: sig });
 		}
 	}
@@ -587,7 +590,7 @@
 	{#if status === 'ready' && hoverPiece && !drawing}
 		<!-- Hidden from assistive tech, as the picked name: the sheet's cards say each piece's number and name. -->
 		<p class="picked-name" aria-hidden="true" data-testid="map-piece-name">
-			<span class="picked-kind">{hoverPiece.label === 'R' ? 'Proposed' : `Proposed unit ${hoverPiece.label}`}</span>
+			<span class="picked-kind">{hoverPiece.label === 'R' ? 'Proposed piece R' : `Proposed piece ${hoverPiece.label}`}</span>
 			<span class="picked-label">{hoverPiece.name}</span>
 		</p>
 	{:else if status === 'ready' && picked && !drawing}

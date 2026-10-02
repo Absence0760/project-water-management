@@ -625,9 +625,6 @@
 		{#if canStart}
 			<a class="btn" href={withParam(page.url, 'start', '1')} data-testid="map-start-open">{pendingStart ? 'Review the proposed model' : 'Start from the map'}</a>
 		{/if}
-		{#if canDivide}
-			<a class="btn" href={withParam(page.url, 'divide', '1')} data-testid="map-divide-open">{pendingDivide ? 'Review the division' : 'Divide the model'}</a>
-		{/if}
 	{/if}
 {/snippet}
 
@@ -716,6 +713,13 @@
 		<p class="alert alert-info slim" data-testid="map-delineation-pending">
 			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map, waiting for your decision.
 			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
+		</p>
+	{/if}
+	{#if (pendingStart || pendingDivide) && canEdit && !startSheet.open && !divideSheet.open}
+		<!-- An open start or division is drawn piece by piece: say so in words, and how to read it (the sheet's cards are its key). -->
+		<p class="alert alert-info slim" data-testid="map-pieces-pending">
+			{pendingStart ? 'A proposed model' : 'A proposed division of the model'} is drawn on the map piece by piece, each piece tinted and numbered as its card in the sheet (R: the rest of the catchment), waiting for your decision.
+			<a class="btn btn-sm" href={withParam(page.url, pendingStart ? 'start' : 'divide', '1')} data-testid="map-pieces-review">Review it</a>
 		</p>
 	{/if}
 	{#if canEdit && !tilesUrl}
@@ -887,6 +891,13 @@
 							{:else}
 								<span class="muted">The map’s checks found no problems.</span>
 							{/if}
+						</p>
+					{/if}
+					<!-- Divide the model (#326 C3's follow-up): beside the map, not in the header, which it would push onto a second row. -->
+					{#if canDivide && !pendingDivide}
+						<p class="panel side-box checks-line small" data-testid="map-divide-line">
+							<span>Each unit’s own area and order, proposed from its point on the map</span>
+							<a class="btn btn-sm" href={withParam(page.url, 'divide', '1')} data-testid="map-divide-open">Divide the model</a>
 						</p>
 					{/if}
 				</aside>

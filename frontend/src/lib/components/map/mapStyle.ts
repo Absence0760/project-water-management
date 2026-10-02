@@ -283,14 +283,20 @@ export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer
 export const proposalColour = (dark: boolean) => (dark ? '#3fe0d0' : '#006d77');
 
 /**
- * The tints a start or divide proposal's pieces cycle through (#326 C3's
- * follow-up, pieces.ts): the Okabe–Ito set, told apart by people with the
- * common colour-vision deficiencies, each well apart from the next
- * (mapStyle.test.ts). Translucent fills under the proposal's teal dash, so
- * they never carry meaning alone: every piece has its number on it, and the
- * sheet's card the same number and swatch.
+ * The tints a start or divide proposal's pieces take (#326 C3's follow-up,
+ * pieces.ts pieceTintsFor: neighbours never share one). Chosen away from the
+ * hues the map already gives a meaning (parcel green, water blue, the
+ * boundary's amber, the proposal's teal: ΔE ≥ 25 from each in both themes)
+ * and apart from each other (ΔE ≥ 20, mapStyle.test.ts): vermillion, pink,
+ * yellow, grey, lavender, brown. Translucent fills under the proposal's teal
+ * dash, so they never carry meaning alone: every piece has its number on it,
+ * and the sheet's card the same number and swatch. The same in both themes
+ * (a translucent fill reads on either ground); `dark` for the map's pattern.
  */
-export const pieceTints = (): readonly string[] => ['#e69f00', '#56b4e9', '#009e73', '#cc79a7', '#0072b2', '#d55e00'];
+export const pieceTints = (dark = false): readonly string[] => {
+	void dark;
+	return ['#d55e00', '#cc79a7', '#e6f04a', '#9e9e9e', '#b39ddb', '#8d6e63'];
+};
 /** How opaque a piece's tint is drawn, and the lit one's (its card has the focus or the pointer). */
 export const PIECE_FILL_OPACITY = 0.22;
 export const PIECE_LIT_OPACITY = 0.45;
@@ -334,7 +340,7 @@ export function proposalLayers(dark: boolean): Layer[] {
 	const piece = ['==', ['get', 'part'], 'piece'];
 	const shape = ['any', area, piece];
 	const lit = ['all', piece, ['==', ['get', 'lit'], true]];
-	const tints = pieceTints();
+	const tints = pieceTints(dark);
 	return [
 		{ id: 'pr-fill', type: 'fill', ...src, filter: area, paint: { 'fill-color': colour, 'fill-opacity': 0.12 } },
 		{

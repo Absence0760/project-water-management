@@ -45,7 +45,7 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	test.setTimeout(90_000);
 	const v = await valley(page, 'Divide from the map');
 	await openMap(page, v.id);
-	await page.getByTestId('section-header').getByTestId('map-divide-open').click();
+	await page.getByTestId('map-divide-open').click();
 	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
 	await expect(page.getByTestId('divide-sheet')).toHaveAttribute('data-step', 'points');
 
@@ -87,6 +87,18 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	await expectNoViolations(page);
 	await page.setViewportSize({ width: 1440, height: 960 });
 
+	// On the map: a number per piece (the gauge's beside its point), each card's the same; closed, the page says what they are, and a number opens its card.
+	await expect(page.getByTestId('catchment-map').locator('xpath=..')).toHaveAttribute('data-status', 'ready');
+	await expect(page.locator('.piece-badge')).toHaveText(['1', '2', '3', 'R']);
+	await expect(cards.nth(2).getByTestId('piece-badge')).toHaveText('Piece 3: 3');
+	await pump.getByTestId('divide-tick-area').focus();
+	await expect(page.locator('.piece-badge[data-lit="true"]')).toHaveText('1');
+	await sheet(page).getByRole('button', { name: 'Close', exact: true }).click();
+	await expect(page.getByTestId('map-pieces-pending')).toContainText('A proposed division of the model is drawn on the map piece by piece');
+	await page.locator('.piece-badge').filter({ hasText: '2' }).click();
+	await expect(page).toHaveURL(/[?&]divide=1(&|$)/);
+	await expect(dam.getByTestId('divide-tick-area')).toBeFocused();
+
 	// The dam's order into the new gauge needs the gauge added.
 	await dam.getByTestId('divide-tick-drains').check();
 	await expect(review.getByTestId('divide-problem')).toHaveText('Valley dam would drain into the new gauge Mid weir, which isn’t being added: tick Add it too.');
@@ -122,7 +134,7 @@ test('Discard changes nothing; a viewer is offered no division, and a link to it
 	await openMap(page, v.id, '&divide=1');
 	await sheet(page).getByTestId('divide-propose').click();
 	await expect(page.getByTestId('divide-sheet')).toHaveAttribute('data-step', 'review');
-	await expect(page.getByTestId('section-header').getByTestId('map-divide-open')).toHaveText('Review the division');
+	await expect(page.getByTestId('map-divide-open')).toHaveCount(0);
 	await sheet(page).getByTestId('divide-discard').click();
 	await page.getByRole('alertdialog', { name: 'Discard the proposed division?' }).getByRole('button', { name: 'Discard' }).click();
 	await expect(page.getByTestId('map-notice')).toHaveText(/Discarded the proposed division; nothing in the model changed\./);
