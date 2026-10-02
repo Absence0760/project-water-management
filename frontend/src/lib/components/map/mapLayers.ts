@@ -96,3 +96,35 @@ export function reachFacts(r: { strahler: number | null; upstreamKm2: number | n
 export const reachKey = (r: { dataset: string; reachId: number }) => `${r.dataset}:${r.reachId}`;
 /** The `ref` a reach added to the project carries (the server's riverRef, geo/rivers.ts), so the layer can tell it is on the map. */
 export const reachRef = (r: { dataset: string; reachId: number }) => `river-network:${r.dataset}:${r.reachId}`;
+
+/** One layer's state, as the Layers box's status line reads it. */
+export interface LayerState {
+	on: boolean;
+	/** Nothing on the map to look around, so nothing is asked for. */
+	idle: boolean;
+	failed: boolean;
+	/** How many came back; null while loading. */
+	count: number | null;
+}
+
+/**
+ * What the Layers box's one always-present status region says (WCAG 4.1.3: a
+ * live region that arrives already filled is often not read, so the loading
+ * lines and the results share one that stays): each layer loading, or how
+ * many it shows, then the reach picked. A failure is said by its own alert,
+ * so it adds nothing here.
+ */
+export function layersStatus(qt: LayerState, rv: LayerState, picked: string | null): string {
+	const one = (s: LayerState, loading: string, one: string, many: string) => {
+		if (!s.on || s.idle || s.failed) return null;
+		if (s.count === null) return loading;
+		return `${s.count} ${s.count === 1 ? one : many} shown.`;
+	};
+	return [
+		one(qt, 'Loading the quaternaries…', 'quaternary', 'quaternaries'),
+		one(rv, 'Loading the river network…', 'reach', 'reaches'),
+		rv.on && picked ? `Picked ${picked}.` : null
+	]
+		.filter(Boolean)
+		.join(' ');
+}

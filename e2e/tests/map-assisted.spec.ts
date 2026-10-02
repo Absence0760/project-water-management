@@ -257,7 +257,7 @@ test('on a phone the assisted tools fit and pass axe; a viewer gets neither Trac
 	await expectNoViolations(page);
 	await bar(page).getByRole('button', { name: 'Cancel' }).click();
 	await header(page).getByRole('button', { name: 'Trace a dam' }).click();
-	await expect(bar(page).getByLabel('Share of the observations counted as water')).toHaveValue('25');
+	await expect(bar(page).getByRole('combobox', { name: /^Water in at least\b/ })).toHaveValue('25');
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
 

@@ -248,6 +248,13 @@ server ([§ Delineation](#delineation)).
   reaches a hover had re-sent about 2 MB of GeoJSON (every source) and
   recomputed the pieces (~4.5 ms); now it sends the proposal (~0.56 MB) and
   computes nothing.
+- **Focus and announcements (round 4 a11y):** when the Delineate sheet
+  closes and its opener is gone (the draw bar ends once a proposal comes
+  back), focus goes to the header's Delineate button, else the map, never
+  `<body>` (WCAG 2.4.3). The Layers box keeps one always-present status
+  region (`layersStatus`, mapLayers.ts) that says each layer loading, how
+  many it shows and the reach picked (4.1.3); a failure is its own alert.
+  The trace's share select is named by its visible label (2.5.3).
 - **The picked feature's name** shows in a small box over the map's top-left
   corner (its kind, then its name), until the basemap has labels (A6). It is
   hidden from assistive technology (`aria-hidden`): the ways to pick that it reaches are

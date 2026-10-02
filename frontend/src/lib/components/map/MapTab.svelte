@@ -264,12 +264,29 @@
 	let delineateAt = $state<MapPosition | null>(null);
 	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
 	let delineateStep = $state<'ask' | 'decide'>('decide');
+	let delineateWasOpen = false;
 	$effect(() => {
 		if (!delineateSheet.open) {
 			delineateAt = null;
 			delineateStep = 'decide';
+			if (delineateWasOpen) void untrack(focusAfterDelineate);
 		}
+		delineateWasOpen = delineateSheet.open;
 	});
+	/**
+	 * The sheet closed. Its opener (the draw bar's Delineate…, the Review it link) is
+	 * usually gone by then, so the dialog had nothing to hand focus back to: the
+	 * Delineate button takes it, else the map, never <body> (WCAG 2.4.3). A focus
+	 * already placed (Accept picks the new feature's card) is left where it is.
+	 */
+	async function focusAfterDelineate() {
+		await tick();
+		const at = document.activeElement;
+		if (at && at !== document.body) return;
+		const btn = document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]');
+		if (btn) btn.focus();
+		else mapRef?.focusMap();
+	}
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
 		delineateStep = 'ask';

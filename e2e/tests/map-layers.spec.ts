@@ -83,6 +83,9 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await expect(page).toHaveURL(/[?&]layers=rivers(&|$)/);
 	// The boundary padded to 21.2–21.5 E, 33.5–33.8 S meets ten of the eleven synthetic reaches (the far one is at 22.5 E).
 	await expect(page.getByTestId('map-rivers-summary')).toHaveText('10 reaches around the catchment, the biggest first, from synthetic. Synthetic test data, never real rivers.');
+	// One status region, there from the start, says what loaded (WCAG 4.1.3), then the reach picked.
+	const status = layers(page).getByRole('status');
+	await expect(status).toHaveText('10 reaches shown.');
 	const reaches = page.getByTestId('map-reach-list').getByRole('button');
 	await expect(reaches).toHaveCount(10);
 	await expect(reaches.first()).toHaveText('Reach 90000002 · order 3 · 655 km²');
@@ -92,6 +95,7 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await page.getByTestId('map-reach-list').getByRole('button', { name: 'Reach 90000003 · order 2 · 168 km²' }).click();
 	const picked = page.getByTestId('map-reach-picked');
 	await expect(picked).toContainText('Reach 90000003: Strahler order 2, 168 km² upstream');
+	await expect(status).toHaveText('10 reaches shown. Picked Reach 90000003.');
 	await expect(picked).toContainText('Source: SYNTHETIC test data');
 	await picked.getByRole('button', { name: 'Add to the map as a river' }).click();
 	await expect(page.getByTestId('map-notice')).toHaveText(/^Added “Reach 90000003” to the map as a river, from the river network\./);
