@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MigrateError } from '../scripts/migrate.js';
-import { failureSummary, handler } from './lambda-migrate.js';
+import { failureSummary, handler, isMissingObject } from './lambda-migrate.js';
 
 // The deploy workflow prints a failed run's summary to a public Actions log,
 // so it must carry codes and names only, never the error's text.
@@ -88,4 +88,15 @@ describe('a reference load (docs/deployment.md § Reference datasets)', () => {
 		expect(inputs.some((f) => f.endsWith('src/geo/croplandGrid.ts'))).toBe(true);
 		expect(inputs.filter((f) => /geo\/loadCropland\.ts$|feeds\/sources\/tiff\.ts$/.test(f))).toEqual([]);
 	}, 60_000);
+});
+
+describe('isMissingObject: S3 answers a GetObject-only role 403 for a missing key', () => {
+	it('NoSuchKey and AccessDenied (and their status codes) are a missing object; anything else is an error', () => {
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'NoSuchKey' }))).toBe(true);
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }))).toBe(true);
+		expect(isMissingObject({ $metadata: { httpStatusCode: 404 } })).toBe(true);
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'SlowDown', $metadata: { httpStatusCode: 503 } }))).toBe(false);
+		expect(isMissingObject(new Error('socket hang up'))).toBe(false);
+		expect(isMissingObject(undefined)).toBe(false);
+	});
 });

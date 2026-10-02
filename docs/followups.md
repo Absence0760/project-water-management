@@ -3609,9 +3609,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       protections: no stand-alone redistribution, no reverse engineering)
       before the river network is loaded. `scripts/release/map-data-gates.mjs`
       refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
-      in `frontend/src`'s legal text; `delineation_dem` is the operator's to
-      turn on only after the Art. 6(c) sentence is live (Terraform can't see
-      the frontend). Trigger: the first deployment that wants the relief,
+      in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
+      `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
+      the operator's to do only after the Art. 6(c) sentence is live
+      (Terraform can't see the frontend, and the upload is outside it). Trigger: the first deployment that wants the relief,
       Delineate or the River network layer.
 - [x] **Loading the quaternary dataset in production** (2026-10-02, PR
       feat/infra-map-data): the production path for every reference dataset

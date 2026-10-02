@@ -353,6 +353,10 @@ resource "aws_lambda_function" "migrate" {
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
       # Reference-dataset loads read their file here (map_data.tf).
       REFERENCE_BUCKET = aws_s3_bucket.reference.bucket
+      # V8's heap at 85% of the function's memory, set here rather than left
+      # to the runtime's default, so a load's parse (geo/referenceLoad.ts
+      # MAX_TEXT_BYTES) has the room the caps were measured against.
+      NODE_OPTIONS = "--max-old-space-size=${floor(var.migrate_memory_mb * 0.85)}"
     }
   }
 

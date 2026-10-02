@@ -3164,7 +3164,7 @@ key there would let any read-only principal forge any user's session.
   had. The migrate Lambda reads one object from the private reference
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
-  bytes), caps it (512 MiB, 500 MiB unzipped: a gzip bomb is cut off), and
+  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off), and
   parses it with the same code as the local loaders (JSON only, no archive
   formats, no external references). The kinds whose licence isn't
   confirmed are refused in the workflow and again in the Lambda, by name.
@@ -3172,7 +3172,9 @@ key there would let any read-only principal forge any user's session.
   only, since the Actions log is public; the file's problems go to
   CloudWatch.
 - **No role can write either bucket** but the operator's own SSO session;
-  the deploy role touches neither.
+  the deploy role touches neither. Uploading to the tiles bucket is itself
+  publishing (the behaviour serves what is there), so the licence steps come
+  before the upload (deployment.md § Map tiles).
 
 ### Accepted IaC findings
 

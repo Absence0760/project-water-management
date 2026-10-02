@@ -2809,8 +2809,8 @@ run "map_data" {
     error_message = "The migrate role may only read reference files (reference/*): no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
   }
   assert {
-    condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1
-    error_message = "The migrate Lambda runs a load for up to 900 s with 3008 MB by default, one at a time (reserved concurrency 1)."
+    condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1 && aws_lambda_function.migrate.environment[0].variables["NODE_OPTIONS"] == "--max-old-space-size=2556"
+    error_message = "The migrate Lambda runs a load for up to 900 s with 3008 MB by default (V8's heap at 85% of it), one at a time (reserved concurrency 1)."
   }
 
   # --- Delineation off by default: no DEM, no grant -----------------------------------------
@@ -2847,6 +2847,17 @@ run "map_data_with_delineation" {
 
 # Delineation keeps a 20 s budget and peaks near 460 MB: a smaller or shorter
 # API Lambda is refused (positive control: map_data_with_delineation).
+# A reference load's caps were measured against 3008 MB (geo/referenceLoad.ts).
+run "rejects_a_small_migrate_lambda" {
+  command = plan
+
+  variables {
+    migrate_memory_mb = 1024
+  }
+
+  expect_failures = [var.migrate_memory_mb]
+}
+
 run "rejects_delineation_on_a_small_api_lambda" {
   command = plan
 

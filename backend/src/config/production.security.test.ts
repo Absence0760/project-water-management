@@ -33,7 +33,7 @@ const ENTRY: Record<Role, string> = {
 /** Terraform's aws_lambda_function resource for each role. */
 const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate' };
 /** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
-const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'VITEST']);
+const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
 
 // Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below):
 // PROD is each environment block, PROD_SECRETS each runtime secret's JSON.
@@ -111,7 +111,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		MASTER_SECRET_ARN: 'arn:aws:secretsmanager:af-south-1:000000000000:secret:rds!db-0000-AbCdEf',
 		...runtimeSecret('migrate'),
 		NODE_EXTRA_CA_CERTS: CA,
-		REFERENCE_BUCKET: 'water-management-reference-000000000000'
+		REFERENCE_BUCKET: 'water-management-reference-000000000000',
+		NODE_OPTIONS: '--max-old-space-size=2556'
 	}
 };
 

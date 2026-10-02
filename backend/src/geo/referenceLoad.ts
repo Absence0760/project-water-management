@@ -64,10 +64,18 @@ export const REFERENCE_KINDS = {
 export type ReferenceKindName = keyof typeof REFERENCE_KINDS;
 type AllowedKind = { [K in ReferenceKindName]: (typeof REFERENCE_KINDS)[K]['status'] extends 'allowed' ? K : never }[ReferenceKindName];
 
-/** The largest object a load downloads (what the operator uploaded, compressed or not). */
-export const MAX_OBJECT_BYTES = 512 * 1024 * 1024;
-/** The largest text a load parses, after gunzip: under V8's longest string. */
-export const MAX_TEXT_BYTES = 500 * 1024 * 1024;
+/**
+ * The largest object a load downloads (what the operator uploaded, compressed
+ * or not), and the largest text it parses after gunzip. Sized to the migrate
+ * Lambda's memory (migrate_memory_mb, at least 3008 MB, with a 2.5 GB heap):
+ * parsing 200 MB of text peaked at 1.8 GB resident for either kind (measured
+ * 2026-10-02 on synthetic files: 475 000 river reaches, 6.9 million cells),
+ * and a country's real files are well under it (deployment.md § Reference
+ * datasets). A bigger file is refused here, with a reason, rather than killed
+ * by the runtime out of memory with none.
+ */
+export const MAX_OBJECT_BYTES = 200 * 1024 * 1024;
+export const MAX_TEXT_BYTES = 200 * 1024 * 1024;
 
 export interface LoadRequest {
 	kind: AllowedKind;

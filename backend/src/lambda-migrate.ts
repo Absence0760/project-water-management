@@ -188,6 +188,17 @@ export function loadFailureSummary(err: unknown, context?: LogContext): LoadFail
 	};
 }
 
+/**
+ * Whether an S3 error means "no such object". The migrate role has GetObject
+ * only (no ListBucket, infra/map_data.tf), so S3 answers a missing key with
+ * 403 AccessDenied rather than 404 NoSuchKey; both mean the operator's key
+ * names nothing it may read.
+ */
+export function isMissingObject(e: unknown): boolean {
+	const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+	return err?.name === 'NoSuchKey' || err?.name === 'AccessDenied' || err?.$metadata?.httpStatusCode === 404 || err?.$metadata?.httpStatusCode === 403;
+}
+
 /** The reference bucket through the runtime's S3 client (a lazy import, like delineation/dem.ts). */
 const readFromReferenceBucket: ReadObject = async (key) => {
 	const bucket = requireEnv('REFERENCE_BUCKET');
@@ -199,7 +210,7 @@ const readFromReferenceBucket: ReadObject = async (key) => {
 		if (!body) return null;
 		return { contentLength: r.ContentLength ?? 0, bytes: async () => new Uint8Array(await body.transformToByteArray()) };
 	} catch (e) {
-		if ((e as { name?: string }).name === 'NoSuchKey') return null;
+		if (isMissingObject(e)) return null;
 		throw e;
 	}
 };

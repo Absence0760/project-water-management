@@ -404,8 +404,8 @@ variable "migrate_memory_mb" {
   type        = number
   default     = 3008
   validation {
-    condition     = var.migrate_memory_mb >= 512 && var.migrate_memory_mb <= 10240
-    error_message = "Between 512 and 10240 MB (Lambda's range)."
+    condition     = var.migrate_memory_mb >= 3008 && var.migrate_memory_mb <= 10240
+    error_message = "Between 3008 MB (a reference load's 200 MB file peaks near 1.8 GB, geo/referenceLoad.ts MAX_TEXT_BYTES) and 10240 MB (Lambda's maximum)."
   }
 }
 

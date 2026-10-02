@@ -1553,7 +1553,12 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
 Upload them with your own SSO session (no workflow or Lambda can write the
-bucket), then invalidate the cache, since CloudFront keeps byte ranges of
+bucket). **An upload is itself the release** of that file: the `/tiles/*`
+behaviour serves whatever is in the bucket to anyone, by byte range,
+whether or not the frontend variable is set. So upload `terrain.pmtiles`
+only once the Art. 6(c) sentence is live in the app's legal text; the
+frontend gate and `delineation_dem` come after that, not instead of it.
+Then invalidate the cache, since CloudFront keeps byte ranges of
 the old file and the PMTiles reader notices a replaced archive by its
 `ETag`:
 
@@ -1641,14 +1646,20 @@ streams, `-f min_order=<n>`. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
 `synthetic` is refused).
 
-Limits: the file at most 512 MiB as uploaded and 500 MiB of text unzipped
-(a gzip bomb is cut off, not unpacked); the migrate Lambda has
-`migrate_memory_mb` (3 008 MB by default) and 900 s. A country's WorldCover
+Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
+(a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
+the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
+accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
+peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
+files of 475 000 reaches and 6.9 million cells). A country's WorldCover
 grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
 HydroRIVERS reaches are tens of MB. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
-billed only while they run.
+billed only while they run. Don't run a load while a backend deploy is
+migrating: the migrate Lambda's reserved concurrency of 1 turns the second
+invocation away (the workflow fails with a throttle, nothing is loaded), and
+a load writes only its own dataset's rows, so retrying afterwards is safe.
 
 ## Runbooks
 
