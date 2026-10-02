@@ -1631,6 +1631,7 @@ Lambda's list against the Sources table):
 | Kind | Licence (maps.md § Sources) | The file | How to make it |
 | --- | --- | --- | --- |
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
+| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the terms of service carry the end-user protections (no stand-alone redistribution, no reverse engineering; check that yourself) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
@@ -1640,7 +1641,9 @@ aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldc
 gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
 ```
 
-For rivers add `-f source="<the attribution line>"` (the one
+Evaporation is the same with `kind=evaporation` and a key under
+`reference/evaporation/`; the file carries dPET's source, version and
+attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
 `bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
 streams, `-f min_order=<n>`. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
@@ -1653,7 +1656,10 @@ accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
 peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
 files of 475 000 reaches and 6.9 million cells). A country's WorldCover
 grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
-HydroRIVERS reaches are tens of MB. A load costs cents (3 GB × a few
+HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
+32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
+Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
+Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is
