@@ -72,7 +72,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		REPORT_DOWNLOADS: 'cloudfront',
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
 		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey,
-		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles'
+		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
+		WATER_URL: 's3://water-management-tiles-000000000000/tiles/water.pmtiles'
 	},
 	worker: {
 		...runtimeSecret('worker'),
