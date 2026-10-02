@@ -4694,6 +4694,34 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
+- [ ] **A per-user ledger for the elevation model's compute (round 4 infra
+      audit, cost finding 2).** Delineate, Start from the map and Divide are
+      capped at 30 a project an hour, now counting refused and failed runs
+      (`delineation/attempts.ts`), but creating projects is free and a
+      deleted project takes its proposals and audit events with it, so one
+      account can run 30 × N an hour, each up to the 20 s budget. Today the
+      bound across projects is the WAF's API rate (1 000 per 5 minutes per
+      IP) and the API's reserved concurrency (10), which a few editors'
+      delineations can fill, slowing every other request. **Durable fix:**
+      a migration adding `elevation_attempt (user_id, tool, created_at)`,
+      no RLS read for `water_app` beyond its own rows, written *before* the
+      compute under an advisory lock on the user (so concurrent requests
+      count too) and kept past project deletion, with a per-user hourly cap
+      across all three tools and Trace a dam; and run the DEM tools in their
+      own Lambda (or with a per-route reserved slice) so they can never take
+      all of the API's slots. **Trigger:** the first production apply with
+      `delineation_dem` on, or `lambda-throttles` firing with delineation in
+      the logs.
+- [ ] **Record which file a reference load came from (round 4 infra audit,
+      data finding 4).** A load checks the uploaded file's SHA-256, then
+      drops it: the dataset rows don't say which key and hash they came
+      from, so once the Actions log expires nobody can tell which file is
+      live or which version to restore (the reference bucket is versioned
+      for a year, deployment.md § Reference datasets, Undoing a load).
+      **Durable fix:** a migration adding `source_key` and `source_sha256`
+      to the land-cover, evaporation and rivers dataset tables, written by
+      `geo/referenceLoad.ts` and shown on `/data-sources`. **Trigger:** the
+      first production load, or the next migration touching those tables.
 
 ## Housekeeping
 

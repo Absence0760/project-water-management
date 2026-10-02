@@ -2588,7 +2588,16 @@ placed points. The server never trusts the browser with geometry:
   latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
   API, so it is editor-only, capped at 30 a project an hour (429), bounded
   by a window cap and a 20 s budget under the Lambda's timeout, and run
-  outside any database transaction. The decoders (WebP, PNG, PMTiles) read
+  outside any database transaction. The cap counts every run that cost the
+  compute: the proposals stored, and each click the DEM refused (422) or
+  couldn't read (503), recorded as `map.elevation_refused` (the tool and the
+  reason's code, never the click; `delineation/attempts.ts`). Requests
+  arriving at the same moment each see the count before any finishes, so a
+  burst can pass the cap by at most the API's reserved concurrency (10).
+  The cap is per project and creating projects is free, so what bounds one
+  account across projects is the WAF's API rate and that concurrency; a
+  per-user ledger and keeping this compute from filling the API's slots are
+  followups.md items. The decoders (WebP, PNG, PMTiles) read
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
@@ -2606,8 +2615,9 @@ placed points. The server never trusts the browser with geometry:
   unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
-  (editor-only, its own 30 an hour, the window cap and budget, outside any
-  transaction). A user names only feature ids of their own project's map
+  (editor-only, its own 30 an hour, shared with dividing and counting
+  refused and failed runs the same way, the window cap and budget, outside
+  any transaction). A user names only feature ids of their own project's map
   (read under RLS, so another project's are "not on this map") and roles.
   Apply writes only into an empty model, re-checks the ticks against the
   stored plan (a value can't be ticked that wasn't proposed) and runs the
@@ -3089,9 +3099,12 @@ key there would let any read-only principal forge any user's session.
   each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+- **WAF:** four per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
-  default 1000 per 5 minutes) scoped to `/api/*`, and a site-wide backstop
+  default 1000 per 5 minutes) scoped to `/api/*`, the map's tiles
+  (`waf_tiles_rate_limit_per_ip`, default 1000, scoped to `/tiles/*`: each
+  may be a 2 MiB range, so this is the egress bound per address, with the
+  `cloudfront-bytes` alarm across addresses), and a site-wide backstop
   on every path (`waf_site_rate_limit_per_ip`, default 5000). The API's
   limit doesn't count the SPA's cached files, so a cold visit (~150 of
   them) or the report renderer, which loads the SPA in a fresh Chromium for
@@ -3185,7 +3198,11 @@ key there would let any read-only principal forge any user's session.
   else is granted. The `tiles_range` function refuses whole-file and
   open-ended reads of an archive (a 2 MiB cap per request) and answers 404
   for every other path, so a public 2 GB file can't be pulled in one
-  request (the cost side: deployment.md § Map tiles).
+  request; the WAF's `RateLimitTilesPerIP` (1 000 per 5 minutes) bounds one
+  address at ~2 GB per 5 minutes, and the `cloudfront-bytes` alarm watches
+  egress across addresses (the cost side: deployment.md § Map tiles). The
+  bucket is versioned, so an archive overwritten or deleted by mistake
+  (the DEM the API reads among them) can be restored for 14 days.
 - **Delineation's DEM read** (`delineation_dem`): the API role may
   GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
   allows the same; off by default.
@@ -3195,9 +3212,15 @@ key there would let any read-only principal forge any user's session.
   like the other archives; GSW's terms allow redistribution.
 - **Reference loads run as the schema owner**, so they are gated like a
   deploy: `load-reference.yml` reaches AWS only in the `production`
-  environment (a required reviewer, then OIDC), and the deploy role's only
-  part is `lambda:InvokeFunction` on the migrate Lambda, which it already
-  had. The migrate Lambda reads one object from the private reference
+  environment (a required reviewer, then OIDC), from `main` only, after a
+  `preflight` job (no environment, no AWS) has confirmed that environment
+  exists with its reviewer and branch policy, since naming a missing one
+  would create it unprotected (`preflight.mjs environment`; the workflow
+  guard's `preflight` rule makes every production-gated job need it). The
+  job's session is narrowed by an inline session policy to
+  `lambda:InvokeFunction` on the migrate function, so none of the deploy
+  role's other grants (the frontend bucket, the Lambdas' code, ECR) reach
+  it. The migrate Lambda reads one object from the private reference
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
   bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
@@ -3210,7 +3233,7 @@ key there would let any read-only principal forge any user's session.
   only, since the Actions log is public; the file's problems go to
   CloudWatch.
 - **No role can write either bucket** but the operator's own SSO session;
-  the deploy role touches neither. Uploading to the tiles bucket is itself
+  the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come
   before the upload (deployment.md § Map tiles).
 
@@ -3228,6 +3251,17 @@ beside the resource; a new ignore needs a line here too.
 
 Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
 customer-held keys or key-level audit of report or pack reads.
+
+Below CI's HIGH/CRITICAL threshold, so it carries no ignore, but accepted on
+purpose: **AWS-0089, no S3 server access logging**, on every bucket. The
+tiles are public map data served through CloudFront (whose WAF metrics and
+sampled requests show who pulls them), the reference files are openly
+licensed data with one reader (the migrate role, whose loads are logged in
+CloudWatch and gated by the `production` approval), and the reports and
+packs buckets are read through signed URLs the API mints and logs. A log
+bucket would add storage and a lifecycle to run for no question it would
+answer. If key-level audit is ever needed, CloudTrail data events on the
+prefix in question (e.g. `reference/*`) cost almost nothing at this volume.
 
 ## Liability
 
