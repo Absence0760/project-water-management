@@ -85,7 +85,8 @@ describe('sharedPumpHint', () => {
 });
 
 // Water-year order Oct–Sep: index 3 is January.
-const WINTER = [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800];
+// River to dam is stored in m³/day and shown in m³/s: 864 m³/day is 0.01 m³/s.
+const WINTER = [0, 0, 0, 0, 0, 0, 0, 864, 864, 864, 864, 864];
 
 describe('diverts', () => {
 	it('is the one capacity above 0, or any month above 0 once set by month', () => {
@@ -98,7 +99,8 @@ describe('diverts', () => {
 });
 
 describe('handsOffTakers', () => {
-	const farm = { damCapacityM3: 150_000, pctUpstreamToDam: 1, pctRunoffToDam: 1, divertCapacityM3Day: 0, divertMonthlyM3Day: null };
+	// An off-channel dam (River to dam is for one; a dam on the river takes none, engine 1.68.0).
+	const farm = { damCapacityM3: 150_000, pctUpstreamToDam: 0, pctRunoffToDam: 1, divertCapacityM3Day: 0, divertMonthlyM3Day: null };
 
 	it('is the pump on any rule but the dam only, unless its capacity is 0', () => {
 		expect(handsOffTakers({ ...farm, supplyRule: 'riverFirst', pumpCapacityM3Day: 500 }).pump).toBe(true);
@@ -111,6 +113,8 @@ describe('handsOffTakers', () => {
 		expect(handsOffTakers(farm)).toEqual({ pump: false, riverToDam: false, noDamRouting: false });
 		expect(handsOffTakers({ ...farm, divertCapacityM3Day: 800 })).toEqual({ pump: false, riverToDam: true, noDamRouting: false });
 		expect(handsOffTakers({ ...farm, divertCapacityM3Day: 800, divertMonthlyM3Day: new Array(12).fill(0) }).riverToDam).toBe(false);
+		// A dam on the river has no River to dam, whatever is stored.
+		expect(handsOffTakers({ ...farm, pctUpstreamToDam: 1, divertCapacityM3Day: 800 }).riverToDam).toBe(false);
 	});
 
 	it('is what a farm with no dam irrigates straight from the river, except on run of river (engine 1.32.0)', () => {
@@ -126,7 +130,7 @@ describe('handsOffTakers', () => {
 });
 
 describe('handsOffPreview', () => {
-	const pumpAndDivert = { supplyRule: 'riverFirst' as const, pumpCapacityM3Day: 500, damCapacityM3: 150_000, pctUpstreamToDam: 1, pctRunoffToDam: 1, divertCapacityM3Day: 800 };
+	const pumpAndDivert = { supplyRule: 'riverFirst' as const, pumpCapacityM3Day: 500, damCapacityM3: 150_000, pctUpstreamToDam: 0, pctRunoffToDam: 1, divertCapacityM3Day: 800 };
 
 	it('says what River to dam and the pump leave without one: senior users only, not the EWR', () => {
 		expect(handsOffPreview({})).toMatch(/^No hands-off flow: .*senior water users downstream need, not the EWR\.$/);
@@ -186,13 +190,13 @@ describe('divertMonthsPreview', () => {
 	});
 
 	it('names the months it takes nothing in, and says the one value is not used', () => {
-		expect(divertMonthsPreview({ divertMonthlyM3Day: WINTER })).toBe('River to dam takes up to 800 m³/day; nothing in Oct–Apr. The one value above is not used.');
+		expect(divertMonthsPreview({ divertMonthlyM3Day: WINTER })).toBe('River to dam takes up to 0.01 m³/s; nothing in Oct–Apr. The one value above is not used.');
 		expect(divertMonthsPreview({ divertMonthlyM3Day: new Array(12).fill(0) })).toBe('River to dam is 0 in every month: it diverts nothing.');
-		expect(divertMonthsPreview({ divertMonthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] })).toBe(
-			'River to dam takes between 1 and 12 m³/day by month. The one value above is not used.'
+		expect(divertMonthsPreview({ divertMonthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((k) => k * 864) })).toBe(
+			'River to dam takes between 0.01 and 0.12 m³/s by month. The one value above is not used.'
 		);
-		expect(divertMonthsPreview({ divertMonthlyM3Day: [0.0129, 12_345.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })).toBe(
-			'River to dam takes between 0.0129 and 12 345.5 m³/day by month; nothing in Dec–Sep. The one value above is not used.'
+		expect(divertMonthsPreview({ divertMonthlyM3Day: [86.4, 1_296_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })).toBe(
+			'River to dam takes between 0.001 and 15 m³/s by month; nothing in Dec–Sep. The one value above is not used.'
 		);
 	});
 });
@@ -205,14 +209,14 @@ describe('divertMonthsCell', () => {
 
 	it('shows the months’ range, and names it in full for a screen reader', () => {
 		expect(divertMonthsCell({ divertMonthlyM3Day: WINTER }, 'Hilltop')).toEqual({
-			text: 'by month: 0–800',
-			aria: 'River to dam at Hilltop is set by month, between 0 and 800 m³/day'
+			text: 'by month: 0–0.01',
+			aria: 'River to dam at Hilltop is set by month, between 0 and 0.01 m³/s'
 		});
-		expect(divertMonthsCell({ divertMonthlyM3Day: new Array(12).fill(500) }, 'Hilltop')).toEqual({
-			text: 'by month: 500',
-			aria: 'River to dam at Hilltop is set by month, 500 m³/day every month'
+		expect(divertMonthsCell({ divertMonthlyM3Day: new Array(12).fill(17_280) }, 'Hilltop')).toEqual({
+			text: 'by month: 0.2',
+			aria: 'River to dam at Hilltop is set by month, 0.2 m³/s every month'
 		});
-		expect(divertMonthsCell({ divertMonthlyM3Day: [0.0129, 12_345.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'Hilltop')!.text).toBe('by month: 0–12\u202f345.5');
+		expect(divertMonthsCell({ divertMonthlyM3Day: [86.4, 1_296_000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, 'Hilltop')!.text).toBe('by month: 0–15');
 	});
 
 	it('says by month without a range when no month holds a number (a row the save refuses)', () => {

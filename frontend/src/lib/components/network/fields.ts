@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { estimatedDamAreaM2, IRRIGATION_SYSTEMS, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
+import { estimatedDamAreaM2, IRRIGATION_SYSTEMS, onRiverDam, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -31,7 +31,9 @@ export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×' | 'days' | 'ha';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | 'm³/s' | '×' | 'days' | 'ha';
+	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
+	scale?: number;
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
 	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
 	aria: (name: string) => string;
@@ -44,6 +46,9 @@ export interface NodeField {
 	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
 	detailOnly?: boolean;
 }
+
+/** m³/day → m³/s: River to dam is entered in m³/s and stored in m³/day. */
+export const M3S_PER_M3DAY = 1 / 86_400;
 
 export const GROUPS: Record<NodeField['group'], string> = {
 	area: 'Catchment area',
@@ -165,7 +170,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
-		help: 'Share of the water arriving from upstream nodes that enters the dam. The rest passes below it, where River to dam can take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion. (The b023 workbook\'s formula applied it the other way round; see docs/model.md §3 Q1.)'
+		help: 'Share of the water arriving from upstream nodes that enters the dam. 100 %: a dam on the river, which catches it all, and has no River to dam. 0 %: an off-channel dam, which the river passes by; it fills from its share of the runoff and from River to dam. (The b023 workbook\'s formula applied it the other way round; the import converts its values, see docs/model.md §3 Q1.)'
 	},
 	{
 		key: 'pctRunoffToDam',
@@ -179,11 +184,12 @@ export const NODE_FIELDS: NodeField[] = [
 	{
 		key: 'divertCapacityM3Day',
 		label: 'River to dam',
-		unit: 'm³/day',
+		unit: 'm³/s',
+		scale: M3S_PER_M3DAY,
 		group: 'routing',
 		farmOnly: true,
-		aria: (n) => `River to dam at ${n}, m³/day`,
-		help: 'Most water per day taken from the river below the dam into the dam, by a weir, furrow or pump. It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
+		aria: (n) => `River to dam at ${n}, m³/s`,
+		help: 'Most water taken from the river into an off-channel dam, by a weir, furrow or pump, in m³/s (0.2 m³/s = 17 280 m³ a day). Not available for a dam on the river (Upstream inflow to dam 100 %). It takes up to this every day of the year (or set it by month below), leaving in the river what senior water users downstream need, and the hands-off flow under Supply when there is one; without one it doesn’t leave the EWR. This is separate from the river pump under Supply, which irrigates: if one pump does both, split its capacity between the two. 0 means none.'
 	},
 	{
 		key: 'irrigationEfficiency',
@@ -291,6 +297,18 @@ export function cardLabel(f: NodeField): string {
 }
 
 export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
+/** What a field's input multiplies the stored value by to show it. */
+export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
+
+/**
+ * Why a field isn't used on this node, or null: River to dam on a dam on the
+ * river (engine ≥ 1.68.0, onRiverDam), which shows the field read-only.
+ */
+export function fieldUnused(f: NodeField, n: Pick<NetworkNode, 'pctUpstreamToDam'>): string | null {
+	if (f.key === 'divertCapacityM3Day' && onRiverDam(n))
+		return 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.';
+	return null;
+}
 /** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */
 export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/day';
 

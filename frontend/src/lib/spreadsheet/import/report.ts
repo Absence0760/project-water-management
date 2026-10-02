@@ -13,6 +13,10 @@ import { type Cell, cellAddress, isNumeric, num, pyRepr, pyStr } from './cells';
 export type ImportNoteCode =
 	/** [Farm spec] fragmentation method isn't Area, Hi/Lo or Specific; area is used. */
 	| 'unknown-flow-share-method'
+	/** [Farm spec] Upstream inflow above dam % stored as 1 − the value (b023's formula applied it below the dam, docs/model.md §3 Q1). */
+	| 'upstream-pct-converted'
+	/** [Farm spec] Upstream inflow above dam % imported as entered: the workbook's formula is the fixed one. */
+	| 'upstream-pct-as-entered'
 	/** A transfer month list relied on the workbook's substring match (audit M1). */
 	| 'transfer-months-substring'
 	/** More than one element has nothing downstream; only the outflow gauge is the outlet. */

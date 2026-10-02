@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NEW_FARM_IRRIGATION } from '@water-management/engine';
-import { cardLabel, damHints, fmtVolume, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
+import { cardLabel, damHints, fieldScale, fieldUnused, fmtVolume, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -113,8 +113,27 @@ describe('TABLE_FIELDS', () => {
 });
 
 describe('isVolume', () => {
-	it('marks the m³ and m³/day fields, whose columns need room for large values', () => {
-		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'divertCapacityM3Day', 'boreholeCapacityM3Day']);
+	it('marks the m³ and m³/day fields, whose columns need room for large values (River to dam is m³/s, a small number)', () => {
+		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'boreholeCapacityM3Day']);
+	});
+});
+
+describe('River to dam in m³/s', () => {
+	const divert = NODE_FIELDS.find((f) => f.key === 'divertCapacityM3Day')!;
+
+	it('is entered in m³/s and stored in m³/day: 0.2 m³/s is 17 280 m³ a day', () => {
+		expect(divert.unit).toBe('m³/s');
+		expect(17_280 * fieldScale(divert)).toBeCloseTo(0.2, 12);
+		expect(Math.round((0.2 / fieldScale(divert)) * 1e9) / 1e9).toBe(17_280);
+		expect(fieldScale(NODE_FIELDS.find((f) => f.key === 'pctUpstreamToDam')!)).toBe(100);
+		expect(fieldScale(NODE_FIELDS.find((f) => f.key === 'damCapacityM3')!)).toBe(1);
+	});
+
+	it('is not available for a dam on the river (Upstream inflow to dam 100 %, engine 1.68.0); any less, it is', () => {
+		expect(fieldUnused(divert, { pctUpstreamToDam: 1 })).toMatch(/^Not available: the dam is on the river/);
+		expect(fieldUnused(divert, { pctUpstreamToDam: 0.99 })).toBeNull();
+		expect(fieldUnused(divert, { pctUpstreamToDam: 0 })).toBeNull();
+		expect(fieldUnused(NODE_FIELDS.find((f) => f.key === 'damCapacityM3')!, { pctUpstreamToDam: 1 })).toBeNull();
 	});
 });
 

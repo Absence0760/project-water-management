@@ -75,6 +75,14 @@ rows and columns don't break it.
   006 (docs/engine-audit.md N1). The workbook has no dam surface areas:
   `damAreaFullM2` is null (runs estimate 7.2 × capacity^0.77 m² and warn, N2),
   `damAreaExponent` 0.7 and `damSeepagePerDay` 0, with one `note:`.
+  **Upstream inflow above dam %** is stored as 1 − the workbook's value, with
+  a `note:`: b023's formula sends that share past the dam, not into it, and
+  the values were entered against the formula, so this keeps what the
+  workbook ran (a b023 100 % is an off-channel dam, 0 % here). A workbook
+  carrying the defined name `zFarmSpec_UpstrInflowIntoDam` (the fixed
+  workbooks, whose formula sends the share into the dam) imports its values
+  as entered, with a different `note:` (docs/model.md §3 Q1). Everything below
+  reads the stored share (the share into the dam).
   b023 has no river abstraction, so a unit that pumps straight from the river
   is entered as a "dummy dam". A farm whose dam takes 100 % of the upstream
   inflow and either is a pool (under 1 % of a day of its diversion capacity,
@@ -324,12 +332,13 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | [Network]: 9 farms and 2 gauges, a three-way confluence (Echo) and a two-way one (Hotel), a gauge mid-network (Midway Gauge), one outflow (Outlet Gauge) | `read_network`, `downstreamNodeId` as the inverse of the upstream columns, gauge vs farm kind, `sortOrder` |
 | "Echo&nbsp;&nbsp;Farm" (double space) in [Network], "Echo Farm " and " Golf Farm" in [Farm demand] | `clean()` whitespace normalisation, names matched across sheets |
 | Delta Farm in [Network], not in [Farm spec] | note "missing from [Farm spec]"; zero parameters, `pctUpstreamToDam` 1, `flowShareManual` null |
+| Every [Farm spec] farm | note "Upstream inflow above dam %: … stores 100 % − the workbook's value"; the generator types b023's values (India Farm 0, Alpha 1, Hotel 0.75 …), so the stored shares are 1, 0, 0.25 … |
 | [Farm spec] method "Specific"; Charlie Farm's external fragmentation blank | `flowShareMethod: "manual"`; a blank share reads as 0 (the "Specific with no values" case) |
 | Min dam % on Bravo, Echo and Golf | note per farm, `damMinPct` 0 (Q5) |
 | Irrigation return flow 0.1–0.3 on most farms, 0 on Charlie and Foxtrot | `irrigationEfficiency` 1 − r with `lossReturnFraction` 1, or 1 and 0 (N1) |
 | 7 farms with a dam, Charlie without one (blank cells) | note "7 dam(s) have no surface area" (N2); blank capacity reads as 0 |
 | Delta Farm: missing from [Farm spec], so no dam but 100 % of the upstream inflow | `WARNING:` "probable run-of-river … it has no dam" (the no-dam case) |
-| India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow, diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
+| India Farm (below Golf): a 20 m³ dam taking 100 % of the upstream inflow (0 % in the workbook), diversion 12,960 m³/day | `WARNING:` "probable run-of-river" (the pool test); imported unchanged. Bravo and Hotel take part of the upstream inflow and aren't flagged |
 | Golf Farm total area 8.5 km² vs hi + lo 8.0 | both kept as typed (the engine warns) |
 | Foxtrot's diversion typed as the text "4320" | `num()` of a numeric string |
 | Hi/lo split 0.8/0.2, tolerance 0.0002, February 28.25 days, A-pan row, effective rain 0.7 | settings read from their named ranges |

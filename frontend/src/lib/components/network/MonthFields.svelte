@@ -23,6 +23,7 @@
 		blank = 0,
 		grouped = true,
 		testid,
+		scale = 1,
 		onchange
 	}: {
 		/** The row in water-year order (Oct first); a missing month shows `blank`. */
@@ -41,6 +42,8 @@
 		/** Thousands separators on read-only fields (off for a profile factor). */
 		grouped?: boolean;
 		testid?: string;
+		/** Shown = stored × scale (River to dam: stored m³/day, shown m³/s). */
+		scale?: number;
 		onchange: (next: number[]) => void;
 	} = $props();
 
@@ -62,6 +65,7 @@
 				<NumberInput
 					label={label(m)}
 					min={0}
+					{scale}
 					grouped={grouped && readonly}
 					disabled={readonly}
 					value={values?.[i] ?? blank}

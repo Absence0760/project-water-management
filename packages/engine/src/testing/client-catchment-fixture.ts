@@ -93,8 +93,10 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 
 	// Q1 (engine ≥ 0.9.0): the engine puts pctUpstreamToDam of the upstream
 	// inflow INTO the dam, as the column's label says; the workbook's formula
-	// put it below the dam. Replay the workbook by feeding 1 − pct, so the
-	// comparison below still tests the port, not the corrected meaning.
+	// put it below the dam. The importer stores 1 − the workbook's value
+	// (2026-10-02, docs/model.md §3 Q1), so the replay feeds it unchanged.
+	// A dam on the river (100 % after that) takes no River to dam (engine ≥
+	// 1.68.0); the client workbooks' on-river dams have none entered.
 	// N3 (engine ≥ 0.14.0): effective rain carries over through a soil-water
 	// store; the workbook has none. The replay switches it off (0 mm), which
 	// is bit for bit the workbook's rule; the N3 test below runs it on.
@@ -125,7 +127,7 @@ export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixtu
 		},
 		model: {
 			...project.model,
-			nodes: project.model.nodes.map((n) => ({ ...n, pctUpstreamToDam: 1 - n.pctUpstreamToDam, damMinPct: 0, damAreaFullM2: 0, damSeepagePerDay: 0 }))
+			nodes: project.model.nodes.map((n) => ({ ...n, damMinPct: 0, damAreaFullM2: 0, damSeepagePerDay: 0 }))
 		},
 		series: Object.fromEntries(project.series.map((s) => [s.kind, { startDate: s.startDate, values: s.values }]))
 	};

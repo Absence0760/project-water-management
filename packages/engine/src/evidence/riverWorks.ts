@@ -9,6 +9,7 @@ import type { OpClass } from '../scenario/overrides';
 import type { ScenarioOp } from '../scenario/ops';
 import { toEpochDay } from '../calendar';
 import { damPresence } from '../network/development';
+import { onRiverDam } from '../network/supply';
 import { transferRatesM3s } from '../network/transferRates';
 
 /**
@@ -95,7 +96,8 @@ export function nodeRiverWorks(n: NetworkNode, model: Pick<ProjectModel, 'cropAr
 	if (RIVER_PUMP_RULES.has(rule) && n.pumpCapacityM3Day !== 0 && demand)
 		out.push({ kind: 'pump', id: n.id, name: n.name, bounded: size(n.pumpCapacityM3Day), protectsEwr: handsOffCovers(n, null) || passInflowCovers(n) });
 	const divertOn = Array.isArray(n.divertMonthlyM3Day) ? monthsOn(n.divertMonthlyM3Day) : null;
-	const divert = divertOn ? divertOn.some(Boolean) : above0(n.divertCapacityM3Day);
+	// A dam on the river takes no River to dam (engine ≥ 1.68.0, network/supply.ts onRiverDam).
+	const divert = !onRiverDam(n) && (divertOn ? divertOn.some(Boolean) : above0(n.divertCapacityM3Day));
 	// Run of river zeroes the split and River to dam (simulate.ts); any other rule keeps them.
 	const split = rule !== 'runOfRiver';
 	if (split && dam.ever && divert) out.push({ kind: 'divert', id: n.id, name: n.name, bounded: true, protectsEwr: handsOffCovers(n, divertOn) });

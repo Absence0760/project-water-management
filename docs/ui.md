@@ -2306,20 +2306,31 @@ note's link on the Summary, `notes.ts` `noteHref`).
   `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
   button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
   a profile) is in the `.ts` neighbour, unit-tested.
+- **River to dam in m³/s, for an off-channel dam** (2026-10-02). River to
+  dam is entered in m³/s, as b023 enters it (0.2 m³/s is 17 280 m³ a day),
+  in the node table, the one-node form, its months, the paste and the
+  scenario editor; it is stored, sent and exported in m³/day
+  (`divertCapacityM3Day`; `fields.ts` `scale`, `fieldScale`). On a dam on
+  the river (**Upstream inflow to dam** 100 %) it is read-only, with the hint
+  "Not available: the dam is on the river …" (`fieldUnused`), the by-month
+  box is disabled, a paste leaves it out ("a dam on the river"), and the run
+  doesn't use it (engine ≥ 1.68.0, model.md §2.7 row O). Setting Upstream
+  inflow to dam below 100 % makes it available again; the stored value is
+  kept.
 - **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
   one-node form, farms, under **River to dam** in Routing: **Set River to dam
-  by month** opens twelve m³/day fields (started from the one value, with
+  by month** opens twelve m³/s fields (started from the one value, with
   **Use October’s capacity for every month**); while it is on, the one River
   to dam field is read-only with the hint "Not used: River to dam is set by
-  month below", and a line gives the capacity ("up to 800 m³/day", or
-  "between 800 and 12 345.5 m³/day by month") and names the months it takes
+  month below", and a line gives the capacity ("up to 0.01 m³/s", or
+  "between 0.01 and 0.2 m³/s by month") and names the months it takes
   nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
   dam's own hint says what it leaves in the river: senior users' demand, and
   the hands-off flow under Supply when there is one. The months are edited
   only here: on a farm set by month the node table's River to dam cell
   (`NetworkTab.svelte`, desktop and phone card) has no input for the one
   value the run ignores, but the months' range, read-only ("by month:
-  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  0–0.01", in m³/s, `divertMonthsCell`), which in the catchment's Node table grid links
   to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
   tables it is plain text. A farm with the one value edits it in the table as
   before.
@@ -3252,7 +3263,8 @@ the link goes to that tab with it open (`movedGridHref`;
   value as it is; a value that isn't a number, a negative, or a % above 100
   stops it with the row and column. The node table leaves out values for a
   field the node doesn't use (a gauge's dam, any field of an other water
-  user, River to dam set by month) with a note (`network/nodePaste.ts`); the
+  user, River to dam set by month or on a dam on the river) with a note, and
+  reads River to dam in m³/s (`network/nodePaste.ts`); the
   planted-areas grid reads hectares, and 0 clears an area
   (`crops/areaPaste.ts`). The **Preview** lists every value that would
   change (row, column, now, pasted) and counts those already equal;

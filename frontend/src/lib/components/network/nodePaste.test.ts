@@ -46,6 +46,17 @@ describe('planNodePaste', () => {
 		expect(p.notes.at(-1)).toContain('Upper farm river to dam (set by month)');
 	});
 
+	it('reads River to dam in m³/s and stores m³/day, and leaves it out on a dam on the river (engine 1.68.0)', () => {
+		const nodes = sample();
+		nodes[2]!.pctUpstreamToDam = 0; // Lower farm's dam is off the river; Upper farm's (a new node's 100 %) is on it
+		const p = plan(planNodePaste('Name\tRiver to dam (m³/s)\nUpper farm\t0.2\nLower farm\t0.2', nodes));
+		expect(p.changes).toEqual([{ rowId: 'l', rowName: 'Lower farm', key: 'divertCapacityM3Day', column: 'River to dam', unit: 'm³/s', from: 0, to: 0.2 }]);
+		expect(p.notes.at(-1)).toContain('Upper farm river to dam (a dam on the river)');
+		applyNodePaste(nodes, p);
+		expect(nodes[2]!.divertCapacityM3Day).toBe(17_280);
+		expect(nodeTableCsv(nodes).split('\n')[0]).toContain('River to dam (m³/s)');
+	});
+
 	it('fills from the cell pasted into when the block has no names or headings', () => {
 		const nodes = sample();
 		const area = TABLE_FIELDS.findIndex((f) => f.key === 'areaKm2');

@@ -138,7 +138,8 @@ export function syntheticB023(opts: SyntheticOptions = {}): WorkbookBuilder {
 	b.set('Farm spec', 'M27', 'Area').set('Farm spec', 'I27', 0.8).set('Farm spec', 'J27', 0.2);
 	b.col('Farm spec', 'M4', ['Area', 'Hi/Lo', 'Specific']).set('Farm spec', 'M24', 0.0002);
 	b.col('Farm spec', 'L30', [0.5, 0.5]).col('Farm spec', 'M30', [0.4, 0.6]);
-	b.col('Farm spec', 'N30', [1, 0.5]).col('Farm spec', 'O30', [0.2, 0.3]);
+	// Upstream inflow above dam % as b023 holds it (the share past the dam): Farm A's 0 imports as 100 % into it.
+	b.col('Farm spec', 'N30', [0, 0.5]).col('Farm spec', 'O30', [0.2, 0.3]);
 	b.col('Farm spec', 'P30', [100000, 0]).col('Farm spec', 'Q30', [0.5, 0]);
 	b.col('Farm spec', 'R30', [0.3, 0]).col('Farm spec', 'S30', [0.2, 0]).col('Farm spec', 'T30', [1000, 0]);
 	b.name('zFarmSpec_FarmNameLst', `${fs}!$D$29:$D$33`)
