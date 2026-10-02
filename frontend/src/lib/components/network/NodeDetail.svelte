@@ -91,6 +91,8 @@
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
 	/** River to dam set by month (engine ≥ 1.32.0): the one value is then inert. */
 	const byMonth = $derived(node.divertMonthlyM3Day != null);
+	/** River to dam's one value, read-only while it is set by month. */
+	const divertByMonth = (f: NodeField) => f.key === 'divertCapacityM3Day' && byMonth; // gitleaks:allow (a field name, not a secret)
 </script>
 
 <div class="detail">
@@ -189,12 +191,12 @@
 							nullable={f.nullable}
 							grouped={!isPct(f)}
 							placeholder={f.nullable ? 'not set' : undefined}
-							disabled={readonly || unused !== null || (f.key === 'divertCapacityM3Day' && byMonth)}
+							disabled={readonly || unused !== null || divertByMonth(f)}
 							aria-describedby="{id(f.key)}-h"
 							value={node[f.key] ?? null}
 							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
-						<span class="hint" id="{id(f.key)}-h">{unused ?? (f.key === 'divertCapacityM3Day' && byMonth ? 'Not used: River to dam is set by month below.' : f.help)}</span>
+						<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
 						<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
 					</div>
 				{/each}

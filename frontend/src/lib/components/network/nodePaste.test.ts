@@ -50,7 +50,7 @@ describe('planNodePaste', () => {
 		const nodes = sample();
 		nodes[2]!.pctUpstreamToDam = 0; // Lower farm's dam is off the river; Upper farm's (a new node's 100 %) is on it
 		const p = plan(planNodePaste('Name\tRiver to dam (m³/s)\nUpper farm\t0.2\nLower farm\t0.2', nodes));
-		expect(p.changes).toEqual([{ rowId: 'l', rowName: 'Lower farm', key: 'divertCapacityM3Day', column: 'River to dam', unit: 'm³/s', from: 0, to: 0.2 }]);
+		expect(p.changes).toEqual([{ rowId: 'l', rowName: 'Lower farm', key: 'divertCapacityM3Day', column: 'River to dam', unit: 'm³/s', from: 0, to: 0.2 }]); // gitleaks:allow (a field name, not a secret)
 		expect(p.notes.at(-1)).toContain('Upper farm river to dam (a dam on the river)');
 		applyNodePaste(nodes, p);
 		expect(nodes[2]!.divertCapacityM3Day).toBe(17_280);

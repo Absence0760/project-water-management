@@ -119,7 +119,7 @@ describe('isVolume', () => {
 });
 
 describe('River to dam in m³/s', () => {
-	const divert = NODE_FIELDS.find((f) => f.key === 'divertCapacityM3Day')!;
+	const divert = NODE_FIELDS.find((f) => f.key === 'divertCapacityM3Day')!; // gitleaks:allow (a field name, not a secret)
 
 	it('is entered in m³/s and stored in m³/day: 0.2 m³/s is 17 280 m³ a day', () => {
 		expect(divert.unit).toBe('m³/s');

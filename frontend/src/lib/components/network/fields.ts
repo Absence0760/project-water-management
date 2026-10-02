@@ -305,7 +305,7 @@ export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
  * river (engine ≥ 1.68.0, onRiverDam), which shows the field read-only.
  */
 export function fieldUnused(f: NodeField, n: Pick<NetworkNode, 'pctUpstreamToDam'>): string | null {
-	if (f.key === 'divertCapacityM3Day' && onRiverDam(n))
+	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) // gitleaks:allow (a field name, not a secret)
 		return 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.';
 	return null;
 }
