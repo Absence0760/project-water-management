@@ -93,12 +93,28 @@ FONTS_REF="${TILES_FONTS_REF:-028c18f713baecad011301ff7a69acc39bcc2ae7}"
 FONT_STACKS=("Noto Sans Regular" "Noto Sans Medium" "Noto Sans Italic")
 FONTS="$CACHE/fonts"
 
+# Every argument that reaches a command line is checked first (no flags or
+# shell words smuggled in through the environment), and every download is
+# HTTPS only, redirects included.
+die() { echo "$*" >&2; exit 2; }
+NUM='-?[0-9]+(\.[0-9]+)?'
+[[ "$BBOX" =~ ^$NUM,$NUM,$NUM,$NUM$ ]] || die "TILES_BBOX must be west,south,east,north in degrees (got: $BBOX)"
+[[ "$MAXZOOM" =~ ^[0-9]{1,2}$ ]] || die "TILES_MAXZOOM must be a zoom (got: $MAXZOOM)"
+[[ "$TERRAIN_MAXZOOM" =~ ^[0-9]{1,2}$ ]] || die "TERRAIN_MAXZOOM must be a zoom (got: $TERRAIN_MAXZOOM)"
+[[ "$RIVERS_MIN_ORDER" =~ ^[0-9]{1,2}$ ]] || die "RIVERS_MIN_ORDER must be a Strahler order (got: $RIVERS_MIN_ORDER)"
+[[ "$FONTS_REF" =~ ^[0-9a-f]{40}$ ]] || die "TILES_FONTS_REF must be a full commit SHA (got: $FONTS_REF)"
+for src in "$TERRAIN_SRC" "$WATER_SRC" "$RIVERS_SRC"; do
+	[[ "$src" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?/[^[:space:]]*$ ]] || die "sources must be https:// URLs (got: $src)"
+done
+[[ -z "${TILES_BUILD:-}" || "$TILES_BUILD" =~ ^[0-9]{8}$ ]] || die "TILES_BUILD must be a build date, YYYYMMDD (got: $TILES_BUILD)"
+fetch_https() { curl --proto '=https' --proto-redir '=https' "$@"; }
+
 fetch_fonts() {
 	mkdir -p "$CACHE"
 	local tgz="$CACHE/basemaps-assets-$FONTS_REF.tar.gz" top="basemaps-assets-$FONTS_REF"
 	if [ ! -f "$tgz" ]; then
 		echo "Downloading the label fonts (protomaps/basemaps-assets@${FONTS_REF:0:12}) …"
-		curl -fsSL -o "$tgz.part" "https://codeload.github.com/protomaps/basemaps-assets/tar.gz/$FONTS_REF"
+		fetch_https -fsSL -o "$tgz.part" "https://codeload.github.com/protomaps/basemaps-assets/tar.gz/$FONTS_REF"
 		mv "$tgz.part" "$tgz"
 	fi
 	rm -rf "$FONTS" && mkdir -p "$FONTS"
@@ -169,17 +185,18 @@ case "${1:-}" in
 		mkdir -p "$CACHE"
 		if [ ! -f "$RIVERS_ZIP" ]; then
 			echo "Downloading $RIVERS_SRC (about 110 MB) …"
-			curl -fSL -o "$RIVERS_ZIP.part" "$RIVERS_SRC"
+			fetch_https -fSL -o "$RIVERS_ZIP.part" "$RIVERS_SRC"
 			mv "$RIVERS_ZIP.part" "$RIVERS_ZIP"
 		fi
 		rm -rf "$CACHE/rivers-shp" && mkdir -p "$CACHE/rivers-shp"
 		unzip -q -o "$RIVERS_ZIP" -d "$CACHE/rivers-shp"
 		shp=$(find "$CACHE/rivers-shp" -name '*.shp' | head -n 1)
 		[ -n "$shp" ] || { echo "No shapefile in $RIVERS_ZIP." >&2; exit 1; }
+		IFS=, read -r west south east north <<<"$BBOX"
 		echo "Cutting $(basename "$shp") to $BBOX …"
 		rm -f "$RIVERS_FILE"
 		# -spat keeps every reach that meets the bbox (whole, not clipped); five decimals is about 1 m.
-		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat ${BBOX//,/ } -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS \
+		ogr2ogr -f GeoJSON -t_srs EPSG:4326 -spat "$west" "$south" "$east" "$north" -select HYRIV_ID,ORD_STRA,UPLAND_SKM,LENGTH_KM,DIS_AV_CMS \
 			-lco COORDINATE_PRECISION=5 "$RIVERS_FILE" "$shp"
 		du -h "$RIVERS_FILE"
 		(cd "$ROOT/backend" && NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsx scripts/import-rivers.ts "$RIVERS_FILE" --dataset HydroRIVERS-v10 --source "$RIVERS_SOURCE" --min-order "$RIVERS_MIN_ORDER")
@@ -204,7 +221,7 @@ case "${1:-}" in
 				name="occurrence_$([ "$lon" -lt 0 ] && echo "$((-lon))W" || echo "${lon}E")_$([ "$lat" -le 0 ] && echo "$((-lat))S" || echo "${lat}N")_v1_5_2024.tif"
 				if [ ! -f "$CACHE/gsw/$name" ]; then
 					echo "Downloading $name …"
-					if curl -fsSL -o "$CACHE/gsw/$name.part" "$WATER_SRC/$name"; then mv "$CACHE/gsw/$name.part" "$CACHE/gsw/$name"; else rm -f "$CACHE/gsw/$name.part"; echo "  none there (open sea): skipped"; continue; fi
+					if fetch_https -fsSL -o "$CACHE/gsw/$name.part" "$WATER_SRC/$name"; then mv "$CACHE/gsw/$name.part" "$CACHE/gsw/$name"; else rm -f "$CACHE/gsw/$name.part"; echo "  none there (open sea): skipped"; continue; fi
 				fi
 				tiles+=("$name")
 			done
