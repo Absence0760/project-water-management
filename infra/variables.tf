@@ -380,6 +380,12 @@ variable "delineation_dem" {
   default     = false
 }
 
+variable "dam_trace_water" {
+  description = "Tracing a dam in production (docs/maps.md § Assisted drawing, docs/deployment.md § Map tiles): true sets the API's WATER_URL to s3://<tiles bucket>/tiles/water.pmtiles and lets its role read that one key. Turn it on once water.pmtiles (JRC Global Surface Water, `pnpm dev:tiles:water`) is uploaded. false (the default): no Trace a dam."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_reserved_concurrency" {
   description = <<-EOT
     Max concurrent API Lambda executions. Bounds worst-case spend during an
@@ -400,7 +406,7 @@ variable "lambda_reserved_concurrency" {
 }
 
 variable "migrate_memory_mb" {
-  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches or land-cover cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
+  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches, land-cover cells or evaporation cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
   type        = number
   default     = 3008
   validation {

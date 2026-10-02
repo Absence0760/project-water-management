@@ -18,7 +18,8 @@
 //     LOAD_KEY, LOAD_SHA256, LOAD_DATASET, LOAD_SOURCE and LOAD_MIN_ORDER
 //     (the workflow's inputs) must have the shapes the migrate Lambda accepts
 //     (backend/src/geo/referenceLoad.ts parseLoadRequest checks them again),
-//     the kind must be one the Sources table allows (land-cover, rivers), and
+//     the kind must be one the Sources table allows (land-cover,
+//     evaporation, rivers), and
 //     rivers need HydroSHEDS' Exhibit B statement in the app's legal text
 //     first (the HydroSHEDS licence, § 2.2).
 //
@@ -40,8 +41,8 @@ export const REQUIRED_TEXT = {
 	rivers: 'WWF has not evaluated the data as altered and incorporated within'
 };
 
-/** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones). */
-export const LOADABLE = ['land-cover', 'rivers'];
+/** The kinds a production load may name (backend/src/geo/referenceLoad.ts REFERENCE_KINDS, the allowed ones; referenceLoad.test.ts keeps the two in step). */
+export const LOADABLE = ['land-cover', 'evaporation', 'rivers'];
 
 const ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
 const GLYPHS = '/tiles/fonts/{fontstack}/{range}.pbf';

@@ -254,6 +254,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');
 		expect(eventLine(ev('map.feature_changed', { kind: 'catchment_boundary', name: 'Upper', moved: false }))).toBe('Changed the catchment boundary “Upper” on the map');
 		expect(eventLine(ev('map.feature_deleted', { kind: 'river', name: 'Spruit' }))).toBe('Deleted a river “Spruit” from the map');
+		expect(eventLine(ev('map.feature_split', { kind: 'farm_parcel', name: 'Hill farm', into: 'farm_parcel' }))).toBe('Split a farm parcel “Hill farm” in two');
+		expect(eventLine(ev('map.feature_split', { kind: 'catchment_boundary', name: 'Valley', into: 'other' }))).toBe(
+			'Split the catchment boundary “Valley” into two areas'
+		);
+		expect(eventLine(ev('map.feature_created', { kind: 'dam', name: 'Bosrand', from: 'dam_trace', dataset: 'Synthetic water', minOccurrence: 25, edited: true }))).toBe(
+			'Traced a dam “Bosrand” from Synthetic water (water in at least 25 % of the observations, then adjusted)'
+		);
 		expect(eventLine(ev('map.delineation_proposed', { from: 'dam_wall', areaKm2: 340.7, dataset: 'Synthetic DEM 1' }))).toBe('Delineated a catchment of 340.7 km² from a dam wall (Synthetic DEM 1)');
 		expect(eventLine(ev('map.delineation_accepted', { as: 'catchment_boundary', name: 'Valley' }))).toBe('Accepted a delineated catchment as the catchment boundary “Valley”');
 		expect(eventLine(ev('map.delineation_rejected', {}))).toBe('Rejected a delineated catchment');

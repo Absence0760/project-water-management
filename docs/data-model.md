@@ -1680,7 +1680,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   row_idx, col_idx)`, also a polygon's range lookup) and `monthly_mm` (12
   mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
   are stored. Global, loaded by the operator as the schema owner (`pnpm
-  import:evaporation`), readable by anyone signed in, written by no app role.
+  import:evaporation`; in production `load-reference.yml` through the
+  migrate Lambda, deployment.md § Reference datasets), readable by anyone signed in, written by no app role.
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the

@@ -192,6 +192,11 @@ resource "aws_lambda_function" "backend" {
       # DEM in the tiles bucket, read by ranged GetObject; empty turns
       # delineation off (the default, until delineation_dem is set).
       DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
+
+      # Tracing a dam (map_data.tf, docs/maps.md § Assisted drawing): the
+      # water occurrence in the tiles bucket; empty turns it off (the
+      # default, until dam_trace_water is set).
+      WATER_URL = var.dam_trace_water ? "s3://${aws_s3_bucket.tiles.bucket}/${local.water_key}" : ""
     }
   }
 
@@ -208,6 +213,7 @@ resource "aws_lambda_function" "backend" {
     aws_vpc_endpoint.s3,
     aws_iam_role_policy.api_pack_bundles,
     aws_iam_role_policy.api_dem,
+    aws_iam_role_policy.api_water,
     # A rotation switches the API only once the key group trusts the new key.
     aws_cloudfront_key_group.report_downloads,
   ]

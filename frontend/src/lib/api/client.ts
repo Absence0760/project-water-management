@@ -161,6 +161,10 @@ import type {
 	DamProposals,
 	DelineationProposal,
 	DelineationState,
+	DamTraceProposal,
+	DamTraceState,
+	MinOccurrence,
+	MapGeometry,
 	StartProposal,
 	StartRole,
 	StartState,
@@ -1054,6 +1058,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			update: (id: string, fid: string, body: MapFeatureInput) =>
 				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
 			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
+			/** Cut a polygon in two along a drawn line (issue #326 C2): both parts saved together; the boundary stays whole and its parts become `as`. */
+			split: (id: string, fid: string, body: { parts: [MapGeometry, MapGeometry]; names?: [string, string]; as?: 'farm_parcel' | 'other' }) =>
+				request<{ features: [MapFeature, MapFeature] }>('POST', `${p(id)}/map/features/${enc(fid)}/split`, body).then((r) => r.features),
+			/** Whether tracing a dam is on (issue #326 C2). */
+			damTraceState: (id: string) => request<DamTraceState>('GET', `${p(id)}/map/dam-trace`),
+			/** The outline of the water round a point, proposed; nothing saved. 422: refused, `details.reason` says why. */
+			traceDam: (id: string, body: { lon: number; lat: number; minOccurrence?: MinOccurrence }) =>
+				request<{ trace: DamTraceProposal }>('POST', `${p(id)}/map/dam-trace`, body).then((r) => r.trace),
 			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
 			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
 			/**

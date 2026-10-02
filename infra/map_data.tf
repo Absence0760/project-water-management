@@ -13,7 +13,11 @@
 #     byte ranges of an archive, glyph ranges and the licence (the cost
 #     bound). The API reads the DEM from here too, for delineation, by ranged
 #     GetObject through the S3 interface endpoint (packs.tf), when
-#     delineation_dem is on: one key, nothing else.
+#     delineation_dem is on: one key, nothing else. And the water occurrence
+#     tracing a dam reads (tiles/water.pmtiles, #326 C2), when dam_trace_water
+#     is on: one more key. The browser never asks for it, but it sits under
+#     tiles/ like the rest, so /tiles/* serves it by bounded ranges too (JRC
+#     Global Surface Water allows that: docs/maps.md § Sources).
 #   - reference: the operator's pre-processed reference datasets
 #     (reference/<kind>/…), private. The migrate Lambda reads one object per
 #     load (lambda-migrate.ts, geo/referenceLoad.ts) and writes it into RDS
@@ -37,6 +41,8 @@
 locals {
   # The DEM delineation reads (delineation/dem.ts), and the relief the browser draws.
   dem_key = "tiles/terrain.pmtiles"
+  # The water occurrence tracing a dam reads (delineation/damTrace.ts): JRC GSW as Terrarium tiles.
+  water_key = "tiles/water.pmtiles"
 }
 
 # ============================================================================
@@ -163,6 +169,29 @@ resource "aws_iam_role_policy" "api_dem" {
   name   = "delineation-dem"
   role   = aws_iam_role.lambda.id
   policy = data.aws_iam_policy_document.api_dem.json
+}
+
+# --- Tracing a dam reads the water occurrence (issue #326 C2) ----------------------
+#
+# With dam_trace_water on, the API's WATER_URL is s3://<tiles>/tiles/water.pmtiles
+# (lambda.tf) and its role may GetObject that one key. A trace reads a handful
+# of small tiles (at most a 512-cell window) in milliseconds, so it needs no
+# larger Lambda. Off (the default), WATER_URL is empty, the Map offers no
+# Trace a dam, and the role holds nothing here.
+
+data "aws_iam_policy_document" "api_water" {
+  statement {
+    sid       = "ReadDamTraceWater"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tiles.arn}/${local.water_key}"]
+  }
+}
+
+resource "aws_iam_role_policy" "api_water" {
+  count  = var.dam_trace_water ? 1 : 0
+  name   = "dam-trace-water"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.api_water.json
 }
 
 # ============================================================================
