@@ -658,6 +658,14 @@ setting, so run comparison reads it as legacy.
     factor), spread over the month's days the same way. `source` says where
     the values came from (required, at most 600 characters). The pan
     coefficient is not used.
+    The row can be proposed from the map (issue #326 B-evap,
+    [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
+    a reference-ET grid's FAO-56 ET₀ averaged over the catchment boundary
+    goes in **as it stands**, factor 1, its `source` naming the dataset.
+    Reference ET is never written into `apanMm`, and A-pan never into the
+    PE row: converting between them is the pan coefficient's job (ET₀ = Kp ×
+    Epan), which stays the modeller's. The engine is unchanged by this; it
+    only ever sees the accepted values.
 
   Irrigation demand (§2.3) and dam evaporation (§2.7a) always read A-pan
   (`apanMm`, and the daily A-pan series where it has a value, §2.3a),

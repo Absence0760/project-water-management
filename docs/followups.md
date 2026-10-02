@@ -3590,32 +3590,40 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Needs the zip-bomb test and the "Lo projection within 0.5 % of a
       reference area" acceptance test. Trigger: a client holding only
       shapefiles.
-- [ ] **Production basemap**: the PMTiles file in S3 under `tiles/`, a
-      same-origin CloudFront behaviour `/tiles/*` (Range and `ETag`
-      forwarded, long cache), `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles`
-      in the web release, and `infra/scripts/check-csp.mjs` run on it. Until
-      then production draws the plain background. Decide D7 (maxzoom, by the
-      measured extract size) first. With it, the labels' glyphs (#326 A6):
-      the `fonts/` tree from `bin/tiles-dev.sh fonts` under `tiles/fonts/`,
-      and `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`
-      (maps.md § Labels); no CSP change. And the relief: `terrain.pmtiles`
-      from `bin/tiles-dev.sh terrain` under `tiles/`,
-      `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`, and the Copernicus
-      licence's liability sentence ("The organisations in charge of the
-      Copernicus programme by law or by delegation do not incur any
-      liability for any use of the Copernicus WorldDEM-30", Art. 6(c)) in
-      the app's legal notice (maps.md § Relief): done 2026-10-02, on the
-      Data sources and credits page (`/data-sources`). Delineation reads the
-      same file from the API (#326 B-delineate, maps.md § Delineation): set
-      `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles` on the API Lambda and
-      grant its role `s3:GetObject` on that one key (it reaches S3 through
-      the VPC's gateway endpoint); until then production offers no
-      Delineate. The Art. 6(c) sentence covers the delineated polygons too.
-- [ ] **Loading the quaternary dataset in production**: the loader runs as
-      the schema owner from a workstation; the database is in a private VPC.
-      Add a one-off path (a migrate-Lambda-style invocation, or a job reading
-      the operator's file from the private bucket). Blocked on the WR2012
-      licence decision below.
+- [x] **Production basemap** (2026-10-02, PR feat/infra-map-data): the
+      tiles bucket and the same-origin `/tiles/*` behaviour
+      (`infra/map_data.tf`, `s3_cloudfront.tf`: cached, its own OAC, the
+      `tiles_range` function letting an archive through only by one range of
+      at most 2 MiB, the cost bound), the three `PUBLIC_TILES…` variables
+      through `deploy-frontend.yml` behind a gate that takes only same-origin
+      `/tiles/` paths, and delineation's DEM (`delineation_dem`: `DEM_URL` on
+      the API and its role's read of `tiles/terrain.pmtiles`, refused on an
+      API Lambda under 1 024 MB or 25 s). CSP unchanged. What's left is the
+      operator's (uploading, the variables, the tfvars:
+      [deployment.md § Map tiles](./deployment.md#map-tiles)) and the item
+      below.
+- [ ] **The licence sentences the map's production data waits for**
+      (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
+      liability sentence (Art. 6(c)) and HydroSHEDS' Exhibit B statement are
+      done (2026-10-02, on the public Data sources and credits page,
+      `/data-sources`). Still open: the terms' end-user protections for
+      HydroRIVERS (no stand-alone redistribution, no reverse engineering;
+      legal-status.md § Other open items) before the river network is loaded. `scripts/release/map-data-gates.mjs`
+      refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
+      in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
+      `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
+      the operator's to do only after the Art. 6(c) sentence is live
+      (Terraform can't see the frontend, and the upload is outside it). Trigger: the first deployment that wants the relief,
+      Delineate or the River network layer.
+- [x] **Loading the quaternary dataset in production** (2026-10-02, PR
+      feat/infra-map-data): the production path for every reference dataset
+      is built (the migrate Lambda reads one file from the private reference
+      bucket, hash-checked, through `load-reference.yml` in the `production`
+      environment; [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+      It refuses `quaternaries` by name while the WR2012 decision below is
+      open; on a yes, mark the Sources rows allowed and add the kind to
+      `REFERENCE_KINDS` (`geo/referenceLoad.ts`, with its parser) and
+      `LOADABLE` (`scripts/release/map-data-gates.mjs`).
 - [ ] **Decision: WR2012's licence terms** (operator; maps.md § Quaternary
       dataset, roadmap Step 4 D5). Until the WRC confirms redistribution,
       WR2012 values are loaded only from the operator's own registered
@@ -3627,8 +3635,10 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Services in writing whether station metadata may be reused in a
       commercial service; until then the nearest-gauge proposal reads only
       the synthetic list. On a yes: record it in the sources table, load the
-      catalogue with `pnpm import:gauge-stations`, and add it to the
-      production loading path above (same gap as the quaternaries).
+      catalogue with `pnpm import:gauge-stations`, and allow the
+      `gauge-stations` kind on the production path (`geo/referenceLoad.ts`,
+      `scripts/release/map-data-gates.mjs`, the workflow's choices), which
+      refuses it until then.
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
       on two conditions to meet before a deployment serves it. The
@@ -3639,9 +3649,9 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       protections the agreement asks for (§ 2.1.2: no stand-alone
       redistribution of the data, no reverse engineering), a material Terms
       change for the operator (legal-status.md § Other open items). Then load it
-      through the production loading path above (the same gap as the
-      quaternaries). Trigger: the first deployment that wants the River
-      network layer.
+      with `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate
+      refuses the load until the Exhibit B statement is in the legal text).
+      Trigger: the first deployment that wants the River network layer.
 - [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
       Sources, issue #345, D-B). Its page answers 403 outside South Africa
       and DWS's published wording is non-commercial, so HydroRIVERS is used.
@@ -3701,19 +3711,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job
       kind on the worker (300 s) with a larger window cap, the same code.
       Trigger: a client asking to delineate a large river's catchment.
-- [ ] **Loading the register of dams in production**: the same missing path
-      as the quaternary dataset above (the loader runs as the schema owner
-      from a workstation). Do both together, once either licence allows.
-- [ ] **Loading the land-cover grid in production** (issue #326
-      B-landcover; maps.md § The land-cover grid): ESA WorldCover is
-      allowed (CC BY 4.0), so this is the first map dataset with no licence
-      gate, but it has the same missing path into the private database as
-      the quaternaries (the loader reads tiles and writes as the schema owner
-      from a workstation). Durable fix: one operator path for every
-      reference dataset (a migrate-Lambda-style one-off reading the
-      operator's pre-summarised file from the private bucket), built once
-      for all four. Trigger: the first client deployment that should propose
-      planted areas. Show the WorldCover attribution with any figure served.
+- [x] **Loading the register of dams in production** (2026-10-02, PR
+      feat/infra-map-data): the reference-dataset path is built and refuses
+      `dam-register` while the register's licence decision above is open; on
+      a yes, allow the kind as for the quaternaries.
+- [x] **Loading the land-cover grid in production** (2026-10-02, PR
+      feat/infra-map-data): `pnpm import:land-cover … --out <file>.json.gz`
+      pre-summarises the WorldCover tiles on the operator's machine, and
+      `load-reference.yml` (kind `land-cover`) loads that file into RDS
+      through the migrate Lambda: one operator path for every reference
+      dataset, the licence-blocked kinds refused by name
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+      Show the WorldCover attribution with any figure served.
 - [ ] **Decision: SANLC's licence** (operator; maps.md § Sources, issue
       #326 B-landcover, decision D-B). South African National Land Cover
       would give crop classes WorldCover lacks (centre pivots, orchards,
@@ -3728,6 +3737,39 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       proposals read WorldCover or the synthetic grid. Trigger: a
       hydrologist asking which crop the land cover sees, or WorldCover's
       cropland class proving too coarse in a client catchment.
+- [ ] **Loading the evaporation grid in production** (issue #326 B-evap;
+      maps.md § The evaporation grid): dPET is allowed (CC BY 4.0, from
+      ERA5-Land, also CC BY 4.0), with the same missing path into the
+      private database as the land-cover grid and the quaternaries (the
+      loader writes as the schema owner from a workstation). Same durable
+      fix as the item above: one operator path for every reference dataset,
+      fed the pre-summarised `--reduce` totals. Trigger: the first client
+      deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
+      attribution with any figure served.
+- [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
+      review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
+      `settings/EvaporationProposal.svelte` repeat the same frame (heading,
+      live notice, the `aria-busy`/`data-ready` body, error with Try again,
+      no-dataset alert, synthetic-data warning, Source and method). Third
+      caller, so extract a shell taking a body snippet, after pinning each
+      panel's rendered states in its e2e spec (CLAUDE.md: pin, then fold).
+      The evaporation panel's focus-to-notice after Use is the pattern the
+      other two should take with it. Trigger: the next map proposal panel,
+      or the next fix that has to be made in all three.
+- [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
+      maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
+      reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam
+      evaporation still take the A-pan row typed from WR90/WR2012 or a
+      station. WR2012's evaporation (S-pan per quaternary) is blocked with
+      the rest of WR2012 (the WR2012 decision above) and is S-pan, which
+      would need the hydrologist's S-pan → A-pan factors; no open A-pan grid
+      passes D-B (Global-AI_PET v3.1 is non-commercial, WaPOR's RET is CC
+      BY-NC-SA, ERA5-Land's `pev` is known to be wrong). On a WRC yes:
+      convert WR2012's S-pan to A-pan with stated monthly factors, keyed
+      per quaternary (a quaternary-keyed variant of the grid, or
+      rasterised to it), load it as kind `apan`, and record it in the
+      sources table. Trigger: the WR2012 decision, or a hydrologist asking
+      for the A-pan row from the map.
 
 ## Crop factors (issue #54 item 1)
 
@@ -4598,7 +4640,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       `curl -sI https://<domain>/_app/missing.js` `404` (S3 NoSuchKey via the
       frontend bucket's ListBucket grant, not `403` AccessDenied);
       `curl -s 'https://<domain>/?list-type=2'` must return the app's
-      `index.html`, never a bucket listing. Plan-only tests
+      `index.html`, never a bucket listing. The map tiles (once uploaded):
+      `curl -sI https://<domain>/tiles/south-africa.pmtiles` answers `416`
+      from `tiles_range` (no whole-file read), with
+      `-H 'Range: bytes=0-16383'` `206`, and `/tiles/x.txt` `404`. Plan-only tests
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.

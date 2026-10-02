@@ -1,6 +1,6 @@
 // The share of each grid cell a polygon covers, on a regular lon/lat grid of
-// any cell size (issue #326 B-landcover; docs/maps.md § Cultivated area from
-// land cover). Pure and dependency-free.
+// any cell size (issue #326 B-landcover and B-evap; docs/maps.md § Cultivated
+// area from land cover, § Evaporation from the map). Pure and dependency-free.
 //
 // The grid is the land-cover dataset's (cropland_dataset.cell_deg): cell
 // (row, col) is the square with south-west corner (col × cell, row × cell).
@@ -51,9 +51,16 @@ export const cellAreaM2 = (west: number, south: number, cellDeg: number): number
  * be read: not a polygon, no area, or a bounding box of more than `maxCells`
  * cells (a bound on the work, checked before any clipping). With `only`,
  * cells it rejects are never clipped (a land-cover grid lists the cells
- * with cropland; the rest add nothing).
+ * with cropland; the rest add nothing). `grid` names the grid in the
+ * too-many-cells problem.
  */
-export function gridShares(g: Geometry, cellDeg: number, maxCells: number, only?: (row: number, col: number) => boolean): GridSharesResult {
+export function gridShares(
+	g: Geometry,
+	cellDeg: number,
+	maxCells: number,
+	only?: (row: number, col: number) => boolean,
+	grid = 'land-cover'
+): GridSharesResult {
 	if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') return { problem: 'not a polygon' };
 	if (!(cellDeg > 0)) return { problem: 'the grid has no cell size' };
 	const polygons = (g.type === 'Polygon' ? [g.coordinates] : g.coordinates).map((rings) => rings.map(openRing));
@@ -73,7 +80,7 @@ export function gridShares(g: Geometry, cellDeg: number, maxCells: number, only?
 	const rows = cellSpan(south, north, cellDeg);
 	const cols = cellSpan(west, east, cellDeg);
 	const n = (rows[1] - rows[0]) * (cols[1] - cols[0]);
-	if (n > maxCells) return { problem: `the polygon’s extent spans ${n.toLocaleString('en-ZA')} land-cover cells, more than the ${maxCells.toLocaleString('en-ZA')} one summary reads` };
+	if (n > maxCells) return { problem: `the polygon’s extent spans ${n.toLocaleString('en-ZA')} ${grid} cells, more than the ${maxCells.toLocaleString('en-ZA')} one summary reads` };
 	const cellArea = cellDeg * cellDeg;
 	const cells: CellShare[] = [];
 	for (let r = rows[0]; r < rows[1]; r++) {
