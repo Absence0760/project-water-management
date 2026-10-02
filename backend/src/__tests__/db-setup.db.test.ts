@@ -1,11 +1,11 @@
 // The per-file pending-job guard (db-setup.ts, pendingJobs.ts): it fails a file
 // that leaves a job pending, names what was left, and retires the leftovers;
-// it passes a file that leaves none (positive control); and it runs after the
+// the same for a pending notice email; it passes a file that leaves none (positive control); and it runs after the
 // file's own afterAll, so a file's cleanup there counts.
 import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from './helpers.js';
-import { assertNoPendingJobs, GUARD_RAN } from './pendingJobs.js';
+import { assertNothingPending, GUARD_RAN } from './pendingJobs.js';
 import { withUser } from '../db/tx.js';
 
 async function withOwnerClient<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
@@ -17,7 +17,7 @@ async function withOwnerClient<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> 
 		await client.end();
 	}
 }
-const guard = () => withOwnerClient(assertNoPendingJobs);
+const guard = () => withOwnerClient(assertNothingPending);
 
 /** A project with an insert that queues a re-run in it as its owner; `status` then moves it (as the worker would). */
 async function queued(projectName: string) {
@@ -28,7 +28,7 @@ async function queued(projectName: string) {
 		if (status === 'failed') await asOwner(`UPDATE job SET status = 'failed', attempts = 1 WHERE id = $1`, [id]);
 		return id;
 	};
-	return { pid, insert };
+	return { pid, uid: u.id, insert };
 }
 const statusOf = async (id: string) => (await asOwner('SELECT status FROM job WHERE id = $1', [id]))[0]?.status;
 
@@ -54,6 +54,21 @@ describe('the pending-job guard', () => {
 		expect(err?.message).toContain('1 × rerun (queued) in project "Guard leak"');
 		// Retired, not deleted: the next file starts with nothing to claim.
 		expect([await statusOf(a), await statusOf(b)]).toEqual(['done', 'done']);
+		await expect(guard()).resolves.toBeUndefined();
+	});
+
+	it('fails on a pending notice email, naming its queue, status and project, and settles it', async () => {
+		const { pid, uid } = await queued('Guard notice');
+		await asOwner(`INSERT INTO erratum_notice (erratum_id, project_id, user_id, run_count) VALUES ('ER-999', $1, $2, 1)`, [pid, uid]);
+		const err = await guard().then(
+			() => null,
+			(e: Error) => e
+		);
+		expect(err?.message).toContain('left pending notices');
+		expect(err?.message).toContain('1 × erratum_notice (pending) in project "Guard notice"');
+		expect(err?.message).not.toContain('pending jobs');
+		// Settled as skipped, not sent: the next file's tick mails nothing.
+		expect((await asOwner('SELECT status, reason FROM erratum_notice WHERE project_id = $1', [pid]))[0]).toEqual({ status: 'skipped', reason: 'test cleanup' });
 		await expect(guard()).resolves.toBeUndefined();
 	});
 });
