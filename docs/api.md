@@ -2961,7 +2961,7 @@ only propose.
   value afterwards: a later typed change replaces it (History keeps both).
 - Each write is in the audit log (`map.imported`, `map.feature_created`,
   `map.feature_changed`, `map.feature_deleted`: ids, kind, name, never the
-  geometry). Farmers and applicants get `403` on every route here (RLS lets
+  geometry; delineation's `map.delineation_*` in [§ Delineation](#delineation)). Farmers and applicants get `403` on every route here (RLS lets
   them read the boundary, gauges, rivers and their own farm's features, for a
   later farm view).
 

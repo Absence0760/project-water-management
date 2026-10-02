@@ -11,10 +11,11 @@
 	sheet starts at Decide.
 -->
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { api, type DelineationProposal, type DelineationState, type MapFeature } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '$lib/api/types';
-	import { CAVEATS, datasetNotice, FROM_LABEL, openProposal, proposalFacts } from './delineation';
+	import { CAVEATS, datasetNotice, FROM_LABEL, openProposal, proposalFacts, provenanceFacts } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
 
 	let {
@@ -22,6 +23,7 @@
 		projectId,
 		info,
 		at = null,
+		step = 'decide',
 		boundary,
 		onproposed,
 		onaccepted,
@@ -33,6 +35,8 @@
 		info: DelineationState;
 		/** Where the point was clicked (lon, lat), or null: typed. */
 		at?: MapPosition | null;
+		/** Where the sheet opens: asking for a point (from Delineate), or deciding the waiting proposal (Review it); with none waiting, it asks. */
+		step?: 'ask' | 'decide';
 		/** The project's catchment boundary, if it has one: accepting as the boundary then needs the tick. */
 		boundary: MapFeature | null;
 		onproposed: (p: DelineationProposal) => Promise<void> | void;
@@ -43,9 +47,22 @@
 	const uid = $props.id();
 	const formId = `${uid}-form`;
 	const pending = $derived(openProposal(info));
-	// Seeded once: a new point asks first; otherwise an open proposal is decided.
+	// Seeded once from the caller: Delineate asks, Review it decides.
 	// svelte-ignore state_referenced_locally
-	let asking = $state(!!at || !openProposal(info));
+	let asking = $state(step === 'ask' || !openProposal(info));
+	/** The body's first element: its dialog's title takes the focus when the step changes (the focused control went with the old step). */
+	let bodyEl: HTMLElement | undefined = $state();
+	async function focusTitle() {
+		await tick();
+		const h = bodyEl?.closest('dialog')?.querySelector<HTMLElement>('h2');
+		if (!h) return;
+		h.tabIndex = -1;
+		h.focus();
+	}
+	function setAsking(v: boolean) {
+		asking = v;
+		void focusTitle();
+	}
 	const deg = (v: number) => String(Math.round(v * 1e7) / 1e7);
 	// svelte-ignore state_referenced_locally
 	let latText = $state(at ? deg(at[1]) : '');
@@ -73,9 +90,9 @@
 		busy = 'propose';
 		try {
 			const r = await api.delineation.propose(projectId, { lon: lon.value, lat: lat.value, from });
-			asking = false;
 			replace = false;
 			await onproposed(r.proposal);
+			setAsking(false);
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
 		} finally {
@@ -111,6 +128,7 @@
 </script>
 
 <Dialog bind:open title={asking || !pending ? 'Delineate a catchment' : 'The delineated catchment'} side>
+	<span bind:this={bodyEl} hidden></span>
 	{#if asking || !pending}
 		<form id={formId} onsubmit={propose} novalidate data-testid="delineate-form">
 			<p class="lead">The app proposes the catchment that drains to a point on a river, from the elevation model. You decide whether to keep it.</p>
@@ -121,7 +139,7 @@
 				{/each}
 			</fieldset>
 			{#if at}
-				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point moves to the most-drained cell within about 150 m.</p>
+				<p class="at" data-testid="delineate-at">Clicked at {positionText(at)}. The point moves onto the channel nearby: the cell most water drains through.</p>
 			{/if}
 			<details class="coords" bind:open={showCoords}>
 				<summary>Enter coordinates</summary>
@@ -147,9 +165,18 @@
 			<dl class="facts">
 				{#each proposalFacts(p) as [k, v] (k)}
 					<dt>{k}</dt>
-					<dd data-testid="delineate-fact-{k.toLowerCase()}">{v}</dd>
+					<dd data-testid="delineate-fact-{k.toLowerCase().replace(/\s+/g, '-')}">{v}</dd>
 				{/each}
 			</dl>
+			<details class="how">
+				<summary>How it was made</summary>
+				<dl class="facts">
+					{#each provenanceFacts(p) as [k, v] (k)}
+						<dt>{k}</dt>
+						<dd data-testid="delineate-fact-{k.toLowerCase()}">{v}</dd>
+					{/each}
+				</dl>
+			</details>
 			<section aria-labelledby="{uid}-cav-h">
 				<h3 id="{uid}-cav-h" class="sub">Before you accept it</h3>
 				<ul class="caveats">
@@ -177,10 +204,13 @@
 
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
+		{#if asking && pending}
+			<button type="button" class="btn" onclick={() => setAsking(false)} disabled={busy === 'propose'} data-testid="delineate-back">Back to the proposal</button>
+		{/if}
 		{#if asking || !pending}
 			<button type="submit" form={formId} class="btn btn-primary" disabled={busy === 'propose'} data-testid="delineate-submit">{busy === 'propose' ? 'Delineating…' : 'Delineate'}</button>
 		{:else}
-			<button type="button" class="btn" onclick={() => (asking = true)} disabled={!!busy}>Delineate another point</button>
+			<button type="button" class="btn" onclick={() => setAsking(true)} disabled={!!busy}>Delineate another point</button>
 		{/if}
 	{/snippet}
 </Dialog>
@@ -213,6 +243,19 @@
 		gap: 0.5rem;
 		align-items: baseline;
 		min-height: 24px;
+	}
+	.radio input,
+	.tick input {
+		flex: none;
+	}
+	.how summary {
+		cursor: pointer;
+		min-height: 24px;
+		color: var(--accent);
+		font-weight: 600;
+	}
+	.how[open] summary {
+		margin-bottom: 0.5rem;
 	}
 	.field {
 		display: grid;

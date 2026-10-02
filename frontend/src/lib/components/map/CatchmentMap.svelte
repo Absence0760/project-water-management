@@ -114,7 +114,7 @@
 		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
 		onreliefError?: () => void;
 		/** A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet. */
-		proposal?: { geometry: MapGeometry; outlet: MapPosition } | null;
+		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition } | null;
 	} = $props();
 
 	let el: HTMLDivElement;
@@ -359,11 +359,11 @@
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.
-	let framedProposal: unknown = null;
+	let framedProposal: string | null = null;
 	$effect(() => {
 		const p = proposal;
-		if (status !== 'ready' || !p || p === framedProposal) return;
-		framedProposal = p;
+		if (status !== 'ready' || !p || p.id === framedProposal) return;
+		framedProposal = p.id;
 		frame(boundsOf(p.geometry), 13);
 	});
 

@@ -1,4 +1,4 @@
 {
-	"addKb": 4,
-	"why": "Delineation on the Map (issue #326 B-delineate): DelineateSheet, delineation.ts, the proposal layers in mapStyle.ts, the draw bar's delineating mode and the API client calls, all in the Map tab's chunk. Measured: total 1555 KB against 1551 on origin/main 62bf9b2a."
+	"addKb": 5,
+	"why": "Delineation on the Map (issue #326 B-delineate): DelineateSheet, delineation.ts, the proposal layers in mapStyle.ts, the draw bar's delineating mode and the API client calls, all in the Map tab's chunk. Measured: total 1556 KB against 1551 on origin/main 62bf9b2a."
 }

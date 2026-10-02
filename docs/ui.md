@@ -2555,17 +2555,22 @@ map" card) stays the schematic; this is the geography.
   (“Delineating…”). A refusal shows its sentence in the sheet ("That point
   is outside the elevation model …"). The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
-  when it arrives) and the sheet becomes **The delineated catchment**: Area,
-  Clicked, Outlet ("128 m from the click, on the channel"), Cells, Dataset
-  (with its fingerprint), Method (with its version), **Before you accept
-  it** (three caveats), then **Accept as the catchment boundary** (disabled
-  until **Replace the current boundary “…”** is ticked when there is one),
-  **Accept as an area** and **Reject**; **Delineate another point** goes back
-  to the form. Closed with a proposal open, a slim line under the header
-  says "A delineated catchment (547.19 km²) is drawn dashed on the map,
-  waiting for your decision." with **Review it**. Accepting saves the
-  feature, picks it and says "Saved Catchment above the outlet
-  (delineated), 547.19 km² on the map."; rejecting says nothing on the map
+  when it arrives) and the sheet becomes **The delineated catchment**, its
+  title taking the focus: Area, The point is, Outlet ("128 m from the
+  point, on the channel"), Cells ("33 609 cells, each about 128 m across"),
+  **How it was made** (closed: Dataset with its fingerprint, Method with its
+  version), **Before you accept it** (three caveats), then **Accept as the
+  catchment boundary** (disabled until **Replace the current boundary “…”**
+  is ticked when there is one), **Accept as an area** and **Reject**;
+  **Delineate another point** goes back to the form, and the form's **Back
+  to the proposal** returns while one waits. Delineate (or its Enter
+  coordinates) always opens the form; **Review it** and a reload with
+  `delineate=1` open the waiting proposal. Closed with a proposal open, a
+  slim line among the notices says "A delineated catchment (547.19 km²) is
+  drawn dashed on the map, waiting for your decision." with **Review it**.
+  Accepting saves the feature, picks it and says "Saved Catchment above the
+  outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
+  the map
   changed.
 - **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
   [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the

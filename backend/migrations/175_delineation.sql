@@ -12,7 +12,7 @@
 --    the project's open one, so at most one is open at a time.
 --  * RLS: viewers read a project's proposals; editors propose and decide.
 --    An accepted proposal stays on record (the feature's provenance) until
---    its project goes; superseded and rejected ones beyond the newest 20 are
+--    its project goes; superseded and rejected ones beyond the newest 50 are
 --    pruned by the route that adds one, so the table can't grow without
 --    bound (editors may delete). The accepted feature is tied by a composite foreign
 --    key (same project by construction); deleting that feature keeps the

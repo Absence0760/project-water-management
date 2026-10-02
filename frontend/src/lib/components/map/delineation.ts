@@ -19,14 +19,20 @@ export function datasetNotice(d: { label: string; attribution?: string } | null 
 
 export const FROM_LABEL: Record<DelineationProposal['from'], string> = { outlet: 'The catchment’s outlet', dam_wall: 'Just below a dam wall' };
 
-/** The proposal's facts, as the sheet lists them: label, then value. */
+/** The proposal's facts, as the sheet lists them first: label, then value. */
 export function proposalFacts(p: DelineationProposal): [string, string][] {
 	const snap = Math.round(p.snapDistanceM);
 	return [
 		['Area', `${fmtNum(p.areaM2 / 1e6, 2)} km²`],
-		['Clicked', FROM_LABEL[p.from].toLowerCase()],
-		['Outlet', snap === 0 ? 'where you clicked' : `${snap} m from the click, on the channel`],
-		['Cells', `${fmtNum(p.cells)} of about ${Math.round(p.cellSizeM)} m`],
+		['The point is', FROM_LABEL[p.from].toLowerCase()],
+		['Outlet', snap === 0 ? 'where the point was' : `${snap} m from the point, on the channel`],
+		['Cells', `${fmtNum(p.cells)} cells, each about ${Math.round(p.cellSizeM)} m across`]
+	];
+}
+
+/** Where it came from, behind "How it was made": the dataset with its fingerprint, the method with its version. */
+export function provenanceFacts(p: DelineationProposal): [string, string][] {
+	return [
 		['Dataset', `${p.dataset} (${p.datasetFingerprint})`],
 		['Method', `${p.method} [${p.methodVersion}]`]
 	];

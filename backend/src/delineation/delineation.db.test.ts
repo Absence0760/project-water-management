@@ -12,6 +12,9 @@
 //  - deleting the accepted feature keeps the proposal and clears the link;
 //  - a stranger gets 404, and another project's proposal can't be decided;
 //  - the hourly cap answers 429.
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
@@ -68,6 +71,20 @@ describe('delineation off', () => {
 	it('says unavailable when DEM_URL names a file that is not there', async () => {
 		process.env.DEM_URL = '/nonexistent/dem.pmtiles';
 		expect((await viewer.call('GET', at('/map/delineation'))).body.available).toBe(false);
+	});
+});
+
+describe('a DEM that can’t be read', () => {
+	it('answers 503 with a sentence (never the decoder’s error text) and saves nothing', async () => {
+		const bad = join(mkdtempSync(join(tmpdir(), 'dem-')), 'corrupt.pmtiles');
+		writeFileSync(bad, Buffer.alloc(4096, 7));
+		process.env.DEM_URL = bad;
+		expect((await viewer.call('GET', at('/map/delineation'))).body.available).toBe(false);
+		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
+		expect(res.status).toBe(503);
+		expect(res.body.error).toMatch(/could not be read just now/);
+		expect(JSON.stringify(res.body)).not.toMatch(/PMTiles|pmtiles archive/);
+		expect(await asOwner('SELECT 1 FROM delineation_proposal WHERE project_id = $1', [projectId])).toHaveLength(0);
 	});
 });
 
@@ -154,6 +171,16 @@ describe('with the synthetic DEM', () => {
 		expect((await editor.call('DELETE', at(`/map/features/${ok.body.feature.id}`))).status).toBe(204);
 		const list = (await viewer.call('GET', at('/map/delineation'))).body.proposals;
 		expect(list.find((x: { id: string }) => x.id === p.id)).toMatchObject({ status: 'accepted', featureId: null });
+	});
+
+	it('holds one open proposal a project in the schema too (the partial unique index)', async () => {
+		const row = `INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+			cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version)
+			VALUES ($1, 'outlet', 20.7, -33.5, 20.7, -33.5, 0, '{"type":"Polygon","coordinates":[]}', 1, 1, 128, 10, 1024, 'x', '0000000000000000', 'x', 'x')`;
+		expect((await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' })).status).toBe(201);
+		// That proposal is open; a second open row is refused (positive control: another project takes one).
+		await expect(asOwner(row, [projectId])).rejects.toThrow(/delineation_proposal_one_open_idx/);
+		await asOwner(row, [otherProjectId]);
 	});
 
 	it('rejects an open proposal once', async () => {

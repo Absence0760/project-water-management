@@ -31,7 +31,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DelineationProposal, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
+	import { api, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -186,7 +186,8 @@
 	}
 	const upload = overlay('upload', '1', () => canEdit);
 	const place = overlay('place', '1', () => canEdit);
-	const delineateSheet = overlay('delineate', '1', () => canEdit && !!delineation?.available);
+	// Until the state is in, a `delineate=1` link is kept (a reload, a deep link), so the param isn't dropped before it can be judged.
+	const delineateSheet = overlay('delineate', '1', () => canEdit && (!delineationLoaded || !!delineation?.available));
 	const grid = overlay('grid', GRID_ID, () => true);
 	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
 	const checksSheet = overlay('checks', '1', () => true);
@@ -209,6 +210,7 @@
 
 	// --- delineation (#326 B-delineate): on when the server has a DEM; one open proposal, drawn on the map ---
 	let delineation = $state<DelineationState | null>(null);
+	let delineationLoaded = $state(false);
 	async function loadDelineation() {
 		if (!canEdit) return;
 		try {
@@ -216,6 +218,8 @@
 		} catch {
 			// Unavailable is the same as off: the tool isn't offered.
 			delineation = null;
+		} finally {
+			delineationLoaded = true;
 		}
 	}
 	$effect(() => {
@@ -236,15 +240,25 @@
 	});
 	/** Where the delineation's point was clicked, kept for the sheet once the draft is gone. */
 	let delineateAt = $state<MapPosition | null>(null);
+	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
+	let delineateStep = $state<'ask' | 'decide'>('decide');
+	$effect(() => {
+		if (!delineateSheet.open) {
+			delineateAt = null;
+			delineateStep = 'decide';
+		}
+	});
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
+		delineateStep = 'ask';
 		await goto(withParam(page.url, 'delineate', '1'), { noScroll: true, keepFocus: true });
 	}
-	async function proposed(p: DelineationProposal) {
+	/** A proposal came back: the drawing mode ends and the sheet (still open) shows it from the reloaded state. */
+	async function proposed() {
 		draft.cancel();
 		delineateAt = null;
+		delineateStep = 'decide';
 		await loadDelineation();
-		notice = `Proposed a catchment of ${fmtNum(p.areaM2 / 1e6, 2)} km²: it is drawn dashed on the map. Accept or reject it in the sheet.`;
 	}
 	async function delineationAccepted(f: MapFeature, summary: string) {
 		notice = `Saved ${summary} on the map.`;
@@ -276,17 +290,20 @@
 	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
 	function startDraw(choiceId?: string) {
 		measure.cancel();
+		delineating = false;
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
 		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
 		void afterStart();
 	}
 	function startPlace() {
 		measure.cancel();
+		delineating = false;
 		draft.place('gauge');
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
 		measure.cancel();
+		delineating = false;
 		if (draft.edit(f)) void afterStart();
 	}
 	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
@@ -570,6 +587,12 @@
 			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (notice = null)}>Dismiss</button>
 		</p>
 	{/if}
+	{#if pendingProposal && canEdit && !delineateSheet.open}
+		<p class="alert alert-info slim" data-testid="map-delineation-pending">
+			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map, waiting for your decision.
+			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
+		</p>
+	{/if}
 	{#if canEdit && !tilesUrl}
 		<p class="alert alert-info slim" data-testid="map-no-tiles">No basemap is configured, so the features are drawn on a plain background (docs/maps.md says how to serve one).</p>
 	{/if}
@@ -581,12 +604,6 @@
 	{/if}
 	<!-- The rain feed from the boundary (#326 B-rain): a line when no CHIRPS feed reads it yet. -->
 	{#if data && boundary && canEdit}<MapRainLink {projectId} {boundary} />{/if}
-	{#if pendingProposal && canEdit && !delineateSheet.open}
-		<p class="alert alert-info slim" data-testid="map-delineation-pending">
-			A delineated catchment ({fmtNum(pendingProposal.areaM2 / 1e6, 2)} km²) is drawn dashed on the map, waiting for your decision.
-			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
-		</p>
-	{/if}
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
@@ -738,6 +755,7 @@
 					{projectId}
 					info={delineation}
 					at={delineateAt}
+					step={delineateStep}
 					{boundary}
 					onproposed={proposed}
 					onaccepted={delineationAccepted}
