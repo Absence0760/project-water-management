@@ -2566,10 +2566,46 @@ map" card) stays the schematic; this is the geography.
   **Edit the shape** (a single line or one-ring polygon) or **Move the
   point** (editors) puts it in the drawing mode, and **Delete** asks first.
   With nothing picked: "Select a feature on the map or in the list to see it
-  here."; with nothing on the map, the empty state leads with drawing (#326
-  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
-  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
-  file (WGS84), or place a point.".
+  here."; with nothing on the map, the empty state leads with delineating
+  and drawing (#326 D4): with a DEM, "Nothing on the map yet. Start with the
+  catchment: delineate it from its outlet on the river, or draw its
+  boundary.", a primary **Delineate from the outlet** and **Draw the
+  boundary** (without one, "Start with the catchment boundary: draw it on
+  the map." and a primary **Draw the boundary**), then "Or upload it as a
+  GeoJSON file (WGS84), or place a point." and, for an editor of an empty
+  model, **Start the model from the map**.
+- **Start the model from the map** (editors, while the model has no nodes;
+  issue #326 C3, `StartSheet.svelte`, `startFlow.ts`, [maps.md § Start from
+  the map](./maps.md#start-from-the-map)). From the empty state's link, or
+  the header's **Start from the map** (**Review the proposed model** while
+  one is open, drawn dashed on the map). What the editor chose and ticked
+  is kept by the Map tab, so closing the sheet or leaving it for a tool
+  loses nothing; a tool opened from the sheet brings it back once it
+  saves, and one started any other way never does. A side sheet (`start=1`) with the steps listed at its
+  top (The boundary · The points · The proposal · Data and the first run,
+  the current one `aria-current="step"`), each read from the server:
+  **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
+  boundary**, **Upload a GeoJSON file**; each closes the sheet into that
+  tool, and the sheet opens again once it saves; with a gauge on the map
+  and no boundary, "go on to the points". **The points**: each dam, other
+  point and gauge with a select (A unit with a dam / A unit at an
+  abstraction point / Another water user (no land) / Not in the model),
+  **Place a point** (into the drawing mode, back after the save), the
+  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
+  the rest of the catchment."), and **Propose the network**. **The
+  proposal** (drawn dashed on the map like a delineation): the catchment's
+  area, the warnings and dropped points, the outflow gauge's name, then one
+  card a unit: its name, and a tick for each value proposed (Area … saved
+  as its parcel; Drains into …; All of its own runoff reaches the dam),
+  every tick off at first; the rest of the catchment as a unit (a tick,
+  then its name and area); **Tick every value**; **How it was made**
+  (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
+  the reason by the names, while a name is empty or used twice),
+  which asks first ("The empty model gets 3 nodes, with 2 areas … It is
+  saved now as one change in History."). **Data and the first run**: links
+  to rain from the boundary, observed flow, the dams' capacities, cultivated
+  area, the Network and **Run the model**. With nodes typed in, the sheet
+  says the model isn't started from the map.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §

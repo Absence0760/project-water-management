@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ringSelfIntersects } from '../geo/geojson.js';
-import { signedArea, simplifyRing, traceOutline } from './outline.js';
+import { insideRing, signedArea, simplifyRing, traceOutline, traceRings } from './outline.js';
 
 const maskOf = (rows: string[]) => {
 	const ny = rows.length;
@@ -54,5 +54,32 @@ describe('simplifyRing', () => {
 	it('leaves a ring alone at tolerance 0', () => {
 		const ring: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 0]];
 		expect(simplifyRing(ring, 0)).toEqual(ring);
+	});
+});
+
+describe('traceRings (a unit’s piece of a catchment, design/start-from-map.md § Sub-catchments)', () => {
+	it('keeps a hole where a unit upstream lies wholly inside, walked the other way round', () => {
+		const { nx, ny, m } = maskOf(['######', '#....#', '#....#', '#....#', '######']);
+		const { outer, holes } = traceRings(nx, ny, m);
+		expect(Math.abs(signedArea(outer))).toBe(30);
+		expect(holes).toHaveLength(1);
+		expect(Math.abs(signedArea(holes[0]!))).toBe(12);
+		expect(Math.sign(signedArea(holes[0]!))).toBe(-Math.sign(signedArea(outer)));
+		expect(insideRing(holes[0]![0]!, outer)).toBe(true);
+		// The outer ring is traceOutline's.
+		expect(Math.abs(signedArea(traceOutline(nx, ny, m)))).toBe(30);
+	});
+
+	it('drops a hole smaller than minHoleCells (D8’s diagonal crossings)', () => {
+		const { nx, ny, m } = maskOf(['###', '#.#', '###']);
+		expect(traceRings(nx, ny, m).holes).toHaveLength(0);
+		expect(traceRings(nx, ny, m, 1).holes).toHaveLength(1);
+	});
+
+	it('has no holes for a solid piece, and drops a separate piece', () => {
+		const { nx, ny, m } = maskOf(['##...', '##...', '....#']);
+		const { outer, holes } = traceRings(nx, ny, m);
+		expect(holes).toHaveLength(0);
+		expect(Math.abs(signedArea(outer))).toBe(4);
 	});
 });

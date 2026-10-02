@@ -240,6 +240,10 @@ export type AuditKind =
 	| 'map.delineation_proposed'
 	| 'map.delineation_accepted'
 	| 'map.delineation_rejected'
+	// A model started from the map (178, issue #326 C3): proposed, applied (counts of nodes, areas and orders taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.start_proposed'
+	| 'map.start_applied'
+	| 'map.start_discarded'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

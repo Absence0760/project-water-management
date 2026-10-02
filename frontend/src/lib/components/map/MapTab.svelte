@@ -28,11 +28,15 @@
 	// With a DEM on the server, editors can Delineate (`delineate=1`, #326
 	// B-delineate, docs/design/delineation.md): click the river, and the
 	// catchment above it is proposed, drawn dashed, until they accept or reject it.
+	// On an empty model, editors can Start the model from the map (`start=1`,
+	// #326 C3, docs/design/start-from-map.md): units at the dams and
+	// abstraction points, their sub-catchments and order proposed and ticked
+	// value by value; the empty map leads with Delineate and Draw (D4).
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
+	import { api, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -63,6 +67,8 @@
 	import PlaceSheet from './PlaceSheet.svelte';
 	import DelineateSheet from './DelineateSheet.svelte';
 	import { openProposal } from './delineation';
+	import StartSheet from './StartSheet.svelte';
+	import { openStart, startShape, type StartDraft } from './startFlow';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
@@ -191,6 +197,8 @@
 	// Until the state is in, a `delineate=1` link is kept (a reload, a deep link), so the param isn't dropped before it can be judged.
 	const delineateSheet = overlay('delineate', '1', () => canEdit && (!delineationLoaded || !!delineation?.available));
 	const grid = overlay('grid', GRID_ID, () => true);
+	// Until the state is in, a `start=1` link is kept (a reload, a deep link), as Delineate's is.
+	const startSheet = overlay('start', '1', () => canEdit && (!startLoaded || !!startInfo));
 	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
 	const checksSheet = overlay('checks', '1', () => true);
 	const checks = $derived(mapChecks(features, nodes));
@@ -208,6 +216,7 @@
 		draft.cancel();
 		await load();
 		await pickInPlace(f.id, 'place');
+		await returnToStart();
 	}
 
 	// --- delineation (#326 B-delineate): on when the server has a DEM; one open proposal, drawn on the map ---
@@ -232,6 +241,7 @@
 	/** The point placed is a delineation's outlet, not a feature: the draw bar asks to delineate. */
 	let delineating = $state(false);
 	function startDelineate() {
+		backToStart = false;
 		measure.cancel();
 		draft.place('gauge');
 		delineating = true;
@@ -266,11 +276,62 @@
 		notice = `Saved ${summary} on the map.`;
 		await Promise.all([load(), loadDelineation()]);
 		await pickInPlace(f.id, 'delineate');
+		await returnToStart();
 	}
 	async function delineationRejected() {
+		backToStart = false;
 		notice = 'Rejected the delineated catchment; nothing on the map changed.';
 		await loadDelineation();
 		delineateSheet.open = false;
+	}
+
+	// --- start the model from the map (#326 C3): editors, while the model is empty (or just started from it) ---
+	let startInfo = $state<StartState | null>(null);
+	let startLoaded = $state(false);
+	async function loadStart() {
+		if (!canEdit) return;
+		try {
+			startInfo = await api.start.get(projectId);
+		} catch {
+			// Unavailable: the flow isn't offered; the Network and the per-feature tools still are.
+			startInfo = null;
+		} finally {
+			startLoaded = true;
+		}
+	}
+	$effect(() => {
+		void projectId;
+		untrack(loadStart);
+	});
+	const pendingStart = $derived(openStart(startInfo));
+	/** The flow is offered while the model is empty. */
+	const canStart = $derived(canEdit && !!startInfo?.modelEmpty);
+	/** A tool opened from the Start sheet (Delineate, Draw, Place): once it saves, the sheet opens again where it was. */
+	let backToStart = false;
+	async function returnToStart() {
+		if (!backToStart) return;
+		backToStart = false;
+		await goto(withParam(page.url, 'start', '1'), { noScroll: true, keepFocus: true });
+	}
+	/**
+	 * Leave the sheet for one of the map's own tools (the sheet's param goes first, in place). Every tool
+	 * clears the flag as it starts, so it is set after: a tool started any other way, or a rejected
+	 * delineation, never brings the sheet back.
+	 */
+	async function fromStart(start: () => unknown, back = true) {
+		await goto(withoutParam(page.url, 'start'), { replaceState: true, noScroll: true, keepFocus: true });
+		await start();
+		backToStart = back;
+	}
+	/** What the editor chose and ticked in the sheet: kept here, so closing it or leaving for a tool loses nothing. */
+	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {} });
+	async function startApplied() {
+		notice = 'Started the model from the map. Its nodes are on the Network now, and each unit’s point and parcel stand for it on the map.';
+		await Promise.all([load(), loadStart(), onModelChanged()]);
+	}
+	async function startDiscarded() {
+		notice = 'Discarded the proposed model; nothing in the model changed.';
+		await loadStart();
 	}
 
 	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
@@ -291,6 +352,7 @@
 	}
 	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
 	function startDraw(choiceId?: string) {
+		backToStart = false;
 		measure.cancel();
 		delineating = false;
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
@@ -298,12 +360,14 @@
 		void afterStart();
 	}
 	function startPlace() {
+		backToStart = false;
 		measure.cancel();
 		delineating = false;
 		draft.place('gauge');
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
+		backToStart = false;
 		measure.cancel();
 		delineating = false;
 		if (draft.edit(f)) void afterStart();
@@ -346,6 +410,7 @@
 		draft.cancel();
 		await load();
 		await pickInPlace(f.id);
+		await returnToStart();
 	}
 	function pasted(g: MapGeometry) {
 		draft.replace(g);
@@ -523,6 +588,9 @@
 			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
 		{/if}
 		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
+		{#if canStart}
+			<a class="btn" href={withParam(page.url, 'start', '1')} data-testid="map-start-open">{pendingStart ? 'Review the proposed model' : 'Start from the map'}</a>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -627,7 +695,7 @@
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
-			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
+			<div class="map-layout" class:empty={!features.length} bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
@@ -669,7 +737,7 @@
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
-									proposal={pendingProposal}
+									proposal={pendingProposal ?? startShape(pendingStart)}
 								/>
 							{/snippet}
 						</Lazy>
@@ -723,10 +791,26 @@
 						{:else}
 							<!-- The empty state leads with drawing (#326 D4); uploading a file is the other way in. -->
 							<div class="pick-hint" data-testid="map-no-boundary">
-								<p class="empty-line">Nothing on the map yet.{canEdit ? ' Start with the catchment boundary: draw it on the map.' : ''}</p>
-								{#if canEdit}
-									<p class="empty-line"><button type="button" class="btn btn-primary" onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button></p>
+								<p class="empty-line">
+									Nothing on the map yet.{canEdit && delineationLoaded
+										? delineation?.available
+											? ' Start with the catchment: delineate it from its outlet on the river, or draw its boundary.'
+											: ' Start with the catchment boundary: draw it on the map.'
+										: ''}
+								</p>
+								{#if canEdit && delineationLoaded}
+									<p class="empty-line ways">
+										{#if delineation?.available}
+											<button type="button" class="btn btn-primary" onclick={startDelineate} data-testid="map-empty-delineate">Delineate from the outlet</button>
+										{/if}
+										<button type="button" class={delineation?.available ? 'btn' : 'btn btn-primary'} onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button>
+									</p>
 									<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+									{#if canStart}
+										<p class="empty-line small">
+											<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then your dams and abstraction points, and the app proposes the units, their areas and their order.
+										</p>
+									{/if}
 								{/if}
 							</div>
 						{/if}
@@ -791,6 +875,22 @@
 					onproposed={proposed}
 					onaccepted={delineationAccepted}
 					onrejected={delineationRejected}
+				/>
+			{/if}
+			{#if startSheet.open && startInfo}
+				<StartSheet
+					bind:open={startSheet.open}
+					{projectId}
+					{features}
+					info={startInfo}
+					bind:draft={startDraft}
+					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
+					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
+					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
+					onplace={() => fromStart(startPlace)}
+					onproposed={loadStart}
+					onapplied={startApplied}
+					ondiscarded={startDiscarded}
 				/>
 			{/if}
 			{#if place.open}
@@ -922,6 +1022,10 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 	}
+	/* Stacked with nothing on the map, the empty state's ways in (Delineate, Draw, Start) come before the blank map. */
+	.map-layout.empty .map-side {
+		order: -1;
+	}
 	.map-card,
 	.side-box {
 		margin: 0;
@@ -956,6 +1060,10 @@
 		.map-layout {
 			grid-template-columns: minmax(0, 1fr) clamp(18rem, 30%, 24rem);
 			align-items: start;
+		}
+		/* Beside the map, the side column keeps its place. */
+		.map-layout.empty .map-side {
+			order: 0;
 		}
 	}
 	/* Window fit (a dashboard, as the Network): with the side column and a window at least 620 px high,
@@ -1042,6 +1150,11 @@
 	}
 	.empty-line {
 		margin: 0 0 0.5rem;
+	}
+	.ways {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 	.pick-hint {
 		margin: 0;
