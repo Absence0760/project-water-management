@@ -135,6 +135,10 @@ the ranks within one (engine ≥ 1.64.0),
   for transfers.
 - **Hands-off flows** (§2.7h): a flow by month and/or the EWR at the farm,
   on farms with and without a dam; River to dam by month.
+- **River abstractions** (§2.7j, engine ≥ 1.65.0): the crops or a demand
+  object on a river pump of their own beside the dam, the dam side serving
+  the rest, the takes by supply level from the flow passing the dam above
+  what must pass, pools drawn after the flow, refilled last and evaporating.
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent

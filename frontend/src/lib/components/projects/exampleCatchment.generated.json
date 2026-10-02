@@ -41,7 +41,7 @@
 		},
 		"fitRecord": {
 			"fittedAt": "2025-01-15T09:00:00.000Z",
-			"engineVersion": "1.54.0",
+			"engineVersion": "1.65.0",
 			"model": "gr4j",
 			"objective": "kgePrime",
 			"bounds": "wide",
@@ -121,6 +121,7 @@
 				"censoredDays": 0,
 				"leftOutDays": 0,
 				"suspectZeroDays": 0,
+				"longZeroDays": 0,
 				"rain": {
 					"observed": 4759,
 					"infilled": 153,
@@ -247,7 +248,8 @@
 						"fdcMidSlopePct": 2.676888971196988,
 						"fdcLowPct": -144.29219723369832
 					},
-					"halfWindowDays": 7
+					"halfWindowDays": 7,
+					"builtFrom": "period"
 				}
 			},
 			"before": {
@@ -362,7 +364,8 @@
 						"fdcMidSlopePct": 2.676888971196988,
 						"fdcLowPct": -144.29219723369832
 					},
-					"halfWindowDays": 7
+					"halfWindowDays": 7,
+					"builtFrom": "period"
 				}
 			},
 			"forcing": {
@@ -529,7 +532,8 @@
 							"fdcMidSlopePct": 2.0459658205471007,
 							"fdcLowPct": -109.30282092673862
 						},
-						"halfWindowDays": 7
+						"halfWindowDays": 7,
+						"builtFrom": "period"
 					}
 				},
 				"validation": {
@@ -618,33 +622,34 @@
 					"benchmarks": {
 						"meanFlow": {
 							"days": 2456,
-							"kgePrime": -0.4142135623730754,
-							"kgeYearly": -0.7456480883005621,
-							"kgeNp": -0.18130141113007814,
-							"nse": 0,
-							"nseSqrt": -0.23629397293985388,
-							"nseLog": -0.8674305873364727,
-							"kgeLowHigh": -0.5672722568484488,
-							"volumeErrorPct": 5.1509867458344305e-12,
-							"fdcHighPct": -89.34125862707864,
+							"kgePrime": -0.41507371383632075,
+							"kgeYearly": -0.7759355860395977,
+							"kgeNp": -0.18233101943934682,
+							"nse": -0.0007129137867181168,
+							"nseSqrt": -0.2673814175054803,
+							"nseLog": -0.9036393835570224,
+							"kgeLowHigh": -0.5679734129760664,
+							"volumeErrorPct": 4.9331689516663735,
+							"fdcHighPct": -88.81544490703182,
 							"fdcMidSlopePct": -99.99999999999999,
 							"fdcLowPct": 100.00000000000001
 						},
 						"climatology": {
 							"days": 2456,
-							"kgePrime": 0.592438128242472,
-							"kgeYearly": 0.494224134822828,
-							"kgeNp": 0.76277361014494,
-							"nse": 0.5095911333182377,
-							"nseSqrt": 0.7344049466519427,
-							"nseLog": 0.8125614437862844,
-							"kgeLowHigh": 0.6942239355343403,
-							"volumeErrorPct": 0.028462831504132483,
-							"fdcHighPct": -59.263363202373945,
-							"fdcMidSlopePct": 3.2402301096160326,
-							"fdcLowPct": -164.23759519661692
+							"kgePrime": 0.608297390500621,
+							"kgeYearly": 0.4454390055718014,
+							"kgeNp": 0.8153807946938545,
+							"nse": 0.4427800734650772,
+							"nseSqrt": 0.7203077307687293,
+							"nseLog": 0.855572708730451,
+							"kgeLowHigh": 0.7059460666601467,
+							"volumeErrorPct": 5.029598102252455,
+							"fdcHighPct": -49.390734448672326,
+							"fdcMidSlopePct": 2.217361471823381,
+							"fdcLowPct": -165.78048235013725
 						},
-						"halfWindowDays": 7
+						"halfWindowDays": 7,
+						"builtFrom": "calibration"
 					}
 				}
 			},
@@ -767,7 +772,8 @@
 							"fdcMidSlopePct": 2.732578863296695,
 							"fdcLowPct": -113.51778465365935
 						},
-						"halfWindowDays": 7
+						"halfWindowDays": 7,
+						"builtFrom": "period"
 					}
 				},
 				"validation": {
@@ -856,33 +862,34 @@
 					"benchmarks": {
 						"meanFlow": {
 							"days": 2456,
-							"kgePrime": -0.4142135623730745,
-							"kgeYearly": -0.41524272235178167,
-							"kgeNp": -0.17413510350143713,
-							"nse": 0,
-							"nseSqrt": -0.2283622837547501,
-							"nseLog": -0.8228427608419178,
-							"kgeLowHigh": -0.5671426304912965,
-							"volumeErrorPct": 5.3188400714753956e-12,
-							"fdcHighPct": -89.31500903017627,
+							"kgePrime": -0.43771207748812735,
+							"kgeYearly": -0.43788003892374283,
+							"kgeNp": -0.20233491965824402,
+							"nse": -0.02028695241676859,
+							"nseSqrt": -0.08944785480115991,
+							"nseLog": -0.6201528276776,
+							"kgeLowHigh": -0.5768473845853349,
+							"volumeErrorPct": -25.88745212554906,
+							"fdcHighPct": -92.08108095210886,
 							"fdcMidSlopePct": -100,
 							"fdcLowPct": 100
 						},
 						"climatology": {
 							"days": 2456,
-							"kgePrime": 0.6396328152032633,
-							"kgeYearly": 0.6438586922013627,
-							"kgeNp": 0.8174765905574805,
-							"nse": 0.5594656089893572,
-							"nseSqrt": 0.7937261543135675,
-							"nseLog": 0.8724835456718955,
-							"kgeLowHigh": 0.727275030577516,
-							"volumeErrorPct": 0.039200244990936786,
-							"fdcHighPct": -54.507419602988996,
-							"fdcMidSlopePct": 4.1189160928069395,
-							"fdcLowPct": -139.251603669922
+							"kgePrime": 0.5478029749262059,
+							"kgeYearly": 0.5481698913206122,
+							"kgeNp": 0.6752553906382479,
+							"nse": 0.47525782120644267,
+							"nseSqrt": 0.7823448249340544,
+							"nseLog": 0.9200165956883495,
+							"kgeLowHigh": 0.7325867929503054,
+							"volumeErrorPct": -27.12356845037799,
+							"fdcHighPct": -68.25558511454443,
+							"fdcMidSlopePct": -2.251406110630574,
+							"fdcLowPct": -79.35499476783404
 						},
-						"halfWindowDays": 7
+						"halfWindowDays": 7,
+						"builtFrom": "calibration"
 					}
 				},
 				"dryYears": [2009,2010,2012,2016,2021,2022,2023],
@@ -945,6 +952,9 @@
 				"handsOffM3Day": null,
 				"handsOffEwr": false,
 				"divertMonthlyM3Day": null,
+				"cropWaterSource": "dam",
+				"cropRiverPumpM3Day": null,
+				"cropRiverPoolM3": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -994,6 +1004,9 @@
 				"handsOffM3Day": null,
 				"handsOffEwr": false,
 				"divertMonthlyM3Day": null,
+				"cropWaterSource": "dam",
+				"cropRiverPumpM3Day": null,
+				"cropRiverPoolM3": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1043,6 +1056,9 @@
 				"handsOffM3Day": null,
 				"handsOffEwr": false,
 				"divertMonthlyM3Day": null,
+				"cropWaterSource": "dam",
+				"cropRiverPumpM3Day": null,
+				"cropRiverPoolM3": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1092,6 +1108,9 @@
 				"handsOffM3Day": null,
 				"handsOffEwr": false,
 				"divertMonthlyM3Day": null,
+				"cropWaterSource": "dam",
+				"cropRiverPumpM3Day": null,
+				"cropRiverPoolM3": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null
@@ -1141,6 +1160,9 @@
 				"handsOffM3Day": null,
 				"handsOffEwr": false,
 				"divertMonthlyM3Day": null,
+				"cropWaterSource": "dam",
+				"cropRiverPumpM3Day": null,
+				"cropRiverPoolM3": null,
 				"ewrSite": true,
 				"gaPropertyAreaHa": null,
 				"gaRateM3HaYear": null

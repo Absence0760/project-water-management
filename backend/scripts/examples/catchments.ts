@@ -28,6 +28,7 @@ import {
 	BOREHOLE_DEFAULTS,
 	OPERATING_DEFAULTS,
 	SUPPLY_DEFAULTS,
+	WATER_SOURCE_DEFAULTS,
 	PAN_COEFFICIENT_PRESETS,
 	calibrate,
 	defaultProjectSettings,
@@ -235,6 +236,8 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			...DEVELOPMENT_DEFAULTS,
 			...SUPPLY_DEFAULTS,
 			...OPERATING_DEFAULTS,
+			// The crops on the dam (engine ≥ 1.65.0).
+			...WATER_SOURCE_DEFAULTS,
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null

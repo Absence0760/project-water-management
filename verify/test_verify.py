@@ -159,6 +159,9 @@ MUTANTS = [
         ("        return (0, object_rank(ob))", "        return (1, 0)"),
     ),
     ("ranks within a class are ignored", "        return int(r)\n    return 1", "        return 1\n    return 1"),
+    # River abstractions beside a unit's dam (§2.7j).
+    ("a river abstraction takes what must pass the unit", "free = max(0.0, past - keep)", "free = max(0.0, past)"),
+    ("a river abstraction's pool never refills", "if rsum > 0 and free > 0:", "if False:"),
     # River off-takes and canal seepage (§2.6a).
     ("the canal loses nothing on the way", "append((t, v * (1 - lp)))", "append((t, v))"),
     (

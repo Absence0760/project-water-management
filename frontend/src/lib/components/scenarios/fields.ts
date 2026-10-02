@@ -26,6 +26,8 @@ import {
 	LAND_COVER_SET_FIELDS,
 	SUPPLY_RULES,
 	SUPPLY_RULE_LABEL,
+	WATER_SOURCE_LABEL,
+	WATER_SOURCES,
 	TRANSFER_SET_FIELDS,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
@@ -172,6 +174,10 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	handsOffM3Day: { label: 'Hands-off flow by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	handsOffEwr: { label: 'Hands-off flow keeps the EWR', spec: { t: 'bool' } },
 	divertMonthlyM3Day: { label: 'River to dam by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
+	// Where the crops take their water (engine ≥ 1.65.0, docs/model.md §2.7j).
+	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
+	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	cropRiverPoolM3: { label: 'Crops’ pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
 	// A gauge's EWR site flag (engine ≥ 1.5.0): a baseline assumption, never a proposal (docs/scenarios.md).
 	ewrSite: { label: 'EWR site', spec: { t: 'bool' } }
 };
@@ -260,6 +266,10 @@ export const DEMAND_OBJECT_FIELD_SPECS: Record<DemandObjectFormField, FieldSpec>
 	population: { label: 'People served', spec: num('', { nullable: true, nullLabel: 'its count (per person), else none' }) },
 	// Where its number comes from (engine ≥ 1.56.0); its sizing must match (a model rule, so set both in one edit group).
 	source: { label: 'Source of the number', spec: { t: 'enum', options: plain(DEMAND_OBJECT_SOURCES, SOURCE_OPTION_LABEL), nullable: true, nullLabel: 'not recorded' } },
+	// Where its water comes from (engine ≥ 1.65.0, docs/model.md §2.7j): the dam (null), or a river abstraction of its own.
+	waterSource: { label: 'Water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL), nullable: true, nullLabel: 'the unit’s supply' } },
+	riverPumpM3Day: { label: 'River pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
+	riverPoolM3: { label: 'Pool at the river pump', spec: num('m³', { nullable: true, nullLabel: 'no pool' }) },
 	note: { label: 'Source details', spec: { t: 'text', optional: true } }
 };
 /** The schedule field's label, as the Network form heads it. */

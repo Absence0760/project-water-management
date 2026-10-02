@@ -12,13 +12,17 @@
 	// through (engine ≥ 1.44.0, issue #123): its people are a per-unit count, or
 	// entered here. Where its number comes from is a source by rule (engine ≥
 	// 1.56.0, issue #54 Q11), which sets how the demand is given
-	// (demandObjectSource.ts), with the note for the detail. The objects are the
-	// editor's own, so edits land in the model directly.
+	// (demandObjectSource.ts), with the note for the detail. Its water comes
+	// from the dam side under the unit's supply rule, or from a river
+	// abstraction of its own with its own pump and pool (WaterSourceFields,
+	// engine ≥ 1.65.0, issue #344). The objects are the editor's own, so edits
+	// land in the model directly.
 	import {
 		BASIC_NEEDS_CATEGORIES,
 		DEMAND_OBJECT_CATEGORIES,
 		DEMAND_OBJECT_CATEGORY_LABEL,
 		DEMAND_OBJECT_SOURCES,
+		SUPPLY_RULE_LABEL,
 		objectMonthlyM3Day,
 		supplyOrder,
 		type DemandObject,
@@ -30,6 +34,7 @@
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import DemandScheduleFields from './DemandScheduleFields.svelte';
+	import WaterSourceFields from './WaterSourceFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
@@ -82,7 +87,7 @@
 <div class="objects" data-testid="demand-objects-{node.id}">
 	<p class="hint">
 		Demands on {label} that aren’t crops: a town, households, livestock or water piped elsewhere. Each adds to the hydrological unit’s demand and is supplied from
-		its dam, river pump and boreholes with the crops. <HelpTip key="demandObject.category" />
+		its dam, river pump and boreholes with the crops, or from a river abstraction of its own. <HelpTip key="demandObject.category" />
 	</p>
 	{#if objects.length === 0}
 		<p class="muted small">No demand objects on {label}.</p>
@@ -204,6 +209,19 @@
 								<span class="muted small" id="do-pop-hint-{o.id}">{peopleHint(o)}</span>
 							</div>
 						{/if}
+						<WaterSourceFields
+							idBase="ws-{o.id}"
+							who={o.name || `demand ${i + 1}`}
+							helpKey="demandObject.waterSource"
+							rule={SUPPLY_RULE_LABEL[node.supplyRule ?? 'damFirst']}
+							source={o.waterSource}
+							pump={o.riverPumpM3Day}
+							pool={o.riverPoolM3}
+							{readonly}
+							onsource={(v) => (o.waterSource = v)}
+							onpump={(v) => (o.riverPumpM3Day = v)}
+							onpool={(v) => (o.riverPoolM3 = v)}
+						/>
 						<div class="field check">
 							<label><input type="checkbox" disabled={readonly} bind:checked={o.enabled} /> Modelled</label>
 						</div>

@@ -4241,6 +4241,164 @@ runs without it (more demand restricts every unit sooner, and a unit
 upstream that takes less leaves more below, as the trigger rule does). The
 Excel audit workbook refuses a farm under a rule, by name.
 
+### 2.7j Water source per demand: river abstractions beside a unit's dam (engine ≥ 1.65.0, issue #344)
+
+**Why.** The client's units have a dam *and* river abstractions beside it,
+each abstraction with its own demand: crop-driven irrigation, or a
+domestic or industrial monthly demand with a weekday schedule (#342 items 4
+and 5). Before 1.65.0 a unit had one supply rule (§2.7e) for all its demand,
+so a river take beside a dam had to be split into its own run-of-river unit
+or entered as an other water user (§2.7c), which has no schedule and no
+crops. **Off by default**: a demand without a water source draws on the dam
+under the unit's supply rule, as every engine before 1.65.0, so every saved
+project runs to the bit as before (a test compares every series and summary
+figure of random networks with the fields absent and set to the dam).
+
+**Fields.** Each demand of a unit has a water source: the unit's crops (on
+the node) and each demand object (§2.7f).
+
+| Field | On | Meaning |
+| --- | --- | --- |
+| `cropWaterSource` | farm node | `dam` (default, absent) or `river` |
+| `cropRiverPumpM3Day` | farm node | the crops' river pump capacity, m³/day; null = no limit (the run warns); 0 = no pump; read only under `river` |
+| `cropRiverPoolM3` | farm node | a pool at that pump, m³; null or 0 = none; read only under `river` |
+| `waterSource` | demand object | `dam` (default, absent) or `river` |
+| `riverPumpM3Day` | demand object | its river pump capacity, as `cropRiverPumpM3Day` |
+| `riverPoolM3` | demand object | a pool at its pump, as `cropRiverPoolM3` |
+
+A demand with source `river` is a **river abstraction**: its own pump on the
+river at the unit, and an optional pool at the pump (a natural pool or a
+weir pool in the channel). One pump per demand, as the client describes it
+("each abstraction has its own demand"); two demands sharing one pump aren't
+modelled. The pool takes only its capacity: it starts the run full and its
+surface area is estimated from the capacity as a dam's is (7.2 ×
+capacity^0.77, §2.7a), with the dams' area–storage exponent b = 0.7.
+
+**Each day,** after the unit's dam side (§2.7, §2.7e, the off-take water,
+the boreholes) has supplied its dam-sourced demand and the dam has spilled:
+
+```
+dam side      D_dam = Σ the demands with source dam (F′/e for the crops when theirs, d′_k for the objects)
+              supplied exactly as §2.7 supplies D before 1.65.0: the transfer room, a river off-take's
+              need and the restriction's D′ read D_dam; the supply rule's pump serves only it
+flow past     Fr = (S − Gr) + R + released + returned seepage + off-take water passing the unit
+keep          = MAX(Zs, the pass-inflow release's target, the hands-off keep §2.7h)   (the unit pump's keep)
+free          = MAX(0, Fr − keep)
+pool          A = A_full × (V[t−1] ÷ cap)^0.7;   E_pool = MIN(lake evaporation × A, V[t−1]);   held = V[t−1] − E_pool
+by supply level (the unit's supply order, §2.7f: 'first' by rank, then the crops with 'shared', then 'last' by rank):
+              want_a   = MIN(demand_a, pump_a)
+              flow_a   = want_a × MIN(1, free ÷ Σ want, room ÷ Σ want)       pro rata within a level
+              pool_a   = MIN(want_a − flow_a, held_a)                        (× MIN(1, room left ÷ Σ) under a cap)
+              free −= Σ flow_a;  room −= Σ (flow_a + pool_a);  held_a −= pool_a
+refill        each pool refills from the free flow left, pro rata to its room (cap − held), up to it
+              V[t] = held_a + refill_a
+G_a           = flow_a + pool_a                                              river_take@<key>, part of supplied
+U             = Fr − Σ flow_a − Σ refill_a + T + T_river − Dep, then the unit's river off-takes
+```
+
+`room` is the surface allocation room the dam side left (§2.12a; Infinity
+without a cap). `T_river` is each river demand's own return: β(1 − e) of
+the crops' take, the object's return share of its take. The farm's balance
+gains the pools' change and evaporation:
+
+```
+H + I + J + rain + GW + off-takes in − off-takes out = (G − T) + E + ΔQ + U + Dep + seepage lost + Σ (ΔV_a + E_pool,a)
+```
+
+**Decisions** (pending the client’s hydrologist, issue #90 Q18 for the pool, listed
+in [followups.md § Hydrologist](./followups.md#hydrologist)):
+
+- *The dam side goes first, the river abstractions take what passes the
+  dam.* An abstraction beside the dam sits on the river below it, so it
+  sees the dam's spill, its releases and its returned seepage the same day:
+  a full dam spilling feeds the river pumps. The dam side never sees the
+  river abstractions, so a unit whose demands all draw on the dam runs as
+  before, and moving a demand to the river never changes what the dam
+  gives the others.
+- *What must pass comes first, as for the unit's own pump.* The
+  abstractions leave the senior users' requirement, a pass-inflow
+  release's target and the unit's hands-off flow (and, with `handsOffEwr`,
+  the EWR at the unit) in the river (§2.7e, §2.7h); the hands-off flow is
+  the unit's, not one per abstraction. Without a hands-off flow the EWR
+  isn't protected, as for the unit pump; a licence application's own new
+  river take still needs one before an evidence pack is issued
+  (`evidence-10`).
+- *Priority among river takes reuses the supply order of §2.7f*: 'first'
+  objects, then the crops with 'shared' objects, then 'last', each of
+  'first' and 'last' by its ranks (engine ≥ 1.64.0, #343), pro rata within
+  a level.
+  The river is shared by level before any pool is drawn: within a level the
+  flow goes first, then each abstraction's own pool. A pool is its own
+  abstraction's, never another's.
+- *Before the unit's river off-takes.* The abstractions are in the unit;
+  an off-take (§2.6a) takes from the flow leaving it, so it sees what they
+  left, and their return flows.
+- *The pool* refills only from the flow above what must pass, after every
+  abstraction of the day has taken, and it isn't limited by the pump (it
+  fills in the channel). It loses open-water evaporation from its
+  start-of-day surface and gains no rain (a pool is small; leaving out its
+  rain understates what it holds); no seepage. It starts the run full; a
+  run resumed from a snapshot starts from the pool the snapshot held.
+- *The supply rule governs only the dam-sourced demand.* `riverFirst` and
+  `trigger` stay: they answer a different question (conjunctive use of the
+  dam-sourced demand, one pump serving several demands with the dam
+  behind it). A unit's `pumpCapacityM3Day` is that pump's alone.
+- *Run of river stays as it is* for saved projects: a unit with no dam whose
+  dam-sourced demands share one pump and take a transfer in first. The
+  same unit can now be written with each demand on its own river
+  abstraction; the two differ only in that one pump with one capacity
+  serves all of the first, and in the transfer, which serves the dam side.
+- *Boreholes, off-take water delivered to the unit and transfers in serve
+  the dam side only.* A river-sourced demand has its pump and pool, nothing
+  else, so its shortfall is the river's.
+- *A drought restriction* cuts a river-sourced demand as it cuts the same
+  demand on the dam (§2.7i): the abstraction asks for the cut demand.
+- *Invalid values run and warn; the API refuses them on save*
+  (`modelRuleIssues`): a source other than `dam` or `river`, crop water
+  source fields on a node that isn't a unit, a pump below 0, a pool below
+  0. A pump or pool on a demand that draws on the dam is inert.
+
+**Outputs** (only on a unit with a river-sourced demand): per abstraction,
+keyed by the demand object's id or `crops`, `river_take@<key>` (pumped,
+m³/day, part of `supplied`; for an object also its `object_supplied@`),
+and with a pool `river_pool@<key>` (storage at the end of the day, m³) and
+`river_pool_evaporation@<key>` (m³/day); `FarmSummary.riverTakes` (each
+one's mean take and, with a pool, its mean storage). The water balance
+counts the pools' evaporation with the dams' and their storage in the
+opening and closing storage.
+
+**Checks.** `checkBalance` closes every unit's balance with the pools'
+change and evaporation, and keeps each pool within 0 … capacity;
+`checkWorkings` keeps each take within its pump's capacity and its
+demand, and the flow the abstractions took (Σ take − pool drawn + refill)
+within the flow past the dam above what must pass. `checkWorkings` replays
+each pool's evaporation from its start-of-day surface, the dam side's
+supply against its dam-sourced demand only, and the outflow with the
+abstractions' flow taken out; while flow above what must pass is left over
+(and no allocation cap), every abstraction got MIN(its demand, its pump)
+and every pool is full. The transfer room's check reads the dam side's
+demand. Hand examples (`run.riverSource.test.ts`): a dam unit with one
+river abstraction beside it, the crops on the river leaving the dam to the
+objects on it, spill feeding the pump, the hands-off flow kept, priority by
+level and a pump below its share, a pool drawn down and refilled,
+evaporation off the pool and the water balance closing with it, a resumed
+run to the bit, a tampered take caught by the self-checks, and bit identity
+with the fields absent, null or "dam" (pump and pool inert) on random
+networks. The fuzz generator gives a quarter of networks river sources on
+random demands (pumps from 0 to no limit, pools now and then, on units with
+a dam and without, under every supply rule), and every invariant holds on
+them (balance, self-checks, order invariance, resume, the water account);
+the scenario fuzz sets the fields too. The Excel audit workbook refuses a
+unit with a river abstraction, by name. The independent Python cross-check
+(`verify/model.py`, written from this section) models them too, and its
+generator puts the crops or demand objects on river pumps, with pools, in
+some networks; every daily series agrees.
+
+**Not in the workbook.** b023 has no river abstraction beside a dam; with
+no water source set the engine is the workbook's, so it is no deviation and
+the client catchment regression suite is unchanged. The decisions above are
+open question R2 in [engine-audit.md](./engine-audit.md#open-questions-for-the-hydrologist).
+
 ### 2.8 Outputs
 
 | Workbook sheet | What it shows | App equivalent (V1) |

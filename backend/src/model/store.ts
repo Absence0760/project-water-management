@@ -1,4 +1,4 @@
-import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, WATER_SOURCE_DEFAULTS, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -30,6 +30,7 @@ const MODEL_JSON = `json_build_object(
 			to_char(dam_in_service_from, 'YYYY-MM-DD') AS "damInServiceFrom", to_char(abstraction_from, 'YYYY-MM-DD') AS "abstractionFrom",
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
 			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct",
+			crop_water_source AS "cropWaterSource", crop_river_pump_m3_day AS "cropRiverPumpM3Day", crop_river_pool_m3 AS "cropRiverPoolM3",
 			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
 			ewr_site AS "ewrSite",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
@@ -56,7 +57,8 @@ const MODEL_JSON = `json_build_object(
 	'demandObjects', (SELECT json_agg(r ORDER BY r."nodeId", r.name, r.id) FROM (
 		SELECT id, node_id AS "nodeId", name, category, sizing, monthly_m3_day AS "monthlyM3Day", unit_count AS "count",
 			litres_per_unit_day AS "litresPerUnitDay", loss_pct AS "lossPct", monthly_factor AS "monthlyFactor",
-			return_pct AS "returnPct", priority, priority_rank AS "rank", destination, enabled, schedule, population, source, note
+			return_pct AS "returnPct", priority, priority_rank AS "rank", destination, enabled, schedule, population, source,
+			water_source AS "waterSource", river_pump_m3_day AS "riverPumpM3Day", river_pool_m3 AS "riverPoolM3", note
 		FROM demand_object WHERE project_id = $1) r)
 )`;
 
@@ -142,6 +144,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
@@ -151,6 +154,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			crop_water_source, crop_river_pump_m3_day, crop_river_pool_m3,
 			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
@@ -175,7 +179,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_in_service_from = EXCLUDED.dam_in_service_from, abstraction_from = EXCLUDED.abstraction_from,
 			supply_rule = EXCLUDED.supply_rule,
 			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
-			supply_stop_pct = EXCLUDED.supply_stop_pct, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
+			supply_stop_pct = EXCLUDED.supply_stop_pct,
+			crop_water_source = EXCLUDED.crop_water_source, crop_river_pump_m3_day = EXCLUDED.crop_river_pump_m3_day,
+			crop_river_pool_m3 = EXCLUDED.crop_river_pool_m3, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
 			hands_off_ewr = EXCLUDED.hands_off_ewr, divert_monthly_m3_day = EXCLUDED.divert_monthly_m3_day,
 			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year
@@ -221,6 +227,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
 			supply_stop_pct: n.supplyStopPct ?? 0.6,
+			// Where the crops take their water (engine ≥ 1.65.0, migration 170); absent = the dam.
+			crop_water_source: n.cropWaterSource ?? WATER_SOURCE_DEFAULTS.cropWaterSource,
+			crop_river_pump_m3_day: n.cropRiverPumpM3Day ?? WATER_SOURCE_DEFAULTS.cropRiverPumpM3Day,
+			crop_river_pool_m3: n.cropRiverPoolM3 ?? WATER_SOURCE_DEFAULTS.cropRiverPoolM3,
 			// Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114); absent = off.
 			hands_off_m3_day: n.handsOffM3Day ?? OPERATING_DEFAULTS.handsOffM3Day,
 			hands_off_ewr: n.handsOffEwr ?? OPERATING_DEFAULTS.handsOffEwr,
@@ -340,9 +350,11 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 	);
 	await upsertAll(
 		`INSERT INTO demand_object (id, project_id, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source, note)
+			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
+			water_source, river_pump_m3_day, river_pool_m3, note)
 		 SELECT id, $1, node_id, name, category, sizing, monthly_m3_day, unit_count, litres_per_unit_day,
-			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source, note
+			loss_pct, monthly_factor, return_pct, priority, priority_rank, destination, enabled, schedule, population, source,
+			water_source, river_pump_m3_day, river_pool_m3, note
 		 FROM jsonb_populate_recordset(NULL::demand_object, $2::jsonb)
 		 ON CONFLICT (id) DO NOTHING`,
 		(m.demandObjects ?? []).map((o) => ({
@@ -368,6 +380,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			population: o.population ?? null,
 			// Where its number comes from (engine 1.56.0); absent and null alike = not recorded.
 			source: o.source ?? null,
+			// Where its water comes from (engine 1.65.0, migration 170); absent and null alike = the dam.
+			water_source: o.waterSource ?? null,
+			river_pump_m3_day: o.riverPumpM3Day ?? null,
+			river_pool_m3: o.riverPoolM3 ?? null,
 			note: o.note
 		})),
 		'demand object'

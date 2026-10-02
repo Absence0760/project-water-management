@@ -248,6 +248,15 @@ runs and accumulations are real) can't be decided without the client.
       answers on #90; a reversal becomes a new engine version with its
       engine-audit.md entry.
 
+- [ ] **River abstractions beside a dam (engine 1.65.0, issue #344):**
+      confirm the decisions of [model.md §2.7j](./model.md) (open question R2
+      in engine-audit.md): the abstractions take after the dam side from the
+      flow passing the dam (its spill too), keep the unit's hands-off flow,
+      share the river by the demand objects' supply order, and a pool (issue
+      #90 Q18) starts full, refills only from the flow above what must pass
+      and gains no rain. Trigger: the hydrologist's answer on #90; a change
+      is a new engine version.
+
 - [x] **Calibration record:** the gauge vs the logger over their overlap,
       [#1](https://github.com/Absence0760/project-water-management/issues/1)
       (closed 2026-09-25). Decided: the logger is the calibration and
@@ -3788,6 +3797,20 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       the run comparison and the summary CSV ([model.md §2.7c](./model.md)).
       No importer sets it: neither b023 importer creates user nodes. Its
       policy choices are listed under § Hydrologist.
+- [x] **A water source per demand: river abstractions beside a unit's dam**
+      (2026-10-01, engine 1.65.0, migration 170, issue #344, #342 items 4
+      and 5). A unit's crops and each demand object draw on the dam (the
+      default, the unit's supply rule) or on a river abstraction of their
+      own with its own pump and an optional pool (capacity only: it starts
+      full, its area is estimated), after the dam side, from the flow passing
+      the dam with its spill, by the demand objects' supply order
+      ([model.md §2.7j](./model.md)). The node form's **Water for …**
+      fields, a scenario `node.set` / `demandObject.set`, the run comparison,
+      the series `river_take@`, `river_pool@`, `river_pool_evaporation@`,
+      `FarmSummary.riverTakes` and the water balance's pool evaporation.
+      Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
+      importer sets it (b023 has no such abstraction). The decisions are
+      open question R2 in engine-audit.md, listed under § Hydrologist.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per

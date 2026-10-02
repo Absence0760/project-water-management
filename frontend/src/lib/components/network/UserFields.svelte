@@ -8,9 +8,8 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum } from '$lib/format/number';
 	import MonthFields from './MonthFields.svelte';
-	import { pumpM3Day } from './supply';
+	import PumpCapacityField from './PumpCapacityField.svelte';
 	import { userDemandOf, userPumpNote } from './users';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
@@ -24,15 +23,6 @@
 	const demand = $derived(userDemandOf(node));
 	const pump = $derived(node.pumpCapacityM3Day ?? null);
 
-	// The calculator: not stored. Filling both sets the capacity; typing a capacity clears them.
-	let pumps = $state<number | null>(null);
-	let rate = $state<number | null>(null);
-	function calc(p: number | null, r: number | null) {
-		pumps = p;
-		rate = r;
-		const v = pumpM3Day(p, r);
-		if (v !== null) node.pumpCapacityM3Day = v;
-	}
 </script>
 
 <div class="user" data-testid="user-fields-{node.id}">
@@ -57,44 +47,18 @@
 		</div>
 	</div>
 	<div class="row pump" data-testid="user-pump-{node.id}">
-		{#if !readonly}
-			<div class="field">
-				<label for={id('pumps')}>Number of pumps</label>
-				<NumberInput id={id('pumps')} min={0} value={pumps} nullable placeholder="–" onchange={(v) => calc(v, rate)} />
-			</div>
-			<div class="field">
-				<label for={id('rate')}>m³/h per pump</label>
-				<NumberInput id={id('rate')} min={0} value={rate} nullable placeholder="–" onchange={(v) => calc(pumps, v)} />
-			</div>
-		{/if}
-		<div class="field">
-			<span class="lbl"><label for={id('pump')}>Pump capacity <span class="u">(m³/day)</span></label><HelpTip key="run.pump_limited" /></span>
-			<NumberInput
-				id={id('pump')}
-				min={0}
-				grouped
-				nullable
-				placeholder="no limit"
-				disabled={readonly}
-				aria-describedby="{id('pump')}-h"
-				value={pump}
-				onchange={(v) => {
-					node.pumpCapacityM3Day = v;
-					if (v !== pumpM3Day(pumps, rate)) {
-						pumps = null;
-						rate = null;
-					}
-				}}
-			/>
-			<span class="hint" id="{id('pump')}-h" data-testid="user-pump-note">
-				{#if pumpM3Day(pumps, rate) !== null}
-					{fmtNum(pumps, 0, true)} × {fmtNum(rate, 2, true)} m³/h × 24 h = {fmtNum(pumpM3Day(pumps, rate), 0)} m³/day.
-				{:else}
-					{userPumpNote(node, readonly)}
-				{/if}
-			</span>
-			<FieldHistoryLine field="node:{node.id}:pumpCapacityM3Day" unit={null} />
-		</div>
+		<PumpCapacityField
+			idBase="usr-{node.id}"
+			label="Pump capacity"
+			helpKey="run.pump_limited"
+			value={pump}
+			{readonly}
+			note={userPumpNote(node, readonly)}
+			noteTestId="user-pump-note"
+			onchange={(v) => (node.pumpCapacityM3Day = v)}
+		>
+			{#snippet history()}<FieldHistoryLine field="node:{node.id}:pumpCapacityM3Day" unit={null} />{/snippet}
+		</PumpCapacityField>
 	</div>
 	<MonthFields
 		values={demand}

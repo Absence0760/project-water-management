@@ -25,6 +25,7 @@ import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
+import { riverSourcesOf } from '../network/riverSource';
 import { operatingOf } from '../network/supply';
 import { upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
@@ -236,6 +237,8 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	const why = new Set<string>();
 	for (const [key, feature] of AUDIT_UNSUPPORTED_SERIES) if (run.farm.has(key)) why.add(feature);
 	if (demandObjectsByNode(model, []).get(n.id)) why.add('demand objects');
+	// River abstractions beside the dam (engine ≥ 1.65.0): they take from the flow past the dam, and the dam side no longer supplies their demands.
+	if (riverSourcesOf(n, demandObjectsByNode(model, []).get(n.id), []).river) why.add('river abstractions beside the dam');
 	// Operating rules (engine ≥ 1.32.0): they change O by month and by the day's flow.
 	const ops = operatingOf(n, []);
 	if (ops.handsOff) why.add('a hands-off flow');

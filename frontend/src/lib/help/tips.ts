@@ -254,6 +254,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.source']
 	},
 	{
+		id: 'water-source',
+		term: 'Water source of a demand',
+		short: 'Whether a demand draws on its hydrological unit’s dam, under the supply rule, or on a river abstraction of its own beside it.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.cropWaterSource', 'node.cropRiverPumpM3Day', 'node.cropRiverPoolM3', 'demandObject.waterSource', 'demandObject.riverPumpM3Day', 'demandObject.riverPoolM3', 'summary.riverTakes']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',

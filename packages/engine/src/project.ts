@@ -1267,6 +1267,18 @@ export interface NetworkNode {
 	 * default, no warning), 0 = it takes nothing from the river. A gauge has none.
 	 */
 	pumpCapacityM3Day?: number | null;
+	/**
+	 * Farms only (engine ≥ 1.65.0, issue #344, docs/model.md §2.7j): where the
+	 * unit's crops take their water. 'dam' (default, absent): from the dam
+	 * side under the unit's supply rule, every engine before 1.65.0. 'river':
+	 * a river abstraction of their own beside the dam, its pump
+	 * `cropRiverPumpM3Day` and an optional pool `cropRiverPoolM3`.
+	 */
+	cropWaterSource?: WaterSource;
+	/** The crops' river pump capacity, m³/day, under `cropWaterSource` 'river'; null / absent = no limit (the run warns); 0 = no pump. */
+	cropRiverPumpM3Day?: number | null;
+	/** A pool at the crops' river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	cropRiverPoolM3?: number | null;
 	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
 	supplyTriggerPct?: number;
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
@@ -1348,6 +1360,28 @@ export const SUPPLY_DEFAULTS = {
 	pumpCapacityM3Day: null,
 	supplyTriggerPct: 0.4,
 	supplyStopPct: 0.6
+} as const;
+
+/**
+ * Where a demand takes its water (engine ≥ 1.65.0, issue #344, docs/model.md
+ * §2.7j): 'dam' — the unit's dam side under its supply rule, as every engine
+ * before 1.65.0 (the default); 'river' — a river abstraction of its own
+ * beside the dam, with its own pump and an optional pool.
+ */
+export const WATER_SOURCES = ['dam', 'river'] as const;
+export type WaterSource = (typeof WATER_SOURCES)[number];
+
+/** Each water source in plain words, as the node form, the scenario form and run comparison show it. */
+export const WATER_SOURCE_LABEL: Record<WaterSource, string> = {
+	dam: 'the unit’s supply (dam side)',
+	river: 'its own river abstraction'
+};
+
+/** What a node without the crop water source fields (engine ≥ 1.65.0) runs as: the crops on the dam. */
+export const WATER_SOURCE_DEFAULTS = {
+	cropWaterSource: 'dam',
+	cropRiverPumpM3Day: null,
+	cropRiverPoolM3: null
 } as const;
 
 /**
@@ -1583,6 +1617,10 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
+				// The crops' water source (engine ≥ 1.65.0): the dam unless set.
+				n.cropWaterSource ??= WATER_SOURCE_DEFAULTS.cropWaterSource;
+				if (n.cropRiverPumpM3Day === undefined) n.cropRiverPumpM3Day = WATER_SOURCE_DEFAULTS.cropRiverPumpM3Day;
+				if (n.cropRiverPoolM3 === undefined) n.cropRiverPoolM3 = WATER_SOURCE_DEFAULTS.cropRiverPoolM3;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -1982,6 +2020,18 @@ export interface DemandObject {
 	 * not recorded (every object saved before it); the run is the same.
 	 */
 	source?: DemandObjectSource | null;
+	/**
+	 * Where its water comes from (engine ≥ 1.65.0, issue #344, docs/model.md
+	 * §2.7j): 'dam' (null or absent, every object saved before it) — the
+	 * unit's dam side under its supply rule; 'river' — a river abstraction of
+	 * its own beside the dam, with the pump `riverPumpM3Day` and the pool
+	 * `riverPoolM3`.
+	 */
+	waterSource?: WaterSource | null;
+	/** Its river pump capacity, m³/day, under 'river'; null / absent = no limit (the run warns); 0 = no pump. */
+	riverPumpM3Day?: number | null;
+	/** A pool at its river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	riverPoolM3?: number | null;
 	/** The detail of where the number comes from (which meter, which strategy and year, which norm), for the report. */
 	note: string;
 }
@@ -2295,6 +2345,25 @@ export interface FarmSummary {
 	 * Absent for a unit without any, and on older runs.
 	 */
 	demandObjects?: DemandObjectSummary[];
+	/**
+	 * The unit's river abstractions (engine ≥ 1.65.0, issue #344,
+	 * docs/model.md §2.7j), crops first then objects in id order: each one's
+	 * mean take (part of avgSuppliedM3Day) and, with a pool, its capacity and
+	 * mean storage. Absent for a unit without a river-sourced demand.
+	 */
+	riverTakes?: RiverTakeSummary[];
+}
+
+/** One river abstraction over the whole run (engine ≥ 1.65.0): `key` is 'crops' or the demand object's id. */
+export interface RiverTakeSummary {
+	key: string;
+	name: string;
+	avgTakeM3Day: number;
+	/** Its pump's capacity, m³/day; null = no limit. */
+	pumpM3Day: number | null;
+	/** With a pool: its capacity (m³) and mean storage at the end of the day. */
+	poolM3?: number;
+	avgPoolStorageM3?: number;
 }
 
 /** One demand object over the whole run (engine ≥ 1.7.0), m³/day means like FarmSummary. */
@@ -3202,6 +3271,8 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
+	/** Evaporation from the river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool. */
+	poolEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
 	/** Groundwater pumped into supply and (engine ≥ 0.36.0, WP-3.9) into the dams, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
@@ -3221,7 +3292,7 @@ export interface WaterBalanceRow {
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − other use − stream depletion − seepage lost − conveyance losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − outflow − closing. */
 	residualM3: number;
 }
 

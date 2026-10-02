@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, WATER_SOURCE_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
 import { validateModel, type ModelIssue } from './validate';
@@ -46,6 +46,8 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		...SUPPLY_DEFAULTS,
 		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
 		...OPERATING_DEFAULTS,
+		// The crops on the dam (engine 1.65.0).
+		...WATER_SOURCE_DEFAULTS,
 		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
 		ewrSite: true
 	};
@@ -191,6 +193,10 @@ export class ModelEditor {
 			source: null,
 			// Its rank within its class (engine ≥ 1.64.0): none, so it shares with the class's rank 1 until the supply order says otherwise.
 			rank: null,
+			// Where its water comes from (engine ≥ 1.65.0): the dam until the modeller gives it a river abstraction.
+			waterSource: null,
+			riverPumpM3Day: null,
+			riverPoolM3: null,
 			note: ''
 		};
 		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.

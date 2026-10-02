@@ -1406,6 +1406,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Transfers, net (m³)', (r) => r.transfersM3],
 	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
 	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
+	['Evaporation from river abstractions’ pools (m³)', (r) => r.poolEvaporationM3 ?? null, true],
 	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
 	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
 	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],

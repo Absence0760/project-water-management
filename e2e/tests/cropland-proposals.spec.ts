@@ -73,9 +73,13 @@ test('an editor uses the parcels’ cultivated area as a crop’s planted area; 
 	await answerConfirm(page, false, 'Set Orchard’s planted area on Upper farm from land cover?');
 	await expect(row.getByRole('cell').first()).toHaveText('20 ha');
 	await row.getByRole('button', { name: /^Use / }).click();
+	// The page reloads the model after the save; the notice must outlive that reload (it used to be cleared by it).
+	const reloaded = page.waitForResponse((r) => r.request().method() === 'GET' && r.url().endsWith(`/projects/${project.id}/model`));
 	await answerConfirm(page, true, /Set Orchard’s planted area on Upper farm from land cover\?\s*Orchard on Upper farm changes from 20 ha to [\d.,]+ ha, the cultivated area the land cover \(synthetic, synthetic 1\) shows in Upper farm’s parcels\./);
 	await expect(panel(page).getByTestId('cropland-notice')).toHaveText(/^Orchard’s planted area on Upper farm is now [\d.,]+ ha, from land cover\. Run the model to see its effect\.$/);
 	await expect(row.getByRole('cell').last()).toHaveText('Saved');
+	await reloaded;
+	await expect(panel(page).getByTestId('cropland-notice')).toBeVisible();
 	await expect(row.getByTestId('cropland-provenance')).toContainText('from land cover (the unit’s parcels; synthetic, synthetic 1), used');
 	const model = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { cropAreas: { nodeId: string; cropId: string; areaM2: number }[] };
 	expect(model.cropAreas.find((a) => a.nodeId === upper.id && a.cropId === orchard.id)!.areaM2).toBe(summary.unit.cultivatedM2);

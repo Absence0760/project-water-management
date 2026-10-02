@@ -142,6 +142,10 @@ issued on it.
     (§2.7g): a dam not yet in service when the run starts, or silted empty by
     its end, leaves days without one;
   - an other water user with demand and no pump capacity (model.md §2.7c);
+  - a demand's own river abstraction beside a unit's dam (engine ≥ 1.65.0,
+    model.md §2.7j): the crops' (with a crop area) or an enabled demand
+    object's, with no pump capacity; 0 means no pump. It keeps the unit's
+    hands-off flow, so `protectsEwr` reads the unit's;
   - a river off-take whose rate isn't a number and has no daily cap. Its
     capacity is the month's rate × 86 400, capped by the daily cap (§2.6a),
     so a stored off-take normally passes.
@@ -150,7 +154,8 @@ issued on it.
   the run ends (§2.7g) takes nothing in it. Without a cap, only the river's
   flow limits the take, which is no basis for licensing a volume. The fix
   names what to enter for each kind (a pump capacity under Network › the
-  unit › Supply, run of river for a dam-less unit, the user's pump capacity,
+  unit › Supply, a river abstraction's pump under Water for the crops or
+  the demand object, run of river for a dam-less unit, the user's pump capacity,
   the off-take's rate), then run the model again and nominate that run (or,
   for the application's own units only, run the application again).
 - **`protectsEwr`: the application's own river abstraction leaves the EWR in

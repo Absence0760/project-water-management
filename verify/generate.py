@@ -490,6 +490,22 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                 })
         m["allocations"] = allocs
 
+    # River abstractions beside a unit's dam (§2.7j): the crops or a demand object on a pump of their own,
+    # now and then with a pool; drawn last, so every other feature of a seed is unchanged.
+    if rng.random() < gate(0.3):
+        pump = lambda: rng.choice([None, 0, round(rng.uniform(50, 3000)), round(rng.uniform(1000, 50000))])
+        pool = lambda: rng.choice([None, None, 0, round(rng.uniform(20, 500)), round(rng.uniform(500, 50000))])
+        for f in farms:
+            if rng.random() < 0.4:
+                f["cropWaterSource"] = "river"
+                f["cropRiverPumpM3Day"] = pump()
+                f["cropRiverPoolM3"] = pool()
+        for ob in m.get("demandObjects") or []:
+            if rng.random() < 0.5:
+                ob["waterSource"] = rng.choice(["river", "river", "dam"])
+                ob["riverPumpM3Day"] = pump()
+                ob["riverPoolM3"] = pool()
+
 
 def _window(rng, start: dt.date, days: int) -> dict:
     span = rng.choice(["always", "yearly", "range", "easter"])

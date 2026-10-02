@@ -62,8 +62,13 @@
 			if (mine === seq) loading = false;
 		}
 	}
+	// A new unit starts clean. Only a change of unit: the prop's expression (the drawer's `node.id`) re-runs this
+	// whenever the model reloads, which a saved value does, and that cleared the notice it had just set.
+	let shownId: string | null = null;
 	$effect(() => {
 		const id = nodeId;
+		if (id === shownId) return;
+		shownId = id;
 		untrack(() => {
 			notice = null;
 			rowError = null;
