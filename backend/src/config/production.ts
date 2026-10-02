@@ -197,6 +197,11 @@ export const SETTINGS: Record<string, Setting> = {
 	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
 	DB_NAME: { why: 'The database to migrate.', checks: { migrate: required } },
 	MASTER_SECRET_ARN: { why: 'The RDS-managed owner credentials in Secrets Manager.', checks: { migrate: arn } },
+	NODE_OPTIONS: { why: 'Read by Node itself: the migrate Lambda’s V8 heap size (infra/lambda.tf), sized for a reference load. Flags, never a credential.' },
+	REFERENCE_BUCKET: {
+		why: 'The private bucket a reference-dataset load reads its one file from (infra/map_data.tf, geo/referenceLoad.ts, docs/deployment.md § Reference datasets).',
+		checks: { migrate: required }
+	},
 	WATER_APP_PASSWORD: {
 		why: 'The runtime role password the migrate Lambda sets (sops db_app_password), from its runtime secret.',
 		checks: { migrate: appPassword }

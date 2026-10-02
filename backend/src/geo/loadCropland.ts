@@ -3,7 +3,8 @@
 // § Cultivated area from land cover). The operator's tool, run as the schema
 // owner (`pnpm import:land-cover`); the app only reads the result, and never
 // a raster: no GeoTIFF code reaches a Lambda bundle (this module is imported
-// by backend/scripts/import-land-cover.ts and its tests only).
+// by backend/scripts/import-land-cover.ts and its tests only). The JSON form,
+// the defaults and the database load are in croplandGrid.ts, re-exported here.
 //
 // Two inputs:
 //  * a GeoTIFF classification raster, read here without a dependency: the
@@ -21,37 +22,22 @@
 // Only cells with some cropland are kept. A load replaces its dataset, in one
 // transaction.
 import { inflateSync } from 'node:zlib';
-import type pg from 'pg';
+import type { CroplandCell } from './croplandGrid.js';
 
-/** The ESA WorldCover class the summary counts as cultivated: 40, Cropland (WorldCover product user manual, v2.0). */
-export const WORLDCOVER_CROPLAND = 40;
-/** The cell size the operator's load uses unless told otherwise: 30 WorldCover pixels, about 250 m × 230 m in South Africa. */
-export const DEFAULT_CELL_DEG = 0.0025;
-
-/** The product the operator's raster load defaults to (each can be overridden on the command line). */
-export const WORLDCOVER_2021 = {
-	source:
-		'ESA WorldCover 10 m 2021 v200 (Zanaga, D. et al. 2022, https://doi.org/10.5281/zenodo.7254221), CC BY 4.0',
-	version: '2021 v200',
-	attribution: '© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium'
-} as const;
-
-/** The counting method in words, as proposals and revisions cite it. */
-export function methodFor(cellDeg: number, classes: readonly number[]): string {
-	const cls = classes.length === 1 ? `class ${classes[0]}` : `classes ${classes.join(', ')}`;
-	return (
-		`Pre-summarised at import: each ${cellDeg}° grid cell's share of pixels in ${cls} (cultivated) among its pixels with data. ` +
-		'A polygon’s cultivated area is the sum over the cells it covers of the cell’s area on the WGS84 ellipsoid × the share of the cell inside the polygon × that cultivated share, ' +
-		'cropland taken as spread evenly within each cell.'
-	);
-}
-
-/** One grid cell with cropland: its south-west indices (row = ⌊lat / cell⌋, col = ⌊lon / cell⌋) and the share of it that is cropland, 0–1. */
-export interface CroplandCell {
-	row: number;
-	col: number;
-	fraction: number;
-}
+export {
+	croplandFromJson,
+	croplandToJson,
+	jsonDatasetMeta,
+	DEFAULT_CELL_DEG,
+	mergeCells,
+	methodFor,
+	replaceCroplandDataset,
+	WORLDCOVER_2021,
+	WORLDCOVER_CROPLAND,
+	type CroplandCell,
+	type CroplandDatasetMeta,
+	type JsonMeta
+} from './croplandGrid.js';
 
 // ---------------------------------------------------------------------------
 // GeoTIFF
@@ -246,116 +232,4 @@ export function croplandCellsFromTiff(buf: Buffer, cellDeg: number, classes: Rea
 		}
 	}
 	return { cells, pixels };
-}
-
-// ---------------------------------------------------------------------------
-// The fixture's JSON form
-// ---------------------------------------------------------------------------
-
-/** What the JSON form may say about its own product (the fixture says all of it). */
-export interface JsonMeta {
-	source?: string;
-	version?: string;
-	attribution?: string;
-	classes?: number[];
-}
-
-const text = (v: unknown, max: number): string | undefined => {
-	const s = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
-	return s ? s.slice(0, max) : undefined;
-};
-
-/**
- * `{ cellDeg, cells: [[lon, lat, fraction], …], source?, version?,
- * attribution?, classes? }`: each cell by its centre.
- */
-export function croplandFromJson(doc: unknown): { cellDeg: number; cells: CroplandCell[]; meta: JsonMeta; problems: string[] } | string {
-	const d = doc as { cellDeg?: unknown; cells?: unknown; source?: unknown; version?: unknown; attribution?: unknown; classes?: unknown };
-	const cellDeg = Number(d?.cellDeg);
-	if (!(cellDeg > 0 && cellDeg <= 1)) return 'the JSON file has no "cellDeg" between 0 and 1';
-	if (!Array.isArray(d.cells)) return 'the JSON file has no "cells" array';
-	const cells: CroplandCell[] = [];
-	const problems: string[] = [];
-	d.cells.forEach((c: unknown, i: number) => {
-		const [lon, lat, fraction] = Array.isArray(c) ? c.map(Number) : [];
-		if (![lon, lat, fraction].every((x) => Number.isFinite(x)) || Math.abs(lon!) > 180 || Math.abs(lat!) > 90) return problems.push(`cell ${i + 1}: not [lon, lat, fraction]`);
-		if (!(fraction! > 0 && fraction! <= 1)) return problems.push(`cell ${i + 1}: the fraction ${fraction} is not above 0 and at most 1`);
-		cells.push({ row: Math.floor(lat! / cellDeg), col: Math.floor(lon! / cellDeg), fraction: fraction! });
-	});
-	const classes = Array.isArray(d.classes) && d.classes.length && d.classes.every((x) => Number.isInteger(x)) ? (d.classes as number[]) : undefined;
-	return {
-		cellDeg,
-		cells,
-		meta: { source: text(d.source, 500), version: text(d.version, 100), attribution: text(d.attribution, 500), classes },
-		problems
-	};
-}
-
-/** Merge cells that name the same grid square (two inputs overlapping): the larger fraction wins, deterministically. */
-export function mergeCells(cells: readonly CroplandCell[]): CroplandCell[] {
-	const byKey = new Map<string, CroplandCell>();
-	for (const c of cells) {
-		const k = `${c.row}:${c.col}`;
-		const was = byKey.get(k);
-		if (!was || c.fraction > was.fraction) byKey.set(k, c);
-	}
-	return [...byKey.values()].sort((a, b) => a.row - b.row || a.col - b.col);
-}
-
-// ---------------------------------------------------------------------------
-// The database
-// ---------------------------------------------------------------------------
-
-export interface CroplandDatasetMeta {
-	dataset: string;
-	/** Shown with every proposed value: the product, its version and where it came from. */
-	source: string;
-	/** The product's version, as its publisher names it ('2021 v200'). */
-	version: string;
-	/** How the cells were counted, in words an evidence pack can print. */
-	method: string;
-	/** The licence and attribution line the map must carry. */
-	attribution: string;
-	cellDeg: number;
-	classes: number[];
-}
-
-const BATCH = 20_000;
-
-/**
- * Replace `meta.dataset` with the cells `parts` yields (one part per input
- * file, read only when its turn comes, so a country's tiles never sit in
- * memory together), in one transaction, as the schema owner. A cell two
- * parts both give keeps the larger share. Returns how many cells it wrote.
- */
-export async function replaceCroplandDataset(client: pg.ClientBase, meta: CroplandDatasetMeta, parts: Iterable<readonly CroplandCell[]>): Promise<number> {
-	await client.query('BEGIN');
-	try {
-		// The cells go with their dataset (ON DELETE CASCADE).
-		await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [meta.dataset]);
-		await client.query(
-			`INSERT INTO cropland_dataset (dataset, source, version, method, attribution, cell_deg, classes)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			[meta.dataset, meta.source, meta.version, meta.method, meta.attribution, meta.cellDeg, meta.classes]
-		);
-		for (const cells of parts) {
-			for (let i = 0; i < cells.length; i += BATCH) {
-				const part = mergeCells(cells.slice(i, i + BATCH));
-				await client.query(
-					`INSERT INTO cropland_cell_reference (dataset, row_idx, col_idx, fraction)
-					 SELECT $1, r, c, f FROM unnest($2::integer[], $3::integer[], $4::real[]) AS t (r, c, f)
-					 ON CONFLICT (dataset, row_idx, col_idx) DO UPDATE SET fraction = GREATEST(cropland_cell_reference.fraction, EXCLUDED.fraction)`,
-					[meta.dataset, part.map((c) => c.row), part.map((c) => c.col), part.map((c) => c.fraction)]
-				);
-			}
-		}
-		const { rows } = await client.query<{ n: number }>('SELECT count(*)::integer AS n FROM cropland_cell_reference WHERE dataset = $1', [meta.dataset]);
-		// A product with no cropland at all is a wrong file or class, not a dataset to propose zeros from.
-		if (!rows[0]!.n) throw new Error('no cell has any cropland: check the files and --classes');
-		await client.query('COMMIT');
-		return rows[0]!.n;
-	} catch (e) {
-		await client.query('ROLLBACK');
-		throw e;
-	}
 }
