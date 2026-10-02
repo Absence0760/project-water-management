@@ -40,7 +40,7 @@ Run the same command the job runs, scoped to what failed. Never the whole
 | Typecheck and unit tests (`test`) | `pnpm test:scripts`, `pnpm check`, `pnpm test`, then for build failures `pnpm build`, `pnpm check:bundle`, `pnpm check:i18n`, `infra/scripts/package-lambdas.sh` |
 | Backend DB tests (`db-test`) | `pnpm dev:db:up`, then the failing file: `pnpm -C backend exec vitest run --project db <file>` |
 | E2E shards (`e2e`, 14 of them) | the failing spec only: `pnpm -C e2e e2e tests/<spec>.spec.ts > e2e.log 2>&1` (never piped into `grep`/`head`: it hangs). `server-report.spec.ts` needs `pnpm dev:s3:up` and `pnpm dev:mail:up` |
-| Workflow lint + guards (`workflow-lint`) | `pnpm check:workflows`, `pnpm check:pins`, `pnpm test:guards` |
+| Workflow lint + guards (`workflow-lint`) | `pnpm check:workflows`, `pnpm check:pins`, `pnpm check:migrations`, `pnpm test:guards` |
 | Claude tooling (`claude-tooling`) | `pnpm check:claude` |
 | Env isolation | `pnpm check:env` |
 | Workbook importer (Python) | `python -m unittest discover -s scripts/wbt-import` |
