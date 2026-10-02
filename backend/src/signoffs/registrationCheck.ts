@@ -126,13 +126,15 @@ export const registrationCheckRoutes = new Hono<AuthEnv>()
 		const checkedAt = new Date(body.checkedAt);
 		if (Number.isNaN(checkedAt.getTime()) || checkedAt.getTime() > Date.now() + 60_000) throw new ApiError(400, 'checkedAt must be a date that has passed');
 		return withUser(c.get('userId'), async (db) => {
-			// An owner (stepped up by requireRole), or an editor an owner marked as acting for the responsible authority (163).
+			// An owner, or an editor an owner marked as acting for the responsible authority (163); either needs two-step
+			// sign-in. requireRole steps up only when the route's minimum is owner, and this one's is editor, so the
+			// owner's step-up is asked for here too (before, an owner recorded a check on a password alone).
 			const role = await requireRole(db, id, 'editor');
 			if (rank[role] < rank.owner) {
 				const { rows: auth } = await db.query<{ ok: boolean }>('SELECT app_acts_for_authority($1) AS ok', [id]);
 				if (!auth[0]?.ok) throw new ApiError(403, 'requires owner role, or a member acting for the responsible authority');
-				await requireStepUp(db);
 			}
+			await requireStepUp(db);
 			if (!UUID.test(userId)) throw notFound();
 			const { rows: member } = await db.query<{ displayName: string }>(
 				`SELECT u.display_name AS "displayName" FROM project_member m JOIN app_user u ON u.id = m.user_id WHERE m.project_id = $1 AND m.user_id = $2`,
