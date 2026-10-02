@@ -34,6 +34,8 @@ test('order two municipalities before the crops, one after the other, and keep i
 	await expect(group.getByLabel('Priority', { exact: true })).toHaveCount(0);
 	const order = group.getByRole('group', { name: /^Supply order on a short day/ });
 	const text = group.getByTestId(/^supply-order-text-/);
+	// The order is per water source: the dam side first, the river abstractions after it (round 4, persona-hydrologist).
+	await expect(order).toContainText('The order holds among the demands on one water source');
 	await expect(order.getByLabel('The crops', { exact: true })).toHaveValue('2');
 	await expect(order.getByLabel('Town A', { exact: true })).toHaveValue('1');
 	await expect(order.getByLabel('Town B', { exact: true })).toHaveValue('1');

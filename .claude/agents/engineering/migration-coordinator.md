@@ -21,7 +21,7 @@ Run the steps in order. Stop and report on any failure; don't paper over it.
 
 Note new tables, columns, indexes, triggers, functions, policies, `CHECK (… IN (…))` enums and grants. Then check:
 
-- **Numbering.** `NNN_slug.sql`, zero-padded, taking the next number after the highest on `origin/main` (`git ls-tree --name-only origin/main backend/migrations/ | tail -3`). The runner refuses a pending file that sorts before the latest applied one.
+- **Numbering.** `NNN_slug.sql`, zero-padded, taking the next number after the highest on `origin/main` (`git ls-tree --name-only origin/main backend/migrations/ | tail -3`). The runner refuses a pending file that sorts before the latest applied one. Never keep a number reserved by a plan: run `pnpm check:migrations` (after `git fetch`) and renumber with the `git mv` it prints if `main` has moved past it.
 - **Forward-only.** If the diff edits a file that already exists on `origin/main`, that is Critical: add a new `NNN_*.sql` instead. The one exception is `001` before the first production deploy (CLAUDE.md rule 2).
 - **Latest definition.** A redefined function or policy must start from its latest definition: `grep -ln '<name>' backend/migrations/*.sql` and read the newest hit. `DROP POLICY` needs the exact name.
 - **Timeouts.** A long backfill either stays under the runner's `statement_timeout = 240s` or says `-- migrate: statement_timeout = …` (and, past ~280 s, the migrate Lambda's timeout changes in `infra/lambda.tf` in the same change). Prefer expand/contract and batched backfills.

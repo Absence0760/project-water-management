@@ -18,6 +18,8 @@ test('after the terms change, the app waits for Accept; the legal pages stay ope
 	// Nothing of the app behind it: no sidebar, no catchment.
 	await expect(page.getByText('Terms-update catchment')).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
+	// Accepted a version before both listed ones: every change since, the first version's included (round 4).
+	await expect(page.locator('ul.changes').getByRole('listitem')).toHaveCount(8);
 	const summary = page.getByRole('region', { name: 'The main things you agree to' });
 	await expect(summary.getByRole('listitem')).toHaveCount(4);
 	await expectNoViolations(page);
@@ -53,4 +55,13 @@ test('an account that accepted an older version can sign out from the notice ins
 	await page.getByRole('button', { name: 'Sign out' }).click();
 	await expect(page).toHaveURL('/login');
 	expect((await termsAccepted(owner.email)).version).toBe('2020-01-01');
+});
+
+test('an account that accepted the previous version is shown only what changed since', async ({ page, owner }) => {
+	await setTermsVersion([owner.email], '2026-10-02');
+	await page.goto('/');
+	await expect(page.getByRole('heading', { level: 1, name: 'Our terms have changed' })).toBeVisible();
+	const changes = page.locator('ul.changes').getByRole('listitem');
+	await expect(changes).toHaveCount(1);
+	await expect(changes).toHaveText(/Some map data, such as the river network, is licensed to us by others/);
 });

@@ -5,6 +5,8 @@
 // again (its `kind` property is read by the upload's review, maps.md §
 // Uploads). Pure (mapExport.test.ts).
 import type { MapFeature } from '$lib/api/types';
+import { HYDRORIVERS_MAP_ATTRIBUTION, JRC_WATER_STATEMENT } from '$lib/components/legal/dataCredits';
+import { creditedFeature } from './mapLayers';
 
 export interface ExportedProperties {
 	name: string;
@@ -16,13 +18,29 @@ export interface ExportedProperties {
 	areaKm2: number | null;
 	/** The same, in hectares. */
 	areaHa: number | null;
+	/**
+	 * The licensed data's credit, only on a feature drawn from it: a river
+	 * added from HydroRIVERS (its map attribution) or a dam traced from JRC
+	 * Global Surface Water (its "Source: EC JRC/Google", which the traced
+	 * feature's description carries), so the credit leaves with the data
+	 * (docs/maps.md § Sources). Absent on every other feature.
+	 */
+	credit?: string;
+}
+
+/** The credit a feature's data carries out of the app, or null (ExportedProperties.credit). */
+export function featureCredit(f: Pick<MapFeature, 'kind' | 'properties'>): string | null {
+	if (creditedFeature(f)) return HYDRORIVERS_MAP_ATTRIBUTION;
+	const d = f.properties?.description;
+	return typeof d === 'string' && d.includes(JRC_WATER_STATEMENT) ? JRC_WATER_STATEMENT : null;
 }
 
 /**
  * The features as a FeatureCollection, in WGS84 longitude/latitude (RFC 7946
  * has no `crs` member), each with its name, kind, the node it stands for and
- * its area. Nothing else: no ids, no file names, no user, so the file says
- * only what the map shows.
+ * its area, and a licensed source's credit where its data is drawn
+ * (featureCredit). Nothing else: no ids, no file names, no user, so the
+ * file says only what the map shows.
  */
 export function featuresGeoJson(features: readonly MapFeature[]) {
 	return {
@@ -35,6 +53,8 @@ export function featuresGeoJson(features: readonly MapFeature[]) {
 				areaKm2: f.areaM2 === null ? null : round(f.areaM2 / 1e6, 6),
 				areaHa: f.areaM2 === null ? null : round(f.areaM2 / 1e4, 4)
 			};
+			const credit = featureCredit(f);
+			if (credit) properties.credit = credit;
 			return { type: 'Feature' as const, properties, geometry: f.geometry };
 		})
 	};

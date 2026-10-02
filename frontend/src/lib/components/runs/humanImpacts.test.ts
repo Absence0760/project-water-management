@@ -16,6 +16,9 @@ describe('hasHumanImpacts', () => {
 		expect(hasHumanImpacts({ farms: [farm({ avgGroundwaterM3Day: 0 })] })).toBe(true);
 		expect(hasHumanImpacts({ farms: [farm({ demandObjects: [{}] as FarmSummary['demandObjects'] })] })).toBe(true);
 		expect(hasHumanImpacts({ farms: [], users: [user()] })).toBe(true);
+		// A unit's river abstractions (engine 1.65.0).
+		expect(hasHumanImpacts({ farms: [farm({ riverTakes: [{}] as FarmSummary['riverTakes'] })] }, false)).toBe(true);
+		expect(otherUsesLink({ farms: [farm({ riverTakes: [{}] as FarmSummary['riverTakes'] })] })!.what).toBe('River abstractions');
 	});
 
 	it('leaves other users out when asked, but not a user’s borehole (issue #137)', () => {

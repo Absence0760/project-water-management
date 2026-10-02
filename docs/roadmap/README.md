@@ -65,7 +65,8 @@ that breaks one is wrong. Fix the plan; don't work around the rule.
    positive control. New visibility scopes (e.g. "a farmer sees only their own
    farm") are RLS policies, not UI filtering.
 3. **Migrations are forward-only once deployed.** Plans never hard-code
-   migration numbers; use the next free `NNN_`. Prefer expand/contract for
+   or reserve migration numbers; use the next free `NNN_` when the PR
+   merges (`pnpm check:migrations`). Prefer expand/contract for
    changes to existing tables.
 4. **The engine stays pure.** No I/O in `packages/engine`. A behaviour change
    bumps `ENGINE_VERSION` and passes the invariant suite and a

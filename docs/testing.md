@@ -75,6 +75,18 @@ after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md
    which `svelte-kit sync` writes, and without it every frontend test file
    fails at startup with "Could not resolve 'node:module' … Tsconfig not
    found" (Vite's dependency optimiser can't find the tsconfig).
+6. A test of a runes state class (a `.svelte.ts` module whose constructor
+   starts an `$effect`, like the map's layers) is a `*.svelte.test.ts`
+   file: the frontend's vitest runs those in its `runes` project
+   (`frontend/vitest.config.ts`, `frontend/vitest.client-env.ts`), Node with
+   Vite's client transforms. Under the plain `node` environment (the `unit`
+   project, every other test) Svelte compiles the module for the server,
+   where `$effect` and `$effect.root` do nothing, so the constructor's effect
+   never runs and a test awaiting its request waits forever. Wrap the class
+   in `$effect.root(…)`, call `flushSync()` after changing its inputs, and
+   pass its requests in rather than importing `$lib/api` (whose
+   `$env/static/public` exists only under SvelteKit;
+   `components/map/riverLayer.svelte.test.ts` is the pattern).
 
 ## Layout checks and fonts
 
@@ -128,7 +140,19 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   case (`fuzz/shard.ts`): raise that budget before raising the release's
   count. The
   determinism check compares outputs value by value (`sameOutput`), not by
-  serialising them twice, which cost as much as a run.
+  serialising them twice, which cost as much as a run. A shard is fixed,
+  CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with
+  the four shards side by side and about 20 s at a load average near 40,
+  against its 120 s limit, and no seed passed 0.8 s.
+- **Loading the Lambda entry points** (`backend/src/config/production.security.test.ts`):
+  the test starts each Lambda's entry point to show it runs the production
+  config check at init. It imports esbuild bundles of them natively (the same
+  build its env-read inventory reads), not the source through vitest's module
+  runner, which transformed the whole backend and the engine's source on the
+  shared Vite server: ~3 s alone, and a timeout beside a full `pnpm test` on
+  a loaded machine (2026-10-02). A test that needs a whole entry point's
+  graph, fresh for each case, should do the same rather than `vi.resetModules()`
+  and re-import it.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
   WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
   6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
@@ -160,6 +184,12 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   retires them so only the leaking file fails. It runs after the file's own
   `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
   `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
+  The same guard covers the notice queues, which the tick also drains
+  globally: a file that leaves a `pack_notice`, `erratum_notice` or
+  `alert_delivery` pending, sending or waiting for the digest fails, so a
+  file that issues or withdraws a pack, sweeps an erratum or fires an alert
+  sends the mail (`runTick`) or settles it
+  (`settlePendingNotices(projectId)` in `__tests__/helpers.ts`).
 - **e2e ticks are scoped to the test's own projects.** Playwright's workers
   share one e2e database and run in parallel, so unlike the DB files an e2e
   test can't count on nobody else ticking: `runJobsTick` requires the

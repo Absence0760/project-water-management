@@ -110,11 +110,11 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $52–54/month | ≈ $51/month |
+| Idle cost (infra/README.md § Cost) | ≈ $68–75/month | ≈ $60–63/month | ≈ $59/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 90` allows for them), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 100` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -645,7 +645,11 @@ Every workflow pins its actions to a commit SHA, grants least-privilege
 `permissions:` per job, and reaches AWS only through GitHub OIDC; there are
 no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 (`scripts/guards/check_workflows.mjs`, plus actionlint when it is installed).
-Among them: a job that grants `id-token: write` (or `write-all`) must be gated
+Among them: every job gated on `environment: production` must need a job
+that runs `scripts/release/preflight.mjs` (rule `preflight`; the deploy
+workflows run it per component, `load-reference.yml` in `environment` mode),
+since naming a missing environment would create it with no reviewer; and a
+job that grants `id-token: write` (or `write-all`) must be gated
 on `environment: production` (rule `oidc-gate`; the only exception,
 `OIDC_ALLOWLIST`, is Scorecard's `analysis` job, which signs its result for
 scorecard.dev and may run no `run:` step), and a workflow triggered by
@@ -1549,6 +1553,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | --- | --- | --- | --- |
 | `tiles/south-africa.pmtiles` (the basemap, ~1 GB at maxzoom 15) | `pnpm dev:tiles:fetch` | `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` | none (the OSM attribution is always on the map) |
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
+| `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
@@ -1566,6 +1571,7 @@ the old file and the PMTiles reader notices a replaced archive by its
 aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
 aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
 
@@ -1589,19 +1595,36 @@ delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 ([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
 which the defaults (1 024 MB, 30 s) hold with room to spare.
 
+**Tracing a dam** (#326 C2, [maps.md § Assisted
+drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API
+Lambda the same way. Set `dam_trace_water = true` in the tfvars and apply
+once the file is uploaded: Terraform sets
+`WATER_URL=s3://<tiles_bucket>/tiles/water.pmtiles` on the API and lets its
+role read that one key (`api_water`), and the Map offers **Trace a dam**. A
+trace reads a handful of small tiles in milliseconds, so it asks nothing of
+the Lambda's size. Unlike the DEM it waits for no legal sentence (GSW's
+licence is settled), and it is independent of `delineation_dem`.
+
 **The cost bound.** Every object under `/tiles/` is public (anyone can
 fetch it, as the browser does), and the archives are gigabytes. The
 `tiles_range` CloudFront Function lets through an archive only by one
 closed byte range of at most 2 MiB (a PMTiles read is a 16 KiB header, then
 directories and tiles far smaller), glyph ranges and the licence whole, and
 answers 404 for anything else, before S3. So one request moves at most
-2 MiB, and the WAF's site-wide per-IP limit (`waf_site_rate_limit_per_ip`,
-5 000 per 5 minutes) bounds one address at about 10 GB per 5 minutes in the
-worst case, about $1.10 of CloudFront egress in South Africa (real map use
-is a few hundred KB a pan). The `cloudfront-requests` alarm and the daily
-budget (§ Budget alerts) catch a sustained pull from many addresses.
-Storage is ~3.5 GB (under $0.10/month), and multipart uploads left
-unfinished are aborted after 7 days.
+2 MiB, and the WAF's tiles rule (`waf_tiles_rate_limit_per_ip`, 1 000 per
+5 minutes) bounds one address at about 2 GB per 5 minutes in the worst
+case, about $0.23 of CloudFront egress in South Africa (real map use is a
+few hundred KB a pan). Requests understate this cost about a hundredfold,
+so the `cloudfront-bytes` alarm watches bytes: past 0.5 GB in 5 minutes
+(`cloudfront_bytes_alarm_gb_per_5min`) it fires, which one address at the
+tiles limit does in the first period; a pull spread under it from many
+addresses (~$12–16 a day) is the daily budget's to catch (§ Budget alerts).
+Storage is ~3.5 GB (under $0.10/month), multipart uploads left unfinished
+are aborted after 7 days, and the bucket is versioned: a replaced or
+deleted archive can be restored for 14 days (S3 console → the object →
+Versions, or `aws s3api copy-object` from its version id), then the old
+version expires. Restore it before an invalidation, as for any
+replacement.
 
 ### Reference datasets
 
@@ -1622,6 +1645,22 @@ before anyone approves, and its `load` job runs in the `production`
 environment (the required reviewer, then OIDC; no AWS key anywhere) and
 prints counts only. A failure prints a code and a fixed reason; the detail
 is in the migrate Lambda's CloudWatch log, and the dataset stays as it was.
+A third job, `preflight` (no environment, no AWS), runs `preflight.mjs
+environment` first: it refuses the run unless the `production` environment
+exists with a required reviewer and its branch policy, since naming a
+missing environment would create it unprotected. The load runs from `main`
+only, and its AWS session is narrowed (an inline session policy) to
+invoking the migrate function, so the deploy role's other grants never
+reach it.
+
+**Undoing a load.** A load replaces its dataset in one transaction, so a
+failed one changes nothing. To undo one that succeeded but was wrong, load
+the previous file again under the same dataset label: the bucket is
+versioned and keeps an overwritten or deleted file for a year (S3 console →
+the object → Versions, or `aws s3api list-object-versions --prefix
+reference/<kind>/`), so restore that version (copy it back over the key),
+`sha256sum` it, and run the workflow with its hash. Values a project
+already accepted were copied into the project and don't change either way.
 
 Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
 workflow offers those kinds alone, its gate refuses the rest, and the
@@ -1631,7 +1670,8 @@ Lambda's list against the Sources table):
 | Kind | Licence (maps.md § Sources) | The file | How to make it |
 | --- | --- | --- | --- |
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
-| `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the terms of service carry the end-user protections (no stand-alone redistribution, no reverse engineering; check that yourself) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
+| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
+| `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
 ```bash
@@ -1640,7 +1680,9 @@ aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldc
 gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
 ```
 
-For rivers add `-f source="<the attribution line>"` (the one
+Evaporation is the same with `kind=evaporation` and a key under
+`reference/evaporation/`; the file carries dPET's source, version and
+attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
 `bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
 streams, `-f min_order=<n>`. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
@@ -1653,7 +1695,10 @@ accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
 peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
 files of 475 000 reaches and 6.9 million cells). A country's WorldCover
 grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
-HydroRIVERS reaches are tens of MB. A load costs cents (3 GB × a few
+HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
+32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
+Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
+Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is
@@ -1784,8 +1829,14 @@ Every step is an ordinary app action by an owner unless it says "operator".
    the pool replaces the connection, the process keeps running). Reproduce it
    locally, fix the cause and add a test; the message was deliberately not
    logged (it can hold row values), so the stack and code are the lead.
-10. **Request flood** (the `cloudfront-requests` or `waf-blocked-requests`
-    alarm, operator; both live in us-east-1 and mail the same address).
+10. **Request flood** (the `cloudfront-requests`, `cloudfront-bytes` or
+    `waf-blocked-requests` alarm, operator; all live in us-east-1 and mail
+    the same address). `cloudfront-bytes` alone (requests normal, bytes
+    high) is someone pulling the map's tiles: sampled requests on
+    `/tiles/` show who; one IP is already capped by
+    `waf_tiles_rate_limit_per_ip`, so many IPs mean step 4 (block the
+    sources), and real growth means raising
+    `cloudfront_bytes_alarm_gb_per_5min` (0.1–2).
     Nothing caps CloudFront and WAF request charges: every allowed request
     costs $1.60–2.80 per million (WAF + CloudFront), a blocked one WAF's
     $0.60 per million only. The arithmetic behind the thresholds is in
@@ -2183,11 +2234,12 @@ the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
 the report renderer run outside the VPC for the same reason. The database's
-customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $52/month in
-us-east-1, ≈ $59–64 in af-south-1; the breakdown is in
+customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $63/month in
+us-east-1, ≈ $68–75 in af-south-1 (with the S3 endpoint); the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
-request charges have no ceiling; the `cloudfront-requests` alarm (us-east-1)
-fires within 5 minutes of a flood, long before the budgets' billing data
+request charges have no ceiling, and nor does egress (the map's tiles are
+the large objects); the `cloudfront-requests` and `cloudfront-bytes` alarms
+(us-east-1) fire within 5 minutes of a flood or a pull, long before the budgets' billing data
 catches up (§ Runbooks, Request flood). The minimal (defaults)
 and full (Multi-AZ, highly available) configurations, their tfvars and
 monthly cost are compared in [deployment-tiers.md](./deployment-tiers.md).
@@ -2199,11 +2251,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $7/day on $90, about 3.5× the
-  ~$2/day af-south-1 idle): a single day cost more than that. This is the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $8/day on $100, about 3.3× the
+  ~$2.40/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($72 on the default $90, above the
+- **Monthly, ACTUAL 80%** ($80 on the default $100, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
@@ -2222,7 +2274,7 @@ Billing data refreshes at least daily, so every one of these lags the spend
 by up to a day; the Lambda concurrency caps and the CloudWatch alarms are
 what bound and report a runaway as it happens. On any of them: open Cost
 Explorer, group by service and usage type for the last few days, and find
-what grew. `budget_monthly_usd` defaults to 80 (af-south-1; ~60 is enough
+what grew. `budget_monthly_usd` defaults to 100 (af-south-1; ~70 is enough
 in us-east-1, ~170 on the full tier). Before billing access is enabled, set
 it to 0 ([infra/README.md § Operator
 steps](../infra/README.md#operator-steps), step 4).

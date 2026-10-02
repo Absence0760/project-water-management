@@ -17,6 +17,7 @@
 // PMTiles file) sits over the land and under the water, only while the tab's
 // Relief layer is on.
 import type { MapFeature, MapGeometry, MapPosition } from '$lib/api/types';
+import type { ProposalPiece } from './pieces';
 
 /** Shown on the map whenever the basemap is (the Protomaps / OSM licence). */
 export const BASEMAP_ATTRIBUTION = '© Protomaps © OpenStreetMap contributors';
@@ -130,6 +131,13 @@ export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 }
 
 /**
+ * A string escaped for the attribution control, which MapLibre sets as
+ * innerHTML: the one place the app's text becomes markup (docs/security.md §
+ * Input handling). Every value put into an attribution's HTML goes through it.
+ */
+export const escapeAttribution = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+/**
  * Shown on the map whenever the relief is: the notice the Copernicus DEM
  * licence asks for on adapted data (Art. 6(b)), and the tiles' compiler.
  */
@@ -145,7 +153,13 @@ export const RELIEF_LAYER = 'tr-hillshade';
  * tiles (the Mapterhorn build, Copernicus GLO-30 over South Africa), read over
  * HTTP Range like the basemap. MapLibre overzooms past the file's maxzoom.
  */
-export const terrainSource = (url: string) => ({ type: 'raster-dem', url: `pmtiles://${url}`, encoding: 'terrarium', tileSize: 512, attribution: TERRAIN_ATTRIBUTION });
+export const terrainSource = (url: string, dataSourcesHref?: string) => ({
+	type: 'raster-dem',
+	url: `pmtiles://${url}`,
+	encoding: 'terrarium',
+	tileSize: 512,
+	attribution: dataSourcesHref ? `${TERRAIN_ATTRIBUTION} (<a href="${escapeAttribution(dataSourcesHref)}#copernicus-dem">licence notice</a>)` : TERRAIN_ATTRIBUTION
+});
 
 /**
  * The shaded relief: soft, translucent shadows and highlights, so the land
@@ -281,29 +295,81 @@ export function quaternaryLayers(dark: boolean, labels: boolean): { under: Layer
 /** A delineated catchment waiting for the editor's decision (#326 B-delineate): a teal apart from every overlay stroke and the quaternaries' purple. */
 export const proposalColour = (dark: boolean) => (dark ? '#3fe0d0' : '#006d77');
 
-/** The `proposal` source's data: the proposed polygon and its snapped outlet, or nothing. */
-export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition } | null | undefined) {
+/**
+ * The tints a start or divide proposal's pieces take (#326 C3's follow-up,
+ * pieces.ts pieceTintsFor: neighbours never share one). Chosen away from the
+ * hues the map already gives a meaning (parcel green, water blue, the
+ * boundary's amber, the proposal's teal: ΔE ≥ 25 from each in both themes)
+ * and apart from each other (ΔE ≥ 20, mapStyle.test.ts): vermillion, pink,
+ * yellow, grey, lavender, brown. Translucent fills under the proposal's teal
+ * dash, so they never carry meaning alone: every piece has its number on it,
+ * and the sheet's card the same number and swatch. The same in both themes
+ * (a translucent fill reads on either ground); `dark` for the map's pattern.
+ */
+export const pieceTints = (dark = false): readonly string[] => {
+	void dark;
+	return ['#d55e00', '#cc79a7', '#e6f04a', '#9e9e9e', '#b39ddb', '#8d6e63'];
+};
+/** How opaque a piece's tint is drawn, and the lit one's (its card has the focus or the pointer). */
+export const PIECE_FILL_OPACITY = 0.22;
+export const PIECE_LIT_OPACITY = 0.45;
+/** The layer the pointer finds a piece on (hover lights its card's, a click opens it). */
+export const PIECE_HIT_LAYER = 'pr-piece-fill';
+
+/**
+ * The `proposal` source's data: the proposed polygon and its snapped outlet,
+ * or, for a start or divide proposal (`pieces`), each piece on its own with
+ * its key, tint and whether it is the one lit; or nothing.
+ */
+export function proposalData(p: { geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null | undefined) {
+	if (!p) return { type: 'FeatureCollection' as const, features: [] };
+	const outlet = { type: 'Feature' as const, properties: { part: 'outlet' } as Record<string, unknown>, geometry: { type: 'Point' as const, coordinates: p.outlet } as MapGeometry };
+	if (!p.pieces) return { type: 'FeatureCollection' as const, features: [{ type: 'Feature' as const, properties: { part: 'area' } as Record<string, unknown>, geometry: p.geometry }, outlet] };
 	return {
 		type: 'FeatureCollection' as const,
-		features: p
-			? [
-					{ type: 'Feature' as const, properties: { part: 'area' }, geometry: p.geometry },
-					{ type: 'Feature' as const, properties: { part: 'outlet' }, geometry: { type: 'Point' as const, coordinates: p.outlet } }
-				]
-			: []
+		features: [
+			...p.pieces.flatMap((x) =>
+				x.geometry ? [{ type: 'Feature' as const, properties: { part: 'piece', key: x.key, name: x.name, tint: x.tint, lit: x.key === p.highlight } as Record<string, unknown>, geometry: x.geometry as MapGeometry }] : []
+			),
+			outlet
+		]
 	};
 }
 
-/** The proposal: a faint fill, a casing and a short dash (never the boundary's long one), the outlet a ringed dot. Over the features: it is what the editor is deciding on. */
+/**
+ * The proposal: a faint fill, a casing and a short dash (never the boundary's
+ * long one), the outlet a ringed dot. Over the features: it is what the editor
+ * is deciding on. A start or divide proposal's pieces each take a tint (the
+ * rest of the catchment the proposal's own teal) under the same dash, so the
+ * edges between them show; the lit piece is outlined again, solid, in the
+ * map's selection colour on its casing.
+ */
 export function proposalLayers(dark: boolean): Layer[] {
 	const colour = proposalColour(dark);
-	const casing = overlayColours(dark).casing;
+	const c = overlayColours(dark);
+	const casing = c.casing;
 	const src = { source: 'proposal' };
 	const area = ['==', ['get', 'part'], 'area'];
+	const piece = ['==', ['get', 'part'], 'piece'];
+	const shape = ['any', area, piece];
+	const lit = ['all', piece, ['==', ['get', 'lit'], true]];
+	const tints = pieceTints(dark);
 	return [
 		{ id: 'pr-fill', type: 'fill', ...src, filter: area, paint: { 'fill-color': colour, 'fill-opacity': 0.12 } },
-		{ id: 'pr-casing', type: 'line', ...src, filter: area, paint: { 'line-color': casing, 'line-width': 6, 'line-opacity': 0.85 } },
-		{ id: 'pr-line', type: 'line', ...src, filter: area, paint: { 'line-color': colour, 'line-width': 3, 'line-dasharray': [1.5, 1.5] } },
+		{
+			id: PIECE_HIT_LAYER,
+			type: 'fill',
+			...src,
+			filter: piece,
+			paint: {
+				'fill-color': ['match', ['get', 'tint'], ...tints.flatMap((t, i) => [i, t]), colour],
+				'fill-opacity': ['case', ['==', ['get', 'lit'], true], PIECE_LIT_OPACITY, PIECE_FILL_OPACITY]
+			}
+		},
+		{ id: 'pr-casing', type: 'line', ...src, filter: shape, paint: { 'line-color': casing, 'line-width': 6, 'line-opacity': 0.85 } },
+		{ id: 'pr-line', type: 'line', ...src, filter: shape, paint: { 'line-color': colour, 'line-width': 3, 'line-dasharray': [1.5, 1.5] } },
+		{ id: 'pr-lit-casing', type: 'line', ...src, filter: lit, paint: { 'line-color': casing, 'line-width': 8, 'line-opacity': 0.9 } },
+		{ id: 'pr-lit', type: 'line', ...src, filter: lit, paint: { 'line-color': c.selected, 'line-width': 4 } },
 		{
 			id: 'pr-outlet',
 			type: 'circle',
@@ -379,6 +445,10 @@ export interface StyleOptions {
 	terrain?: string | null;
 	/** A delineation proposal to draw (proposalData()); none when omitted. */
 	proposal?: ReturnType<typeof proposalData>;
+	/** The river network's credit (riversCredit()), while reaches from a credited dataset are drawn; none when omitted. */
+	riversCredit?: string | null;
+	/** The data sources page's URL: the relief's credit links its Copernicus section (the Art. 6(c) liability sentence). */
+	dataSourcesHref?: string;
 }
 
 /**
@@ -404,14 +474,33 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
 	if (opts.terrain) {
-		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain);
+		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain, opts.dataSourcesHref);
 		const before = reliefBeforeId(style.layers.map((l) => l.id));
 		const at = before ? style.layers.findIndex((l) => l.id === before) : style.layers.length;
 		style.layers.splice(at, 0, reliefLayer(dark));
 	}
+	if (opts.riversCredit) {
+		style.sources[RIVERS_CREDIT_SOURCE] = riversCreditSource(opts.riversCredit);
+		style.layers.push(RIVERS_CREDIT_LAYER);
+	}
 	if (glyphs) style.glyphs = glyphs;
 	return style;
 }
+
+/**
+ * The river network's credit on the map (HydroRIVERS' licence, docs/maps.md
+ * § Sources): MapLibre's attribution control lists a source's attribution
+ * only while a layer reads it, so the credit is its own empty source with
+ * one invisible layer, added while reaches from HydroRIVERS are drawn and
+ * removed after (CatchmentMap syncRiversCredit), as the relief's is. The
+ * `rivers` source itself is always in the style, drawn or not.
+ */
+export const RIVERS_CREDIT_SOURCE = 'rivers-credit';
+export const RIVERS_CREDIT_LAYER: Layer = { id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } };
+export const riversCreditSource = (attribution: string) => ({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution });
+
+/** The credit's HTML for the attribution control: the short line, linking to its full statement on the data sources page. */
+export const riversCredit = (dataSourcesHref: string, text: string) => `<a href="${escapeAttribution(dataSourcesHref)}#hydrorivers">${escapeAttribution(text)}</a>`;
 
 /**
  * The `features` source's data: polygons and lines (points are drawn as

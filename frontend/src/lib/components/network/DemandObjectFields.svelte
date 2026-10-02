@@ -95,7 +95,11 @@
 		{#if ordered}
 			<fieldset class="order" data-testid="supply-order-{node.id}">
 				<legend><span class="lbl">Supply order on a short day<HelpTip key="demandObject.priority" /></span></legend>
-				<p class="muted small">1 is supplied first; demands at one number share pro rata. Pick “between” to put one in a place of its own.</p>
+				<p class="muted small">
+					1 is supplied first; demands at one number share pro rata. Pick “between” to put one in a place of its own. The order holds among the demands on one water source: the
+					unit’s own supply ({node.damCapacityM3 > 0 ? 'its dam, river pump and boreholes' : 'its river pump and boreholes'}) serves its demands first, and the river abstractions
+					share what passes it, each in this order.
+				</p>
 				<ol class="order-list">
 					{#each orderRows(objects) as row (row.which)}
 						{@const id = row.which === 'crops' ? `do-order-crops-${node.id}` : `do-order-${objects[row.which]!.id}`}

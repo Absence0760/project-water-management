@@ -54,7 +54,9 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 		// 159: a restore re-applies erasures from this list; the id only, purged after 40 days (above the 35-day backups).
 		'erasure_log.subject_id': 'the erasure log: the deleted account’s random id only, so a restore can delete it again; purged after 40 days',
 		// 101: the daily cap on adding by email counts by the adder's id, not linked to the account.
-		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends'
+		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends',
+		// 186: the hourly cap on dam traces counts by the user's id, not linked to the account.
+		'map_compute_throttle.bucket': 'the hourly cap on dam traces, keyed by the user’s id; gone when its one-hour window ends'
 	},
 	email: {
 		// Keyed by the typed address, not the account: a day without attempts forgets it.
@@ -239,6 +241,12 @@ beforeAll(async () => {
 	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
 	const proposal = await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
 	await call(subject, 'POST', `/projects/${projectId}/map/delineation/${proposal.proposal.id}/reject`, {});
+	// A start-from-the-map proposal they made and discarded (178), on an empty project of the owner's where they edit: the same.
+	const emptyId = (await call(owner, 'POST', '/projects', { name: `Pd start ${tag}` })).project.id;
+	await call(owner, 'POST', `/projects/${emptyId}/members`, { email: subject.email, role: 'editor' });
+	const weir = (await call(owner, 'POST', `/projects/${emptyId}/map/features`, { kind: 'gauge', name: 'Pd weir', lon: 20.7428741, lat: -33.5396777 })).feature.id;
+	const start = await call(subject, 'POST', `/projects/${emptyId}/map/start`, { outletFeatureId: weir, points: [] });
+	await call(subject, 'POST', `/projects/${emptyId}/map/start/${start.proposal.id}/discard`, {});
 	if (demBefore === undefined) delete process.env.DEM_URL;
 	else process.env.DEM_URL = demBefore;
 	// An application, decided by the subject.

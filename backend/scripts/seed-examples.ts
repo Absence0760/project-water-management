@@ -30,8 +30,9 @@ import { executeRun } from '../src/runs/execute.js';
 import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
 import { applicationOf, APPLICATION_FARM } from './examples/application.js';
-import { buildExamples, type ExampleProject } from './examples/catchments.js';
-import { SANDSPRUIT_MAP_FILE, sandspruitMap } from './examples/map.js';
+import { buildExamples, buildRiverExample } from './examples/catchments.js';
+import { SANDSPRUIT_MAP_FILE, sandspruitMap, type ExampleMapFeature } from './examples/map.js';
+import { ORANJE_MAP_FILE, oranjeMap } from './examples/oranjeMap.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
 import { checkGeometry } from '../src/geo/geojson.js';
@@ -156,6 +157,7 @@ export async function seedExamples(): Promise<string[]> {
 		[sandspruit!.name, ANALYST.email]
 	]);
 	if (existing) {
+		await seedRiverExample();
 		await acceptCurrentTerms(SEEDED());
 		console.log('✓ the example catchments already exist: skipped');
 		return existing;
@@ -187,19 +189,34 @@ export async function seedExamples(): Promise<string[]> {
 		for (const [catchment, farm] of f.farms) await linkFarmer(byName[catchment].owner, byName[catchment].id, id, farm);
 	}
 	await seedApplication(byName[APPLICANT.catchment]);
-	await seedMap(ANALYST.email, ids[2]!, sandspruit!);
+	await seedMap(ANALYST.email, ids[2]!, SANDSPRUIT_MAP_FILE, sandspruitMap(sandspruit!.model));
+	await seedRiverExample();
 	await acceptCurrentTerms(SEEDED());
 	return ids;
 }
 
 /**
- * Sandspruit's invented map (examples/map.ts), recorded as one imported file
- * the way `POST /map/import` records one, with each parcel, dam and gauge
- * linked to its node. It only draws: no node's area comes from it until an
- * editor uses **Use … km²**.
+ * The river-abstractions example (catchments.ts ORANJE, #342 items 4–5),
+ * owned by the demo user with its map. Apart from the bundle, so a database
+ * seeded before it gains it on the next `pnpm seed:examples`; skipped once it
+ * exists.
  */
-async function seedMap(ownerEmail: string, projectId: string, ex: ExampleProject) {
-	const features = sandspruitMap(ex.model);
+async function seedRiverExample() {
+	const ex = buildRiverExample();
+	if (await findOwnedProject(DEMO.email, ex.name)) return;
+	const id = await importProjectData(ex, DEMO.email, { password: DEMO.password, displayName: DEMO.displayName });
+	await publish(DEMO.email, id, await run(DEMO.email, id));
+	await seedMap(DEMO.email, id, ORANJE_MAP_FILE, oranjeMap(ex.model));
+	console.log(`seeded ${ex.name} (${DEMO.email})`);
+}
+
+/**
+ * An example's invented map (examples/map.ts, examples/oranjeMap.ts),
+ * recorded as one imported file the way `POST /map/import` records one, with
+ * each parcel, dam, gauge and pump point linked to its node. It only draws:
+ * no node's area comes from it until an editor uses **Use … km²**.
+ */
+async function seedMap(ownerEmail: string, projectId: string, fileName: string, features: ExampleMapFeature[]) {
 	await withUser(await userId(ownerEmail), async (db) => {
 		const text = JSON.stringify({
 			type: 'FeatureCollection',
@@ -207,7 +224,7 @@ async function seedMap(ownerEmail: string, projectId: string, ex: ExampleProject
 		});
 		const { rows: src } = await db.query<{ id: string }>(
 			`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
-			[projectId, SANDSPRUIT_MAP_FILE, createHash('sha256').update(text, 'utf8').digest('hex')]
+			[projectId, fileName, createHash('sha256').update(text, 'utf8').digest('hex')]
 		);
 		const { rows: nodes } = await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1', [projectId]);
 		for (const f of features) {

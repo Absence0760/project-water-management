@@ -230,7 +230,7 @@
 		return () => document.removeEventListener('visibilitychange', onVisible);
 	});
 	const mfaKind = $derived(ready ? promptKind(mfaPrompt, workspaceUser) : null);
-	// The static pages (/welcome, /privacy, /terms, /methods) render at once (and
+	// The static pages (/welcome, /privacy, /terms, /methods, /data-sources) render at once (and
 	// prerender), so crawlers and a slow API still get them (even with the API
 	// down: they need none). The landing page is prerendered once per language
 	// (/welcome, /welcome/af; issue #137); the legal and methods pages are English only.

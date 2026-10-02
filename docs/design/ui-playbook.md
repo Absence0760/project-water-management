@@ -430,6 +430,13 @@ section it belongs to, with the example that taught it.
   to the items that matter most (largest area, most demand) and group the
   tail as one labelled "Other" that names its members. The Crops page's
   6-colour palette gave five crops the same grey.
+  **The exception: numbered map pieces.** A start or divide proposal's
+  pieces (`map/pieces.ts`) can outnumber any palette, so the **number** on
+  each piece and on its card is what names it, and the six tints
+  (`mapStyle.ts` `pieceTints`, away from the map's meaningful hues) only
+  help the eye: `pieceTintsFor` gives touching pieces different tints, and
+  the map and the cards read number and tint from the one list, so they
+  never disagree.
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
@@ -613,6 +620,7 @@ section it belongs to, with the example that taught it.
 | Dam levels | `overview/damLevels.ts` (level, bands, capacity-weighted total, which dams are in a run) |
 | Status pills and bars | `portfolio/StatusPill.svelte`, `portfolio/StatusBar.svelte` |
 | Lazy panels | `common/Lazy.svelte`, `common/lazy.ts` |
+| A panel of values proposed from the map (the modeller decides) | `proposals/ProposalPanel.svelte` (heading, intro, controls, the live notice focused after a Use via `focusNotice()`, the busy/`data-ready` body, failure with Try again; `variant` page, drawer or inline) with `ProposalNoDataset`, `ProposalSynthetic` and `ProposalSource`; the panel keeps its own rows and Use (land cover, dams, evaporation) |
 | "On this page" menu for a page of several stacked panels past one screen | `common/SectionNav.svelte` with the page's groups (`runs/sections.ts`, `settings/sections.ts`, `river/river.ts` `riverNavGroups`, `supply/supply.ts` `SUPPLY_NAV`, `series/sections.ts`); at most two rows, the rest in More (ui.md § On this page menu) |
 
 Finished pages to copy from: `dams/DamsTab.svelte` (cards + chart, window

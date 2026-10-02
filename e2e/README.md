@@ -197,6 +197,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make |
 | `support/static-server.ts`, `support/site.ts` | Serves the e2e frontend build on the site port, routed by CloudFront's `spa_rewrite` function itself (run from `infra/s3_cloudfront.tf` through `infra/scripts/cloudfront-functions.mjs`, so the two can't drift): `index.html` for an extension-less path (the SPA fallback), `/welcome` and the other prerendered pages from their HTML, the build's files as they are, the function's 404 page for a path with an extension outside the build's file locations (`/nope.pdf`), and a plain 404, as S3 answers, for a missing file inside them. `support/site.test.ts` (`pnpm -C e2e test`) pins each case. No dependencies |
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
+| `support/referenceData.ts` | Which panels' test ids need which reference-data loader, and the check (`referenceData.test.ts`, `pnpm test`) that every test reading one calls it itself (§ Rules for writing specs) |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
 | `tests/golden-path.spec.ts` | The new-user journey, in four tests ([The golden path](#the-golden-path)): register, create "Catchment D", build the network, upload two years of rain, flow and daily A-pan, run the model and read the results, all through the UI; then, on that catchment arranged through the API, crops and a transfer into a run and each unit's results; monthly A-pan and EWR into the run's summary, and a reload; two more catchments beside one with a run |
@@ -245,6 +246,17 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
 - **Every test makes its own users** through the API (`owner`, `signIn`,
   `register`). Tests share nothing and run fully in parallel against the one
   database. Don't depend on another test's data or on the order tests run in.
+- **A test that reads reference data loads it itself.** The proposal panels
+  and map layers read operator-loaded tables (land cover, the register of
+  dams, evaporation, quaternaries, the river network, gauging stations). Call
+  the loader (`loadSyntheticLandCover()`, `loadSyntheticDamRegister()`,
+  `loadSyntheticEvaporation()`, `loadSyntheticQuaternaries()`,
+  `loadSyntheticRivers()`, `loadSyntheticStations()`; idempotent, under a
+  setup lock) in the test, its describe's `beforeAll` or a file-wide one,
+  never rely on another spec in the shard having run it (PR #362).
+  `support/referenceData.test.ts` (`pnpm test`) fails on a block that reads a
+  panel's test id without its loader; add a panel's ids to
+  `REFERENCE_FAMILIES` in `support/referenceData.ts` when you add one.
 - **Arrange through the API, act through the UI.** Only drive the UI a test is
   actually about. Everything else goes through `support/api.ts`.
 - **Wait on real UI signals**: a heading, a status message, a table row, an

@@ -2491,6 +2491,16 @@ Sp = MIN(seepage × store[t−1],  store[t−1] + Pd + J − E)
 start of the day = store[t−1] + Pd − E − Sp       (G, P and Q follow from it; J, M, O, K add to it)
 ```
 
+**No A-pan, no open-water evaporation (engine ≥ 1.67.0 warns).** With the
+monthly A-pan 0 in every month and no daily A-pan series covering a day
+(a new project's default; an ET₀ row from the map feeds GR4J's PE only,
+[maps.md § Evaporation from the map](./maps.md)), E is 0 for every dam and
+river pool (§2.7j). The run then warns "A-pan evaporation is 0 on every day,
+so the dams and river pools lose nothing to evaporation …" whenever it has a
+dam or a pool on a river-sourced demand; before 1.67.0 only the crops'
+"irrigation demand is 0" said so, and a unit with a dam and no crops ran
+with no word (persona-hydrologist, round 4).
+
 A transfer into the dam (§2.6) counts Pd, E and Sp in the destination's
 room (engine ≥ 0.19.0), E and Sp before the MINs above: when the room
 binds, the transfer brings enough that neither MIN bites.
@@ -4375,11 +4385,41 @@ one's mean take and, with a pool, its mean storage). The water balance
 counts the pools' evaporation with the dams' and their storage in the
 opening and closing storage.
 
+**Pump-limited demand (engine ≥ 1.66.0).** With a pump capacity (a number,
+0 included) an abstraction also publishes `river_pump_limited@<key>`
+(m³/day): the demand its pump left unmet although the water was there for
+it, as an other water user's `pump_limited` (§2.7c):
+
+```
+pl_a = MIN(demand_a − G_a, free left after its level + held_a after its level, room left after its level)
+       once its pump is spent (G_a = pump_a); 0 otherwise
+```
+
+Lower supply levels take after it, so the flow they take was its for the
+asking; its own pool counts, another's doesn't. It is a measure, not a flow:
+nothing else in the run changes, and two abstractions spent at one level
+can each count the same water left over, so the figures are per
+abstraction and never added up across abstractions or units. A pump of 0
+(no pump: a demand that can't pump from the river) shows all the demand the
+river could have met as pump-limited: read it as "the river had this and
+there is no pump", not as a pump too small. `RiverTakeSummary` carries its
+mean (`avgPumpLimitedM3Day`) and the days above float noise of the day's
+take (`daysPumpLimited`), both absent without a capacity and on older runs.
+Units & supply's **River abstractions** table (Other uses) and the summary
+CSV's River abstractions block show each abstraction's pump, mean take,
+these two and its pool.
+
 **Checks.** `checkBalance` closes every unit's balance with the pools'
 change and evaporation, and keeps each pool within 0 … capacity;
 `checkWorkings` keeps each take within its pump's capacity and its
 demand, and the flow the abstractions took (Σ take − pool drawn + refill)
-within the flow past the dam above what must pass. `checkWorkings` replays
+within the flow past the dam above what must pass, and each pump-limited
+figure (engine ≥ 1.66.0) within the take's shortfall, 0 unless its pump is
+spent, at most the flow it may take less what it took from the flow plus
+its own pool after its draw (an overstated figure is the costlier mistake:
+it argues for a bigger pump), and, with no cap, at least the flow left over
+at the end of the day up to the shortfall; `checkReportTotals` keeps the summary's pump-limited
+mean and days to the column. `checkWorkings` replays
 each pool's evaporation from its start-of-day surface, the dam side's
 supply against its dam-sourced demand only, and the outflow with the
 abstractions' flow taken out; while flow above what must pass is left over
@@ -4388,7 +4428,9 @@ and every pool is full. The transfer room's check reads the dam side's
 demand. Hand examples (`run.riverSource.test.ts`): a dam unit with one
 river abstraction beside it, the crops on the river leaving the dam to the
 objects on it, spill feeding the pump, the hands-off flow kept, priority by
-level and a pump below its share, a pool drawn down and refilled,
+level and a pump below its share, a pool drawn down and refilled, the
+pump-limited demand (a higher level's spent pump, a pool, a pump of 0) and
+the self-checks catching a tampered one,
 evaporation off the pool and the water balance closing with it, a resumed
 run to the bit, a tampered take caught by the self-checks, and bit identity
 with the fields absent, null or "dam" (pump and pool inert) on random

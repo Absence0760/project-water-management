@@ -31,6 +31,7 @@
 		"import:rivers": "tsx scripts/import-rivers.ts",
 		"import:dam-register": "tsx scripts/import-dam-register.ts",
 		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
+		"gen:water-fixture": "tsx scripts/water-fixture.ts",
 		"import:land-cover": "tsx scripts/import-land-cover.ts",
 		"import:evaporation": "tsx scripts/import-evaporation.ts"
 	},

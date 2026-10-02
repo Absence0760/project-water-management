@@ -119,6 +119,7 @@
 				<a href="{base}/privacy">{t('Privacy notice')}</a>
 				<a href="{base}/terms">{t('Terms of use')}</a>
 				<a href="{base}/methods">{t('How the model is checked')}</a>
+				<a href="{base}/data-sources">{t('Data sources')}</a>
 			</nav>
 		</div>
 	</footer>

@@ -236,10 +236,20 @@ export type AuditKind =
 	| 'map.feature_created'
 	| 'map.feature_changed'
 	| 'map.feature_deleted'
+	// A polygon split in two along a drawn line (issue #326 C2): the shape, what its parts are, their ids and areas; never the geometry.
+	| 'map.feature_split'
 	// A catchment delineated from a click (175, issue #326 B-delineate): proposed, accepted (as which feature) or rejected. Ids, the click's kind, the area and the dataset; never the polygon.
 	| 'map.delineation_proposed'
 	| 'map.delineation_accepted'
 	| 'map.delineation_rejected'
+	// A model started from the map (178, issue #326 C3): proposed, applied (counts of nodes, areas and orders taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.start_proposed'
+	| 'map.start_applied'
+	| 'map.start_discarded'
+	// A model divided into sub-catchments from the map (182, #326 C3's follow-up): proposed, applied (counts of areas, orders, runoff and gauges taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.divide_proposed'
+	| 'map.divide_applied'
+	| 'map.divide_discarded'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'

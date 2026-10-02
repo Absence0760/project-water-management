@@ -28,11 +28,15 @@
 	// With a DEM on the server, editors can Delineate (`delineate=1`, #326
 	// B-delineate, docs/design/delineation.md): click the river, and the
 	// catchment above it is proposed, drawn dashed, until they accept or reject it.
+	// On an empty model, editors can Start the model from the map (`start=1`,
+	// #326 C3, docs/design/start-from-map.md): units at the dams and
+	// abstraction points, their sub-catchments and order proposed and ticked
+	// value by value; the empty map leads with Delineate and Draw (D4).
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { PUBLIC_TERRAIN_URL, PUBLIC_TILES_GLYPHS_URL, PUBLIC_TILES_URL } from '$env/static/public';
-	import { api, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta } from '$lib/api';
+	import { api, type DamTraceProposal, type DamTraceState, type MinOccurrence, type DelineationState, type MapFeature, type MapFeatureList, type Role, type RunMeta, type StartState } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -63,11 +67,18 @@
 	import PlaceSheet from './PlaceSheet.svelte';
 	import DelineateSheet from './DelineateSheet.svelte';
 	import { openProposal } from './delineation';
+	import StartSheet from './StartSheet.svelte';
+	import { openDivide, openStart, type StartDraft } from './startFlow';
+	import DivideSheet from './DivideSheet.svelte';
+	import type { DivideDraft } from './divideFlow';
+	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
 	import DrawBar from './draw/DrawBar.svelte';
 	import PasteSheet from './draw/PasteSheet.svelte';
+	import SplitSheet from './draw/SplitSheet.svelte';
+	import TraceSheet from './draw/TraceSheet.svelte';
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
@@ -190,7 +201,13 @@
 	const place = overlay('place', '1', () => canEdit);
 	// Until the state is in, a `delineate=1` link is kept (a reload, a deep link), so the param isn't dropped before it can be judged.
 	const delineateSheet = overlay('delineate', '1', () => canEdit && (!delineationLoaded || !!delineation?.available));
+	// Trace a dam from typed coordinates (#326 C2): a sheet in the URL like Place and Delineate, kept until the state is in.
+	const traceSheet = overlay('trace', '1', () => canEdit && (!damTraceLoaded || !!damTrace?.available));
 	const grid = overlay('grid', GRID_ID, () => true);
+	// Until the state is in, a `start=1` link is kept (a reload, a deep link), as Delineate's is.
+	const startSheet = overlay('start', '1', () => canEdit && (!startLoaded || !!startInfo));
+	// Divide a model that has nodes (#326 C3's follow-up): the same state, its own sheet.
+	const divideSheet = overlay('divide', '1', () => canEdit && (!startLoaded || !!startInfo));
 	// The consistency checks (#326 A4): a one-line count in the side column, the warnings in a sheet (`checks=1`), so a big catchment's list keeps its room.
 	const checksSheet = overlay('checks', '1', () => true);
 	const checks = $derived(mapChecks(features, nodes));
@@ -208,6 +225,7 @@
 		draft.cancel();
 		await load();
 		await pickInPlace(f.id, 'place');
+		await returnToStart();
 	}
 
 	// --- delineation (#326 B-delineate): on when the server has a DEM; one open proposal, drawn on the map ---
@@ -232,7 +250,9 @@
 	/** The point placed is a delineation's outlet, not a feature: the draw bar asks to delineate. */
 	let delineating = $state(false);
 	function startDelineate() {
+		backToSheet = null;
 		measure.cancel();
+		tracing = false;
 		draft.place('gauge');
 		delineating = true;
 		void afterStart();
@@ -244,12 +264,29 @@
 	let delineateAt = $state<MapPosition | null>(null);
 	/** Which step the sheet opens at: asking for a point (from the header's mode), else deciding a waiting proposal (Review it, a link). */
 	let delineateStep = $state<'ask' | 'decide'>('decide');
+	let delineateWasOpen = false;
 	$effect(() => {
 		if (!delineateSheet.open) {
 			delineateAt = null;
 			delineateStep = 'decide';
+			if (delineateWasOpen) void untrack(focusAfterDelineate);
 		}
+		delineateWasOpen = delineateSheet.open;
 	});
+	/**
+	 * The sheet closed. Its opener (the draw bar's Delineate…, the Review it link) is
+	 * usually gone by then, so the dialog had nothing to hand focus back to: the
+	 * Delineate button takes it, else the map, never <body> (WCAG 2.4.3). A focus
+	 * already placed (Accept picks the new feature's card) is left where it is.
+	 */
+	async function focusAfterDelineate() {
+		await tick();
+		const at = document.activeElement;
+		if (at && at !== document.body) return;
+		const btn = document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]');
+		if (btn) btn.focus();
+		else mapRef?.focusMap();
+	}
 	async function openDelineate(at: MapPosition | null) {
 		delineateAt = at;
 		delineateStep = 'ask';
@@ -266,12 +303,94 @@
 		notice = `Saved ${summary} on the map.`;
 		await Promise.all([load(), loadDelineation()]);
 		await pickInPlace(f.id, 'delineate');
+		await returnToStart();
 	}
 	async function delineationRejected() {
+		backToSheet = null;
 		notice = 'Rejected the delineated catchment; nothing on the map changed.';
 		await loadDelineation();
 		delineateSheet.open = false;
 	}
+
+	// --- start the model from the map (#326 C3): editors, while the model is empty (or just started from it) ---
+	let startInfo = $state<StartState | null>(null);
+	let startLoaded = $state(false);
+	async function loadStart() {
+		if (!canEdit) return;
+		try {
+			startInfo = await api.start.get(projectId);
+		} catch {
+			// Unavailable: the flow isn't offered; the Network and the per-feature tools still are.
+			startInfo = null;
+		} finally {
+			startLoaded = true;
+		}
+	}
+	$effect(() => {
+		void projectId;
+		untrack(loadStart);
+	});
+	const pendingStart = $derived(openStart(startInfo));
+	/** The flow is offered while the model is empty. */
+	const canStart = $derived(canEdit && !!startInfo?.modelEmpty);
+	/** A tool opened from the Start sheet (Delineate, Draw, Place): once it saves, the sheet opens again where it was. */
+	let backToSheet: 'start' | 'divide' | null = null;
+	async function returnToStart() {
+		const sheet = backToSheet;
+		if (!sheet) return;
+		backToSheet = null;
+		await goto(withParam(page.url, sheet, '1'), { noScroll: true, keepFocus: true });
+	}
+	/**
+	 * Leave the sheet for one of the map's own tools (the sheet's param goes first, in place). Every tool
+	 * clears the flag as it starts, so it is set after: a tool started any other way, or a rejected
+	 * delineation, never brings the sheet back.
+	 */
+	async function fromStart(start: () => unknown, back = true, sheet: 'start' | 'divide' = 'start') {
+		await goto(withoutParam(page.url, sheet), { replaceState: true, noScroll: true, keepFocus: true });
+		await start();
+		backToSheet = back ? sheet : null;
+	}
+	/** What the editor chose and ticked in the sheet: kept here, so closing it or leaving for a tool loses nothing. */
+	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {} });
+	async function startApplied() {
+		notice = 'Started the model from the map. Its nodes are on the Network now, and each unit’s point and parcel stand for it on the map.';
+		await Promise.all([load(), loadStart(), onModelChanged()]);
+	}
+	async function startDiscarded() {
+		notice = 'Discarded the proposed model; nothing in the model changed.';
+		await loadStart();
+	}
+
+	// --- divide a model that has nodes from the map (#326 C3's follow-up): editors, with a DEM on the server ---
+	const pendingDivide = $derived(openDivide(startInfo));
+	const canDivide = $derived(canEdit && !!startInfo && !startInfo.modelEmpty && startInfo.elevation);
+	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {} });
+	async function divideApplied() {
+		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
+		await Promise.all([load(), loadStart(), onModelChanged()]);
+	}
+	async function divideDiscarded() {
+		notice = 'Discarded the proposed division; nothing in the model changed.';
+		await loadStart();
+	}
+
+	// --- each proposed unit's piece told apart (pieces.ts): a card lights its piece, a piece picked on the map opens its card ---
+	/** The piece lit on the map (a card has the focus or the pointer, or the pointer is over the piece). */
+	let pieceLit = $state<string | null>(null);
+	/** The card to bring into view when its sheet opens: a piece clicked on the map. */
+	let pieceFocus = $state<string | null>(null);
+	// Worked out once per proposal; lighting a piece (a hover) only swaps `highlight` (litPieces), so the map redraws the proposal alone.
+	const pieceShapes = $derived(piecesShape(pendingStart ?? pendingDivide));
+	const pieces = $derived(litPieces(pieceShapes, pieceLit));
+	async function pickPiece(key: string) {
+		pieceFocus = key;
+		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });
+	}
+	$effect(() => {
+		// A sheet closed: nothing is lit or waiting to be focused.
+		if (!startSheet.open && !divideSheet.open) untrack(() => ((pieceLit = null), (pieceFocus = null)));
+	});
 
 	// --- drawing (#326 C1, D1): the draft, the draw bar over the map, and the sheets that save it ---
 	const draft = new Draft();
@@ -282,6 +401,11 @@
 	let pasteOpen = $state(false);
 	/** The features the map draws: the one being edited is drawn as the draft instead. */
 	const mapFeatures = $derived(draft.mode === 'edit' && draft.feature ? features.filter((f) => f.id !== draft.feature!.id) : features);
+	// What a corner can snap to (#326 C2): every feature on the map (the draft leaves out the one being edited).
+	// Not while placing a trace's point: snapping would pull a click inside the water onto a shoreline drawn already.
+	$effect(() => {
+		draft.snapFeatures = tracing ? [] : features;
+	});
 
 	async function afterStart() {
 		drawError = null;
@@ -291,22 +415,96 @@
 	}
 	/** Draw a shape: the boundary when there is none yet (D4), else a parcel, or the choice given. */
 	function startDraw(choiceId?: string) {
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		const id = choiceId ?? (boundary ? 'farm_parcel' : 'catchment_boundary');
 		draft.draw(DRAW_CHOICES.find((c) => c.id === id));
 		void afterStart();
 	}
 	function startPlace() {
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		draft.place('gauge');
 		void afterStart();
 	}
 	function startEdit(f: MapFeature) {
+		backToSheet = null;
 		measure.cancel();
 		delineating = false;
+		tracing = false;
 		if (draft.edit(f)) void afterStart();
+	}
+	// --- split a polygon along a drawn line (#326 C2): the cut is drawn as a line, the parts previewed, saved together ---
+	let splitOpen = $state(false);
+	function startSplit(f: MapFeature) {
+		measure.cancel();
+		delineating = false;
+		tracing = false;
+		if (draft.split(f)) void afterStart();
+	}
+	async function splitDone(parts: [MapFeature, MapFeature]) {
+		notice = `Split ${featureName(draft.feature ?? parts[0])} in two: ${parts.map((f) => (f.name ? `“${f.name}”` : KIND_LABEL[f.kind].toLowerCase())).join(' and ')}.`;
+		splitOpen = false;
+		draft.cancel();
+		await load();
+		await pickInPlace(parts[0].id);
+	}
+
+	// --- trace a dam (#326 C2): on when the server has water occurrence data; a point inside the water, then the outline as a drawing ---
+	let damTrace = $state<DamTraceState | null>(null);
+	let damTraceLoaded = $state(false);
+	async function loadDamTrace() {
+		if (!canEdit) return;
+		try {
+			damTrace = await api.map.damTraceState(projectId);
+		} catch {
+			// Unavailable is the same as off: the tool isn't offered.
+			damTrace = null;
+		} finally {
+			damTraceLoaded = true;
+		}
+	}
+	$effect(() => {
+		void projectId;
+		untrack(loadDamTrace);
+	});
+	/** The point placed is inside a dam's water, not a feature: the draw bar asks to trace. */
+	let tracing = $state(false);
+	let minOccurrence = $state<MinOccurrence>(25);
+	function startTrace() {
+		measure.cancel();
+		delineating = false;
+		draft.place('dam');
+		tracing = true;
+		void afterStart();
+	}
+	$effect(() => {
+		if (!draft.active || draft.mode !== 'place') tracing = false;
+	});
+	/** The server's outline becomes the drawing: a dam, to adjust and save. */
+	async function traced(t: DamTraceProposal) {
+		traceSheet.open = false;
+		tracing = false;
+		draft.trace(t.geometry, t);
+		mapRef?.frameGeometry(t.geometry);
+		// The control that asked (Trace the outline, or the sheet's Trace) is gone: the next step is Save….
+		await tick();
+		document.querySelector<HTMLElement>('[data-testid="map-draft-save"]')?.focus();
+	}
+	async function traceAt(at: MapPosition) {
+		drawSaving = true;
+		drawError = null;
+		try {
+			await traced(await api.map.traceDam(projectId, { lon: at[0], lat: at[1], minOccurrence }));
+		} catch (err) {
+			drawError = msg(err);
+		} finally {
+			drawSaving = false;
+		}
 	}
 	/** Save: a new shape opens its sheet, a new point the Place sheet (with its position); an edit saves at once. */
 	async function saveDraft() {
@@ -314,6 +512,14 @@
 		if (!g) return;
 		if (draft.mode === 'draw') {
 			draftSheetOpen = true;
+			return;
+		}
+		if (draft.mode === 'split') {
+			splitOpen = true;
+			return;
+		}
+		if (draft.mode === 'place' && tracing) {
+			if (g.type === 'Point') await traceAt(g.coordinates);
 			return;
 		}
 		if (draft.mode === 'place' && delineating) {
@@ -346,6 +552,7 @@
 		draft.cancel();
 		await load();
 		await pickInPlace(f.id);
+		await returnToStart();
 	}
 	function pasted(g: MapGeometry) {
 		draft.replace(g);
@@ -382,14 +589,20 @@
 	const quaternaries = new QuaternaryLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('quaternaries'),
-		features: () => features
+		features: () => features,
+		load: api.map.quaternaries
 	});
 
 	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
+	/** The map's view, for the River network layer while the project has no features. */
+	let mapView = $state<[number, number, number, number] | null>(null);
 	const rivers = new RiverLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('rivers'),
-		features: () => features
+		features: () => features,
+		view: () => mapView,
+		load: api.map.rivers,
+		add: api.map.addRiver
 	});
 	/** A reach clicked on the map: picked, and its facts and Add brought into view (as a feature pick shows its card). */
 	async function reachFromMap(key: string) {
@@ -509,6 +722,9 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
+{#snippet divideLink()}
+	<a class="btn btn-sm" href={withParam(page.url, 'divide', '1')} title="Each unit’s own area and order, proposed from its point on the map" data-testid="map-divide-open">Divide the model</a>
+{/snippet}
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
 	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
@@ -518,11 +734,17 @@
 	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
 		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
-		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating} data-testid="map-start-place">Place a point</button>
+		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating && !tracing} data-testid="map-start-place">Place a point</button>
 		{#if delineation?.available}
 			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
 		{/if}
+		{#if damTrace?.available}
+			<button type="button" class="btn" onclick={startTrace} aria-pressed={tracing} data-testid="map-start-trace">Trace a dam</button>
+		{/if}
 		<a class="btn" href={withParam(page.url, 'upload', '1')} data-testid="map-open-upload">Upload GeoJSON</a>
+		{#if canStart}
+			<a class="btn" href={withParam(page.url, 'start', '1')} data-testid="map-start-open">{pendingStart ? 'Review the proposed model' : 'Start from the map'}</a>
+		{/if}
 	{/if}
 {/snippet}
 
@@ -613,6 +835,13 @@
 			<a class="btn btn-sm" href={withParam(page.url, 'delineate', '1')}>Review it</a>
 		</p>
 	{/if}
+	{#if (pendingStart || pendingDivide) && canEdit && !startSheet.open && !divideSheet.open}
+		<!-- An open start or division is drawn piece by piece: say so in words, and how to read it (the sheet's cards are its key). -->
+		<p class="alert alert-info slim" data-testid="map-pieces-pending">
+			{pendingStart ? 'A proposed model' : 'A proposed division of the model'} is drawn on the map piece by piece, each piece tinted and numbered as its card in the sheet (R: the rest of the catchment), waiting for your decision.
+			<a class="btn btn-sm" href={withParam(page.url, pendingStart ? 'start' : 'divide', '1')} data-testid="map-pieces-review">Review it</a>
+		</p>
+	{/if}
 	{#if canEdit && !tilesUrl}
 		<p class="alert alert-info slim" data-testid="map-no-tiles">No basemap is configured, so the features are drawn on a plain background (docs/maps.md says how to serve one).</p>
 	{/if}
@@ -627,7 +856,7 @@
 
 	<LoadState {loading} {error} retry={load}>
 		{#if data}
-			<div class="map-layout" bind:this={layoutEl} style:--layout-top="{layoutTop}px">
+			<div class="map-layout" class:empty={!features.length} bind:this={layoutEl} style:--layout-top="{layoutTop}px">
 				<section class="panel map-card" aria-label="Map">
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
@@ -640,9 +869,12 @@
 							error={drawError}
 							onsave={saveDraft}
 							onpaste={() => (pasteOpen = true)}
-							oncoords={() => (delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true }))}
+							oncoords={() =>
+								tracing ? goto(withParam(page.url, 'trace', '1'), { noScroll: true, keepFocus: true }) : delineating ? openDelineate(draft.coords[0] ?? null) : goto(withParam(page.url, 'place', '1'), { noScroll: true, keepFocus: true })}
 							onlocated={located}
 							{delineating}
+							{tracing}
+							bind:minOccurrence
 						/>
 					{/if}
 					<div class="map-body">
@@ -663,19 +895,25 @@
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
+									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
 									{terrainUrl}
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
-									proposal={pendingProposal}
+									onview={(b) => (mapView = b)}
+									proposal={pendingProposal ?? pieces}
+									onpiecehover={(k) => (pieceLit = k)}
+									onpiecepick={canEdit ? pickPiece : undefined}
 								/>
 							{/snippet}
 						</Lazy>
 					</div>
 					<!-- The key row: what the areas are coloured by, which run, and the key (#326 E7, A1). -->
-					<MapKeyRow {results} {key} {features} {canEdit} {dark} />
+					<!-- Divide the model (#326 C3's follow-up) at the end of the key row's first line: not in the header (a second row of actions)
+					     nor the side column (the list's room); its title says what it does. -->
+					<MapKeyRow {results} {key} {features} {canEdit} {dark} end={canDivide && !pendingDivide ? divideLink : undefined} />
 				</section>
 
 				<aside class="map-side" aria-label="Features">
@@ -715,6 +953,10 @@
 											{picked.geometry.type === 'Point' ? 'Move the point' : 'Edit the shape'}
 										</button>
 									{/if}
+									{#if editableCorners(picked.geometry)?.shape === 'polygon' && draft.mode !== 'split'}
+										{@const target = picked}
+										<button type="button" class="btn btn-sm" onclick={() => startSplit(target)} data-testid="map-split-shape">Split along a line</button>
+									{/if}
 									{@render deleteButton(picked)}
 								</div>
 							{/if}
@@ -723,10 +965,26 @@
 						{:else}
 							<!-- The empty state leads with drawing (#326 D4); uploading a file is the other way in. -->
 							<div class="pick-hint" data-testid="map-no-boundary">
-								<p class="empty-line">Nothing on the map yet.{canEdit ? ' Start with the catchment boundary: draw it on the map.' : ''}</p>
-								{#if canEdit}
-									<p class="empty-line"><button type="button" class="btn btn-primary" onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button></p>
+								<p class="empty-line">
+									Nothing on the map yet.{canEdit && delineationLoaded
+										? delineation?.available
+											? ' Start with the catchment: delineate it from its outlet on the river, or draw its boundary.'
+											: ' Start with the catchment boundary: draw it on the map.'
+										: ''}
+								</p>
+								{#if canEdit && delineationLoaded}
+									<p class="empty-line ways">
+										{#if delineation?.available}
+											<button type="button" class="btn btn-primary" onclick={startDelineate} data-testid="map-empty-delineate">Delineate from the outlet</button>
+										{/if}
+										<button type="button" class={delineation?.available ? 'btn' : 'btn btn-primary'} onclick={() => startDraw('catchment_boundary')} data-testid="map-draw-boundary">Draw the boundary</button>
+									</p>
 									<p class="empty-line small muted">Or <a href={withParam(page.url, 'upload', '1')}>upload it as a GeoJSON file</a> (WGS84), or place a point.</p>
+									{#if canStart}
+										<p class="empty-line small">
+											<a href={withParam(page.url, 'start', '1')} data-testid="map-empty-start">Start the model from the map</a>: the boundary, then your dams and abstraction points, and the app proposes the units, their areas and their order.
+										</p>
+									{/if}
 								{/if}
 							</div>
 						{/if}
@@ -793,6 +1051,40 @@
 					onrejected={delineationRejected}
 				/>
 			{/if}
+			{#if startSheet.open && startInfo}
+				<StartSheet
+					bind:open={startSheet.open}
+					{projectId}
+					{features}
+					info={startInfo}
+					bind:draft={startDraft}
+					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
+					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
+					ondraw={() => fromStart(() => startDraw('catchment_boundary'))}
+					onplace={() => fromStart(startPlace)}
+					onproposed={loadStart}
+					onapplied={startApplied}
+					ondiscarded={startDiscarded}
+					onhighlight={(k) => (pieceLit = k)}
+					focusKey={pieceFocus}
+				/>
+			{/if}
+			{#if divideSheet.open && startInfo}
+				<DivideSheet
+					bind:open={divideSheet.open}
+					{projectId}
+					{features}
+					nodes={editor.model.nodes}
+					info={startInfo}
+					bind:draft={divideDraft}
+					onplace={() => fromStart(startPlace, true, 'divide')}
+					onproposed={loadStart}
+					onapplied={divideApplied}
+					ondiscarded={divideDiscarded}
+					onhighlight={(k) => (pieceLit = k)}
+					focusKey={pieceFocus}
+				/>
+			{/if}
 			{#if place.open}
 				<PlaceSheet
 					bind:open={place.open}
@@ -804,7 +1096,22 @@
 				/>
 			{/if}
 			{#if draftSheetOpen && draft.geometry}
-				<DraftSheet bind:open={draftSheetOpen} {projectId} {nodes} geometry={draft.geometry} kind={draft.kind} hasBoundary={!!boundary} onsaved={drafted} />
+				<DraftSheet
+					bind:open={draftSheetOpen}
+					{projectId}
+					{nodes}
+					geometry={draft.geometry}
+					kind={draft.kind}
+					hasBoundary={!!boundary}
+					traced={draft.traced ? { lon: draft.traced.click[0], lat: draft.traced.click[1], minOccurrence: draft.traced.minOccurrence, edited: draft.tracedEdited } : null}
+					onsaved={drafted}
+				/>
+			{/if}
+			{#if splitOpen && draft.mode === 'split' && draft.feature && draft.splitResult && 'parts' in draft.splitResult}
+				<SplitSheet bind:open={splitOpen} {projectId} feature={draft.feature} parts={draft.splitResult.parts} onsaved={splitDone} />
+			{/if}
+			{#if traceSheet.open && damTrace}
+				<TraceSheet bind:open={traceSheet.open} {projectId} info={damTrace} at={draft.mode === 'place' ? (draft.coords[0] ?? null) : null} bind:minOccurrence ontraced={traced} />
 			{/if}
 			{#if pasteOpen && draft.active}
 				<PasteSheet bind:open={pasteOpen} shape={draft.shape} onpasted={pasted} />
@@ -922,6 +1229,10 @@
 		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 	}
+	/* Stacked with nothing on the map, the empty state's ways in (Delineate, Draw, Start) come before the blank map. */
+	.map-layout.empty .map-side {
+		order: -1;
+	}
 	.map-card,
 	.side-box {
 		margin: 0;
@@ -957,6 +1268,10 @@
 			grid-template-columns: minmax(0, 1fr) clamp(18rem, 30%, 24rem);
 			align-items: start;
 		}
+		/* Beside the map, the side column keeps its place. */
+		.map-layout.empty .map-side {
+			order: 0;
+		}
 	}
 	/* Window fit (a dashboard, as the Network): with the side column and a window at least 620 px high,
 	   the layout is the height left below its top, less the gutter and the save bar while it shows.
@@ -987,10 +1302,19 @@
 				flex-direction: column;
 				min-height: 0;
 			}
+			/* The picked feature's card scrolls in its box and gives way with the layers (each in proportion to
+			   its size) so the column always fits: the list keeps its 8rem and the checks line its height. As
+			   `flex: none` (before 2026-10-02) a full card held its 55% and pushed the column past a 1280×800
+			   window once a reach was picked too (map-layers.spec.ts › the side column still fits). */
 			.card {
-				flex: none;
+				flex: 0 1 auto;
+				min-height: 0;
 				max-height: 55%;
 				overflow-y: auto;
+			}
+			/* A picked feature's card keeps room for its heading and first facts (the hint alone is shorter). */
+			.card:has(:global(.card-h)) {
+				min-height: 6rem;
 			}
 			.list-box {
 				flex: 1;
@@ -1042,6 +1366,11 @@
 	}
 	.empty-line {
 		margin: 0 0 0.5rem;
+	}
+	.ways {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 	.pick-hint {
 		margin: 0;

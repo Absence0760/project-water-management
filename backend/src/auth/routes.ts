@@ -169,6 +169,8 @@ export const toUser = (r: UserRow) => ({
 	// Accepted the terms and privacy notice now in force (087): false for an
 	// account from before a new version, or made by a script (accepted none).
 	termsCurrent: r.terms_version === LEGAL_VERSION,
+	// The version accepted (null: none), so the re-acceptance step lists every change since it, not only the latest version's.
+	termsVersion: r.terms_version,
 	// Acknowledged the farm view's notice now in force (093): false until the
 	// farmer presses "I understand", and again after a new version.
 	farmNoticeCurrent: r.farm_notice_version === FARMER_NOTICE_VERSION

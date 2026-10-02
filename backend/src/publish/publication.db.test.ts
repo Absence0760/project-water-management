@@ -648,3 +648,28 @@ describe('the season decision log (issue #119)', () => {
 		expect(own.body.publications.length).toBeGreaterThan(0);
 	});
 });
+
+describe('a dam beside a river abstraction (round 4, persona-farmer)', () => {
+	it('loads each river_take@ series, so the dam’s days left leave out what the crops pumped from the river', async () => {
+		const p = await makeProject(owner, 'River crops beside a dam');
+		const model = (await owner.call('GET', `/projects/${p}/model`)).body;
+		const [farmOne] = (await asOwner(`SELECT id FROM node WHERE project_id = $1 AND name = 'Farm One'`, [p])) as { id: string }[];
+		model.nodes = model.nodes.map((n: { id: string }) => (n.id === farmOne!.id ? { ...n, cropWaterSource: 'river', cropRiverPumpM3Day: null } : n));
+		expect((await owner.call('PUT', `/projects/${p}/model`, model)).status).toBe(200);
+		const r = await run(owner, p);
+		expect((await publish(owner, r, {}, p)).status).toBe(201);
+		const [take] = (await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = 'river_take@crops'`, [r, farmOne!.id])) as { values: number[] }[];
+		// The crops did pump from the river over the run …
+		expect(take!.values.some((v) => v > 0)).toBe(true);
+		const [row] = (await asOwner(
+			`SELECT f.view FROM publication_farm f JOIN run_publication p ON p.id = f.publication_id WHERE p.project_id = $1 AND p.superseded_at IS NULL AND f.view->>'nodeId' = $2`,
+			[p, farmOne!.id]
+		)) as { view: { dam: { use14M3Day: number; usableDays: number | null }; season: { onlyRiver?: boolean; shortDaysAtStopLevel: number } } }[];
+		const view = row!.view;
+		// … but every demand of Farm One draws on the river, so its dam carries nothing and no short day is the dam's.
+		expect(view.dam.use14M3Day).toBe(0);
+		expect(view.dam.usableDays).toBeNull();
+		expect(view.season.onlyRiver).toBe(true);
+		expect(view.season.shortDaysAtStopLevel).toBe(0);
+	});
+});

@@ -83,6 +83,9 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await expect(page).toHaveURL(/[?&]layers=rivers(&|$)/);
 	// The boundary padded to 21.2–21.5 E, 33.5–33.8 S meets ten of the eleven synthetic reaches (the far one is at 22.5 E).
 	await expect(page.getByTestId('map-rivers-summary')).toHaveText('10 reaches around the catchment, the biggest first, from synthetic. Synthetic test data, never real rivers.');
+	// One status region, there from the start, says what loaded (WCAG 4.1.3), then the reach picked.
+	const status = layers(page).getByRole('status');
+	await expect(status).toHaveText('10 reaches shown.');
 	const reaches = page.getByTestId('map-reach-list').getByRole('button');
 	await expect(reaches).toHaveCount(10);
 	await expect(reaches.first()).toHaveText('Reach 90000002 · order 3 · 655 km²');
@@ -92,6 +95,9 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await page.getByTestId('map-reach-list').getByRole('button', { name: 'Reach 90000003 · order 2 · 168 km²' }).click();
 	const picked = page.getByTestId('map-reach-picked');
 	await expect(picked).toContainText('Reach 90000003: Strahler order 2, 168 km² upstream');
+	// HydroRIVERS' discharge is a model's long-term mean, not a gauged one (round 4).
+	await expect(picked).toContainText('modelled mean flow');
+	await expect(status).toHaveText('10 reaches shown. Picked Reach 90000003.');
 	await expect(picked).toContainText('Source: SYNTHETIC test data');
 	await picked.getByRole('button', { name: 'Add to the map as a river' }).click();
 	await expect(page.getByTestId('map-notice')).toHaveText(/^Added “Reach 90000003” to the map as a river, from the river network\./);
@@ -138,6 +144,78 @@ for (const [width, height] of [
 	});
 }
 
+/** The side column's fit: the page doesn't scroll, every box ends inside the column, the list keeps its room. */
+const sideFit = (page: Page) =>
+	page.evaluate(() => {
+		const side = document.querySelector('.map-side')!.getBoundingClientRect();
+		const boxes = [...document.querySelectorAll('.map-side > *')].map((e) => ({ cls: e.className, bottom: e.getBoundingClientRect().bottom }));
+		return {
+			scroll: document.documentElement.scrollHeight,
+			inner: window.innerHeight,
+			sideBottom: side.bottom,
+			overflowing: boxes.filter((b) => b.bottom > side.bottom + 0.5).map((b) => b.cls),
+			list: document.querySelector('.list-box')!.getBoundingClientRect().height,
+			card: document.querySelector('[data-testid="map-feature-card"]')!.getBoundingClientRect().height
+		};
+	});
+
+// Reported on PR #348: with a feature picked (its card at full size) as well as a reach, the side column ran
+// past the window at 1280×800. The card and the layers give way (each scrolls in its box), never the list's room.
+for (const [width, height] of [
+	[1440, 960],
+	[1280, 800]
+] as const) {
+	test(`with a feature and a reach picked the side column still fits a ${width}×${height} window`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width, height });
+		await loadSyntheticQuaternaries();
+		await loadSyntheticRivers();
+		const project = await seedRunnableProject(page.request, `Map side fit ${width}`);
+		await openMap(page, project.id);
+		await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
+		await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
+		await openMap(page, project.id, '&layers=quaternaries,rivers');
+		await expect(page.getByTestId('map-reach-list').getByRole('button')).toHaveCount(10);
+		await page.getByTestId('map-reach-list').getByRole('button').first().click();
+		await expect(page.getByTestId('map-reach-picked')).toBeVisible();
+		await page.getByTestId('map-feature-list').getByRole('button', { name: /Upper farm/ }).first().click();
+		await expect(page.getByTestId('map-feature-card').getByRole('heading')).toHaveText('Upper farm');
+		const fit = await sideFit(page);
+		expect(fit.scroll).toBeLessThanOrEqual(fit.inner);
+		expect(fit.overflowing).toEqual([]);
+		expect(fit.sideBottom).toBeLessThanOrEqual(fit.inner);
+		expect(fit.list).toBeGreaterThanOrEqual(8 * 14);
+		// The card keeps enough to read its heading and first facts.
+		expect(fit.card).toBeGreaterThanOrEqual(6 * 14);
+	});
+}
+
+test('the river network with nothing on the map yet: zoom in and it asks for the map’s view', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticRivers();
+	const project = await seedRunnableProject(page.request, 'Map layers rivers empty');
+	await openMap(page, project.id);
+	await mapReady(page);
+	await layers(page).getByRole('checkbox', { name: 'River network' }).check();
+	// The whole country is in view: too wide to ask for, so it says to zoom in, and asks nothing.
+	const rivers = page.getByTestId('map-rivers');
+	await expect(rivers).toContainText('Zoom in to see the river network here');
+	// Zoomed in far enough, it asks for the view (no features needed), at most 2° a side.
+	const asked = page.waitForRequest((r) => /\/map\/rivers\?bbox=/.test(r.url()));
+	const zoomIn = page.getByTestId('catchment-map').getByRole('button', { name: /zoom in/i });
+	const wrap = page.locator('.map-wrap');
+	// One step at a time, each waited out on the map's settled view (a click mid-animation would cancel it).
+	for (let i = 0; i < 5; i++) {
+		const before = await wrap.getAttribute('data-view');
+		await zoomIn.click();
+		await expect(wrap).not.toHaveAttribute('data-view', before ?? '');
+	}
+	const [w, s, e, n] = new URL((await asked).url()).searchParams.get('bbox')!.split(',').map(Number) as [number, number, number, number];
+	expect(e - w).toBeLessThanOrEqual(2);
+	expect(n - s).toBeLessThanOrEqual(2);
+	await expect(rivers).toContainText('No reach of the loaded river network is in view.');
+});
+
 test('Download GeoJSON hands over every feature with its name, kind, node and area', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Map layers download');
@@ -154,7 +232,7 @@ test('Download GeoJSON hands over every feature with its name, kind, node and ar
 	const byName = new Map(doc.features.map((f: { properties: { name: string } }) => [f.properties.name, f]));
 	expect(byName.get('Upper farm')).toMatchObject({ type: 'Feature', properties: { kind: 'farm_parcel', node: 'Upper farm', areaKm2: expect.any(Number) }, geometry: { type: 'Polygon' } });
 	expect(byName.get('Synthetic catchment')).toMatchObject({ properties: { kind: 'catchment_boundary', node: null } });
-	await expect(page.getByTestId('map-notice')).toHaveText(new RegExp(`^Downloaded 3 features as ${download.suggestedFilename().replace(/\./g, '\\.')}\\.`));
+	await expect(page.getByTestId('map-notice')).toHaveText(new RegExp(`^Downloaded 3 features as ${download.suggestedFilename().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`));
 });
 
 test('Measure from the keyboard: points at the crosshair, the distance in words, then the closed shape’s area; Escape ends it', async ({ page, owner }) => {

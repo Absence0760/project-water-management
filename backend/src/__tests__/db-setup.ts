@@ -1,5 +1,6 @@
 // Per-file setup for the DB projects (db, perf-db), after setup.ts: every DB
-// test file must leave nothing pending in the shared `job` table.
+// test file must leave nothing pending in the shared `job` table, and no
+// pending notice email (pack_notice, erratum_notice, alert_delivery).
 //
 // The queue is global on purpose (claim, tick and purge aren't scoped to a
 // project or a file), and the files share one database, run one after another.
@@ -10,6 +11,10 @@
 // (helpers.ts retirePendingJobs) before it ends, and this hook fails the file
 // that didn't, naming what it left, rather than the later file that trips over
 // it. It then retires the leftovers itself, so only the leaking file fails.
+// The notice queues are global the same way: the tick mails every pending
+// notice, so a file that issues or withdraws a pack, sweeps an erratum or
+// fires an alert sends (runTick) or settles (helpers.ts settlePendingNotices)
+// what it queued.
 // docs/testing.md § DB tests share the job queue.
 //
 // Hook order: vitest runs after-hooks in reverse order of registration
@@ -19,14 +24,14 @@
 // db-setup.db.test.ts checks that order (GUARD_RAN).
 import pg from 'pg';
 import { afterAll } from 'vitest';
-import { assertNoPendingJobs, GUARD_RAN } from './pendingJobs.js';
+import { assertNothingPending, GUARD_RAN } from './pendingJobs.js';
 
 afterAll(async () => {
 	(globalThis as Record<symbol, unknown>)[GUARD_RAN] = true;
 	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
 	await client.connect();
 	try {
-		await assertNoPendingJobs(client);
+		await assertNothingPending(client);
 	} finally {
 		await client.end();
 	}

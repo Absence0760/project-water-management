@@ -175,6 +175,22 @@ The checklist for these is issue #62; the history scrub is #63.
       recommendation](./deployment.md)). If that's the choice, raise
       `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
+## DB tests share the mail outbox (2026-10-02, PR #360)
+
+- [x] **Guard pending notices as db-setup.ts guards pending jobs.** The
+      tick sends every pending `pack_notice` (133), `erratum_notice` (153)
+      and `alert_delivery` (051) in the shared test database, so a notice
+      one DB test file left behind landed in the next file that ticked
+      (alerts.db.test.ts got a "pack withdrawn" mail from
+      write-routes.db.test.ts, CI run 37010696949). Done (fix/r4-sec-access):
+      `pendingJobs.ts assertNothingPending` (db-setup.ts) now fails a file
+      that leaves a pending, sending or digest-waiting notice of any kind
+      and settles it; `helpers.ts settlePendingNotices` settles all three
+      queues. A run of every DB file that touches packs, alerts, errata,
+      ticks or sweeps (76 files) found two more leakers, now fixed:
+      pack-share.db.test.ts (two pack notices) and alerts.db.test.ts (a
+      digest-waiting delivery from the daily-cap test).
+
 ## Two-step sign-in (issue #282)
 
 Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
@@ -2228,6 +2244,27 @@ yet; each lands with the work package named.
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
 
+- [ ] **A unit with demands on both its dam and the river: which side was
+      short** (persona-farmer, round 4, 2026-10-02). Since engine 1.65.0
+      (model.md §2.7j) a unit's crops or demand objects can each draw on a
+      river abstraction beside its dam. The farm page's "Short on N days …"
+      line still counts a short day "when your dam was down to its stop
+      level" whenever the dam sat there, whichever side was short; a unit
+      whose demands *all* draw on the river is already right
+      (`season.onlyRiver`, the river's wording), and the dam's days left
+      already divide by the dam's own draw (`damDraw`). What's missing is a
+      per-side shortfall: the run publishes each abstraction's take
+      (`river_take@`) but not what it was asked for after a drought
+      restriction (the stored `object_demand@` is before the cut), so the
+      projection can't tell a river-side shortfall from a dam-side one
+      without guessing. Durable fix: the engine publishes each river
+      abstraction's unmet demand (`river_short@<key>`, an ENGINE_VERSION
+      bump), the projection counts the dam side's and the river side's
+      short days apart, and the card gets a river reason ("… when the
+      river or your pump couldn't give enough", through the i18n agents).
+      Trigger: the client's first unit with both a dam-side and a
+      river-side demand is published to its farmer.
+
 ## Afrikaans (WP-2.5)
 
 Issue #49 (the translation turnaround) is closed: on 2026-09-26 every
@@ -3598,18 +3635,25 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       through `deploy-frontend.yml` behind a gate that takes only same-origin
       `/tiles/` paths, and delineation's DEM (`delineation_dem`: `DEM_URL` on
       the API and its role's read of `tiles/terrain.pmtiles`, refused on an
-      API Lambda under 1 024 MB or 25 s). CSP unchanged. What's left is the
+      API Lambda under 1 024 MB or 25 s). CSP unchanged. Tracing a dam's
+      water occurrence followed the same pattern (#326 C2: `dam_trace_water`,
+      `WATER_URL` and the read of `tiles/water.pmtiles`). What's left is the
       operator's (uploading, the variables, the tfvars:
       [deployment.md § Map tiles](./deployment.md#map-tiles)) and the item
       below.
-- [ ] **The licence sentences the map's production data waits for**
+- [x] **The licence sentences the map's production data waits for**
       (operator + legal text; maps.md § Sources): the Copernicus WorldDEM-30
-      liability sentence (Art. 6(c)) before the relief or delineation is
-      served, and HydroSHEDS' Exhibit B statement (plus the terms' end-user
-      protections: no stand-alone redistribution, no reverse engineering)
-      before the river network is loaded. `scripts/release/map-data-gates.mjs`
-      refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentence is
-      in `frontend/src`'s legal text; uploading `terrain.pmtiles` (which the
+      liability sentence (Art. 6(c): "The organisations in charge of the
+      Copernicus programme by law or by delegation do not incur any liability
+      for any use of the Copernicus WorldDEM-30") and HydroSHEDS' Exhibit B
+      statement are done (2026-10-02, on the public Data sources and credits
+      page, `/data-sources`), and so are the terms' end-user protections for
+      HydroRIVERS (2026-10-03: Terms §9's clause on map data licensed to us,
+      no stand-alone redistribution, no reverse engineering; `LEGAL_VERSION`
+      2026-10-03, legal-status.md). `scripts/release/map-data-gates.mjs`
+      refuses `PUBLIC_TERRAIN_URL` and a `rivers` load until the sentences
+      are in `frontend/src`'s legal text (rivers: the Exhibit B statement and
+      the §9 clause); they are, so what is left is the operator's at deploy time: uploading `terrain.pmtiles` (which the
       `/tiles/*` behaviour then serves to anyone) and `delineation_dem` are
       the operator's to do only after the Art. 6(c) sentence is live
       (Terraform can't see the frontend, and the upload is outside it). Trigger: the first deployment that wants the relief,
@@ -3640,13 +3684,17 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refuses it until then.
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
-      on two conditions to meet before a deployment serves it: the
-      HydroSHEDS Exhibit B statement in the app's legal notice (or its
-      documentation), and the terms of service carrying the end-user
-      protections the agreement asks for (§ 2.1.2: no stand-alone
-      redistribution of the data, no reverse engineering). Then load it with
-      `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate refuses
-      the load until the Exhibit B statement is in the legal text).
+      on two conditions, both met. The HydroSHEDS Exhibit B statement
+      (2026-10-02): the public Data sources and credits page
+      (`/data-sources`) carries it, and the map's attribution control
+      credits HydroRIVERS, linking there, while its reaches are drawn. The
+      end-user protections the agreement asks for (2026-10-03, § 2.1.2 and
+      § 2.1.3): Terms §9's clause on map data licensed to us (no stand-alone
+      copying or distribution, no reverse engineering; the licensors keep
+      ownership and give no warranty), pre-counsel wording, `LEGAL_VERSION`
+      2026-10-03 (legal-status.md). What is left is loading it with
+      `load-reference.yml` (kind `rivers`, built 2026-10-02; its gate checks
+      both texts are in the legal text).
       Trigger: the first deployment that wants the River network layer.
 - [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
       Sources, issue #345, D-B). Its page answers 403 outside South Africa
@@ -3693,15 +3741,30 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       DWS (Dam Safety Office) for written permission for commercial use
       before a client deployment loads the real list. Trigger: the first
       client who wants register capacities proposed.
-- [ ] **Sub-catchments at every dam and abstraction point** (#326
-      B-delineate's stretch, not built; design/delineation.md § Not built).
-      Today an editor delineates each dam wall by hand, which gives its whole
-      upstream area. The model wants each unit's *incremental* area (what
-      drains to it and not to a unit upstream), which needs the network's
-      order: delineate every unit's point at once on one routed window,
-      subtract the upstream units' masks, and propose each unit's area as a
-      polygon with Use. Trigger: C3 (start a catchment from the map), or a
-      client delineating more than a few units.
+- [x] **Sub-catchments at every dam and abstraction point** (#326
+      B-delineate's stretch): built with C3, start a catchment from the map
+      (migration 178, `delineation/subcatchments.ts`,
+      design/start-from-map.md). One routed window, each unit's incremental
+      area with its holes, the order from the D8 tree.
+- [x] **Sub-catchments for a model that already has nodes** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups, migration 182):
+      **Divide the model** on the Map proposes each linked unit's own area,
+      drains-into and runoff to its dam from the same partition, beside its
+      current values, each taken only when ticked; a value changed since
+      the proposal is refused, never overwritten
+      (design/start-from-map.md § Dividing a model that has nodes).
+- [x] **Each proposed unit's outline told apart on the map** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups): each piece drawn on
+      its own, tinted, with its number as a badge (no glyphs needed); the
+      sheet's cards carry the same number and are the key; a card with the
+      focus or the pointer lights its piece, and a piece clicked on the map
+      opens its card (design/start-from-map.md § Each unit's piece on the
+      map).
+- [x] **Intermediate gauges in a model started from the map** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups): a gauge other than the
+      outlet is a gauge node in the order by default, partitioning like a
+      water user; a division can add an unlinked gauge as a new gauge node
+      (design/start-from-map.md § Gauges as nodes).
 - [ ] **Delineation of catchments larger than about 100 km across**
       (design/delineation.md § Where it runs): the API refuses rather than
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job
@@ -3733,25 +3796,29 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       proposals read WorldCover or the synthetic grid. Trigger: a
       hydrologist asking which crop the land cover sees, or WorldCover's
       cropland class proving too coarse in a client catchment.
-- [ ] **Loading the evaporation grid in production** (issue #326 B-evap;
-      maps.md § The evaporation grid): dPET is allowed (CC BY 4.0, from
-      ERA5-Land, also CC BY 4.0), with the same missing path into the
-      private database as the land-cover grid and the quaternaries (the
-      loader writes as the schema owner from a workstation). Same durable
-      fix as the item above: one operator path for every reference dataset,
-      fed the pre-summarised `--reduce` totals. Trigger: the first client
-      deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
-      attribution with any figure served.
-- [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
-      review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
-      `settings/EvaporationProposal.svelte` repeat the same frame (heading,
-      live notice, the `aria-busy`/`data-ready` body, error with Try again,
-      no-dataset alert, synthetic-data warning, Source and method). Third
-      caller, so extract a shell taking a body snippet, after pinning each
-      panel's rendered states in its e2e spec (CLAUDE.md: pin, then fold).
-      The evaporation panel's focus-to-notice after Use is the pattern the
-      other two should take with it. Trigger: the next map proposal panel,
-      or the next fix that has to be made in all three.
+- [x] **Loading the evaporation grid in production** (issue #326 B-evap,
+      2026-10-02, PR feat/evaporation-production-load): `pnpm
+      import:evaporation <years> --dataset <label> --out <file>.json.gz`
+      averages the reduced dPET years into the grid of monthly means on the
+      operator's machine, and `load-reference.yml` (kind `evaporation`)
+      loads that file into RDS through the migrate Lambda
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+      Only a reference-ET grid loads (an A-pan grid's source has no allowed
+      Sources row); its caps are 32 MiB uploaded, 64 MiB unzipped. The
+      dPET/ERA5-Land attribution is stored on the dataset row and shown
+      under every proposal; its credit on the /data-sources page waits for
+      that page (PR #354).
+- [x] **One shell for the map-proposal panels** (found in #326 B-evap's UI
+      review). Done: `components/proposals/ProposalPanel.svelte` draws the
+      frame (heading, intro, controls, the live notice that takes the
+      keyboard after a Use, the `aria-busy`/`data-ready` body, the failure
+      with Try again) and `ProposalNoDataset`, `ProposalSynthetic` and
+      `ProposalSource` the shared alerts and citation; land cover, the dams
+      and evaporation each keep their data, rows, Use and words. Pinned
+      first by `e2e/tests/proposal-panels.spec.ts` (each panel's failure
+      and Try again) and each panel's own spec, which now also checks the
+      focus move after a Use for land cover and the dams. A new proposal
+      panel starts from `ProposalPanel` (ui-playbook.md § 4).
 - [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
       maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
       reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam
@@ -3766,6 +3833,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       rasterised to it), load it as kind `apan`, and record it in the
       sources table. Trigger: the WR2012 decision, or a hydrologist asking
       for the A-pan row from the map.
+
+- [ ] **Divide and start: a piece's area from its cells, not its simplified
+      outline** (persona-hydrologist, round 4, 2026-10-02). The DEM
+      partition is exact in cells, but each piece's `areaM2`
+      (`backend/src/delineation/subcatchments.ts` `piece()`) is its
+      Douglas–Peucker-simplified outline's geodesic area, so the pieces and
+      the rest add up to −0.51 % of the catchment on the synthetic DEM, more
+      on small, jagged pieces. The cell area is already summed (`cellArea`,
+      used only when the outline fails). Durable fix: take each piece's area
+      from its cells and keep the outline for display, *and* decide what the
+      saved parcel's `area_m2` is (today the unit's area equals its parcel's
+      outline area, which "area from the map" relies on): either store the
+      cell area on the parcel too, with the outline marked simplified, or
+      simplify less. Trigger: a divide whose pieces fall more than 1 % short
+      of the catchment, or the first real DEM catchment with many small units.
 
 ## Crop factors (issue #54 item 1)
 
@@ -3853,6 +3935,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.
+- [x] **A river abstraction's pump-limited demand** (2026-10-02, engine
+      1.66.0, follow-up from PR #350). Each abstraction with a pump capacity
+      publishes `river_pump_limited@<key>`: the demand its pump left unmet
+      while the flow its level left, or its own pool, still had the water
+      (within the allocation room), as an other water user's `pump_limited`
+      does (§2.7c). `RiverTakeSummary.avgPumpLimitedM3Day` and
+      `daysPumpLimited`; the Units & supply **River abstractions** table and
+      the summary CSV's River abstractions block show them
+      ([model.md §2.7j](./model.md)). Nothing else in the run changes.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
@@ -4634,6 +4725,18 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
+- [ ] **Record which file a reference load came from (round 4 infra audit,
+      data finding 4).** A load checks the uploaded file's SHA-256, then
+      drops it: the dataset rows don't say which key and hash they came
+      from, so once the Actions log expires nobody can tell which file is
+      live or which version to restore (the reference bucket is versioned
+      for a year, deployment.md § Reference datasets, Undoing a load).
+      **Durable fix:** a migration adding a `reference_load (kind, dataset,
+      source_key, source_sha256)` table (rivers have no dataset table of
+      their own), written in the same transaction as the dataset by
+      `geo/referenceLoad.ts` and cleared by any other replace, and shown on
+      `/data-sources`. **Trigger:** the
+      first production load, or the next migration touching those tables.
 
 ## Housekeeping
 
@@ -5415,3 +5518,59 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `api.runs.series` / `run_series` consumer and how it treats a forecast
       run would stop the next one. Trigger: the next view over stored
       series.
+
+## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
+
+Measured on a scratch database with 300 000 synthetic reaches spread over
+South Africa (2026-10-02): `GET …/map/rivers` for a 2° × 2° box runs two
+sequential scans of `river_reference`, the bbox query (21 ms: the btree
+`river_reference_bbox_idx` on `(min_lon, max_lon, min_lat, max_lat)` can't
+serve a four-sided overlap, so the planner skips it) and `riverDatasets()`'
+`count(*) … GROUP BY dataset` (25 ms), on every pan. Fine at South Africa's
+network; linear in the table, so about 0.2 s a request if the operator loads
+all of Africa. `GET …/map/stations` counts its datasets the same way.
+
+- **Durable fix:** in one migration, an expression GiST index on
+  `box(point(min_lon, min_lat), point(max_lon, max_lat))` (core Postgres, no
+  PostGIS) with the query written as `box(...) && box(...)`, and a small
+  per-dataset summary table (dataset, count) the loader (`loadRivers.ts`,
+  `loadGaugeStations.ts`) writes in its transaction, read instead of the
+  count. Measure before and after with `EXPLAIN (ANALYZE, BUFFERS)` at a
+  million rows.
+- **Trigger:** a river network of more than about 500 000 reaches is loaded,
+  or the layer's request shows above 100 ms in the API's logs.
+
+## Round-4 input hardening (map data, geometry, compute caps)
+
+What the round-4 `sec-input` pass fixed is in docs/security.md (§ Input
+handling: Delineation, Map data files, Geometry cost). Left open:
+
+- [ ] **A work budget on summing a polygon over a grid.** `gridShares`
+      (land cover, evaporation; a viewer's read) clips every vertex to every
+      row it is summed over. Halving the rows and cells (the `sec-access`
+      round-4 branch, `eachBand`) fixes the ordinary case, but a comb whose
+      every edge runs the polygon's whole height keeps all its vertices in
+      every row: a valid 50 000-vertex one over 0.0025° × 178° is about
+      72 000 rows × 50 000 vertices, billions of steps, and `maxCells`
+      doesn't stop it (one column). The durable fix is a budget on the
+      vertices the clipping makes (`eachBand`'s `work` counter, refused past
+      a few million) with a test of that comb. Trigger: the halving lands on
+      main (it was left to that branch to avoid two rewrites of one file).
+- [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
+      outer ring or another hole, but not a hole wholly inside another hole
+      (its area is subtracted twice). A full check is a point-in-ring test
+      per pair of holes, quadratic in the number of holes, so it needs a
+      cap on holes first. Trigger: a real file with nested holes, or an area
+      found below a polygon's outer ring minus its holes.
+- [ ] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
+      `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
+      gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it
+      `@sha256:` and add it to the pins guard. Trigger: the next change to
+      that script.
+- [ ] **No published checksums for the downloaded sources.** HydroRIVERS'
+      zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
+      builds have no checksum the scripts verify (whether each publisher
+      offers one was not checked in this round); the scripts are HTTPS-only (redirects
+      too) and the readers fail closed, and the production load hashes
+      what the operator prepared. Trigger: any of them starts publishing
+      checksums.

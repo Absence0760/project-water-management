@@ -86,5 +86,7 @@ describe('the e2e copy of the fixture’s points', () => {
 		const pair = (name: string) => JSON.parse(new RegExp(`${name}: \\[number, number\\] = (\\[[^\\]]+\\])`).exec(text)![1]!);
 		expect(pair('FIXTURE_OUTLET')).toEqual(at(OUTLET_CELL.x, OUTLET_CELL.y));
 		expect(pair('FIXTURE_DAM')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 1));
+		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
+		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
 	});
 });

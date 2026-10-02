@@ -1127,7 +1127,13 @@ scenario is `'team'`, and behaves exactly as above).
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked; crops, crop areas, transfers, land cover and
-  boreholes on their own farms only. This is D2's recommended default
+  boreholes on their own farms only. Of a hidden node's text fields only
+  those an explicit list keeps survive (`TEXT_KEPT`: its place, kind and
+  the categorical rules: dam release, dates in service, user priority,
+  borehole and supply rules); how a neighbour waters its crops
+  (`cropWaterSource`, river or dam) is dropped with its pump and pool, and
+  a new text field on a node fails the build until the list decides it.
+  This is D2's recommended default
   ([step-3 § 11](./roadmap/step-3-licensing.md#11-open-decisions)),
   **pending the client**.
 - **The applicant's namespace** (049, `applicationMask` in `applicant.ts`,

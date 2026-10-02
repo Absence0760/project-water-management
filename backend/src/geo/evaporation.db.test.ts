@@ -88,8 +88,16 @@ describe('the proposal', () => {
 		expect(b.boundary).toMatchObject({ name: 'Catchment' });
 		expect(b.target).toBe('pe');
 		expect(b.proposal).toEqual({ monthlyMm: BASE, annualMm: 1335, coverage: 1, cells: 4 });
-		expect(b.settings).toEqual({ apanMm: Array(12).fill(0), peKind: 'pan', peMm: null });
+		expect(b.settings).toEqual({ apanMm: Array(12).fill(0), peKind: 'pan', peMm: null, dailyApan: null });
 		expect(b.accepted).toEqual([]);
+	});
+
+	it('says which days a daily A-pan record covers, so the panel can say it still drives them (round 4)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Daily A-pan record' })).body.project.id as string;
+		expect((await proposals(owner, '', pid)).body.settings.dailyApan).toBeNull();
+		// Its last day is the last with a value: a trailing blank isn't data.
+		await asOwner(`INSERT INTO time_series (project_id, kind, unit, start_date, "values") VALUES ($1, 'evap_apan_mm', 'mm', '2020-01-30', ARRAY[5, 6, NULL]::float8[])`, [pid]);
+		expect((await proposals(owner, '', pid)).body.settings.dailyApan).toEqual({ from: '2020-01-30', to: '2020-01-31' });
 	});
 
 	it('says why there is nothing to propose, and is 400 for an unknown dataset, 404 for a stranger, 403 for a farmer', async () => {

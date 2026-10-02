@@ -9,6 +9,16 @@
 
 export class WebpError extends Error {}
 
+/**
+ * The largest tile side either decoder takes (webp.ts, png.ts): a DEM or
+ * water tile is 256 or 512 px, so a bigger one is a corrupt or hostile file,
+ * refused before anything is allocated for it (docs/security.md § Map data
+ * files). 1024² ARGB is 4 MiB.
+ */
+export const MAX_TILE_SIDE = 1024;
+/** Prefix-code groups one image may keep (libwebp writes a few hundred at most): each costs a few KiB of tables. */
+export const MAX_CODE_GROUPS = 4096;
+
 const fail = (why: string): never => {
 	throw new WebpError(`not a readable lossless WebP: ${why}`);
 };
@@ -53,6 +63,7 @@ class Code {
 	private table = new Int32Array(0); // (symbol << 4) | length; 0 = longer than PEEK
 	private counts = new Int32Array(16);
 	private sorted = new Int32Array(0);
+	private peekBits = PEEK;
 
 	constructor(lengths: Uint8Array) {
 		let nonzero = 0;
@@ -87,16 +98,20 @@ class Code {
 		const sorted = new Int32Array(nonzero);
 		for (let s = 0; s < lengths.length; s++) if (lengths[s]) sorted[offs[lengths[s]!]!++] = s;
 		this.sorted = sorted;
-		this.table = new Int32Array(1 << PEEK);
+		// The table only needs the longest code's bits (up to PEEK): a short code keeps a small table.
+		let maxLen = 1;
+		for (let len = 1; len < 16; len++) if (counts[len]) maxLen = len;
+		this.peekBits = Math.min(PEEK, maxLen);
+		this.table = new Int32Array(1 << this.peekBits);
 		// Canonical codes, in order of length then symbol; the stream holds each code's bits first-bit-first, so the table is keyed on the reversed code.
 		let code = 0;
 		let k = 0;
 		for (let len = 1; len < 16; len++) {
 			for (let c = 0; c < counts[len]!; c++, k++, code++) {
-				if (len <= PEEK) {
+				if (len <= this.peekBits) {
 					let r = 0;
 					for (let i = 0; i < len; i++) r |= ((code >>> i) & 1) << (len - 1 - i);
-					for (let j = r; j < 1 << PEEK; j += 1 << len) this.table[j] = (sorted[k]! << 4) | len;
+					if (len <= this.peekBits) for (let j = r; j < 1 << this.peekBits; j += 1 << len) this.table[j] = (sorted[k]! << 4) | len;
 				}
 			}
 			code <<= 1;
@@ -105,7 +120,7 @@ class Code {
 
 	read(bits: Bits): number {
 		if (this.single >= 0) return this.single;
-		const e = this.table[bits.peek(PEEK)]!;
+		const e = this.table[bits.peek(this.peekBits)]!;
 		if (e !== 0) {
 			bits.skip(e & 15);
 			return e >>> 4;
@@ -206,6 +221,7 @@ function readImage(bits: Bits, w: number, h: number, main: boolean): Uint32Array
 	let meta: Uint32Array | null = null;
 	let metaW = 0;
 	let groups = 1;
+	const used = new Set<number>();
 	if (main && bits.read(1)) {
 		prefixBits = bits.read(3) + 2;
 		metaW = Math.ceil(w / (1 << prefixBits));
@@ -214,11 +230,18 @@ function readImage(bits: Bits, w: number, h: number, main: boolean): Uint32Array
 		for (let i = 0; i < img.length; i++) {
 			meta[i] = (img[i]! >>> 8) & 0xffff;
 			if (meta[i]! + 1 > groups) groups = meta[i]! + 1;
+			used.add(meta[i]!);
 		}
+		if (used.size > MAX_CODE_GROUPS) fail(`more than ${MAX_CODE_GROUPS} prefix-code groups`);
 	}
 	const cacheSize = cacheBits ? 1 << cacheBits : 0;
+	// Every group's codes are in the stream and must be read, but only the ones the meta image names are kept (a hostile
+	// file could otherwise name 65 536 groups and have each kept).
 	const codes: Code[][] = [];
-	for (let g = 0; g < groups; g++) codes.push(ALPHABET.map((a, i) => readCode(bits, i === 0 ? a + cacheSize : a)));
+	for (let g = 0; g < groups; g++) {
+		const group = ALPHABET.map((a, i) => readCode(bits, i === 0 ? a + cacheSize : a));
+		if (!meta || used.has(g)) codes[g] = group;
+	}
 
 	const out = new Uint32Array(w * h);
 	const cache = cacheSize ? new Uint32Array(cacheSize) : null;
@@ -415,6 +438,8 @@ export function decodeWebp(buf: Uint8Array): Rgba {
 	const bits = new Bits(buf, start + 1, length - 1);
 	const width = bits.read(14) + 1;
 	const height = bits.read(14) + 1;
+	// Checked before anything is allocated: a few bytes of a single-symbol code decode any number of pixels.
+	if (width > MAX_TILE_SIDE || height > MAX_TILE_SIDE) fail(`an image of ${width} × ${height} px (tiles are at most ${MAX_TILE_SIDE} px a side)`);
 	bits.read(1); // alpha_is_used: a hint only
 	if (bits.read(3) !== 0) fail('a VP8L version other than 0');
 	const transforms: Transform[] = [];

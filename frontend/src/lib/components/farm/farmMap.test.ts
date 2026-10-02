@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { FarmMapFeature } from '$lib/api/types';
 import { BAND_TOKEN } from '$lib/components/map/mapStatus';
 import { vaalbankFixture } from './fixture';
+import { creditedFeature } from '$lib/components/map/mapLayers';
 import { asMapFeatures, FARM_BAND_TOKEN, farmFills, farmMapCard, kindWord, mapWords, placeText, showsMap } from './farmMap';
 
 const sp = (s: string) => s.replace(/[  ]/g, ' ');
@@ -63,6 +64,15 @@ describe('farmMapCard', () => {
 		expect(vm.legend.map((l) => l.kind)).toEqual(['dam']);
 		expect(sp(vm.place)).toBe('Where: about 26.080° S, 28.420° E.');
 	});
+
+	it('names a river once however many reaches draw it, and a river of unnamed reaches as "A river"', () => {
+		const reach = (id: string, name: string): FarmMapFeature => ({ ...FEATURES[3]!, id, name });
+		const many = farmMapCard([FEATURES[0]!, reach('r1', 'Sandspruit'), reach('r2', 'Sandspruit'), reach('r3', '')], vaalbankFixture().farm);
+		expect(many.lines.map(sp)).toContain('Rivers: Sandspruit');
+		// The server leaves out "Reach 1050000001" names (farms/view.ts), so 20 such reaches read as one river.
+		const unnamed = farmMapCard([FEATURES[0]!, ...Array.from({ length: 20 }, (_, k) => reach(`u${k}`, ''))], vaalbankFixture().farm);
+		expect(unnamed.lines).toContain('A river');
+	});
 });
 
 describe('showsMap', () => {
@@ -109,5 +119,16 @@ describe('the map’s words', () => {
 	it('gives the shared map component features with no node or properties', () => {
 		const [f] = asMapFeatures(FEATURES.slice(0, 1));
 		expect(f).toMatchObject({ id: 'p1', kind: 'farm_parcel', nodeId: null, nodeName: null, properties: {} });
+	});
+});
+
+describe('asMapFeatures and the HydroRIVERS credit', () => {
+	it('keeps the server’s credit flag where the map reads it, and gives other features no properties', () => {
+		const base = { id: 'r', kind: 'river' as const, name: 'River', geometry: { type: 'LineString' as const, coordinates: [[21, -33], [21.1, -33.1]] as [number, number][] }, areaM2: null, center: [21, -33] as [number, number] };
+		const [credited, plain] = asMapFeatures([{ ...base, credit: 'hydrorivers' }, { ...base, id: 's' }]);
+		expect(credited!.properties).toEqual({ credit: 'hydrorivers' });
+		expect(plain!.properties).toEqual({});
+		expect(creditedFeature(credited!)).toBe(true);
+		expect(creditedFeature(plain!)).toBe(false);
 	});
 });

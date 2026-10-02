@@ -327,11 +327,18 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'map.feature_created':
 			// A reach of the river network added as a river (issue #345): which reach of which dataset.
 			if (str(s.from) === 'river_network') return `Added ${mapFeature(s)} from the river network (${str(s.dataset)}, reach ${num(s.reachId) ?? '?'})`;
+			// A dam outline traced from the water occurrence data (issue #326 C2): the dataset, the share, and whether it was adjusted.
+			if (str(s.from) === 'dam_trace')
+				return `Traced ${mapFeature(s)} from ${str(s.dataset) || 'the water occurrence data'} (water in at least ${num(s.minOccurrence) ?? '?'} % of the observations${s.edited ? ', then adjusted' : ''})`;
 			return `Placed ${mapFeature(s)} on the map`;
 		case 'map.feature_changed':
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
+		// A polygon cut in two along a drawn line (issue #326 C2): the shape and what its parts became; never the geometry.
+		case 'map.feature_split': {
+			return s.kind === 'catchment_boundary' ? `Split ${mapFeature(s)} into two ${s.into === 'farm_parcel' ? 'farm parcels' : 'areas'}` : `Split ${mapFeature(s)} in two`;
+		}
 		// A catchment delineated from a click (175, issue #326 B-delineate): its area and the dataset; never the polygon.
 		case 'map.delineation_proposed': {
 			const km2 = num(s.areaKm2);
@@ -341,6 +348,26 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Accepted a delineated catchment as ${s.as === 'catchment_boundary' ? 'the catchment boundary' : 'an area'}${str(s.name) ? ` “${str(s.name)}”` : ''}`;
 		case 'map.delineation_rejected':
 			return 'Rejected a delineated catchment';
+		// A model started from the map (178, issue #326 C3): counts, never a polygon.
+		case 'map.start_proposed': {
+			const n = num(s.units) ?? 0;
+			return `Proposed a model from the map: ${plural(n, 'unit')}${s.fromDem === false ? ', without an elevation model' : str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		}
+		case 'map.start_applied': {
+			const areas = num(s.areas) ?? 0;
+			return `Started the model from the map: ${plural(num(s.nodes) ?? 0, 'node')}, ${plural(areas, 'area')} and ${plural(num(s.orders) ?? 0, 'drains-into', 'drains-into')} taken`;
+		}
+		case 'map.start_discarded':
+			return 'Discarded a model proposed from the map';
+		// A model divided into sub-catchments from the map (182, #326 C3's follow-up): counts, never a polygon.
+		case 'map.divide_proposed':
+			return `Proposed dividing the model from the map: ${plural(num(s.units) ?? 0, 'point')}${str(s.dataset) ? ` (${str(s.dataset)})` : ''}`;
+		case 'map.divide_applied': {
+			const gauges = num(s.gauges) ?? 0;
+			return `Divided the model from the map: ${plural(num(s.areas) ?? 0, 'area')}, ${plural(num(s.orders) ?? 0, 'drains-into', 'drains-into')} and ${plural(num(s.runoff) ?? 0, 'runoff to the dam', 'runoffs to the dam')} taken${gauges ? `, ${plural(gauges, 'gauge')} added` : ''}`;
+		}
+		case 'map.divide_discarded':
+			return 'Discarded a division of the model proposed from the map';
 		// The licence record (161): the outcome, the date the record may be deleted, and why.
 		case 'licence.outcome': {
 			const o = str(s.outcome);

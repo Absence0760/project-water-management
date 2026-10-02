@@ -7,7 +7,7 @@
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { parseLandCoverArgs, readLandCoverFiles, SYNTHETIC_LAND_COVER_FILE } from '../../scripts/import-land-cover.js';
-import { croplandCellsFromTiff, croplandFromJson, croplandToJson, gridFits, jsonDatasetMeta, mergeCells, methodFor, readTiffInfo, WORLDCOVER_2021 } from './loadCropland.js';
+import { croplandCellsFromTiff, croplandFromJson, croplandToJson, gridFits, jsonDatasetMeta, MAX_BLOCK_PIXELS, mergeCells, methodFor, readTiffInfo, WORLDCOVER_2021 } from './loadCropland.js';
 
 interface TiffSpec {
 	width: number;
@@ -240,5 +240,41 @@ describe('the JSON form written for a production load (--out)', () => {
 		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--out', 'grid.json.gz'], { INIT_CWD: '/data' })).toMatchObject({ files: ['/data/a.tif'], out: '/data/grid.json.gz' });
 		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--out', 'grid.csv'])).toMatch(/--out/);
 		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x'])).toMatchObject({ out: null });
+	});
+});
+
+/** Set one inline SHORT or LONG value of the first IFD's tag (a little-endian classic TIFF). */
+function setTag(buf: Buffer, tag: number, value: number) {
+	const ifd = buf.readUInt32LE(4);
+	const n = buf.readUInt16LE(ifd);
+	for (let i = 0; i < n; i++) {
+		const e = ifd + 2 + i * 12;
+		if (buf.readUInt16LE(e) !== tag) continue;
+		if (buf.readUInt16LE(e + 2) === 3) buf.writeUInt16LE(value, e + 8);
+		else buf.writeUInt32LE(value, e + 8);
+		return;
+	}
+	throw new Error(`no tag ${tag}`);
+}
+
+describe('hostile GeoTIFFs (round-4 hardening)', () => {
+	it('stops a deflate bomb at its block’s pixels, as "doesn’t decompress"', () => {
+		const base16 = tiff({ ...base, tile: 16, compression: 8 });
+		// 256 MiB of zeros deflated (about 256 KB), appended and made the one tile's data.
+		const bomb = deflateSync(Buffer.alloc(256 * 1024 * 1024));
+		const file = Buffer.concat([base16, bomb]);
+		setTag(file, 324, base16.length);
+		setTag(file, 325, bomb.length);
+		const t = performance.now();
+		expect(croplandCellsFromTiff(file, 0.002, new Set([40]))).toMatch(/doesn't decompress/);
+		expect(performance.now() - t).toBeLessThan(2_000);
+	});
+
+	it('refuses tiles or strips bigger than MAX_BLOCK_PIXELS before reading them', () => {
+		const file = tiff({ ...base, tile: 16 });
+		setTag(file, 322, 65_535);
+		setTag(file, 323, 65_535);
+		expect(65_535 * 65_535).toBeGreaterThan(MAX_BLOCK_PIXELS);
+		expect(readTiffInfo(file)).toMatch(/at most \d+ pixels each/);
 	});
 });

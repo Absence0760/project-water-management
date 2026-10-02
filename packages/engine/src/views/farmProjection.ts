@@ -42,6 +42,7 @@ import {
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
 import type { CropArea, CurtailmentFarm, CurtailmentSummary, DemandObject, NetworkNode, Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
+import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
 import { modelBand, type DamState, type FarmProjection, type MonthTotals, type RiverSite, type SeasonTotals, type WindowTotals } from './farmView';
 
@@ -69,12 +70,28 @@ const NOISE_M3 = 1e-6;
 export const PROJECTION_SERIES = {
 	// return_flow: read only for a unit with demand objects (engine ≥ 1.7.0), whose consumptive share follows it.
 	// basic_needs: only on a unit with a basic-needs floor (engine ≥ 1.44.0); read when present.
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs'],
+	// groundwater_used and the river takes (NOT_FROM_DAM_SERIES, riverTakeKey): the parts of supplied the dam never
+	// has to give, read when present, so the dam's days left follow what it would carry with nothing flowing in.
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow', 'basic_needs', 'groundwater_used'],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
 	catchment: ['ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall']
 } as const;
+
+/**
+ * The series on a farm that are part of `supplied` but that its dam never
+ * has to give, even when nothing flows in: the boreholes to the crop
+ * (WP-1.34), which don't depend on the river. The river abstractions beside
+ * the dam (§2.7j, `river_take@<key>`) are the other part, read per
+ * abstraction: the dam never serves those demands. The supply rule's river
+ * pump (§2.7e) and off-take water (§2.6a) stay in: they serve the dam's own
+ * demand from river flow, and once nothing flows in the dam carries it.
+ */
+export const NOT_FROM_DAM_SERIES = ['groundwater_used'] as const;
+
+/** The prefixes of the per-abstraction series a projection reads too (the loader reads `key LIKE prefix%`). */
+export const PROJECTION_SERIES_PREFIXES = [RIVER_TAKE_SERIES.take.prefix] as const;
 
 /** A saved run, as the projection sees it. */
 export interface ProjectionRun {
@@ -119,11 +136,57 @@ export interface ProjectionRun {
  * floor is read with its basic_needs series. A caller without the category
  * gets no floor, as a run before 1.44.0 has none.
  */
-export type ProjectionDemandObject = { nodeId: string; enabled: boolean } & Partial<Pick<DemandObject, 'category' | 'sizing' | 'count' | 'population'>>;
+export type ProjectionDemandObject = { nodeId: string; enabled: boolean } & Partial<Pick<DemandObject, 'id' | 'category' | 'sizing' | 'count' | 'population' | 'waterSource'>>;
 
 /** A unit has a basic-needs floor (engine ≥ 1.44.0) when one of its enabled objects is domestic or municipal with people. */
 const hasFloor = (objects: readonly ProjectionDemandObject[] | undefined, nodeId: string): boolean =>
 	!!objects?.some((o) => o.enabled !== false && o.nodeId === nodeId && o.category !== undefined && basicNeedsPopulation({ category: o.category, sizing: o.sizing ?? 'monthly', count: o.count ?? null, population: o.population ?? null }) !== null);
+
+/**
+ * The river abstractions' keys on a unit (engine ≥ 1.65.0, docs/model.md
+ * §2.7j): 'crops' when its crops draw on the river, then each enabled demand
+ * object's id whose source is the river. Empty for every unit before 1.65.0.
+ */
+function riverTakeKeys(run: ProjectionRun, node: NetworkNode): string[] {
+	const keys: string[] = [];
+	if (onRiver(node.cropWaterSource)) keys.push(CROPS_TAKE_KEY);
+	for (const o of run.demandObjects ?? []) if (o.nodeId === node.id && o.enabled !== false && o.id && onRiver(o.waterSource)) keys.push(o.id);
+	return keys;
+}
+
+/**
+ * Whether every demand of a unit draws on the river (engine ≥ 1.65.0): its
+ * crops (when it has any crop area, or the run doesn't say) and each enabled
+ * demand object, with at least one of them there. Its dam then serves none.
+ */
+function servesOnlyRiver(run: ProjectionRun, node: NetworkNode): boolean {
+	const objects = (run.demandObjects ?? []).filter((o) => o.nodeId === node.id && o.enabled !== false);
+	const hasCrops = run.cropAreas ? run.cropAreas.some((a) => a.nodeId === node.id && a.areaM2 > 0) : true;
+	if (hasCrops && !onRiver(node.cropWaterSource)) return false;
+	if (objects.some((o) => !onRiver(o.waterSource))) return false;
+	return (hasCrops && onRiver(node.cropWaterSource)) || objects.length > 0;
+}
+
+/**
+ * What a farm's dam would have to give each day with nothing flowing in:
+ * `supplied` less the boreholes and the river abstractions beside it
+ * (NOT_FROM_DAM_SERIES, river_take@), each read when the run has it, never
+ * below 0. The dam's days left divide by this: a crop pumping from the river
+ * through its own abstraction doesn't empty the dam. The supply rule's pump
+ * and off-take water stay in, since without inflow the dam meets that demand.
+ */
+export function damDraw(run: ProjectionRun, node: NetworkNode, supplied: Float64Array): Float64Array {
+	const out = Float64Array.from(supplied);
+	const parts = [...NOT_FROM_DAM_SERIES, ...riverTakeKeys(run, node).map(riverTakeKey)];
+	for (const key of parts) {
+		const v = run.series(node.id, key);
+		if (!v) continue;
+		if (v.length !== out.length) throw new ProjectionInputError(`the run's ${key} series has ${v.length} days, expected ${out.length}`);
+		for (let t = 0; t < out.length; t++) out[t] = out[t]! - val(v[t]);
+	}
+	for (let t = 0; t < out.length; t++) if (!(out[t]! > NOISE_M3)) out[t] = 0;
+	return out;
+}
 
 /** The run lacks a series the projection needs (a run from before engine 0.17.0, say). */
 export class ProjectionInputError extends Error {}
@@ -740,6 +803,8 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 
 	// The season's short days, and how many had the dam at its stop level (the
 	// engine only lets irrigation draw above it, so a dam farm is short only there).
+	// A unit whose demands all draw on the river (§2.7j): its dam serves none of them, so a short day is never the dam's.
+	const onlyRiver = hasDam && servesOnlyRiver(run, node);
 	const shortMonths = new Set<string>();
 	let shortDays = 0;
 	let atStop = 0;
@@ -747,17 +812,17 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		if (!(deficit[t]! > NOISE_M3)) continue;
 		shortDays++;
 		shortMonths.add(fromEpochDay(d0 + t).slice(0, 7));
-		if (hasDam && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3) atStop++;
+		if (hasDam && !onlyRiver && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3) atStop++;
 	}
 	const seasonTotals = totals(demand, supplied, run.startDate, sw.fromDate, sw.toDate);
-	const season: SeasonTotals = { ...seasonTotals, shortDays, shortMonths: [...shortMonths].sort(), shortDaysAtStopLevel: atStop };
+	const season: SeasonTotals = { ...seasonTotals, shortDays, shortMonths: [...shortMonths].sort(), shortDaysAtStopLevel: atStop, ...(onlyRiver ? { onlyRiver } : {}) };
 	const last30 = totals(demand, supplied, run.startDate, lw.fromDate, lw.toDate);
 
 	let dam: DamState | null = null;
 	if (hasDam) {
 		const e = sw.to;
 		const usableM3 = node.damMinPct > 0 ? Math.max(storage[e]! - stopOn(e), 0) : null;
-		const use14 = windowSummary(supplied, run.startDate, fromEpochDay(d0 + Math.max(0, e - 13)), analysis.dataUntil)!.mean;
+		const use14 = windowSummary(damDraw(run, node, supplied), run.startDate, fromEpochDay(d0 + Math.max(0, e - 13)), analysis.dataUntil)!.mean;
 		let lastSpill: string | null = null;
 		for (let t = e; t >= 0; t--) {
 			if (spill[t]! > NOISE_M3) {

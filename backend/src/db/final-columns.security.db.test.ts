@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from './tx.js';
+import { plantStartProposal } from '../__tests__/routeSamples.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -35,12 +36,17 @@ const CLAIMED = new Map<string, string>([
 	['scenario.decided_at', '045/052 scenario guard: decided is a terminal status, the decision never changes (probe: scenarios)'],
 	['scenario.decided_by', '045/052 scenario guard, as decided_at'],
 	['delineation_proposal.decided_at', '175 delineation_proposal_final: an accepted or rejected proposal never changes its decision (probe: delineation)'],
-	['delineation_proposal.decided_by', '175 delineation_proposal_final: only the foreign key clears it']
+	['delineation_proposal.decided_by', '175 delineation_proposal_final: only the foreign key clears it'],
+	['start_proposal.decided_at', '178 start_proposal_final: an applied or discarded proposal never changes its decision (probe: start from the map)'],
+	['start_proposal.decided_by', '178 start_proposal_final: only the foreign key clears it']
 ]);
 
 let owner: User;
 let coOwner: User;
 let projectId: string;
+/** Another project of the owner's: a proposal can't be moved there (185). */
+let elsewhereId: string;
+let stranger: User;
 const outlet = node('Final Weir', null);
 const farm = node('Farm Final', outlet.id);
 const crop = { id: crypto.randomUUID(), name: 'Maize', cropFactor: monthly(0.9) };
@@ -57,6 +63,21 @@ async function expectRefused(sql: string, params: unknown[]) {
 		return null;
 	});
 	if (res) expect(res.rowCount, `${sql} updated a final row`).toBe(0);
+}
+
+/**
+ * 185: a proposal's record stays: each `sqls` (on `$1`) refused, and it can't
+ * be moved to another project the owner also owns, named as another's, or
+ * (once accepted or applied) deleted.
+ */
+async function expectProposalKept(table: 'delineation_proposal' | 'start_proposal', id: string, sqls: string[]) {
+	for (const sql of sqls) await expectRefused(sql, [id]);
+	await expectRefused(`UPDATE ${table} SET project_id = $2 WHERE id = $1`, [id, elsewhereId]);
+	await expectRefused(`UPDATE ${table} SET created_by = $2 WHERE id = $1`, [id, stranger.id]);
+	const [{ status }] = (await asOwner(`SELECT status FROM ${table} WHERE id = $1`, [id])) as [{ status: string }];
+	if (status === 'accepted' || status === 'applied') await expectRefused(`DELETE FROM ${table} WHERE id = $1`, [id]);
+	const [still] = await asOwner(`SELECT project_id FROM ${table} WHERE id = $1`, [id]);
+	expect(still).toEqual({ project_id: projectId });
 }
 
 /** A run of the owner's (a run's creator can't be deleted), published by `by`. */
@@ -76,6 +97,8 @@ async function publish(by: User, notice: string) {
 beforeAll(async () => {
 	[owner, coOwner] = (await Promise.all(['FCowner', 'FCcoowner'].map((n) => signUp(n)))) as [User, User];
 	projectId = (await owner.call('POST', '/projects', { name: 'Final catchment' })).body.project.id;
+	elsewhereId = (await owner.call('POST', '/projects', { name: 'Final elsewhere' })).body.project.id;
+	stranger = await signUp('FCstranger');
 	expect(
 		(
 			await owner.call('PUT', `/projects/${projectId}/model`, {
@@ -317,9 +340,64 @@ describe('delineation', () => {
 			}
 			const [row] = await asOwner('SELECT status, decided_by FROM delineation_proposal WHERE id = $1', [pid]);
 			expect(row).toEqual({ status: 'rejected', decided_by: owner.id });
+			// 185: what was proposed, its project and its maker stay too, and a decided proposal can't be deleted.
+			await expectProposalKept('delineation_proposal', pid, ["UPDATE delineation_proposal SET dataset = 'forged' WHERE id = $1", "UPDATE delineation_proposal SET area_m2 = area_m2 * 2 WHERE id = $1", "UPDATE delineation_proposal SET geometry = '{\"type\":\"Polygon\",\"coordinates\":[]}' WHERE id = $1", "UPDATE delineation_proposal SET method = 'forged' WHERE id = $1"]);
+			const [kept] = await asOwner('SELECT dataset, created_by FROM delineation_proposal WHERE id = $1', [pid]);
+			expect(kept!.dataset).not.toBe('forged');
+			expect(kept!.created_by).toBe(owner.id);
+			// An insert names the signed-in user as its maker, whatever it says; an editor prunes a superseded one (positive controls).
+			const copy = await withUser(owner.id, async (db) => {
+				const { rows } = await db.query<{ id: string; created_by: string }>(
+					`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+						cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, created_by)
+					 SELECT project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+						cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, $2 FROM delineation_proposal WHERE id = $1 RETURNING id, created_by`,
+					[pid, stranger.id]
+				);
+				return rows[0]!;
+			});
+			expect(copy.created_by).toBe(owner.id);
+			await expectRefused("UPDATE delineation_proposal SET cells = cells + 1 WHERE id = $1", [copy.id]);
+			// Accepted, it's the feature's provenance: never deleted but with its project.
+			await asOwner(`UPDATE delineation_proposal SET status = 'accepted', decided_at = now(), decided_by = $2 WHERE id = $1`, [copy.id, owner.id]);
+			await expectRefused('DELETE FROM delineation_proposal WHERE id = $1', [copy.id]);
+			// The rejected one may be pruned.
+			expect((await withUser(owner.id, (db) => db.query('DELETE FROM delineation_proposal WHERE id = $1', [pid]))).rowCount).toBe(1);
 		} finally {
 			if (prev === undefined) delete process.env.DEM_URL;
 			else process.env.DEM_URL = prev;
 		}
+	});
+});
+
+describe('start from the map', () => {
+	it('refuses to undo or rewrite a decided proposal, or its plan (positive control: an editor discards it)', async () => {
+		const spid = await plantStartProposal(projectId);
+		await expectRefused("UPDATE start_proposal SET plan = '{}'::jsonb WHERE id = $1", [spid]);
+		expect((await owner.call('POST', `/projects/${projectId}/map/start/${spid}/discard`, {})).status).toBe(200);
+		for (const [sql, params] of [
+			["UPDATE start_proposal SET status = 'proposed', decided_at = NULL, decided_by = NULL WHERE id = $1", [spid]],
+			["UPDATE start_proposal SET status = 'applied', decision = '{}'::jsonb WHERE id = $1", [spid]],
+			["UPDATE start_proposal SET decided_at = decided_at + interval '1 day' WHERE id = $1", [spid]],
+			['UPDATE start_proposal SET decided_by = $2 WHERE id = $1', [spid, coOwner.id]],
+			['UPDATE start_proposal SET decided_by = NULL WHERE id = $1', [spid]]
+		] as const) {
+			await expectRefused(sql, [...params]);
+		}
+		const [row] = await asOwner('SELECT status, decided_by FROM start_proposal WHERE id = $1', [spid]);
+		expect(row).toEqual({ status: 'discarded', decided_by: owner.id });
+		// 185: an open one's dataset and method stay as proposed too; a discarded one may be pruned (positive control).
+		const open = await plantStartProposal(projectId);
+		await expectProposalKept('start_proposal', open, ["UPDATE start_proposal SET method = 'forged' WHERE id = $1", "UPDATE start_proposal SET method_version = 'forged' WHERE id = $1"]);
+		await withUser(owner.id, (db) => db.query("UPDATE start_proposal SET status = 'superseded' WHERE id = $1", [open]));
+		expect((await withUser(owner.id, (db) => db.query('DELETE FROM start_proposal WHERE id = $1', [spid]))).rowCount).toBe(1);
+	});
+
+	it('refuses to delete an applied proposal, or move it to another project', async () => {
+		const spid = await plantStartProposal(projectId);
+		await asOwner(`UPDATE start_proposal SET status = 'applied', decision = '{}'::jsonb, decided_at = now(), decided_by = $2 WHERE id = $1`, [spid, owner.id]);
+		await expectProposalKept('start_proposal', spid, ["UPDATE start_proposal SET created_at = created_at - interval '1 day' WHERE id = $1"]);
+		const [row] = await asOwner('SELECT status FROM start_proposal WHERE id = $1', [spid]);
+		expect(row).toEqual({ status: 'applied' });
 	});
 });

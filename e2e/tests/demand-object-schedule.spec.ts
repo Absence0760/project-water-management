@@ -33,7 +33,8 @@ test('give a town weekends off and an Easter peak, save, reload, run, and see it
 
 	const schedule = group.getByTestId(/^demand-schedule-/).first();
 	await expect(schedule.getByText('Every day at its month’s demand.')).toBeVisible();
-	// A new "Every day" window starts as weekends off.
+	// A new "Days of the week" window starts as weekends off.
+	await expect(schedule.getByLabel('Days the new window covers').locator('option')).toHaveText(['Days of the week', 'Dates each year', 'Date range, once', 'Around Easter']);
 	await schedule.getByLabel('Days the new window covers').selectOption('always');
 	await schedule.getByRole('button', { name: '+ Add window' }).click();
 	const first = schedule.getByTestId(/^demand-schedule-window-.*-0$/);

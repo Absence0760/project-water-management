@@ -27,7 +27,7 @@ describe('the dam page', () => {
 		]);
 		expect(d.usableNote).toBe('“You can still use” is the water above the level where irrigation stops (your pump intake or reserve).');
 		expect(sp(plainText(d.daysLeft!))).toBe(
-			'At your use over the last 14 days (about 5.1 ML a day), that lasts about 6 days if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.'
+			'At the use your dam carries over the last 14 days (about 5.1 ML a day), that lasts about 6 days if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.'
 		);
 		expect(sp(d.chartCaption)).toBe(
 			'Feb 2023 to Jan 2024, end of each month. Dashed line: irrigation stops (15 %). You were short on 16 days in Nov and Dec, while the dam sat at that line.'

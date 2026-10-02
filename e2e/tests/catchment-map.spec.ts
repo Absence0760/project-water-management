@@ -41,8 +41,9 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page.getByRole('heading', { name: /^Map/ })).toHaveCount(1);
 	await expect(page.getByTestId('map-summary')).toHaveText('Nothing on the map yet');
 	await expect(page.getByTestId('map-no-boundary')).toHaveCount(1);
-	// The empty state leads with drawing (#326 D4); upload is the other way in.
-	await expect(page.getByTestId('map-no-boundary')).toContainText('Nothing on the map yet. Start with the catchment boundary: draw it on the map.');
+	// The empty state leads with delineating (the e2e API has a DEM) and drawing (#326 D4); upload is the other way in.
+	await expect(page.getByTestId('map-no-boundary')).toContainText('Nothing on the map yet. Start with the catchment: delineate it from its outlet on the river, or draw its boundary.');
+	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Delineate from the outlet' })).toBeVisible();
 	await expect(page.getByTestId('map-no-boundary').getByRole('button', { name: 'Draw the boundary' })).toBeVisible();
 	await expect(page.getByTestId('map-no-boundary').getByRole('link', { name: 'upload it as a GeoJSON file' })).toBeVisible();
 	await expect(page.getByTestId('map-no-tiles')).toBeVisible();

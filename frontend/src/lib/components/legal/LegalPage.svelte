@@ -1,6 +1,7 @@
 <script lang="ts">
-	// The frame of the legal pages (/privacy, /terms) and the methods page
-	// (/methods, the engine audit's public summary): outside the app shell,
+	// The frame of the legal pages (/privacy, /terms), the methods page
+	// (/methods, the engine audit's public summary) and the data sources'
+	// credits (/data-sources): outside the app shell,
 	// like the landing page. A slim header whose logo is the way home (no
 	// second button: issue #162), then the Help shell's layout at its width
 	// (1480 px): from 900 px the contents list is a column on the left that
@@ -66,6 +67,7 @@
 			<a href="{base}/privacy">Privacy notice</a>
 			<a href="{base}/terms">Terms of use</a>
 			<a href="{base}/methods">How the model is checked</a>
+			<a href="{base}/data-sources">Data sources</a>
 			<!-- The address is written once, in the terms' contact section. -->
 			<a href="{base}/terms#contact">Contact</a>
 		</nav>

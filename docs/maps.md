@@ -71,7 +71,10 @@ server and no tile CDN: the file is served from the app's own storage.
   (`http://localhost:9002/tiles/south-africa.pmtiles`) that `up` sets.
   `pnpm dev:tiles:status` says what is cached and served.
   `TILES_MAXZOOM`, `TILES_BBOX` and `TILES_BUILD` (a build date) override the
-  defaults. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
+  defaults. The script checks every such override before use (a numeric
+  bbox, whole-number zooms and orders, an 8-digit build date, a 40-hex fonts
+  commit, `https://` source URLs) and exits 2 otherwise; every download is
+  HTTPS only, redirects included. **Maxzoom 15** (#326 D5, decision D7 revisited): placing a dam
   or tracing a parcel (drawing, below) needs a closer zoom than 13. Measured
   2026-10-01 with `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the
   Protomaps build of 2026-09-30, the bbox above), which reads only the
@@ -203,7 +206,10 @@ server ([§ Delineation](#delineation)).
   and `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` as a repository variable
   ([deployment.md § Map tiles](./deployment.md#map-tiles)). The Copernicus
   licence (Art. 6(c)) also asks for its liability sentence in a legal
-  notice covering the distribution; the web release's gate
+  notice covering the distribution: the public **Data sources and
+  credits** page (`/data-sources#copernicus-dem`) carries it with the
+  Art. 6(b) notice (2026-10-02), and the relief's credit on the map ends
+  with a "licence notice" link to that section. The web release's gate
   (`scripts/release/map-data-gates.mjs`) refuses the relief until that
   sentence is in the app's legal text.
 
@@ -236,6 +242,24 @@ server ([§ Delineation](#delineation)).
   the basemap and the overlay (`mapStyle()`), so `setStyle` swaps both and
   the features, the pick and the click handlers carry over. A basemap that
   failed to load stays dropped.
+- **Redrawing:** each GeoJSON source (`features`, `quaternaries`,
+  `proposal`, `rivers`) has its own effect in `CatchmentMap` and is handed
+  new data only when its own inputs change, because MapLibre re-tiles a
+  whole source in its worker on every `setData`. Picking a feature re-sends
+  the features alone, picking a reach the reaches alone, and lighting a
+  proposal's piece (a hover over its card or piece) the proposal alone; the
+  pieces themselves are worked out once per proposal (`piecesShape`) and a
+  hover only swaps their `highlight` (`litPieces`). At 60 units and 1000
+  reaches a hover had re-sent about 2 MB of GeoJSON (every source) and
+  recomputed the pieces (~4.5 ms); now it sends the proposal (~0.56 MB) and
+  computes nothing.
+- **Focus and announcements (round 4 a11y):** when the Delineate sheet
+  closes and its opener is gone (the draw bar ends once a proposal comes
+  back), focus goes to the header's Delineate button, else the map, never
+  `<body>` (WCAG 2.4.3). The Layers box keeps one always-present status
+  region (`layersStatus`, mapLayers.ts) that says each layer loading, how
+  many it shows and the reach picked (4.1.3); a failure is its own alert.
+  The trace's share select is named by its visible label (2.5.3).
 - **The picked feature's name** shows in a small box over the map's top-left
   corner (its kind, then its name), until the basemap has labels (A6). It is
   hidden from assistive technology (`aria-hidden`): the ways to pick that it reaches are
@@ -362,6 +386,126 @@ geometry types) and the audit events are unchanged. Viewers get no tools.
   chunk, adds no dependency, and needs no CSP change: no `blob:`, no
   `eval`, no new origin.
 
+## Assisted drawing
+
+Three helpers on top of the drawing mode (issue #326 C2; the screen is in
+[ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Catchment
+map](./api.md#catchment-map)). Delineating a catchment from its outlet is
+the fourth ([§ Delineation](#delineation)). Each is a proposal: what it
+makes is drawn as the draft, and saved only by the same Save the drawing /
+Split / Save the shape as any drawing, through the server's checks
+(`checkGeometry`) and an audit event.
+
+- **Snap** (`draw/snap.ts`, used by `draw/attachDrawing.ts`; tested in
+  `snap.test.ts`, `attachDrawing.test.ts` and `e2e/tests/map-assisted.spec.ts`).
+  While drawing, placing a point, dragging a corner or adding one on an
+  edge, a position within 12 px (the corners' own hit area) of another
+  feature's corner lands exactly on that corner; else, within 12 px of its
+  edge, on the edge (the foot of the perpendicular, in screen space; Web
+  Mercator is conformal, so over a few pixels screen and lon/lat move in
+  step). A corner wins over a nearer edge, so a shared corner is met
+  exactly. Every feature on the map is a target (the boundary, parcels,
+  dams, rivers, other areas and lines, and points), but the one being
+  edited. A ring marks where the pointer would snap; the live region names
+  it ("Corner 3 at …, on “Upper farm”’s corner."). **Snap to features** in
+  the draw bar turns it off for the rest of the tab; **Alt** held with a
+  click (or **Alt+Enter** at the keyboard crosshair) places one corner
+  exactly where it is. The keyboard path snaps as the pointer does: Enter
+  at the crosshair (or at the mouse) snaps to what is within 12 px of it.
+- **Follow edges** (on with Snap, while drawing a new shape or line; never
+  for a split's cut or a measurement): two corners in a row snapped to the
+  same outline or line take that outline's corners between them, the
+  shorter way round a closed outline (`traceAlong`). So a parcel drawn
+  against its neighbour or the boundary shares their edge corner for
+  corner, with no gap or overlap for [§ Checks](#checks) to find. Closing a
+  polygon whose first and last corners sit on one outline follows it too.
+  Turn it off (or hold Alt) to cut straight across, e.g. a chord of the
+  boundary.
+- **Split a polygon** along a drawn line (`draw/split.ts`, the card's
+  **Split along a line**, for a polygon of one outline without holes). Draw
+  (or paste) a line that goes into the shape once and out once: its ends
+  outside the shape or on its edge (a snapped end lands on it). The two
+  parts are shaded on the map; a line that misses, stays inside, crosses
+  the edge more than twice or runs outside between its crossings is
+  refused with a sentence, and Split… waits. **Split…** opens a sheet with
+  the parts' names. A parcel (dam, other area) keeps its id, name and link
+  on its first part, and its second part is a new feature of the same kind
+  ("<name> (part 2)", linked to nothing). The **catchment boundary** stays
+  whole: both parts are new features, *areas* (`other`, the sub-catchments
+  to link to units and take their areas from) or farm parcels, named
+  "<boundary> part 1/2" unless renamed. The server
+  (`POST …/map/features/:fid/split`) checks each part as any polygon, and
+  that together they are the shape: their geodesic areas add up to its
+  area within 0.1 % (plus 1 m²) and each lies within the shape (every
+  edge of a part that isn't the shape's own stays inside its outline,
+  `geo/splitCheck.ts`; security.md § Map uploads); one
+  `map.feature_split` event names both parts. A unit whose area was taken
+  from the split shape keeps that area until **Use** is pressed again.
+  Splitting into more than two is done a cut at a time.
+- **Trace a dam** (`backend/src/delineation/damTrace.ts`; **Trace a dam**
+  in the header, editors, only when the server has the water data). Click
+  inside a dam's water (or **Enter coordinates** in the draw bar: the
+  non-pointer way), with the share of observations a cell must be water in
+  to count (10, 25 (the default), 50 or 75 %). The server reads a window of
+  the water occurrence raster round the point (256 cells, about 8 km, grown
+  once to 512), moves a click within about 60 m of water onto it, floods
+  the cells at or over the share that touch the clicked one by an edge
+  (two dams meeting at a corner stay two), fills islands (an outline has no
+  holes here), outlines the cells and simplifies the outline by half a cell
+  (`trace-dam-1`). Water that reaches the edge of the larger window ("isn't
+  a dam this can trace"), or the edge of the data, dry land and a point
+  outside the data are refused with a sentence. Nothing is stored: the
+  outline comes back as the draft, a dam to adjust (snapping and all), and
+  the bar says where it came from ("Traced from …: water in at least 25 %
+  of the observations, about 4.3 ha. A proposal: check it against the map
+  before you save it."). **Save…** saves it as a dam (or an other area)
+  with `traced` (the click, the share, and whether it was adjusted): the
+  server traces the click again with its own raster, refuses an outline
+  sent as unadjusted that isn't that trace, and writes the method in the
+  feature's description ("Traced from <dataset> (trace-dam-1): water in at
+  least 25 % of the observations, clicked at …; then adjusted by hand.
+  Check it against the map. Source: EC JRC/Google.") and the
+  `map.feature_created` event (`from: 'dam_trace'`, the dataset, the share,
+  `edited`). A traced outline is the water's edge as the satellite saw it
+  over 1984–2024, not the full supply level: a dam that seldom fills traces
+  smaller at a high share; the share is the hydrologist's call.
+
+### Water occurrence dataset
+
+`WATER_URL` (backend env; empty in the committed file: Trace a dam is off)
+names a PMTiles archive of Terrarium-encoded PNG tiles whose "height" is
+the occurrence in percent (R = 128, G = the share 0–100, B = 0; anything
+outside 0–100, a transparent pixel or GSW's 255, is no data), read with
+delineation's own PMTiles and PNG readers (`delineation/dem.ts`): a local
+file, `http(s)://` (ranged GETs) or `s3://bucket/key`. `WATER_LABEL` names
+it on every traced outline (default: the archive's name). The reads are a
+few tiles a trace (cached per process), between the role check and the
+answer, with no database connection held.
+
+- **Committed: synthetic only.** `backend/fixtures/water/synthetic-water.pmtiles`
+  (`pnpm gen:water-fixture`, the water in `backend/src/delineation/waterFixture.ts`):
+  over the e2e tests' catchment (21.3–21.4° E, 33.6–33.7° S), an invented
+  dam whose edge is wet 35 % of the time and its middle 85 %, with an
+  island; a one-cell stream wet 15 % of the time to a pond (joined only at
+  10 %); and a lake the raster's east edge cuts off. Locally:
+  `WATER_URL=fixtures/water/synthetic-water.pmtiles` in
+  `backend/.env.development.local` (the e2e API has it), and Enter
+  coordinates −33.6724971, 21.3191414.
+- **Real data: JRC Global Surface Water v1.5 occurrence** (§ Sources:
+  allowed). `pnpm dev:tiles:water` downloads the 10° tiles that meet
+  `TILES_BBOX` (about 100 MB over South Africa), warps them to Web Mercator
+  at zoom 12 (about 32 m a cell there; GSW is 0.00025°, about 25–28 m) with
+  each cell the mean of the source cells in it, encodes them as Terrarium
+  PNG tiles and uploads `tiles/water.pmtiles` to MinIO; GDAL comes from
+  PATH, else the pinned `ghcr.io/osgeo/gdal` image through docker. The
+  archive's attribution is "Source: EC JRC/Google", carried into each
+  traced feature's description. Then
+  `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
+  upload it as `tiles/water.pmtiles` and set `dam_trace_water = true` in the
+  tfvars, which sets `WATER_URL=s3://<tiles bucket>/tiles/water.pmtiles` on
+  the API and lets its role read that one key ([deployment.md § Map
+  tiles](./deployment.md#map-tiles)); off by default.
+
 ## Measure
 
 **Measure** in the Map tab's header (#326 A7; anyone who can see the map)
@@ -395,8 +539,12 @@ the list the tab already loaded, **no route**. WGS84 longitude/latitude as
 stored, no `crs` member. Each feature's properties are `name`, `kind` (the
 API's: `catchment_boundary`, `farm_parcel`, `dam`, `gauge`, `river`,
 `other`), `node` (the node it stands for, by name, or null) and `areaKm2` /
-`areaHa` (the server's area of a polygon, null for points and lines);
-nothing else (no ids, files, users or imported properties). The file is
+`areaHa` (the server's area of a polygon, null for points and lines), and
+`credit` only on a feature drawn from licensed data: a river added from
+HydroRIVERS carries its map attribution, a dam traced from JRC Global
+Surface Water "Source: EC JRC/Google" (`featureCredit`), so the credit
+leaves with the data; nothing else (no ids, files, users, descriptions or
+imported properties). The file is
 `<project>-map-<day>.geojson` (`application/geo+json`). Uploaded again, the
 review reads each row's kind from its `kind` property and its node from its
 name.
@@ -418,10 +566,13 @@ did, and refuses the whole file on any problem, listing them per feature:
   takes the types that fit it (a boundary or parcel is polygons, a gauge a
   point, a river lines; a dam a point or polygon).
 - **Rings**: closed, at least 4 positions, with an area, not crossing or
-  touching themselves, each hole starting inside its outer ring, not across
-  the antimeridian. The self-crossing check is a sweep with a budget of 5
-  million segment comparisons per ring, past which the ring is refused as too
-  complex, so a hostile file can't cost quadratic time.
+  touching themselves or each other (a hole can't cross its outer ring or
+  another hole), each hole starting inside its outer ring, not across the
+  antimeridian. The crossing check is one sweep over a polygon's rings with
+  a budget of 5 million segment comparisons, every comparison counted, past
+  which the polygon is refused as too complex, so a hostile file can't cost
+  quadratic time ([security.md § Input handling](./security.md#input-handling),
+  Geometry cost).
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
@@ -690,9 +841,11 @@ boundary itself rather than over a box around it.
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
   exactly a box's cells and weights. Holes are subtracted and the parts of a
   MultiPolygon add up. The share is computed by **exact clipping**, not
-  sampling: each ring is clipped to its row of cells, then to each cell
-  (Sutherland–Hodgman; clipping to a convex cell is exact in area even for a
-  concave ring), and the share is the clipped area over the cell's in degrees.
+  sampling: each ring is clipped to its rows of cells, then to their cells,
+  halving the range each time (`geo/clip.ts eachBand`, so the work grows
+  with the vertices times log(cells), not vertices × cells; security.md §
+  Map uploads; Sutherland–Hodgman: clipping to a convex cell is exact in
+  area even for a concave ring), and the share is the clipped area over the cell's in degrees.
   Exact to floating point, and cheaper than a sampling grid fine enough to
   match it; the degree-space share and the ellipsoidal one differ by under
   1e-4 within a cell. A cell with under 0.1 % of its area inside is left out
@@ -880,7 +1033,7 @@ the earliest when there are several):
   the area–volume curve", first half): the polygon's geodesic area
   (`map_feature.area_m2`, [§ Areas](#areas)) as the dam's area when full
   (`damAreaFullM2`), which the run uses for evaporation instead of the
-  capacity ÷ 3 m estimate. A point has no area to propose.
+  7.2 · C^0.77 m² estimate (engine ≥ 1.63.0, model.md §2.7a). A point has no area to propose.
 
 **Use** asks first, then saves that one value to the model straight away
 (`POST …/dam-capacity-from-register` with the register number, or
@@ -973,6 +1126,73 @@ to a point on a river. The design, the method and its accuracy are in
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
 
+## Start from the map
+
+On an empty model, editors get **Start the model from the map** (issue #326
+C3 and the B-delineate stretch; the design, the method and what isn't built
+in [design/start-from-map.md](./design/start-from-map.md); the screen in
+[ui.md § Map](./ui.md#map-tabmap), the API in
+[api.md § Start from the map](./api.md#start-from-the-map)).
+
+- **The flow.** A sheet (`start=1`) with four steps, each read from the
+  server so a reload lands on it: the boundary (Delineate, Draw or Upload),
+  the points (each dam, other point and gauge is *a unit with a dam*, *a unit
+  at an abstraction point*, *another water user* or *not in the model*; the
+  outlet is a gauge or the boundary's own), the proposal (each value ticked
+  on its own: the unit's area, what it drains into, all of a dam unit's
+  runoff to its dam, the rest of the catchment as a unit), and data and the
+  first run (the existing proposals, linked in order: rain from the
+  boundary, the nearest gauging station, the dams from the register, land
+  cover, then Runs). Typing the model in on the Network stays the other
+  way; upload works at every step.
+- **Sub-catchments.** With a DEM, the server routes one window around the
+  catchment once (the same fill and D8 as Delineation), snaps the outlet and
+  every point to the channel (a dam polygon: its most-drained cell), and
+  gives each unit the cells whose flow meets it before any other unit: its
+  own piece, outlined with its holes (a unit upstream lying wholly inside
+  it). Each unit drains into the first unit its flow path meets. A water
+  user is in the order but owns no land. The rest of the catchment is the
+  outlet's own piece. A point that doesn't drain to the outlet, or snaps
+  onto another, is dropped with the reason; a DEM catchment more than 10 %
+  off the boundary's area is warned about.
+- **Without a DEM** (`DEM_URL` empty): the units come from the points with
+  no area and all drain into the outflow gauge; the rest of the catchment is
+  the boundary.
+- **Applying** writes only what is ticked, only into an empty model (409
+  once it has nodes), as one model revision: the nodes, each ticked area
+  saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
+  delineated from … (start-2)") and its area from it (*from the map*), the
+  points linked to their nodes. The proposal keeps the plan and the ticks.
+- **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
+  in the network* by default: in the order like a water user (the units
+  above drain into it), owning no land; applied, a `gauge` node linked to
+  its point. Its card says what it measures (its whole catchment above
+  it). Without a DEM, a point outside the boundary is dropped.
+- **Each piece told apart.** The open proposal is drawn piece by piece, each
+  unit's own sub-catchment in one of six tints (`mapStyle.ts` `pieceTints`,
+  away from the parcel green, water blue and boundary amber; touching
+  pieces never share one) under the proposal's dash, its **number** on it
+  as a badge (a unit with no land beside its point, the rest of the
+  catchment R), and a line over the map saying so while the sheet is
+  closed. The
+  sheet's cards carry the same number and tint, so they are the key; a card
+  with the focus or the pointer lights its piece in the selection colour,
+  and with the sheet closed a piece under the pointer names itself over the
+  map's corner and a click opens its card ([design/start-from-map.md § Each
+  unit's piece on the map](./design/start-from-map.md#each-units-piece-on-the-map)).
+- **Divide the model** (a model that has nodes, with a DEM; `divide=1`,
+  migration 182): each point on the map stands for a node (or an unlinked
+  gauge for a new gauge node); the same partition proposes each one's own
+  area, what it drains into and a dam's runoff to its dam, **beside the
+  node's value now**, each taken only when ticked, and the rest of the
+  catchment to a unit, a new unit or nobody. A ticked value that changed
+  since the proposal is refused (409), never overwritten unseen; dividing
+  again redraws the parcel an earlier division made in place
+  ([design/start-from-map.md § Dividing a model that has
+  nodes](./design/start-from-map.md#dividing-a-model-that-has-nodes)).
+- **Limits.** The same as Delineation's: about 100 km across, 30 proposals a
+  project an hour (starts and divisions together), the 20 s budget.
+
 ## River network
 
 The Map tab's **River network** layer (issue #345, the client checklist's
@@ -991,7 +1211,14 @@ the app can analyse; this layer is.
   `truncated` past it, so a cut drops the smallest streams. A bbox over
   `RIVER_BBOX_MAX_DEG` (2°) a side is refused. The tab asks for the
   features' bounds padded by half their size (at least 0.1°), once per bbox
-  (`mapLayers.ts` `riverBbox`), and draws nothing with no features.
+  (`mapLayers.ts` `riverBbox`). With no features yet, it asks for the map's
+  view instead (`riverViewBbox`), snapped outward to 0.05° so a small pan
+  asks nothing new, once the view is at most 2° a side; wider, the Layers
+  box says to zoom in. The view comes from the map after each move
+  (`CatchmentMap` `onview`, also its wrapper's `data-view`), and the last
+  twelve answers are kept, so panning back asks nothing. Before a boundary
+  exists is when the rivers help most: finding the outlet to Delineate, or
+  tracing the boundary.
 - **Style.** A dashed cyan-blue line (`riverNetworkColour`: `#006b9e`
   light, `#3ec1f0` dark), wider for a higher order (1.25 px at order 1 to
   3 px at 6), over the quaternary outlines and under the features. Its
@@ -1009,8 +1236,9 @@ the app can analyse; this layer is.
   buttons (`Reach 90000002 · order 3 · 655 km²`: the order and area upstream
   the list is sorted by; the first twelve, then **Show all**). A reach
   picked there, or clicked on the map where no feature is, is drawn again on
-  top, solid in the map's selection colour on a casing, and its facts show: Strahler order, area upstream, length, mean
-  flow (each only when the source gives it) and its source line.
+  top, solid in the map's selection colour on a casing, and its facts show: Strahler order, area upstream, length, the
+  modelled mean flow (HydroRIVERS' `DIS_AV_CMS`, a WaterGAP long-term mean, never a gauged one; "modelled mean flow
+  … m³/s") (each only when the source gives it) and its source line.
 - **Adding a reach** (editor): **Add to the map as a river**
   (`POST /projects/:id/map/rivers/add`, `{ dataset, reachId }`) copies that
   one reach's line into a `river` feature named after the reach ("Reach
@@ -1027,9 +1255,9 @@ the app can analyse; this layer is.
   (#326 D-B6's "accept value by value").
 - **What the added rivers feed.** The gauges-off-the-rivers check
   ([§ Checks](#checks)) measures against them like any drawn river, and the
-  farm view shows them (rivers are an orientation kind). Snapping a drawn
-  point to them (#326 C2) and checking B-delineate's stream network against
-  them are for when those land: neither exists yet.
+  farm view shows them (rivers are an orientation kind), and a corner or
+  point drawn near one snaps to it ([§ Assisted drawing](#assisted-drawing)).
+  Checking B-delineate's stream network against them is not built yet.
 - **Who sees it.** A viewer reads the layer; an editor adds. A farmer gets
   403 and a non-member 404.
 
@@ -1058,7 +1286,16 @@ reads it.
   or 0.1 m³/s mean flow, at 15 arc-seconds (about 500 m), so it misses the
   smallest farm streams and its lines can sit a few hundred metres off the
   real channel: a hydrologist checks a reach against the relief and the
-  basemap before adding it.
+  basemap before adding it. While the layer draws any reach from it
+  (`mapLayers.ts` `creditedReach`: a dataset label or source naming
+  HydroRIVERS or HydroSHEDS, never the synthetic set; so a real HydroRIVERS
+  load must keep that name in its `--dataset` or `--source`, as
+  `dev:tiles:rivers` does, or the credit drops), or the map shows a river
+  feature added from one (its `ref`, `creditedFeature`), the map's
+  attribution control credits it ("Rivers: HydroRIVERS, HydroSHEDS v1 ©
+  World Wildlife Fund, Inc. (2006-2022), used under license"), linking to
+  the full Exhibit B statement on the public **Data sources and credits**
+  page (`/data-sources#hydrorivers`, `lib/components/legal/dataCredits.ts`).
 - **Any other network** loads the same way:
   `pnpm import:rivers rivers.geojson --dataset <label> --source "<product, version, attribution>" [--min-order <n>]`,
   a FeatureCollection of LineStrings or MultiLineStrings in WGS84 with the
@@ -1070,9 +1307,9 @@ reads it.
   `~/.cache/water-management-tiles/rivers.geojson`, gzipped, through the
   reference-dataset path (kind `rivers`;
   [deployment.md § Reference datasets](./deployment.md#reference-datasets)),
-  once HydroSHEDS' Exhibit B statement is in the app's legal text (the
-  workflow's gate checks) and the terms carry the end-user protections
-  (§ Sources).
+  now that HydroSHEDS' Exhibit B statement is on `/data-sources` and the
+  Terms carry the end-user protections (§9's clause on map data licensed
+  to us, 2026-10-03; the workflow's gate checks both; § Sources).
 - **Does the client need it?** #90 Q23 asks whether OSM's rivers on the
   basemap already suffice for "show the rivers". If they do, the layer is
   still the only river data the app can analyse (the checks, and later
@@ -1237,7 +1474,11 @@ grid's kind, and **nothing is converted between them**:
   version, period (first and last year), method in words, attribution and
   grid; the panel shows them under **Source and method**. **Use** asks first
   (the confirmation says what reads the values and that a GR4J fit made
-  before is marked "Forcing changed since fit"), then `POST
+  before is marked "Forcing changed since fit", and, when the project has
+  a daily A-pan record, what that record still drives: it replaces an
+  accepted A-pan row on every day it covers, and GR4J stops reading it once
+  a monthly PE row takes over, while demand and the dams keep it and the A-pan row;
+  `useMessage`, round 4), then `POST
   /projects/:id/evaporation-from-map` with the dataset
   ([api.md § Catchment map](./api.md#catchment-map)): the server re-derives
   the 12 values from the boundary as it is, writes them into the settings,
@@ -1280,7 +1521,8 @@ only reads them.
   `~/.cache/water-management-tiles/evaporation/` so a re-run skips it),
   deletes the year, then averages the years and loads them as
   `dPET-<first>-<last>`. `EVAP_BBOX`, `EVAP_DATASET` and `EVAP_URL` override
-  the box, the label and the source. By hand:
+  the box, the label and the source (checked first: a numeric box, a plain
+  label, an `https://` URL; the download refuses a redirect to plain HTTP). By hand:
   `pnpm import:evaporation --reduce <dir> <year>_daily_pet.nc …` then
   `pnpm import:evaporation <dir>/*.dpet-monthly.json --dataset <label>`
   (`--source`, `--version`, `--attribution` override the dPET defaults). The
@@ -1290,9 +1532,14 @@ only reads them.
   (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
   lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
   station pans. No open A-pan grid passes D-B today (§ Sources).
-- **Production loading** has the quaternary dataset's gap: no path yet into
-  the private database (followups.md). The attribution must be shown with any
-  figure a client-facing deployment serves from it (§ Sources).
+- **Production loading**: `pnpm import:evaporation <dir>/*.dpet-monthly.json
+  --dataset <label> --out dpet.json.gz` writes the averaged grid in the
+  fixture form instead of loading it, and `load-reference.yml` (kind
+  `evaporation`) loads that file through the migrate Lambda
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+  Only a reference-ET grid (`et0`) loads there; an A-pan grid is refused
+  until its source has an allowed row here. The attribution, stored on the
+  dataset row, is shown under every proposal (§ Sources).
 - **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
   monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
 
@@ -1307,10 +1554,12 @@ fixtures only.
 | Dataset | Publisher | Licence (read) | Attribution | Version | Update cadence | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
-| Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) in a legal notice before production serves it | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
+| Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) on the Data sources and credits page (`/data-sources`, 2026-10-02) | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
 | Delineation DEM: the Relief DEM above (Copernicus GLO-30, Mapterhorn's Terrarium tiles), read by the API | as above | as above: Art. 4 allows adaptation, which deriving flow directions and catchment polygons is | the Art. 6(b) notice on the delineation sheet; the dataset label and fingerprint on every proposal | as above | as above | allowed (in use locally; production with the basemap) |
 | HydroSHEDS v1 flow direction (3″, conditioned from SRTM), considered for delineation, not used | WWF / McGill University ([hydrosheds.org](https://www.hydrosheds.org/products/hydrosheds)) | "freely available for scientific, educational and commercial use" under the HydroSHEDS licence agreement in its technical documentation (product page read 2026-10-01; the site's own terms of use are non-commercial but cover the website) | per its licence agreement | v1 | none | not used: passes D-B, but 90 m against GLO-30's 30 m and a second download (design/delineation.md § The DEM) |
 | MERIT Hydro, considered for delineation | University of Tokyo ([MERIT Hydro](https://global-hydrodynamics.github.io/MERIT_Hydro/)) | dual: CC BY-NC 4.0 (non-commercial) or ODbL 1.0, under which data derived from it in a commercial product must be released under the ODbL (read 2026-10-01) | – | – | – | rejected: non-commercial, or share-alike on our output (D-B) |
+| JRC Global Surface Water v1.5 (1984–2024), occurrence: tracing a dam ([§ Assisted drawing](#assisted-drawing)) | European Commission Joint Research Centre, with Google ([global-surface-water.appspot.com](https://global-surface-water.appspot.com/download)); Pekel, J.-F. et al. (2016), *Nature* 540, 418–422 | "All data here is produced under the Copernicus Programme and is provided free of charge, without restriction of use" (the download page, read 2026-10-02), under the Copernicus Regulation's free, full and open data policy; commercial use allowed | "Source: EC JRC/Google" on a published map; the archive's attribution, written into every traced feature's description, and on the Data sources and credits page (`/data-sources#jrc-water`); cite Pekel et al. (2016) in published material | v1.5 (`occurrence_<lon>_<lat>_v1_5_2024.tif`) | yearly releases so far (v1.4 2021, v1.5 2024); refreshed when the operator re-fetches | **Allowed.** The operator's own download (`pnpm dev:tiles:water`), never committed; built and tested against the synthetic raster |
+| Synthetic water occurrence fixture (`backend/fixtures/water/synthetic-water.pmtiles`) | this repo (invented water, `pnpm gen:water-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Synthetic DEM fixture (`backend/fixtures/dem/synthetic-dem.pmtiles`) | this repo (invented terrain, `pnpm -C backend gen:dem-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
@@ -1319,12 +1568,12 @@ fixtures only.
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
-| HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Water Management], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", in the app's documentation or legal notice; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted), with conditions before production serves it**: the Exhibit B statement in the legal notice, and the terms of service carrying the end-user protections (no stand-alone redistribution of the data, no reverse engineering). Loaded locally from the operator's download; never committed |
+| HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Water Management], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", on the Data sources and credits page (`/data-sources#hydrorivers`, 2026-10-02), and a short credit on the map's attribution control linking to it while its reaches are drawn; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted); both conditions met**: the Exhibit B statement is on `/data-sources` (2026-10-02), and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone copying or distribution of the data, no reverse engineering, the licensors' ownership and no warranty; 2026-10-03, pre-counsel, [legal-status.md](./legal-status.md)). Loaded locally from the operator's download; never committed |
 | DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
-| ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
+| ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method, and on the Data sources and credits page (`/data-sources#worldcover`) | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
-| dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
+| dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method, and on the Data sources and credits page (`/data-sources#dpet`) | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |

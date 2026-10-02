@@ -2323,7 +2323,12 @@ In short:
   that guard. The same guard checks the chart library: the uPlot build the
   app bundles writes series labels (typed names) and its legend read-out
   through `textContent`, never markup. Also banned there: `setHTMLUnsafe`,
-  `parseHTMLUnsafe`, `DOMParser.parseFromString`. Mail templates escape
+  `parseHTMLUnsafe`, `DOMParser.parseFromString`. The one exception is the
+  map's attribution control: MapLibre sets a source's `attribution` as
+  innerHTML (behind its own weak sanitiser), so every value put into one
+  (`mapStyle.ts` `terrainSource`, `riversCredit`) goes through
+  `escapeAttribution` (round-4 hardening; `mapStyle.test.ts`). Today they
+  are all build-time constants. Mail templates escape
   every interpolated value (`mail/templates.ts` `escapeHtml`,
   `templates.test.ts`).
 - **No script URLs.** Svelte escapes attribute text, not what it means:
@@ -2529,7 +2534,13 @@ placed points. The server never trusts the browser with geometry:
   inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
   50 000 positions per feature; the self-crossing sweep stops at 5 million
   comparisons and refuses the ring, so a crafted file can't cost quadratic
-  time. The import route has its own body limit (7 MB of JSON, `app.ts`
+  time. Summing a polygon over a grid (land cover, evaporation, the CHIRPS
+  cells) clips its rings into rows and then cells by halving the range
+  (`geo/clip.ts eachBand`), so the work grows with the vertices times
+  log(cells), not vertices × cells: before, clipping the whole row piece to
+  every cell let a 48 000-position comb (1.3 MB, valid) cost about 92 s of
+  CPU in one viewer GET of `evaporation-proposals` (`geo/clip.test.ts` bounds
+  the work). The import route has its own body limit (7 MB of JSON, `app.ts`
   exempts that one path from the general 4 MB), and the parse is
   `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
   there is no archive to bomb), no external references.
@@ -2579,18 +2590,93 @@ placed points. The server never trusts the browser with geometry:
   are `SET NULL` (the features are the project's; catalogue guard). A map
   feature holds no personal information about its creator, so the
   data-subject export doesn't list them. `delineation_proposal.created_by`
-  and `decided_by` (175) are `SET NULL` the same way.
+  and `decided_by` (175), and `start_proposal`'s (178), are `SET NULL` the
+  same way.
 - **Delineation** (#326 B-delineate, [maps.md §
   Delineation](./maps.md#delineation)): the DEM is read from `DEM_URL`,
   operator configuration, never a URL a user gives, so a click can't point
   the API anywhere (no SSRF surface); a user supplies only a longitude and
   latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
-  API, so it is editor-only, capped at 30 a project an hour (429), bounded
-  by a window cap and a 20 s budget under the Lambda's timeout, and run
-  outside any database transaction. The decoders (WebP, PNG, PMTiles) read
-  only the operator's file and fail closed on anything malformed. The
-  proposal's polygon passes the same `checkGeometry` as every map polygon
-  before it is stored.
+  API, so it is editor-only, capped at 30 stored proposals a project an
+  hour (429), bounded by a window cap and a 20 s budget under the Lambda's
+  timeout, and run outside any database transaction. On top of that every
+  account has its own cap on elevation-model work (184_dem_attempt,
+  `delineation/attempt.ts`), shared by delineate, start and divide and
+  counted before the work in the transaction that checks the role: at most
+  2 attempts running at once and 60 started an hour, across every project,
+  refused and failed attempts included (429). It is per account because the
+  per-project count missed the attempts that store nothing (a `too_large`
+  refusal still reads and routes the windows), passed parallel requests
+  (counted in one transaction, stored in another) and reset with a new
+  project, so one account could keep every API Lambda slot busy. An attempt
+  whose Lambda died frees its running slot after a 2-minute lease. The row
+  names only the account and the kind, goes with the account (cascade) and
+  after a day, so it isn't exported (as `account_mail_quota`). The decoders (WebP, PNG, PMTiles) read
+  only the operator's file and fail closed on anything malformed, within
+  fixed bounds (§ Map data files below). The proposal's polygon passes the same
+  `checkGeometry` as every map polygon before it is stored.
+- **Map data files** (round-4 hardening): the hand-written readers bound
+  what a file can make them do, so a corrupt or hostile archive (a
+  compromised upstream, a wrong upload) is refused with the reader's own
+  error and a 503, never an out-of-memory crash. Tiles are at most 1024 px
+  a side, checked before any pixel is allocated (`MAX_TILE_SIDE`; a WebP of
+  single-symbol codes decodes any size from a few bytes), and at least
+  64 px (`MIN_TILE_SIDE`, else a window is millions of reads); PNG image
+  data inflates to its rows at most; a WebP keeps only the prefix-code
+  groups its meta image names (at most 4096). PMTiles caps every length the
+  archive gives before reading it (directories 4 MiB, metadata 1 MiB,
+  tiles 2 MiB) and every gzip inflation (`PMTILES_LIMITS`), and refuses a
+  directory claiming more entries than its bytes hold. Over HTTP the DEM
+  reader follows no redirect and refuses a server that ignores Range or
+  sends more than asked. `delineation/hostile.test.ts` feeds the decoders
+  seeded mutations of the fixtures (truncations, bit flips, random splices,
+  huge fields) plus the specific bombs. The land-cover import's GeoTIFF
+  blocks inflate to their pixels at most (operator-run). The CHIRPS
+  reader's GDAL metadata scan is linear (`gdalItems`; the regex it replaced
+  backtracked quadratically on a crafted megabyte).
+- **Geometry cost** (round-4 hardening): `checkGeometry`'s crossing sweep
+  counts every comparison against `GEO_MAX_PAIR_CHECKS` (a 50 000-vertex
+  sawtooth whose edges all overlap in longitude took ~9 s of blocked event
+  loop before; now refused in under 0.1 s) and checks a polygon's rings
+  against each other, so a hole can't cross its outer ring or another hole.
+  Placing a dam's outline on the DEM (`rasterize`, start from the map and
+  divide) adds each edge only to the rows it spans, rather than testing
+  every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.
+- **Tracing a dam** (#326 C2, [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
+  configuration, read with the same fail-closed decoders; a user supplies a
+  longitude, latitude and one of four shares. A trace reads at most a
+  512-cell window (a handful of tiles, cached per process), takes
+  milliseconds and stores nothing; it is editor-only and capped at 300 a
+  project and 600 a user an hour, every attempt counted before the work
+  under a row lock (so parallel requests can't all pass), the re-trace when
+  a traced outline is saved included (`186_map_compute_throttle.sql`,
+  `delineation/throttle.ts`, 429 with Retry-After; `throttle.db.test.ts`).
+  It had no cap before (round-4 hardening). A traced outline saved names its method on the server's word,
+  not the client's: the server traces the click again, and an outline sent
+  as unadjusted must equal that trace. Splitting checks each part with
+  `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
+  and each part within the shape: every edge of a part that isn't one of
+  the shape's own has its ends and middle inside or on the outline and
+  crosses none of its edges, at most 500 such edges, `geo/splitCheck.ts`;
+  before, only the bounding box was checked, so an L cut into two
+  rectangles, one outside the L, passed), in one transaction, so a split
+  can't smuggle in an unrelated shape labelled as a split.
+- **Start from the map** (#326 C3, [maps.md § Start from the
+  map](./maps.md#start-from-the-map)): the same DEM and the same bounds
+  (editor-only, its own 30 stored an hour, the account's attempt cap, the window cap and budget, outside any
+  transaction). A user names only feature ids of their own project's map
+  (read under RLS, so another project's are "not on this map") and roles.
+  Apply writes only into an empty model, re-checks the ticks against the
+  stored plan (a value can't be ticked that wasn't proposed) and runs the
+  model's own validation before saving; the plan is immutable and the
+  decision final (178 `start_proposal_final`). Since 185 a proposal of either kind is kept as proposed in the database too, not only by the routes: every column but the decision's is fixed (the polygon, area, dataset, method, project), the maker is the signed-in user on insert and only its account's deletion clears it, an accepted or applied proposal can't be deleted but with its project, and the triggers' "is that account gone?" check runs as SECURITY DEFINER, so app_user's RLS can't hide a live decider (`final-columns.security.db.test.ts`). **Dividing** a model that has
+  nodes (182) is the same surface: feature and node ids of the project's own
+  map and model only (another project's are "not on this map" / "not in the
+  model", `cross-project-refs.security.db.test.ts`), the shared cap, and an
+  apply that takes only ticked values and refuses one whose current value
+  changed since the proposal, so it never overwrites typed data unseen; the
+  mode is as final as the plan (182).
 
 ## Personal information (POPIA)
 
@@ -2684,10 +2770,12 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
+| Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
 | Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
 | The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
+| Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
@@ -2715,6 +2803,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
 | The Map's records of who made them: a map import, a feature, a delineation proposed or decided (175) | `geo_source.imported_by`, `map_feature.created_by`, `delineation_proposal.created_by` and `decided_by` | With the project (superseded and rejected proposals past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); a proposal's polygon, dataset and method hold nothing about the person; its decision stays final (175 `delineation_proposal_final`, only the foreign key clears `decided_by`) | Deleted |
+| A model proposed from the map (178): who proposed and decided it | `start_proposal.created_by` and `decided_by` | With the project (superseded and discarded ones past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); the plan (units, areas, outlines from the project's map) and the decision hold nothing about the person; the decision stays final (178 `start_proposal_final`) | Deleted |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
 | Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |
@@ -3010,7 +3099,7 @@ key there would let any read-only principal forge any user's session.
   The reports bucket keeps `GetObject` only.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome` and `/welcome/af`, issues #57 and #137), the legal pages (`/privacy`, `/terms`,
-  [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
+  [legal-status.md](./legal-status.md)), the methods page (`/methods`) and the data sources' credits (`/data-sources`) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
@@ -3057,12 +3146,15 @@ key there would let any read-only principal forge any user's session.
   classify, checks each Lambda's Terraform environment block (or, for a secret,
   its runtime secret, [§ Runtime secrets](#runtime-secrets)) sets every
   required setting, sweeps every `backend/.env.development` value, and starts
-  each entry point with a production-shaped env (the positive control).
+  each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+- **WAF:** four per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
-  default 1000 per 5 minutes) scoped to `/api/*`, and a site-wide backstop
+  default 1000 per 5 minutes) scoped to `/api/*`, the map's tiles
+  (`waf_tiles_rate_limit_per_ip`, default 1000, scoped to `/tiles/*`: each
+  may be a 2 MiB range, so this is the egress bound per address, with the
+  `cloudfront-bytes` alarm across addresses), and a site-wide backstop
   on every path (`waf_site_rate_limit_per_ip`, default 5000). The API's
   limit doesn't count the SPA's cached files, so a cold visit (~150 of
   them) or the report renderer, which loads the SPA in a fresh Chromium for
@@ -3156,26 +3248,42 @@ key there would let any read-only principal forge any user's session.
   else is granted. The `tiles_range` function refuses whole-file and
   open-ended reads of an archive (a 2 MiB cap per request) and answers 404
   for every other path, so a public 2 GB file can't be pulled in one
-  request (the cost side: deployment.md § Map tiles).
+  request; the WAF's `RateLimitTilesPerIP` (1 000 per 5 minutes) bounds one
+  address at ~2 GB per 5 minutes, and the `cloudfront-bytes` alarm watches
+  egress across addresses (the cost side: deployment.md § Map tiles). The
+  bucket is versioned, so an archive overwritten or deleted by mistake
+  (the DEM the API reads among them) can be restored for 14 days.
 - **Delineation's DEM read** (`delineation_dem`): the API role may
   GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
   allows the same; off by default.
+- **Tracing a dam's water read** (`dam_trace_water`, #326 C2): the same
+  for one other key, `tiles/water.pmtiles` (`api_water`); off by default.
+  The file sits under `tiles/`, so `/tiles/*` serves it by bounded ranges
+  like the other archives; GSW's terms allow redistribution.
 - **Reference loads run as the schema owner**, so they are gated like a
   deploy: `load-reference.yml` reaches AWS only in the `production`
-  environment (a required reviewer, then OIDC), and the deploy role's only
-  part is `lambda:InvokeFunction` on the migrate Lambda, which it already
-  had. The migrate Lambda reads one object from the private reference
+  environment (a required reviewer, then OIDC), from `main` only, after a
+  `preflight` job (no environment, no AWS) has confirmed that environment
+  exists with its reviewer and branch policy, since naming a missing one
+  would create it unprotected (`preflight.mjs environment`; the workflow
+  guard's `preflight` rule makes every production-gated job need it). The
+  job's session is narrowed by an inline session policy to
+  `lambda:InvokeFunction` on the migrate function, so none of the deploy
+  role's other grants (the frontend bucket, the Lambdas' code, ECR) reach
+  it. The migrate Lambda reads one object from the private reference
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
-  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off), and
+  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
+  evaporation grid 32 MiB and 64 MiB), and
   parses it with the same code as the local loaders (JSON only, no archive
   formats, no external references). The kinds whose licence isn't
-  confirmed are refused in the workflow and again in the Lambda, by name.
+  confirmed are refused in the workflow and again in the Lambda, by name,
+  and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.
 - **No role can write either bucket** but the operator's own SSO session;
-  the deploy role touches neither. Uploading to the tiles bucket is itself
+  the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
   publishing (the behaviour serves what is there), so the licence steps come
   before the upload (deployment.md § Map tiles).
 
@@ -3193,6 +3301,17 @@ beside the resource; a new ignore needs a line here too.
 
 Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
 customer-held keys or key-level audit of report or pack reads.
+
+Below CI's HIGH/CRITICAL threshold, so it carries no ignore, but accepted on
+purpose: **AWS-0089, no S3 server access logging**, on every bucket. The
+tiles are public map data served through CloudFront (whose WAF metrics and
+sampled requests show who pulls them), the reference files are openly
+licensed data with one reader (the migrate role, whose loads are logged in
+CloudWatch and gated by the `production` approval), and the reports and
+packs buckets are read through signed URLs the API mints and logs. A log
+bucket would add storage and a lifecycle to run for no question it would
+answer. If key-level audit is ever needed, CloudTrail data events on the
+prefix in question (e.g. `reference/*`) cost almost nothing at this volume.
 
 ## Liability
 

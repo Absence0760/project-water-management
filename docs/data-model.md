@@ -1596,9 +1596,39 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
   accepted or rejected). RLS: viewers read, editors insert, update and
-  delete (the route prunes superseded and rejected rows past the newest 50
-  a project; accepted ones stay as their features' provenance). No node
+  delete all but an accepted one (the route prunes superseded and rejected
+  rows past the newest 50 a project; accepted ones stay as their features'
+  provenance, 185). Every column but the decision's never changes (what
+  was proposed, its project; `created_by` only cleared with its account),
+  and an insert's `created_by` is the signed-in user
+  (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
+- **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
+  proposed for an empty project from its map, and the editor's decision.
+  `id`, `project_id` (cascade), `status` (`proposed` | `applied` |
+  `discarded` | `superseded`; at most one `proposed` per project, partial
+  unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
+  areas and outlines, the order, the rest of the catchment, the outlet, the
+  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
+  `method_version` (`start-2`), `mode` (`start` | `divide`, 182: a
+  division of a model that has nodes, always `from_dem`; never changes),
+  `decision` (jsonb, set exactly when
+  `applied`: the ticks, the node and parcel ids, the revision),
+  `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
+  `decided_at` (set exactly when applied or discarded). The plan, the mode
+  and every other column but the decision's never change (185: dataset,
+  method, project; `created_by` only cleared with its account, and set to
+  the signed-in user on insert), and a decision is final
+  (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
+  editors insert, update and delete all but an applied one (the route
+  prunes superseded and discarded rows past the newest 50 a project). What apply makes is
+  ordinary model data: nodes, `farm_parcel` features linked to them, and
+  `node.area_source = 'map'` for a ticked area. A division's plan
+  (`divide.ts` `DividePlan`) also keeps each node's values when proposed
+  (`current`), which apply checks before replacing one. No node column, so
+  farmers never read it.
 - **`river_reference`** (`171_river_network.sql`, issue #345,
   [maps.md § River network](./maps.md#river-network)): the river network
   the Map tab's River network layer draws and proposes rivers from. Primary
@@ -1657,7 +1687,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   row_idx, col_idx)`, also a polygon's range lookup) and `monthly_mm` (12
   mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
   are stored. Global, loaded by the operator as the schema owner (`pnpm
-  import:evaporation`), readable by anyone signed in, written by no app role.
+  import:evaporation`; in production `load-reference.yml` through the
+  migrate Lambda, deployment.md § Reference datasets), readable by anyone signed in, written by no app role.
 - **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
   evaporation row accepted from the map came from. Primary key
   `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
@@ -2621,9 +2652,11 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
+| `dem_attempt` (184) | One row per elevation-model request (delineate, start, divide): `user_id` (cascade), `kind`, `started_at`, `finished_at`. For the account's cap (2 running, 60 an hour); rows older than a day are deleted on the next attempt. SECURITY DEFINER access only (`app_dem_attempt`, `app_dem_attempt_done`) |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** or **applicant** (`contributor`, 097) invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` or `contributor` invite of the same project |
 | `invite_throttle` (101) | The daily cap on adding people by email (issue #51): `bucket` (`user:<id>`, `project:<id>` or `team:<id>`), `window_start`, `attempts`. Deny-all RLS; only `app_invite_attempt` (SECURITY DEFINER, the project's owner or the team's admin) counts; rows go once their 24-hour window is over |
+| `map_compute_throttle` (186) | The hourly cap on tracing a dam, counted before the work: `bucket` (`user:<id>:trace` or `project:<id>:trace`), `window_start`, `attempts`. Deny-all RLS; only `app_map_compute_attempt` (SECURITY DEFINER, an editor of the project) counts; rows go once their hour is over |
 | `revoked_session` (102) | Sessions signed out with `POST /auth/logout` (issue #51): `user_id` (cascade) + `jti` (the key), `expires_at` (the token's own expiry), `revoked_at`. Deny-all RLS; `app_revoke_session` records one for the signed-in account and `app_session_state` (read with the watermark on every request) checks it; rows go once expired, at the next sign-out |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
@@ -3573,6 +3606,22 @@ ids are rejected.
   branch's migration never reaches the main checkout's before it merges
   under its final number. Production recovery: [deployment.md § Migration
   integrity](./deployment.md#migration-integrity).
+- **A migration takes its number when it merges.** Take the next free
+  number after the highest on `origin/main`, and never reserve one ahead
+  of time for planned work: two branches that each took a number can merge
+  in the other order, and every database that applied the later file first
+  (each dev database, a worktree's, production) then refuses the earlier
+  one until it is renumbered. `pnpm check:migrations`
+  (`scripts/guards/check_migration_order.mjs`) fails when a file the branch
+  adds sorts before, or shares a number with, the highest on `origin/main`,
+  and prints the `git mv` that fixes it; CI runs it on every PR's merge ref
+  and on every push to `main`. Branch protection doesn't re-run a PR's
+  checks when `main` moves, so before merging a PR that adds a migration,
+  merge `origin/main` into it (or rerun its CI) if another migration has
+  landed since. Renumbering also means updating the places that cite the
+  file name (`git grep <old name>`). A dev database that already applied
+  the later file can take the late one by hand only when the two are
+  independent; otherwise `pnpm dev:db:reset`.
 - **Timeouts.** Each migration's transaction runs with `lock_timeout = 5s`
   (so it fails instead of queueing behind live traffic, with every later
   query queued behind it) and `statement_timeout = 240s` (under the migrate

@@ -23,6 +23,7 @@ import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
+import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
@@ -140,7 +141,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		const body = DelineateBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		await withUser(userId, async (db) => {
+		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const { rows } = await db.query<{ n: number }>(
 				`SELECT count(*)::integer AS n FROM delineation_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`,
@@ -149,70 +150,76 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			if (rows[0]!.n >= DELINEATIONS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${DELINEATIONS_PER_HOUR} delineations in the last hour; try again later.`);
 			}
+			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt).
+			return beginDemAttempt(db, 'delineation');
 		});
-		const dem = configuredDem();
-		if (!dem) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
-		let result;
 		try {
-			result = await delineate(dem, [body.lon, body.lat]);
-		} catch (err) {
-			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
-			logEvent('error', { event: 'delineation_failed', ...safeError(err) });
-			throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
-		}
-		const r = result;
-		return withUser(userId, async (db) => {
-			await requireRole(db, id, 'editor');
-			// One open proposal per project: this one supersedes the last.
-			await db.query(`UPDATE delineation_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
-			const { rows } = await db
-				.query<{ id: string }>(
-					`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry,
-						area_m2, cells, cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, created_by)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, app_current_user_id()) RETURNING id`,
-					[
-						id,
-						body.from,
-						body.lon,
-						body.lat,
-						r.outlet[0],
-						r.outlet[1],
-						r.snapDistanceM,
-						JSON.stringify(r.geometry),
-						r.areaM2,
-						r.cells,
-						r.cellSizeM,
-						r.zoom,
-						r.windowCells,
-						r.dataset.label,
-						r.dataset.fingerprint,
-						r.method,
-						r.methodVersion
-					]
-				)
-				.catch((err: unknown) => {
-					// Two delineations finishing at once: the unique open index keeps one; the other is told.
-					if ((err as { code?: string; constraint?: string }).constraint === 'delineation_proposal_one_open_idx') {
-						throw new ApiError(409, 'Another delineation for this catchment finished at the same moment; look at it, or click again.');
-					}
-					throw err;
+			const dem = configuredDem();
+			if (!dem) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
+			let result;
+			try {
+				result = await delineate(dem, [body.lon, body.lat]);
+			} catch (err) {
+				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
+				logEvent('error', { event: 'delineation_failed', ...safeError(err) });
+				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
+			}
+			const r = result;
+			return await withUser(userId, async (db) => {
+				await requireRole(db, id, 'editor');
+				// One open proposal per project: this one supersedes the last.
+				await db.query(`UPDATE delineation_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
+				const { rows } = await db
+					.query<{ id: string }>(
+						`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry,
+							area_m2, cells, cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, created_by)
+						 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, app_current_user_id()) RETURNING id`,
+						[
+							id,
+							body.from,
+							body.lon,
+							body.lat,
+							r.outlet[0],
+							r.outlet[1],
+							r.snapDistanceM,
+							JSON.stringify(r.geometry),
+							r.areaM2,
+							r.cells,
+							r.cellSizeM,
+							r.zoom,
+							r.windowCells,
+							r.dataset.label,
+							r.dataset.fingerprint,
+							r.method,
+							r.methodVersion
+						]
+					)
+					.catch((err: unknown) => {
+						// Two delineations finishing at once: the unique open index keeps one; the other is told.
+						if ((err as { code?: string; constraint?: string }).constraint === 'delineation_proposal_one_open_idx') {
+							throw new ApiError(409, 'Another delineation for this catchment finished at the same moment; look at it, or click again.');
+						}
+						throw err;
+					});
+				// Keep the table bounded: superseded and rejected proposals beyond the newest PROPOSALS_KEPT go.
+				await db.query(
+					`DELETE FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') AND id NOT IN (
+						SELECT id FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') ORDER BY created_at DESC, id LIMIT $2)`,
+					[id, PROPOSALS_KEPT]
+				);
+				const proposal = toProposal(await loadProposal(db, id, rows[0]!.id));
+				await recordAudit(db, id, 'map.delineation_proposed', {
+					proposalId: proposal.id,
+					from: body.from,
+					areaKm2: Math.round(r.areaM2 / 1e4) / 100,
+					dataset: r.dataset.label,
+					methodVersion: r.methodVersion
 				});
-			// Keep the table bounded: superseded and rejected proposals beyond the newest PROPOSALS_KEPT go.
-			await db.query(
-				`DELETE FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') AND id NOT IN (
-					SELECT id FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') ORDER BY created_at DESC, id LIMIT $2)`,
-				[id, PROPOSALS_KEPT]
-			);
-			const proposal = toProposal(await loadProposal(db, id, rows[0]!.id));
-			await recordAudit(db, id, 'map.delineation_proposed', {
-				proposalId: proposal.id,
-				from: body.from,
-				areaKm2: Math.round(r.areaM2 / 1e4) / 100,
-				dataset: r.dataset.label,
-				methodVersion: r.methodVersion
+				return c.json({ proposal }, 201);
 			});
-			return c.json({ proposal }, 201);
-		});
+		} finally {
+			await finishDemAttempt(userId, attempt);
+		}
 	})
 	.post('/:id/map/delineation/:pid/accept', async (c) => {
 		const body = AcceptBody.parse(await readJson(c));

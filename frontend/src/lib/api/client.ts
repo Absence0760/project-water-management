@@ -161,6 +161,16 @@ import type {
 	DamProposals,
 	DelineationProposal,
 	DelineationState,
+	DamTraceProposal,
+	DamTraceState,
+	MinOccurrence,
+	MapGeometry,
+	StartProposal,
+	StartRole,
+	StartState,
+	StartTicks,
+	DivideProposal,
+	DivideTicks,
 	CroplandProposals,
 	EvaporationProposals,
 	EvaporationTarget
@@ -1048,6 +1058,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			update: (id: string, fid: string, body: MapFeatureInput) =>
 				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
 			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
+			/** Cut a polygon in two along a drawn line (issue #326 C2): both parts saved together; the boundary stays whole and its parts become `as`. */
+			split: (id: string, fid: string, body: { parts: [MapGeometry, MapGeometry]; names?: [string, string]; as?: 'farm_parcel' | 'other' }) =>
+				request<{ features: [MapFeature, MapFeature] }>('POST', `${p(id)}/map/features/${enc(fid)}/split`, body).then((r) => r.features),
+			/** Whether tracing a dam is on (issue #326 C2). */
+			damTraceState: (id: string) => request<DamTraceState>('GET', `${p(id)}/map/dam-trace`),
+			/** The outline of the water round a point, proposed; nothing saved. 422: refused, `details.reason` says why. */
+			traceDam: (id: string, body: { lon: number; lat: number; minOccurrence?: MinOccurrence }) =>
+				request<{ trace: DamTraceProposal }>('POST', `${p(id)}/map/dam-trace`, body).then((r) => r.trace),
 			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
 			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
 			/**
@@ -1090,6 +1108,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
 			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+		},
+		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
+		start: {
+			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; role: StartRole }[] }) =>
+				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
+			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
+			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
+		},
+		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
+		divide: {
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; nodeId: string | null }[] }) =>
+				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
+			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},
 		/**
 		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,

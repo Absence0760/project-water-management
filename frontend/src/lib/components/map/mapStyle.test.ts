@@ -4,7 +4,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
+import { PIECE_TINT_COUNT } from './pieces';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 import {
+	RIVERS_CREDIT_LAYER,
+	RIVERS_CREDIT_SOURCE,
+	riversCredit,
+	escapeAttribution,
+	terrainSource,
 	BASEMAP_ATTRIBUTION,
 	basemapColours,
 	basemapLayerIds,
@@ -17,6 +24,8 @@ import {
 	overlayColours,
 	overlayData,
 	overlayLayers,
+	PIECE_HIT_LAYER,
+	pieceTints,
 	proposalColour,
 	proposalData,
 	proposalLayers,
@@ -295,6 +304,27 @@ describe('the river network (#345)', () => {
 		expect(ids.indexOf('rn-line')).toBeLessThan(ids.indexOf('ov-parcel-fill'));
 	});
 
+	it('links the relief’s credit to the Copernicus licence notice on the data sources page when given its URL', () => {
+		const style = mapStyle(null, false, overlayData([], null), { terrain: '/tiles/terrain.pmtiles', dataSourcesHref: '/data-sources' });
+		const attribution = (style.sources[TERRAIN_SOURCE] as { attribution: string }).attribution;
+		expect(attribution).toContain(TERRAIN_ATTRIBUTION);
+		expect(attribution).toContain('<a href="/data-sources#copernicus-dem">licence notice</a>');
+		expect((mapStyle(null, false, overlayData([], null), { terrain: '/t.pmtiles' }).sources[TERRAIN_SOURCE] as { attribution: string }).attribution).toBe(TERRAIN_ATTRIBUTION);
+	});
+
+	it('credits HydroRIVERS on the attribution control only when asked: its own empty source and an invisible layer reading it', () => {
+		const html = riversCredit('/data-sources', HYDRORIVERS_MAP_ATTRIBUTION);
+		expect(html).toBe(`<a href="/data-sources#hydrorivers">${escapeAttribution(HYDRORIVERS_MAP_ATTRIBUTION)}</a>`);
+		const credited = mapStyle(null, false, overlayData([], null), { riversCredit: html });
+		expect(credited.sources[RIVERS_CREDIT_SOURCE]).toEqual({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: html });
+		expect(credited.layers.find((l) => l.id === RIVERS_CREDIT_LAYER.id)).toEqual({ id: 'rivers-credit', type: 'line', source: RIVERS_CREDIT_SOURCE, paint: { 'line-opacity': 0 } });
+		const plain = mapStyle(null, false, overlayData([], null), { riversCredit: null });
+		expect(plain.sources[RIVERS_CREDIT_SOURCE]).toBeUndefined();
+		expect(plain.layers.some((l) => l.id === RIVERS_CREDIT_LAYER.id)).toBe(false);
+		// The river network's own source never carries it: it is in the style whether drawn or not.
+		expect((credited.sources.rivers as Record<string, unknown>).attribution).toBeUndefined();
+	});
+
 	it('feeds each reach with its key and order (1 when not given), marking the picked one', () => {
 		const d = riverNetworkData([{ key: 'synthetic:1', strahler: 3, geometry: line }, { key: 'synthetic:2', strahler: null, geometry: line }], 'synthetic:2');
 		expect(d.features.map((f) => f.properties)).toEqual([
@@ -374,6 +404,52 @@ describe('relief (shaded from a DEM)', () => {
 	});
 });
 
+describe('a start or divide proposal’s pieces (#326 C3’s follow-up)', () => {
+	const sq = (x: number) => ({ type: 'Polygon' as const, coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 0]]] as [number, number][][] });
+	const pieces = [
+		{ key: 'a', label: '1', name: 'A', geometry: sq(0), at: [0.5, 0.3] as [number, number], tint: 0 },
+		{ key: 'w', label: '2', name: 'Weir', geometry: null, at: [3, 3] as [number, number], tint: 1 },
+		{ key: 'rest', label: 'R', name: 'Rest', geometry: sq(2), at: [2.5, 0.3] as [number, number], tint: -1 }
+	];
+
+	it('draws each piece with an outline on its own, with its key and tint and the lit one marked; a unit without land draws none', () => {
+		const d = proposalData({ geometry: sq(0), outlet: [9, 9], pieces, highlight: 'rest' });
+		expect(d.features.map((f) => [f.properties.part, f.properties.key, f.properties.tint, f.properties.lit])).toEqual([
+			['piece', 'a', 0, false],
+			['piece', 'rest', -1, true],
+			['outlet', undefined, undefined, undefined]
+		]);
+	});
+
+	it('fills each piece with its tint (the rest the proposal’s teal), lights the lit one in the selection colour, under the proposal’s dash', () => {
+		for (const dark of [false, true]) {
+			const layers = proposalLayers(dark);
+			const fill = layers.find((l) => l.id === PIECE_HIT_LAYER)!;
+			expect((fill.paint as Record<string, unknown>)['fill-color']).toEqual(['match', ['get', 'tint'], ...pieceTints(dark).flatMap((t, i) => [i, t]), proposalColour(dark)]);
+			const lit = layers.find((l) => l.id === 'pr-lit')!;
+			expect((lit.paint as Record<string, unknown>)['line-color']).toBe(overlayColours(dark).selected);
+			const ids = layers.map((l) => l.id);
+			expect(ids.indexOf(PIECE_HIT_LAYER)).toBeLessThan(ids.indexOf('pr-line'));
+			expect(ids.indexOf('pr-line')).toBeLessThan(ids.indexOf('pr-lit'));
+		}
+	});
+
+	it('has tints well apart from each other, and from every hue the map already gives a meaning, light and dark', () => {
+		for (const dark of [false, true]) {
+			const t = pieceTints(dark);
+			expect(t).toHaveLength(PIECE_TINT_COUNT);
+			for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) expect(deltaE(t[i]!, t[j]!), `${t[i]} vs ${t[j]}`).toBeGreaterThanOrEqual(20);
+			// Never read as a parcel (green), water (blue), the boundary (amber) or the proposal's own teal.
+			const c = overlayColours(dark);
+			for (const x of t) for (const m of [c.parcel, c.water, c.boundary, proposalColour(dark)]) expect(deltaE(x, m), `${x} vs ${m}, ${dark ? 'dark' : 'light'}`).toBeGreaterThanOrEqual(25);
+		}
+	});
+
+	it('writes the numbers in a colour that reads 4.5:1 on the badge’s casing, light and dark', () => {
+		for (const dark of [false, true]) expect(contrast(labelColours(dark).text, overlayColours(dark).casing)).toBeGreaterThanOrEqual(4.5);
+	});
+});
+
 describe('the delineation proposal (#326 B-delineate)', () => {
 	const geometry = { type: 'Polygon' as const, coordinates: [[[20, -33], [21, -33], [21, -34], [20, -33]]] as [number, number][][] };
 	const data = overlayData([], null);
@@ -404,5 +480,14 @@ describe('the delineation proposal (#326 B-delineate)', () => {
 			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(colour, g), `${colour} on ${g}`).toBeGreaterThanOrEqual(3);
 			expect(contrast(colour, overlayColours(dark).casing)).toBeGreaterThanOrEqual(3);
 		}
+	});
+});
+
+describe('attribution HTML (MapLibre sets it as innerHTML)', () => {
+	it('escapes every value put into it, so no text can become markup', () => {
+		expect(escapeAttribution(`<img src=x onerror="a()">&'`)).toBe('&#60;img src=x onerror=&#34;a()&#34;&#62;&#38;&#39;');
+		const html = riversCredit('" onmouseover="x', '<b>credit</b>');
+		expect(html).not.toMatch(/<b>|" onmouseover/);
+		expect(terrainSource('/t.pmtiles', '"><script>').attribution).not.toContain('<script>');
 	});
 });

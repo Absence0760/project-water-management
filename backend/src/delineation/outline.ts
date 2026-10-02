@@ -17,6 +17,53 @@ const CHAMFER = 0.25;
  * cells at most.
  */
 export function traceOutline(nx: number, ny: number, mask: Uint8Array): Pt[] {
+	let best: Pt[] = [];
+	let bestArea = 0;
+	for (const ring of traceAll(nx, ny, mask)) {
+		const area = Math.abs(signedArea(ring));
+		if (area > bestArea) {
+			bestArea = area;
+			best = ring;
+		}
+	}
+	return best;
+}
+
+/**
+ * The mask's outer ring (as traceOutline) and its holes: the rings walked the
+ * other way round, lying inside it, of at least `minHoleCells` cells. A unit's
+ * own piece of a catchment has real holes, where a unit upstream lies wholly
+ * inside it (design/start-from-map.md § Sub-catchments); a hole of a cell or
+ * two is D8's diagonal crossings, dropped as traceOutline drops them.
+ */
+export function traceRings(nx: number, ny: number, mask: Uint8Array, minHoleCells = 4): { outer: Pt[]; holes: Pt[][] } {
+	const rings = traceAll(nx, ny, mask);
+	let outer: Pt[] = [];
+	let outerArea = 0;
+	for (const ring of rings) {
+		const a = signedArea(ring);
+		if (Math.abs(a) > Math.abs(outerArea)) {
+			outerArea = a;
+			outer = ring;
+		}
+	}
+	const holes = rings.filter((r) => r !== outer && Math.sign(signedArea(r)) === -Math.sign(outerArea) && Math.abs(signedArea(r)) >= minHoleCells && insideRing(r[0]!, outer));
+	return { outer, holes };
+}
+
+/** Whether p lies inside the closed ring (even–odd; a vertex of a hole is never on its outer ring, so ties don't arise). */
+export function insideRing(p: Pt, ring: readonly Pt[]): boolean {
+	let inside = false;
+	for (let i = 0, j = ring.length - 2; i < ring.length - 1; j = i++) {
+		const [xi, yi] = ring[i]!;
+		const [xj, yj] = ring[j]!;
+		if (yi > p[1] !== yj > p[1] && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+	}
+	return inside;
+}
+
+/** Every closed ring of the mask's cell edges, region on the left (y down), corners only. */
+function traceAll(nx: number, ny: number, mask: Uint8Array): Pt[][] {
 	const W = nx + 1;
 	const out = new Map<number, number[]>();
 	const add = (ax: number, ay: number, bx: number, by: number) => {
@@ -39,8 +86,7 @@ export function traceOutline(nx: number, ny: number, mask: Uint8Array): Pt[] {
 	const saddles = new Set<number>();
 	for (const [v, list] of out) if (list.length > 1) saddles.add(v);
 	const starts = [...out.keys()].filter((v) => !saddles.has(v));
-	let best: Pt[] = [];
-	let bestArea = 0;
+	const rings: Pt[][] = [];
 	for (const start of starts) {
 		if (!out.has(start)) continue;
 		const ring: Pt[] = [];
@@ -79,13 +125,9 @@ export function traceOutline(nx: number, ny: number, mask: Uint8Array): Pt[] {
 		}
 		if (ring.length < 3) continue;
 		ring.push([ring[0]![0], ring[0]![1]]);
-		const area = Math.abs(signedArea(ring));
-		if (area > bestArea) {
-			bestArea = area;
-			best = ring;
-		}
+		rings.push(ring);
 	}
-	return best;
+	return rings;
 }
 
 /** Shoelace area of a closed ring (grid units; positive when the region is on the left in y-down coordinates walked as traced… sign only matters relatively). */

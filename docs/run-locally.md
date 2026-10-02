@@ -119,13 +119,15 @@ user starts with no projects.
 pnpm seed:examples          # needs dev:db:up; about 10 s
 ```
 
-This loads three invented catchments, each with one run (published by its
+This loads four invented catchments, each with one run (published by its
 owner, WP-2.3; Sandspruit's with an advisory notice in English and
 Afrikaans), for two local demo
 users: `demo@example.com` and `analyst@example.com`, password `demo-password`
 (they exist only in your docker Postgres). The team "Demo Catchment
 Consultants" (demo is admin, analyst a member) owns Kleinberg and Droëvlei;
-analyst owns Sandspruit and shares it with demo as a viewer. Two demo
+analyst owns Sandspruit and shares it with demo as a viewer; demo owns
+Oranje, seeded after the other three, so a database seeded before it gains it
+on the next `pnpm seed:examples`. Two demo
 **farmers** (WP-2.1) see only their own farms: `farmer1@example.com` is linked
 to Vaalbank (Sandspruit), `farmer2@example.com` to Rietspruit (Sandspruit) and
 Kareebos (Droëvlei), same password; each reads their farm's published
@@ -155,6 +157,7 @@ feature of the current engine:
 | **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
 | **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
 | **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. It is the one example with a catchment map (Map tab): boundary, parcels, dams, gauges and streams, all invented. |
+| **Oranje** (river abstractions) | The client checklist's river abstractions (#342 items 4–5, docs/model.md §2.7j), near Upington on the lower Orange (the rainfall is invented, wetter than the real thing). **Rivierplaas** waters its vines from its dam, with a village and stock water ranked 1 and 2 before the crops, and runs a **packhouse** from the river through its own pump, on weekdays only (an on/off schedule with the weekend off) with a pool at the pump. **Wingerdhoek** irrigates its crops from its own river pump and pool (the pump is the limit on some days), supplies a **town** from the river, and pipes water **out of the catchment** from its dam, last. Its map has the boundary, parcels, dams, the weir and a point at each pump; with HydroRIVERS loaded (`pnpm dev:tiles:rivers`) the Map tab's **River network** layer draws the real Orange around it. |
 
 Every dam has a surveyed full-supply area, so dam evaporation and rain on the
 dam are not estimated. The only run warnings are the ones each example is built
@@ -399,6 +402,7 @@ pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: st
 pnpm dev:tiles:fetch        # re-download the tiles, then the labels' fonts
 pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
 pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB at maxzoom 12; TERRAIN_MAXZOOM=11 for ~570 MB); then dev:tiles:up again
+pnpm dev:tiles:water        # tracing a dam's data (JRC Global Surface Water occurrence, ~100 MB of downloads; GDAL or docker); then WATER_URL in backend/.env.development.local
 pnpm dev:tiles:status       # what is cached and what MinIO serves
 ```
 
@@ -410,6 +414,16 @@ terrain: Enter coordinates 20.7428741, −33.5396777 for its outlet), or
 `DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` after
 `pnpm dev:tiles:terrain` for the real one, and restart `pnpm dev`
 ([maps.md § Delineation](./maps.md#delineation)).
+
+**Trace a dam** needs water occurrence data on the backend (`WATER_URL`,
+empty in the committed file). Put
+`WATER_URL=fixtures/water/synthetic-water.pmtiles` in
+`backend/.env.development.local` for the committed synthetic raster
+(invented water: Enter coordinates −33.6724971, 21.3191414 for its dam), or
+`WATER_URL=http://localhost:9002/tiles/water.pmtiles` after
+`pnpm dev:tiles:water` (JRC Global Surface Water; GDAL, or docker for its
+image), and restart `pnpm dev` ([maps.md § Assisted
+drawing](./maps.md#assisted-drawing)).
 
 The fonts come from the Protomaps `basemaps-assets` repository at a pinned
 commit (`TILES_FONTS_REF` overrides it), cached in

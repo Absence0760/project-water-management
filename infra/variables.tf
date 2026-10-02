@@ -235,6 +235,31 @@ variable "waf_site_rate_limit_per_ip" {
   }
 }
 
+variable "waf_tiles_rate_limit_per_ip" {
+  description = "WAF rate limit on /tiles/* (the map's PMTiles archives, glyphs): requests per IP per 5-minute rolling window. Each may move up to 2 MiB (tiles_range), so this bounds one address's CloudFront egress: 1000 is ~2 GB per 5 minutes at worst, which the cloudfront-bytes alarm sees in its first period. Real map use is a few hundred range reads in a busy 5 minutes. Between 100 (AWS's minimum) and waf_site_rate_limit_per_ip."
+  type        = number
+  default     = 1000
+  validation {
+    condition     = var.waf_tiles_rate_limit_per_ip >= 100 && var.waf_tiles_rate_limit_per_ip <= var.waf_site_rate_limit_per_ip
+    error_message = "Between 100 (AWS WAF's minimum) and waf_site_rate_limit_per_ip (above it the site-wide rule is the limit and this one bounds nothing)."
+  }
+}
+
+# The egress alarm (alarms.tf cloudfront_bytes). Requests are cheap; bytes are
+# what the tiles cost ($0.110/GB at Africa's edges, $0.085 at US/EU's). A pull
+# just under the threshold from many addresses goes unseen: at 0.5 GB per
+# 5 minutes that is 144 GB a day, ~$12–16 a day, until the daily budget
+# (8–24 h late) says so.
+variable "cloudfront_bytes_alarm_gb_per_5min" {
+  description = "Alarm when CloudFront sends viewers more than this many GB in 5 minutes (BytesDownloaded, us-east-1): the egress alarm for the map's tiles, which the request alarm can't see (one /tiles/ request may be 2 MiB). Default 0.5: a busy 5 minutes for a handful of users is tens of MB; a pull just under it costs ~$12–16/day unseen. Runbook: docs/deployment.md § Runbooks, Request flood."
+  type        = number
+  default     = 0.5
+  validation {
+    condition     = var.cloudfront_bytes_alarm_gb_per_5min >= 0.1 && var.cloudfront_bytes_alarm_gb_per_5min <= 2
+    error_message = "Between 0.1 GB and 2 GB per 5 minutes (at 2 an unseen pull costs ~$50–63 a day, most of the monthly budget in two days)."
+  }
+}
+
 # The request-flood alarm (alarms.tf cloudfront_requests). A flood that stays
 # just under it goes unseen, so the ceiling is set by what that costs: every
 # allowed request is billed by WAF ($0.60/M) and CloudFront ($1.00/M at
@@ -296,9 +321,9 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 90 sits above af-south-1's ~$59–64 idle (infra/README.md § Cost), so ACTUAL 80% ($72) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 100 sits above af-south-1's ~$68–75 idle (infra/README.md § Cost), so ACTUAL 80% ($80) doesn't fire at idle; ~70 fits us-east-1 (~$56 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 90
+  default     = 100
 
   validation {
     condition     = var.budget_monthly_usd >= 0
@@ -309,7 +334,7 @@ variable "budget_monthly_usd" {
 # The daily budget is the first-month guard: the monthly FORECASTED alert needs
 # ~5 weeks of history, and daily budgets support ACTUAL notifications only.
 variable "budget_daily_usd" {
-  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $7 on $90, ~3.5× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $8 on $100, ~3.3× af-south-1's ~$2.40/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
   type        = number
   default     = null
 
@@ -380,6 +405,12 @@ variable "delineation_dem" {
   default     = false
 }
 
+variable "dam_trace_water" {
+  description = "Tracing a dam in production (docs/maps.md § Assisted drawing, docs/deployment.md § Map tiles): true sets the API's WATER_URL to s3://<tiles bucket>/tiles/water.pmtiles and lets its role read that one key. Turn it on once water.pmtiles (JRC Global Surface Water, `pnpm dev:tiles:water`) is uploaded. false (the default): no Trace a dam."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_reserved_concurrency" {
   description = <<-EOT
     Max concurrent API Lambda executions. Bounds worst-case spend during an
@@ -400,7 +431,7 @@ variable "lambda_reserved_concurrency" {
 }
 
 variable "migrate_memory_mb" {
-  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches or land-cover cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
+  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches, land-cover cells or evaporation cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
   type        = number
   default     = 3008
   validation {

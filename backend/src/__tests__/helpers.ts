@@ -5,7 +5,7 @@ import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
 import { withUser } from '../db/tx.js';
-import { RETIRE_PENDING_JOBS_SQL } from './pendingJobs.js';
+import { RETIRE_PENDING_JOBS_SQL, settlePendingNoticesSql } from './pendingJobs.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
@@ -171,6 +171,20 @@ export async function asOwner(sql: string, params: unknown[] = []) {
 export async function retirePendingJobs(...projectIds: (string | undefined)[]) {
 	const ids = projectIds.filter((id): id is string => !!id);
 	if (ids.length) await asOwner(`${RETIRE_PENDING_JOBS_SQL} AND project_id = ANY($1::uuid[])`, [ids]);
+}
+
+/**
+ * Settle the notice emails a file queued for these projects without sending
+ * them: "pack issued / withdrawn" (133_pack_notices), "known engine bug"
+ * (153_erratum_notices) and alert deliveries (051_alerts, a digest-waiting one
+ * included). Test cleanup, as retirePendingJobs is for jobs: the tick sends
+ * every pending notice in the shared database, so one left behind lands in a
+ * later file's outbox, and db-setup.ts fails the file that left it.
+ */
+export async function settlePendingNotices(...projectIds: (string | undefined)[]) {
+	const ids = projectIds.filter((id): id is string => !!id);
+	if (!ids.length) return;
+	for (const sql of settlePendingNoticesSql('AND project_id = ANY($1::uuid[])')) await asOwner(sql, [ids]);
 }
 
 /**

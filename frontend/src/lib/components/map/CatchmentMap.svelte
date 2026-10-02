@@ -28,6 +28,12 @@
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
 	and leaves everything else drawn.
+	A start or divide proposal (`proposal` with `pieces`, #326 C3's follow-up)
+	is drawn piece by piece, each with its number as a badge (hidden from
+	assistive technology: the sheet's cards carry the numbers and are the
+	key); the piece in `proposal.highlight` is lit, and a piece or badge under
+	the pointer reports itself (`onpiecehover`, its name over the top-left
+	corner) and a click on one opens its card (`onpiecepick`).
 -->
 <script module lang="ts">
 	import type { MapFeatureKind } from '$lib/api/types';
@@ -48,14 +54,21 @@
 
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { base } from '$app/paths';
 	import type { MapFeature } from '$lib/api/types';
+	import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
+	import { creditedFeature } from './mapLayers';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import {
 		basemapLayerIds,
 		mapStyle,
 		overlayColours,
 		overlayData,
+		PIECE_HIT_LAYER,
+		labelColours,
+		pieceTints,
+		proposalColour,
 		proposalData,
 		QUATERNARY_HIT_LAYER,
 		quaternaryData,
@@ -64,6 +77,10 @@
 		reliefLayer,
 		RIVER_NETWORK_HIT_LAYER,
 		riverNetworkData,
+		RIVERS_CREDIT_LAYER,
+		RIVERS_CREDIT_SOURCE,
+		riversCredit as riversCreditLink,
+		riversCreditSource,
 		TERRAIN_SOURCE,
 		terrainSource,
 		type NetworkReach,
@@ -73,6 +90,7 @@
 	import { attachDrawing } from './draw/attachDrawing';
 	import type { Draft } from './draw/draft.svelte';
 	import { DRAFT_SOURCE, draftData, draftLayers } from './draw/drawLayers';
+	import type { ProposalPiece } from './pieces';
 	const ENGLISH: MapWords = {
 		loading: 'Drawing the map…',
 		unavailable: 'The map can’t be drawn in this browser (it needs WebGL). Everything on it is in the list, and every action works from there.',
@@ -92,17 +110,21 @@
 		words = ENGLISH,
 		draft = null,
 		onstatus,
+		onview,
 		glyphs = null,
 		quaternaries = null,
 		pickedQuaternary = null,
 		onquaternary,
 		rivers = null,
+		riversCredit = false,
 		pickedReach = null,
 		onreach,
 		terrainUrl = null,
 		relief = false,
 		onreliefError,
-		proposal = null
+		proposal = null,
+		onpiecehover,
+		onpiecepick
 	}: {
 		features: MapFeature[];
 		selectedId?: string | null;
@@ -119,6 +141,8 @@
 		draft?: Draft | null;
 		/** The map's state, for the tab (no WebGL: drawing falls back to pasting and typed coordinates). */
 		onstatus?: (s: 'loading' | 'ready' | 'failed') => void;
+		/** The map's view (west, south, east, north) on load and after every move: the River network layer asks for it while the project has no features. */
+		onview?: (bbox: [number, number, number, number]) => void;
 		/** What the map says, for a translated page (the farm view); English by default. */
 		words?: MapWords;
 		/** The glyphs URL, absolute (mapStyle.ts glyphsUrl): place and water names and the quaternaries' codes. Null: no labels, no glyphs fetched. */
@@ -131,6 +155,8 @@
 		onquaternary?: (code: string) => void;
 		/** The river network's reaches to draw (#345); null or empty: none. */
 		rivers?: readonly NetworkReach[] | null;
+		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
+		riversCredit?: boolean;
 		/** The reach picked in the tab's list, drawn heavier. */
 		pickedReach?: string | null;
 		/** A click on a reach where no feature is: its key. */
@@ -141,12 +167,21 @@
 		relief?: boolean;
 		/** The DEM couldn't be read: the relief is dropped, the rest of the map stays. */
 		onreliefError?: () => void;
-		/** A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet. */
-		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition } | null;
+		/**
+		 * A delineated catchment waiting for a decision (#326 B-delineate): drawn dashed over the features, with its outlet.
+		 * With `pieces` (a start or divide proposal, pieces.ts), each piece apart with its number, `highlight` the one lit.
+		 */
+		proposal?: { id: string; geometry: MapGeometry; outlet: MapPosition; pieces?: readonly ProposalPiece[]; highlight?: string | null } | null;
+		/** The pointer is over a piece or its number (its key), or has left them (null). */
+		onpiecehover?: (key: string | null) => void;
+		/** A piece or its number was clicked (where no feature is): its key. */
+		onpiecepick?: (key: string) => void;
 	} = $props();
 
 	let el: HTMLDivElement;
 	let status = $state<'loading' | 'ready' | 'failed'>('loading');
+	/** The view (west,south,east,north) after the last move, on the wrapper as `data-view`: a settled-map signal for tests. */
+	let view = $state('');
 	$effect(() => onstatus?.(status));
 	const drawing = $derived(!!draft?.active);
 	/** The map's canvas has the keyboard focus: the crosshair shows (drawing by keyboard). */
@@ -161,6 +196,15 @@
 	let lib: Lib | null = null;
 	let map: InstanceType<Lib['MapLibreMap']> | null = null;
 	const markers = new Map<string, { marker: InstanceType<Lib['Marker']>; button: HTMLButtonElement; key: string }>();
+	/** The proposal's pieces' numbers, by piece key. */
+	const badges = new Map<string, { marker: InstanceType<Lib['Marker']>; el: HTMLSpanElement; key: string }>();
+	/** The piece under the pointer: its name shows over the top-left corner. */
+	let hoverPiece = $state<ProposalPiece | null>(null);
+	function hoverOn(p: ProposalPiece | null) {
+		if (p?.key === hoverPiece?.key) return;
+		hoverPiece = p;
+		onpiecehover?.(p?.key ?? null);
+	}
 	let dark = $state(typeof matchMedia === 'function' && typeof document !== 'undefined' && appIsDark());
 	const colours = $derived(overlayColours(dark));
 	const picked = $derived(selectedId ? features.find((f) => f.id === selectedId) : undefined);
@@ -238,25 +282,104 @@
 		}
 	}
 
+	/** The proposal's pieces' numbers: one badge each, at a point inside its piece (or the unit's point), lit with its piece. */
+	function syncBadges() {
+		if (!map || !lib) return;
+		const pieces = proposal?.pieces ?? [];
+		const keep = new Set(pieces.map((p) => p.key));
+		for (const [k, b] of badges) {
+			if (!keep.has(k)) {
+				b.marker.remove();
+				badges.delete(k);
+			}
+		}
+		const tints = pieceTints(dark);
+		for (const p of pieces) {
+			const sig = `${p.label}|${p.at.join(',')}|${p.tint}|${p.geometry ? 1 : 0}`;
+			const had = badges.get(p.key);
+			if (had && had.key === sig) {
+				had.el.dataset.lit = String(p.key === proposal?.highlight);
+				continue;
+			}
+			had?.marker.remove();
+			const el = document.createElement('span');
+			el.className = 'piece-badge';
+			el.textContent = p.label;
+			el.setAttribute('aria-hidden', 'true');
+			el.dataset.piece = p.key;
+			el.dataset.lit = String(p.key === proposal?.highlight);
+			if (p.tint >= 0) el.style.setProperty('--piece-tint', tints[p.tint]!);
+			el.addEventListener('mouseenter', () => !draft?.active && hoverOn(p));
+			el.addEventListener('mouseleave', () => hoverOn(null));
+			el.addEventListener('click', (e) => {
+				e.stopPropagation();
+				if (!draft?.active) onpiecepick?.(p.key);
+			});
+			// A unit with no land (a gauge, a user) has its number beside its point, not on it: its marker stays visible and clickable.
+			const marker = new lib.Marker({ element: el, offset: p.geometry ? [0, 0] : [20, -20] })
+				.setLngLat(p.at as [number, number])
+				.addTo(map);
+			badges.set(p.key, { marker, el, key: sig });
+		}
+	}
+
 	/** The draft's source and layers, after every style load (a theme switch replaces the style). */
 	function ensureDraft() {
 		if (!map || map.getSource(DRAFT_SOURCE)) return;
 		map.addSource(DRAFT_SOURCE, { type: 'geojson', data: draftData(draftView()) as never });
 		for (const l of draftLayers(dark)) map.addLayer(l as never);
 	}
-	const draftView = () => (draft?.active ? { shape: draft.shape, coords: draft.coords, phase: draft.phase, whole: draft.whole, cursor: draft.cursor, corner: draft.corner } : null);
+	const draftView = () => {
+		if (!draft?.active) return null;
+		const split = draft.splitResult;
+		return {
+			shape: draft.shape,
+			coords: draft.coords,
+			phase: draft.phase,
+			whole: draft.whole,
+			cursor: draft.cursor,
+			corner: draft.corner,
+			snap: draft.snapHint?.at ?? null,
+			parts: split && 'parts' in split ? split.parts : null
+		};
+	};
+
+	/** Hand one GeoJSON source its data (MapLibre re-tiles the whole source in its worker, so only a source whose input changed is sent). */
+	function setSource(id: string, data: () => unknown) {
+		if (!map || status !== 'ready') return;
+		(map.getSource(id) as { setData?: (d: unknown) => void } | undefined)?.setData?.(data());
+	}
+	const syncFeatures = () => setSource('features', () => overlayData(features, selectedId, fills));
+	const syncQuaternaries = () => setSource('quaternaries', () => quaternaryData(quaternaries, pickedQuaternary));
+	const syncProposal = () => setSource('proposal', () => proposalData(proposal));
+	const syncRivers = () => setSource('rivers', () => riverNetworkData(rivers, pickedReach));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
-		const src = map.getSource('features') as { setData?: (d: unknown) => void } | undefined;
-		src?.setData?.(overlayData(features, selectedId, fills));
-		const qt = map.getSource('quaternaries') as { setData?: (d: unknown) => void } | undefined;
-		qt?.setData?.(quaternaryData(quaternaries, pickedQuaternary));
-		const pr = map.getSource('proposal') as { setData?: (d: unknown) => void } | undefined;
-		pr?.setData?.(proposalData(proposal));
-		const rn = map.getSource('rivers') as { setData?: (d: unknown) => void } | undefined;
-		rn?.setData?.(riverNetworkData(rivers, pickedReach));
+		syncFeatures();
+		syncQuaternaries();
+		syncProposal();
+		syncRivers();
 		syncMarkers();
+		syncBadges();
+	}
+
+	// The credit shows while the layer draws HydroRIVERS reaches (`riversCredit`) or a river added from one is drawn.
+	const featuresCredited = $derived(features.some(creditedFeature));
+	const riversCreditHtml = () => (riversCredit || featuresCredited ? riversCreditLink(`${base}/data-sources`, HYDRORIVERS_MAP_ATTRIBUTION) : null);
+
+	/** Add or drop the river network's credit on the live map, to match the reaches drawn (a style load carries it already). */
+	function syncRiversCredit() {
+		if (!map || status !== 'ready') return;
+		const html = riversCreditHtml();
+		const has = !!map.getLayer(RIVERS_CREDIT_LAYER.id);
+		if (html && !has) {
+			if (!map.getSource(RIVERS_CREDIT_SOURCE)) map.addSource(RIVERS_CREDIT_SOURCE, riversCreditSource(html) as never);
+			map.addLayer(RIVERS_CREDIT_LAYER as never);
+		} else if (!html && has) {
+			map.removeLayer(RIVERS_CREDIT_LAYER.id);
+			map.removeSource(RIVERS_CREDIT_SOURCE);
+		}
 	}
 
 	/** Add or drop the relief on the live map, to match the Relief layer (a style load carries it already). */
@@ -265,7 +388,7 @@
 		const url = reliefUrl();
 		const has = !!map.getLayer(RELIEF_LAYER);
 		if (url && !has) {
-			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url) as never);
+			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url, `${base}/data-sources`) as never);
 			map.addLayer(reliefLayer(dark) as never, reliefBeforeId(map.getStyle().layers.map((l) => l.id)));
 		} else if (!url && has) {
 			map.removeLayer(RELIEF_LAYER);
@@ -287,6 +410,8 @@
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
 						terrain: reliefUrl(),
+						riversCredit: riversCreditHtml(),
+						dataSourcesHref: `${base}/data-sources`,
 						proposal: proposalData(proposal)
 					});
 				const style = styleNow();
@@ -333,8 +458,16 @@
 					ensureDraft();
 					syncOverlay();
 				});
+				const reportView = () => {
+					const b = m.getBounds();
+					const v: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+					view = v.map((x) => x.toFixed(4)).join(',');
+					onview?.(v);
+				};
+				m.on('moveend', reportView);
 				m.on('load', () => {
 					ensureDraft();
+					reportView();
 					m.on('click', OVERLAY_CLICKABLE, (e: { features?: { properties?: { id?: string } }[] }) => {
 						// Drawing: a click shapes the draft, it doesn't pick what's under it.
 						if (draft?.active) return;
@@ -345,6 +478,10 @@
 					m.on('click', (e: { point: { x: number; y: number } }) => {
 						if (draft?.active) return;
 						if (m.queryRenderedFeatures(e.point as never, { layers: OVERLAY_CLICKABLE.filter((l) => m.getLayer(l)) }).length) return;
+						if (onpiecepick && m.getLayer(PIECE_HIT_LAYER)) {
+							const key = m.queryRenderedFeatures(e.point as never, { layers: [PIECE_HIT_LAYER] })[0]?.properties?.key;
+							if (typeof key === 'string') return onpiecepick(key);
+						}
 						if (onreach && m.getLayer(RIVER_NETWORK_HIT_LAYER)) {
 							const key = m.queryRenderedFeatures(e.point as never, { layers: [RIVER_NETWORK_HIT_LAYER] })[0]?.properties?.key;
 							if (typeof key === 'string') return onreach(key);
@@ -361,12 +498,26 @@
 							if (!draft?.active) m.getCanvas().style.cursor = '';
 						});
 					}
+					// A piece under the pointer lights its card, and says its name over the corner.
+					m.on('mousemove', PIECE_HIT_LAYER, (e: { features?: { properties?: { key?: string } }[]; originalEvent?: Event }) => {
+						// Over a number, the number's piece is the one meant (a gauge's number sits on the piece below it).
+						if (draft?.active || (e.originalEvent?.target as Element | null)?.closest?.('.piece-badge')) return;
+						const key = e.features?.[0]?.properties?.key;
+						hoverOn(proposal?.pieces?.find((p) => p.key === key) ?? null);
+						m.getCanvas().style.cursor = onpiecepick ? 'pointer' : '';
+					});
+					m.on('mouseleave', PIECE_HIT_LAYER, (e: { originalEvent?: Event }) => {
+						if ((e.originalEvent as MouseEvent | undefined)?.relatedTarget instanceof Element && ((e.originalEvent as MouseEvent).relatedTarget as Element).closest('.piece-badge')) return;
+						hoverOn(null);
+						if (!draft?.active) m.getCanvas().style.cursor = '';
+					});
 					// The crosshair is for the keyboard: shown when the focus came by keyboard (focus-visible), not after a click.
 					m.getCanvas().addEventListener('focus', () => (keyFocus = m.getCanvas().matches(':focus-visible')));
 					m.getCanvas().addEventListener('keydown', () => (keyFocus = true));
 					m.getCanvas().addEventListener('blur', () => (keyFocus = false));
 					status = 'ready';
 					syncMarkers();
+					syncBadges();
 				});
 			} catch {
 				// No WebGL (a locked-down browser, some headless ones): the list does everything the map does.
@@ -378,22 +529,41 @@
 			stopTheme?.();
 			for (const m of markers.values()) m.marker.remove();
 			markers.clear();
+			for (const b of badges.values()) b.marker.remove();
+			badges.clear();
 			map?.remove();
 			map = null;
 		};
 	});
 
-	// Redraw when the features or the selection change.
+	// Redraw each source when its own inputs change, never the others: hovering a piece (a new `proposal`
+	// highlight) or picking a reach must not re-send every feature, quaternary and reach (~2 MB at 60 units
+	// and 1000 reaches) to MapLibre's worker to be re-tiled (perf-hunt, round 4).
 	$effect(() => {
 		void features;
 		void selectedId;
 		void fills;
+		void status;
+		syncFeatures();
+		untrack(syncMarkers);
+	});
+	$effect(() => {
 		void quaternaries;
 		void pickedQuaternary;
+		void status;
+		syncQuaternaries();
+	});
+	$effect(() => {
 		void proposal;
+		void status;
+		syncProposal();
+		untrack(syncBadges);
+	});
+	$effect(() => {
 		void rivers;
 		void pickedReach;
-		syncOverlay();
+		void status;
+		syncRivers();
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.
@@ -410,6 +580,14 @@
 		void relief;
 		void status;
 		untrack(syncRelief);
+	});
+
+	// HydroRIVERS reaches drawn or gone: their credit with them.
+	$effect(() => {
+		void riversCredit;
+		void featuresCredited;
+		void status;
+		untrack(syncRiversCredit);
 	});
 
 	// Selecting in the list frames the feature (instantly under prefers-reduced-motion).
@@ -453,6 +631,9 @@
 		src?.setData?.(draftData(v));
 	});
 
+	/** With snapping on (#326 C2): how Enter snaps, and how to place exactly. */
+	const snapKeys = (d: Draft) => (d.snapOn && d.snapTargets.length ? ' (on the nearest feature’s corner or edge within reach; Alt+Enter places it exactly)' : '');
+
 	// The canvas says what the keys do while drawing.
 	const keysHelp = $derived(
 		!draft?.active
@@ -460,9 +641,9 @@
 			: 'measuring' in draft
 				? `${label}, measuring: the arrow keys move the map under the crosshair, Enter adds a point there, Backspace removes the last, Escape ends the measurement`
 				: draft.shape === 'point'
-					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there, Escape cancels`
+					? `${label}, placing a point: the arrow keys move the map under the crosshair, Enter places the point there${snapKeys(draft)}, Escape cancels`
 					: draft.phase === 'drawing'
-						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there, Backspace removes the last, Escape cancels (asking first once two are placed)`
+						? `${label}, drawing: the arrow keys move the map under the crosshair, Enter adds a ${draft.cornerWord.one} there${snapKeys(draft)}, Backspace removes the last, Escape cancels (asking first once two are placed)`
 						: `${label}, adjusting the drawing: the arrow keys pan, Escape cancels (asking first if it would discard your changes); pick a ${draft.cornerWord.one} on the map to remove it with Delete`
 	);
 	$effect(() => {
@@ -479,6 +660,7 @@
 
 <div
 	class="map-wrap"
+	data-view={view || undefined}
 	class:fill
 	class:drawing
 	data-status={status}
@@ -487,6 +669,8 @@
 	style:--mk-other={colours.other}
 	style:--mk-water={colours.water}
 	style:--mk-selected={colours.selected}
+	style:--mk-proposal={proposalColour(dark)}
+	style:--mk-badge-text={labelColours(dark).text}
 >
 	<div class="map" role="region" aria-label={label} bind:this={el} data-testid="catchment-map" data-drawing={drawing ? draft?.phase : undefined}>
 		{#if status === 'ready' && drawing && keyFocus && !aimAtPointer}
@@ -494,7 +678,13 @@
 			<span class="crosshair" aria-hidden="true" data-testid="map-crosshair"></span>
 		{/if}
 	</div>
-	{#if status === 'ready' && picked && !drawing}
+	{#if status === 'ready' && hoverPiece && !drawing}
+		<!-- Hidden from assistive tech, as the picked name: the sheet's cards say each piece's number and name. -->
+		<p class="picked-name" aria-hidden="true" data-testid="map-piece-name">
+			<span class="picked-kind">{hoverPiece.label === 'R' ? 'Proposed piece R' : `Proposed piece ${hoverPiece.label}`}</span>
+			<span class="picked-label">{hoverPiece.name}</span>
+		</p>
+	{:else if status === 'ready' && picked && !drawing}
 		<!-- Hidden from assistive tech: every way to pick (the list's buttons, a point's button) already says which is pressed; this repeats the name for the eye. -->
 		<p class="picked-name" aria-hidden="true" data-testid="map-picked-name">
 			<span class="picked-kind">{words.kind(picked.kind)}</span>
@@ -628,6 +818,30 @@
 		box-shadow: var(--shadow);
 		pointer-events: none;
 		line-height: 1.3;
+	}
+	/* A proposal piece's number (pieces.ts): its tint as a band under the number, on the casing, so it reads on any basemap; lit with its piece. */
+	.map :global(.piece-badge) {
+		display: grid;
+		place-items: center;
+		min-width: 24px;
+		height: 24px;
+		padding: 0 4px;
+		box-sizing: border-box;
+		border-radius: 12px;
+		border: 2px solid var(--mk-proposal);
+		background: linear-gradient(var(--mk-casing), var(--mk-casing)) padding-box;
+		box-shadow: inset 0 -5px 0 var(--piece-tint, var(--mk-proposal));
+		color: var(--mk-badge-text);
+		font: 700 0.8rem/1 var(--font, system-ui, sans-serif);
+		cursor: pointer;
+	}
+	.map :global(.piece-badge[data-lit='true']) {
+		border-color: var(--mk-selected);
+		border-width: 3px;
+	}
+	.drawing .map :global(.piece-badge) {
+		pointer-events: none;
+		opacity: 0.6;
 	}
 	.picked-kind {
 		font-size: 0.75rem;

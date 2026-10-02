@@ -12,7 +12,7 @@
 import type { ProjectModel } from '@water-management/engine';
 import type { Geometry, Position } from '../../src/geo/geojson.js';
 
-export type ExampleMapKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river';
+export type ExampleMapKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
 
 export interface ExampleMapFeature {
 	kind: ExampleMapKind;

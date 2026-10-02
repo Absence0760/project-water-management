@@ -248,12 +248,37 @@ own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
 title is the first `<title>` and these pages run no script to correct it
 (WCAG 2.4.2; `legal.spec.ts`). English
 only: the English text binds; the link labels to them are translated. Linked
-from the landing footer, under every sign-in form (a **Legal** nav in
+from the landing footer (with **Data sources**, below), under every sign-in form (a **Legal** nav in
 `AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
 **The short version**: the four main points of `lib/components/legal/termsSummary.ts`,
 the same list the sign-up form and the re-acceptance notice show translated
 (`TermsSummary.svelte`). Research-based wording the operator accepted without
 counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
+
+**Data sources and credits** (`/data-sources`, `routes/data-sources`, the
+same frame, prerendered; 2026-10-02): the third-party data the service
+serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
+DEM, HydroRIVERS, ESA WorldCover, JRC Global Surface Water (Trace a dam),
+dPET (the evaporation proposals), CHIRPS, the map's label fonts), each with
+what it is used for, its publisher, its licence (and the day it was read, "read on …") and the credit that licence
+asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
+Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit,
+"Source: EC JRC/Google" and dPET's line (the backend's `DPET.attribution`)
+(`lib/components/legal/dataCredits.ts`; `dataCredits.test.ts` checks each
+against [maps.md § Sources](./maps.md#sources), and dPET's against the backend's). A notice, not part of the
+terms, so changing it bumps no `LEGAL_VERSION`. Linked from the footer of
+the legal pages ("Data sources"), from Terms §9, and from the map's
+attribution control while HydroRIVERS reaches are drawn (the River network
+layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
+Inc. (2006-2022), used under license", linking to its section, and on any
+map, the farm map included, that draws a river added from a HydroRIVERS
+reach), and from the relief's credit ("licence notice", to the Copernicus
+section). Its line under the title is the latest day a licence was read
+(`LICENCES_READ`, the latest of the credits' `read` dates, each one a date
+the Sources table records). Also linked from the landing page's footer
+(**Data sources**, translated like its other links; 2026-10-03). The Terms'
+§9 clause on map data licensed to us (HydroRIVERS' end-user terms) points
+back here for the list of sources.
 
 **Sign-up assent.** Directly above the sign-up button (invitations
 included): a bordered box, **The main things you agree to**, with the four
@@ -287,8 +312,11 @@ the title and between the fields are tighter (0.5rem).
 signed-in account whose `termsCurrent` is false (it accepted an older
 version, or none) sees, on any app page, a full-page notice in the sign-in
 pages' frame instead (`auth-extras/TermsUpdate.svelte`, loaded by the root
-layout): **Our terms have changed**, what changed (a short list rewritten
-with each version), links to both pages, the same main points, **Accept the
+layout): **Our terms have changed**, what changed (every version's lines
+after the one the account accepted, `termsVersion` on `/auth/me`, all of
+them when it accepted none; kept version by version in
+`auth-extras/termsChanges.ts` `TERMS_CHANGES`, whose first entry a test
+ties to `LEGAL_VERSION`), links to both pages, the same main points, **Accept the
 new terms** (`POST /auth/me/accept-terms`) and **Sign out**. The URL stays
 the page asked for, which renders once accepted. The public pages (the legal
 pages, emailed links, share links) aren't held behind it. Translated.
@@ -1298,8 +1326,10 @@ for every workspace tab. Its own chunk.
   asks first (`confirmWords`: the unit, the old and new value, the source;
   "Use this capacity" / "Use this area"), saves that one value on the
   server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.") and
-  reloads the saved model and the proposals. Use is disabled while the model
+  the register of dams (Z100/07). Run the model to see its effect.", which
+  takes the keyboard, since the Use button is gone) and reloads the saved
+  model and the proposals. The frame is shared with land cover and
+  evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
   unit (with **Open the Map**), no register loaded (the loader's command),
@@ -2360,7 +2390,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
   covers** picker beside **+ Add window** adds one, off (factor 0), with a
-  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  starting point per span (Days of the week: every week on the ticked days, starting as weekends off, Sat and Sun ticked; Dates
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
@@ -2504,7 +2534,8 @@ map" card) stays the schematic; this is the geography.
   example-sandspruit-map-2026-10-01.geojson."; [maps.md §
   Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on), **Delineate** (with a DEM on the server; below) and
+  while it is on), **Delineate** (with a DEM on the server; below), **Trace
+  a dam** (with water occurrence data on the server; below) and
   **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
   (Dismiss), the no-basemap note (owners and editors only), and "No
@@ -2518,7 +2549,13 @@ map" card) stays the schematic; this is the geography.
   column and a window at least 620 px high the layout is a dashboard: exactly
   the height left below its measured top, less the 1rem gutter and the save
   bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
-  and the page doesn't scroll. Without WebGL the map says it can't be drawn
+  and the page doesn't scroll. In the side column the picked feature's card
+  (at most 55 %, at least 6rem while a feature is picked) and the layers box
+  (at most 35 %) each scroll in their box and give way, in proportion to
+  their size, before the list goes below 8rem; the checks line keeps its height (`map-layers.spec.ts` pins it at
+  1440×960 and 1280×800 with a feature and a reach picked; until
+  2026-10-02 the card held its full height and the column ran past a
+  1280×800 window). Without WebGL the map says it can't be drawn
   and the list does everything; when the tiles can't be read the map drops
   them and says so.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
@@ -2564,12 +2601,88 @@ map" card) stays the schematic; this is the geography.
   while the model has unsaved edits (a line says why) and reading **In use**
   when that feature's area is the unit's. **From**: the file it came in.
   **Edit the shape** (a single line or one-ring polygon) or **Move the
-  point** (editors) puts it in the drawing mode, and **Delete** asks first.
+  point** (editors) puts it in the drawing mode, **Split along a line**
+  (editors, a polygon of one outline; #326 C2, below) draws the cut, and
+  **Delete** asks first.
   With nothing picked: "Select a feature on the map or in the list to see it
-  here."; with nothing on the map, the empty state leads with drawing (#326
-  D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
-  the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
-  file (WGS84), or place a point.".
+  here."; with nothing on the map, the empty state leads with delineating
+  and drawing (#326 D4): with a DEM, "Nothing on the map yet. Start with the
+  catchment: delineate it from its outlet on the river, or draw its
+  boundary.", a primary **Delineate from the outlet** and **Draw the
+  boundary** (without one, "Start with the catchment boundary: draw it on
+  the map." and a primary **Draw the boundary**), then "Or upload it as a
+  GeoJSON file (WGS84), or place a point." and, for an editor of an empty
+  model, **Start the model from the map**.
+- **Start the model from the map** (editors, while the model has no nodes;
+  issue #326 C3, `StartSheet.svelte`, `startFlow.ts`, [maps.md § Start from
+  the map](./maps.md#start-from-the-map)). From the empty state's link, or
+  the header's **Start from the map** (**Review the proposed model** while
+  one is open, drawn dashed on the map). What the editor chose and ticked
+  is kept by the Map tab, so closing the sheet or leaving it for a tool
+  loses nothing; a tool opened from the sheet brings it back once it
+  saves, and one started any other way never does. A side sheet (`start=1`) with the steps listed at its
+  top (The boundary · The points · The proposal · Data and the first run,
+  the current one `aria-current="step"`), each read from the server:
+  **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
+  boundary**, **Upload a GeoJSON file**; each closes the sheet into that
+  tool, and the sheet opens again once it saves; with a gauge on the map
+  and no boundary, "go on to the points". **The points**: each dam, other
+  point and gauge with a select (A unit with a dam / A unit at an
+  abstraction point / Another water user (no land) / Not in the model; a
+  gauge: A gauge in the network (no land), the default, / Not in the model),
+  **Place a point** (into the drawing mode, back after the save), the
+  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
+  the rest of the catchment."), and **Propose the network**. **The
+  proposal** (drawn on the map piece by piece: each unit's piece tinted
+  with its number on it, the rest R): the catchment's
+  area, the warnings and dropped points, the outflow gauge's name, then one
+  card a unit: its number badge (the piece's number and tint, so the cards
+  are the map's key; the card with the focus or the pointer lights its
+  piece), its name, a gauge's "It measures … of the catchment above it",
+  and a tick for each value proposed (Area … saved
+  as its parcel; Drains into …; All of its own runoff reaches the dam),
+  every tick off at first; the rest of the catchment as a unit (a tick,
+  then its name and area); **Tick every value**; **How it was made**
+  (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
+  the reason by the names, while a name is empty or used twice),
+  which asks first ("The empty model gets 3 nodes, with 2 areas … It is
+  saved now as one change in History."). **Data and the first run**: links
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
+  area, the Network and **Run the model**. With nodes typed in, the sheet
+  says the model isn't started from the map and points to Divide the model.
+  With the sheet closed, a piece (or its number) under the pointer shows
+  "Proposed piece 2 / <name>" over the map's corner, a click on one opens
+  the sheet at its card, focused, and a line over the map ("A proposed
+  model is drawn on the map piece by piece, each piece tinted and numbered
+  as its card in the sheet (R: the rest of the catchment) …" with **Review
+  it**) says what the pieces are. The points step counts gauges apart ("1
+  unit and 1 gauge, plus the rest of the catchment.").
+- **Divide the model** (editors, a model with nodes, a DEM on the server;
+  #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
+  Start from the map](./maps.md#start-from-the-map)). **Divide the model**
+  at the end of the key row's first line under the map (an open division
+  is reviewed from the line over the map) opens a side
+  sheet (`divide=1`, "Divide the model from the map"), read from the
+  server: **the points**: each dam, other point and gauge with a select
+  (Not in the division / the nodes its kind may stand for / A new gauge
+  node for an unlinked gauge), a linked point on its node by default, "Two
+  points stand for …" refusing a node twice, **Place a point**, the outlet,
+  the count ("3 points in the division."), **Propose the division**; **the
+  proposal**: the warnings (dropped points, "No point stands for …: it keeps
+  its values", and, as the ticks and the rest's choice change, "After Apply
+  the units would add up to …, more than the … above the outlet, so some
+  land would count twice …" naming the units that keep a typed area,
+  `divideOverlap`, past 1 %), **Tick every value**, the problem the server would refuse
+  (`role="alert"`, Apply disabled while it stands), one card a point with
+  its number badge, the node's name (or "A new gauge" with **Add it to the
+  model as a gauge node** and its name), and a tick for each value with the
+  value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
+  All of its own runoff reaches the dam. Now: 50 %), "(the same)" when
+  equal; the rest of the catchment ("Its area goes to": Nobody / a unit /
+  A new unit, with its name); **How it was made**; **Discard** and **Apply
+  the ticked values** (asks first: "The model takes 2 areas …, 3 drains-into
+  … Every value not ticked stays as it is."). Without a DEM the sheet says
+  dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
@@ -2624,6 +2737,33 @@ map" card) stays the schematic; this is the geography.
   GeoJSON-or-WKT field, an example for the shape being drawn and the error
   in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
   is picked.
+- **Assisted drawing** (#326 C2; [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)). The draw bar has **Snap to
+  features** (on; for the rest of the tab once unticked) and, while a new
+  shape or line is drawn, **Follow edges**, with "Hold Alt to place one
+  corner exactly."; a ring on the map marks where the pointer would snap,
+  and the live region names it ("…, on “Upper farm”’s corner."; "(2
+  corners followed along it)"). The canvas's accessible name adds "(on the
+  nearest feature’s corner or edge within reach; Alt+Enter places it
+  exactly)". **Split along a line** heads the bar "Splitting “name”"
+  ("Click outside the shape (or on its edge), then across it, and finish
+  outside it …"); once the line is finished (or pasted) the two parts are
+  shaded and "Cut in two: parts of 5 and 7 corners." shows, or why it can't
+  be cut ("Draw the line right across the shape …"); **Split…** opens
+  **Split the shape** (a side sheet: what happens to the shape, for the
+  boundary "The parts are" Areas (sub-catchments to link to units) / Farm
+  parcels, each part's name with its area, **Back to the map**, **Split**),
+  and the notice says "Split Hill farm in two: “Hill farm” and “Hill farm
+  (part 2)”.". **Trace a dam** puts the map in the point-placing mode with
+  the bar headed "Tracing a dam" and "Water in at least [25 %] of the
+  observations"; **Trace the outline** (or **Enter coordinates**, which
+  opens **Trace a dam**, a side sheet with Latitude, Longitude, the share
+  and **Trace**) asks the server; a refusal shows its sentence (in the bar,
+  or the sheet). The outline becomes a Dam drawing in review, with a line
+  "Traced from …: water in at least 25 % of the observations, about 4.30
+  ha. A proposal: check it against the map before you save it." (", then
+  adjusted" once changed); **Save…** opens Save the drawing (kinds Dam and
+  Other area only), which says the method is saved with it.
 - **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
   Measure](./maps.md#measure)): the drawing mode with nothing saved. A
   **measure bar** over the map: "Measuring", how ("Click the map to add each
@@ -3021,8 +3161,9 @@ saves the catchment's model, and override mode there edits the scenario's
   area, the dataset, and that the land cover doesn't say what grows there or
   whether it is irrigated; "Use this area"), saves that one value on the
   server, shows a notice ("Orchard’s planted area on Upper farm is now
-  51.73 ha, from land cover. Run the model to see its effect.") and reloads
-  the saved model and the summary. Use is disabled while the model has
+  51.73 ha, from land cover. Run the model to see its effect.", which takes
+  the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
+  saved model and the summary. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
@@ -3841,7 +3982,8 @@ which checks every catchment tab).
     attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
     A-pan evaporation row**; editors) asks first (what reads the values, and
     that an earlier GR4J fit is marked "Forcing changed since fit"), saves
-    the 12 values as one settings revision, says so in a notice, and the
+    the 12 values as one settings revision, says so in a notice (focused;
+    `proposals/ProposalPanel.svelte`'s frame), and the
     form reloads the saved settings (the PE kind switches to monthly, its
     source naming the dataset). Use waits, with the reason, while the form
     has unsaved changes. When the saved settings hold the proposal it says
@@ -4773,7 +4915,7 @@ read it before.
   restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
   [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
-  demand-object and other-user tables, once under the run summary with no
+  demand-object, river-abstraction and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
@@ -5203,6 +5345,17 @@ read it before.
   the days it did, whole-run means. Drawn on Units & supply too, beside the
   curtailment table (which has no pump columns); the run Summary's Other uses
   line names it.
+- **River abstractions** (engine ≥ 1.65.0, only when a unit has a demand on
+  the river, model.md §2.7j; drawn after Demand objects, the unit tables
+  together, in the order the Summary's Other uses line names them): per
+  abstraction its unit, its name (**Crops** for the crops' take, whose
+  engine name repeats the unit), its pump capacity
+  ("no limit" without one), the mean it pumped and, with a pool, the pool's
+  capacity and mean storage; from engine 1.66.0, when one has a pump
+  capacity, the demand its pump left unmet while the river or its pool had
+  the water (`river_pump_limited@`) and the days it did ("–" for one without
+  a capacity). The summary CSV has the same block; the run Summary's Other
+  uses line names it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the

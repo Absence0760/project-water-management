@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { splitHalves } from '../__tests__/routeSamples.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -485,6 +486,16 @@ const WRITE_ROUTES: Entry[] = [
 		}
 	},
 	{
+		// A parcel cut in two along a drawn line (issue #326 C2): one event for the split, naming both parts.
+		route: `POST ${P}/map/features/:fid/split`,
+		records: ['map.feature_split'],
+		call: async (c) => {
+			const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
+			const made = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard split', geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/map/features/${made.body.feature.id}/split`, { parts: splitHalves(21.36, -33.66, 0.01) });
+		}
+	},
+	{
 		route: `DELETE ${P}/map/features/:fid`,
 		records: ['map.feature_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/map/features/${c.mapPointId}`)
@@ -518,6 +529,71 @@ const WRITE_ROUTES: Entry[] = [
 		route: `POST ${P}/map/delineation/:pid/accept`,
 		records: ['map.delineation_accepted'],
 		call: (c) => c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId3}/accept`, { as: 'other' })
+	},
+	// --- start a model from the map (178, issue #326 C3): on an empty project of its own ----
+	{
+		route: `POST ${P}/map/start`,
+		records: ['map.start_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+			c.startProject = (await c.owner.call('POST', '/projects', { name: 'Guard start' })).body.project.id;
+			const sat = `/projects/${c.startProject}`;
+			const [olon, olat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			const [dlon, dlat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 99.5);
+			const gauge = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'gauge', name: 'Guard weir', lon: olon, lat: olat })).body.feature.id;
+			const dam = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'dam', name: 'Guard dam', lon: dlon, lat: dlat })).body.feature.id;
+			const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+			const r = await c.owner.call('POST', `${sat}/map/start`, body);
+			c.startBody = body;
+			c.startId = (await c.owner.call('POST', `${sat}/map/start`, body)).body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/discard`,
+		records: ['map.start_discarded'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const r = await c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId}/discard`);
+			const again = await c.owner.call('POST', `/projects/${c.startProject}/map/start`, c.startBody);
+			c.startId2 = again.body.proposal?.id;
+			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: true }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/apply`,
+		records: ['map.start_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) =>
+			c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId2}/apply`, {
+				outletName: 'Guard weir',
+				units: c.startUnits,
+				rest: { include: true, name: 'Rest of the catchment', area: true }
+			})
+	},
+	// --- divide that model from the map (182): the dam's point stands for its unit now; the rest a new unit (a change, so a revision) ----
+	{
+		route: `POST ${P}/map/divide`,
+		records: ['map.divide_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const sat = `/projects/${c.startProject}`;
+			const features = (await c.owner.call('GET', `${sat}/map/features`)).body.features as { id: string; kind: string; nodeId: string | null }[];
+			const dam = features.find((f) => f.kind === 'dam')!;
+			const outlet = features.find((f) => f.kind === 'gauge')!;
+			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: dam.id, nodeId: dam.nodeId }] });
+			c.divideId = r.body.proposal?.id;
+			c.divideUnits = r.body.proposal?.plan.units.map((u: { key: string }) => ({ key: u.key, area: true, drainsInto: true, runoffToDam: false, add: false }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/divide/:spid/apply`,
+		records: ['map.divide_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.startProject}/map/divide/${c.divideId}/apply`, { units: c.divideUnits, rest: { to: 'new', name: 'Guard rest, divided' } })
 	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{
@@ -742,6 +818,7 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
+	{ route: `POST ${P}/map/dam-trace`, exempt: 'proposes a dam outline and saves nothing; a traced outline is recorded when it is saved (map.feature_created, from dam_trace)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
 	{
 		route: `POST ${P}/auto-calibrations`,
@@ -867,7 +944,11 @@ describe('every write route records its change', () => {
 	}, 60_000);
 
 	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render) and its re-run (pack_reproduce, 154_pack_reproduce); nothing here runs them, so no later file's tick may claim them.
-	afterAll(() => retirePendingJobs(ctx.packProjectId as string | undefined));
+	// Issuing and withdrawing it also queue its emails (pack_notice, 133): settled here, or the next file's tick sends them into its outbox.
+	afterAll(async () => {
+		await retirePendingJobs(ctx.packProjectId as string | undefined);
+		await settlePendingNotices(ctx.packProjectId as string | undefined);
+	});
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);
 	for (const e of recorded) {

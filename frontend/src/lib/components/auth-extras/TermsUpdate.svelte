@@ -17,21 +17,15 @@
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
 	import { errorText } from '$lib/i18n/apiError';
-	import { msg, t } from '$lib/i18n/locale.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
+	import { changesSince, TERMS_CHANGES } from './termsChanges';
 
-	// What changed in this version. Rewrite it whenever LEGAL_VERSION changes.
-	// Since 2026-10-01: the positions taken pending counsel (docs/legal-status.md, 2026-10-02): lawful bases and the
-	// right to object, deleted notes and invitation entries, restores, licence records' dates, registered water use outside
-	// the organisation, the organisation's privacy contact, and public comments on a licence application.
-	const CHANGES = [
-		msg('We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.'),
-		msg('A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.'),
-		msg('If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.'),
-		msg('Licence records, and the names they keep, are kept until a set date and then deleted.'),
-		msg('Outside the organisation, registered water use is shown only as totals, never with a name.'),
-		msg('Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.'),
-		msg('When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.')
-	];
+	// What changed since the version the account accepted (termsChanges.ts TERMS_CHANGES).
+	// Never an empty list under "What changed": an accepted version newer than the list's (a stale build) shows the newest.
+	const shown = $derived.by(() => {
+		const since = changesSince(TERMS_CHANGES, session.user?.termsVersion ?? null);
+		return since.length ? since : (TERMS_CHANGES[0]?.items ?? []);
+	});
 
 	let busy = $state(false);
 	let signingOut = $state(false);
@@ -75,7 +69,7 @@
 	<p>{t('Read what changed, then accept the new Terms of use and Privacy notice to carry on.')}</p>
 	<h2 class="changed">{t('What changed')}</h2>
 	<ul class="changes">
-		{#each CHANGES as change (change)}<li>{t(change)}</li>{/each}
+		{#each shown as change (change)}<li>{t(change)}</li>{/each}
 	</ul>
 	<p class="links">
 		<a href="{base}/terms">{t('Terms of use')}</a>

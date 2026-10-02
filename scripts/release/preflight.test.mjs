@@ -169,3 +169,48 @@ test('an active tag ruleset must stop creating, moving and deleting release tags
 	assert.match(/** @type {string} */ (tagRulesetProblem([ruleset({ conditions: { ref_name: { include: ['refs/tags/backend@*'] } } })])), /web@\* lacks/);
 	assert.match(/** @type {string} */ (tagRulesetProblem([ruleset({ conditions: { ref_name: { include: ['~ALL'], exclude: ['refs/tags/web@*'] } } })])), /web@\* lacks/);
 });
+
+// `environment` mode (load-reference.yml): the environment and config checks
+// alone, run end to end against a stand-in `gh` on PATH.
+test('environment mode: refuses a missing or unprotected environment, clears a protected one', async () => {
+	const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
+	const { join } = await import('node:path');
+	const { tmpdir } = await import('node:os');
+	const { spawnSync } = await import('node:child_process');
+	const { fileURLToPath } = await import('node:url');
+	const script = fileURLToPath(new URL('./preflight.mjs', import.meta.url));
+	const run = (/** @type {string} */ envAnswer, /** @type {Record<string, string>} */ extra = {}) => {
+		const dir = mkdtempSync(join(tmpdir(), 'preflight-'));
+		const gh = join(dir, 'gh');
+		// Answers the two calls environment mode makes: the environment, then its policies.
+		writeFileSync(
+			gh,
+			`#!/bin/sh\ncase "$*" in\n  *deployment-branch-policies*) printf 'branch main\\ntag backend@*\\ntag web@*\\n' ;;\n  *environments/production*) ${envAnswer} ;;\n  *) echo "unexpected gh $*" >&2; exit 1 ;;\nesac\n`
+		);
+		chmodSync(gh, 0o755);
+		const out = join(dir, 'out');
+		writeFileSync(out, '');
+		const r = spawnSync(process.execPath, [script, 'environment'], {
+			encoding: 'utf8',
+			env: { PATH: `${dir}:${process.env.PATH}`, GITHUB_REPOSITORY: 'o/r', GITHUB_OUTPUT: out, REQUIRED_CONFIG: 'MIGRATE_FUNCTION_NAME', MIGRATE_FUNCTION_NAME: 'fn', ...extra }
+		});
+		return { status: r.status, stdout: r.stdout, output: readFileSync(out, 'utf8') };
+	};
+	const protectedEnv = `echo '{"protection_rules":[{"type":"required_reviewers","reviewers":[{"type":"User"}]}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'`;
+
+	const ok = run(protectedEnv);
+	assert.equal(ok.status, 0, ok.stdout);
+	assert.match(ok.output, /deploy=true/);
+
+	const missing = run(`echo 'gh: Not Found (HTTP 404)' >&2; exit 1`);
+	assert.equal(missing.status, 1);
+	assert.match(missing.stdout, /does not exist/);
+
+	const noReviewer = run(`echo '{"protection_rules":[],"deployment_branch_policy":{"custom_branch_policies":true}}'`);
+	assert.equal(noReviewer.status, 1);
+	assert.match(noReviewer.stdout, /no required reviewer/);
+
+	const unconfigured = run(protectedEnv, { MIGRATE_FUNCTION_NAME: '' });
+	assert.equal(unconfigured.status, 1);
+	assert.match(unconfigured.stdout, /not configured: MIGRATE_FUNCTION_NAME/);
+});

@@ -223,6 +223,8 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
+	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
+	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
 	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
 	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
 	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
@@ -441,10 +443,10 @@ export const af: Catalogue = {
 	'100c3cb5': '{points} hoër in 30 dae (was {was})',
 	// Down {points} in 30 days (was {was})
 	'ef59dc0c': '{points} laer in 30 dae (was {was})',
-	// At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
-	'1cc72e56': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
-	// At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
-	'00f9df75': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
+	// At the use your dam carries over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
+	'3a3d3a40': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
+	// At the use your dam carries over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
+	'226e7cd7': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
 	// irrigation stops at {pct}
 	'e54e8052': 'besproeiing stop by {pct}',
 	// {storage} of {capacity}
@@ -1019,6 +1021,8 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
+	// Data sources
+	'51f21a4b': 'Databronne',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.

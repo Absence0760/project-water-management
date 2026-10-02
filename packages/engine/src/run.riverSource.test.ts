@@ -135,7 +135,9 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		// The unit's own supply-rule pump is the dam side's: there is none here.
 		expect(col(both, 'A', 'river_abstraction')).toBeUndefined();
 		const f = both.summary.farms.find((x) => x.nodeId === 'A')!;
-		expect(f.riverTakes).toEqual([{ key: 'town', name: 'town', avgTakeM3Day: 1000 / 3, pumpM3Day: 500 }]);
+		// Day 1 the river had 2000 below the dam and the pump took 500 of the town's 600: 100 pump-limited (engine ≥ 1.66.0).
+		close(col(both, 'A', 'river_pump_limited@town'), [0, 100, 0]);
+		expect(f.riverTakes).toEqual([{ key: 'town', name: 'town', avgTakeM3Day: 1000 / 3, pumpM3Day: 500, avgPumpLimitedM3Day: 100 / 3, daysPumpLimited: 1 }]);
 	});
 
 	it('the crops on the river leave the dam to the demand objects on it', () => {
@@ -234,6 +236,54 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		for (const k of [1, 7, 20]) expect(checkResume(i, k)).toBeNull();
 	});
 
+	it('records the demand each pump left unmet while the river or its pool had it (engine 1.66.0)', () => {
+		// 'first' (pump 100) ranks above 'last': the 1100 its level leaves was there for it, so 500 of its 600 is
+		// pump-limited although 'last' then takes 600 of that flow. 'last' (no pump limit) has no such series.
+		const objects = [obj('first', 600, { priority: 'first', waterSource: 'river', riverPumpM3Day: 100 }), obj('last', 600, { priority: 'last', waterSource: 'river', riverPumpM3Day: null })];
+		const o = run(input({}, objects, 0, 2), [1200, 50]);
+		passed(o);
+		close(col(o, 'A', 'river_take@first'), [100, 50]);
+		// Day 1: 50 in the river, pump not spent: the river is what limited it.
+		close(col(o, 'A', 'river_pump_limited@first'), [500, 0]);
+		expect(col(o, 'A', 'river_pump_limited@last')).toBeUndefined();
+		const f = o.summary.farms.find((x) => x.nodeId === 'A')!;
+		expect(f.riverTakes!.map((k) => [k.key, k.avgPumpLimitedM3Day, k.daysPumpLimited])).toEqual([
+			['first', 250, 1],
+			['last', undefined, undefined]
+		]);
+		// A pool counts: a dry river, a 300 m³/day pump drawing a 1000 m³ pool, 200 of the 500 left unmet while 700 is held.
+		const pooled = run(input({}, [obj('town', 500, { waterSource: 'river', riverPumpM3Day: 300, riverPoolM3: 1000 })], 0, 1), [0]);
+		passed(pooled);
+		close(col(pooled, 'A', 'river_take@town'), [300]);
+		close(col(pooled, 'A', 'river_pool@town'), [700]);
+		close(col(pooled, 'A', 'river_pump_limited@town'), [200]);
+		// A pump of 0 (no pump: a demand that can't pump) leaves all of it unmet while the river has it, never more
+		// than the river had: read it as "the river had this and there is no pump", not as a pump too small.
+		const none = run(input({}, [obj('town', 600, { waterSource: 'river', riverPumpM3Day: 0 })], 0, 2), [1000, 250]);
+		passed(none);
+		close(col(none, 'A', 'river_take@town'), [0, 0]);
+		close(col(none, 'A', 'river_pump_limited@town'), [600, 250]);
+		// Its own unit's dam side and the pump-limited figure change nothing else: the outflow is the run's without it.
+		close(col(none, 'A', 'outflow'), [1000, 250]);
+	});
+
+	it('the self-checks catch a pump-limited figure on a day the pump had room, above the shortfall, or above what the river had left', () => {
+		const make = () => input({}, [obj('town', 600, { waterSource: 'river', riverPumpM3Day: 500 })], 0, 3);
+		for (const [day, v] of [
+			[0, 50],
+			[1, 150],
+			[2, 100]
+		] as const) {
+			// Day 0 the river had only 300 (pump not spent); day 1 the shortfall is 100; day 2 the river's 500 and
+			// the pump ran out together, so nothing was left for it (an overstated figure, the costlier mistake).
+			const o = run(make(), [300, 1000, 500]);
+			passed(o);
+			o.series.find((x) => x.key === 'river_pump_limited@town')!.values[day] = v;
+			const again = withVerification(make(), { ...o, summary: { ...o.summary, verification: undefined } });
+			expect(again.summary.verification!.passed, `day ${day}`).toBe(false);
+		}
+	});
+
 	it('the self-checks catch a take tampered above its pump', () => {
 		const o = run(input({}, [obj('town', 600, { waterSource: 'river', riverPumpM3Day: 500 })], 0, 2), [1000, 1000]);
 		passed(o);
@@ -263,5 +313,28 @@ describe('water source per demand (engine 1.65.0, docs/model.md §2.7j)', () => 
 		const texts = diffInputs({ settings: ok.settings, model: ok.model, series: {} }, { settings: s.input.settings, model: s.input.model, series: {} }).map((c) => c.text);
 		expect(texts.some((t) => /crops’ pool at the river pump none → 2\s000 m³/.test(t))).toBe(true);
 		expect(texts.some((t) => /demand object "mill".*from a river abstraction \(pump 480 m³\/day, pool 3\s000 m³\) → .*from the unit’s supply \(a river pump 480 m³\/day, pool 3\s000 m³ kept, unused\)/.test(t))).toBe(true);
+	});
+});
+
+describe('a run with no A-pan on any day warns that open water evaporates nothing (engine 1.67.0, persona-hydrologist round 4)', () => {
+	const WARN = /A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation/;
+	const warned = (i: ModelInput) => runModelWith(i, () => ({ naturalFlowM3Day: [1000, 1000] })).summary.warnings.some((w) => WARN.test(w));
+
+	it('on a unit with a dam, or a river abstraction with a pool', () => {
+		expect(warned(input(dam, [], 0, 2))).toBe(true);
+		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null, riverPoolM3: 500 })], 0, 2))).toBe(true);
+		expect(warned(input({ cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 500 }, [], 0, 2))).toBe(true);
+	});
+
+	it('not with an A-pan on some day, nor without a dam or a pool', () => {
+		// The January A-pan set (input's `need`): the dam evaporates, nothing to say.
+		expect(warned(input(dam, [], 50, 2))).toBe(false);
+		// A daily A-pan series covers it as well as the monthly row.
+		const daily = input(dam, [], 0, 2);
+		daily.series.evap_apan_mm = { startDate: '2021-01-01', values: [5, 5] };
+		expect(warned(daily)).toBe(false);
+		expect(warned(input({}, [obj('town', 100, { waterSource: 'river', riverPumpM3Day: null })], 0, 2))).toBe(false);
+		// A pool on a demand that draws on the dam is inert: no pool.
+		expect(warned(input({}, [obj('town', 100, { riverPoolM3: 500 })], 0, 2))).toBe(false);
 	});
 });

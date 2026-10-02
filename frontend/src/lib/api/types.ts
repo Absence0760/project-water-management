@@ -88,6 +88,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The version of the terms the account accepted (app_user.terms_version); null = none. The re-acceptance step lists the changes since. */
+	termsVersion?: string | null;
 	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
 	renderSession?: boolean;
 	/**
@@ -2600,6 +2602,8 @@ export interface FarmMapFeature {
 	geometry: MapGeometry;
 	areaM2: number | null;
 	center: MapPosition;
+	/** The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS reach. */
+	credit?: 'hydrorivers';
 }
 
 /** GET /projects/:id/farm/:nodeId/map: empty when the farm has no parcel or dam of its own on the map. */
@@ -2648,6 +2652,36 @@ export interface MapFeatureInput {
 	lon?: number;
 	lat?: number;
 	geometry?: MapGeometry;
+	/** A dam outline traced from the water occurrence data (issue #326 C2): where and how, and whether it was adjusted after. POST only. */
+	traced?: { lon: number; lat: number; minOccurrence: MinOccurrence; edited: boolean };
+}
+
+/** The share of observations (%) a cell must be water in to count when tracing a dam (issue #326 C2). */
+export type MinOccurrence = 10 | 25 | 50 | 75;
+
+/** GET …/map/dam-trace: whether the server has water occurrence data, and which. */
+export interface DamTraceState {
+	available: boolean;
+	dataset: { label: string; attribution: string; fingerprint: string; maxZoom: number; bounds: [number, number, number, number] } | null;
+}
+
+/** POST …/map/dam-trace: the outline of the water round a click, proposed (nothing saved; docs/api.md § Catchment map). */
+export interface DamTraceProposal {
+	click: MapPosition;
+	/** The water cell the trace started from (the click, or the nearest water within about 60 m). */
+	seed: MapPosition;
+	snapDistanceM: number;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }>;
+	areaM2: number;
+	cells: number;
+	cellSizeM: number;
+	zoom: number;
+	minOccurrence: MinOccurrence;
+	dataset: string;
+	attribution: string;
+	datasetFingerprint: string;
+	method: string;
+	methodVersion: string;
 }
 
 /** One problem in an imported file (422 `details`): the feature's place from 1, or null for the file. */
@@ -2891,7 +2925,13 @@ export interface EvaporationProposals {
 	/** Null without a dataset or a boundary. */
 	proposal: EvaporationSummary | null;
 	/** The saved settings: the A-pan row, the PE kind and, under 'monthly', its row. */
-	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null };
+	/**
+	 * What the settings hold now, and the project's daily A-pan record's days
+	 * (series evap_apan_mm, first day to last value), which replaces the monthly
+	 * A-pan row on every day it covers; null without one. Absent from an
+	 * older server.
+	 */
+	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null; dailyApan?: { from: string; to: string } | null };
 	accepted: EvaporationAccepted[];
 }
 
@@ -2955,6 +2995,125 @@ export interface DelineationProposal {
 	createdAt: string;
 	decidedBy: string | null;
 	decidedAt: string | null;
+}
+
+/** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
+export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+
+/** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
+export interface StartUnit {
+	key: string;
+	featureName: string;
+	role: StartRole;
+	name: string;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	/** Its own sub-catchment's area (m²) and outline; null without an elevation model, and for a water user or a gauge (they own no land). */
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	/** The unit it drains into (its key), or null for the outflow gauge. */
+	drainsInto: string | null;
+	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
+	drainsIntoProposed: boolean;
+}
+
+/** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
+export interface StartPlan {
+	fromDem: boolean;
+	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null };
+	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
+	units: StartUnit[];
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number | null;
+	zoom: number | null;
+	windowCells: number | null;
+}
+
+/** The ticks an editor sends to apply a start proposal: every unit once, each value ticked or not. */
+export interface StartTicks {
+	outletName: string;
+	units: { key: string; name: string; area: boolean; drainsInto: boolean; runoffToDam: boolean }[];
+	rest: { include: boolean; name: string; area: boolean };
+}
+
+export interface StartProposal {
+	id: string;
+	mode: 'start';
+	status: 'proposed' | 'applied' | 'discarded' | 'superseded';
+	plan: StartPlan;
+	fromDem: boolean;
+	dataset: string | null;
+	datasetFingerprint: string | null;
+	method: string;
+	methodVersion: string;
+	decision: unknown;
+	createdBy: string | null;
+	createdAt: string;
+	decidedBy: string | null;
+	decidedAt: string | null;
+}
+
+/** A node's values a division would replace, as they stood when it was proposed (182, docs/api.md § Start from the map). */
+export interface DivideCurrent {
+	areaKm2: number;
+	areaSource: 'typed' | 'map';
+	downstreamNodeId: string | null;
+	downstreamName: string | null;
+	pctRunoffToDam: number;
+}
+
+/** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
+export interface DivideUnit {
+	key: string;
+	featureName: string;
+	nodeId: string | null;
+	name: string;
+	role: StartRole;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	drainsInto: string | null;
+	current: DivideCurrent | null;
+}
+
+/** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
+export interface DividePlan {
+	mode: 'divide';
+	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' };
+	catchment: { areaM2: number; boundaryAreaM2: number | null };
+	units: DivideUnit[];
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	untouched: { nodeId: string; name: string; areaKm2: number }[];
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number;
+	zoom: number;
+	windowCells: number;
+}
+
+/** The ticks an editor sends to apply a division: every point once. */
+export interface DivideTicks {
+	units: { key: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
+	rest: { to: 'none' } | { to: 'node'; nodeId: string } | { to: 'new'; name: string };
+}
+
+export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {
+	mode: 'divide';
+	plan: DividePlan;
+}
+
+/** GET …/map/start: whether the server has a DEM, whether the model is empty or was started from the map, and the latest proposals of either mode (newest first). */
+export interface StartState {
+	elevation: boolean;
+	dataset: DelineationState['dataset'];
+	modelEmpty: boolean;
+	startedFromMap: boolean;
+	proposals: (StartProposal | DivideProposal)[];
 }
 
 /** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */

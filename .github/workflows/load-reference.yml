@@ -8,18 +8,28 @@ name: Load a reference dataset
 # SHA-256 given here, and replaces that dataset (backend/src/geo/referenceLoad.ts).
 #
 # Only the kinds docs/maps.md § Sources marks allowed load: land-cover (ESA
-# WorldCover) and rivers (HydroRIVERS, once HydroSHEDS' Exhibit B statement is
-# in the app's legal text). Quaternaries, the register of dams and the gauging
+# WorldCover), evaporation (dPET's reference ET) and rivers (HydroRIVERS, once
+# HydroSHEDS' Exhibit B statement and the Terms' clause on map data licensed to
+# us are in the app's legal text, scripts/release/map-data-gates.mjs).
+# Quaternaries, the register of dams and the gauging
 # stations stay blocked by their licences; the input offers only the allowed
 # kinds, the check job refuses the rest, and so does the Lambda.
 #
-# Two jobs, as in the deploy workflows:
-#   check  no AWS: the inputs' shapes and the licence gates
-#          (scripts/release/map-data-gates.mjs load), before anyone approves.
-#   load   `environment: production` (a required reviewer, then OIDC: the
-#          deploy role's trust policy pins that environment): invokes the
-#          migrate Lambda with { load: … } and prints counts only. The log is
-#          public (the repo is); the Lambda's detail stays in CloudWatch.
+# Three jobs, as in the deploy workflows:
+#   check      no AWS: the inputs' shapes and the licence gates
+#              (scripts/release/map-data-gates.mjs load), before anyone approves.
+#   preflight  no environment, no AWS: the `production` environment exists,
+#              has a required reviewer and its branch policy
+#              (scripts/release/preflight.mjs environment). Naming an
+#              environment that doesn't exist would create it unprotected, and
+#              the approval below would silently not exist.
+#   load       `environment: production` (a required reviewer, then OIDC: the
+#              deploy role's trust policy pins that environment), from main
+#              only: invokes the migrate Lambda with { load: … } and prints
+#              counts only. The session is narrowed to invoking that one
+#              function (inline-session-policy), so the deploy role's other
+#              grants never reach this job. The log is public (the repo is);
+#              the Lambda's detail stays in CloudWatch.
 #
 # Prepare and upload first (docs/deployment.md § Reference datasets):
 #   pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz
@@ -27,6 +37,7 @@ name: Load a reference dataset
 #   aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldcover-2021.json.gz
 # then run:
 #   gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
+# Evaporation the same way, from `pnpm import:evaporation <years> --dataset <label> --out dpet.json.gz`.
 
 on:
   workflow_dispatch:
@@ -37,6 +48,7 @@ on:
         type: choice
         options:
           - land-cover
+          - evaporation
           - rivers
       key:
         description: 'Object key in the reference bucket: reference/<kind>/<file>'
@@ -51,7 +63,7 @@ on:
         required: true
         type: string
       source:
-        description: 'Rivers: the attribution stored on every reach (required). Land cover: overrides the file’s own'
+        description: 'Rivers: the attribution stored on every reach (required). Land cover, evaporation: overrides the file’s own'
         required: false
         type: string
         default: ''
@@ -97,9 +109,39 @@ jobs:
           LOAD_MIN_ORDER: ${{ inputs.min_order }}
         run: node scripts/release/map-data-gates.mjs load
 
+  preflight:
+    name: Preflight (environment, AWS config)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # read the production environment's protection rules
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Environment preflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRED_CONFIG: AWS_DEPLOY_ROLE_ARN,AWS_REGION,MIGRATE_FUNCTION_NAME
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
+        run: node scripts/release/preflight.mjs environment
+
   load:
     name: Load (migrate Lambda)
-    needs: [check]
+    needs: [check, preflight]
+    # From main only: the environment's branch policy allows main too, and
+    # the dispatch's own branch decides which checkout the check job read.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -115,6 +157,10 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           role-session-name: load-reference-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION }}
+          # Narrow the deploy role to the one call this job makes: a session
+          # policy can only take away (docs/security.md § Reference loads).
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"lambda:InvokeFunction","Resource":"arn:aws:lambda:${{ vars.AWS_REGION }}:*:function:${{ vars.MIGRATE_FUNCTION_NAME }}"}]}
 
       - name: Invoke the migrate Lambda with the load
         env:
@@ -158,5 +204,5 @@ jobs:
             echo "::error::The load failed; the dataset is as it was."
             exit 1
           fi
-          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|rivers)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
+          jq -r "$defs"'"Loaded \(.written | count) row(s) of \(.kind | safe("^(land-cover|evaporation|rivers)$")) as dataset \(.dataset | safe("^[A-Za-z0-9][A-Za-z0-9 ._-]{0,49}$"))",
             "Skipped (reasons in CloudWatch): \(.skipped | count)", "Below the Strahler order: \(.belowOrder | count)"' load-result.json

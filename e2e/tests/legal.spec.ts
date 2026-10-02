@@ -34,6 +34,7 @@ const TITLED = [
 	{ path: '/privacy', title: 'Privacy notice · Water Management' },
 	{ path: '/terms', title: 'Terms of use · Water Management' },
 	{ path: '/methods', title: 'How the model is checked · Water Management' },
+	{ path: '/data-sources', title: 'Data sources and credits · Water Management' },
 	{ path: '/welcome', title: 'Water Management: daily water balance for a catchment' }
 ];
 test('every prerendered page names itself, before and without any script', async ({ request, page }) => {
@@ -150,6 +151,7 @@ test('the header has only the logo, and the footer’s Contact opens the terms�
 test('the landing footer, the sign-in pages and the sign-up form link both pages', async ({ page }) => {
 	await page.goto('/');
 	const footer = page.getByRole('contentinfo');
+	await expect(footer.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/data-sources');
 	await footer.getByRole('link', { name: 'Privacy notice' }).click();
 	await expect(page).toHaveURL('/privacy');
 	await page.getByRole('link', { name: 'Water Management, home' }).click();
@@ -213,4 +215,45 @@ test('the trust strip links the methods page, which passes an a11y scan light an
 	await page.getByRole('contentinfo').getByRole('link', { name: 'Home' }).click();
 	await expect(page).toHaveURL('/');
 	await expect(page.getByRole('contentinfo').getByRole('link', { name: 'How the model is checked' })).toHaveAttribute('href', '/methods');
+});
+
+// The data sources page (/data-sources): the credit each third-party
+// dataset's licence asks for (lib/components/legal/dataCredits.ts; docs/maps.md
+// § Sources), the legal notice HydroRIVERS and the Copernicus DEM need before
+// production serves them. Linked from the legal pages' footer and Terms §9.
+test('/data-sources is prerendered HTML with each licence’s credit, reached from the terms, and passes an a11y scan', async ({ request, page }) => {
+	test.setTimeout(60_000);
+	const res = await request.get('/data-sources');
+	expect(res.status()).toBe(200);
+	const html = await res.text();
+	expect(html).toMatch(/<h1[^>]*>Data sources and credits<\/h1>/);
+	for (const text of [
+		'This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022)',
+		'The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30',
+		'© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium',
+		'© Protomaps © OpenStreetMap contributors',
+		'Source: EC JRC/Google',
+		'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0.'
+	])
+		expect(html, text).toContain(text);
+	await page.goto('/terms');
+	// §9 binds users to the end-user terms licensed map data needs (HydroRIVERS: no stand-alone copy, no reverse engineering).
+	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' })).toContainText(
+		'you may not decompile, reverse engineer or disassemble it'
+	);
+	await expect(page.locator('#third-party ~ p').filter({ hasText: 'Map data licensed to us.' }).getByRole('link', { name: 'data sources' })).toHaveAttribute('href', /^(\.)?\/data-sources$/);
+	await page.locator('#third-party + p').getByRole('link', { name: 'data sources' }).click();
+	await expect(page).toHaveURL('/data-sources');
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+			await page.setViewportSize(size);
+			await page.goto('/data-sources#hydrorivers');
+			await expect(page.getByRole('heading', { level: 2, name: '3. HydroRIVERS v1.0' })).toBeVisible();
+			await expectNoViolations(page);
+			await expectNoSidewaysScroll(page);
+		}
+	}
+	// The prerendered pages' links are relative (`base` is relative while prerendering).
+	await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', /^(\.)?\/data-sources$/);
 });

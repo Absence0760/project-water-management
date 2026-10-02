@@ -148,8 +148,11 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	const np = reviewer.page.getByRole('dialog', { name: 'New project' });
 	await expect(np.getByLabel('Belongs to').locator('option')).toHaveText(['Personal']);
 
-	// Promoted to member, they can.
+	// Promoted to member, they can. The select shows the new value before the
+	// server has saved it, so wait for the save itself.
+	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes(`/teams/${team.id}/members/`));
 	await page.getByLabel('Team role for Team reviewer').selectOption('member');
+	expect((await saved).ok()).toBe(true);
 	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('member');
 	await reviewer.page.goto(`/teams/${team.id}`);
 	await expect(reviewer.page.getByRole('link', { name: 'New project', exact: true })).toBeVisible();

@@ -42,12 +42,15 @@ describe('frontend: the tile variables', () => {
 
 describe('load: a reference load’s inputs', () => {
 	const landCover = { LOAD_KIND: 'land-cover', LOAD_KEY: 'reference/land-cover/worldcover-2021.json.gz', LOAD_SHA256: 'a'.repeat(64), LOAD_DATASET: 'WorldCover-2021-v200', LOAD_SOURCE: '', LOAD_MIN_ORDER: '1' };
+	const evaporation = { ...landCover, LOAD_KIND: 'evaporation', LOAD_KEY: 'reference/evaporation/dpet-1991-2020.json.gz', LOAD_DATASET: 'dPET-1991-2020' };
 	const rivers = { ...landCover, LOAD_KIND: 'rivers', LOAD_KEY: 'reference/rivers/hydrorivers-za.geojson.gz', LOAD_DATASET: 'HydroRIVERS-v10', LOAD_SOURCE: 'HydroRIVERS v1.0 © WWF' };
 
 	it('well-formed loads of the allowed kinds pass (rivers once Exhibit B is in the legal text)', () => {
 		assert.deepEqual(loadProblems(landCover, lacks), []);
 		assert.deepEqual(loadProblems(rivers, has), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'rivers']);
+		// dPET is CC BY 4.0: its attribution travels with the data (the dataset row), no legal-text sentence first.
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers']);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {
@@ -59,8 +62,16 @@ describe('load: a reference load’s inputs', () => {
 		}
 	});
 
-	it('rivers wait for HydroSHEDS’ Exhibit B statement, and need a source', () => {
+	it('rivers wait for HydroSHEDS’ Exhibit B statement and the Terms’ end-user clause, and need a source', () => {
 		assert.match(loadProblems(rivers, lacks).join('\n'), /Exhibit B/);
+		const exhibitOnly = (s) => s === REQUIRED_TEXT.rivers;
+		assert.deepEqual(
+			loadProblems(rivers, exhibitOnly).map((p) => /reverse engineering/.test(p)),
+			[true],
+			'Exhibit B alone is not enough: the end-user clause is refused on its own'
+		);
+		const termsOnly = (s) => s === REQUIRED_TEXT.riversTerms;
+		assert.match(loadProblems(rivers, termsOnly).join('\n'), /Exhibit B/);
 		assert.match(loadProblems({ ...rivers, LOAD_SOURCE: ' ' }, has).join('\n'), /need a source/);
 	});
 
@@ -89,6 +100,12 @@ describe('the legal text search', () => {
 		const fake = { 'a.svelte': '<p>The organisations … do not incur any\n\t\tliability for any use of the Copernicus WorldDEM-30.</p>' };
 		assert.equal(legalTextHas(REQUIRED_TEXT.terrain, Object.keys(fake), (f) => fake[f]), true);
 		assert.equal(legalTextHas(REQUIRED_TEXT.rivers, Object.keys(fake), (f) => fake[f]), false);
+	});
+
+	it('the Terms carry the end-user clause the rivers load waits for', () => {
+		const terms = frontendSources().filter((f) => f.endsWith('routes/terms/+page.svelte'));
+		assert.equal(terms.length, 1);
+		assert.equal(legalTextHas(REQUIRED_TEXT.riversTerms, terms), true);
 	});
 
 	it('the sentences are the licences’ own words (as docs/maps.md § Sources quotes them)', () => {

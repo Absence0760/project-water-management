@@ -36,6 +36,11 @@ import {
 	OFFTAKE_DEFAULTS,
 	runModel,
 	type CropDef,
+	type DemandObject,
+	type DemandObjectCategory,
+	type DemandObjectDestination,
+	type DemandObjectPriority,
+	type DemandScheduleWindow,
 	type DailySeries,
 	type Gr4jParams,
 	type ModelInput,
@@ -124,6 +129,34 @@ interface FarmSpec {
 	lossReturn?: number;
 	/** hectares per crop */
 	crops?: Record<string, number>;
+	/** The crops from a river abstraction of their own beside the dam (engine ≥ 1.65.0, docs/model.md §2.7j), not the dam. */
+	cropRiver?: RiverTakeSpec;
+}
+
+/** A river abstraction's pump (m³/day) and optional pool (m³, starts full). */
+interface RiverTakeSpec {
+	pumpM3Day: number;
+	poolM3?: number;
+}
+
+/** A demand object on a unit (docs/model.md §2.7f), sized by month. */
+interface DemandSpec {
+	farm: string;
+	name: string;
+	category: DemandObjectCategory;
+	/** m³/day, every month alike. */
+	m3Day: number;
+	priority: DemandObjectPriority;
+	/** Order within a before- or after-the-crops class (engine ≥ 1.64.0). */
+	rank?: number;
+	destination?: DemandObjectDestination;
+	/** Share returned to the river below the unit. Default 0. */
+	returnPct?: number;
+	/** The people it serves (domestic, municipal): the basic-needs floor. */
+	population?: number;
+	/** From a river abstraction of its own (engine ≥ 1.65.0); absent = the dam. */
+	river?: RiverTakeSpec;
+	schedule?: DemandScheduleWindow[];
 }
 
 interface TransferSpec {
@@ -182,6 +215,7 @@ interface CatchmentSpec {
 	fit?: { budget: number; seed: number };
 	farms: FarmSpec[];
 	transfers?: TransferSpec[];
+	demands?: DemandSpec[];
 }
 
 const id = (key: string, what: string) => uuidv5(`example:${key}:${what}`);
@@ -236,8 +270,9 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			...DEVELOPMENT_DEFAULTS,
 			...SUPPLY_DEFAULTS,
 			...OPERATING_DEFAULTS,
-			// The crops on the dam (engine ≥ 1.65.0).
+			// The crops on the dam (engine ≥ 1.65.0), unless they have a river abstraction of their own.
 			...WATER_SOURCE_DEFAULTS,
+			...(f.cropRiver ? { cropWaterSource: 'river' as const, cropRiverPumpM3Day: f.cropRiver.pumpM3Day, cropRiverPoolM3: f.cropRiver.poolM3 ?? null } : {}),
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null
@@ -259,7 +294,31 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 		monthlyRateM3s: null,
 		...OFFTAKE_DEFAULTS
 	}));
-	const model: ProjectModel = { nodes, crops, cropAreas, transfers };
+	const demandObjects: DemandObject[] = (spec.demands ?? []).map((o) => ({
+		id: id(spec.key, `demand:${o.farm}:${o.name}`),
+		nodeId: nodeId(o.farm),
+		name: o.name,
+		category: o.category,
+		sizing: 'monthly',
+		monthlyM3Day: new Array(12).fill(o.m3Day),
+		count: null,
+		litresPerUnitDay: null,
+		lossPct: 0,
+		monthlyFactor: null,
+		returnPct: o.returnPct ?? 0,
+		priority: o.priority,
+		rank: o.rank ?? null,
+		destination: o.destination ?? 'internal',
+		enabled: true,
+		schedule: o.schedule ?? null,
+		population: o.population ?? null,
+		source: null,
+		waterSource: o.river ? 'river' : null,
+		riverPumpM3Day: o.river?.pumpM3Day ?? null,
+		riverPoolM3: o.river?.poolM3 ?? null,
+		note: 'Invented demo demand.'
+	}));
+	const model: ProjectModel = { nodes, crops, cropAreas, transfers, ...(demandObjects.length ? { demandObjects } : {}) };
 
 	const truthRain = dailyRain(spec.climate, START, DAYS, spec.seed, spec.rainScale);
 	const d = defaultProjectSettings();
@@ -535,6 +594,58 @@ const SANDSPRUIT: CatchmentSpec = {
 	]
 };
 
+/**
+ * River abstractions beside the dams (#342 items 4–5, #344): the client's
+ * checklist made clickable. Seeded on its own, after the bundle (seed-examples.ts),
+ * near Upington on the Orange River so the River network layer shows real
+ * reaches once HydroRIVERS is loaded (pnpm dev:tiles:rivers). Every name and
+ * value is invented.
+ */
+export const ORANJE: CatchmentSpec = {
+	key: 'oranje',
+	name: 'Example · Oranje (river abstractions)',
+	description:
+		'Invented demo catchment on the lower Orange River, near Upington (its rainfall is invented too, wetter than the real lower Orange, so there is water to share). Shows the client checklist: units with a dam and river abstractions beside it, each demand with its own water source. Rivierplaas waters its vines from the dam, with a village and stock water ranked first, and runs a packhouse from the river on weekdays only, with a pool at its pump. Wingerdhoek irrigates from its own river pump and pool, supplies a town from the river, and pipes water out of the catchment from its dam. Open the Map tab and turn on River network.',
+	climate: SUMMER_RAIN,
+	rainScale: 0.9,
+	seed: 404,
+	apan: APAN_SUMMER_RAIN.map((v) => Math.round(v * 1.3)),
+	ewrFraction: [0.2, 0.2, 0.2, 0.2, 0.2, 0.25, 0.3, 0.3, 0.3, 0.3, 0.25, 0.2],
+	settings: { panCoefficient: panPreset('summer-rainfall') },
+	farms: [
+		{ name: 'Oranje Weir', kind: 'gauge', into: null },
+		{ name: 'Rivierplaas', into: 'Oranje Weir', areaKm2: 60, damM3: 300_000, damDepthM: 4, divertM3Day: 3000, system: 'drip', crops: ha({ 'Wine grapes': 60 }) },
+		{
+			name: 'Wingerdhoek',
+			into: 'Rivierplaas',
+			areaKm2: 70,
+			damM3: 150_000,
+			damDepthM: 3.5,
+			divertM3Day: 2000,
+			system: 'pivot',
+			crops: ha({ Lucerne: 50, 'Wine grapes': 30 }),
+			cropRiver: { pumpM3Day: 6000, poolM3: 5000 }
+		},
+		{ name: 'Sandkop', into: 'Wingerdhoek', areaKm2: 120, damM3: 80_000, damDepthM: 3, divertM3Day: 1200, system: 'micro', crops: ha({ Vegetables: 20 }) }
+	],
+	demands: [
+		{ farm: 'Rivierplaas', name: 'Rivierplaas village', category: 'domestic', m3Day: 80, priority: 'first', rank: 1, returnPct: 0.3, population: 300 },
+		{ farm: 'Rivierplaas', name: 'Stock water', category: 'livestock', m3Day: 20, priority: 'first', rank: 2 },
+		{
+			farm: 'Rivierplaas',
+			name: 'Packhouse',
+			category: 'industrial',
+			m3Day: 250,
+			priority: 'shared',
+			returnPct: 0.2,
+			river: { pumpM3Day: 400, poolM3: 1500 },
+			schedule: [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }]
+		},
+		{ farm: 'Wingerdhoek', name: 'Town supply', category: 'municipal', m3Day: 900, priority: 'first', rank: 1, returnPct: 0.5, population: 4000, river: { pumpM3Day: 1500, poolM3: 3000 } },
+		{ farm: 'Wingerdhoek', name: 'Pipeline out of the catchment', category: 'external', m3Day: 150, priority: 'last', destination: 'external' }
+	]
+};
+
 export const EXAMPLES = [KLEINBERG, DROEVLEI, SANDSPRUIT];
 
 export interface BuildOptions {
@@ -547,3 +658,6 @@ export interface BuildOptions {
 }
 
 export const buildExamples = (opts: BuildOptions = { fit: true }): ExampleProject[] => EXAMPLES.map((s) => build(s, opts));
+
+/** The river-abstractions example (ORANJE), seeded apart from the bundle. */
+export const buildRiverExample = (opts: BuildOptions = { fit: true }): ExampleProject => build(ORANJE, opts);

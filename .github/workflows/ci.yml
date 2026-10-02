@@ -444,6 +444,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The migration-order guard reads the base's migrations at HEAD^1
+          # (the merge ref's base tip on a PR, the previous main on a push).
+          fetch-depth: 2
 
       - name: Install actionlint
         run: |
@@ -476,6 +479,9 @@ jobs:
 
       - name: Playwright pins (backend, e2e, renderer image)
         run: node scripts/guards/check_playwright_pins.mjs
+
+      - name: Migration order (a new migration sorts after the base's highest)
+        run: node scripts/guards/check_migration_order.mjs
 
       - name: Guard unit tests (scripts/guards, scripts/release, scripts/ingest, infra/scripts)
         run: |

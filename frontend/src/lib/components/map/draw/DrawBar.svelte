@@ -7,11 +7,18 @@
 	Use my location shows on phones (asked only on the tap; the position goes
 	no further than the point). Escape anywhere in the bar cancels (asking
 	first when a drawing would be lost: Draft.escape); Cancel drops it at once.
+
+	Assisted drawing (#326 C2): Snap to features and Follow edges switch the
+	draft's snapping (Alt with a click, or Alt+Enter, places one corner
+	exactly); splitting a shape draws its cut and previews the two parts;
+	tracing a dam places the point inside its water, with the share of
+	observations to count as water, and a traced outline says where it came
+	from until it is saved.
 -->
 <script lang="ts">
-	import type { MapPosition } from '$lib/api/types';
-	import { KIND_LABEL, POINT_KINDS } from '../mapData';
-	import type { Draft } from './draft.svelte';
+	import type { MapPosition, MinOccurrence } from '$lib/api/types';
+	import { areaText, KIND_LABEL, POINT_KINDS } from '../mapData';
+	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';
 
 	let {
@@ -23,7 +30,9 @@
 		onpaste,
 		oncoords,
 		onlocated,
-		delineating = false
+		delineating = false,
+		tracing = false,
+		minOccurrence = $bindable(25)
 	}: {
 		draft: Draft;
 		/** false without WebGL: no clicks to place, so the bar leads with pasting and typed coordinates. */
@@ -37,10 +46,20 @@
 		onlocated: (at: MapPosition) => void;
 		/** The point placed is a delineation's outlet (#326 B-delineate): no kind to pick, and Save asks the server to delineate. */
 		delineating?: boolean;
+		/** The point placed is inside a dam's water (#326 C2): Save asks the server to trace its outline. */
+		tracing?: boolean;
+		/** Tracing: the share of observations (%) a cell must be water in. */
+		minOccurrence?: MinOccurrence;
 	} = $props();
 
 	const uid = $props.id();
-	const problem = $derived(draft.whole ? null : draft.phase === 'review' || draft.shape === 'point' ? draftProblem(draft.shape, draft.coords) : null);
+	const split = $derived(draft.splitResult);
+	const problem = $derived(
+		split && 'problem' in split ? split.problem : draft.whole ? null : draft.phase === 'review' || draft.shape === 'point' ? draftProblem(draft.shape, draft.coords) : null
+	);
+	/** Snapping applies to every drawing but a measurement (which has no bar) and a pasted shape of several parts. */
+	const canSnap = $derived(!draft.whole && mapReady && !tracing && draft.snapTargets.length > 0);
+	const canFollow = $derived(draft.mode === 'draw' && draft.shape !== 'point' && draft.phase === 'drawing');
 	const editing = $derived(draft.mode === 'edit');
 	const name = $derived(draft.feature ? draft.feature.name || KIND_LABEL[draft.feature.kind] : '');
 	const corner = $derived(draft.cornerWord);
@@ -74,6 +93,14 @@
 	const howTo = $derived.by(() => {
 		if (!mapReady) return draft.shape === 'point' ? 'The map can’t be drawn here: enter the point’s coordinates.' : 'The map can’t be drawn here: paste the shape as GeoJSON or WKT.';
 		if (draft.whole) return 'A pasted shape of several parts: save it as it is, or paste another.';
+		if (draft.mode === 'split') {
+			return draft.phase === 'drawing'
+				? `${phone ? 'Tap' : 'Click'} outside the shape (or on its edge), then across it, and finish outside it (or on the other edge): it is cut in two along the line.`
+				: 'The two parts are shaded. Adjust the line if it needs it, then Split…';
+		}
+		if (draft.shape === 'point' && tracing) {
+			return draft.coords.length ? 'Drag the point into the water if it missed, then Trace the outline.' : `${phone ? 'Tap' : 'Click'} inside the dam’s water.`;
+		}
 		if (draft.shape === 'point' && delineating) {
 			return draft.coords.length
 				? `Drag the point onto the river if it missed, then Delineate…`
@@ -108,6 +135,17 @@
 			<select id="{uid}-what" class="cap" value={draft.choice} onchange={(e) => draft.choose(e.currentTarget.value)}>
 				{#each DRAW_CHOICES as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
 			</select>
+		{:else if draft.mode === 'split'}
+			<h2 class="bar-h" id="{uid}-h">Splitting “{name}”</h2>
+		{:else if draft.mode === 'place' && tracing}
+			<h2 class="bar-h" id="{uid}-h">Tracing a dam</h2>
+			<label class="share small">
+				Water in at least
+				<select bind:value={minOccurrence} data-testid="map-trace-share">
+					{#each [10, 25, 50, 75] as const as v (v)}<option value={v}>{v} %</option>{/each}
+				</select>
+				of the observations
+			</label>
 		{:else if draft.mode === 'place' && delineating}
 			<h2 class="bar-h" id="{uid}-h">Delineating a catchment</h2>
 		{:else if draft.mode === 'place'}
@@ -121,6 +159,23 @@
 	</div>
 	<p class="how small" data-testid="map-draw-how">{howTo}</p>
 	<p class="said small muted" role="status" data-testid="map-draw-said">{draft.said}</p>
+	{#if draft.traced}
+		<p class="small" data-testid="map-trace-source">
+			Traced from {draft.traced.dataset}: water in at least {draft.traced.minOccurrence} % of the observations, about {areaText(draft.traced.areaM2)}{draft.tracedEdited ? ', then adjusted' : ''}.
+			{#if draft.traced.attribution && draft.traced.attribution !== 'synthetic'}{draft.traced.attribution}{/if}
+			A proposal: check it against the map before you save it.
+		</p>
+	{/if}
+	{#if split && 'parts' in split}
+		<p class="small" data-testid="map-split-parts">Cut in two: {cutText(split.parts)}.</p>
+	{/if}
+	{#if canSnap}
+		<div class="snap small">
+			<label><input type="checkbox" bind:checked={draft.snapOn} data-testid="map-snap" /> Snap to features</label>
+			{#if canFollow}<label><input type="checkbox" bind:checked={draft.follow} disabled={!draft.snapOn} data-testid="map-follow" /> Follow edges</label>{/if}
+			{#if draft.snapOn && !phone}<span class="muted">Hold Alt to place one {draft.shape === 'point' ? 'point' : corner.one} exactly.</span>{/if}
+		</div>
+	{/if}
 	{#if problem && (draft.phase === 'review' || draft.coords.length)}<p class="problem small" data-testid="map-draw-problem">{problem}</p>{/if}
 	{#if locateError}<p class="problem small" role="alert">{locateError}</p>{/if}
 	{#if error}<p class="problem small" role="alert" data-testid="map-draw-error">{error}</p>{/if}
@@ -143,7 +198,21 @@
 		<button type="button" class="btn btn-sm btn-ghost" onclick={() => draft.cancel()}>Cancel</button>
 		{#if draft.phase === 'review'}
 			<button type="button" class="btn btn-sm btn-primary" onclick={onsave} disabled={!!problem || saving || !draft.geometry} data-testid="map-draft-save">
-				{saving ? 'Saving…' : editing ? (draft.shape === 'point' ? 'Save the position' : 'Save the shape') : delineating ? 'Delineate…' : 'Save…'}
+				{saving
+					? tracing
+						? 'Tracing…'
+						: 'Saving…'
+					: editing
+						? draft.shape === 'point'
+							? 'Save the position'
+							: 'Save the shape'
+						: draft.mode === 'split'
+							? 'Split…'
+							: tracing
+								? 'Trace the outline'
+								: delineating
+									? 'Delineate…'
+									: 'Save…'}
 			</button>
 		{/if}
 	</div>
@@ -178,6 +247,18 @@
 	}
 	.problem {
 		color: var(--danger);
+	}
+	.snap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.9rem;
+		align-items: center;
+	}
+	.snap label,
+	.share {
+		display: inline-flex;
+		gap: 0.3rem;
+		align-items: center;
 	}
 	.bar-actions {
 		display: flex;

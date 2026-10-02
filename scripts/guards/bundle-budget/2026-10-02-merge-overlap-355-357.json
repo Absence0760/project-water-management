@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "#355 (assisted drawing) and #357 (one proposal panel) each budgeted against a main without the other; together main measures 1589 KB against 1588 KB after build:frontend at 58a4f04b"
+}

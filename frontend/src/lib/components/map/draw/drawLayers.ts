@@ -25,6 +25,11 @@ export function draftLayers(dark: boolean): Layer[] {
 		{ id: 'draft-line', type: 'line', ...src, filter: role('shape'), paint: { 'line-color': c.selected, 'line-width': 3 } },
 		// The line from the last corner to the pointer while drawing: dashed, so it reads as "not placed yet".
 		{ id: 'draft-band', type: 'line', ...src, filter: role('band'), paint: { 'line-color': c.selected, 'line-width': 2, 'line-dasharray': [2, 2] } },
+		// A split's two parts (#326 C2): each filled lightly, its own edge dashed, so the cut reads before it is saved.
+		{ id: 'draft-part-fill', type: 'fill', ...src, filter: role('part'), paint: { 'fill-color': ['case', ['==', ['get', 'part'], 1], withAlpha(c.selected, 0.28), withAlpha(c.casing, 0.35)] } },
+		{ id: 'draft-part-line', type: 'line', ...src, filter: role('part'), paint: { 'line-color': c.selected, 'line-width': 1.5, 'line-dasharray': [3, 2] } },
+		// Where a corner would snap (#326 C2): a hollow ring, larger than a corner so it reads around one.
+		{ id: 'draft-snap', type: 'circle', ...src, filter: role('snap'), paint: { 'circle-radius': 11, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': c.selected, 'circle-stroke-width': 2.5 } },
 		{ id: DRAFT_MID_LAYER, type: 'circle', ...src, filter: role('mid'), paint: { 'circle-radius': 5, 'circle-color': c.casing, 'circle-stroke-color': c.selected, 'circle-stroke-width': 2 } },
 		{
 			id: DRAFT_CORNER_LAYER,
@@ -50,6 +55,10 @@ export interface DraftView {
 	whole: MapGeometry | null;
 	cursor: MapPosition | null;
 	corner: number | null;
+	/** Where the pointer would snap (#326 C2), drawn as a ring. */
+	snap?: MapPosition | null;
+	/** A split's two parts, previewed under the cut (#326 C2). */
+	parts?: readonly (readonly MapPosition[])[] | null;
 }
 
 type Out = { type: 'Feature'; properties: Record<string, unknown>; geometry: MapGeometry };
@@ -65,6 +74,7 @@ export function draftData(d: DraftView | null) {
 	}
 	const c = d.coords;
 	const drawing = d.phase === 'drawing';
+	d.parts?.forEach((p, i) => features.push({ type: 'Feature', properties: { role: 'part', part: i }, geometry: { type: 'Polygon', coordinates: [[...p, p[0]!]] } }));
 	if (d.shape === 'polygon' && c.length >= 3 && !drawing) features.push({ type: 'Feature', properties: { role: 'shape' }, geometry: { type: 'Polygon', coordinates: [[...c, c[0]!]] } });
 	else if (d.shape !== 'point' && c.length >= 2) features.push({ type: 'Feature', properties: { role: 'shape' }, geometry: { type: 'LineString', coordinates: [...c] } });
 	if (drawing && d.shape !== 'point' && d.cursor && c.length) {
@@ -74,5 +84,6 @@ export function draftData(d: DraftView | null) {
 	}
 	if (!drawing) for (const m of midpoints(d.shape, c)) features.push({ type: 'Feature', properties: { role: 'mid', after: m.after }, geometry: { type: 'Point', coordinates: m.at } });
 	c.forEach((p, i) => features.push({ type: 'Feature', properties: { role: 'corner', index: i, picked: i === d.corner, point: d.shape === 'point' }, geometry: { type: 'Point', coordinates: p } }));
+	if (d.snap) features.push({ type: 'Feature', properties: { role: 'snap' }, geometry: { type: 'Point', coordinates: d.snap } });
 	return fc();
 }

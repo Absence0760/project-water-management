@@ -35,7 +35,16 @@ sides share.
   Terrarium DEM (PMTiles, its own WebP/PNG decoders, no dependency) named by
   `DEM_URL`: empty (the default) is off; the committed synthetic DEM
   (`backend/fixtures/dem/`) or the Relief's DEM after `pnpm dev:tiles:terrain`
-  ([maps.md § Delineation](./maps.md#delineation)).
+  ([maps.md § Delineation](./maps.md#delineation)); the same routing divides
+  a catchment into units at the map's dams, abstraction points and gauges to
+  start an empty model, or to divide one that has nodes (`start.ts`,
+  `divide.ts`, `subcatchments.ts`,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)).
+  Tracing a dam (`src/delineation/damTrace.ts`) reads a water occurrence
+  raster through the same readers, named by `WATER_URL`: empty (the default)
+  is off; the committed synthetic raster (`backend/fixtures/water/`) or JRC
+  Global Surface Water after `pnpm dev:tiles:water` ([maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -122,7 +131,7 @@ pnpm dev:mail:bounce <email> [--complaint | --transient]   # stand in for an SES
 pnpm dev:s3:up              # MinIO: report PDFs (API :9002, console :9003, minioadmin / minioadmin)
 pnpm dev:s3:down | dev:s3:status | dev:s3:logs
 pnpm dev:tiles:up           # optional basemap for the Map tab, one step, re-runnable: MinIO, tiles + fonts (cached, else fetched), a cached relief DEM, the frontend's URLs; restart pnpm dev
-pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinIO; dev:tiles:terrain (the Relief layer's DEM) | dev:tiles:status | dev:tiles:env (maps.md)
+pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinIO; dev:tiles:terrain (the Relief layer's DEM) | dev:tiles:water (Trace a dam's GSW occurrence; GDAL or docker) | dev:tiles:status | dev:tiles:env (maps.md)
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
@@ -146,9 +155,10 @@ pnpm import:rivers          # load the synthetic river network the Map's River n
 pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
                              # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
 pnpm import:evaporation     # load the synthetic evaporation grid Settings → Evaporation from the map proposes from (pnpm setup runs it);
-                             # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means
+                             # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
+                             # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
 pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
-pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
+pnpm seed:examples          # 4 invented example catchments (Oranje: river abstractions) + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
 pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
@@ -165,13 +175,14 @@ pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 
-pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings in scripts/guards/check_web_bundle_budget.mjs
 pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new entry file in scripts/guards/bundle-budget/ (never edit BUDGET.totalCodeKb)
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
+pnpm check:migrations       # every migration this branch adds sorts after origin/main's highest (git fetch first; data-model.md § Migrations)
 pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
@@ -179,6 +190,7 @@ pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
 pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
+pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)

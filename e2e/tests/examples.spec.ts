@@ -4,7 +4,7 @@
 // backend's own seeding CLI, once per suite run.
 import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
-import { ANALYST, DEMO, DROEVLEI, FARMER1, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
+import { ANALYST, DEMO, DROEVLEI, FARMER1, KLEINBERG, ORANJE, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 
@@ -38,6 +38,7 @@ test('each demo user sees their own and shared example catchments with the right
 	await expect(roleIn(page, KLEINBERG)).toHaveText('owner');
 	await expect(roleIn(page, DROEVLEI)).toHaveText('owner');
 	await expect(roleIn(page, SANDSPRUIT)).toHaveText('viewer');
+	await expect(roleIn(page, ORANJE)).toHaveText('owner');
 
 	const context = await browser.newContext();
 	const analyst = await context.newPage();
@@ -159,4 +160,20 @@ test('the seeded farmer reads their published farm and the advisory notice', asy
 	expect(body.publication.restriction.level).toBe('advisory');
 	expect(body.publication.restriction.notice.af).toMatch(/^Die rivier is laag/);
 	expect(body.farm.monthly).toHaveLength(12);
+});
+
+test('the Oranje example: demands on the river beside a dam, one on weekdays only, and its map', async ({ page }) => {
+	await signInAs(page, DEMO);
+	const listed = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; name: string }[] };
+	const id = listed.projects.find((p) => p.name === ORANJE)!.id;
+	const model = (await (await page.request.get(`${API_URL}/projects/${id}/model`)).json()) as {
+		nodes: { name: string; cropWaterSource?: string }[];
+		demandObjects: { name: string; waterSource?: string | null; riverPoolM3?: number | null; schedule?: { weekdays: number[] | null; factor: number }[] | null }[];
+	};
+	expect(model.nodes.find((n) => n.name === 'Wingerdhoek')?.cropWaterSource).toBe('river');
+	const packhouse = model.demandObjects.find((o) => o.name === 'Packhouse')!;
+	expect(packhouse).toMatchObject({ waterSource: 'river', riverPoolM3: 1500 });
+	expect(packhouse.schedule).toEqual([expect.objectContaining({ weekdays: [6, 7], factor: 0 })]);
+	const features = (await (await page.request.get(`${API_URL}/projects/${id}/map/features`)).json()) as { features: { kind: string }[] };
+	expect(features.features.map((f) => f.kind).sort()).toEqual(['catchment_boundary', 'dam', 'dam', 'dam', 'farm_parcel', 'farm_parcel', 'farm_parcel', 'gauge', 'other', 'other', 'other']);
 });

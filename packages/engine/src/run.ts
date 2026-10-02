@@ -38,7 +38,7 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOffta
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
-import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
+import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
@@ -93,6 +93,7 @@ import {
 	type RunAllocationNode,
 	type RunAllocations,
 	type RunAllocationSource,
+	type RiverTakeSummary,
 	type UserSummary
 } from './project';
 import type { AllocationLimitBound } from './project';
@@ -700,6 +701,9 @@ function runNetwork(
 					push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
 					push(node.id, riverPoolEvaporationKey(x.key), RIVER_TAKE_SERIES.poolEvaporation.label(x.name), RIVER_TAKE_SERIES.poolEvaporation.unit, r.riverTakes!.poolEvaporation[a]!);
 				}
+				// Its pump's limit (engine ≥ 1.66.0): only with a pump capacity.
+				const pl = r.riverTakes!.pumpLimited[a];
+				if (pl) push(node.id, riverPumpLimitedKey(x.key), RIVER_TAKE_SERIES.pumpLimited.label(x.name), RIVER_TAKE_SERIES.pumpLimited.unit, pl);
 			});
 		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
@@ -779,6 +783,7 @@ function runNetwork(
 							name: x.name,
 							avgTakeM3Day: mean(r.riverTakes!.got[a]!),
 							pumpM3Day: Number.isFinite(x.pumpM3Day) ? x.pumpM3Day : null,
+							...(r.riverTakes!.pumpLimited[a] ? takePumpMeans(r.riverTakes!.got[a]!, r.riverTakes!.pumpLimited[a]!, mean) : {}),
 							...(x.pool ? { poolM3: x.pool.capM3, avgPoolStorageM3: mean(r.riverTakes!.pool[a]!) } : {})
 						}))
 					}
@@ -1439,10 +1444,21 @@ export function buildNetworkPlan(
 	const lakeK = settings.lakeEvapFactorMonthly;
 	// A day the daily A-pan series covers (engine ≥ 0.38.0, issue #45) takes that day's A-pan instead of the month's mean.
 	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
+	// Whether any day of the run has an A-pan above 0 (the daily series' day, else the month's mean).
+	let anyApan = false;
 	for (let t = 0; t < days; t++) {
 		const m = waterYearIndex(month[t]!);
 		const a = apanDay ? apanDay[t]! : NaN;
 		lakeEvapMmDay[t] = a === a ? (lakeK ? lakeK[m]! : settings.lakeEvapFactor) * a : ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
+		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
+	}
+	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
+	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4).
+	if (!anyApan && days > 0) {
+		const pooled = (model.demandObjects ?? []).some((o) => o.enabled !== false && o.waterSource === 'river' && typeof o.riverPoolM3 === 'number' && o.riverPoolM3 > 0);
+		const open = nodes.filter((n) => n.kind === 'farm' && (n.damCapacityM3 > 0 || (n.cropWaterSource === 'river' && typeof n.cropRiverPoolM3 === 'number' && n.cropRiverPoolM3 > 0)));
+		if (open.length || pooled)
+			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -2513,6 +2529,17 @@ function pumpMeans(river: Float64Array, limited: Float64Array, mean: (a: ArrayLi
 	let days = 0;
 	for (let t = 0; t < limited.length; t++) if (limited[t]! > 1e-9 * Math.max(1, river[t]!)) days++;
 	return { avgRiverAbstractionM3Day: mean(river), avgPumpLimitedM3Day: mean(limited), daysPumpLimited: days };
+}
+
+/**
+ * A river abstraction's pump over the run (engine ≥ 1.66.0, docs/model.md
+ * §2.7j): the mean demand its pump left unmet although the water was there,
+ * and the days it did (more than float noise of the day's take), as an other
+ * water user's pumpMeans counts them.
+ */
+function takePumpMeans(got: Float64Array, limited: Float64Array, mean: (a: ArrayLike<number>) => number): Pick<RiverTakeSummary, 'avgPumpLimitedM3Day' | 'daysPumpLimited'> {
+	const { avgPumpLimitedM3Day, daysPumpLimited } = pumpMeans(got, limited, mean);
+	return { avgPumpLimitedM3Day: avgPumpLimitedM3Day!, daysPumpLimited: daysPumpLimited! };
 }
 
 /** Series labels that read differently on an other water user (WP-1.33). */

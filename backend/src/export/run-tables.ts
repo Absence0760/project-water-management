@@ -1,6 +1,7 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
+	CROPS_TAKE_KEY,
 	demandPctNote,
 	DOUBLE_MASS_MIN_DAYS,
 	DOUBLE_MASS_MIN_YEARS,
@@ -1004,6 +1005,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield '';
 		yield* demandObjectLines(summary);
 	}
+	if (summary.farms?.some((f) => f.riverTakes?.length)) {
+		yield '';
+		yield* riverTakeLines(summary);
+	}
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
@@ -1560,6 +1565,41 @@ export function* columnGuideLines(): Generator<string> {
 	yield csvRow(['Observed flow columns (the catchment daily CSV or a calibration site’s)']);
 	yield csvRow(['Column', 'Series', 'Meaning']);
 	for (const c of OBSERVED_FLOW_COLUMNS) yield csvRow(['', c.key, c.formula]);
+}
+
+/**
+ * River abstractions beside a unit's dam (engine ≥ 1.65.0, docs/model.md
+ * §2.7j): each one's pump, its mean take and, with a pool, the pool's
+ * capacity and mean storage; with a pump capacity (engine ≥ 1.66.0) the mean
+ * demand its pump left unmet although the river or its pool had it, and the days it did.
+ * The pump-limited columns only when some abstraction has them, blank for one
+ * without a capacity; the pool columns only when one has a pool.
+ */
+export function* riverTakeLines(summary: RunSummary): Generator<string> {
+	const rows = (summary.farms ?? []).flatMap((f) => (f.riverTakes ?? []).map((k) => ({ unit: f.name, k })));
+	if (!rows.length) return;
+	const pool = rows.some(({ k }) => k.poolM3 !== undefined);
+	const limited = rows.some(({ k }) => k.avgPumpLimitedM3Day !== undefined);
+	yield csvRow(['River abstractions (whole run)']);
+	yield csvRow([
+		'Hydrological unit',
+		'River abstraction',
+		'Pump capacity (m³/day)',
+		'Average pumped (m³/day)',
+		...(limited ? ['Average demand the pump capacity left unmet (m³/day)', 'Days the pump capacity left demand unmet'] : []),
+		...(pool ? ['Pool capacity (m³)', 'Average pool storage (m³)'] : [])
+	]);
+	for (const { unit, k } of rows) {
+		yield csvRow([
+			unit,
+			// The crops' take is named "<unit>: crops" by the engine; the unit has its own column.
+			k.key === CROPS_TAKE_KEY ? 'Crops' : k.name,
+			k.pumpM3Day ?? 'no limit',
+			k.avgTakeM3Day,
+			...(limited ? [k.avgPumpLimitedM3Day ?? '', k.daysPumpLimited ?? ''] : []),
+			...(pool ? [k.poolM3 ?? '', k.avgPoolStorageM3 ?? ''] : [])
+		]);
+	}
 }
 
 /**

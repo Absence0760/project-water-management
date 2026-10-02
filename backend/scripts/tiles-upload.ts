@@ -3,13 +3,16 @@
 //
 //   tsx scripts/tiles-upload.ts <file.pmtiles>
 //   tsx scripts/tiles-upload.ts --terrain <file.pmtiles>
+//   tsx scripts/tiles-upload.ts --water <file.pmtiles>
 //   tsx scripts/tiles-upload.ts --fonts <dir>
 //   tsx scripts/tiles-upload.ts --env <file> [--terrain]
 //
 // It creates the `tiles` bucket, lets anyone read its objects (MinIO is
 // loopback-only; the map reads the file with HTTP Range from the browser) and
 // uploads the file as `south-africa.pmtiles`. With --terrain it uploads the
-// relief's DEM tiles as `terrain.pmtiles` instead (docs/maps.md § Relief).
+// relief's DEM tiles as `terrain.pmtiles` instead (docs/maps.md § Relief);
+// with --water, the water occurrence tracing a dam reads as `water.pmtiles`
+// (#326 C2, docs/maps.md § Assisted drawing; the backend's WATER_URL).
 // With --fonts it uploads the
 // labels' glyph ranges instead (#326 A6, docs/maps.md § Labels): every
 // `<fontstack>/<range>.pbf` under <dir> to `fonts/<fontstack>/<range>.pbf`,
@@ -29,6 +32,8 @@ export const TILES_BUCKET = 'tiles';
 export const TILES_KEY = 'south-africa.pmtiles';
 /** The relief's elevation tiles (Terrarium PMTiles). */
 export const TERRAIN_KEY = 'terrain.pmtiles';
+/** The water occurrence tracing a dam reads (Terrarium PMTiles; the API reads it, not the browser). */
+export const WATER_KEY = 'water.pmtiles';
 /** Where the glyph ranges go in the bucket. */
 export const FONTS_PREFIX = 'fonts';
 
@@ -124,9 +129,10 @@ async function main(args: string[]): Promise<number> {
 	}
 	const fonts = args[0] === '--fonts';
 	const terrain = args[0] === '--terrain';
-	const file = fonts || terrain ? args[1] : args[0];
+	const water = args[0] === '--water';
+	const file = fonts || terrain || water ? args[1] : args[0];
 	if (!file) {
-		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --terrain <file.pmtiles> | --fonts <dir> | --env <file> [--terrain]');
+		console.error('usage: tsx scripts/tiles-upload.ts <file.pmtiles> | --terrain <file.pmtiles> | --water <file.pmtiles> | --fonts <dir> | --env <file> [--terrain]');
 		return 2;
 	}
 	if ((process.env.STORAGE ?? 'local').trim() === 's3') {
@@ -169,13 +175,14 @@ async function main(args: string[]): Promise<number> {
 	await s3.send(
 		new sdk.PutObjectCommand({
 			Bucket: TILES_BUCKET,
-			Key: terrain ? TERRAIN_KEY : TILES_KEY,
+			Key: terrain ? TERRAIN_KEY : water ? WATER_KEY : TILES_KEY,
 			Body: createReadStream(path),
 			ContentLength: statSync(path).size,
 			ContentType: 'application/vnd.pmtiles'
 		})
 	);
-	console.log(`Uploaded ${path} (${(statSync(path).size / 1024 / 1024).toFixed(0)} MB).\n${terrain ? `PUBLIC_TERRAIN_URL=${terrainUrl()}` : `PUBLIC_TILES_URL=${tilesUrl()}`}`);
+	const line = terrain ? `PUBLIC_TERRAIN_URL=${terrainUrl()}` : water ? `WATER_URL=${base(process.env.S3_ENDPOINT?.trim() || 'http://127.0.0.1:9002')}/${WATER_KEY} (backend/.env.development.local)` : `PUBLIC_TILES_URL=${tilesUrl()}`;
+	console.log(`Uploaded ${path} (${(statSync(path).size / 1024 / 1024).toFixed(0)} MB).\n${line}`);
 	return 0;
 }
 

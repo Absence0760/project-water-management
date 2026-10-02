@@ -53,12 +53,18 @@ export const CROPS_TAKE_KEY = 'crops';
 export const RIVER_TAKE_SERIES = {
 	take: { prefix: 'river_take@', label: (name: string) => `River abstraction "${name}": pumped (part of supplied)`, unit: 'm³/day' },
 	pool: { prefix: 'river_pool@', label: (name: string) => `River abstraction "${name}": pool storage (end of the day)`, unit: 'm³' },
-	poolEvaporation: { prefix: 'river_pool_evaporation@', label: (name: string) => `River abstraction "${name}": evaporation from the pool`, unit: 'm³/day' }
+	poolEvaporation: { prefix: 'river_pool_evaporation@', label: (name: string) => `River abstraction "${name}": evaporation from the pool`, unit: 'm³/day' },
+	/** Engine ≥ 1.66.0, only with a pump capacity: the demand its pump left unmet although the river (or its pool) had it. */
+	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river or its pool had it)`, unit: 'm³/day' }
 } as const;
 
 export const riverTakeKey = (key: string): string => `${RIVER_TAKE_SERIES.take.prefix}${key}`;
 export const riverPoolKey = (key: string): string => `${RIVER_TAKE_SERIES.pool.prefix}${key}`;
 export const riverPoolEvaporationKey = (key: string): string => `${RIVER_TAKE_SERIES.poolEvaporation.prefix}${key}`;
+export const riverPumpLimitedKey = (key: string): string => `${RIVER_TAKE_SERIES.pumpLimited.prefix}${key}`;
+
+/** Whether a river abstraction publishes its pump-limited series (engine ≥ 1.66.0): only with a pump capacity (a finite one; 0 = no pump). */
+export const hasPumpLimit = (take: Pick<PlanTake, 'pumpM3Day'>): boolean => Number.isFinite(take.pumpM3Day);
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -147,13 +153,46 @@ export interface TakeDay {
 	fromPool: Float64Array;
 	/** What the pool refilled from the flow. */
 	refill: Float64Array;
+	/**
+	 * The demand its pump capacity left unmet although the water was there
+	 * (engine ≥ 1.66.0): MIN(its demand − got, the flow left after its level
+	 * + its own pool, the allocation room left after its level), only once
+	 * its pump is spent; 0 otherwise.
+	 */
+	pumpLimited: Float64Array;
 	/** Scratch, one per take, kept between days so the day loop allocates nothing: what is left of each pump, and what each still wants in a level. */
 	pumpLeft: Float64Array;
 	want: Float64Array;
 }
 
 /** A unit's TakeDay for `n` river abstractions. */
-export const takeDayFor = (n: number): TakeDay => ({ got: new Float64Array(n), fromPool: new Float64Array(n), refill: new Float64Array(n), pumpLeft: new Float64Array(n), want: new Float64Array(n) });
+export const takeDayFor = (n: number): TakeDay => ({
+	got: new Float64Array(n),
+	fromPool: new Float64Array(n),
+	refill: new Float64Array(n),
+	pumpLimited: new Float64Array(n),
+	pumpLeft: new Float64Array(n),
+	want: new Float64Array(n)
+});
+
+/**
+ * What the pumps of level `l` left unmet (engine ≥ 1.66.0, docs/model.md
+ * §2.7j): for each abstraction there whose pump is spent and whose demand
+ * isn't met, what was still there for it once its level had taken: the flow
+ * left plus its own pool, within the allocation room left. Only a spent pump
+ * can leave any: one with pump left took all the flow, pool and room there
+ * was. Later levels rank below it, so what they take was its for the asking.
+ */
+function notePumpLimited(takes: readonly PlanTake[], level: ArrayLike<number>, l: number, want: ArrayLike<number>, flow: number, left: number, held: Float64Array, out: TakeDay): void {
+	for (let a = 0; a < takes.length; a++) {
+		if (level[a] !== l) continue;
+		const pump = takes[a]!.pumpM3Day;
+		if (!Number.isFinite(pump) || out.pumpLeft[a]! > 1e-12 * Math.max(1, pump)) continue;
+		const unmet = want[a]! - out.got[a]!;
+		const there = Math.min(flow + (takes[a]!.pool ? held[a]! : 0), left);
+		if (unmet > 0 && there > 0) out.pumpLimited[a] = Math.min(unmet, there);
+	}
+}
 
 /**
  * The river abstractions' day (engine ≥ 1.65.0, docs/model.md §2.7j), after
@@ -163,7 +202,9 @@ export const takeDayFor = (n: number): TakeDay => ({ got: new Float64Array(n), f
  * can't give each draws from its own pool (`held`, after evaporation), all
  * within the surface allocation room `room` (Infinity without a cap). Then
  * each pool refills from the flow left, pro rata to its room, up to its
- * capacity. `held` is updated in place to each pool's storage at the end of
+ * capacity. An abstraction whose pump ran out first records what was still
+ * there for it in `pumpLimited` (notePumpLimited, engine ≥ 1.66.0); that
+ * changes nothing else. `held` is updated in place to each pool's storage at the end of
  * the day (0 without a pool). Returns the flow taken out of the river
  * (Σ from the flow + Σ refill).
  */
@@ -175,6 +216,7 @@ export function riverTakesDay(takes: readonly PlanTake[], level: ArrayLike<numbe
 		out.got[a] = 0;
 		out.fromPool[a] = 0;
 		out.refill[a] = 0;
+		out.pumpLimited[a] = 0;
 	}
 	let flow = Math.max(free, 0);
 	let left = room;
@@ -187,7 +229,10 @@ export function riverTakesDay(takes: readonly PlanTake[], level: ArrayLike<numbe
 			w[a] = Math.max(0, Math.min(want[a]! - out.got[a]!, pumpLeft[a]!));
 			total += w[a]!;
 		}
-		if (!(total > 0) || !(left > 0)) continue;
+		if (!(total > 0) || !(left > 0)) {
+			notePumpLimited(takes, level, l, want, flow, left, held, out);
+			continue;
+		}
 		// The flow first, pro rata within the level, within the room.
 		const fromFlow = Math.min(total, flow, left);
 		const f = fromFlow / total;
@@ -219,6 +264,7 @@ export function riverTakesDay(takes: readonly PlanTake[], level: ArrayLike<numbe
 			}
 			left -= drawn;
 		}
+		notePumpLimited(takes, level, l, want, flow, left, held, out);
 	}
 	// Each pool refills from the flow left, pro rata to its room.
 	let roomSum = 0;

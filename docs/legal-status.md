@@ -161,13 +161,20 @@ Tracked in issue #103.
 
 ### Other open items
 
-- [ ] **HydroSHEDS attribution and end-user terms** (the River network
-  layer, issue #345; [maps.md § Sources](./maps.md#sources)). HydroRIVERS'
-  licence allows commercial use, but before a deployment serves it the
-  app's legal notice (or documentation) must carry the agreement's Exhibit B
-  statement, and the terms of service the end-user protections it asks for
-  (no stand-alone redistribution of the data, no reverse engineering).
-  Tracked in followups.md § Catchment map.
+- [x] **HydroSHEDS end-user terms** (the River network layer, issue #345;
+  [maps.md § Sources](./maps.md#sources)). HydroRIVERS' licence allows
+  commercial use, and asks that end users be bound by terms at least as
+  protective as its own (§ 2.1.2: never the data as a stand-alone product;
+  § 2.1.3: no decompiling, reverse engineering or disassembly, a restriction
+  to include in the end-user terms). The attribution half was done
+  2026-10-02 (the Exhibit B statement on the public Data sources and
+  credits page, `/data-sources`). *Done 2026-10-03 (the operator approved
+  adding it, 2026-10-02):* Terms §9, **Map data licensed to us**, written
+  for any licensed map source so later ones fit (§ Change log, 2026-10-03).
+  *Open for counsel:* whether one clause in the Terms is "an end user
+  license agreement … at least as protective" enough, or whether §4–§6 of
+  the licence (no warranty, indemnity, liability) need mirroring in more
+  words than "provided as it is, without any warranty, and not liable".
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):
@@ -461,6 +468,10 @@ cl. 3). The licensing ones are rows in
   unanswered link 30 days). A new kind of personal information, so a
   material change: `LEGAL_VERSION` 2026-10-01 (every account accepts again;
   nothing is in production yet).
+- 2026-10-02: Terms §9 links the new Data sources and credits page
+  (`/data-sources`: each third-party dataset's licence and the credit it
+  asks for). A pointer to a notice, not a change to anyone's rights or
+  duties: a clarification, so no `LEGAL_VERSION` bump.
 - 2026-10-01: Privacy §10 says a signed-in person can delete the account
   themselves (Account → Delete my account, issue #112, 143), and §7 that the
   account page says when they must hand a project or team over first. The
@@ -521,3 +532,24 @@ cl. 3). The licensing ones are rows in
   version had already been bumped that day; every account accepts again,
   and nothing is in production yet); the re-acceptance notice's "what
   changed" list is rewritten for it.
+- 2026-10-03: Terms §9 gains **Map data licensed to us** (pre-counsel
+  wording, not legal advice; the operator approved adding it on
+  2026-10-02): map data licensed to us by others (HydroRIVERS, from WWF's
+  HydroSHEDS, first) may be used within the service and as part of a
+  user's projects, results, reports and maps, but not copied, extracted or
+  distributed on its own as a stand-alone dataset, and not decompiled,
+  reverse engineered or disassembled; it stays its licensors' property,
+  as it is, with no warranty and no liability from them. §11's survival
+  list adds §9. This is what the HydroSHEDS licence's § 2.1.2 and § 2.1.3
+  ask of end-user terms (read from its technical documentation v1.4,
+  Appendix A, 2026-10-02). New duties on users, so a material change:
+  `LEGAL_VERSION` 2026-10-03 (a new date, since 2026-10-02's version was
+  already set; every account accepts again, and nothing is in production
+  yet). The re-acceptance notice's "what changed" list gains its line (one
+  line, translated); since round 4 (2026-10-02) the list keeps every
+  version's lines and shows those after the version the account accepted
+  (`termsVersion` on `/auth/me`; all of them for an account that accepted
+  none), so the 2026-10-02 lines are still shown to anyone who accepted
+  before them. The rivers load gate
+  (`scripts/release/map-data-gates.mjs`) now checks for the clause as well
+  as the Exhibit B statement.
