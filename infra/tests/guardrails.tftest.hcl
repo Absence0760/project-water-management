@@ -1110,8 +1110,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 4
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API and site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 5
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API, tiles and site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -1462,6 +1462,7 @@ run "alarms" {
     condition = alltrue([for a in [
       aws_cloudwatch_metric_alarm.cloudfront_5xx,
       aws_cloudwatch_metric_alarm.cloudfront_requests,
+      aws_cloudwatch_metric_alarm.cloudfront_bytes,
       aws_cloudwatch_metric_alarm.waf_blocked_requests,
     ] : a.alarm_actions == toset([aws_sns_topic.alerts_us_east_1.arn])])
     error_message = "Every us-east-1 alarm (CloudFront, WAF) must notify the us-east-1 alerts topic."
@@ -1481,6 +1482,24 @@ run "alarms" {
   assert {
     condition     = aws_cloudwatch_metric_alarm.cloudfront_requests.threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests.comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests.evaluation_periods == 1
     error_message = "By default the request-flood alarm fires on the first 5 minutes over 5,000 requests (a flood just under it costs $2.30-4.03/day)."
+  }
+  # --- Egress alarm: bytes, which the request alarm can't see (the tiles) ----
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.metric_name == "BytesDownloaded" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+    )
+    error_message = "The egress alarm must sum this distribution's BytesDownloaded (Region = Global) over 5 minutes and fire on the first period over."
+  }
+  assert {
+    # One address at the tiles rule's limit, every range the 2 MiB tiles_range allows, must trip it in one period.
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold == 536870912 && aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold < var.waf_tiles_rate_limit_per_ip * 2097152
+    error_message = "By default the egress alarm fires over 0.5 GB in 5 minutes, below what one address can pull at the WAF's tiles limit."
   }
   assert {
     condition = (
@@ -1523,8 +1542,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "90" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "A $90 monthly budget exists by default (above af-south-1's ~$59–64 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "100" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $100 monthly budget exists by default (its 80% alert, $80, above af-south-1's ~$68–75 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1539,9 +1558,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "7"
+      aws_budgets_budget.daily[0].limit_amount == "8"
     )
-    error_message = "A $7/day budget (ceil(90 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $8/day budget (ceil(100 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1657,7 +1676,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "90"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "100"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1734,7 +1753,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 90
+    budget_daily_usd = 100
   }
   expect_failures = [var.budget_daily_usd]
 }
@@ -2765,15 +2784,64 @@ run "map_data" {
   }
   assert {
     condition = alltrue([for l in [aws_s3_bucket_lifecycle_configuration.tiles, aws_s3_bucket_lifecycle_configuration.reference] :
-    length(l.rule) == 1 && l.rule[0].status == "Enabled" && one(l.rule[0].abort_incomplete_multipart_upload).days_after_initiation == 7 && length(l.rule[0].expiration) == 0])
-    error_message = "Each bucket aborts multipart uploads left unfinished after 7 days (a broken 2 GB upload isn't billed for ever), and expires nothing else."
+      length([for r in l.rule : r if r.id == "abort-incomplete-uploads" && r.status == "Enabled" && one(r.abort_incomplete_multipart_upload).days_after_initiation == 7 && length(r.expiration) == 0]) == 1
+    ])
+    error_message = "Each bucket aborts multipart uploads left unfinished after 7 days (a broken 2 GB upload isn't billed for ever)."
+  }
+  # Versioned, so an overwrite or delete by the operator can be undone (the
+  # live DEM the API reads, a reference file a load came from), with the old
+  # versions expiring so each re-upload isn't billed for ever.
+  assert {
+    condition     = alltrue([for v in [aws_s3_bucket_versioning.tiles, aws_s3_bucket_versioning.reference] : one(v.versioning_configuration).status == "Enabled"])
+    error_message = "The tiles and reference buckets must be versioned."
   }
   assert {
     condition = (
-      contains([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport") &&
-      contains([for s in data.aws_iam_policy_document.reference_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport")
+      length([for r in aws_s3_bucket_lifecycle_configuration.tiles.rule : r if r.status == "Enabled" && one(r.noncurrent_version_expiration).noncurrent_days == 14 && length(r.expiration) == 1 && one(r.expiration).expired_object_delete_marker == true]) == 1 &&
+      length([for r in aws_s3_bucket_lifecycle_configuration.reference.rule : r if r.status == "Enabled" && one(r.noncurrent_version_expiration).noncurrent_days == 365 && length(r.expiration) == 1 && one(r.expiration).expired_object_delete_marker == true]) == 1
     )
-    error_message = "The tiles and reference buckets must refuse plain-HTTP access."
+    error_message = "Old versions expire (tiles after 14 days, ~3.5 GB a re-upload; reference files after a year, a few hundred MB), and lone delete markers are cleaned up."
+  }
+  assert {
+    condition = alltrue([for pair in [
+      [data.aws_iam_policy_document.tiles_bucket_policy, aws_s3_bucket.tiles.arn],
+      [data.aws_iam_policy_document.reference_bucket_policy, aws_s3_bucket.reference.arn],
+      ] : length([for s in pair[0].statement : s if(
+        s.sid == "DenyInsecureTransport"
+        && s.effect == "Deny"
+        && s.actions == toset(["s3:*"])
+        && s.resources == toset([pair[1], "${pair[1]}/*"])
+        && one(s.principals).type == "*"
+        && one(s.principals).identifiers == toset(["*"])
+        && length(s.condition) == 1
+        && one(s.condition).test == "Bool"
+        && one(s.condition).variable == "aws:SecureTransport"
+        && join(",", one(s.condition).values) == "false"
+    )]) == 1])
+    error_message = "The tiles and reference bucket policies must deny s3:* on the bucket and its objects to every principal when aws:SecureTransport is false."
+  }
+
+  # --- No other role names either bucket: no role can write them, and the
+  # readers are the grants pinned below (map_data.tf's header) ---------------
+  assert {
+    condition = length([for r in flatten([for d in [
+      data.aws_iam_policy_document.github_deploy,
+      data.aws_iam_policy_document.migrate_lambda,
+      data.aws_iam_policy_document.worker_lambda,
+      data.aws_iam_policy_document.fetcher_lambda,
+      data.aws_iam_policy_document.renderer_lambda,
+      data.aws_iam_policy_document.worker_packs,
+      data.aws_iam_policy_document.renderer_packs,
+      data.aws_iam_policy_document.worker_reports,
+      data.aws_iam_policy_document.worker_feeds,
+      data.aws_iam_policy_document.lambda_jobs_send,
+      data.aws_iam_policy_document.lambda_ses,
+      data.aws_iam_policy_document.lambda_ses_release,
+      data.aws_iam_policy_document.worker_mail_events,
+      data.aws_iam_policy_document.renderer_ecr_pull,
+      data.aws_iam_policy_document.api_pack_bundles,
+    ] : [for st in d.statement : coalesce(st.resources, [])]]) : r if startswith(r, aws_s3_bucket.tiles.arn) || startswith(r, aws_s3_bucket.reference.arn)]) == 0
+    error_message = "Only api_dem, api_water and migrate_reference may name the tiles or reference bucket; the deploy role and every other Lambda role touch neither."
   }
 
   # --- Tiles: CloudFront reads tiles/*, nothing else is granted in the bucket policy -----
@@ -3373,9 +3441,48 @@ run "waf_rate_rules_scope" {
     error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
   }
   assert {
-    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitSitePerIP = 3 }
-    error_message = "The rate rules run tightest first: auth, API, then the site-wide backstop."
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitTilesPerIP = 3, RateLimitSitePerIP = 4 }
+    error_message = "The rate rules run tightest first: auth, API, the tiles, then the site-wide backstop."
   }
+  # The tiles' bytes bound (waf.tf): /tiles/ only, per IP, blocking, the path as CloudFront matches it.
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].limit == 1000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/tiles/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].positional_constraint == "STARTS_WITH" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].field_to_match[0].uri_path) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).action[0].block) == 1
+    )
+    error_message = "The tiles rate rule must block per IP on paths starting /tiles/ at waf_tiles_rate_limit_per_ip (the egress bound: each request may be 2 MiB)."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The tiles rate rule must match the decoded, normalised, lowercased path, or /%74iles/… slips past it."
+  }
+}
+
+run "rejects_tiles_rate_limit_above_the_site_limit" {
+  command = plan
+
+  variables {
+    waf_tiles_rate_limit_per_ip = 5001
+  }
+
+  expect_failures = [var.waf_tiles_rate_limit_per_ip]
+}
+
+run "rejects_bytes_alarm_too_high" {
+  command = plan
+
+  variables {
+    cloudfront_bytes_alarm_gb_per_5min = 5
+  }
+
+  expect_failures = [var.cloudfront_bytes_alarm_gb_per_5min]
 }
 
 run "rejects_site_rate_limit_below_the_api_limit" {
@@ -3400,7 +3507,7 @@ run "signin_captcha" {
   command = plan
 
   assert {
-    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitSitePerIP"])
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitTilesPerIP", "4:RateLimitSitePerIP"])
     error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
   }
   assert {

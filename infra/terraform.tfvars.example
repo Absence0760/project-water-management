@@ -34,11 +34,11 @@ bootstrap_slug = "water-management"
 # Budget + alarm notifications. Budgets need IAM billing access enabled on the
 # member account (one-time root toggle) — set budget_monthly_usd to 0 until
 # then.
-# 90 (the default) for af-south-1 (idle ≈ $59–64; ACTUAL 80% = $72); ~60 in
+# 100 (the default) for af-south-1 (idle ≈ $68–75; ACTUAL 80% = $80); ~70 in
 # us-east-1. Full tier: ~170 (docs/deployment-tiers.md).
-budget_monthly_usd = 90
+budget_monthly_usd = 100
 # Daily ACTUAL budget, the first-month guard (the monthly forecast needs ~5
-# weeks of history). Unset = ceil(monthly × 2.25 / 30) = $7 on $90, ~3.5× idle;
+# weeks of history). Unset = ceil(monthly × 2.25 / 30) = $8 on $100, ~3.3× idle;
 # 0 skips it. Must be below budget_monthly_usd.
 # budget_daily_usd = 6
 # Cost Anomaly Detection: page on an anomaly of at least this many USD. 0 (the
