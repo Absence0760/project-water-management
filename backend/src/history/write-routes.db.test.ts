@@ -530,6 +530,15 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['map.delineation_accepted'],
 		call: (c) => c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId3}/accept`, { as: 'other' })
 	},
+	// --- sub-catchments from clicks (delineation/clicks.ts): the preview stores nothing, the save audits ---
+	{
+		route: `POST ${P}/map/subcatchments/save`,
+		records: ['map.subcatchments_saved'],
+		call: (c) => {
+			const [lon, lat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			return c.owner.call('POST', `${at(c)}/map/subcatchments/save`, { clicks: [{ lon, lat }] });
+		}
+	},
 	// --- start a model from the map (178, issue #326 C3): on an empty project of its own ----
 	{
 		route: `POST ${P}/map/start`,
@@ -818,6 +827,7 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
+	{ route: `POST ${P}/map/subcatchments`, exempt: 'previews the sub-catchments of the clicks and saves nothing; saving them is recorded (map.subcatchments_saved)' },
 	{ route: `POST ${P}/map/dam-trace`, exempt: 'proposes a dam outline and saves nothing; a traced outline is recorded when it is saved (map.feature_created, from dam_trace)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
 	{
