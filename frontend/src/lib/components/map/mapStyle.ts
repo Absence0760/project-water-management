@@ -131,6 +131,13 @@ export function basemapStyle(tilesUrl: string | null, dark: boolean): Style {
 }
 
 /**
+ * A string escaped for the attribution control, which MapLibre sets as
+ * innerHTML: the one place the app's text becomes markup (docs/security.md §
+ * Input handling). Every value put into an attribution's HTML goes through it.
+ */
+export const escapeAttribution = (s: string) => s.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+
+/**
  * Shown on the map whenever the relief is: the notice the Copernicus DEM
  * licence asks for on adapted data (Art. 6(b)), and the tiles' compiler.
  */
@@ -151,7 +158,7 @@ export const terrainSource = (url: string, dataSourcesHref?: string) => ({
 	url: `pmtiles://${url}`,
 	encoding: 'terrarium',
 	tileSize: 512,
-	attribution: dataSourcesHref ? `${TERRAIN_ATTRIBUTION} (<a href="${dataSourcesHref}#copernicus-dem">licence notice</a>)` : TERRAIN_ATTRIBUTION
+	attribution: dataSourcesHref ? `${TERRAIN_ATTRIBUTION} (<a href="${escapeAttribution(dataSourcesHref)}#copernicus-dem">licence notice</a>)` : TERRAIN_ATTRIBUTION
 });
 
 /**
@@ -493,7 +500,7 @@ export const RIVERS_CREDIT_LAYER: Layer = { id: 'rivers-credit', type: 'line', s
 export const riversCreditSource = (attribution: string) => ({ type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution });
 
 /** The credit's HTML for the attribution control: the short line, linking to its full statement on the data sources page. */
-export const riversCredit = (dataSourcesHref: string, text: string) => `<a href="${dataSourcesHref}#hydrorivers">${text}</a>`;
+export const riversCredit = (dataSourcesHref: string, text: string) => `<a href="${escapeAttribution(dataSourcesHref)}#hydrorivers">${escapeAttribution(text)}</a>`;
 
 /**
  * The `features` source's data: polygons and lines (points are drawn as

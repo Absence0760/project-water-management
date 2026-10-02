@@ -44,6 +44,7 @@ import {
 } from './geojson.js';
 import { quaternaryAt, quaternaryDatasets } from './quaternary.js';
 import { configuredWater, traceDam, TraceRefused, type MinOccurrence } from '../delineation/damTrace.js';
+import { countMapCompute } from '../delineation/throttle.js';
 import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
 
@@ -501,7 +502,11 @@ export const mapRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const userId = c.get('userId');
 		// Checked before the trace below, so a viewer can't make the server read the raster.
-		await withUser(userId, (db) => requireRole(db, id, 'editor'));
+		await withUser(userId, async (db) => {
+			await requireRole(db, id, 'editor');
+			// The re-trace below counts as a trace (186_map_compute_throttle).
+			if (body.traced) await countMapCompute(c, db, id, 'trace');
+		});
 		const g = requestGeometry(body)!;
 		assertKindFits(body.kind, g.geometry);
 		const traced = body.traced ? await tracedMethod(body.traced, g.geometry) : null;

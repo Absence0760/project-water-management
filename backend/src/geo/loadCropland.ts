@@ -117,6 +117,7 @@ export function readTiffInfo(buf: Buffer): TiffInfo | string {
 	const blockH = tiled ? one(323)! : (one(278) ?? height);
 	const offsets = tags.get(tiled ? 324 : 273) ?? [];
 	const counts = tags.get(tiled ? 325 : 279) ?? [];
+	if (!(blockW >= 1 && blockH >= 1 && blockW * blockH <= MAX_BLOCK_PIXELS)) return `the raster's tiles or strips are ${blockW} × ${blockH} px (at most ${MAX_BLOCK_PIXELS} pixels each)`;
 	const blocks = Math.ceil(width / blockW) * Math.ceil(height / blockH);
 	if (offsets.length !== blocks || counts.length !== blocks) return 'the TIFF lists the wrong number of tiles or strips';
 	const scale = tags.get(33550);
@@ -146,6 +147,9 @@ export function readTiffInfo(buf: Buffer): TiffInfo | string {
 		noData
 	};
 }
+
+/** Pixels one tile or strip may have (ESA WorldCover's 3 × 3° tiles are written in 1024² blocks; a strip of 36 000 px rows fits too). */
+export const MAX_BLOCK_PIXELS = 64 * 1024 * 1024;
 
 const near = (x: number, eps = 1e-6) => Math.abs(x - Math.round(x)) < eps;
 
@@ -192,7 +196,8 @@ export function croplandCellsFromTiff(buf: Buffer, cellDeg: number, classes: Rea
 		const raw = buf.subarray(info.offsets[b]!, info.offsets[b]! + info.counts[b]!);
 		let data: Uint8Array;
 		try {
-			data = info.compression === 1 ? raw : inflateSync(raw);
+			// A block never inflates past its pixels: a deflate bomb stops there.
+			data = info.compression === 1 ? raw : inflateSync(raw, { maxOutputLength: info.blockW * info.blockH });
 		} catch {
 			return `tile or strip ${b + 1} doesn't decompress`;
 		}

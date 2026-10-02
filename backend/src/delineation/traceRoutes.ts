@@ -19,6 +19,7 @@ import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
 import { requireRole } from '../projects/access.js';
 import { configuredWater, traceDam, TraceRefused } from './damTrace.js';
+import { countMapCompute } from './throttle.js';
 
 export const TraceBody = z
 	.object({
@@ -48,7 +49,11 @@ export const traceRoutes = new Hono<AuthEnv>()
 	.post('/:id/map/dam-trace', async (c) => {
 		const body = TraceBody.parse(await readJson(c));
 		const id = c.req.param('id');
-		await withUser(c.get('userId'), (db) => requireRole(db, id, 'editor'));
+		await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			// Every trace counts before the work (186_map_compute_throttle).
+			await countMapCompute(c, db, id, 'trace');
+		});
 		const water = configuredWater();
 		if (!water) throw new ApiError(409, 'Tracing is off: the server has no water occurrence data (WATER_URL is empty).');
 		try {

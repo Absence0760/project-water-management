@@ -63,12 +63,18 @@ export function byteSource(url: string): ByteSource {
 	}
 	if (/^https?:\/\//.test(url)) {
 		return async (offset, length) => {
-			const res = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, signal: AbortSignal.timeout(15_000) });
-			if (res.status === 416) return new Uint8Array(0);
-			if (res.status !== 206 && res.status !== 200) throw new DemError(`the DEM answered HTTP ${res.status}`);
-			const b = new Uint8Array(await res.arrayBuffer());
-			// A server that ignores Range sends the whole file: cut the range out of it.
-			return res.status === 200 ? b.subarray(offset, offset + length) : b;
+			// No redirects: DEM_URL names the server, and nothing else is fetched.
+			const res = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+			if (res.status === 416) {
+				await res.body?.cancel();
+				return new Uint8Array(0);
+			}
+			// A server that ignores Range would send the whole archive (gigabytes): refused, never buffered.
+			if (res.status !== 206) {
+				await res.body?.cancel();
+				throw new DemError(res.status === 200 ? 'the DEM server ignores Range requests' : `the DEM answered HTTP ${res.status}`);
+			}
+			return readAtMost(res, length);
 		};
 	}
 	const path = url.startsWith('file:') ? fileURLToPath(url) : url;
@@ -80,6 +86,29 @@ export function byteSource(url: string): ByteSource {
 		const { bytesRead } = await (await fh).read(b, 0, length, offset);
 		return new Uint8Array(b.buffer, b.byteOffset, bytesRead);
 	};
+}
+
+/** A response body, refused once it passes `max` bytes (a ranged answer never should). */
+async function readAtMost(res: Response, max: number): Promise<Uint8Array> {
+	if (Number(res.headers.get('content-length') ?? 0) > max) {
+		await res.body?.cancel();
+		throw new DemError('the DEM sent more than the range asked for');
+	}
+	const out = new Uint8Array(max);
+	let n = 0;
+	const reader = res.body?.getReader();
+	if (!reader) return out.subarray(0, 0);
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (n + value.length > max) {
+			await reader.cancel();
+			throw new DemError('the DEM sent more than the range asked for');
+		}
+		out.set(value, n);
+		n += value.length;
+	}
+	return out.subarray(0, n);
 }
 
 /**
@@ -99,6 +128,9 @@ export function plainText(s: string): string {
 	}
 	return out.replace(/\s+/g, ' ').trim();
 }
+
+/** Tile sides a DEM may have: smaller would make a window thousands of tile reads; larger is refused by the decoders (webp.ts MAX_TILE_SIDE). */
+export const MIN_TILE_SIDE = 64;
 
 /** A decoded-tile cache across requests in one process (a Lambda container keeps it warm): ~1 MB a 512 px tile. */
 const CACHE_TILES = 64;
@@ -147,6 +179,7 @@ export function openDem(url: string, label?: string): Dem {
 				if (!bytes) return null;
 				const img = decode(h, bytes);
 				if (img.width !== img.height) throw new DemError(`a DEM tile of ${img.width} × ${img.height} px; tiles must be square`);
+				if (img.width < MIN_TILE_SIDE) throw new DemError(`a DEM tile of ${img.width} px; tiles are at least ${MIN_TILE_SIDE} px a side`);
 				const out = new Float32Array(img.argb.length);
 				for (let i = 0; i < out.length; i++) out[i] = terrarium(img.argb[i]!);
 				return { size: img.width, z: out };
