@@ -82,6 +82,24 @@ export function byteSource(url: string): ByteSource {
 	};
 }
 
+/**
+ * An archive's attribution as plain text: PMTiles metadata often holds an
+ * HTML link (`<a href="…">© Mapterhorn</a>`). The text between tags is kept
+ * and every angle bracket dropped, by a scan rather than a pattern, so no
+ * markup can survive in any order. The app shows it escaped anyway (never as
+ * HTML); this only keeps the label readable.
+ */
+export function plainText(s: string): string {
+	let out = '';
+	let inTag = false;
+	for (const ch of s) {
+		if (ch === '<') inTag = true;
+		else if (ch === '>') inTag = false;
+		else if (!inTag) out += ch;
+	}
+	return out.replace(/\s+/g, ' ').trim();
+}
+
 /** A decoded-tile cache across requests in one process (a Lambda container keeps it warm): ~1 MB a 512 px tile. */
 const CACHE_TILES = 64;
 
@@ -101,11 +119,11 @@ export function openDem(url: string, label?: string): Dem {
 				const h = await reader.getHeader();
 				const meta = await reader.getMetadata();
 				const head = await read(0, 16384);
-				const name = typeof meta.name === 'string' ? meta.name : typeof meta.attribution === 'string' ? meta.attribution.replace(/<[^>]*>/g, '') : 'DEM';
+				const name = typeof meta.name === 'string' ? meta.name : typeof meta.attribution === 'string' ? plainText(meta.attribution) : 'DEM';
 				const version = typeof meta.version === 'string' ? ` ${meta.version}` : '';
 				return {
 					label: (label?.trim() || `${name}${version}`).slice(0, 200),
-					attribution: typeof meta.attribution === 'string' ? meta.attribution.replace(/<[^>]*>/g, '').trim().slice(0, 300) : '',
+					attribution: typeof meta.attribution === 'string' ? plainText(meta.attribution).slice(0, 300) : '',
 					fingerprint: createHash('sha256').update(head).digest('hex').slice(0, 16),
 					tileType: TILE_TYPES[h.tileType as keyof typeof TILE_TYPES] ?? 'unknown',
 					maxZoom: h.maxZoom,

@@ -287,7 +287,6 @@
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
 						terrain: reliefUrl(),
-						terrain: reliefUrl(),
 						proposal: proposalData(proposal)
 					});
 				const style = styleNow();

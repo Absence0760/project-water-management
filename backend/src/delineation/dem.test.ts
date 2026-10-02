@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { byteSource, configuredDem, openDem, terrarium } from './dem.js';
+import { byteSource, configuredDem, openDem, plainText, terrarium } from './dem.js';
 import { FIXTURE_FILE, FIXTURE_X0, FIXTURE_Y0, FIXTURE_ZOOM, fixtureElevation } from './fixture.js';
 
 const FIXTURE = fileURLToPath(FIXTURE_FILE);
@@ -87,5 +87,15 @@ describe('configuredDem', () => {
 		const a = configuredDem({ DEM_URL: FIXTURE });
 		expect(a).not.toBeNull();
 		expect(configuredDem({ DEM_URL: FIXTURE })).toBe(a);
+	});
+});
+
+describe('plainText', () => {
+	it('keeps the text of an attribution link and drops every angle bracket, whatever the nesting', () => {
+		expect(plainText('<a href="https://mapterhorn.com/attribution">© Mapterhorn</a>')).toBe('© Mapterhorn');
+		expect(plainText('<scr<script>ipt>alert(1)</script>')).toBe('iptalert(1)');
+		expect(plainText('a > b < c')).toBe('a b');
+		expect(plainText('plain  text\n here')).toBe('plain text here');
+		for (const s of ['<<a>>x<', '<scr<script>ipt>', 'x<y>z>']) expect(plainText(s)).not.toMatch(/[<>]/);
 	});
 });

@@ -11,6 +11,7 @@
 // name says it is a one-way event must be claimed by a probe below, so a new
 // such column fails this file until someone decides how it stays final. Each
 // probe has a positive control (the forward move the API makes still works).
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from './tx.js';
@@ -32,7 +33,9 @@ const CLAIMED = new Map<string, string>([
 	['note.deleted_at', '037/048 note_guard: a deleted note refuses every update (probe: notes)'],
 	['note.deleted_by', '037/048 note_guard: set by the trigger, cleared only by the foreign key'],
 	['scenario.decided_at', '045/052 scenario guard: decided is a terminal status, the decision never changes (probe: scenarios)'],
-	['scenario.decided_by', '045/052 scenario guard, as decided_at']
+	['scenario.decided_by', '045/052 scenario guard, as decided_at'],
+	['delineation_proposal.decided_at', '175 delineation_proposal_final: an accepted or rejected proposal never changes its decision (probe: delineation)'],
+	['delineation_proposal.decided_by', '175 delineation_proposal_final: only the foreign key clears it']
 ]);
 
 let owner: User;
@@ -291,5 +294,32 @@ describe('scenarios', () => {
 		}
 		const [row] = await asOwner('SELECT status, outcome, decided_by FROM scenario WHERE id = $1', [sid]);
 		expect(row).toMatchObject({ status: 'decided', outcome: 'licence_issued', decided_by: owner.id });
+	});
+});
+
+describe('delineation', () => {
+	it('refuses to undo or rewrite a decided proposal (positive control: an editor rejects it)', async () => {
+		const prev = process.env.DEM_URL;
+		process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+		try {
+			const p = await owner.call('POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
+			expect(p.status, JSON.stringify(p.body)).toBe(201);
+			const pid = p.body.proposal.id as string;
+			expect((await owner.call('POST', `/projects/${projectId}/map/delineation/${pid}/reject`, {})).status).toBe(200);
+			for (const [sql, params] of [
+				["UPDATE delineation_proposal SET status = 'proposed', decided_at = NULL, decided_by = NULL WHERE id = $1", [pid]],
+				["UPDATE delineation_proposal SET status = 'accepted' WHERE id = $1", [pid]],
+				["UPDATE delineation_proposal SET decided_at = decided_at + interval '1 day' WHERE id = $1", [pid]],
+				['UPDATE delineation_proposal SET decided_by = $2 WHERE id = $1', [pid, coOwner.id]],
+				['UPDATE delineation_proposal SET decided_by = NULL WHERE id = $1', [pid]]
+			] as const) {
+				await expectRefused(sql, [...params]);
+			}
+			const [row] = await asOwner('SELECT status, decided_by FROM delineation_proposal WHERE id = $1', [pid]);
+			expect(row).toEqual({ status: 'rejected', decided_by: owner.id });
+		} finally {
+			if (prev === undefined) delete process.env.DEM_URL;
+			else process.env.DEM_URL = prev;
+		}
 	});
 });

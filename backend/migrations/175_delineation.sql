@@ -65,6 +65,33 @@ CREATE INDEX delineation_proposal_decided_by_idx ON delineation_proposal (decide
 COMMENT ON TABLE delineation_proposal IS
 	'A catchment the DEM proposed upstream of a clicked outlet or dam wall, with its dataset and method, and the editor''s decision (175, issue #326 B-delineate). The polygon reaches the map only through an accept.';
 
+-- A decision is final (the one-way-event columns, final-columns.security.db.test.ts):
+-- once accepted or rejected, the status, decided_at and decided_by never change,
+-- except decided_by cleared by its foreign key when that account is deleted and
+-- feature_id cleared by its own when the feature is. A superseded proposal stays
+-- superseded. So water_app's UPDATE grant can't undo a decision.
+CREATE FUNCTION delineation_proposal_final() RETURNS trigger
+	LANGUAGE plpgsql SET search_path = public
+	AS $$
+	BEGIN
+		IF OLD.decided_at IS NOT NULL AND (
+			NEW.status IS DISTINCT FROM OLD.status
+			OR NEW.decided_at IS DISTINCT FROM OLD.decided_at
+			OR (NEW.feature_id IS DISTINCT FROM OLD.feature_id AND NEW.feature_id IS NOT NULL)
+			OR (NEW.decided_by IS DISTINCT FROM OLD.decided_by
+				AND (NEW.decided_by IS NOT NULL OR EXISTS (SELECT 1 FROM app_user u WHERE u.id = OLD.decided_by)))
+		) THEN
+			RAISE EXCEPTION 'a delineation proposal is decided once, and the decision stays' USING ERRCODE = 'check_violation';
+		END IF;
+		IF OLD.status = 'superseded' AND NEW.status IS DISTINCT FROM 'superseded' THEN
+			RAISE EXCEPTION 'a superseded delineation proposal stays superseded' USING ERRCODE = 'check_violation';
+		END IF;
+		RETURN NEW;
+	END
+	$$;
+CREATE TRIGGER delineation_proposal_final BEFORE UPDATE ON delineation_proposal
+	FOR EACH ROW EXECUTE FUNCTION delineation_proposal_final();
+
 ALTER TABLE delineation_proposal ENABLE ROW LEVEL SECURITY;
 CREATE POLICY delineation_proposal_select ON delineation_proposal FOR SELECT USING (app_has_role(project_id, 'viewer'));
 CREATE POLICY delineation_proposal_insert ON delineation_proposal FOR INSERT WITH CHECK (app_has_role(project_id, 'editor'));
