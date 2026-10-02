@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StartPlan, StartUnit } from '$lib/api';
 import type { MapPosition } from '$lib/api/types';
-import { interiorPoint, PIECE_TINT_COUNT, pieceTintsFor, piecesShape, proposalPieces, REST_KEY } from './pieces';
+import { interiorPoint, litPieces, PIECE_TINT_COUNT, pieceTintsFor, piecesShape, proposalPieces, REST_KEY } from './pieces';
 import { unitOffers } from './startFlow';
 
 const square = (x0: number, y0: number, s: number): MapPosition[] => [
@@ -116,6 +116,24 @@ describe('piecesShape (the open proposal as the map draws it)', () => {
 		const noOutlet = plan([unit('a')]);
 		noOutlet.outlet = { ...noOutlet.outlet, point: null };
 		expect(piecesShape({ id: 'p', plan: noOutlet })).toBeNull();
+	});
+});
+
+describe('litPieces (lighting a piece on hover)', () => {
+	it('swaps only the highlight: the pieces, outline and outlet are the same objects, so nothing is recomputed', () => {
+		const shape = piecesShape({ id: 'p', plan: plan([unit('a'), unit('b')]) })!;
+		const lit = litPieces(shape, 'b')!;
+		expect(lit.highlight).toBe('b');
+		expect(lit.pieces).toBe(shape.pieces);
+		expect(lit.geometry).toBe(shape.geometry);
+		expect(lit.outlet).toBe(shape.outlet);
+		expect(shape.highlight).toBeNull();
+	});
+
+	it('hands back the same shape when the highlight is unchanged, and null with nothing to draw', () => {
+		const shape = piecesShape({ id: 'p', plan: plan([unit('a')]) })!;
+		expect(litPieces(shape, null)).toBe(shape);
+		expect(litPieces(null, 'a')).toBeNull();
 	});
 });
 

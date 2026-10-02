@@ -71,7 +71,7 @@
 	import { openDivide, openStart, type StartDraft } from './startFlow';
 	import DivideSheet from './DivideSheet.svelte';
 	import type { DivideDraft } from './divideFlow';
-	import { piecesShape } from './pieces';
+	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
 	import DraftSheet from './draw/DraftSheet.svelte';
@@ -363,7 +363,9 @@
 	let pieceLit = $state<string | null>(null);
 	/** The card to bring into view when its sheet opens: a piece clicked on the map. */
 	let pieceFocus = $state<string | null>(null);
-	const pieces = $derived(piecesShape(pendingStart ?? pendingDivide, pieceLit));
+	// Worked out once per proposal; lighting a piece (a hover) only swaps `highlight` (litPieces), so the map redraws the proposal alone.
+	const pieceShapes = $derived(piecesShape(pendingStart ?? pendingDivide));
+	const pieces = $derived(litPieces(pieceShapes, pieceLit));
 	async function pickPiece(key: string) {
 		pieceFocus = key;
 		await goto(withParam(page.url, pendingStart ? 'start' : 'divide', '1'), { noScroll: true, keepFocus: true });

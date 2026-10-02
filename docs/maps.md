@@ -237,6 +237,17 @@ server ([§ Delineation](#delineation)).
   the basemap and the overlay (`mapStyle()`), so `setStyle` swaps both and
   the features, the pick and the click handlers carry over. A basemap that
   failed to load stays dropped.
+- **Redrawing:** each GeoJSON source (`features`, `quaternaries`,
+  `proposal`, `rivers`) has its own effect in `CatchmentMap` and is handed
+  new data only when its own inputs change, because MapLibre re-tiles a
+  whole source in its worker on every `setData`. Picking a feature re-sends
+  the features alone, picking a reach the reaches alone, and lighting a
+  proposal's piece (a hover over its card or piece) the proposal alone; the
+  pieces themselves are worked out once per proposal (`piecesShape`) and a
+  hover only swaps their `highlight` (`litPieces`). At 60 units and 1000
+  reaches a hover had re-sent about 2 MB of GeoJSON (every source) and
+  recomputed the pieces (~4.5 ms); now it sends the proposal (~0.56 MB) and
+  computes nothing.
 - **The picked feature's name** shows in a small box over the map's top-left
   corner (its kind, then its name), until the basemap has labels (A6). It is
   hidden from assistive technology (`aria-hidden`): the ways to pick that it reaches are
