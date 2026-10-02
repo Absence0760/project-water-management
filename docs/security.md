@@ -2601,7 +2601,9 @@ placed points. The server never trusts the browser with geometry:
   hour (429), bounded by a window cap and a 20 s budget under the Lambda's
   timeout, and run outside any database transaction. On top of that every
   account has its own cap on elevation-model work (184_dem_attempt,
-  `delineation/attempt.ts`), shared by delineate, start and divide and
+  `delineation/attempt.ts`), shared by delineate, start, divide and the
+  sub-catchments from clicks (each click's preview and the save are one
+  attempt each, counted as delineation) and
   counted before the work in the transaction that checks the role: at most
   2 attempts running at once and 60 started an hour, across every project,
   refused and failed attempts included (429). It is per account because the
