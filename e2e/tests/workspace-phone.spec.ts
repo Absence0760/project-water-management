@@ -8,7 +8,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { seedManyAllocations } from '../support/allocations.ts';
-import { addMember, createRun, showAllSections } from '../support/api.ts';
+import { addMember, createRun, setAllocationViewerUnits, showAllSections } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { createScenario } from '../support/scenarios.ts';
 
@@ -211,6 +211,9 @@ test.describe('phone', () => {
 		const p = await seedBig(page, 'Phone viewer header');
 		const viewer = await signIn('Phone header viewer');
 		await addMember(page.request, p.id, viewer.user.email, 'viewer');
+		// Viewers read each volume (and get the CSV) only once an owner allows it (D3, 162), so the
+		// section's full set of controls is there to lay out.
+		await setAllocationViewerUnits(page.request, p.id, true);
 		const v = viewer.page;
 		await v.setViewportSize({ width: 390, height: 844 });
 		await v.goto(`/projects/${p.id}?tab=allocations`);

@@ -102,9 +102,29 @@ export function targetQuery(t: NoteTarget): NotesQuery {
 	}
 }
 
-/** The POST /notes body for a new note on a target. */
-export function createBody(t: NoteTarget, body: string, visibility: NoteVisibility): NoteCreate {
+/**
+ * Beside every public-participation comment box (166_public_participation;
+ * licensing positions item 7, provisional position, pre-counsel research,
+ * 2026-10-01): only a timeous written objection keeps a right to appeal
+ * (National Water Act s148(1)(f)). The share pages say the same in the
+ * reader's language (share/ShareComments.svelte).
+ */
+export const OBJECTION_WARNING =
+	'A comment here is not a written objection. To object, and to keep the right to appeal (National Water Act s148(1)(f)), write to the address in the application’s notice before its closing date.';
+/** The register opt-in (GN R267 reg 18): the email goes to the applicant only when ticked. */
+export const REGISTER_CONSENT_LABEL = 'Give my name and email to the applicant for the register of interested and affected parties (GN R267 reg 18)';
+/** Who receives a public comment (POPIA s18). */
+export const PUBLIC_COMMENT_RECIPIENTS =
+	'The applicant, the responsible authority that decides the application, and the public participation report the applicant gives it (GN R267 reg 19) receive your comment and your name.';
+
+/** The POST /notes body for a new note on a target. `registerConsent` goes only with a public comment. */
+export function createBody(t: NoteTarget, body: string, visibility: NoteVisibility, registerConsent = false): NoteCreate {
 	const text = normaliseBody(body);
+	const out = createBodyFor(t, text, visibility);
+	return out.visibility === 'public_participation' && registerConsent ? { ...out, registerConsent: true } : out;
+}
+
+function createBodyFor(t: NoteTarget, text: string, visibility: NoteVisibility): NoteCreate {
 	switch (t.kind) {
 		case 'project':
 			return { body: text, visibility: 'team' };

@@ -89,6 +89,12 @@ const builders: Record<string, () => Mail[]> = {
 				)
 			)
 		),
+	packSentMail: () =>
+		[EVIL, null].flatMap((authority) =>
+			[EVIL, null].map((note) =>
+				templates.packSentMail(TO, { projectId: 'p1', packId: 'k1', projectName: EVIL, title: EVIL, version: 2, shortCode: 'ab12-cd34-ef56', sentBy: EVIL, authority, note })
+			)
+		),
 	accountDeletedMail: () =>
 		templates.LOCALES.map((l) => templates.accountDeletedMail(TO, { projects: [EVIL, EVIL], teams: [EVIL] }, l)),
 	erratumNoticeMail: () =>
@@ -101,6 +107,11 @@ const builders: Record<string, () => Mail[]> = {
 					runCount: 2
 				})
 			)
+		),
+	// The licence record's review and closing notices (161, licence/record.ts), the owners' and the operator's copy.
+	licenceRecordMail: () =>
+		(['review', 'closes'] as const).flatMap((event) =>
+			[false, true].map((operator) => templates.licenceRecordMail(TO, { projectId: 'p1', projectName: EVIL, event, dueOn: '2031-10-01', operator }))
 		)
 };
 
@@ -126,8 +137,10 @@ describe('every email template, against hostile names', () => {
 			alertMail: 'alert',
 			digestMail: 'alert_digest',
 			packNoticeMail: 'pack_notice',
+			packSentMail: 'pack_sent',
 			accountDeletedMail: 'account_deleted',
-			erratumNoticeMail: 'erratum_notice'
+			erratumNoticeMail: 'erratum_notice',
+			licenceRecordMail: 'licence_record'
 		};
 		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
 		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);

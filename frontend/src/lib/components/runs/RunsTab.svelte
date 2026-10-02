@@ -768,7 +768,7 @@
 							</div>
 						{:else if publication}
 							{#key shownRunId}
-								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
+								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} actsForAuthority={project.actsForAuthority ?? false} onChange={published} />
 							{/key}
 						{:else}
 							<p class="muted" role="status">Loading the publication…</p>

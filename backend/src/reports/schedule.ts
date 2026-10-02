@@ -13,7 +13,10 @@
 //                        records the answer, as the report's requester.
 //   acceptPackRenderResult  the same for an evidence pack's answer: the
 //                        follow-up pack_render job, as the acting user of the
-//                        pack's render request (119_pack_render).
+//                        pack's render request (119_pack_render); for an
+//                        applicant's copy (`copy: 'applicant'`, 165) the
+//                        follow-up applicant_pack_render job, as the party
+//                        who asked.
 //   purgeReports         every tick: rows older than 8 days (a day past the
 //                        bucket's lifecycle); locally their PDFs too.
 import { withoutUser, withUser } from '../db/tx.js';
@@ -126,20 +129,23 @@ export async function acceptRenderResult(msg: RenderResultMessage): Promise<Rend
 export type PackRenderAcceptance = 'queued' | 'unknown_pack' | 'refused';
 
 export async function acceptPackRenderResult(msg: PackRenderResultMessage): Promise<PackRenderAcceptance> {
+	// An applicant's copy (165_applicant_copy) answers to its own request: the party who asked, and its own job kind.
+	const applicant = msg.copy === 'applicant';
+	const lookup = applicant ? 'app_applicant_copy_render_target' : 'app_pack_render_target';
 	const { rows } = await withoutUser((db) =>
-		db.query<{ projectId: string; actingUserId: string }>('SELECT project_id AS "projectId", acting_user_id AS "actingUserId" FROM app_pack_render_target($1)', [msg.packId])
+		db.query<{ projectId: string; actingUserId: string }>(`SELECT project_id AS "projectId", acting_user_id AS "actingUserId" FROM ${lookup}($1)`, [msg.packId])
 	);
 	const target = rows[0];
-	// A draft, a pack whose PDF is recorded already, or one with no render asked for.
+	// A draft, a pack whose PDF (or copy) is recorded already, or one with no render asked for.
 	if (!target) return 'unknown_pack';
 	try {
 		await withUser(target.actingUserId, (db) =>
 			enqueueJob(db, {
 				projectId: target.projectId,
-				kind: 'pack_render',
+				kind: applicant ? 'applicant_pack_render' : 'pack_render',
 				payload: { packId: msg.packId, result: msg.result },
-				// Redelivered answers collapse while one is pending; the first recorded stands anyway (app_record_pack_pdf).
-				dedupeKey: `pack_result:${msg.packId}`
+				// Redelivered answers collapse while one is pending; the first recorded stands anyway (app_record_pack_pdf, app_record_applicant_pack_pdf).
+				dedupeKey: `${applicant ? 'applicant_copy_result' : 'pack_result'}:${msg.packId}`
 			})
 		);
 		return 'queued';

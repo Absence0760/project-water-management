@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The team page's settings sheet (docs/ui.md § Teams): the team's name, the
-	// portfolio's traffic-light thresholds (D11) and leaving or deleting the
+	// portfolio's traffic-light thresholds (D11), the privacy contact (168) and leaving or deleting the
 	// team, out of the page's reading path in a side sheet. Every member opens
 	// it: they read the thresholds and can leave; only admins rename, change the
 	// thresholds or delete. Leaving and deleting are the page's (they need its
@@ -60,6 +60,11 @@
 			amber = team.portfolioThresholds.amber;
 			thresholdsSaved = null;
 			thresholdsFailed = null;
+			pcName = team.privacyContact?.name ?? '';
+			pcEmail = team.privacyContact?.email ?? '';
+			pcPostal = team.privacyContact?.postal ?? '';
+			contactSaved = null;
+			contactFailed = null;
 		});
 	});
 
@@ -92,6 +97,41 @@
 		} finally {
 			savingThresholds = false;
 		}
+	}
+
+	// The privacy contact (168, POPIA s18(1)(b)): whom members and farmers ask about the team's projects' information.
+	let pcName = $state('');
+	let pcEmail = $state('');
+	let pcPostal = $state('');
+	let savingContact = $state(false);
+	let contactSaved = $state<string | null>(null);
+	let contactFailed = $state<string | null>(null);
+	const contactUnchanged = $derived(
+		pcName.trim() === (team.privacyContact?.name ?? '') &&
+			pcEmail.trim() === (team.privacyContact?.email ?? '') &&
+			pcPostal.trim() === (team.privacyContact?.postal ?? '')
+	);
+
+	async function saveContact(next: { name: string; email: string; postal: string | null } | null) {
+		savingContact = true;
+		contactFailed = null;
+		contactSaved = null;
+		try {
+			team = await api.teams.setPrivacyContact(team.id, next);
+			pcName = team.privacyContact?.name ?? '';
+			pcEmail = team.privacyContact?.email ?? '';
+			pcPostal = team.privacyContact?.postal ?? '';
+			contactSaved = next ? 'Saved. Farmers see it from their farm page’s menu, and new invitations name it.' : 'Removed.';
+		} catch (err) {
+			contactFailed = msg(err);
+		} finally {
+			savingContact = false;
+		}
+	}
+
+	function submitContact(e: SubmitEvent) {
+		e.preventDefault();
+		void saveContact({ name: pcName.trim(), email: pcEmail.trim(), postal: pcPostal.trim() || null });
 	}
 
 	function submitThresholds(e: SubmitEvent) {
@@ -179,6 +219,47 @@
 			</form>
 		{:else}
 			<p class="muted small">Only owners can change them.</p>
+		{/if}
+	</section>
+
+	<section class="part" aria-labelledby="pc-h">
+		<h3 id="pc-h">Privacy contact</h3>
+		<p class="small rule">
+			Your organisation decides about the personal information in the team's projects. Name the person or office people should ask about
+			it: farmers see it from their farm page's menu, and invitations to the team and its projects name it (POPIA s18).
+		</p>
+		{#if isAdmin}
+			<form onsubmit={submitContact}>
+				{#if contactFailed}<div class="alert alert-error" role="alert">{contactFailed}</div>{/if}
+				<div class="field">
+					<label for="pc-name">Name or office</label>
+					<input id="pc-name" required maxlength="200" autocomplete="off" bind:value={pcName} oninput={() => (contactSaved = null)} />
+				</div>
+				<div class="field">
+					<label for="pc-email">Email address</label>
+					<input id="pc-email" type="email" required maxlength="254" autocomplete="off" bind:value={pcEmail} oninput={() => (contactSaved = null)} />
+				</div>
+				<div class="field">
+					<label for="pc-postal">Postal address (optional)</label>
+					<textarea id="pc-postal" rows="3" maxlength="500" bind:value={pcPostal} oninput={() => (contactSaved = null)}></textarea>
+				</div>
+				<div class="row">
+					<button class="btn" type="submit" disabled={savingContact || !pcName.trim() || !pcEmail.trim() || contactUnchanged}>
+						{savingContact ? 'Saving…' : 'Save contact'}
+					</button>
+					{#if team.privacyContact}
+						<button type="button" class="btn btn-sm" disabled={savingContact} onclick={() => saveContact(null)}>Remove</button>
+					{/if}
+				</div>
+				<p class="muted small saved" role="status">{contactSaved ?? ''}</p>
+			</form>
+		{:else if team.privacyContact}
+			<p class="small">
+				{team.privacyContact.name}, {team.privacyContact.email}{#if team.privacyContact.postal}<br />{team.privacyContact.postal}{/if}
+			</p>
+			<p class="muted small">Only owners can change it.</p>
+		{:else}
+			<p class="muted small">Not set yet. Only owners can set it.</p>
 		{/if}
 	</section>
 

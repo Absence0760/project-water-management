@@ -111,6 +111,8 @@ export const PackRenderRequestMessage = z
 		type: z.literal('render_pack'),
 		packId: Uuid,
 		projectId: Uuid,
+		/** An applicant's copy (165_applicant_copy): the pack's application, whose party's page is printed and stored under applicantPackPdfKey. */
+		scenarioId: Uuid.optional(),
 		token: z.string().regex(/^[A-Za-z0-9_-]{43}$/)
 	})
 	.strict();
@@ -136,6 +138,8 @@ export const PackRenderResultMessage = z
 		v: z.literal(1),
 		type: z.literal('rendered_pack'),
 		packId: Uuid,
+		/** The answer is about an applicant's copy (165), not the pack's own PDF. */
+		copy: z.literal('applicant').optional(),
 		result: PackRenderResult
 	})
 	.strict();

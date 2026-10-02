@@ -9,6 +9,7 @@
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
 	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '$lib/auth/mfaPrompt.svelte';
+	import { askForCode, freshCode } from '$lib/auth/freshCode.svelte';
 	import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
@@ -202,6 +203,19 @@
 		session.user && !session.user.renderSession && !authScreen && !farmScreen && !translated ? session.user.id : null
 	);
 	onMount(() => api.onError((err) => noteMfaRefusal(session.user?.id ?? null, err)));
+	// A code again (licensing positions item 9; lib/auth/freshCode.svelte.ts): a sign-off, issuing or withdrawing an
+	// evidence pack answered 401 mfa_fresh_code. The dialog is its own chunk, loaded only while it asks.
+	onMount(() =>
+		api.onFreshCode(async () => {
+			// Loaded before it opens, so a failed load answers "no code" instead of leaving the action waiting.
+			try {
+				await import('$lib/components/layout/FreshCodeDialog.svelte');
+			} catch {
+				return false;
+			}
+			return askForCode();
+		})
+	);
 	$effect(() => {
 		if (session.checked && !session.user) untrack(resetMfaPrompt);
 	});
@@ -247,6 +261,11 @@
 			<div class="verify-failed">
 				<ChunkFailed text="The reminder to set up two-step sign-in could not be loaded. Check your connection, then reload the page." />
 			</div>
+		{/await}
+	{/if}
+	{#if freshCode.open}
+		{#await import('$lib/components/layout/FreshCodeDialog.svelte') then dialog}
+			<dialog.default />
 		{/await}
 	{/if}
 	{#if bootError && !staticPage}

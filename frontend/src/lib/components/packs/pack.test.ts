@@ -200,6 +200,12 @@ describe('issueChecklist', () => {
 	it('fails a draft missing an erratum found since it was made, saying to draft it again', () => {
 		const stale = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: false, signed: true });
 		expect(stale.filter((c) => !c.ok).map((c) => c.id)).toEqual(['errataRecorded']);
+		// The registration check (167): listed only while the project requires it, naming who isn't checked.
+		expect(issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: true, registrationCheckRequired: false, registrationUnchecked: ['Dr X'] }).map((c) => c.id)).not.toContain(
+			'registrationChecked'
+		);
+		const unchecked = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: true, registrationCheckRequired: true, registrationUnchecked: ['Dr X'] });
+		expect(unchecked.filter((c) => !c.ok)).toEqual([expect.objectContaining({ id: 'registrationChecked', todo: expect.stringContaining('Dr X') })]);
 		expect(stale[2]!.todo).toMatch(/can’t be issued\. Draft the pack again/);
 	});
 });

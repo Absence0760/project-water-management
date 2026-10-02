@@ -1,4 +1,5 @@
-// One tick of the queue: purge old jobs, reports, alerts and lapsed invites, queue the data feeds
+// One tick of the queue: purge old jobs, reports, alerts, lapsed invites, deleted
+// notes' text and the erasure log's old entries, queue the data feeds
 // (feeds/schedule.ts), report schedules (reports/schedule.ts) and scheduled
 // alert checks (app_alert_schedule) that are due, then claim and run due
 // jobs one at a time until none are due or the time budget is spent, then
@@ -13,6 +14,7 @@ import { type NoticeResult, purgePackNotices, sendPackNotices } from '../evidenc
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { purgeInvites } from '../invites/invites.js';
+import { type LicenceRecordResult, sendLicenceRecordNotices } from '../licence/record.js';
 import { safeError, stackFrames } from '../logging/safeError.js';
 import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
@@ -88,6 +90,16 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 export const ALERT_CHECK_GAP = '1 hour';
 /** Alert deliveries (and events cleared this long ago) are kept this long, then the tick deletes them. */
 export const ALERT_RETENTION_DAYS = 180;
+/**
+ * A deleted note (its text and earlier texts) is erased this long after it was deleted, unless it belongs to a
+ * licence record (158_note_purge; Privacy §7). Long enough for a complaint about what was written to surface.
+ */
+export const DELETED_NOTE_RETENTION_DAYS = 90;
+/**
+ * An erasure log entry (159_erasure_log) is kept this long: above the longest automated backup
+ * (`db_backup_retention_days`, at most 35), so a restore can always re-apply the erasures after its restore point.
+ */
+export const ERASURE_LOG_RETENTION_DAYS = 40;
 
 /** Queue a job_dead check for one project at once (app_alert_schedule); a failure is logged, never thrown. */
 async function scheduleAlertCheck(projectId: string): Promise<void> {
@@ -132,6 +144,10 @@ export interface TickResult {
 	purged: number;
 	/** Lapsed invites deleted (invites/invites.ts purgeInvites). */
 	invitesPurged: number;
+	/** Notes deleted more than DELETED_NOTE_RETENTION_DAYS ago, erased with their earlier texts (158_note_purge). */
+	notesPurged: number;
+	/** Erasure log entries past ERASURE_LOG_RETENTION_DAYS deleted (159_erasure_log). */
+	erasuresPurged: number;
 	claimed: number;
 	done: number;
 	failed: number;
@@ -149,6 +165,8 @@ export interface TickResult {
 	packNotices: NoticeResult & { purged: number };
 	/** The known-defect emails (153_erratum_notices, issue #103): queued by the sweep of a new erratum, sent each tick. */
 	erratumNotices: ErratumNoticeResult & { purged: number; queued: number };
+	/** The licence record's review and closing notices (161_licence_record): owners and the operator, at most once each. */
+	licenceRecords: LicenceRecordResult;
 }
 
 /** Positive integer from the environment, or the fallback. */
@@ -165,6 +183,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	const result: TickResult = {
 		purged: 0,
 		invitesPurged: 0,
+		notesPurged: 0,
+		erasuresPurged: 0,
 		claimed: 0,
 		done: 0,
 		failed: 0,
@@ -173,10 +193,17 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
-		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 }
+		erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
+		licenceRecords: { due: 0, sent: 0, skipped: 0, failed: 0 }
 	};
 	result.purged = await withoutUser((db) => purgeJobs(db));
 	result.invitesPurged = await withoutUser((db) => purgeInvites(db));
+	result.notesPurged = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_purge_deleted_notes(make_interval(days => $1)) AS n', [DELETED_NOTE_RETENTION_DAYS])).rows[0]?.n ?? 0
+	);
+	result.erasuresPurged = await withoutUser(
+		async (db) => (await db.query<{ n: number }>('SELECT app_purge_erasure_log(make_interval(days => $1)) AS n', [ERASURE_LOG_RETENTION_DAYS])).rows[0]?.n ?? 0
+	);
 	const noticesPurged = await purgePackNotices();
 	const erratumPurged = await purgeErratumNotices();
 	if (o.feeds !== false) result.feeds = await scheduleDueFeeds({ all: o.allFeeds });
@@ -206,6 +233,8 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 	// fails can't hold them up; an unchanged list costs a lookup per erratum. Its notices go out in the same tick.
 	const erratumQueued = await sweepErrata();
 	result.erratumNotices = { purged: erratumPurged, queued: erratumQueued, ...(await sendErratumNotices()) };
+	// A licence record's review is due, or its closing date passed (161): asked, never deleted.
+	result.licenceRecords = await sendLicenceRecordNotices();
 	result.stats = await withoutUser(queueStats);
 	return result;
 }

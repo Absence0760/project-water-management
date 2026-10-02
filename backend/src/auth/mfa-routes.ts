@@ -7,6 +7,7 @@
 //   DELETE /mfa/totp             { code } → off (a code from the app, or a recovery code)
 //   POST   /mfa/recovery-codes   { code } → a new set, replacing the old (a code from the app)
 //   POST   /mfa/verify           { code } + the sign-in challenge cookie → the session (public)
+//   POST   /mfa/step-up          { code } → this session counts as having just given a code (stepUp.ts requireFreshCode)
 //
 // Every code check counts on the account's code throttle first, in its own
 // transaction (mfa.ts countCodeAttempt), so parallel guesses queue on its row
@@ -126,7 +127,7 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			logLoginFailed('/auth/mfa/totp/confirm', 'bad_code');
 			throw wrongCode();
 		}
-		await issueSession(c, userId, undefined, WITH_CODE);
+		await issueSession(c, userId, undefined, WITH_CODE, Date.now());
 		c.header('Cache-Control', 'no-store');
 		return c.json({ recoveryCodes: result.codes });
 	})
@@ -216,7 +217,34 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			throw wrongCode();
 		}
 		clearMfaChallenge(c);
-		await issueSession(c, userId, undefined, WITH_CODE);
+		await issueSession(c, userId, undefined, WITH_CODE, Date.now());
 		issueDevice(c, result.user.email, result.user.sessions_revoked_at);
 		return c.json({ user: toUser(result.user), ...(result.via === 'recovery' ? { usedRecoveryCode: true } : {}) });
+	})
+	// A code again, inside a session (licensing positions item 9): a sign-off and issuing or withdrawing an
+	// evidence pack need one from the last 10 minutes (stepUp.ts requireFreshCode, 401 mfa_fresh_code). A code
+	// from the app or a recovery code; the session is re-issued as signed in with a code, just now, so a session
+	// that signed in with the password only (an authenticator added elsewhere) is stepped up too. Same throttle
+	// as every code check.
+	.post('/mfa/step-up', requireUser, async (c) => {
+		if (c.get('renderSession')) throw new ApiError(403, 'this session can only read one report');
+		const body = Code.parse(await readJson(c));
+		const userId = c.get('userId');
+		await throttle(c, userId, '/auth/mfa/step-up');
+		const result = await withUser(userId, async (db) => {
+			if (!(await isEnrolled(db, userId))) return 'none' as const;
+			const via = await useCode(db, userId, body.code, { recovery: true });
+			if (!via) return 'wrong' as const;
+			if (via === 'recovery') await recordSecurityEvent(db, userId, 'mfa.recovery_used');
+			await db.query('SELECT app_mfa_succeeded()');
+			return via;
+		});
+		if (result === 'none') throw ApiError.coded(403, 'mfa_required', 'this needs two-step sign-in: set up an authenticator app on your Account page first');
+		if (result === 'wrong') {
+			logLoginFailed('/auth/mfa/step-up', 'bad_code');
+			throw wrongCode();
+		}
+		await issueSession(c, userId, undefined, WITH_CODE, Date.now());
+		c.header('Cache-Control', 'no-store');
+		return c.json({ ok: true, ...(result === 'recovery' ? { usedRecoveryCode: true } : {}) });
 	});

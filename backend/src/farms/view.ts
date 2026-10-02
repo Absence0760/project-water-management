@@ -19,6 +19,7 @@ import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
 import { isStale } from '../portfolio/status.js';
+import { projectPrivacyContact } from '../teams/privacyContact.js';
 import type { StoredCatchmentView } from '../publish/publish.js';
 
 const isoDate = z
@@ -193,6 +194,17 @@ export async function farmMap(db: Db, projectId: string, nodeId: string): Promis
 }
 
 export const farmViewRoutes = new Hono<AuthEnv>()
+	// Who decides about this project's information (POPIA s18(1)(b), 168): its team's name and privacy contact,
+	// for every member, farmers included (the farm menu's "Who decides about your farm's information").
+	// contact null: the project has no team, or the team has set no contact.
+	.get('/:id/privacy-contact', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'farmer');
+			const { rows: p } = await db.query<{ wuaName: string | null }>('SELECT wua_name AS "wuaName" FROM project WHERE id = $1', [id]);
+			return c.json({ wuaName: p[0]?.wuaName ?? null, contact: await projectPrivacyContact(db, id) });
+		});
+	})
 	// The caller's farms in this project, and whether anything is published.
 	.get('/:id/farm', async (c) => {
 		const id = c.req.param('id');

@@ -12,7 +12,7 @@
 // such column fails this file until someone decides how it stays final. Each
 // probe has a positive control (the forward move the API makes still works).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from './tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -275,15 +275,21 @@ describe('scenarios', () => {
 		expect(s.status).toBe(201);
 		const sid = s.body.scenario.id as string;
 		expect((await owner.call('POST', `/projects/${projectId}/scenarios/${sid}/submit`, {})).status).toBe(200);
-		expect((await owner.call('POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(200);
+		await actForAuthority(owner, projectId, owner.id);
+		expect((await owner.call('POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		for (const sql of [
 			"UPDATE scenario SET status = 'submitted', decided_at = NULL, decided_by = NULL, outcome = NULL WHERE id = $1",
-			"UPDATE scenario SET outcome = 'refused' WHERE id = $1",
-			"UPDATE scenario SET decided_at = decided_at + interval '1 day' WHERE id = $1"
+			"UPDATE scenario SET outcome = 'licence_refused' WHERE id = $1",
+			"UPDATE scenario SET decided_at = decided_at + interval '1 day' WHERE id = $1",
+			// 163: the authority's record is set once, with the outcome.
+			"UPDATE scenario SET decision_authority = 'Someone else' WHERE id = $1",
+			"UPDATE scenario SET decision_date = decision_date - 1 WHERE id = $1",
+			"UPDATE scenario SET reasons_received = false WHERE id = $1",
+			"UPDATE scenario SET decision_reference = '' WHERE id = $1"
 		]) {
 			await expectRefused(sql, [sid]);
 		}
 		const [row] = await asOwner('SELECT status, outcome, decided_by FROM scenario WHERE id = $1', [sid]);
-		expect(row).toMatchObject({ status: 'decided', outcome: 'approved', decided_by: owner.id });
+		expect(row).toMatchObject({ status: 'decided', outcome: 'licence_issued', decided_by: owner.id });
 	});
 });

@@ -6,7 +6,8 @@
 // opens their copy (their own farm by name; the neighbour beside it, not
 // downstream, not listed, as in their results view;
 // no PDF, manifest or bundle; the errata found since issue when there are
-// any), makes a read-only share link to it, and
+// any), makes their printable copy (165_applicant_copy: printed by the server
+// as them, with its own hash), makes a read-only share link to it, and
 // someone signed out opens the link. axe on the pack view and the Share
 // dialog; the phone layout doesn't scroll sideways. Synthetic catchment and
 // invented rule table, as evidence-pack.spec.ts.
@@ -20,6 +21,8 @@ import { addMember, createRun, nominateRun, seedRunnableProject, updateSettings 
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { runJobsTick } from '../support/jobs.ts';
+import { createHash } from 'node:crypto';
 
 const PHONE = { width: 360, height: 740 };
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
@@ -149,6 +152,26 @@ test('an applicant reads their own issued pack, anonymised, and shares it by lin
 	await a.unroute(packApi);
 	await a.reload();
 	await expect(view.getByTestId('applicant-pack-standing')).toHaveAttribute('data-status', 'issued');
+
+	// Their printable copy (165_applicant_copy): the server prints this page as them, with its own hash.
+	await view.getByTestId('applicant-copy-ask').click();
+	await expect(view.getByTestId('applicant-copy-rendering')).toHaveText('Printing your copy…');
+	await runJobsTick({ projects: [project.id], schedule: false });
+	const download = view.getByTestId('applicant-copy-download');
+	await expect(download).toHaveAttribute('href', `${packApi}/pdf`);
+	const ready = view.getByTestId('applicant-copy-ready');
+	await expect(ready).toContainText('a copy of this page, not the pack');
+	const copySha = (await ready.locator('.mono').textContent())!.trim();
+	expect(copySha).toMatch(/^[0-9a-f]{64}$/);
+	const link = await a.request.get(`${packApi}/pdf`, { maxRedirects: 0 });
+	expect(link.status()).toBe(302);
+	const location = link.headers()['location']!;
+	expect(location).toContain(`/packs/${project.id}/${pack.id}/applicant/${copySha}.pdf?`);
+	const pdf = Buffer.from(await (await fetch(location)).arrayBuffer());
+	expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+	expect(createHash('sha256').update(pdf).digest('hex')).toBe(copySha);
+	// Not the pack: its own hash, never the pack's PDF's.
+	expect(copySha).not.toBe((await (await a.request.get(packApi)).json()).verify.pdfSha256);
 
 	// A share link from the pack view, opened signed out.
 	await view.getByTestId('applicant-pack-share-open').click();

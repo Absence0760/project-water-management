@@ -36,6 +36,12 @@
 		const f = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!f) return;
 		error = null;
+		// A WARMS extract says how it was obtained (162, D3; operator agreement 3A.1(d)).
+		if (kind === 'warms_extract' && !reference.trim()) {
+			error = 'Say how you obtained this extract (the DWS or CMA letter or terms) before choosing the file.';
+			if (input) input.value = '';
+			return;
+		}
 		if (f.size > 2 * 1024 * 1024) {
 			error = 'The file is larger than 2 MB. Split it, or keep only the catchment’s rows.';
 			return;
@@ -124,8 +130,13 @@
 				</select>
 			</div>
 			<div class="field">
-				<label for="alloc-ref">Reference <span class="muted">(optional)</span></label>
-				<input id="alloc-ref" type="text" maxlength="500" placeholder="e.g. extract received from the CMA, date" bind:value={reference} />
+				{#if kind === 'warms_extract'}
+					<label for="alloc-ref">How you obtained this extract (the DWS or CMA letter or terms)</label>
+					<input id="alloc-ref" type="text" maxlength="500" required placeholder="e.g. CMA letter ref. 12/3, 2026-08-01" bind:value={reference} />
+				{:else}
+					<label for="alloc-ref">Reference <span class="muted">(optional)</span></label>
+					<input id="alloc-ref" type="text" maxlength="500" placeholder="e.g. template filled in by the WUA, date" bind:value={reference} />
+				{/if}
 			</div>
 			<div class="field">
 				<label for="alloc-file">File (CSV, up to 2 MB)</label>

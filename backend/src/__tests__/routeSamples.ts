@@ -33,6 +33,18 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/copy': () => ({ body: { name: 'Ladder copy' } }),
 	'POST /projects/:id/members': () => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, role: 'viewer' } }),
 	'PATCH /projects/:id/members/:userId': () => ({ body: { role: 'editor' } }),
+	'POST /projects/:id/members/:userId/registration-checks': () => ({
+		body: {
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationNo: '400999/20',
+			registerName: 'Ladder Signer',
+			outcome: 'registered',
+			checkedByOrg: 'Ladder WUA',
+			checkedAt: '2026-01-01'
+		}
+	}),
+	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
 	'PUT /projects/:id/model': (c) => ({ body: c.model }),
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),
@@ -49,8 +61,10 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios': (c) => ({ body: { name: `Ladder ${crypto.randomUUID()}`, baseRunId: c.runId, ops: [] } }),
 	'PATCH /projects/:id/scenarios/:sid': () => ({ body: { description: 'ladder' } }),
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),
-	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'approved' } }),
+	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'licence_issued', authority: 'Ladder CMA', decisionDate: '2026-09-30', reasonsReceived: true } }),
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
+	'POST /projects/:id/scenarios/:sid/questions': () => ({ body: { problem: 0, line: 'op 1 (node.set): ladder' } }),
+	'POST /projects/:id/application-questions/:qid/answer': () => ({ body: { answer: 'Ladder answer' } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
 		body: {
@@ -95,6 +109,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PUT /projects/:id/farmers/:userId': (c) => ({ body: { nodeIds: [c.otherFarmId] }, params: { userId: c.farmer.id } }),
 	'POST /projects/:id/publication': (c) => ({ body: { runId: c.runId } }),
 	'PATCH /projects/:id/publication/:pubId': () => ({ body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } } }),
+	'POST /projects/:id/publication/:pubId/endorse': () => ({ body: { note: 'ladder' } }),
 	'POST /projects/:id/share-links': () => ({ body: { label: 'Ladder link', expiresInDays: 7 } }),
 	'POST /projects/:id/allocations': (c) => ({ body: { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 } }),
 	// A PATCH changes only what it sends (issue #72), so an empty one is refused before the role check.
@@ -125,7 +140,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'PATCH /projects/:id/notes/:noteId': () => ({ body: { body: 'Edited' } }),
 	'POST /projects/:id/api-keys': () => ({ body: { name: 'Ladder key' } }),
 	'PUT /projects/:id/alert-rules': (c) => ({ body: { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] } }),
-	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } })
+	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } }),
+	'PUT /projects/:id/licence-record': () => ({ body: { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'ladder' } }),
+	'PUT /projects/:id/allocations/viewer-units': () => ({ body: { on: true } })
 };
 
 /**
@@ -190,6 +207,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const outlookId = await plantCompleteOutlook(owner!.id, projectId, runId, [{ nodeId: a.id }, { nodeId: b.id }]);
 	const cid = await plantCalibration(owner!.id, projectId);
 	const [rev] = await asOwner('SELECT id FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
+	const qid = await plantQuestion(projectId, sid);
 	return {
 		owner: owner!,
 		editor: editor!,
@@ -223,9 +241,26 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			jobId,
 			outlookId,
 			cid,
+			qid,
 			revId: String(rev!.id)
 		}
 	};
+}
+
+/**
+ * An unanswered "Ask the assessors why" question on scenario `sid`, planted as
+ * the schema owner (164_applicant_visibility): asking one through the API
+ * needs an application whose rule turns on hidden farms
+ * (scenarios/questions.db.test.ts asks one).
+ */
+export async function plantQuestion(projectId: string, sid: string): Promise<string> {
+	const [q] = await asOwner(
+		`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text)
+		 VALUES ($1, $2, 'Ladder application', 'op 1 (node.set): doesn''t apply to the catchment as modelled', '{0}', '[]', '{shares}', 'op 1 (node.set): ladder')
+		 RETURNING id`,
+		[projectId, sid]
+	);
+	return q!.id as string;
 }
 
 /**

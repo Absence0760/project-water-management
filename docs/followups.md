@@ -3512,8 +3512,35 @@ from the WP:
       modelled dam, with "not an entitlement" (`FarmView.registered`; no
       name or registration number). Not blocked by D3, which is about other
       people's names and volumes.
-- [ ] **Share views per D3 (c)** (volumes public, names hidden). Trigger: D3
-      settled with the client's legal adviser.
+- [x] **D3: who sees registered water use** (2026-10-01, migration 162,
+      provisional position, pre-counsel research). Viewers read each volume
+      only once an owner switches it on, else totals per water source at 5
+      or more registered users; § 5 of the evidence report lists only the
+      applicant's own units, the rest as totals (`evidence-15`); a WARMS
+      extract needs its reference; Privacy §5 says so
+      ([allocations.md § Who sees what](./allocations.md#who-sees-what)).
+- [ ] **Share views: allocation totals** (D3 (c), narrowed): totals only, at
+      5 or more holders (the share links' `k` rule), never a unit beside a
+      volume or a name. Share views show no allocation figure today, so
+      nothing leaks; this is the feature, to the rule. Trigger: a client
+      asks for registered use on its public page.
+- [ ] **A capped run's per-unit series still bound a viewer's guess at the
+      volume** (D3). With viewers' switch off, a viewer reads no copy of the
+      volumes, but a cap run's daily `supplied` per unit is held to its
+      volume, and `allocation_left_*` (a capped source with licence
+      conditions) is the volume less use so far; a viewer's project
+      `model-input` also omits the volumes (RLS), so a fit they run in a cap
+      project runs uncapped. Durable fix: for a viewer with the switch off,
+      leave `allocation_left_*` out of the series routes and exports, and
+      say on a cap run's per-unit pages that its use is capped by a volume
+      they can't see. Trigger: a project with outside viewers runs in cap
+      mode, or counsel reads per-unit modelled use as personal information.
+- [ ] **Registration numbers in History** are readable by viewers
+      (`allocation.created/changed/deleted` carry `registrationNo`), and a
+      registration number is a "unique identifier" (POPIA s1). Durable fix:
+      leave `registrationNo` out of those events for a viewer in the History
+      route (as `allocation.viewer_units` is off). Trigger: with the share
+      views item above, or counsel's review (#92).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -4220,12 +4247,19 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
-      recommended defaults: D2's anonymised baseline and results (downstream
-      units as a whole percentage, nothing but the EWR for a run with a
-      baseline assumption) and the outcome words
-      (`approved`, `approved_with_conditions`, `refused`) are **pending the
-      client and the licensing authority**. Trigger: the client's answers.
+- [ ] **D1, D2, D3 and D14 are provisional positions** (pre-counsel
+      research, 2026-10-01; [issue #90](https://github.com/Absence0760/project-water-management/issues/90);
+      step-3 § 11; [legal-status.md § Positions taken pending counsel](./legal-status.md#positions-taken-pending-counsel-2026-10-01)),
+      built and waiting for the client, the pilot authority and counsel
+      (#92): D1 (who decides: the responsible authority, members acting for
+      it, the endorsement and the conflict guard, 163_licensing_authority);
+      D2 (the applicant sees the farmer scope plus the river: the k rule
+      split, the issued copy's frozen units, 164_applicant_visibility and
+      165_applicant_copy); D3 (names to editors, owners and the linked
+      farmer; volumes outside the organisation as totals, 162; [allocations.md § Who sees what](./allocations.md#who-sees-what));
+      and the outcome words (D14: `licence_issued`, `licence_refused`,
+      `application_rejected`, `not_considered`, 163), whose labels may follow
+      the pilot authority's house style. Trigger: the client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
       `mask` (then `maskedNames`). The project owner puts an applicant and their
       consultant in an applying party (`project_member.party`); an applicant
@@ -4275,7 +4309,7 @@ Applicant view and the Applications tab. Left:
       each Applications row) with the `assessors`, `parties` and
       `public_participation` audiences, the read/write matrix in
       [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
-      edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
+      edit of one kept in `note_revision`. An NGO (since 166 with no role, through the link) opens the
       link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
 - [x] **Pack targets for share links and notes** (WP-3.15, the pack half):
       done in `128_pack_share_notes` (2026-09-30, issue #71). An editor
@@ -4298,16 +4332,15 @@ Applicant view and the Applications tab. Left:
       (issue #71). The Applications tab and the Application panel list each
       application's packs and link to the pack view
       ([ui.md § Evidence pack](./ui.md#evidence-pack)).
-- [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
-      as a `viewer` to comment, and the e2e does so; but a viewer reads every
-      farm's figures, every team note and every decided application, far
-      more than commenting needs and everything the share link redacts. A
-      member contributor with no farm links can already post
-      `public_participation` and reads almost nothing (045). Durable fix: a
-      comment-only role or scope (or invite NGOs as linkless contributors,
-      if the client accepts that they could then file applications).
-      Trigger: the first real NGO invited to comment (client decision,
-      step-3 D5).
+- [x] **A comment-only role for NGOs** (WP-3.15). Done 2026-10-01
+      (166_public_participation; licensing positions item 7, provisional
+      position, pre-counsel research): no role at all. Anyone signed in
+      comments through a live link to an application or an issued pack (a
+      *link participant*, `POST /share/comment`, 10 an hour), reads only what
+      the link shows, and is never made a viewer; the e2e
+      (`scenario-share.spec.ts`, `pack-share.spec.ts`) comments as a
+      non-member ([scenarios.md § Sharing and
+      comments](./scenarios.md#sharing-and-comments-wp-315)).
 - [x] **The owner's inventory of every public link.** Done 2026-09-30:
       the Project page's Share links list is every link in the project
       (`GET …/share-links?scope=all`, owner only), the baseline's and each
@@ -4348,6 +4381,19 @@ Applicant view and the Applications tab. Left:
       from the members list keeps the farms. Tests:
       `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
       `farmer-invites.spec.ts`.
+- [ ] **A dominance rule beside k** (filed 2026-10-01 with the k rule's
+      split, 164; provisional position, pre-counsel research, 2026-10-01).
+      The use's catchment series (outflow, observed flow, EWR shortfall) and
+      the volume rows show at 5 or more farm holders, but k alone doesn't
+      protect a catchment where one holder does almost all the abstraction:
+      natural minus outflow is then mostly that holder's use. Durable fix:
+      withhold the use's series and volume rows also when one holder accounts
+      for more than ~70 % of modelled consumptive use in the published run
+      (one SQL helper beside the holder count, used by `app_share_series`,
+      `run_series_select_contributor` and the volume projections, with tests
+      at 69 and 71 %). Trigger: counsel's answer on question 5 of the
+      licensing positions (k and "reasonably foreseeable method"), or the
+      first pilot catchment with one dominant user.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +
@@ -4878,16 +4924,31 @@ bundle, [evidence-pack.md](./evidence-pack.md)). Left:
       the applicant's pack view ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
       `app_share_link_creatable` / `_visible` let the application's owner
       link their own issued pack and list and revoke the links they made.
-- [ ] **An anonymised printable copy of the pack for its applicant.** The
-      applicant's view (131) offers no PDF, manifest or bundle: each carries
-      the whole report, every unit named (the assessors' copy, D2). An
-      applicant who needs a document to attach has the verify code and the
-      assessors' copy. Durable fix: a D2-anonymised print of the applicant's
-      view (the server renderer, a render session scoped to that route), not
-      hashed as the pack (it isn't the pack), saying so and carrying the
-      pack's code. Trigger: an applicant or the client asks for a file of
-      their own copy, or D2 is settled with the client (it may instead open
-      the assessors' copy to the applicant).
+- [ ] **Send a pack to the authority's own address, not only its members.**
+      `POST …/packs/:packId/send` (licensing build item 13, 2026-10-01)
+      emails only members marked as acting for the responsible authority,
+      with a link to the pack's page that needs them signed in.
+      `settings.responsibleAuthority` (163) holds no address, and a link that
+      opened the PDF and bundle without signing in would be a new way out of
+      the app for every unit's figures. Durable fix: an
+      `authority.email` in the settings, set by the owner, and a single-use,
+      time-limited delivery token (stored as its hash, like a render token)
+      that downloads exactly that pack's PDF and bundle once, recorded in
+      the history; the operator agreement then names the authority as a
+      recipient. Trigger: an authority whose assessors won't hold accounts,
+      or counsel's answer on the D1 hosting question.
+- [x] **An anonymised printable copy of the pack for its applicant.**
+      Built 2026-10-01 (165_applicant_copy; licensing build item 12,
+      provisional position, pre-counsel research, 2026-10-01): a party of
+      the application asks for it on their pack view (`POST
+      …/scenarios/:sid/packs/:packId/pdf`), an `applicant_pack_render` job
+      prints that view as them in the server renderer (a render session that
+      reads that one page, render-token purpose `applicant_pack`), stores it
+      beside the pack's PDF under `applicant/` and records its own SHA-256
+      once (`evidence_pack_applicant_copy`); `GET …/pdf` downloads it. The
+      printed page says it is a derived copy, not the pack, with the pack's
+      code, manifest hash and verify address
+      ([evidence-pack.md § Applicants](./evidence-pack.md#applicants)).
 - [x] **"Pack issued" notices** (Mailpit locally, SES in production) to the
       project's editors and the scenario's owner: built 2026-09-30
       (133_pack_notices, `backend/src/evidence/notices.ts`). Issuing a pack,
@@ -5033,13 +5094,29 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `/terms`, linked from sign-up, the invite emails, the sign-in pages
       and the farm menu, with the consent record (087) and re-acceptance
       (2026-09-28); counsel review is gate D in legal-status.md (#103).
-- [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
-      security.md: farmers' accounts and farm links (the WUA's function or
-      legitimate interest, not consent), notes and the audit log kept for
-      the life of the project, alerts as service messages the WUA switches
-      on per catchment, each person choosing how often (WP-2.13).
-      Who: the client's information officer. Trigger: with the privacy
-      notice.
+- [x] **Confirm the lawful basis** for each row marked *(confirm)* in
+      security.md. **Provisional positions taken (pre-counsel research,
+      2026-10-01):** accounts on contract, s11(1)(b); memberships, farm
+      links, notes, the audit log and alerts on the client's legitimate
+      interest, s11(1)(f), with the s11(3) objection built in (leave the
+      project; the alert unsubscribe); records kept under s14(1)(b); "and
+      duty to keep" dropped from Privacy §4. Alerts are service messages,
+      not direct marketing (s1, s69): `mail/alerts.content.test.ts` holds
+      their links to an allowlist, and SES open and click tracking stays
+      off. Privacy §4 and §10, security.md § Personal information,
+      `LEGAL_VERSION` 2026-10-02. The client's information officer may still
+      override them by written instruction (operator agreement cl. 3).
+- [x] **The client's privacy contact on the farm page and in invitations**
+      (POPIA s18(1)(b) for project data). Done (168_team_privacy_contact;
+      provisional position, pre-counsel research, 2026-10-01): a team's
+      admins set a privacy contact (name or office, email, optional postal
+      address) in Team settings; farmers read it from the farm menu's "Who
+      decides about your farm's information" (`GET
+      /projects/:id/privacy-contact`), and invitation emails to the team or
+      its projects name it. Privacy §2 points there. A project without a
+      team, or a team that hasn't set one, still relies on operator agreement
+      3A.1(b) (the client's own notice); the page then says to ask the
+      inviter or the WUA.
 - [ ] **Operator agreement** (POPIA s20–21, gate B in #103) between the client as
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
@@ -5078,34 +5155,47 @@ own. Loop in the CISO or security analyst before acting on any of them.
       `assertNotLastAdmin`, and migration 149 has the keep-owner and
       keep-admin triggers take a per-project (per-team) lock before counting;
       `last-owner-race.db.test.ts` forces both orders.
-- [ ] **A DWS or CMA responsible party may have to keep the maker's name**
-      (National Archives Act, operator agreement notes for counsel, clause
-      8.4). Durable fix: a per-team setting that keeps a snapshot of the name
-      on the evidence (its own migration), on for such a team. Trigger: D1
-      (#50) puts the published baseline with a CMA or DWS, or counsel says
-      the Act applies.
-- [ ] **Retention of deleted notes' bodies.** A soft-deleted note keeps its
-      body for editors for the life of the project (037). Decide a limit (for
-      example a year, then purge the body and keep the event). Who: client.
-      Trigger: with the privacy notice.
-- [ ] **Backups after an erasure.** A deleted account stays in RDS automated
-      backups for up to `db_backup_retention_days` (7–35). The usual
-      answer is that backups age out and are never restored into live use
-      without re-applying erasures; confirm and put it in the notice. Who:
-      operator + information officer. Trigger: with the privacy notice.
-      Since self-service deletion (143) the operator log no longer sees
-      every erasure: `DELETE /auth/me` logs `account_deleted` with no id, on
-      purpose. If the answer is "re-apply erasures after a restore", that
-      step needs a list of erased account ids that survives a restore (the
-      restore takes the database back, so not a table in it): for example
-      the id in that log line with log retention at least the backups', or
-      a write to a separate store. Decide it with the answer, in the same
-      change as the runbook step (deployment.md § Rollback).
-- [ ] **D12 confirmation.** The audit log is pseudonymised on account
-      deletion ("Deleted user", 048) as the roadmap recommends; the
-      information officer confirms it (or asks for full deletion of the
-      events, which would weaken the regulator's trail). Trigger: with the
-      privacy notice.
+- [ ] **A DWS or CMA responsible party keeps the maker's name** (National
+      Archives Act s13(2)(a), operator agreement 3A.2). **Built 2026-10-01
+      (161):** the operator-set `team.public_records` keeps the name in that
+      team's project history after account deletion, and the team and its
+      projects are kept until `team.records_disposal_confirmed_on`
+      (provisional position, pre-counsel research). Left: Privacy §7's
+      sentence for such a team ("If the organisation responsible for a
+      project is a government body that must keep its records by law …, your
+      name stays in that project's history after your account is deleted"),
+      a `LEGAL_VERSION` bump with it and an email to that team's members
+      first (Privacy §12). Trigger: the first DWS or CMA client signs 3A.2.
+- [x] **Retention of deleted notes' bodies.** Done (158_note_purge.sql;
+      provisional position, pre-counsel research, 2026-10-01): a deleted
+      note's text and earlier texts are erased 90 days after deletion by the
+      tick (`app_purge_deleted_notes`, `DELETED_NOTE_RETENTION_DAYS`); the
+      `note.deleted` event stays; a note on a scenario or pack past draft is
+      kept hidden with the licence record. Privacy §7, security.md,
+      data-model.md § Notes. A dispute before day 90: the client instructs
+      the operator in writing to copy the note out first (no legal-hold
+      feature until one is asked for).
+- [x] **Backups after an erasure.** Done (provisional position, pre-counsel
+      research, 2026-10-01): backups age out (≤ 35 days) and a restore
+      re-applies erasures and revocations before traffic is back.
+      `erasure_log` (159) keeps the id of every deleted account, project and
+      team for 40 days, written by triggers so both deletion paths are
+      covered; the restore runbook's step 6a reads it, and the audit log's
+      revocations, on the old instance (deployment.md § Restoring the
+      database); `account_deleted` now logs the account id for the case
+      where the instance itself is lost; the old instance's final snapshot
+      is taken only if needed and deleted within 30 days; the teardown
+      snapshot is kept 90 days after the shutdown notice. Privacy §7,
+      operator agreement 5.8 and 10.2, infra/README.md § Tearing down.
+- [x] **D12 confirmation** (2026-10-01, provisional position, pre-counsel
+      research). Pseudonymising is enough: s24(1)(b) reaches only what s14
+      no longer authorises, and s14(1)(b) authorises the audit trail. The
+      events stay, treated as personal information (not de-identified).
+      Migration 160 also blanks the deleted account's masked address in
+      invitation entries (`app_mask_email`, paired with `maskEmail` by
+      `mask-email.db.test.ts`); Privacy §7 says so. If counsel wants the
+      events de-identified, the remaining step is clearing `subject.userId`
+      and node names in events about the person.
 - [x] **Personal-information incident procedure** for the "a farmer sees the
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data

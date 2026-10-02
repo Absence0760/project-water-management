@@ -1,6 +1,8 @@
 <script lang="ts">
 	// An application's workflow (WP-3.3, docs/ui.md § Applications): where it
-	// stands, the owner's Submit / Withdraw / Reopen, the assessor's decision,
+	// stands, the owner's Submit / Withdraw / Reopen, the responsible
+	// authority's decision as recorded by a member acting for it
+	// (163_licensing_authority: the app records the decision, never makes it),
 	// and who it is shared with. The server holds every rule (who may move it,
 	// that a submit freezes the ops, that no one decides their own); this
 	// offers only the moves it would allow. Its comments (WP-3.15: the notes
@@ -10,7 +12,12 @@
 	// the project's viewers and up (the pack's own page), and to its
 	// applicant and whoever they shared it with the ones that were issued,
 	// never a draft (131_applicant_packs: their anonymised pack view, where
-	// the applicant also shares it by link).
+	// the applicant also shares it by link). The notice's objection address
+	// and closing date (the applicant's, while a draft; every comment box
+	// prints them beside the warning that a comment is not an objection), and
+	// for the applicant and the assessors the public-participation record
+	// (166_public_participation, the reg 19 report's material). The drafts the
+	// caller may sign as the application's appointed specialist (167_signers).
 	import { base } from '$app/paths';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -22,6 +29,7 @@
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import {
 		api,
+		OUTCOME_BASIS,
 		OUTCOME_LABEL,
 		scenarioProblems,
 		SCENARIO_OUTCOMES,
@@ -29,16 +37,19 @@
 		type Pack,
 		type Scenario,
 		type ScenarioOutcome,
-		type ScenarioWithCheck
+		type PackSignoffList,
+		type ScenarioWithCheck,
+		type SpecialistDraft
 	} from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	let {
 		projectId,
 		scenario: s,
 		isOwner,
 		canDecide,
+		canEdit = false,
 		problems,
 		unverifiedRuns = 0,
 		locked = false,
@@ -50,8 +61,14 @@
 		scenario: Scenario;
 		/** The applicant who made it: they submit, withdraw, reopen and share it. */
 		isOwner: boolean;
-		/** An editor who isn't its owner: they decide it once submitted. */
+		/**
+		 * An editor who isn't its owner and whom the project's owner marks as
+		 * acting for the responsible authority (163): they record its decision
+		 * once submitted.
+		 */
 		canDecide: boolean;
+		/** An editor or owner of the project: an assessor, whether or not they act for the authority. */
+		canEdit?: boolean;
 		/** How many of its changes don't apply to its base (a submit is refused until none). */
 		problems: number;
 		/**
@@ -108,15 +125,39 @@
 	const withdraw = () => act('Withdrawn.', () => api.scenarios.withdraw(projectId, s.id));
 	const reopen = () => act('Back to draft.', () => api.scenarios.reopen(projectId, s.id));
 
-	// --- the decision ------------------------------------------------------------------
+	// --- the authority's decision (163_licensing_authority) --------------------------
 	let outcome = $state<ScenarioOutcome | ''>('');
 	let reasons = $state('');
+	/** Empty: the project's settings.responsibleAuthority (the server refuses when it names none). */
+	let authority = $state('');
+	let decisionDate = $state('');
+	let reference = $state('');
+	let reasonsReceived = $state<'' | 'yes' | 'no'>('');
 	function decide(e: SubmitEvent) {
 		e.preventDefault();
-		if (!outcome) return;
-		const o = outcome;
-		act('Decided.', () => api.scenarios.decide(projectId, s.id, o, reasons.trim()));
+		if (!outcome || !decisionDate || !reasonsReceived) return;
+		const body = {
+			outcome,
+			...(authority.trim() ? { authority: authority.trim() } : {}),
+			decisionDate,
+			reference: reference.trim(),
+			reasonsReceived: reasonsReceived === 'yes',
+			note: reasons.trim()
+		};
+		act('Decision recorded.', () => api.scenarios.decide(projectId, s.id, body));
 	}
+	/** The decision's record under its outcome: the reference, the reasons answer, who recorded it and when. */
+	const decisionRecord = $derived(
+		[
+			s.decisionReference ? `Reference ${s.decisionReference}.` : '',
+			s.reasonsReceived === true ? 'Written reasons received.' : s.reasonsReceived === false ? 'Written reasons not received.' : '',
+			`Recorded${s.decidedBy ? ` by ${s.decidedBy}` : ''}${s.decidedAt ? ` on ${fmtDate(s.decidedAt, true)}` : ''}.`
+		]
+			.filter(Boolean)
+			.join(' ')
+	);
+	/** An editor who didn't make it: they read it as an assessor (comments, share links), deciding or not. */
+	const assessor = $derived(canDecide || (canEdit && !isOwner));
 
 	// --- sharing -------------------------------------------------------------------------
 	// The owner picks from the people the server lists for them (an applicant:
@@ -203,11 +244,59 @@
 			}, failed);
 	});
 
+	// --- the notice: where written objections go (166) ---------------------------------
+	let noticeOpen = $state(false);
+	let address = $state('');
+	let closing = $state('');
+	function editNotice() {
+		address = s.objectionAddress ?? '';
+		closing = s.objectionClosingDate ?? '';
+		noticeOpen = true;
+	}
+	function saveNotice(e: SubmitEvent) {
+		e.preventDefault();
+		const body = { objectionAddress: address.trim() || null, objectionClosingDate: closing || null };
+		act('Notice details saved.', async () => {
+			const d = await api.scenarios.update(projectId, s.id, body);
+			noticeOpen = false;
+			return d;
+		});
+	}
+
+	// --- the specialist's drafts to sign (167) ------------------------------------------
+	let toSign = $state.raw<SpecialistDraft[]>([]);
+	$effect(() => {
+		const sid = scenarioId;
+		toSign = [];
+		if (canReadPacks) return;
+		api.scenarios.packsAndDrafts(projectId, sid).then(
+			(r) => {
+				if (sid === scenarioId) toSign = r.toSign;
+			},
+			() => {}
+		);
+	});
+	let signing = $state<SpecialistDraft | null>(null);
+	let signOpen = $state(false);
+	let signList = $state.raw<PackSignoffList | null>(null);
+	let signError = $state('');
+	async function openSigning(d: SpecialistDraft) {
+		signing = d;
+		signOpen = true;
+		signList = null;
+		signError = '';
+		try {
+			signList = await api.packs.signoffs(projectId, d.id);
+		} catch (e) {
+			signError = msg(e);
+		}
+	}
+
 	// --- comments and share links (WP-3.15) -------------------------------------------
 	const party = $derived(isOwner || s.members.some((m) => m.userId === session.user?.id));
-	const audiences = $derived(scenarioAudiences({ assessor: canDecide, party }));
+	const audiences = $derived(scenarioAudiences({ assessor, party }));
 	/** The applicant or an assessor shares it, once submitted or decided (the API holds the rule). */
-	const canShare = $derived(isOwner || canDecide);
+	const canShare = $derived(isOwner || assessor);
 	let shareOpen = $state(false);
 
 	const STAGE: Record<Scenario['status'], string> = {
@@ -227,9 +316,58 @@
 
 	{#if s.status === 'decided' && s.outcome}
 		<div class="decision" data-testid="application-decision">
-			<p><strong>{OUTCOME_LABEL[s.outcome]}</strong>{s.decidedBy ? ` by ${s.decidedBy}` : ''}{s.decidedAt ? `, ${fmtDate(s.decidedAt, true)}` : ''}.</p>
+			<p>
+				<strong>{OUTCOME_LABEL[s.outcome]}</strong>{s.decisionAuthority ? `: the decision of ${s.decisionAuthority}` : ''}{s.decisionDate ? `, dated ${fmtDay(s.decisionDate)}` : ''}.
+			</p>
+			<p class="small">{decisionRecord}</p>
 			{#if s.decisionNote}<p class="reasons">{s.decisionNote}</p>{/if}
+			<p class="small muted">Any appeal runs from the authority’s decision letter (National Water Act s148, s41(6)); this app doesn’t work out its deadline.</p>
 		</div>
+	{/if}
+
+	<div class="notice" data-testid="application-notice">
+		<h4>Written objections</h4>
+		<p class="hint">
+			A comment in the app is not a written objection: only a written objection sent to the address in the application’s notice before its closing date keeps
+			a right to appeal (National Water Act s148(1)(f)). The comment boxes and share links say so, with these details when they are given.
+		</p>
+		{#if noticeOpen}
+			<form onsubmit={saveNotice} class="notice-form">
+				<div class="field">
+					<label for="notice-address">Where written objections go (as the notice gives it)</label>
+					<textarea id="notice-address" rows="3" maxlength="500" bind:value={address}></textarea>
+				</div>
+				<div class="field">
+					<label for="notice-date">Closing date for objections</label>
+					<input id="notice-date" type="date" bind:value={closing} />
+				</div>
+				<div class="actions">
+					<button type="submit" class="btn btn-primary btn-sm" disabled={busy || locked}>Save</button>
+					<button type="button" class="btn btn-sm" onclick={() => (noticeOpen = false)}>Cancel</button>
+				</div>
+			</form>
+		{:else}
+			<dl>
+				<dt>Address</dt>
+				<dd class="pre">{s.objectionAddress ?? 'Not given'}</dd>
+				<dt>Closing date</dt>
+				<dd>{s.objectionClosingDate ?? 'Not given'}</dd>
+			</dl>
+			{#if isOwner && s.status === 'draft'}
+				<button type="button" class="btn btn-sm" disabled={busy || locked} onclick={editNotice} data-testid="application-notice-edit">Edit the notice details</button>
+			{:else if isOwner}
+				<p class="hint">Fixed while the application is submitted; withdraw and reopen it to change them.</p>
+			{/if}
+		{/if}
+	</div>
+
+	{#if (isOwner || canDecide) && s.status !== 'draft'}
+		<p class="participation">
+			<a href="{base}/projects/{encodeURIComponent(projectId)}/scenarios/{encodeURIComponent(s.id)}/participation" data-testid="application-participation"
+				>Public participation record</a
+			>
+			<span class="hint">The comments made in the app, for the report to the authority (GN R267 reg 19).</span>
+		</p>
 	{/if}
 
 	<div class="actions talk">
@@ -252,7 +390,7 @@
 		{#if s.status === 'draft' && problems > 0}<p class="hint">Remove the changes that don't apply before submitting.</p>{/if}
 	{/if}
 
-	{#if canDecide && unverifiedRuns > 0}
+	{#if assessor && unverifiedRuns > 0}
 		<div class="alert alert-warning" role="status" data-testid="application-unverified">
 			{unverifiedRuns === 1 ? '1 run of this application wasn’t' : `${unverifiedRuns} runs of this application weren’t`} stored by the model run itself: the server’s
 			stamp is missing or no longer matches the results, so {unverifiedRuns === 1 ? 'it can’t be signed off' : 'they can’t be signed off'}{s.status === 'submitted'
@@ -262,21 +400,48 @@
 	{/if}
 	{#if canDecide && s.status === 'submitted'}
 		<form class="decide" onsubmit={decide} aria-labelledby="decide-h">
-			<h4 id="decide-h">Decide</h4>
+			<h4 id="decide-h">Record the authority’s decision</h4>
+			<p class="hint">Only the responsible authority decides a licence (National Water Act s27, s41, s42). Record its decision as its letter gives it.</p>
 			<fieldset>
 				<legend>Outcome</legend>
 				{#each SCENARIO_OUTCOMES as o (o)}
-					<label><input type="radio" name="outcome" value={o} bind:group={outcome} /> {OUTCOME_LABEL[o]}</label>
+					<label><input type="radio" name="outcome" value={o} bind:group={outcome} /> {OUTCOME_LABEL[o]} <span class="muted small">({OUTCOME_BASIS[o]})</span></label>
 				{/each}
 			</fieldset>
 			<div class="field">
-				<label for="decide-note">Reasons and conditions</label>
+				<label for="decide-authority">Responsible authority</label>
+				<input id="decide-authority" type="text" maxlength="200" bind:value={authority} aria-describedby="decide-authority-help" />
+				<p id="decide-authority-help" class="hint">Leave it empty for the authority named in the project’s settings.</p>
+			</div>
+			<div class="form-row">
+				<div class="field">
+					<label for="decide-date">Date of the decision letter</label>
+					<input id="decide-date" type="date" required bind:value={decisionDate} />
+				</div>
+				<div class="field grow">
+					<label for="decide-ref">Licence or file reference <span class="muted">(optional)</span></label>
+					<input id="decide-ref" type="text" maxlength="200" bind:value={reference} />
+				</div>
+			</div>
+			<fieldset>
+				<legend>Written reasons received?</legend>
+				<label><input type="radio" name="reasons-received" value="yes" bind:group={reasonsReceived} /> Yes</label>
+				<label><input type="radio" name="reasons-received" value="no" bind:group={reasonsReceived} /> No</label>
+			</fieldset>
+			<div class="field">
+				<label for="decide-note">Note: the authority’s reasons and conditions</label>
 				<textarea id="decide-note" rows="3" maxlength="4000" bind:value={reasons} aria-describedby="decide-note-help"></textarea>
 				<p id="decide-note-help" class="hint">Shown on the application’s read-only share links, which the applicant can make too.</p>
 			</div>
-			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || unverifiedRuns > 0}>Record the decision</button>
-			<p class="hint">A decision is final: the application can't then be withdrawn or changed.</p>
+			<button type="submit" class="btn btn-primary" disabled={busy || locked || !outcome || !decisionDate || !reasonsReceived || unverifiedRuns > 0}
+				>Record the authority’s decision</button
+			>
+			<p class="hint">A recorded decision is final: the application can't then be withdrawn or changed.</p>
 		</form>
+	{:else if assessor && s.status === 'submitted'}
+		<p class="hint" data-testid="application-decide-who">
+			Only a member the project’s owner marks as acting for the responsible authority records its decision (Members).
+		</p>
 	{/if}
 
 	{#if canReadPacks}
@@ -319,6 +484,17 @@
 				</ul>
 			{:else}
 				<p class="muted">None issued yet. The assessors issue a pack of the application once it is submitted; you can then read it here and share it by link.</p>
+			{/if}
+			{#if toSign.length}
+				<h5>To sign as the applicant’s specialist</h5>
+				<ul data-testid="application-panel-to-sign">
+					{#each toSign as d (d.id)}
+						<li>
+							Draft version {d.version}, drafted {fmtDate(d.createdAt)}{d.signoffs ? `, ${d.signoffs} sign-off${d.signoffs === 1 ? '' : 's'}` : ''}
+							<button type="button" class="btn btn-sm" onclick={() => openSigning(d)}>Sign…</button>
+						</li>
+					{/each}
+				</ul>
 			{/if}
 		</div>
 	{/if}
@@ -366,6 +542,24 @@
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<p class="visually-hidden" role="status">{note}</p>
 </section>
+
+{#if signing}
+	{@const d = signing}
+	<Dialog bind:open={signOpen} title="Sign draft version {d.version} as the applicant’s specialist" side wide>
+		{#if signError}
+			<p class="alert alert-error" role="alert">{signError}</p>
+		{:else if !signList}
+			<p class="muted" role="status">Loading the statement…</p>
+		{:else}
+			{#await import('$lib/components/liability/SignoffSection.svelte') then m}
+				<m.default {projectId} target={{ kind: 'pack', id: d.id }} list={signList} onchange={() => openSigning(d)} />
+			{/await}
+		{/if}
+		{#snippet actions()}
+			<button type="button" class="btn" onclick={() => (signOpen = false)}>Close</button>
+		{/snippet}
+	</Dialog>
+{/if}
 
 {#if canShare}
 	<Dialog bind:open={shareOpen} title="Share “{s.name}” read-only" side>
@@ -451,5 +645,37 @@
 		font-size: 0.82rem;
 		color: var(--text-muted);
 		margin: 0.25rem 0 0.5rem;
+	}
+	h5 {
+		margin: 0.5rem 0 0.25rem;
+		font-size: 0.9rem;
+	}
+	.notice dl {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 0.2rem 0.75rem;
+		margin: 0 0 0.5rem;
+	}
+	.notice dt {
+		font-weight: 500;
+	}
+	.notice dd {
+		margin: 0;
+	}
+	.pre {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.notice-form textarea,
+	.notice-form input {
+		width: 100%;
+		max-width: 60ch;
+		font: inherit;
+	}
+	.participation {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
+		align-items: baseline;
 	}
 </style>

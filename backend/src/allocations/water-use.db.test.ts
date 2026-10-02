@@ -155,7 +155,7 @@ describe('runs and the comparison', () => {
 	});
 
 	it('compares the dam with its registered storage and never counts the 21(b) row as a take', async () => {
-		const res = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
+		const res = await owner.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		const a = res.body.comparison.nodes.find((n: { nodeId: string }) => n.nodeId === farmA.id);
 		// Farm A: 100 000 m³ registered (WU-1 21(b)) against a 150 000 m³ dam: 50 000 m³ larger, above the band.
@@ -193,13 +193,15 @@ describe('the farmer’s farm view (issue #72)', () => {
 		const raw = JSON.stringify(res.body);
 		expect(raw).not.toMatch(/Invented Holder|WU-1|WU-2|Portion 1/);
 		// Positive control: the WUA previewing the same farm sees the same totals.
-		expect((await viewer.call('GET', `/projects/${projectId}/farm/${farmA.id}`)).body.registered).toEqual(res.body.registered);
+		expect((await owner.call('GET', `/projects/${projectId}/farm/${farmA.id}`)).body.registered).toEqual(res.body.registered);
+		// A viewer the owners haven't let read each volume (162, D3) previews the farm without them.
+		expect((await viewer.call('GET', `/projects/${projectId}/farm/${farmA.id}`)).body.registered).toBeNull();
 	});
 
 	it('never shows another farm’s, and counts only what is in force today', async () => {
 		expect((await farmer.call('GET', `/projects/${projectId}/farm/${farmB.id}`)).status).toBe(404);
 		// Farm B through the WUA's eyes has registrations; a lapsed one on Farm A doesn't count.
-		expect((await viewer.call('GET', `/projects/${projectId}/farm/${farmB.id}`)).body.registered).not.toBeNull();
+		expect((await owner.call('GET', `/projects/${projectId}/farm/${farmB.id}`)).body.registered).not.toBeNull();
 		expect(
 			(await owner.call('POST', `/projects/${projectId}/allocations`, { nodeId: farmA.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 999, validTo: '2001-01-01' })).status
 		).toBe(201);

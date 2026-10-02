@@ -112,6 +112,12 @@ export async function addMember(request: APIRequestContext, projectId: string, e
 	await acceptInvites(email, projectId);
 }
 
+/** Let a project's viewers read each registered volume (D3, 162; owners only, off by default). */
+export async function setAllocationViewerUnits(request: APIRequestContext, projectId: string, on: boolean): Promise<void> {
+	const res = await request.put(`${API_URL}/projects/${projectId}/allocations/viewer-units`, { data: { on } });
+	await json(res, 200);
+}
+
 /**
  * The holder of `email` pressing Accept on each of their pending invites to `targetId` (a project or a
  * team), through the API as themselves: a session minted for them (session.ts), since the spec's own

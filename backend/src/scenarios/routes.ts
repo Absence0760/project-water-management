@@ -26,12 +26,14 @@ import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, type Role, UUID } from '../projects/access.js';
 import { requireStepUp } from '../auth/stepUp.js';
+import { projectAuthority, requireActsForAuthority } from '../projects/authoritySettings.js';
 import { lockProjectRuns, runFailure, trimRuns } from '../runs/execute.js';
 import { RUN_META_SQL } from '../runs/routes.js';
 import { runUnverified, unverifiedScenarioRuns } from '../runs/stamp.js';
 import { projectBaseForApplicant } from './applicant.js';
 import {
 	checkScenario,
+	hiddenHolders,
 	loadBaseInput,
 	loadScenario,
 	runScenario,
@@ -50,11 +52,17 @@ import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBod
  * only names the caller sees (checkScenario masks an application's hidden
  * nodes for everyone); `renamed`, the hidden nodes an application's ops took
  * the name of, and `reIds`, the new items moved off a hidden item's id, are
- * for the assessors, never a contributor.
+ * for the assessors, never a contributor. An application's check also says
+ * which problem lines a hidden rule broke (`maskedRules`: line, ops and the
+ * rules' kinds, never an id, a name or a value; what "Ask the assessors why"
+ * sends) and, to editors and up only, every line in its real words
+ * (`assessorProblems`, 164). A team scenario has neither: nothing is masked.
  */
 function checkView(c: ScenarioCheck, role: Role) {
-	const view = { applied: c.applied, problems: c.problems, classified: c.classified };
-	return role === 'contributor' ? view : { ...view, renamed: c.renamed, reIds: c.reIds };
+	const view = { applied: c.applied, problems: c.problems, classified: c.classified, ...(c.masked ? { maskedRules: c.maskedRules } : {}) };
+	if (role === 'contributor') return view;
+	// The unmasked reasons are the assessors' (164): editors and up, who read every farm anyway. Never a contributor.
+	return { ...view, renamed: c.renamed, reIds: c.reIds, ...(c.masked && rank[role] >= rank.editor ? { assessorProblems: c.assessorProblems } : {}) };
 }
 
 /** A scenario and its check against its base, or `check: null` with why when the base can't be rebuilt. */
@@ -66,7 +74,7 @@ async function withCheck(db: Db, projectId: string, s: ScenarioRow, role: Role) 
 	const unverifiedRunIds = isApplication(s) && rank[role] >= rank.editor ? await unverifiedScenarioRuns(db, projectId, s.id) : null;
 	try {
 		const base = await loadBaseInput(db, projectId, s.baseRunId, role);
-		return { scenario, check: checkView(checkScenario(base, s), role), checkError: null, unverifiedRunIds };
+		return { scenario, check: checkView(checkScenario(base, s, await hiddenHolders(db, s)), role), checkError: null, unverifiedRunIds };
 	} catch (err) {
 		if (err instanceof ApiError && err.status === 409) return { scenario, check: null, checkError: err.message, unverifiedRunIds };
 		throw err;
@@ -125,15 +133,30 @@ const subject = (s: Pick<ScenarioRow, 'id' | 'name' | 'origin'>, extra: Record<s
 	s.origin === 'applicant' && !decided ? { scenarioId: s.id, application: true, ...extra } : { scenarioId: s.id, name: s.name, ...extra };
 
 /** Move a scenario's status after the caller's right to has been checked; the guard trigger checks the move again. */
-async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatus, extra: { outcome?: string; note?: string } = {}) {
+/** What recording the authority's decision writes beside the move (163_licensing_authority). */
+interface DecisionRecord {
+	outcome: string;
+	note: string;
+	authority: string;
+	decisionDate: string;
+	reference: string;
+	reasonsReceived: boolean;
+}
+
+async function move(db: Db, projectId: string, s: ScenarioRow, to: ScenarioStatus, decision: DecisionRecord | null = null) {
 	if (!STATUS_MOVES[s.status].includes(to)) throw new ApiError(409, `a ${s.status} scenario can't become ${to}`);
 	// Only from the status the caller read: a concurrent move (the applicant
 	// withdrawing while the assessor decides) makes this match no row, and RLS
 	// filters an UPDATE silently, so a zero count is the 409, never a success.
 	const { rowCount } = await db.query(
-		`UPDATE scenario SET status = $3, outcome = COALESCE($4, outcome), decision_note = COALESCE($5, decision_note)
-		 WHERE project_id = $1 AND id = $2 AND status = $6`,
-		[projectId, s.id, to, extra.outcome ?? null, extra.note ?? null, s.status]
+		decision
+			? `UPDATE scenario SET status = $3, outcome = $5, decision_note = $6, decision_authority = $7, decision_date = $8::date,
+					decision_reference = $9, reasons_received = $10
+				 WHERE project_id = $1 AND id = $2 AND status = $4`
+			: 'UPDATE scenario SET status = $3 WHERE project_id = $1 AND id = $2 AND status = $4',
+		decision
+			? [projectId, s.id, to, s.status, decision.outcome, decision.note, decision.authority, decision.decisionDate, decision.reference, decision.reasonsReceived]
+			: [projectId, s.id, to, s.status]
 	);
 	if (!rowCount) {
 		const now = await loadScenario(db, projectId, s.id).catch(() => null);
@@ -266,6 +289,13 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (body.purposeAndNeed !== undefined) set.push(['purpose_need', body.purposeAndNeed]);
 			if (body.mitigation !== undefined) set.push(['mitigation', body.mitigation]);
 			if (body.monitoring !== undefined) set.push(['monitoring', body.monitoring]);
+			// The notice's objection details (166): an application's, frozen once it is submitted (scenario_objection_frozen).
+			if (body.objectionAddress !== undefined || body.objectionClosingDate !== undefined) {
+				if (!isApplication(s)) throw new ApiError(409, 'only an application has a notice to object to');
+				if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} application's notice details are frozen; withdraw it to change them`);
+				if (body.objectionAddress !== undefined) set.push(['objection_address', body.objectionAddress]);
+				if (body.objectionClosingDate !== undefined) set.push(['objection_closing_date', body.objectionClosingDate]);
+			}
 			if (body.ops !== undefined)
 				set.push(
 					['ops', JSON.stringify(body.ops)],
@@ -289,6 +319,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				purposeAndNeed: s.purposeAndNeed,
 				mitigation: s.mitigation,
 				monitoring: s.monitoring,
+				objectionAddress: s.objectionAddress,
+				objectionClosingDate: s.objectionClosingDate,
 				ops: s.opsSha256,
 				owned_node_ids: [...s.ownedNodeIds].sort().join(','),
 				status: s.status
@@ -299,6 +331,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				purposeAndNeed: body.purposeAndNeed,
 				mitigation: body.mitigation,
 				monitoring: body.monitoring,
+				objectionAddress: body.objectionAddress,
+				objectionClosingDate: body.objectionClosingDate,
 				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status
@@ -401,7 +435,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				await db.query('UPDATE scenario SET op_names = $3 WHERE project_id = $1 AND id = $2', [id, sid, JSON.stringify(s.opNames)]);
 				await recordAudit(db, id, 'scenario.changed', subject(s, { fields: ['base_run_id'], baseRunId: body.baseRunId }));
 			}
-			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s), role) });
+			return c.json({ scenario: applicantOpNames(s, role), ...checkView(checkScenario(base, s, await hiddenHolders(db, s)), role) });
 		});
 	})
 	// --- the submission workflow (WP-3.3) ---------------------------------------------
@@ -418,8 +452,8 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const s = await loadScenario(db, id, sid);
 			if (s.status !== 'draft') throw new ApiError(409, `a ${s.status} scenario can't be submitted`);
 			const base = await loadBaseInput(db, id, s.baseRunId, role);
-			const { problems } = checkScenario(base, s);
-			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems });
+			const { problems, maskedRules } = checkScenario(base, s, await hiddenHolders(db, s));
+			if (problems.length) throw new ApiError(422, "a scenario whose changes don't all apply to its base can't be submitted", { problems, maskedRules });
 			await move(db, id, s, 'submitted');
 			await recordAudit(db, id, 'scenario.submitted', subject(s, { opsSha256: s.opsSha256 }));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
@@ -448,24 +482,38 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
 		});
 	})
-	// The assessor's decision: an editor who didn't make the application.
+	// Record the responsible authority's decision (163_licensing_authority): an
+	// editor the owner marks as acting for the authority, who didn't make the
+	// application. The app records the decision; it never makes one.
 	.post('/:id/scenarios/:sid/decide', async (c) => {
 		const { id, sid } = c.req.param();
 		const body = DecideBody.parse(await readJson(c, { optional: true }));
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'editor');
-			// The assessor's decision needs two-step sign-in (auth/stepUp.ts).
+			// Recording the decision needs two-step sign-in (auth/stepUp.ts).
 			await requireStepUp(db);
+			await requireActsForAuthority(db, id);
 			const s = await loadScenario(db, id, scenarioId(sid));
 			if (isApplication(s) && s.ownerUserId === c.get('userId')) throw new ApiError(403, 'an applicant can’t decide their own application');
+			const authority = body.authority ?? (await projectAuthority(db, id))?.name;
+			if (!authority) throw new ApiError(400, 'name the responsible authority whose decision this is (authority), or set the project’s settings.responsibleAuthority');
+			// The decision letter's date: today at the latest (a day's grace for time zones).
+			if (body.decisionDate > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) throw new ApiError(400, 'the decision date is in the future');
 			// Decided on runs the model run stored, never on one written past it (077, runs/stamp.ts).
 			const unverified = await unverifiedScenarioRuns(db, id, s.id);
 			if (unverified.length)
 				throw runUnverified(
 					`this scenario can't be decided: ${unverified.length} of its runs (unverifiedRunIds) weren't stored by the model run itself (a server stamp missing or no longer matching its results); delete them and run it again`
 				);
-			await move(db, id, s, 'decided', { outcome: body.outcome, note: body.note });
-			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome }, true));
+			await move(db, id, s, 'decided', {
+				outcome: body.outcome,
+				note: body.note,
+				authority,
+				decisionDate: body.decisionDate,
+				reference: body.reference,
+				reasonsReceived: body.reasonsReceived
+			});
+			await recordAudit(db, id, 'scenario.decided', subject(s, { outcome: body.outcome, authority, decisionDate: body.decisionDate }, true));
 			return c.json(await withCheck(db, id, await loadScenario(db, id, sid), role));
 		});
 	})
@@ -520,7 +568,11 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			await db.query('SAVEPOINT scenario_share');
 			const added = await db
 				.query('INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', [s.id, id, userId])
-				.catch(async (err: { code?: string }) => {
+				.catch(async (err: { code?: string; constraint?: string }) => {
+					// 163's conflict guard (an editor can't be shared an application): said as
+					// it is to a viewer and up, who read the member list anyway; an applicant
+					// gets the one refusal (their candidates are their party, never an editor).
+					if (err.constraint === 'role_conflict' && rank[role] >= rank.viewer) throw err;
 					if (err.code === '23514' || err.code === '23503') {
 						await db.query('ROLLBACK TO SAVEPOINT scenario_share');
 						throw refused();

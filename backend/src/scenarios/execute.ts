@@ -4,7 +4,7 @@
 // through the same save path as any other (storeRun), so it is an ordinary
 // model_run with scenario_id set: compare, export and the 20-run cap treat it
 // like any run.
-import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, classifyScenario, type AppliedOp, type MaskedReId, type MaskedRename, type MaskedRuleRef, type ModelInput, type ModelOutput, type OpClass, type ScenarioOp } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import type { Role } from '../projects/access.js';
@@ -31,6 +31,9 @@ export interface ScenarioRow {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/** Where and by when written objections go, as the application's notice gives them (166_public_participation); null: not given. */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run's label and date, for the "Based on run X" banner (label '' and createdAt null if the caller can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -51,6 +54,16 @@ export interface ScenarioRow {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
+	/**
+	 * The authority's decision as recorded (163_licensing_authority): its
+	 * name, the date on its decision letter (null on a decision recorded
+	 * before 163), its licence or file reference ('' = none) and whether its
+	 * written reasons were received (null before 163). All null/'' until decided.
+	 */
+	decisionAuthority: string | null;
+	decisionDate: string | null;
+	decisionReference: string;
+	reasonsReceived: boolean | null;
 	/** Who else reads an application (scenario_member): the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -74,12 +87,15 @@ export const APPLICATION_RUNS_KEPT = 5;
 // and a new run show them in full. Everyone else reads the stored list, the
 // record the assessors judge.
 export const SCENARIO_SELECT = `SELECT s.id, s.name, s.description,
-	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.base_run_id AS "baseRunId",
+	s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring,
+	s.objection_address AS "objectionAddress", to_char(s.objection_closing_date, 'YYYY-MM-DD') AS "objectionClosingDate", s.base_run_id AS "baseRunId",
 	COALESCE(app_run_brief(s.project_id, s.base_run_id), jsonb_build_object('id', s.base_run_id, 'label', '', 'createdAt', NULL)) AS "baseRun",
 	s.ops, s.ops_sha256 AS "opsSha256",
 	CASE WHEN s.origin = 'applicant' AND app_is_contributor(s.project_id) THEN app_application_own_nodes(s.id) ELSE s.owned_node_ids END AS "ownedNodeIds", s.op_names AS "opNames", s.owner_user_id AS "ownerUserId",
 	u.display_name AS owner, s.status, s.origin, s.submitted_at AS "submittedAt", s.decided_at AS "decidedAt",
 	du.display_name AS "decidedBy", s.outcome, s.decision_note AS "decisionNote",
+	s.decision_authority AS "decisionAuthority", to_char(s.decision_date, 'YYYY-MM-DD') AS "decisionDate",
+	s.decision_reference AS "decisionReference", s.reasons_received AS "reasonsReceived",
 	(SELECT COALESCE(jsonb_agg(jsonb_build_object('userId', m.user_id, 'displayName', mu.display_name) ORDER BY mu.display_name, m.user_id), '[]'::jsonb)
 	 FROM scenario_member m JOIN app_user mu ON mu.id = m.user_id WHERE m.scenario_id = s.id) AS members,
 	s.created_at AS "createdAt", s.updated_at AS "updatedAt",
@@ -108,6 +124,24 @@ export interface ScenarioCheck {
 	renamed: MaskedRename[];
 	/** An application's new items moved off a hidden item's id (applyScenario's `reIds`). Never shown to a contributor. */
 	reIds: MaskedReId[];
+	/** `problems` in the real words of every rule, hidden names restored (applyScenario's `assessorProblems`, 164). Never shown to a contributor. */
+	assessorProblems: string[];
+	/** The problem lines a hidden rule broke, with their ops and the rules' kinds (applyScenario's `maskedRules`): what "Ask the assessors why" quotes. */
+	maskedRules: MaskedRuleRef[];
+	/** An application, checked under its applicant's mask: only then do `maskedRules` and `assessorProblems` say anything. */
+	masked: boolean;
+}
+
+/**
+ * How many farm holders an application's hidden farms have, capped at
+ * FARMER_K (app_application_hidden_holders, 164): what lets the check give a
+ * catchment-wide rule's aggregate (engine MASKED_RULE_AGGREGATE). 0 for a
+ * team scenario or one the caller can't read. Server-side only.
+ */
+export async function hiddenHolders(db: Db, s: Pick<ScenarioRow, 'id' | 'origin'>): Promise<number> {
+	if (s.origin !== 'applicant') return 0;
+	const { rows } = await db.query<{ n: number }>('SELECT app_application_hidden_holders($1) AS n', [s.id]);
+	return rows[0]?.n ?? 0;
 }
 
 /**
@@ -158,10 +192,11 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
  * hidden item's id or name answers as a free one, and nothing counts what
  * they can't see (docs/scenarios.md § Applications).
  */
-export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>): ScenarioCheck {
-	const options = s.origin === 'applicant' ? { mask: applicationMask(base, s.ownedNodeIds) } : {};
-	const { input, applied, problems, renamed, reIds } = applyScenario(base, s.ops, options);
-	return { input, base, applied, problems, renamed, reIds, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
+export function checkScenario(base: ModelInput, s: Pick<ScenarioRow, 'ops' | 'ownedNodeIds' | 'origin'>, holders = 0): ScenarioCheck {
+	const masked = s.origin === 'applicant';
+	const options = masked ? { mask: { ...applicationMask(base, s.ownedNodeIds), hiddenHolders: holders } } : {};
+	const { input, applied, problems, renamed, reIds, assessorProblems, maskedRules } = applyScenario(base, s.ops, options);
+	return { input, base, applied, problems, renamed, reIds, assessorProblems, maskedRules, masked, classified: classifyScenario(base, s.ops, s.ownedNodeIds, options) };
 }
 
 /** Who may run a scenario, and the scenario as they read it: the route's check, made when the run is read and again when it is stored. */
@@ -182,7 +217,7 @@ interface ScenarioRunPlan {
  */
 export async function prepareScenarioRun(db: Db, projectId: string, scenario: ScenarioRow, label: string | undefined, role: Role): Promise<ScenarioRunPlan> {
 	const base = await loadBaseInput(db, projectId, scenario.baseRunId, role);
-	const check = checkScenario(base, scenario);
+	const check = checkScenario(base, scenario, await hiddenHolders(db, scenario));
 	// Ops, not problem lines: an edit group that breaks a rule is one line for all its ops.
 	const skipped = scenario.ops.length - check.applied.length;
 	if (check.problems.length)

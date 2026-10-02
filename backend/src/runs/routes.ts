@@ -8,6 +8,7 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { queueAlertEval } from '../alerts/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
@@ -113,7 +114,7 @@ export const runRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 			// The run's own settings snapshot: its fit record and calibration
 			// exclusions are the provenance of its parameters and scores. Its
@@ -141,7 +142,9 @@ export const runRoutes = new Hono<AuthEnv>()
 				 FROM run_series WHERE run_id = $1 ORDER BY node_id NULLS FIRST, key`,
 				[runId]
 			);
-			return c.json({ run: withErrata(rows[0] as RunEngines), series });
+			// A viewer who can't read each registered volume (162, D3) gets the run without its copy of them.
+			const run = (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations(rows[0]) : rows[0];
+			return c.json({ run: withErrata(run as RunEngines), series });
 		});
 	})
 	.get('/:id/runs/:runId/series', async (c) => {

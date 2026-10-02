@@ -245,6 +245,8 @@ interface Fk {
 	updatable: boolean;
 	/** The child has an INSERT, UPDATE or ALL policy (else RLS lets water_app write none of it). */
 	writable: boolean;
+	/** Every INSERT or ALL policy on the child requires the (single) column to be NULL: water_app never names it. */
+	insertNull: boolean;
 }
 
 const FK_SQL = `
@@ -260,7 +262,9 @@ const FK_SQL = `
 		con.conrelid IN (SELECT oid FROM scoped) AS "childHasProject",
 		(SELECT bool_and(has_column_privilege('water_app', con.conrelid, a.attnum, 'UPDATE')) FROM unnest(con.conkey) k(n) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.n)
 			AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('w', '*')) AS updatable,
-		EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', 'w', '*')) AS writable
+		EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', 'w', '*')) AS writable,
+		coalesce((SELECT bool_and(position('(' || (SELECT a.attname FROM pg_attribute a WHERE a.attrelid = con.conrelid AND a.attnum = con.conkey[1]) || ' IS NULL)' IN pg_get_expr(p.polwithcheck, p.polrelid)) > 0)
+			FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', '*')), false) AS "insertNull"
 	FROM pg_constraint con
 	WHERE con.contype = 'f' AND con.connamespace = 'public'::regnamespace
 		AND con.confrelid <> 'project'::regclass AND con.confrelid IN (SELECT oid FROM scoped)
@@ -270,7 +274,7 @@ const FK_SQL = `
  * Foreign keys onto a project-scoped table that need no same-project check,
  * with the reason. The inventory test checks each reason's premise.
  */
-const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
+const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' | 'set only by a definer' }> = {
 	'note_revision.note_id': {
 		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (115)',
 		premise: 'not writable'
@@ -298,6 +302,14 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_fan_out, SECURITY DEFINER, copies the project from the event',
 		premise: 'not writable'
 	},
+	'application_question.scenario_id': {
+		reason: 'water_app inserts none and updates only the answer; app_ask_assessors, SECURITY DEFINER, copies the project from the application itself (164)',
+		premise: 'not writable'
+	},
+	'evidence_pack_applicant_copy.pack_id': {
+		reason: 'water_app writes none of it; app_record_applicant_pack_pdf, SECURITY DEFINER, copies the project from the pack itself (165)',
+		premise: 'not writable'
+	},
 	'alert_feedback.event_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_answer_slot, SECURITY DEFINER, copies the project from the caller’s own delivery (151)',
 		premise: 'not writable'
@@ -305,6 +317,18 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 	'pack_notice.pack_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_pack_notice_queue, SECURITY DEFINER, copies the project from the pack (133)',
 		premise: 'not writable'
+	},
+	'note.share_link_id': {
+		reason: 'water_app never names a link: note_insert requires share_link_id IS NULL and it has no UPDATE on the column; app_share_comment, SECURITY DEFINER, copies the project from the link itself (166)',
+		premise: 'set only by a definer'
+	},
+	'signoff_registration_check.signoff_id': {
+		reason: 'no project_id of its own: the row is its sign-off’s, written only by app_pack_bind_registration_checks, SECURITY DEFINER, from the pack’s own sign-offs and their signers’ checks in that project (167)',
+		premise: 'no project_id'
+	},
+	'signoff_registration_check.check_id': {
+		reason: 'no project_id of its own: app_pack_bind_registration_checks binds a sign-off only to a check app_registration_check_current finds in the sign-off’s project (167)',
+		premise: 'no project_id'
 	},
 	'pack_reproduction.pack_id': {
 		reason: 'water_app writes none of it (SELECT only); app_record_pack_reproduction, SECURITY DEFINER, copies the project from the pack (154), and pack_reproduction_same_project checks it',
@@ -419,6 +443,21 @@ const CASES: Record<string, Case> = {
 	'model_revision.restored_from': {
 		ref: (w) => w.revisionId,
 		insert: (h, ref) => [`INSERT INTO model_revision (project_id, created_by, source, snapshot, restored_from) VALUES ($1, $2, 'restore', '{}', $3)`, [h.projectId, u(), ref]]
+	},
+	// Page 1's board against full authorised use (165, licensing build item 8): authorised_impact_same_project checks both runs.
+	'authorised_impact.application_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, ref, h.runId]
+		]
+	},
+	'authorised_impact.base_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, h.scenarioRunId, ref]
+		]
 	},
 	'model_run.scenario_id': {
 		ref: (w) => w.scenarioId,
@@ -725,6 +764,8 @@ describe('the inventory of references between project-scoped tables', () => {
 			if (exempt) {
 				if (exempt.premise === 'no project_id') expect(fk.childHasProject, key).toBe(false);
 				else if (exempt.premise === 'not writable') expect(fk.writable, key).toBe(false);
+				// Never written by water_app: no UPDATE on the column, and every INSERT policy requires it NULL.
+				else if (exempt.premise === 'set only by a definer') expect([fk.updatable, fk.insertNull], key).toEqual([false, true]);
 				// Fixed at insert: the insert-time readability check can't be sidestepped by an UPDATE.
 				else expect(fk.updatable, key).toBe(false);
 				continue;
@@ -940,12 +981,14 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:packId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:projectId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:runId': 'a queue envelope between the app’s own Lambdas, not a request',
+	'jobs/transport.ts:scenarioId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'model/validate.ts:downstreamNodeId': ['PUT /projects/:id/model downstreamNodeId'],

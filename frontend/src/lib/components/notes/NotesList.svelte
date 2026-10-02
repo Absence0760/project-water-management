@@ -18,7 +18,19 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
-	import { AUDIENCE_BADGE, AUDIENCE_LABEL, bodyProblem, createBody, hasAudiences, normaliseBody, targetQuery, type NoteTarget } from './notes';
+	import {
+		AUDIENCE_BADGE,
+		AUDIENCE_LABEL,
+		bodyProblem,
+		createBody,
+		hasAudiences,
+		normaliseBody,
+		OBJECTION_WARNING,
+		PUBLIC_COMMENT_RECIPIENTS,
+		REGISTER_CONSENT_LABEL,
+		targetQuery,
+		type NoteTarget
+	} from './notes';
 	import { NOTES_EN, type NotesWords } from './words';
 
 	let {
@@ -64,6 +76,9 @@
 	let audience = $state<NoteVisibility | null>(null);
 	const audiences = $derived(hasAudiences(target) ? target.audiences : []);
 	const chosen = $derived<NoteVisibility>(audience && audiences.includes(audience) ? audience : (audiences[0] ?? 'team'));
+	/** A public comment's register opt-in (GN R267 reg 18, 166). */
+	let registerConsent = $state(false);
+	const publicComment = $derived(hasAudiences(target) && chosen === 'public_participation');
 	/** The note whose earlier texts are open, and them. */
 	let historyOf = $state<string | null>(null);
 	let history = $state<NoteRevision[] | null>(null);
@@ -116,9 +131,10 @@
 		busy = true;
 		error = null;
 		try {
-			const note = await api.notes.create(projectId, createBody(target, draft, hasAudiences(target) ? chosen : farmer || shareWithFarm ? 'farm' : 'team'));
+			const note = await api.notes.create(projectId, createBody(target, draft, hasAudiences(target) ? chosen : farmer || shareWithFarm ? 'farm' : 'team', registerConsent));
 			notes = [note, ...(notes ?? [])];
 			draft = '';
+			registerConsent = false;
 			onChanged?.();
 		} catch (err) {
 			error = message(err);
@@ -190,6 +206,10 @@
 			</p>
 			{#if showShare}
 				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this hydrological unit’s farmers</label>
+			{/if}
+			{#if publicComment}
+				<p class="muted small objection" data-testid="note-objection-warning"><strong>{OBJECTION_WARNING}</strong> {PUBLIC_COMMENT_RECIPIENTS}</p>
+				<label class="check"><input type="checkbox" bind:checked={registerConsent} data-testid="note-register-consent" /> {REGISTER_CONSENT_LABEL}</label>
 			{/if}
 			<div class="row">
 				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>

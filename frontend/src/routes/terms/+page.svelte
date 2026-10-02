@@ -82,8 +82,12 @@
 			the qualified professionals advising you. Check the results against your own knowledge and data before relying on them.
 		</li>
 		<li>
-			A sign-off in the service records who reviewed a run; it is that person’s professional statement, not ours. The professional
-			registration shown with it is typed in by the person signing: we don’t check it against the professional body’s register.
+			A sign-off in the service records who reviewed a run or an evidence pack; it is that person’s professional statement, not ours.
+			It is an electronic professional statement in this app, not the signer’s signature on any form or report the authority
+			requires: sign those as the authority asks. The professional registration shown with it is typed in by the person signing: we
+			don’t check it against the professional body’s register. A project’s host may record that it checked one, and the pack’s verify
+			page then says by whom and when; that check is the host’s, not ours. Signing off, and issuing or withdrawing an evidence pack,
+			need a code from your authenticator app from the last 10 minutes.
 		</li>
 	</ul>
 	<p>

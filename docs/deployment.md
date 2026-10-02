@@ -381,6 +381,10 @@ Lambda environment (set by `infra/lambda.tf`):
 | `SES_REGION` | unset: SES is in the Lambda's own region |
 | `RUNS_KEPT_PER_PROJECT` | not set by Terraform, so the backend default (20 runs per project) applies; see [data-model.md § Run output volume](./data-model.md#time-series-storage) |
 
+The worker (`infra/jobs.tf`) also gets `OPERATOR_EMAIL`, set to
+`budget_alert_email`: the operator's copy of the licence-record notices
+([evidence-pack.md § Retention](./evidence-pack.md#retention)).
+
 Besides the email settings, `lambda.tf` sets `ALLOWED_ORIGINS` (the site
 origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
 `RUNTIME_SECRET_ARN` / `RUNTIME_SECRET_VERSION`, which name the API's runtime
@@ -1616,10 +1620,12 @@ Every step is an ordinary app action by an owner unless it says "operator".
    A person who can sign in can do it themselves: Account → **Delete my
    account** (`DELETE /auth/me`, issue #112) runs the same deletion, refuses
    the only owner or admin with the list to hand over, and emails them what
-   was done; point them there. It logs `{"event":"account_deleted","via":"self"}`
-   with no id, so a self-service deletion is **not** in the operator log
-   (the re-apply-after-restore step waits on #90, [followups.md §
-   POPIA](./followups.md#popia-and-the-step-2-release-wp-216)). Otherwise
+   was done; point them there. It logs
+   `{"event":"account_deleted","via":"self","accountId":"…"}`: the account's
+   random id only, never an address or a name. Both paths, the self-service
+   one and the SQL below, also write the id to the `erasure_log` table (159),
+   which a restore reads to delete the account again
+   ([§ Restoring the database](#restoring-the-database), step 6a). Otherwise
    (they can't sign in, or ask another way): a request may come by email or
    any other expedient way (POPIA s24,
    Regulation 3); act on it as soon as reasonably practicable. Confirm it
@@ -1632,7 +1638,9 @@ Every step is an ordinary app action by an owner unless it says "operator".
    maker cleared (138: keep the evidence, remove the name), except an
    ensemble they never completed and their **draft** applications, which go;
    sign-offs keep the typed name and registration; the audit log is
-   pseudonymised ("Deleted user"). A `23514` error at commit ("a project must
+   pseudonymised ("Deleted user"), invitation entries' partly hidden
+   address included (160), except in the projects of a team that keeps
+   public records (161), where the name stays. A `23514` error at commit ("a project must
    keep at least one owner", "a team must keep at least one admin") means
    they are the only owner or admin of something: ask them, or the
    project's or team's other members, to hand it over (make someone else
@@ -1845,6 +1853,27 @@ Every step is an ordinary app action by an owner unless it says "operator".
     and tell every person who had two-step sign-in on to set it up again
     (owners, team admins and assessors can't do those actions until they
     have). Their security log keeps the history.
+16. **A licence record past its closing date** (operator; the "This licence
+    record can now be deleted" email, or a review that went unanswered;
+    [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing
+    is deleted without the organisation's written confirmation: ask the
+    project's owners whether it still needs the record (a renewed licence is
+    a later outcome they record; an unanswered review stays as it is). On a
+    written yes, as the schema owner: note the project's evidence pack
+    objects (`SELECT pdf_key, bundle_key FROM evidence_pack WHERE project_id
+    = '…'`), delete the project in one transaction with its two evidence
+    guards disabled for it (`ALTER TABLE project DISABLE TRIGGER
+    project_evidence_guard, DISABLE TRIGGER project_pack_guard; DELETE FROM
+    project WHERE id = '…'; ALTER TABLE project ENABLE TRIGGER
+    project_evidence_guard, ENABLE TRIGGER project_pack_guard;`), then delete
+    every version of each pack object from the packs bucket with
+    `s3:BypassGovernanceRetention` (`aws s3api delete-object --bucket …
+    --key … --version-id … --bypass-governance-retention`, for each version
+    `list-object-versions` shows). A project of a team that keeps public
+    records (`team.public_records`) also needs the client's confirmation
+    that it holds its records or has a disposal authority, recorded as
+    `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
+    the confirmation, the date and what was deleted in the operator log.
 
 ## Rollback
 
@@ -1966,11 +1995,49 @@ replace or destroy; don't apply one.
    `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`.
 6. Invoke the migrate Lambda (the script prints the command). It applies any
    migration newer than the restore point and resets `water_app`'s password.
-7. Check the site and that the data is as of the restore point.
-8. Only then delete the old instance, with a final snapshot (the script
-   prints both commands: turn off its deletion protection, then
-   `delete-db-instance --final-db-snapshot-identifier …`). Export first
-   anything written to it after the restore point that you want back.
+6a. **Re-apply erasures and revocations** (POPIA s14(4), s24; provisional
+   position, pre-counsel research, 2026-10-01). A restore takes the database
+   back to before every deletion and revocation made since the restore
+   point, so a deleted account, project or team, a removed member, an
+   unlinked farmer, a revoked share link or API key would all be live again.
+   Keep the API and the worker stopped until this is done: if traffic is
+   back after step 5's apply, stop them again with step 1's commands. On the
+   **old** instance (still running as `water-management-old-<ts>`), as the
+   schema owner:
+   - `SELECT kind, subject_id, erased_at FROM erasure_log WHERE erased_at > '<restore point>' ORDER BY erased_at;`
+   - `SELECT kind, project_id, subject, created_at FROM audit_event WHERE created_at > '<restore point>' AND kind IN ('member.removed', 'team_member.removed', 'farmer.unlinked', 'share_link.revoked', 'api_key.revoked', 'invite.revoked') ORDER BY created_at;`
+
+   Then on the restored instance, as the schema owner, in one transaction:
+   delete each listed `app_user`, `project` and `team` row (`kind` account,
+   project, team; the triggers pseudonymise and log as they did the first
+   time), and re-apply each removal, unlink and revocation the events name
+   (delete the `project_member`, `team_member` or `farm_link` row; set
+   `revoked_at` on the share link or API key; delete the invite). Only then
+   let traffic back (run step 5's apply again; it restores the concurrency),
+   and at once invoke the worker once (`aws lambda invoke --function-name
+   water-management-worker …`, the production `pnpm dev:jobs:tick`; at
+   reserved concurrency 0 it would be throttled, hence after the apply) so
+   the time-based purges catch up: lapsed invites, deleted notes' text,
+   alert deliveries, pack notices. None of those is served by the API, so
+   the minutes between are harmless. Record each re-applied erasure in the
+   operator log.
+
+   **If the instance itself is gone** (below), there is no old instance to
+   read: take the erasures since `LatestRestorableTime` from the operator
+   log and from CloudWatch, where every self-service deletion logs
+   `account_deleted` with its `accountId`
+   (`filter message.event = "account_deleted"` in Logs Insights on the API's
+   log group, 30 days).
+7. Check the site and that the data is as of the restore point, with the
+   erasures re-applied.
+8. Only then delete the old instance (the script prints the commands: turn
+   off its deletion protection, then `delete-db-instance`). Take a final
+   snapshot (`--final-db-snapshot-identifier …`) only if you may need data
+   written after the restore point, and **delete it within 30 days**: it
+   holds everything erased since the restore point and, unlike automated
+   backups, never expires on its own. Put its delete-by date in the
+   operator log. Export first anything written to the old instance after the
+   restore point that you want back.
 
 **If the instance itself is gone** (deleted, or never coming back from
 `failed`), the script refuses, since it swaps with the live instance. The
@@ -1992,6 +2059,9 @@ runs it against a fake `aws` and `terraform`):
       the modify, as the docs say).
 - [ ] Confirm the plan was in-place only, and the migrate run and the site
       work after the apply.
+- [ ] The re-apply step (6a) against a test erasure made after the restore
+      point: delete a test account and revoke a test share link after it,
+      then confirm both are gone again on the restored instance.
 - [ ] Write down how long the restore, the swap and the whole run took (the
       real RTO), and the date, here.
 

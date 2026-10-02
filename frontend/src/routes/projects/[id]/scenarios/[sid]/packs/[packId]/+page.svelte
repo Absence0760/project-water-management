@@ -11,11 +11,14 @@
 	// farm or water user downstream of the application under the anonymous
 	// name the results view gives it ("Farm 3"), with its change in whole points.
 	// The PDF, manifest and reproduction bundle aren't offered: each is the
-	// assessors' copy, which names every unit. The application's owner makes
+	// assessors' copy, which names every unit. Instead, their own printable
+	// copy (165_applicant_copy): this page, printed by the server as them
+	// (data-report-ready; a print-only head says it is a derived copy, not
+	// the pack, and where to check the pack), with its own SHA-256. The application's owner makes
 	// read-only share links to it while it is issued (the same ShareLinksPanel
 	// as an editor's) and withdraws the ones they made, whatever its standing.
 	// Part of the workspace, so English (docs/ui.md § Language).
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError, type ApplicantPack } from '$lib/api';
@@ -25,6 +28,8 @@
 	import { applicantPackHref, bandText, otherUnitLines, othersSummary, ownUnitLines, rowChange, rowLabel, rowValue, siteLines, standingLine } from '$lib/components/packs/applicantPack';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
 	import { fmtDate } from '$lib/format/number';
+	import { reportPageRule } from '$lib/components/report/printPage';
+	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 
 	const projectId = $derived(page.params.id ?? '');
 	const scenarioId = $derived(page.params.sid ?? '');
@@ -68,12 +73,73 @@
 	const others = $derived(view?.units ? otherUnitLines(view.units.others) : []);
 	const back = $derived(`${base}/projects/${encodeURIComponent(projectId)}?tab=scenarios&scenario=${encodeURIComponent(scenarioId)}`);
 	let shareOpen = $state(false);
+
+	// --- the printable copy (165_applicant_copy) -------------------------------------
+	const copy = $derived(view?.copy ?? null);
+	const verifyUrl = $derived(pack ? `${page.url.origin}${base}/verify/${encodeURIComponent(pack.shortCode)}` : '');
+	/** The server's PDF of this page prints it on every page: a derived copy, never the pack. */
+	const footer = $derived(pack ? `Applicant’s copy, not the pack · Evidence pack v${pack.version}, code ${pack.shortCode} · check the pack at ${verifyUrl} ·` : undefined);
+	let asking = $state(false);
+	let copyError = $state<string | null>(null);
+	let poll: ReturnType<typeof setTimeout> | undefined;
+	onDestroy(() => clearTimeout(poll));
+	/** Read the copy's state again until it is ready or failed (about a minute at most). */
+	function follow(tries = 30) {
+		clearTimeout(poll);
+		if (tries <= 0) return;
+		poll = setTimeout(async () => {
+			try {
+				const v = await api.scenarios.pack(projectId, scenarioId, packId);
+				view = v;
+				if (v.copy.status === 'rendering') follow(tries - 1);
+			} catch {
+				follow(tries - 1);
+			}
+		}, 2000);
+	}
+	async function askCopy() {
+		asking = true;
+		copyError = null;
+		try {
+			const c = await api.scenarios.packCopy(projectId, scenarioId, packId);
+			if (view) view = { ...view, copy: c };
+			if (c.status === 'rendering') follow();
+		} catch (e) {
+			copyError = e instanceof Error ? e.message : String(e);
+		} finally {
+			asking = false;
+		}
+	}
+
+	// Printing is A4, in the light theme, with the copy's footer on every page (report/printPage.ts).
+	const pageRule = $derived(reportPageRule(footer));
+	let pageStyle: HTMLStyleElement | null = null;
+	$effect(() => {
+		const rule = pageRule;
+		if (pageStyle) pageStyle.textContent = rule;
+	});
+	$effect(() => {
+		pageStyle = document.createElement('style');
+		pageStyle.textContent = untrack(() => pageRule);
+		document.head.append(pageStyle);
+		const before = () => forceLightForPrint();
+		const after = () => restoreThemeAfterPrint();
+		addEventListener('beforeprint', before);
+		addEventListener('afterprint', after);
+		return () => {
+			pageStyle?.remove();
+			pageStyle = null;
+			removeEventListener('beforeprint', before);
+			removeEventListener('afterprint', after);
+			restoreThemeAfterPrint();
+		};
+	});
 </script>
 
 <svelte:head><title>{pack ? `Evidence pack v${pack.version} · ${pack.title} · ` : ''}Water Management</title></svelte:head>
 
-<main class="page applicant-pack" aria-busy={status === 'loading'} data-testid="applicant-pack">
-	<p><a href={back}>← Back to the application</a></p>
+<main class="page applicant-pack" aria-busy={status === 'loading'} data-testid="applicant-pack" data-report-ready={(status === 'loaded' && !!view) || undefined} data-report-footer={footer}>
+	<p class="no-print"><a href={back}>← Back to the application</a></p>
 	{#if status === 'not-found'}
 		<div class="alert alert-error" role="alert">This evidence pack doesn’t exist, isn’t issued yet, or isn’t one of your application’s.</div>
 	{:else if status === 'forbidden'}
@@ -89,22 +155,44 @@
 
 	{#if status === 'loaded' && view && pack}
 		<header class="head">
+			<!-- On the printed copy only (165): what it is, and where to check the pack itself. -->
+			<p class="print-only copy-head" data-testid="applicant-copy-head">
+				<strong>Applicant’s copy: other water users’ figures withheld. Not the pack.</strong> Check the pack at {verifyUrl}. Pack code
+				{pack.shortCode}, manifest SHA-256 <span class="mono">{pack.manifestSha256}</span>. Printed from the pack as its applicant reads it; this copy has
+				its own SHA-256, which isn’t the pack’s.
+			</p>
 			<h1>Evidence pack v{pack.version} · {pack.title}</h1>
-			<div class="bar">
+			<div class="bar no-print">
 				<PackBadge status={pack.status} version={pack.version} />
 				{#if pack.isOwner}
 					<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="applicant-pack-share-open">Share link…</button>
 				{/if}
 				<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>
+				{#if copy?.status === 'ready'}
+					<a class="btn" href={api.scenarios.packCopyUrl(projectId, scenarioId, pack.id)} data-testid="applicant-copy-download">Download your printable copy</a>
+				{:else if copy?.status === 'rendering'}
+					<span class="muted" role="status" data-testid="applicant-copy-rendering">Printing your copy…</span>
+				{:else}
+					<button type="button" class="btn" disabled={asking} onclick={askCopy} data-testid="applicant-copy-ask">Make a printable copy</button>
+				{/if}
 			</div>
+			{#if copy?.status === 'ready' && copy.sha256}
+				<p class="small muted no-print" data-testid="applicant-copy-ready">
+					Your printable copy (printed {fmtDate(copy.renderedAt, true)}{copy.pages ? `, ${copy.pages} pages` : ''}) has SHA-256 <span class="mono">{copy.sha256}</span>. It is
+					a copy of this page, not the pack: file it where your application needs the evidence, and the authority checks the pack itself on the verify page.
+				</p>
+			{:else if copy?.status === 'failed'}
+				<p class="alert alert-warning no-print" role="alert" data-testid="applicant-copy-failed">Your printable copy couldn’t be made{copy.error ? `: ${copy.error}` : '.'} Try again.</p>
+			{/if}
+			{#if copyError}<p class="alert alert-warning no-print" role="alert">{copyError}</p>{/if}
 			<p data-testid="applicant-pack-standing" data-status={pack.status}>{standingLine(pack)}</p>
 			{#if pack.supersededById}
 				<p><a href={applicantPackHref(base, projectId, scenarioId, pack.supersededById)} data-testid="applicant-pack-successor">Open the version that replaced it</a></p>
 			{/if}
-			<p class="note" data-testid="applicant-pack-note">
+			<p class="note no-print" data-testid="applicant-pack-note">
 				Your copy of the pack. It shows your own hydrological units by name and every other farm or water user only by a number, as
 				the rest of your application does; the assessors’ copy, its PDF and its reproduction bundle name them. Issuing a pack, and
-				withdrawing or replacing one, is for the assessors.
+				withdrawing or replacing one, is for the assessors. Make a printable copy to file with your application: it is this page as a PDF.
 			</p>
 		</header>
 
@@ -304,5 +392,41 @@
 	}
 	.hashes dd {
 		margin: 0 0 0.3rem;
+	}
+	.print-only {
+		display: none;
+	}
+	.copy-head {
+		border: 1px solid #444;
+		padding: 0.4rem 0.6rem;
+	}
+	@media print {
+		.no-print,
+		.applicant-pack :global(.no-print) {
+			display: none !important;
+		}
+		.print-only {
+			display: block;
+		}
+		:global(html:has(main.applicant-pack)),
+		:global(body:has(main.applicant-pack)) {
+			background: #fff;
+		}
+		.applicant-pack {
+			max-width: none;
+			padding: 0;
+			font-size: 9.5pt;
+			print-color-adjust: exact;
+			-webkit-print-color-adjust: exact;
+		}
+		.applicant-pack :global(.table-wrap) {
+			overflow: visible;
+			max-height: none;
+			border: 0;
+		}
+		.applicant-pack :global(h2),
+		.applicant-pack :global(h3) {
+			break-after: avoid;
+		}
 	}
 </style>

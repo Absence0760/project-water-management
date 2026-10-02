@@ -144,6 +144,10 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'false turns off the second-factor requirement for owners, team admins and assessors (auth/stepUp.ts) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
 		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
 	},
+	REGISTRATION_CHECK_REQUIRED: {
+		why: 'false lets every project issue a pack without a recorded check of its specialist signers\' registrations, whatever the project\'s own setting (signoffs/registrationCheck.ts, 167_signers), for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
+		checks: { api: optional(oneOf('true')) }
+	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
 	PASSWORD_HASH_COST: { why: 'bcrypt cost override for the local e2e server; auth/password.ts refuses it in Lambda.', checks: { api: optional(oneOf('12')), worker: optional(oneOf('12')) } },
@@ -198,6 +202,9 @@ export const SETTINGS: Record<string, Setting> = {
 	SMTP_USER: { why: 'SMTP transport only.' },
 	SMTP_PASSWORD: { why: 'SMTP transport only.' },
 	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
+	OPERATOR_EMAIL: {
+		why: 'The operator’s copy of the licence-record notices (licence/record.ts, 161); unset sends none and the owners still get theirs. Terraform sets it to budget_alert_email on the worker (infra/jobs.tf).'
+	},
 
 	// --- Alerts ----------------------------------------------------------------------------
 	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe and “Was this useful?” links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
