@@ -4,7 +4,9 @@ import {
 	defaultDivideChoice,
 	divideBody,
 	divideDrainsIntoName,
+	divideAreaAfterKm2,
 	divideOffers,
+	divideOverlap,
 	divideProblem,
 	divideSummary,
 	doubleNode,
@@ -160,5 +162,39 @@ describe('the ticks', () => {
 		expect(divideSummary(t)).toBe(
 			'The model takes 2 areas (each saved as its unit’s parcel), 2 drains-into and 0 runoffs to the dam, and 1 new gauge, and a new unit for the rest of the catchment. Every value not ticked stays as it is.'
 		);
+	});
+});
+
+describe('land counted twice (persona-hydrologist, round 4)', () => {
+	// A 9 km² catchment: the dam's piece 5 km², the rest 4 km²; Hillside, which no point stands for, keeps 3 km².
+	const p = { ...plan([unit('dam', { areaM2: 5e6 })]), untouched: [{ nodeId: 'hill', name: 'Hillside', areaKm2: 3 }] };
+	const ticked = () => tickAllDivide(p, initialDivideTicks(p));
+
+	it('adds up the pieces taken, the areas kept and the rest where it goes', () => {
+		// Unticked: the dam keeps its 5 km² now, Hillside its 3.
+		expect(divideAreaAfterKm2(p, initialDivideTicks(p))).toBeCloseTo(8, 9);
+		const t = ticked();
+		t.rest = { to: 'new', name: 'Rest' };
+		expect(divideAreaAfterKm2(p, t)).toBeCloseTo(12, 9);
+		t.rest = { to: 'node', nodeId: 'hill' };
+		expect(divideAreaAfterKm2(p, t)).toBeCloseTo(9, 9);
+	});
+
+	it('says so before Apply when the units would add up to more than the catchment, naming who keeps a typed area', () => {
+		const t = ticked();
+		t.rest = { to: 'new', name: 'Rest' };
+		expect(divideOverlap(p, t)).toBe(
+			'After Apply the units would add up to 12.00 km², more than the 9.00 km² above the outlet, so some land would count twice and its runoff with it. Hillside keeps its typed area: give it the rest of the catchment or a point of its own, or check it.'
+		);
+		// Nothing taken yet: the model's own typed areas, and the point whose typed area is bigger than its piece, named.
+		const big = { ...p, units: [unit('dam', { areaM2: 5e6, current: { areaKm2: 300, areaSource: 'typed', downstreamNodeId: 'out', downstreamName: 'Outflow', pctRunoffToDam: 0 } })] };
+		expect(divideOverlap(big, initialDivideTicks(big))).toBe(
+			'The model’s areas already add up to 303.00 km², more than the 9.00 km² above the outlet, so some land counts twice and its runoff with it. dam keeps its typed 300.00 km²: tick its area to take its piece. Hillside keeps its typed area: give it the rest of the catchment or a point of its own, or check it.'
+		);
+		// Hillside takes the rest: the units are the catchment exactly.
+		t.rest = { to: 'node', nodeId: 'hill' };
+		expect(divideOverlap(p, t)).toBeNull();
+		// Within the tolerance: no sentence.
+		expect(divideOverlap({ ...p, untouched: [{ nodeId: 'hill', name: 'Hillside', areaKm2: 0.05 }] }, { ...t, rest: { to: 'new', name: 'Rest' } })).toBeNull();
 	});
 });

@@ -58,7 +58,10 @@ reload) lands on the same step.
 4. **Data and the first run.** With the network in, the sheet lists the
    existing Part B proposals, each with its own accept, and where it is:
    rain from the boundary (the CHIRPS feed, on this sheet), the nearest
-   gauging station (Settings → Data feeds), each dam's capacity from the
+   gauging station (Settings → Data feeds), evaporation (Settings &
+   calibration → Demand, which links Evaporation from the map: the monthly A-pan the dams, river pools and crops lose,
+   since an ET₀ row from the map feeds the runoff model only and with no
+   A-pan the dams lose nothing; round 4), each dam's capacity from the
    register and full-supply area from its polygon (Dams), cultivated area
    (Crops), and finally **Run the model** (Runs & results). Nothing there is
    new: the step links the proposals that already exist, in order.
