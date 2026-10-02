@@ -31,7 +31,7 @@ No env setup is needed: the local defaults are committed, and they are
 non-sensitive. Register an account at http://localhost:7777 and create a
 project.
 
-**Demo data (invented):** `pnpm seed:examples` loads three invented example
+**Demo data (invented):** `pnpm seed:examples` loads four invented example
 catchments, each with a run, for two demo users (`demo@example.com` /
 `analyst@example.com`, password `demo-password`, local only). They are
 synthetic and committed, so this works on any clone
