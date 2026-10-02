@@ -23,7 +23,9 @@ Two rules hold throughout:
   full-supply area (from its polygon) enters the model only through **Use**
   on the Dams page and a confirmation; a unit's cultivated area (from land
   cover) enters a crop's planted area only through **Use** in the unit's planted-areas drawer,
-  for a crop the modeller picks, and a confirmation; a reach of the river
+  for a crop the modeller picks, and a confirmation; the boundary's monthly
+  evaporation enters GR4J's PE (or the A-pan row) only through **Use** in
+  Settings and a confirmation; a reach of the river
   network becomes one of the project's rivers only through **Add to the map
   as a river**, one reach at a time;
   a delineated catchment reaches the map only through **Accept** (and
@@ -1150,6 +1152,121 @@ reads them.
   work and products that compete with GEOTERRAIMAGE's own, and the 2018/2020
   terms couldn't be read from outside South Africa.
 
+## Evaporation from the map
+
+**Evaporation from the map**, in Settings → Flow calibration under GR4J's
+potential evaporation (issue #326 Part B, "B-evap";
+[ui.md § Settings & calibration](./ui.md#settings--calibration)), averages an evaporation
+grid's 12 monthly means over the **catchment boundary** and proposes them,
+beside what the saved settings hold, as one of two inputs. Which one is the
+grid's kind, and **nothing is converted between them**:
+
+| Grid kind | What the values are | Proposed as | Read by |
+| --- | --- | --- | --- |
+| `et0` | FAO-56 Penman-Monteith reference evapotranspiration (ET₀), mm a month | GR4J's monthly PE: `settings.pe = { kind: 'monthly', mm, source }` | GR4J only ([model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)); the pan coefficient is then unused |
+| `apan` | Class-A pan evaporation, mm a month | the A-pan row, `settings.apanMm` | irrigation demand, dam evaporation and, under `pe.kind: 'pan'`, GR4J (× the pan coefficient) |
+
+- **Why no conversion.** ET₀ is the evapotranspiration of a reference grass
+  surface, not what a Class-A pan loses. FAO-56 relates them as ET₀ = Kp ×
+  Epan, and Kp (the pan coefficient) depends on the pan's siting, humidity
+  and wind: it is the modeller's call (model.md §2.4a, question 4), not the
+  map's. So reference ET goes in where the model already takes a PE as it
+  stands (the monthly PE input exists for "a station FAO-56 ET₀", §2.4a),
+  and never into the A-pan row, which drives crop demand (A-pan × crop
+  factor) and dam evaporation (A-pan × lake factor), both calibrated on pan
+  values. For a reference-ET grid the panel shows **ET₀ ÷ saved A-pan** per
+  month, the pan coefficient the two rows imply, as a cross-check only
+  (flagged outside FAO-56's typical Class A range, 0.6–0.85); nothing is
+  written from it. A Symons-pan (S-pan) grid, WR2012's kind, has no kind
+  here: the loader refuses it, since turning S-pan into A-pan needs the
+  modeller's own monthly factors.
+- **Pre-summarised at import, local-first.** The app never reads NetCDF. The
+  operator's `pnpm import:evaporation` (`backend/scripts/import-evaporation.ts`,
+  `geo/loadEvaporation.ts`) reads the daily product a year at a time (dPET:
+  NetCDF-4, read with `h5wasm`, a backend dev dependency loaded only by that
+  script, so no HDF5 code is in a Lambda bundle), sums each 0.1° cell's days
+  into calendar-month totals inside a box (a cell with a missing day leaves
+  that year), and averages each calendar month over the years, keeping only
+  cells every year has. The result is 12 numbers a cell in water-year order
+  (`evaporation_cell_reference`, 180): at most about 23 000 cells for South Africa,
+  Lesotho and eSwatini. A grid, not a value per quaternary: a per-quaternary
+  summary would need the DWS quaternary outlines, whose licence is
+  unconfirmed (§ Sources), and the boundary's own cells are a closer average.
+- **The boundary's month** (`geo/evaporation.ts`) is the mean of the cells it
+  covers, each weighted by its area on the WGS84 ellipsoid × the share of it
+  inside the boundary (`geo/gridShares.ts`, the clipper of [§ Rain from the
+  boundary](#rain-from-the-boundary) and [§ Cultivated area from land
+  cover](#cultivated-area-from-land-cover)), rounded to 0.1 mm. Cells without
+  a value (sea, or past the loaded box) are left out of both sums and the
+  share of the boundary they leave is shown as coverage; below 50 %
+  (`MIN_COVERAGE`) nothing is proposed. dPET's cells are centred on whole
+  tenths of a degree, so the dataset row carries the grid's origin
+  (`origin_lon`, `origin_lat`: 0.05°) and the clipping works in that frame.
+  One summary reads at most 40 000 cells of extent (`MAX_EVAPORATION_CELLS`,
+  about 480 000 km²).
+- **Cited.** Each dataset row (`evaporation_dataset`) holds its kind, source,
+  version, period (first and last year), method in words, attribution and
+  grid; the panel shows them under **Source and method**. **Use** asks first
+  (the confirmation says what reads the values and that a GR4J fit made
+  before is marked "Forcing changed since fit"), then `POST
+  /projects/:id/evaporation-from-map` with the dataset
+  ([api.md § Catchment map](./api.md#catchment-map)): the server re-derives
+  the 12 values from the boundary as it is, writes them into the settings,
+  records one settings revision whose reason cites the dataset, version and
+  method ("GR4J’s monthly PE from the map: 1335 mm a year of reference
+  evapotranspiration (FAO-56 Penman-Monteith ET₀), area-weighted over the 4
+  grid cells the catchment boundary “Catchment” covers (100 % of it has
+  values); dPET, … (hPET v3 …, 1991–2020 monthly means; dataset
+  “dPET-1991-2020”). Pre-summarised at import: …"), which History, the run
+  comparison and an evidence pack's revisions list carry, and keeps an
+  `evaporation_accepted` row (181) with the same citation. A monthly PE's own
+  `source` names the dataset too, so a fit record and a run's settings carry
+  it. The panel says when the saved row no longer holds the accepted values
+  ("Typed over since"). While Settings has unsaved changes, Use waits; after
+  it, the form takes the saved settings. Viewers see the proposal, not Use.
+- **Datasets.** The default is a real dataset before the synthetic one, then
+  the newest load; the API takes `?dataset=`, and the panel offers a choice
+  when more than one is loaded.
+
+### The evaporation grid
+
+`evaporation_dataset` and `evaporation_cell_reference` (180) are global
+reference data: the **operator** loads them as the schema owner and the app
+only reads them.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/evaporation.synthetic.json`
+  is an invented 0.1° reference-ET grid around the seeded Sandspruit map
+  (20.5–22.5° E, 34.5–32.5° S): the four cells centred on 21.3–21.4° E,
+  33.6–33.7° S (the DB and e2e tests' boundary) hold a base row of 120 … 95
+  mm (1 335 mm a year) exactly, the rest a fixed multiple of it, and 12 cells
+  in the south-west corner have no value (the "sea"; its `_comment` gives the
+  rule). `pnpm import:evaporation` with no argument loads it (`pnpm setup`
+  does), as dataset `synthetic`, and the panel marks it "Synthetic test data".
+- **Real data: dPET, the operator's own download** (§ Sources: allowed, CC
+  BY 4.0). `pnpm import:evaporation:fetch [first] [last]`
+  (`bin/evaporation-fetch.sh`, default 1991 2020, a 30-year normal) downloads
+  each year's `<year>_daily_pet.nc` (about 2.4 GB) from the University of
+  Bristol's data.bris, reduces it to that year's monthly totals inside the
+  box (`import:evaporation --reduce`, a few MB, kept in
+  `~/.cache/water-management-tiles/evaporation/` so a re-run skips it),
+  deletes the year, then averages the years and loads them as
+  `dPET-<first>-<last>`. `EVAP_BBOX`, `EVAP_DATASET` and `EVAP_URL` override
+  the box, the label and the source. By hand:
+  `pnpm import:evaporation --reduce <dir> <year>_daily_pet.nc …` then
+  `pnpm import:evaporation <dir>/*.dpet-monthly.json --dataset <label>`
+  (`--source`, `--version`, `--attribution` override the dPET defaults). The
+  years must run without a gap. Never commit a file or the database it
+  filled.
+- **An A-pan grid** (kind `apan`) loads from the fixture form
+  (`{ "kind": "apan", "cellDeg", "firstYear", "lastYear", "cells": [[lon,
+  lat, [Oct … Sep]], …] }`), for example the operator's own interpolation of
+  station pans. No open A-pan grid passes D-B today (§ Sources).
+- **Production loading** has the quaternary dataset's gap: no path yet into
+  the private database (followups.md). The attribution must be shown with any
+  figure a client-facing deployment serves from it (§ Sources).
+- **WR2012's evaporation** (S-pan per quaternary, with its evaporation zones'
+  monthly distribution) stays **blocked** with the rest of WR2012 (§ Sources).
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -1178,3 +1295,8 @@ fixtures only.
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |
+| dPET, the daily files of hPET (hourly potential evapotranspiration, FAO-56 Penman-Monteith, 0.1°, 1981 onwards): the evaporation proposals' reference ET ([§ Evaporation from the map](#evaporation-from-the-map)) | University of Bristol (data.bris); Singer, M.B. et al. (2021), *Sci Data* 8, 224 ([doi:10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp](https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp)) | **CC BY 4.0**: "Licence: Creative Commons Attribution 4.0" on the dataset page ([data.bris.ac.uk](https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp), read 2026-10-02); commercial use allowed with attribution. Its README: "This dataset contains modified Copernicus Climate Change Service information", from ERA5-Land, itself CC BY 4.0 (next row) | "hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it." Stored on the dataset row, shown under the panel's Source and method | v3 (yearly files, one added each January) | yearly | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
+| ERA5-Land (the reanalysis dPET is computed from; its own `pev`, potential evaporation, considered and not used) | Copernicus Climate Change Service (C3S), ECMWF | **CC BY 4.0** on the Climate Data Store's catalogue record ("license": "CC-BY-4.0", `cds.climate.copernicus.eu/api/catalogue/v1/collections/reanalysis-era5-land-monthly-means`, read 2026-10-02) | cite the CDS entry and attribute the Copernicus programme (carried in dPET's line above) | – | monthly | Allowed as dPET's input. Its own `pev` is **not used**: ECMWF documents it as wrong ([ECMWF forum, the ERA5 potential evaporation problems](https://forum.ecmwf.int/t/confluence-page-on-the-problems-of-the-potential-evapotranspiration-product-in-era5/2491)) (a bug stops transpiration where there is no low vegetation, so it is badly underestimated over forest and desert), and it isn't a reference ET either |
+| Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
+| FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
+| WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |

@@ -2543,7 +2543,10 @@ placed points. The server never trusts the browser with geometry:
   be a dam linked to that unit). A planted area from land cover only through
   `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
   dataset and optionally a parcel, never a value: the server sums the
-  cropland in the unit's own linked parcels as they are now.
+  cropland in the unit's own linked parcels as they are now. Evaporation
+  only through `evaporation-from-map` (issue #326 B-evap), which takes a
+  dataset label, never a value: the server averages the grid over the
+  project's own boundary as it is now.
 - **Properties are allowlisted** (`name`, `description`, `ref`; capped):
   a GIS attribute table can carry owners' names, ID numbers or phone numbers,
   and anything else is dropped before storage (POPIA minimisation, as the
@@ -2565,7 +2568,7 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173) and `river_reference` (171) are public reference data, readable by any
+  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180) and `river_reference` (171) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin

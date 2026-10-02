@@ -3724,6 +3724,39 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       proposals read WorldCover or the synthetic grid. Trigger: a
       hydrologist asking which crop the land cover sees, or WorldCover's
       cropland class proving too coarse in a client catchment.
+- [ ] **Loading the evaporation grid in production** (issue #326 B-evap;
+      maps.md § The evaporation grid): dPET is allowed (CC BY 4.0, from
+      ERA5-Land, also CC BY 4.0), with the same missing path into the
+      private database as the land-cover grid and the quaternaries (the
+      loader writes as the schema owner from a workstation). Same durable
+      fix as the item above: one operator path for every reference dataset,
+      fed the pre-summarised `--reduce` totals. Trigger: the first client
+      deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
+      attribution with any figure served.
+- [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
+      review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
+      `settings/EvaporationProposal.svelte` repeat the same frame (heading,
+      live notice, the `aria-busy`/`data-ready` body, error with Try again,
+      no-dataset alert, synthetic-data warning, Source and method). Third
+      caller, so extract a shell taking a body snippet, after pinning each
+      panel's rendered states in its e2e spec (CLAUDE.md: pin, then fold).
+      The evaporation panel's focus-to-notice after Use is the pattern the
+      other two should take with it. Trigger: the next map proposal panel,
+      or the next fix that has to be made in all three.
+- [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
+      maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
+      reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam
+      evaporation still take the A-pan row typed from WR90/WR2012 or a
+      station. WR2012's evaporation (S-pan per quaternary) is blocked with
+      the rest of WR2012 (the WR2012 decision above) and is S-pan, which
+      would need the hydrologist's S-pan → A-pan factors; no open A-pan grid
+      passes D-B (Global-AI_PET v3.1 is non-commercial, WaPOR's RET is CC
+      BY-NC-SA, ERA5-Land's `pev` is known to be wrong). On a WRC yes:
+      convert WR2012's S-pan to A-pan with stated monthly factors, keyed
+      per quaternary (a quaternary-keyed variant of the grid, or
+      rasterised to it), load it as kind `apan`, and record it in the
+      sources table. Trigger: the WR2012 decision, or a hydrologist asking
+      for the A-pan row from the map.
 
 ## Crop factors (issue #54 item 1)
 

@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Settings → Evaporation from the map (issue #326 B-evap): its lazy chunk (4.3 KB gzip) and the API client's two evaporation calls; measured with pnpm build:frontend"
+}
