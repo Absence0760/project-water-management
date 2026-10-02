@@ -2534,8 +2534,13 @@ placed points. The server never trusts the browser with geometry:
   (`geo/clip.ts eachBand`), so the work grows with the vertices times
   log(cells), not vertices × cells: before, clipping the whole row piece to
   every cell let a 48 000-position comb (1.3 MB, valid) cost about 92 s of
-  CPU in one viewer GET of `evaporation-proposals` (`geo/clip.test.ts` bounds
-  the work). The import route has its own body limit (7 MB of JSON, `app.ts`
+  CPU in one viewer GET of `evaporation-proposals`. No clipping order helps
+  a shape that puts every vertex in every row (a comb whose teeth run its
+  full height: its pieces alone are vertices × rows, about a billion over
+  20 000 rows), so the work also has a hard budget (`GRID_WORK_BUDGET`, 8
+  million vertices clipped, about a second): past it the summary is a
+  problem ("too detailed … simplify it", 400 on the accept routes), not
+  minutes of CPU (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`). The import route has its own body limit (7 MB of JSON, `app.ts`
   exempts that one path from the general 4 MB), and the parse is
   `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
   there is no archive to bomb), no external references.
