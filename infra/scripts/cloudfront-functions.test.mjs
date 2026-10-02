@@ -29,7 +29,7 @@ test('SPA routes (no extension) are served index.html', () => {
 });
 
 test('the prerendered pages are served from their own HTML', () => {
-	for (const p of ['welcome', 'welcome/af', 'privacy', 'terms', 'methods']) assert.equal(outcome(`/${p}`), `/${p}.html`);
+	for (const p of ['welcome', 'welcome/af', 'privacy', 'terms', 'methods', 'data-sources']) assert.equal(outcome(`/${p}`), `/${p}.html`);
 });
 
 test('a landing page in a language the build has not written is the SPA, and its HTML is not served directly (issue #137)', () => {

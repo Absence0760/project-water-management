@@ -48,8 +48,11 @@
 
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { base } from '$app/paths';
 	import type { MapFeature } from '$lib/api/types';
+	import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 	import { boundsOf, boundsOfAll, KIND_LABEL } from './mapData';
+	import { creditedFeature } from './mapLayers';
 	import { appIsDark, watchAppTheme } from './appTheme';
 	import {
 		basemapLayerIds,
@@ -64,6 +67,10 @@
 		reliefLayer,
 		RIVER_NETWORK_HIT_LAYER,
 		riverNetworkData,
+		RIVERS_CREDIT_LAYER,
+		RIVERS_CREDIT_SOURCE,
+		riversCredit as riversCreditLink,
+		riversCreditSource,
 		TERRAIN_SOURCE,
 		terrainSource,
 		type NetworkReach,
@@ -97,6 +104,7 @@
 		pickedQuaternary = null,
 		onquaternary,
 		rivers = null,
+		riversCredit = false,
 		pickedReach = null,
 		onreach,
 		terrainUrl = null,
@@ -131,6 +139,8 @@
 		onquaternary?: (code: string) => void;
 		/** The river network's reaches to draw (#345); null or empty: none. */
 		rivers?: readonly NetworkReach[] | null;
+		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
+		riversCredit?: boolean;
 		/** The reach picked in the tab's list, drawn heavier. */
 		pickedReach?: string | null;
 		/** A click on a reach where no feature is: its key. */
@@ -272,13 +282,31 @@
 		syncMarkers();
 	}
 
+	// The credit shows while the layer draws HydroRIVERS reaches (`riversCredit`) or a river added from one is drawn.
+	const featuresCredited = $derived(features.some(creditedFeature));
+	const riversCreditHtml = () => (riversCredit || featuresCredited ? riversCreditLink(`${base}/data-sources`, HYDRORIVERS_MAP_ATTRIBUTION) : null);
+
+	/** Add or drop the river network's credit on the live map, to match the reaches drawn (a style load carries it already). */
+	function syncRiversCredit() {
+		if (!map || status !== 'ready') return;
+		const html = riversCreditHtml();
+		const has = !!map.getLayer(RIVERS_CREDIT_LAYER.id);
+		if (html && !has) {
+			if (!map.getSource(RIVERS_CREDIT_SOURCE)) map.addSource(RIVERS_CREDIT_SOURCE, riversCreditSource(html) as never);
+			map.addLayer(RIVERS_CREDIT_LAYER as never);
+		} else if (!html && has) {
+			map.removeLayer(RIVERS_CREDIT_LAYER.id);
+			map.removeSource(RIVERS_CREDIT_SOURCE);
+		}
+	}
+
 	/** Add or drop the relief on the live map, to match the Relief layer (a style load carries it already). */
 	function syncRelief() {
 		if (!map || status !== 'ready') return;
 		const url = reliefUrl();
 		const has = !!map.getLayer(RELIEF_LAYER);
 		if (url && !has) {
-			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url) as never);
+			if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(url, `${base}/data-sources`) as never);
 			map.addLayer(reliefLayer(dark) as never, reliefBeforeId(map.getStyle().layers.map((l) => l.id)));
 		} else if (!url && has) {
 			map.removeLayer(RELIEF_LAYER);
@@ -300,6 +328,8 @@
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
 						terrain: reliefUrl(),
+						riversCredit: riversCreditHtml(),
+						dataSourcesHref: `${base}/data-sources`,
 						proposal: proposalData(proposal)
 					});
 				const style = styleNow();
@@ -423,6 +453,14 @@
 		void relief;
 		void status;
 		untrack(syncRelief);
+	});
+
+	// HydroRIVERS reaches drawn or gone: their credit with them.
+	$effect(() => {
+		void riversCredit;
+		void featuresCredited;
+		void status;
+		untrack(syncRiversCredit);
 	});
 
 	// Selecting in the list frames the feature (instantly under prefers-reduced-motion).

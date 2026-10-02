@@ -3,15 +3,26 @@
 // project's features are fetched once per bbox (GET …/map/rivers) and handed
 // to the map; the tab lists them beside it (the map is never the only place
 // to read them), and an editor adds the picked reach as the project's river
-// feature, one reach at a time (POST …/map/rivers/add).
+// feature, one reach at a time (POST …/map/rivers/add). The two requests come
+// in with the deps (MapTab passes api.map's), so the module never imports the
+// app-wide API client and its SvelteKit $env, and the tests can drive it.
 import { untrack } from 'svelte';
-import { api, type MapFeature, type RiverLayer as Answer, type RiverReach } from '$lib/api';
-import { reachKey, reachRef, riverBbox } from './mapLayers';
+import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
+import { creditedReach, reachKey, reachRef, riverBbox } from './mapLayers';
 import type { NetworkReach } from './mapStyle';
 
+export interface RiverLayerDeps {
+	projectId: () => string;
+	on: () => boolean;
+	features: () => readonly MapFeature[];
+	/** GET …/map/rivers: the reaches in `bbox`. */
+	load: (projectId: string, bbox: readonly [number, number, number, number]) => Promise<Answer>;
+	/** POST …/map/rivers/add: the project's new river feature. */
+	add: (projectId: string, dataset: string, reachId: number) => Promise<MapFeature>;
+}
 
 export class RiverLayer {
-	#deps: { projectId: () => string; on: () => boolean; features: () => readonly MapFeature[] };
+	#deps: RiverLayerDeps;
 	answer = $state<Answer | null>(null);
 	loading = $state(false);
 	error = $state<string | null>(null);
@@ -22,7 +33,7 @@ export class RiverLayer {
 	addError = $state<string | null>(null);
 	#asked = '';
 
-	constructor(deps: { projectId: () => string; on: () => boolean; features: () => readonly MapFeature[] }) {
+	constructor(deps: RiverLayerDeps) {
 		this.#deps = deps;
 		$effect(() => {
 			const on = this.#deps.on();
@@ -61,6 +72,11 @@ export class RiverLayer {
 		return this.on && this.answer ? this.answer.reaches.map((r) => ({ key: reachKey(r), strahler: r.strahler, geometry: r.geometry })) : [];
 	}
 
+	/** Whether the map credits HydroRIVERS: while it draws any of its reaches. */
+	get credited(): boolean {
+		return this.on && !!this.answer?.reaches.some(creditedReach);
+	}
+
 	/** The picked reach, if it is in the answer. */
 	get pickedReach(): RiverReach | null {
 		return this.answer?.reaches.find((r) => reachKey(r) === this.picked) ?? null;
@@ -85,7 +101,7 @@ export class RiverLayer {
 		this.loading = true;
 		this.error = null;
 		try {
-			const a = await api.map.rivers(id, bbox);
+			const a = await this.#deps.load(id, bbox);
 			if (key === this.#asked) this.answer = a;
 		} catch (e) {
 			if (key === this.#asked) {
@@ -113,8 +129,7 @@ export class RiverLayer {
 		this.adding = key;
 		this.addError = null;
 		try {
-			const feature = await api.map.addRiver(this.#deps.projectId(), reach.dataset, reach.reachId);
-			return feature;
+			return await this.#deps.add(this.#deps.projectId(), reach.dataset, reach.reachId);
 		} catch (e) {
 			this.addError = e instanceof Error ? e.message : String(e);
 			return null;

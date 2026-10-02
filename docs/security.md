@@ -3033,7 +3033,7 @@ key there would let any read-only principal forge any user's session.
   The reports bucket keeps `GetObject` only.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome` and `/welcome/af`, issues #57 and #137), the legal pages (`/privacy`, `/terms`,
-  [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
+  [legal-status.md](./legal-status.md)), the methods page (`/methods`) and the data sources' credits (`/data-sources`) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but

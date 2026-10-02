@@ -139,6 +139,9 @@ the ranks within one (engine ≥ 1.64.0),
   object on a river pump of their own beside the dam, the dam side serving
   the rest, the takes by supply level from the flow passing the dam above
   what must pass, pools drawn after the flow, refilled last and evaporating.
+  Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
+  model doesn't write it, so the comparison notes it as engine-only; the
+  engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent

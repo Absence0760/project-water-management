@@ -75,6 +75,18 @@ after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md
    which `svelte-kit sync` writes, and without it every frontend test file
    fails at startup with "Could not resolve 'node:module' … Tsconfig not
    found" (Vite's dependency optimiser can't find the tsconfig).
+6. A test of a runes state class (a `.svelte.ts` module whose constructor
+   starts an `$effect`, like the map's layers) is a `*.svelte.test.ts`
+   file: the frontend's vitest runs those in its `runes` project
+   (`frontend/vitest.config.ts`, `frontend/vitest.client-env.ts`), Node with
+   Vite's client transforms. Under the plain `node` environment (the `unit`
+   project, every other test) Svelte compiles the module for the server,
+   where `$effect` and `$effect.root` do nothing, so the constructor's effect
+   never runs and a test awaiting its request waits forever. Wrap the class
+   in `$effect.root(…)`, call `flushSync()` after changing its inputs, and
+   pass its requests in rather than importing `$lib/api` (whose
+   `$env/static/public` exists only under SvelteKit;
+   `components/map/riverLayer.svelte.test.ts` is the pattern).
 
 ## Layout checks and fonts
 

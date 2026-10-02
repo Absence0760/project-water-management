@@ -9,7 +9,7 @@ import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
-import { poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
+import { hasPumpLimit, poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
 import { PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { AllocationCap } from '../allocations/mode';
@@ -343,9 +343,11 @@ export interface NodeResult {
 	 * The unit's river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j), in
 	 * `river.takes` order: what each pumped (part of `supplied`) and, with a
 	 * pool, the pool's storage at the end of the day and its evaporation (null
-	 * without one). Absent on a unit without a river-sourced demand.
+	 * without one), and with a pump capacity the demand the pump left unmet
+	 * although the water was there (engine ≥ 1.66.0; null without a capacity).
+	 * Absent on a unit without a river-sourced demand.
 	 */
-	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; poolEvaporation: (Float64Array | null)[] };
+	riverTakes?: { got: Float64Array[]; pool: (Float64Array | null)[]; poolEvaporation: (Float64Array | null)[]; pumpLimited: (Float64Array | null)[] };
 	/** Delivered by river off-takes into this unit (engine ≥ 1.14.0), after conveyance losses; absent on a unit no off-take reaches. */
 	offtakeIn?: Float64Array;
 	/** Taken by river off-takes from the flow leaving this unit (engine ≥ 1.14.0), before losses; absent on a unit no off-take draws on. */
@@ -671,7 +673,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (n.objects) r.objectSupplied = n.objects.ids.map(() => new Float64Array(days));
 		if (n.river) {
 			const tk = n.river.takes;
-			r.riverTakes = { got: tk.map(() => new Float64Array(days)), pool: tk.map((x) => (x.pool ? new Float64Array(days) : null)), poolEvaporation: tk.map((x) => (x.pool ? new Float64Array(days) : null)) };
+			r.riverTakes = {
+				got: tk.map(() => new Float64Array(days)),
+				pool: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
+				poolEvaporation: tk.map((x) => (x.pool ? new Float64Array(days) : null)),
+				pumpLimited: tk.map((x) => (hasPumpLimit(x) ? new Float64Array(days) : null))
+			};
 		}
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
@@ -1415,6 +1422,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					const x = tk[a]!;
 					const v = td.got[a]!;
 					rt.got[a]![t] = v;
+					const pl = rt.pumpLimited[a];
+					if (pl) pl[t] = td.pumpLimited[a]!;
 					Griver += v;
 					if (x.obj < 0) back += node.lossReturnFraction * (1 - node.irrigationEfficiency) * v;
 					else {
