@@ -11,14 +11,16 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                     ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
                     ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
                     ├─ /packs/*   → signed URLs only (key group) → S3 packs (OAC)   evidence pack PDFs
+                    ├─ /tiles/*   → CF Function tiles_range (≤ 2 MiB ranges) → S3 tiles (OAC)  basemap, relief, glyphs
                     └─ /api/*     → CF Function strips /api → Lambda Function URL   Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
                                                           SES API (VPC endpoint) ◄────┤ SendEmail as no-reply@
                                                                                       │ water_app, TLS verify-full
                                    deploy-backend.yml ──invoke──► migrate Lambda ─────┤
-                                                                   │ owner creds       ▼
-                                                   Secrets Manager ◄┘ (VPC endpoint)  RDS PostgreSQL 17
+                                   load-reference.yml ──invoke──►  │ │ owner creds     ▼
+                     S3 reference (private) ◄──GetObject (S3 endpoint)┘ │
+                                                   Secrets Manager ◄─┘ (VPC endpoint)  RDS PostgreSQL 17
                                                    (RDS master; runtime secrets)      db.t4g.micro, single-AZ
                                                                                       ▲
    API ──SendMessage (SQS VPC endpoint)──► SQS jobs ──► worker Lambda ────────────────┤ water_app, RLS as
@@ -196,9 +198,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
-| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that, and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
+| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that and the three reads and writes the API and migrate make through it (a pack bundle's put, the delineation DEM, a reference file), and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
-| `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
+| `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions (`spa_rewrite`, `api_strip_prefix`, `tiles_range`), distribution (incl. the `/tiles/*` behaviour), A/AAAA records |
+| `map_data.tf` | The catchment map's data ([deployment.md § The Map tab](../docs/deployment.md#the-map-tab)): the tiles bucket (SSE-S3, TLS only, ACLs off, broken uploads aborted after 7 days; only this distribution reads `tiles/`) and its OAC; the API's read of `tiles/terrain.pmtiles` for delineation (`api_dem`, only with `delineation_dem`); the private reference bucket (no grant in its policy) and the migrate role's read of `reference/*`; the migrate Lambda's path to the S3 endpoint |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
@@ -213,7 +216,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (55 runs; see [Validating locally](#validating-locally)) |
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
 | `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
@@ -477,7 +480,8 @@ Idle to light use, on-demand, us-east-1:
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | S3 packs bucket (an issued pack's PDF, ~1 MB, kept 10 years) | ~0 |
-| S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`) | 7.30 |
+| S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`; also the API's DEM reads and migrate's reference loads, at $0.01/GB) | 7.30 |
+| S3 tiles bucket (~3.5 GB: the basemap, relief and glyphs) and reference bucket (a few hundred MB), `map_data.tf` | ~0.10 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
@@ -827,6 +831,15 @@ Claude does not run any of these, and none of them print a secret. Replace
     - Either way, confirm afterwards: the first command lists one monitor,
       `water-management-services`.
 
+12. **The map's data** (when a client deployment wants the basemap, relief,
+    delineation or the land-cover and river proposals): upload the tiles to
+    `tiles_bucket`, set the three `PUBLIC_TILES…` repository variables and
+    release the web; set `delineation_dem = true` and apply once the DEM is
+    up; and load the allowed reference datasets through `load-reference.yml`.
+    The commands, the licence steps that come first and the cost bound are
+    in [deployment.md § Map tiles and § Reference
+    datasets](../docs/deployment.md#map-tiles).
+
 ### Rotating secrets
 
 Every secret below reaches its Lambdas through their runtime secrets
@@ -855,7 +868,7 @@ The apply, for any of the sops keys:
 
 - **`db_app_password`:** edit it with sops, apply, and invoke the migrate Lambda straight away. The API fails DB logins
   until you do:
-  `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
+  `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 920 --region <region> --profile water-management /dev/stdout`
 - **`auth_jwt_secret`:** edit it with sops, apply. Everyone is signed out.
 - **`app_encryption_key`** (two-step sign-in's TOTP secrets, the API only):
   only if it leaked, since a new key can't open the stored secrets: edit it

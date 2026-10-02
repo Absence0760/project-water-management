@@ -86,7 +86,9 @@ sides share.
   EventBridge tick, and the data feeds' fetcher, `backend/src/lambda-fetcher.ts`,
   outside the VPC with its two queues, and the report renderer,
   `backend/src/lambda-renderer.ts`, a container image in ECR, outside the VPC,
-  with its two queues and a private reports bucket) + RDS Postgres 17
+  with its two queues and a private reports bucket) + the map's tiles bucket
+  (`/tiles/*`) and private reference bucket, which the migrate Lambda loads
+  the allowed reference datasets from (`load-reference.yml`) + RDS Postgres 17
   in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
   ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 

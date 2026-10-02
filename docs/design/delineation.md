@@ -72,7 +72,9 @@ derived from the DEM on the server**, with depression filling.
   elliptical valley with a river, a dam and its reservoir, a closed pit),
   220–360 KB, PNG Terrarium tiles. The tests and the e2e use it.
 - `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles`: production, ranged S3
-  GetObject (the API Lambda reaches S3 through the VPC's gateway endpoint).
+  GetObject (the API Lambda reaches S3 through the VPC's S3 interface
+  endpoint; `delineation_dem = true` in the tfvars sets it and the role's
+  read of that one key, infra/map_data.tf, deployment.md § Map tiles).
 - `DEM_LABEL` names the dataset on proposals (default: the archive's own
   name and version from its metadata, else its attribution).
 
@@ -99,7 +101,8 @@ polygon).
   takes 0.5–1.8 s, 2 048 cells about 2.3 s with the smaller window first,
   the 3 072-cell cap about 4 s and 460 MB resident.
 - **Lambda limits**: the API Lambda has 1 024 MB and a 30 s timeout (under
-  CloudFront's 35 s). The request keeps a **20 s budget**: before growing
+  CloudFront's 35 s); with `delineation_dem` on, Terraform refuses a plan
+  that lowers them under 1 024 MB or 25 s. The request keeps a **20 s budget**: before growing
   the window it estimates the next window's cost from the last one and
   refuses rather than run into the timeout. The cap (3 072 cells) keeps
   memory near 0.5 GB. A request is one CPU-bound call per click; the

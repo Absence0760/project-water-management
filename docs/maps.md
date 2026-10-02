@@ -82,12 +82,15 @@ server and no tile CDN: the file is served from the app's own storage.
   15 is under the ~2 GB the decision allowed, and is the Protomaps build's
   deepest zoom (MapLibre overzooms past it), so it is the default.
   `TILES_MAXZOOM=13` keeps a laptop's cache small.
-- **Production**: not deployed yet. The plan (WP-3.12) is the same file in
-  S3 under a `tiles/` prefix behind a same-origin CloudFront behaviour
-  `/tiles/*` (Range and `ETag` forwarded, long cache), and
-  `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` in the web release. Until
-  then production shows the plain background. Tracked in
-  [followups.md § Catchment map](./followups.md#catchment-map-issue-288).
+- **Production**: the same file in the tiles bucket under
+  `tiles/south-africa.pmtiles` (`infra/map_data.tf`), served same-origin by
+  the CloudFront behaviour `/tiles/*` (cached, byte ranges only: the
+  `tiles_range` function lets through one range of at most 2 MiB a
+  request, so the public archive can't be pulled whole), and
+  `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` set as a repository
+  variable for the web release. The operator uploads it; until then
+  production shows the plain background
+  ([deployment.md § Map tiles](./deployment.md#map-tiles)).
 
 ### Labels
 
@@ -113,10 +116,10 @@ a file), never a font CDN.
   (`backend/scripts/tiles-upload.ts --fonts`, which takes only files named
   as ranges, and the licence). `pnpm dev:tiles:env` prints
   `PUBLIC_TILES_GLYPHS_URL=http://localhost:9002/tiles/fonts/{fontstack}/{range}.pbf`.
-- **Production** (not deployed yet, with the tiles): the same files in S3
-  under `tiles/fonts/`, served by the same-origin `/tiles/*` behaviour, and
-  `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf`. Tracked
-  with the basemap's follow-up.
+- **Production**: the same files in the tiles bucket under `tiles/fonts/`
+  (with `OFL.txt`), served by the same-origin `/tiles/*` behaviour, and
+  `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` as a
+  repository variable ([deployment.md § Map tiles](./deployment.md#map-tiles)).
 - **What is labelled** (`labelLayers`): towns, regions and suburbs from the
   Protomaps `places` layer (the name in English when the tiles carry one,
   else the local name; towns that show from far out in the medium weight),
@@ -191,12 +194,14 @@ server ([§ Delineation](#delineation)).
   12 is the default because it is the DEM's own resolution; a lower zoom
   is upsampled by MapLibre and looks softer up close. `TERRAIN_MAXZOOM=11`
   keeps a laptop's cache small.
-- **Production** (not deployed yet, with the basemap): the same file in S3
-  under `tiles/terrain.pmtiles`, served by the same-origin `/tiles/*`
-  behaviour, and `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`. The
-  Copernicus licence (Art. 6(c)) also asks for its liability sentence in a
-  legal notice covering the distribution; that goes in before production
-  serves the relief. Tracked with the basemap's follow-up.
+- **Production**: the same file in the tiles bucket under
+  `tiles/terrain.pmtiles`, served by the same-origin `/tiles/*` behaviour,
+  and `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` as a repository variable
+  ([deployment.md § Map tiles](./deployment.md#map-tiles)). The Copernicus
+  licence (Art. 6(c)) also asks for its liability sentence in a legal
+  notice covering the distribution; the web release's gate
+  (`scripts/release/map-data-gates.mjs`) refuses the relief until that
+  sentence is in the app's legal text.
 
 ### Colours, theme and the picked name
 
@@ -777,10 +782,13 @@ as the schema owner; the app never writes it.
   the operator's database from their own download, never committed or
   shipped, and whether a client-facing deployment may show them is the
   operator's call. The DWS quaternary boundaries are open data.
-- **Production loading** has no path yet: the database is in a private VPC
-  and the loader runs as the schema owner from a workstation. A follow-up
-  (followups.md) adds one (a migrate-Lambda-style one-off, or a job reading the
-  operator's file from the private bucket).
+- **Production loading**: the database is in a private VPC, so production
+  loads run in the migrate Lambda from a file in the private reference
+  bucket, through `load-reference.yml` (the `production` environment;
+  [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+  The quaternaries are **refused** there until their licence is settled
+  (§ Sources: blocked); the path takes them once the row says allowed and
+  `quaternaries` joins the allowed kinds (`geo/referenceLoad.ts`).
 
 ## Gauging stations
 
@@ -843,8 +851,10 @@ loads as the schema owner; the app never writes it.
   Several files load as one dataset; a load replaces every row of its
   dataset in one transaction, and stations it can't take are listed as
   skipped. Never commit the real file.
-- **Production loading** has the quaternary dataset's gap: no path yet into
-  the private database (followups.md).
+- **Production loading** goes through the reference-dataset path
+  ([deployment.md § Reference datasets](./deployment.md#reference-datasets)),
+  which refuses the station catalogue while its licence is unconfirmed
+  (§ Sources: blocked).
 
 ## Dams from the register and the map
 
@@ -903,8 +913,9 @@ reads it.
   The loader joins them by register number ("No of dam" / `No_of_dam`),
   converts the capacity to m³, takes a year from "Completion date", and
   lists every dam it skipped (no position, no name). A load replaces every
-  row of its dataset in one transaction. Production loading has the same
-  missing path as the quaternaries (followups.md).
+  row of its dataset in one transaction. Production loading goes through
+  the reference-dataset path, which refuses the register while its licence
+  is unconfirmed ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
 
 ## Delineation
 
@@ -946,7 +957,10 @@ to a point on a river. The design, the method and its accuracy are in
   committed synthetic DEM, invented terrain around 20.74° E, 33.54° S (the
   tests and e2e use it). Any PMTiles of Terrarium-encoded tiles works: WebP
   (lossless only) or PNG. `DEM_LABEL` names it on the proposals.
-  Production: see followups.md "Production basemap".
+  Production: `delineation_dem = true` in the tfvars sets
+  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and lets
+  its role read that one key, read through the VPC's S3 interface endpoint
+  ([deployment.md § Map tiles](./deployment.md#map-tiles)); off by default.
 - **Limits.** 30 delineations per project per hour (429 beyond); each takes
   one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
   460 MB at the largest window) and stops before 20 s, under the API's
@@ -1048,8 +1062,13 @@ reads it.
   `lengthKm`, `dischargeM3s`, `name`, `source`. A load replaces every row of
   its dataset in one transaction; reaches it can't take are listed as
   skipped. Only a source that passes D-B (§ Sources).
-- **Production loading** has the quaternary dataset's gap: no path yet into
-  the private database (followups.md).
+- **Production loading**: the GeoJSON `pnpm dev:tiles:rivers` leaves in
+  `~/.cache/water-management-tiles/rivers.geojson`, gzipped, through the
+  reference-dataset path (kind `rivers`;
+  [deployment.md § Reference datasets](./deployment.md#reference-datasets)),
+  once HydroSHEDS' Exhibit B statement is in the app's legal text (the
+  workflow's gate checks) and the terms carry the end-user protections
+  (§ Sources).
 - **Does the client need it?** #90 Q23 asks whether OSM's rivers on the
   basemap already suffice for "show the rivers". If they do, the layer is
   still the only river data the app can analyse (the checks, and later
@@ -1141,9 +1160,17 @@ reads them.
   replaces the dataset. `--cell`, `--classes`, `--source`, `--version` and
   `--attribution` override the defaults (WorldCover's class 40 and its
   citation). Never commit a tile or the database it filled.
-- **Production loading** has the quaternary dataset's gap: no path yet into
-  the private database (followups.md). The attribution must be shown with any
-  figure a client-facing deployment serves from it (§ Sources).
+- **Production loading**: the GeoTIFF tiles are read once, on the
+  operator's machine: `pnpm import:land-cover tiles/*.tif --dataset
+  WorldCover-2021-v200 --out worldcover.json.gz` writes the pre-summarised
+  grid (the fixture's JSON form, cell centres, gzipped; no database needed)
+  instead of loading it, and that file goes through the reference-dataset
+  path (kind `land-cover`;
+  [deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+  No raster code reaches a Lambda (`geo/croplandGrid.ts` holds the JSON
+  form and the load, `geo/loadCropland.ts` the GeoTIFF reader;
+  `lambda-migrate.test.ts` checks the bundle). The attribution must be shown
+  with any figure a client-facing deployment serves from it (§ Sources).
 - **SANLC** (South African National Land Cover, DFFE) would give finer crop
   classes (pivots, orchards, vineyards), but stays **blocked** (§ Sources):
   the GEOTERRAIMAGE licence the earlier release came under forbids derivative
