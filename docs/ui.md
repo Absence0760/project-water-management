@@ -2474,7 +2474,8 @@ map" card) stays the schematic; this is the geography.
   example-sandspruit-map-2026-10-01.geojson."; [maps.md §
   Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on) and **Upload GeoJSON** (a link that opens its sheet). Slim
+  while it is on), **Delineate** (with a DEM on the server; below) and
+  **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
   (Dismiss), the no-basemap note (owners and editors only), and "No
   catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
@@ -2539,6 +2540,32 @@ map" card) stays the schematic; this is the geography.
   D4): "Nothing on the map yet. Start with the catchment boundary: draw it on
   the map.", a primary **Draw the boundary**, and "Or upload it as a GeoJSON
   file (WGS84), or place a point.".
+- **Delineate** (editors, only when the server has a DEM: `GET
+  …/map/delineation` says `available`; issue #326 B-delineate,
+  `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
+  Delineation](./maps.md#delineation)). The header's **Delineate** puts the
+  map in the point-placing mode with the draw bar headed "Delineating a
+  catchment" ("Click the river at the catchment’s outlet, or just below a
+  dam wall."); **Delineate…** (or the bar's **Enter coordinates**) opens
+  the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
+  catchment’s outlet / Just below a dam wall, the clicked position (or
+  Latitude and Longitude behind **Enter coordinates**), the dataset line
+  (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
+  (“Delineating…”). A refusal shows its sentence in the sheet ("That point
+  is outside the elevation model …"). The proposal is drawn dashed in teal
+  with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
+  when it arrives) and the sheet becomes **The delineated catchment**: Area,
+  Clicked, Outlet ("128 m from the click, on the channel"), Cells, Dataset
+  (with its fingerprint), Method (with its version), **Before you accept
+  it** (three caveats), then **Accept as the catchment boundary** (disabled
+  until **Replace the current boundary “…”** is ticked when there is one),
+  **Accept as an area** and **Reject**; **Delineate another point** goes back
+  to the form. Closed with a proposal open, a slim line under the header
+  says "A delineated catchment (547.19 km²) is drawn dashed on the map,
+  waiting for your decision." with **Review it**. Accepting saves the
+  feature, picks it and says "Saved Catchment above the outlet
+  (delineated), 547.19 km² on the map."; rejecting says nothing on the map
+  changed.
 - **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
   [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
   library decision). A **draw bar** sits over the map while a shape is drawn,

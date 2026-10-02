@@ -386,6 +386,15 @@ pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB
 pnpm dev:tiles:env >> frontend/.env.development.local   # PUBLIC_TILES_URL, PUBLIC_TILES_GLYPHS_URL and PUBLIC_TERRAIN_URL; restart pnpm dev
 ```
 
+**Delineate** on the Map needs a DEM on the backend (`DEM_URL`, empty in
+the committed `backend/.env.development`). Put
+`DEM_URL=fixtures/dem/synthetic-dem.pmtiles` in
+`backend/.env.development.local` for the committed synthetic one (invented
+terrain: Enter coordinates 20.7428741, −33.5396777 for its outlet), or
+`DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` after
+`pnpm dev:tiles:terrain` for the real one, and restart `pnpm dev`
+([maps.md § Delineation](./maps.md#delineation)).
+
 The fonts come from the Protomaps `basemaps-assets` repository at a pinned
 commit (`TILES_FONTS_REF` overrides it), cached in
 `~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under

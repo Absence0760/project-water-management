@@ -31,6 +31,11 @@ sides share.
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
   `ALERTS_ENABLED=false` is the kill switch).
+  Catchment delineation from a click on the Map (`src/delineation/`) reads a
+  Terrarium DEM (PMTiles, its own WebP/PNG decoders, no dependency) named by
+  `DEM_URL`: empty (the default) is off; the committed synthetic DEM
+  (`backend/fixtures/dem/`) or the Relief's DEM after `pnpm dev:tiles:terrain`
+  ([maps.md § Delineation](./maps.md#delineation)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the

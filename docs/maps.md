@@ -8,8 +8,8 @@ self-hosted basemap, and proposes values from them that the hydrologist
 accepts one by one. Issue #288, phases 1–2 of roadmap
 [WP-3.12](./roadmap/step-3-licensing.md#wp-312-catchment-map). This page
 covers the tiles and labels, measuring, the GeoJSON download, uploads, areas, the quaternary lookup, outlines and dataset, the
-nearest gauging stations, the dam proposals from the register of dams and the map, the sources table and
-the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
+nearest gauging stations, the dam proposals from the register of dams and the map, delineating a
+catchment from the DEM, the sources table and the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
 [data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
 
@@ -21,7 +21,8 @@ Two rules hold throughout:
   quaternary's values enter the WR2012 check only through **Use**, value by
   value, and then **Save**; a dam's capacity (from the register of dams) or
   full-supply area (from its polygon) enters the model only through **Use**
-  on the Dams page and a confirmation.
+  on the Dams page and a confirmation; a delineated catchment reaches the
+  map only through **Accept** (and replaces a boundary only with a tick).
 - **The map is never the only way.** Everything it shows is in the feature
   list and table beside it, every action works from there, points can be
   placed by typing coordinates, shapes made by pasting GeoJSON or WKT, and
@@ -126,13 +127,14 @@ a file), never a font CDN.
 
 The **Relief** layer shades the land from a digital elevation model, so
 valleys, ridges and drainage lines read on the map. It is visual only:
-nothing the model uses comes from it. Delineating catchments from a DEM is
-a separate, later piece (#326 B-delineate).
+nothing the model uses comes from it. Delineation reads the same DEM on the
+server ([§ Delineation](#delineation)).
 
 - **The data**: [Mapterhorn](https://mapterhorn.com)'s planet build, a
   global PMTiles archive of Terrarium-encoded 512 px elevation tiles
   (WebP). Over South Africa its only source is **Copernicus GLO-30**, the
-  30 m global DEM, to zoom 12 (about 30 m a pixel there, the DEM's own
+  30 m global DEM, to zoom 12 (about 16 m a pixel there with 512 px tiles,
+  so zoom 12 is upsampled; zoom 11, about 33 m, is the DEM's own
   resolution); the archive's finer national sources are all elsewhere
   (checked 2026-10-01 against its `download_urls.json`: none of its zoom
   13+ files touches the bbox). Licence in [§ Sources](#sources).
@@ -881,6 +883,55 @@ reads it.
   row of its dataset in one transaction. Production loading has the same
   missing path as the quaternaries (followups.md).
 
+## Delineation
+
+**Delineate** in the Map's header (editors, only when the server has a DEM;
+issue #326 B-delineate, #342 map item 4) proposes the catchment that drains
+to a point on a river. The design, the method and its accuracy are in
+[design/delineation.md](./design/delineation.md); the screen in
+[ui.md § Map](./ui.md#map-tabmap), the API in
+[api.md § Delineation](./api.md#delineation).
+
+- **Where you click.** The river at the catchment's outlet, or just below a
+  dam wall (the draw bar's point; or **Enter coordinates**). The server
+  moves the point to the most-drained cell within about 150 m, and says how
+  far it moved.
+- **What it does.** On the API, never in the engine: reads the DEM around
+  the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
+  cells while the catchment reaches its edge), fills depressions
+  (Priority-Flood+ε), routes flow with D8, collects every cell upstream of
+  the outlet and outlines them as one polygon, simplified to about a cell.
+  A catchment still at the edge of the largest window, or reaching the edge
+  of the DEM's data, is refused rather than cut off; so is a point outside
+  the DEM or one almost nothing drains to.
+- **The proposal** is drawn dashed in teal over the features, with its
+  outlet, until it is decided; the sheet lists its area, the snap distance,
+  the cells, the dataset (with its fingerprint) and the method, and the
+  caveats. **Accept as the catchment boundary** (replacing the current one
+  only with **Replace the current boundary** ticked; the server refuses
+  otherwise), **Accept as an area** (an *other* polygon, e.g. a dam's
+  upstream area, which can then be linked to a unit and Used), or
+  **Reject**. A new point replaces an open proposal. Every proposal is kept
+  with its decision (the last 50 superseded or rejected per project; the
+  accepted ones all), and audited.
+- **The DEM** (`DEM_URL`, backend env): empty (the committed default) turns
+  delineation off; the Map shows no Delineate. Locally, after
+  `pnpm dev:tiles:terrain` (§ Relief), put
+  `DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` in
+  `backend/.env.development.local`; or
+  `DEM_URL=fixtures/dem/synthetic-dem.pmtiles` (from `backend/`) for the
+  committed synthetic DEM, invented terrain around 20.74° E, 33.54° S (the
+  tests and e2e use it). Any PMTiles of Terrarium-encoded tiles works: WebP
+  (lossless only) or PNG. `DEM_LABEL` names it on the proposals.
+  Production: see followups.md "Production basemap".
+- **Limits.** 30 delineations per project per hour (429 beyond); each takes
+  one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
+  460 MB at the largest window) and stops before 20 s, under the API's
+  30 s timeout.
+- **Attribution.** A delineated polygon is adapted Copernicus data, so the
+  sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
+  one; the accepted feature's description names the dataset.
+
 ## Sources
 
 Every dataset or asset the map serves or loads, with its licence, checked on
@@ -893,6 +944,10 @@ fixtures only.
 | --- | --- | --- | --- | --- | --- | --- |
 | Basemap tiles (Protomaps vector schema of OpenStreetMap) | Protomaps; OpenStreetMap contributors | ODbL 1.0 for the data: commercial use allowed with attribution; share-alike applies to derived *databases*, not to a map drawn from them ([openstreetmap.org/copyright](https://www.openstreetmap.org/copyright), read 2026-10-01) | "© Protomaps © OpenStreetMap contributors", always visible on the map | the daily build fetched (`TILES_BUILD`) | daily builds; refreshed when the operator re-fetches | allowed (in use) |
 | Relief DEM: Copernicus GLO-30, as Terrarium tiles ([Mapterhorn](https://mapterhorn.com) planet build) | Copernicus DEM: DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn ([attribution](https://mapterhorn.com/attribution), code BSD-3) | The Copernicus WorldDEM-30 licence: free of charge, worldwide, with the rights of reproduction, distribution, communication to the public and adaptation (Art. 4), no restriction on commercial use ([License COPDEM 30](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf), read 2026-10-01) | "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved" (Art. 6(b)), on the map while the relief is drawn, with "© Mapterhorn"; the liability sentence (Art. 6(c)) in a legal notice before production serves it | Mapterhorn 0.0.13 (GLO-30 accessed 2025) | when Mapterhorn rebuilds; refreshed when the operator re-fetches | allowed (in use locally) |
+| Delineation DEM: the Relief DEM above (Copernicus GLO-30, Mapterhorn's Terrarium tiles), read by the API | as above | as above: Art. 4 allows adaptation, which deriving flow directions and catchment polygons is | the Art. 6(b) notice on the delineation sheet; the dataset label and fingerprint on every proposal | as above | as above | allowed (in use locally; production with the basemap) |
+| HydroSHEDS v1 flow direction (3″, conditioned from SRTM), considered for delineation, not used | WWF / McGill University ([hydrosheds.org](https://www.hydrosheds.org/products/hydrosheds)) | "freely available for scientific, educational and commercial use" under the HydroSHEDS licence agreement in its technical documentation (product page read 2026-10-01; the site's own terms of use are non-commercial but cover the website) | per its licence agreement | v1 | none | not used: passes D-B, but 90 m against GLO-30's 30 m and a second download (design/delineation.md § The DEM) |
+| MERIT Hydro, considered for delineation | University of Tokyo ([MERIT Hydro](https://global-hydrodynamics.github.io/MERIT_Hydro/)) | dual: CC BY-NC 4.0 (non-commercial) or ODbL 1.0, under which data derived from it in a commercial product must be released under the ODbL (read 2026-10-01) | – | – | – | rejected: non-commercial, or share-alike on our output (D-B) |
+| Synthetic DEM fixture (`backend/fixtures/dem/synthetic-dem.pmtiles`) | this repo (invented terrain, `pnpm -C backend gen:dem-fixture`) | the repo's own | none | 1 | when the generator changes | in use (tests, e2e) |
 | Label glyphs: Noto Sans Regular, Medium, Italic (PBF glyph ranges) | The Noto Project Authors; packaged by Protomaps ([basemaps-assets](https://github.com/protomaps/basemaps-assets), `fonts/OFL.txt`) | SIL Open Font License 1.1: use, embedding and redistribution with software allowed, commercially too; the fonts may not be sold on their own, and copies keep the OFL and its notice ([openfontlicense.org](https://openfontlicense.org/open-font-license-official-text/), read 2026-10-01) | the OFL notice, uploaded beside the glyphs (`tiles/fonts/OFL.txt`) | basemaps-assets commit `028c18f7` (2025-10-31) | when the pin is moved | allowed (in use) |
 | Quaternary catchment outlines | DWS (Department of Water and Sanitation) | open data per [§ Quaternary dataset](#quaternary-dataset); the commercial-use terms are not yet confirmed on DWS's own page | DWS | the operator's download | per DWS release | blocked: licence unconfirmed for anything but the operator's own database; the committed synthetic fixture is used everywhere else |
 | WR2012 reference values (MAP, MAR, monthly flows) | WRC | redistribution terms unpublished ([§ Quaternary dataset](#quaternary-dataset)) | WR2012 (WRC 2015) | the operator's download | none (a 2012 study) | blocked: licence unconfirmed; operator's own database only |

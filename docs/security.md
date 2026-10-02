@@ -2568,7 +2568,19 @@ placed points. The server never trusts the browser with geometry:
 - Account deletion: `geo_source.imported_by` and `map_feature.created_by`
   are `SET NULL` (the features are the project's; catalogue guard). A map
   feature holds no personal information about its creator, so the
-  data-subject export doesn't list them.
+  data-subject export doesn't list them. `delineation_proposal.created_by`
+  and `decided_by` (175) are `SET NULL` the same way.
+- **Delineation** (#326 B-delineate, [maps.md §
+  Delineation](./maps.md#delineation)): the DEM is read from `DEM_URL`,
+  operator configuration, never a URL a user gives, so a click can't point
+  the API anywhere (no SSRF surface); a user supplies only a longitude and
+  latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
+  API, so it is editor-only, capped at 30 a project an hour (429), bounded
+  by a window cap and a 20 s budget under the Lambda's timeout, and run
+  outside any database transaction. The decoders (WebP, PNG, PMTiles) read
+  only the operator's file and fail closed on anything malformed. The
+  proposal's polygon passes the same `checkGeometry` as every map polygon
+  before it is stored.
 
 ## Personal information (POPIA)
 

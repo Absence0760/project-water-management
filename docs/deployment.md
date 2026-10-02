@@ -1548,7 +1548,11 @@ they are. Two pieces are not deployed yet, each in
   ([maps.md § Relief](./maps.md#relief)) is one more file there,
   `tiles/terrain.pmtiles`, with `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles`,
   once the Copernicus licence's liability sentence is in the app's legal
-  notice (empty until then: no Relief layer offered).
+  notice (empty until then: no Relief layer offered). Delineation reads the
+  same file from the API Lambda: `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles`
+  in its environment and `s3:GetObject` on that key for its role (not in
+  Terraform yet; empty until then: no Delineate offered;
+  [maps.md § Delineation](./maps.md#delineation), followups.md).
 - **Quaternary dataset**: `quaternary_reference` is empty in production
   until the operator loads one, so the lookup says no dataset is loaded.
   There is no production loading path yet, and WR2012's licence terms are a

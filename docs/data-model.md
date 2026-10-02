@@ -1577,6 +1577,25 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   accepted from it (or from a dam polygon's `area_m2`) is stored in
   `node.dam_capacity_m3` / `node.dam_area_full_m2` like a typed one; its
   provenance is the model revision's reason (no column on `node`).
+- **`delineation_proposal`** (`175_delineation.sql`, issue #326
+  B-delineate, [maps.md § Delineation](./maps.md#delineation)): a catchment
+  the DEM proposed upstream of a clicked point, and the editor's decision.
+  `id`, `project_id` (cascade), `status` (`proposed` | `accepted` |
+  `rejected` | `superseded`; at most one `proposed` per project, partial
+  unique index), `click_kind` (`outlet` | `dam_wall`), `click_lon`,
+  `click_lat`, `outlet_lon`, `outlet_lat` (the snapped outlet),
+  `snap_distance_m`, `geometry` (a GeoJSON Polygon, checked by
+  `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
+  `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
+  (16 hex: SHA-256 of the archive's header and root directory),
+  `method` (1–1000), `method_version` (`delineate-1`), `feature_id`
+  (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
+  (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
+  `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
+  accepted or rejected). RLS: viewers read, editors insert, update and
+  delete (the route prunes superseded and rejected rows past the newest 50
+  a project; accepted ones stay as their features' provenance). No node
+  column, so farmers never read it. Covering indexes on every foreign key.
 
 ### Import reports (017_project_import.sql)
 
