@@ -11,7 +11,10 @@ const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 =
 	geometry: sq(click),
 	areaM2: km2 * 1e6,
 	totalAreaM2: totalKm2 * 1e6,
-	open: false
+	open: false,
+	placedBy: 'snapped',
+	reach: null,
+	larger: null
 });
 /** An inflow point: its catchment ran past the routed window, so it has no piece. */
 const inflow = (click: number, drainsInto: number | null): ClickPiece => ({ ...piece(click, drainsInto, 0), geometry: null, areaM2: null, totalAreaM2: null, open: true });
@@ -58,6 +61,18 @@ describe('pieceLine', () => {
 		expect(pieceLine(r, 1)).toBe('5.00 km² · the lowest click: everything above it drains out here · 7.00 km² upstream in all');
 		expect(pieceLine(r, 2)).toBe('not a piece: it doesn’t drain to the lowest click');
 		expect(pieceLine(answer([piece(0, null, 3)], 0), 0)).toBe('3.00 km² · the lowest click: everything above it drains out here');
+	});
+
+	it('says a click was put on the channel matching its river reach', () => {
+		const r = answer([{ ...piece(0, null, 410), placedBy: 'matched', reach: { dataset: 'HydroRIVERS-v10', reachId: 11492928, upstreamKm2: 412.5 } }], 0);
+		expect(pieceLine(r, 0)).toBe('410.00 km² · the lowest click: everything above it drains out here · on the channel matching river reach 11492928 (412.50 km²)');
+	});
+
+	it('names a much larger channel beside a click, instead of the missed-channel warning', () => {
+		const r = answer([{ ...piece(0, null, 0.02), point: [21.465, -28.389], larger: { at: [21.465, -28.3845], distanceM: 504, km2: 619.8, pointKm2: 0.02 } }], 0);
+		expect(pieceLine(r, 0)).toBe(
+			'0.02 km² · the lowest click: everything above it drains out here · a much larger channel (620 km²) runs 504 m north: the river line may sit off the channel the elevation model sees'
+		);
 	});
 
 	it('warns that a click with under a square kilometre upstream probably missed the channel', () => {
@@ -144,6 +159,31 @@ describe('ClickDivider', () => {
 		const d = new ClickDivider(async () => answer([piece(0, null, 0.01)], 0), vi.fn());
 		await d.add([20, -33]);
 		expect(d.said).toMatch(/^Click 1: very little drains here: it probably missed the channel; /);
+	});
+
+	it('moves a click to the larger channel and routes again; Undo moves it back without asking', async () => {
+		const { d, fetch } = make();
+		await d.add([20, -33]);
+		await d.add([20.1, -33.1]);
+		await d.replace(0, [20.005, -33]);
+		expect(fetch).toHaveBeenLastCalledWith([
+			{ lon: 20.005, lat: -33 },
+			{ lon: 20.1, lat: -33.1 }
+		]);
+		expect(d.clicks).toHaveLength(2);
+		d.undo();
+		expect(d.clicks[0]).toEqual({ lon: 20, lat: -33 });
+		expect(d.said).toBe('Moved the click back.');
+		expect(fetch).toHaveBeenCalledTimes(3);
+	});
+
+	it('says when a refused move leaves the click where it was', async () => {
+		const { d, fetch } = make();
+		await d.add([20, -33]);
+		fetch.mockRejectedValueOnce(new Error('The clicks are outside the elevation model.'));
+		await d.replace(0, [25, -30]);
+		expect(d.clicks).toEqual([{ lon: 20, lat: -33 }]);
+		expect(d.error).toBe('Click 1 not moved: The clicks are outside the elevation model.');
 	});
 
 	it('keeps only the newest answer when clicks overlap', async () => {

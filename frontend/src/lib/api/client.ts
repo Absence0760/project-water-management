@@ -1103,7 +1103,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
 		delineation: {
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
-			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from'] }) =>
+			/** `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel). */
+			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean }) =>
 				request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation`, body),
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>

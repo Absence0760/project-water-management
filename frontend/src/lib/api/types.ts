@@ -3133,6 +3133,23 @@ export interface ClickPiece {
 	totalAreaM2: number | null;
 	/** An inflow point: its catchment runs past the window routed around the clicks, so it has no whole piece and its water enters the pieces below as an inflow. */
 	open: boolean;
+	/** matched: put on the channel whose upstream area matches its nearby river reach's; snapped: on the most-drained cell near it. */
+	placedBy: 'matched' | 'snapped';
+	/** The river reach it was matched to. */
+	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
+	/** Snapped beside a much larger channel: that channel, to offer instead. */
+	larger: LargerChannel | null;
+}
+
+/** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */
+export interface LargerChannel {
+	at: MapPosition;
+	/** From the point (m). */
+	distanceM: number;
+	/** What drains through it inside the routed window (km²). */
+	km2: number;
+	/** What drains through the cell the point snapped to (km²). */
+	pointKm2: number;
 }
 
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
