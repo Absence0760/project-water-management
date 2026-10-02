@@ -1209,7 +1209,14 @@ the app can analyse; this layer is.
   `truncated` past it, so a cut drops the smallest streams. A bbox over
   `RIVER_BBOX_MAX_DEG` (2°) a side is refused. The tab asks for the
   features' bounds padded by half their size (at least 0.1°), once per bbox
-  (`mapLayers.ts` `riverBbox`), and draws nothing with no features.
+  (`mapLayers.ts` `riverBbox`). With no features yet, it asks for the map's
+  view instead (`riverViewBbox`), snapped outward to 0.05° so a small pan
+  asks nothing new, once the view is at most 2° a side; wider, the Layers
+  box says to zoom in. The view comes from the map after each move
+  (`CatchmentMap` `onview`, also its wrapper's `data-view`), and the last
+  twelve answers are kept, so panning back asks nothing. Before a boundary
+  exists is when the rivers help most: finding the outlet to Delineate, or
+  tracing the boundary.
 - **Style.** A dashed cyan-blue line (`riverNetworkColour`: `#006b9e`
   light, `#3ec1f0` dark), wider for a higher order (1.25 px at order 1 to
   3 px at 6), over the quaternary outlines and under the features. Its

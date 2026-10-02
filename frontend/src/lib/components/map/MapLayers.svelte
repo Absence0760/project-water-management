@@ -18,7 +18,7 @@
 	import { page } from '$app/state';
 	import type { MapFeature } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
-	import { type MapLayer, layersStatus, reachFacts, reachKey, reachLabel, withLayer } from './mapLayers';
+	import { type MapLayer, layersStatus, reachFacts, reachKey, reachLabel, RIVER_BBOX_MAX_DEG, withLayer } from './mapLayers';
 	import { quaternaryColour, riverNetworkColour } from './mapStyle';
 	import type { QuaternaryLayer } from './quaternaryLayer.svelte';
 	import type { RiverLayer } from './riverLayer.svelte';
@@ -127,14 +127,14 @@
 	{#if rivers.on}
 		<div class="qt small" data-testid="map-rivers">
 			{#if rivers.nothingAround}
-				<p class="muted">Nothing on the map yet to show the rivers around.</p>
+				<p class="muted">Zoom in to see the river network here (to about {RIVER_BBOX_MAX_DEG}° across), or draw the catchment.</p>
 			{:else if rivers.error}
 				<p class="err" role="alert">The river network couldn’t be loaded: {rivers.error} <button type="button" class="btn btn-sm" onclick={() => rivers.retry()}>Try again</button></p>
 			{:else if !rv}
 				<p class="muted">Loading the river network…</p>
 			{:else if !rv.reaches.length}
 				<p class="muted" data-testid="map-rivers-none">
-					{rv.datasets.length ? 'No reach of the loaded river network is near this catchment.' : 'No river network is loaded (docs/maps.md § River network).'}
+					{rv.datasets.length ? (rivers.aroundFeatures ? 'No reach of the loaded river network is near this catchment.' : 'No reach of the loaded river network is in view.') : 'No river network is loaded (docs/maps.md § River network).'}
 				</p>
 			{:else}
 				<p class="muted" data-testid="map-rivers-summary">{rvSummary}{#if rvSynthetic}{' '}<strong>Synthetic test data, never real rivers.</strong>{/if}</p>

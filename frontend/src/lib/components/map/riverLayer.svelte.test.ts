@@ -6,7 +6,7 @@ import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MapFeature, RiverLayer as Answer, RiverReach } from '$lib/api/types';
 import { RiverLayer, type RiverLayerDeps } from './riverLayer.svelte';
-import { reachRef, riverBbox } from './mapLayers';
+import { reachRef, riverBbox, riverViewBbox } from './mapLayers';
 import { deferred, square } from './layerTesting';
 
 const reach = (reachId: number, over: Partial<RiverReach> = {}): RiverReach => ({
@@ -33,16 +33,59 @@ afterEach(() => {
 
 /** A layer on reactive deps the test changes: on, the features, the project. */
 function setup(load: RiverLayerDeps['load'], add: RiverLayerDeps['add'] = vi.fn()) {
-	const deps = $state({ on: false, features: [] as MapFeature[], projectId: 'p1' });
+	const deps = $state({ on: false, features: [] as MapFeature[], projectId: 'p1', view: null as [number, number, number, number] | null });
 	let layer!: RiverLayer;
 	cleanup = $effect.root(() => {
-		layer = new RiverLayer({ projectId: () => deps.projectId, on: () => deps.on, features: () => deps.features, load, add });
+		layer = new RiverLayer({ projectId: () => deps.projectId, on: () => deps.on, features: () => deps.features, view: () => deps.view, load, add });
 	});
 	flushSync();
 	return { deps, layer };
 }
 
 describe('RiverLayer', () => {
+	it('with no features, asks for the map view once zoomed in, snapped so a small pan asks nothing new, and reuses an answer panned back to', async () => {
+		const load = vi.fn<RiverLayerDeps['load']>(async () => answer(reach(1)));
+		const { deps, layer } = setup(load);
+		deps.on = true;
+		// The whole country in view: too wide to ask for, so it says to zoom in.
+		deps.view = [16.4, -34.9, 32.9, -22.1];
+		flushSync();
+		expect(layer.nothingAround).toBe(true);
+		expect(load).not.toHaveBeenCalled();
+		// Zoomed in near Upington: the view, snapped out to the grid.
+		deps.view = [21.03, -28.62, 21.48, -28.31];
+		flushSync();
+		await vi.waitFor(() => expect(layer.answer).not.toBeNull());
+		expect(layer.nothingAround).toBe(false);
+		expect(load).toHaveBeenCalledTimes(1);
+		expect(load).toHaveBeenLastCalledWith('p1', [21, -28.65, 21.5, -28.3]);
+		// A small pan inside the same snapped bbox asks nothing.
+		deps.view = [21.04, -28.61, 21.47, -28.32];
+		flushSync();
+		expect(load).toHaveBeenCalledTimes(1);
+		// Away and back: the second view is asked for, the first comes from what was fetched.
+		deps.view = [22.03, -28.62, 22.48, -28.31];
+		flushSync();
+		await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+		deps.view = [21.03, -28.62, 21.48, -28.31];
+		flushSync();
+		expect(load).toHaveBeenCalledTimes(2);
+		expect(layer.answer?.reaches.map((r) => r.reachId)).toEqual([1]);
+	});
+
+	it('asks around the features once there are some, whatever the map shows', async () => {
+		const load = vi.fn<RiverLayerDeps['load']>(async () => answer(reach(1)));
+		const { deps } = setup(load);
+		deps.on = true;
+		deps.view = [21.03, -28.62, 21.48, -28.31];
+		const f = [square('b', 28, -26)];
+		deps.features = f;
+		flushSync();
+		await vi.waitFor(() => expect(load).toHaveBeenCalled());
+		expect(load).toHaveBeenLastCalledWith('p1', riverBbox(f));
+		expect(riverViewBbox(deps.view)).not.toEqual(riverBbox(f));
+	});
+
 	it('asks nothing while off, and says there is nothing around while on with no features', () => {
 		const load = vi.fn<RiverLayerDeps['load']>(async () => answer(reach(1)));
 		const { deps, layer } = setup(load);

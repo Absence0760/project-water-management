@@ -58,6 +58,28 @@ export const quaternaryBbox = (features: readonly MapFeature[]) => layerBbox(fea
 /** The bbox the river network is asked for (layerBbox, at most RIVER_BBOX_MAX_DEG a side). */
 export const riverBbox = (features: readonly MapFeature[]) => layerBbox(features, RIVER_BBOX_MAX_DEG);
 
+/** The grid a map view is snapped out to before the river network is asked for it, so small pans share one answer. */
+export const RIVER_VIEW_SNAP_DEG = 0.05;
+
+/**
+ * The bbox the river network is asked for when the project has no features
+ * yet (docs/maps.md § River network): the map's view (west, south, east,
+ * north), snapped outward to RIVER_VIEW_SNAP_DEG so a small pan asks the same
+ * bbox again. Null when no view is known or the snapped view is wider than
+ * RIVER_BBOX_MAX_DEG a side, which the server refuses: zoom in.
+ */
+export function riverViewBbox(view: readonly [number, number, number, number] | null): [number, number, number, number] | null {
+	if (!view || !view.every(Number.isFinite)) return null;
+	const g = RIVER_VIEW_SNAP_DEG;
+	const r = (v: number) => Math.round(v * 1e4) / 1e4;
+	const w = r(Math.max(-180, Math.floor(view[0] / g) * g));
+	const s = r(Math.max(-90, Math.floor(view[1] / g) * g));
+	const e = r(Math.min(180, Math.ceil(view[2] / g) * g));
+	const n = r(Math.min(90, Math.ceil(view[3] / g) * g));
+	if (e <= w || n <= s || e - w > RIVER_BBOX_MAX_DEG || n - s > RIVER_BBOX_MAX_DEG) return null;
+	return [w, s, e, n];
+}
+
 /**
  * Whether a reach comes from HydroRIVERS, whose licence asks for a credit
  * wherever its data is shown (docs/maps.md § Sources): by its dataset label or

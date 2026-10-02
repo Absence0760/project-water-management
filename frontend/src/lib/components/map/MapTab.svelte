@@ -594,10 +594,13 @@
 	});
 
 	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
+	/** The map's view, for the River network layer while the project has no features. */
+	let mapView = $state<[number, number, number, number] | null>(null);
 	const rivers = new RiverLayer({
 		projectId: () => projectId,
 		on: () => layersOn(params).has('rivers'),
 		features: () => features,
+		view: () => mapView,
 		load: api.map.rivers,
 		add: api.map.addRiver
 	});
@@ -899,6 +902,7 @@
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
 									onstatus={(s) => (mapState = s)}
+									onview={(b) => (mapView = b)}
 									proposal={pendingProposal ?? pieces}
 									onpiecehover={(k) => (pieceLit = k)}
 									onpiecepick={canEdit ? pickPiece : undefined}
