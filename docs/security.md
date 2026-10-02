@@ -2586,9 +2586,21 @@ placed points. The server never trusts the browser with geometry:
   operator configuration, never a URL a user gives, so a click can't point
   the API anywhere (no SSRF surface); a user supplies only a longitude and
   latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
-  API, so it is editor-only, capped at 30 a project an hour (429), bounded
-  by a window cap and a 20 s budget under the Lambda's timeout, and run
-  outside any database transaction. The decoders (WebP, PNG, PMTiles) read
+  API, so it is editor-only, capped at 30 stored proposals a project an
+  hour (429), bounded by a window cap and a 20 s budget under the Lambda's
+  timeout, and run outside any database transaction. On top of that every
+  account has its own cap on elevation-model work (184_dem_attempt,
+  `delineation/attempt.ts`), shared by delineate, start and divide and
+  counted before the work in the transaction that checks the role: at most
+  2 attempts running at once and 60 started an hour, across every project,
+  refused and failed attempts included (429). It is per account because the
+  per-project count missed the attempts that store nothing (a `too_large`
+  refusal still reads and routes the windows), passed parallel requests
+  (counted in one transaction, stored in another) and reset with a new
+  project, so one account could keep every API Lambda slot busy. An attempt
+  whose Lambda died frees its running slot after a 2-minute lease. The row
+  names only the account and the kind, goes with the account (cascade) and
+  after a day, so it isn't exported (as `account_mail_quota`). The decoders (WebP, PNG, PMTiles) read
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
@@ -2606,7 +2618,7 @@ placed points. The server never trusts the browser with geometry:
   unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
-  (editor-only, its own 30 an hour, the window cap and budget, outside any
+  (editor-only, its own 30 stored an hour, the account's attempt cap, the window cap and budget, outside any
   transaction). A user names only feature ids of their own project's map
   (read under RLS, so another project's are "not on this map") and roles.
   Apply writes only into an empty model, re-checks the ticks against the
@@ -2712,6 +2724,7 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
+| Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
 | Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
 | Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
 | The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |

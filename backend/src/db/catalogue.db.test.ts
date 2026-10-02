@@ -258,6 +258,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
+	// A count for the elevation-model cap; goes with the account (184_dem_attempt).
+	'dem_attempt.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
 	// An evidence pack is the project's evidence; it stays with who drafted or issued it cleared (112_evidence_pack.sql).
 	'evidence_pack.created_by': 'set null',
