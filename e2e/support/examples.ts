@@ -21,6 +21,7 @@ const DEMO_EMAILS = [DEMO.email, ANALYST.email, FARMER1.email, FARMER2.email, 'a
 export const KLEINBERG = 'Example · Kleinberg (winter rainfall)';
 export const DROEVLEI = 'Example · Droëvlei (water-stressed)';
 export const SANDSPRUIT = 'Example · Sandspruit (summer rainfall, larger network)';
+export const ORANJE = 'Example · Oranje (river abstractions)';
 
 const backendDir = fileURLToPath(new URL('../../backend/', import.meta.url));
 /** Any fixed number: the advisory lock's key for this one-off setup. */
