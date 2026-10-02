@@ -175,6 +175,27 @@ The checklist for these is issue #62; the history scrub is #63.
       recommendation](./deployment.md)). If that's the choice, raise
       `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
+## DB tests share the mail outbox (2026-10-02, PR #360)
+
+- [ ] **Guard pending notices as db-setup.ts guards pending jobs.** The
+      tick sends every pending `pack_notice` (133), `erratum_notice` (153)
+      and `alert_delivery` (051) in the shared test database. A notice that
+      one DB test file queues and leaves behind lands in the next file that
+      ticks. alerts.db.test.ts counts every mail its tick sends, and it got
+      an extra "Evidence pack withdrawn: … Guard packs" mail from
+      write-routes.db.test.ts once a new file order put that file just
+      before it (CI run 37010696949). That source is fixed:
+      write-routes.db.test.ts now settles its pack's notices
+      (`helpers.ts settlePendingPackNotices`). About a dozen other files
+      issue or withdraw packs (packs, pack-send, stepUp, report-combined,
+      audit-trail, role-ladder, runs/evidence, mass-assignment, applications,
+      pack-share, scenario-share), so they may leave notices behind the same
+      way. Durable fix: extend `pendingJobs.ts assertNoPendingJobs`
+      (db-setup.ts) to fail a file that leaves a pending or sending notice
+      of any kind, and settle them in each leaking file. A full CI DB run is
+      needed to find them all. Trigger: the next file-order shift that
+      breaks a mail count, or any work on the notices.
+
 ## Two-step sign-in (issue #282)
 
 Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
