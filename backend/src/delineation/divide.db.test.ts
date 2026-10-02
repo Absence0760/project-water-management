@@ -110,7 +110,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-2' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-3' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -184,7 +184,7 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-2/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-3/);
 		// The points stand for their nodes now: the pump, the new gauge and the outlet gauge.
 		const links = await asOwner('SELECT id, node_id FROM map_feature WHERE id = ANY($1::uuid[])', [[v.f.pump, v.f.mid, v.f.outlet, v.f.dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(

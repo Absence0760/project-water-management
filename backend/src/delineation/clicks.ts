@@ -26,7 +26,8 @@ import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
-import { DelineationRefused } from './delineate.js';
+import { DelineationRefused, type LargerChannel } from './delineate.js';
+import { nearestReach, type NearReach } from './reach.js';
 import { configuredDem } from './dem.js';
 import { delineateUnits, type Subcatchments } from './subcatchments.js';
 
@@ -60,6 +61,12 @@ export interface ClickPiece {
 	 * an inflow point, the water from above it entering the pieces below as an inflow.
 	 */
 	open: boolean;
+	/** How the click was put on the channel: matched to its nearby river reach's upstream area, or snapped to the most-drained cell near it. */
+	placedBy: 'matched' | 'snapped';
+	/** The river reach it was matched to. */
+	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
+	/** Snapped beside a much larger channel: that channel, to offer instead (the click stays where it snapped). */
+	larger: LargerChannel | null;
 }
 
 export interface ClickPieces {
@@ -76,11 +83,27 @@ export interface ClickPieces {
 }
 
 /** The partition's answer in clicks: the lowest click's piece is its "rest". Pure. */
-export function toClickPieces(r: Subcatchments): ClickPieces {
+export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | null)[] = []): ClickPieces {
+	const reachOf = (i: number) => {
+		const x = reaches[i];
+		return x ? { dataset: x.dataset, reachId: x.reachId, upstreamKm2: x.upstreamKm2 } : null;
+	};
 	const lowest = Number(r.outlet.id);
 	const index = (id: string | null) => (id === null ? lowest : Number(id));
 	const all = [
-		{ click: lowest, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, drainsInto: null, geometry: r.rest.geometry, areaM2: r.rest.areaM2, totalAreaM2: r.catchment.areaM2, open: !!r.rest.open },
+		{
+			click: lowest,
+			point: r.outlet.point,
+			snapDistanceM: r.outlet.snapDistanceM,
+			drainsInto: null,
+			geometry: r.rest.geometry,
+			areaM2: r.rest.areaM2,
+			totalAreaM2: r.catchment.areaM2,
+			open: !!r.rest.open,
+			placedBy: r.outlet.placedBy ?? 'snapped',
+			reach: r.outlet.placedBy === 'matched' ? reachOf(lowest) : null,
+			larger: r.outlet.larger ?? null
+		},
 		...r.units.map((u) => ({
 			click: Number(u.id),
 			point: u.point,
@@ -89,7 +112,10 @@ export function toClickPieces(r: Subcatchments): ClickPieces {
 			geometry: u.geometry,
 			areaM2: u.areaM2,
 			totalAreaM2: u.totalAreaM2,
-			open: !!u.open
+			open: !!u.open,
+			placedBy: u.placedBy ?? ('snapped' as const),
+			reach: u.placedBy === 'matched' ? reachOf(Number(u.id)) : null,
+			larger: u.larger ?? null
 		}))
 	];
 	// A total is known only when nothing above the click is open: the open pieces' areas count only what was routed.
@@ -125,9 +151,12 @@ export const pieceName = (click: number) => `Sub-catchment ${click + 1}`;
 
 /** Count the attempt (editor only), route the clicks, free the attempt. Refusals are 422 with the sentence. */
 async function route(userId: string, projectId: string, clicks: readonly { lon: number; lat: number }[]): Promise<ClickPieces> {
-	const attempt = await withUser(userId, async (db) => {
+	const { attempt, reaches } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
-		return beginDemAttempt(db, 'delineation');
+		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
+		const reaches = [];
+		for (const c of clicks) reaches.push(await nearestReach(db, [c.lon, c.lat]));
+		return { attempt: await beginDemAttempt(db, 'delineation'), reaches };
 	});
 	try {
 		const dem = configuredDem();
@@ -136,9 +165,9 @@ async function route(userId: string, projectId: string, clicks: readonly { lon: 
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] } }))
+				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null }))
 			});
-			return toClickPieces(r);
+			return toClickPieces(r, reaches);
 		} catch (err) {
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 			logEvent('error', { event: 'subcatchments_failed', ...safeError(err) });
@@ -159,6 +188,7 @@ export function pieceDescription(r: ClickPieces, p: ClickPiece): string {
 		`The land draining to ${deg(p.point[0])}° E, ${deg(Math.abs(p.point[1]))}° ${p.point[1] < 0 ? 'S' : 'N'} before any other click; ` +
 		`${p.drainsInto === null ? 'the lowest click' : `drains into ${pieceName(p.drainsInto).toLowerCase()}`}; ` +
 		`${p.totalAreaM2 !== null ? `${km2(p.totalAreaM2)} upstream in all` : 'more upstream than was routed'}${inflows.length ? `; an inflow enters at ${inflows.join(' and ')}` : ''}. ` +
+		`${p.reach ? `Placed on the channel whose upstream area best matches reach ${p.reach.reachId} of ${p.reach.dataset} (${Math.round(p.reach.upstreamKm2)} km²). ` : ''}` +
 		`Delineated from ${r.dataset.label} (${r.methodVersion}); check it against the map.`
 	).slice(0, 500);
 }
