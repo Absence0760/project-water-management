@@ -2,15 +2,25 @@
 // docs/maps.md § Quaternary outlines): while `layers=quaternaries` is in
 // the URL, the outlines around the project's features are fetched once per
 // bbox (GET …/map/quaternaries) and handed to the map; the tab lists their
-// codes beside it, so the map is never the only place to read them.
+// codes beside it, so the map is never the only place to read them. The
+// request comes in with the deps (MapTab passes api.map.quaternaries), so the
+// module never imports the app-wide API client and its SvelteKit $env, and
+// the tests can drive it.
 import { untrack } from 'svelte';
-import { api, type QuaternaryLayer as Answer } from '$lib/api';
-import type { MapFeature } from '$lib/api/types';
+import type { MapFeature, QuaternaryLayer as Answer } from '$lib/api/types';
 import { quaternaryBbox } from './mapLayers';
 import type { QuaternaryOutline } from './mapStyle';
 
+export interface QuaternaryLayerDeps {
+	projectId: () => string;
+	on: () => boolean;
+	features: () => readonly MapFeature[];
+	/** GET …/map/quaternaries: the outlines in `bbox`. */
+	load: (projectId: string, bbox: readonly [number, number, number, number]) => Promise<Answer>;
+}
+
 export class QuaternaryLayer {
-	#deps: { projectId: () => string; on: () => boolean; features: () => readonly MapFeature[] };
+	#deps: QuaternaryLayerDeps;
 	answer = $state<Answer | null>(null);
 	loading = $state(false);
 	error = $state<string | null>(null);
@@ -18,7 +28,7 @@ export class QuaternaryLayer {
 	picked = $state<string | null>(null);
 	#asked = '';
 
-	constructor(deps: { projectId: () => string; on: () => boolean; features: () => readonly MapFeature[] }) {
+	constructor(deps: QuaternaryLayerDeps) {
 		this.#deps = deps;
 		$effect(() => {
 			const on = this.#deps.on();
@@ -61,7 +71,7 @@ export class QuaternaryLayer {
 		this.loading = true;
 		this.error = null;
 		try {
-			const a = await api.map.quaternaries(id, bbox);
+			const a = await this.#deps.load(id, bbox);
 			if (key === this.#asked) this.answer = a;
 		} catch (e) {
 			if (key === this.#asked) {
