@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Issue #103, the known-defect procedure: the run header's tag for runs a known engine bug may affect, and its errata link. Measured in CI: main 1435 KB (run 36883567450), this branch merged 1436 KB (run 36892832017), +1 KB."
+}

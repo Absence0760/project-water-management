@@ -431,6 +431,42 @@ override_resource {
   }
 }
 
+# The map's data (map_data.tf, s3_cloudfront.tf's /tiles/*)
+override_resource {
+  target          = aws_s3_bucket.tiles
+  override_during = plan
+  values = {
+    arn                         = "arn:aws:s3:::water-management-tiles-000000000000"
+    bucket                      = "water-management-tiles-000000000000"
+    bucket_regional_domain_name = "water-management-tiles-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.tiles
+  override_during = plan
+  values = {
+    id = "tiles-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_function.tiles_range
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:function/water-management-tiles-range"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reference
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reference-000000000000"
+    bucket = "water-management-reference-000000000000"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
@@ -615,6 +651,7 @@ variables {
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
   alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  app_encryption_key  = "0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd"
   # PEM armour around a placeholder: the shape the variable checks, not a key.
   cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
   # Report downloads (reports.tf): a public key generated for these tests (its
@@ -648,8 +685,8 @@ run "edge_behaviours" {
 
   # Every ordered behaviour is named here, so a new one needs its own checks.
   assert {
-    condition     = [for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b.path_pattern] == ["/api/*", "/reports/*", "/packs/*"]
-    error_message = "The distribution has exactly three ordered behaviours, /api/*, /reports/* then /packs/*; a new one needs its cache and origin policies pinned here."
+    condition     = [for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b.path_pattern] == ["/api/*", "/reports/*", "/packs/*", "/tiles/*"]
+    error_message = "The distribution has exactly four ordered behaviours, /api/*, /reports/*, /packs/* then /tiles/*; a new one needs its cache and origin policies pinned here."
   }
 
   # /api/*: nothing cached, so a response can never be served to another
@@ -695,6 +732,29 @@ run "edge_behaviours" {
       b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]),
     ]) if b.path_pattern == "/packs/*"])
     error_message = "/packs/* must go to the packs bucket with Managed-CachingDisabled, https-only, GET/HEAD only and signed URLs (the report-downloads key group)."
+  }
+
+  # /tiles/*: the map's public tiles, cached (the same bytes for every
+  # viewer), no cookie or query string to S3, read-only, no compression (it
+  # would break byte ranges), and tiles_range in front (the cost bound).
+  assert {
+    condition = length([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b if b.path_pattern == "/tiles/*"]) == 1 && alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : alltrue([
+      b.target_origin_id == "s3-tiles",
+      b.cache_policy_id == "658327ea-f89d-4fab-a63d-7e88639e58f6",
+      (b.origin_request_policy_id == null ? "" : b.origin_request_policy_id) == "",
+      b.viewer_protocol_policy == "https-only",
+      b.allowed_methods == toset(["GET", "HEAD"]),
+      b.compress == false,
+      b.trusted_key_groups == null ? true : length(b.trusted_key_groups) == 0,
+      [for f in b.function_association : "${f.event_type} ${f.function_arn}"] == ["viewer-request ${aws_cloudfront_function.tiles_range.arn}"],
+    ]) if b.path_pattern == "/tiles/*"])
+    error_message = "/tiles/* must go to the tiles bucket with Managed-CachingOptimized, no origin request policy, https-only, GET/HEAD, uncompressed, and tiles_range on viewer-request."
+  }
+  assert {
+    condition = length([for o in aws_cloudfront_distribution.frontend.origin : o if o.origin_id == "s3-tiles"]) == 1 && alltrue([for o in aws_cloudfront_distribution.frontend.origin :
+      o.domain_name == aws_s3_bucket.tiles.bucket_regional_domain_name && o.origin_access_control_id == aws_cloudfront_origin_access_control.tiles.id
+    if o.origin_id == "s3-tiles"])
+    error_message = "The s3-tiles origin must be the tiles bucket, read through its own OAC."
   }
 
   # The default (SPA) behaviour forwards no query string or cookie to S3:

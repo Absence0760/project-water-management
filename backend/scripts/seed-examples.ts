@@ -21,7 +21,7 @@
 // examples runs Kleinberg's automatic GR4J calibration for its stored fit
 // (several seconds). What each example shows: docs/run-locally.md
 // § Example catchments; catchments.test.ts keeps them current.
-import { config } from 'dotenv';
+import { createHash } from 'node:crypto';
 import { closePool } from '../src/db/pool.js';
 import { actAsUser, type Db, withoutUser, withUser } from '../src/db/tx.js';
 import { publishRun } from '../src/publish/publish.js';
@@ -29,10 +29,14 @@ import { recordAudit } from '../src/history/record.js';
 import { executeRun } from '../src/runs/execute.js';
 import { loadScenario, runScenario } from '../src/scenarios/execute.js';
 import { opsSha256 } from '../src/scenarios/schema.js';
-import { buildExamples } from './examples/catchments.js';
+import { applicationOf, APPLICATION_FARM } from './examples/application.js';
+import { buildExamples, type ExampleProject } from './examples/catchments.js';
+import { SANDSPRUIT_MAP_FILE, sandspruitMap } from './examples/map.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
+import { checkGeometry } from '../src/geo/geojson.js';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { loadDevEnv } from '../src/config/devEnv.js';
 
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
@@ -46,7 +50,7 @@ export const FARMERS = [
 ] as const;
 
 // DEV-ONLY demo applicant (WP-3.3): a contributor on Sandspruit, linked to one farm.
-export const APPLICANT = { email: 'applicant@example.com', password: 'demo-password', displayName: 'Demo Applicant', catchment: 'Sandspruit', farm: 'Klipdrift' } as const;
+export const APPLICANT = { email: 'applicant@example.com', password: 'demo-password', displayName: 'Demo Applicant', catchment: 'Sandspruit', farm: APPLICATION_FARM } as const;
 
 /** A verified demo account, created once (a re-seed finds it). */
 async function ensureUser(u: { email: string; password: string; displayName: string }) {
@@ -183,14 +187,46 @@ export async function seedExamples(): Promise<string[]> {
 		for (const [catchment, farm] of f.farms) await linkFarmer(byName[catchment].owner, byName[catchment].id, id, farm);
 	}
 	await seedApplication(byName[APPLICANT.catchment]);
+	await seedMap(ANALYST.email, ids[2]!, sandspruit!);
 	await acceptCurrentTerms(SEEDED());
 	return ids;
 }
 
 /**
+ * Sandspruit's invented map (examples/map.ts), recorded as one imported file
+ * the way `POST /map/import` records one, with each parcel, dam and gauge
+ * linked to its node. It only draws: no node's area comes from it until an
+ * editor uses **Use … km²**.
+ */
+async function seedMap(ownerEmail: string, projectId: string, ex: ExampleProject) {
+	const features = sandspruitMap(ex.model);
+	await withUser(await userId(ownerEmail), async (db) => {
+		const text = JSON.stringify({
+			type: 'FeatureCollection',
+			features: features.map((f) => ({ type: 'Feature', properties: { name: f.name }, geometry: f.geometry }))
+		});
+		const { rows: src } = await db.query<{ id: string }>(
+			`INSERT INTO geo_source (project_id, file_name, sha256, crs, imported_by) VALUES ($1, $2, $3, 'EPSG:4326', app_current_user_id()) RETURNING id`,
+			[projectId, SANDSPRUIT_MAP_FILE, createHash('sha256').update(text, 'utf8').digest('hex')]
+		);
+		const { rows: nodes } = await db.query<{ id: string; name: string }>('SELECT id, name FROM node WHERE project_id = $1', [projectId]);
+		for (const f of features) {
+			const checked = checkGeometry(f.geometry);
+			if ('problem' in checked) throw new Error(`the example map's ${f.name} ${checked.problem}`);
+			await db.query(
+				`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, area_m2, source_id, created_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id())`,
+				[projectId, f.kind, f.name, f.node ? (nodes.find((n) => n.name === f.node)?.id ?? null) : null, JSON.stringify(checked.geometry), checked.areaM2, src[0]!.id]
+			);
+		}
+	});
+}
+
+/**
  * The demo applicant's submitted application (WP-3.3, docs/scenarios.md
- * § Applications): double their dam on the published baseline, run it, submit
- * it, as the applicant would through the API.
+ * § Applications): double their dam on the published baseline, keeping the
+ * EWR in the river (examples/application.ts), run it, submit it, as the
+ * applicant would through the API.
  */
 async function seedApplication(project: { id: string; owner: string }) {
 	const applicant = await ensureUser(APPLICANT);
@@ -202,8 +238,7 @@ async function seedApplication(project: { id: string; owner: string }) {
 			`SELECT (n->>'damCapacityM3')::float8 AS capacity FROM app_published_run_input($1, $2) r, jsonb_array_elements(r.inputs->'model'->'nodes') n WHERE n->>'id' = $3`,
 			[project.id, pub[0]!.run_id, own[0]!.id]
 		);
-		const ops = [{ op: 'node.set' as const, nodeId: own[0]!.id, field: 'damCapacityM3' as const, value: dam[0]!.capacity * 2 }];
-		const name = `Raise the ${APPLICANT.farm} dam`;
+		const { name, description, ops } = applicationOf(own[0]!.id, dam[0]!.capacity);
 		const { rows } = await db.query<{ id: string }>(
 			// Appendix C's prompts (129): two answered, mitigation left for the demo to show "Not given".
 			`INSERT INTO scenario (project_id, name, description, base_run_id, ops, ops_sha256, owned_node_ids, purpose_need, monitoring)
@@ -211,7 +246,7 @@ async function seedApplication(project: { id: string; owner: string }) {
 			[
 				project.id,
 				name,
-				'Demo application: double the farm dam (invented).',
+				description,
 				pub[0]!.run_id,
 				JSON.stringify(ops),
 				opsSha256(ops),
@@ -234,8 +269,8 @@ async function seedApplication(project: { id: string; owner: string }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	// CLI only: importing this module must not load dev env (see scripts/migrate.ts).
-	config({ path: ['.env.development.local', '.env.development'] });
+	// CLI only: importing this module must not load dev env (the DB tests once ran against the dev database that way).
+	loadDevEnv();
 	seedExamples()
 		.then(() =>
 			console.log(

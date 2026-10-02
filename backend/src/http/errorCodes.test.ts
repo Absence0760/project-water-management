@@ -14,6 +14,8 @@ const FILES = [
 	'auth/email-routes.ts',
 	'auth/export.ts',
 	'auth/middleware.ts',
+	'auth/mfa-routes.ts',
+	'auth/stepUp.ts',
 	'notes/routes.ts',
 	'alerts/routes.ts',
 	'farms/view.ts',
@@ -23,6 +25,9 @@ const FILES = [
 /** Uncoded errors on purpose: `file: message start → why the status's generic line is enough`. */
 const UNCODED: Record<string, string> = {
 	'auth/middleware.ts: this session can only read one report': 'a report-render session (the PDF renderer), never a person',
+	'auth/mfa-routes.ts: this session can only read one report': 'a report-render session (the PDF renderer) at the step-up, never a person',
+	'notes/routes.ts: only a public comment can give your name and email to the applicant’s register':
+		'the register opt-in is offered only beside a public comment (the workspace’s notes, ShareComments); a farm note never sends it',
 	'farms/view.ts: not found': 'the farm page words 403/404 itself ("no longer yours", farm/load.ts classify)',
 	'farms/view.ts: not published yet': 'the farm page checks the index first and shows its no-publication state',
 	'farms/view.ts: the window is outside the published figures': 'the CSV download link sends no window; no farm page calls the series route yet',

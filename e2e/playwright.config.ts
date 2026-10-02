@@ -7,6 +7,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
+import { DEM_FIXTURE } from './support/dem.ts';
+import { WATER_FIXTURE } from './support/water.ts';
 import { API_PORT, API_URL, APP_E2E_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
@@ -86,7 +88,20 @@ export default defineConfig({
 				// TEST-ONLY: every e2e test signs up accounts, all from this one address,
 				// far past the sign-up throttle's 10 an hour (backend/src/auth/signupThrottle.ts;
 				// its own tests are in the backend). Lambda refuses the setting.
-				SIGNUP_THROTTLE: 'off'
+				SIGNUP_THROTTLE: 'off',
+				// TEST-ONLY: the second-factor requirement for owners, team admins and
+				// assessors off (backend/src/auth/stepUp.ts). Hundreds of specs make a
+				// project owner who signs in with a password only; two-step sign-in
+				// itself (enrolment, the sign-in step, recovery codes) works the same
+				// either way and is tested in two-step-signin.spec.ts, and the
+				// requirement in backend/src/auth/stepUp.db.test.ts. Lambda refuses it.
+				MFA_REQUIRED: 'false',
+				// The pack specs sign with invented registrations nobody checked against a register (167_signers).
+				REGISTRATION_CHECK_REQUIRED: 'false',
+				// Delineation on, against the committed synthetic DEM (invented terrain; map-delineate.spec.ts).
+				DEM_URL: DEM_FIXTURE,
+				// Tracing a dam on, against the committed synthetic water occurrence raster (invented water; map-assisted.spec.ts).
+				WATER_URL: WATER_FIXTURE
 			}
 		},
 		DEV_SERVER

@@ -11,14 +11,16 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                     ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
                     ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
                     ├─ /packs/*   → signed URLs only (key group) → S3 packs (OAC)   evidence pack PDFs
+                    ├─ /tiles/*   → CF Function tiles_range (≤ 2 MiB ranges) → S3 tiles (OAC)  basemap, relief, glyphs
                     └─ /api/*     → CF Function strips /api → Lambda Function URL   Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
                                                           SES API (VPC endpoint) ◄────┤ SendEmail as no-reply@
                                                                                       │ water_app, TLS verify-full
                                    deploy-backend.yml ──invoke──► migrate Lambda ─────┤
-                                                                   │ owner creds       ▼
-                                                   Secrets Manager ◄┘ (VPC endpoint)  RDS PostgreSQL 17
+                                   load-reference.yml ──invoke──►  │ │ owner creds     ▼
+                     S3 reference (private) ◄──GetObject (S3 endpoint)┘ │
+                                                   Secrets Manager ◄─┘ (VPC endpoint)  RDS PostgreSQL 17
                                                    (RDS master; runtime secrets)      db.t4g.micro, single-AZ
                                                                                       ▲
    API ──SendMessage (SQS VPC endpoint)──► SQS jobs ──► worker Lambda ────────────────┤ water_app, RLS as
@@ -69,7 +71,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   bucket keeps `GetObject` only, so a missing report stays `403`. A new
   top-level file or directory in `frontend/static`, or a new prerendered
   page (`PRERENDERED`: the landing page once per language, `/welcome` and
-  `/welcome/af`, issue #137, so a new language adds its `/welcome/<code>`),
+  `/welcome/af`, issue #137, so a new language adds its `/welcome/<code>`;
+  also `/privacy`, `/terms`, `/methods` and `/data-sources`),
   must be added to those lists:
   `infra/scripts/cloudfront-functions.test.mjs` (`pnpm test:guards`) runs the
   function and fails until it is. `tests/edge.tftest.hcl` pins the policy and
@@ -196,12 +199,13 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
-| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that, and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
+| `packs.tf` | Issued evidence packs' PDFs (119_pack_render): the private packs bucket (versioned, Object Lock default retention GOVERNANCE for `pack_retention_days`, 10 years by default, no lifecycle; SSE-S3, TLS only), its bucket policy (only this distribution reads `packs/`), the renderer's PutObject under `packs/` and nothing else, the worker's GetObject (HEAD only) on `packs/` through an S3 interface endpoint whose policy allows only that and the three reads and writes the API and migrate make through it (a pack bundle's put, the delineation DEM, a reference file), and the packs OAC; the `/packs/*` behaviour is in `s3_cloudfront.tf`, signed with the report-download key group |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
-| `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
+| `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions (`spa_rewrite`, `api_strip_prefix`, `tiles_range`), distribution (incl. the `/tiles/*` behaviour), A/AAAA records |
+| `map_data.tf` | The catchment map's data ([deployment.md § The Map tab](../docs/deployment.md#the-map-tab)): the tiles bucket (SSE-S3, TLS only, ACLs off, versioned with old versions kept 14 days, broken uploads aborted after 7 days; only this distribution reads `tiles/`) and its OAC; the API's read of `tiles/terrain.pmtiles` for delineation (`api_dem`, only with `delineation_dem`) and of `tiles/water.pmtiles` for tracing a dam (`api_water`, only with `dam_trace_water`); the private reference bucket (versioned, old versions kept a year; no grant in its policy) and the migrate role's read of `reference/*`; the migrate Lambda's path to the S3 endpoint |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
-| `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
-| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
+| `waf.tf` | Web ACL with 4 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; `/tiles/*`, the egress bound: `waf_tiles_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
+| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood, CloudFront egress (`cloudfront-bytes`) and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
 | `iam.tf` | Every Lambda role's logs policy (create streams and put events in its own log group only; no `logs:CreateLogGroup`, no AWS-managed policy) and the API, worker and migrate roles' VPC ENI policy (AWS's six EC2 actions, denied to the function's own code) |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
@@ -213,7 +217,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (85 runs; see [Validating locally](#validating-locally)) |
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
 | `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
@@ -322,6 +326,7 @@ The tradeoffs table and the AWS sources are in
 | `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | **No.** Ephemeral variable → write-only value |
 | `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | **No.** Ephemeral variable → write-only value |
 | Alert unsubscribe-token secret | sops `alerts_token_secret` → the worker's runtime secret | **No.** Ephemeral variable → write-only value |
+| TOTP sealing key (two-step sign-in) | sops `app_encryption_key` → the API's runtime secret | **No.** Ephemeral variable → write-only value |
 | CloudFront shared secret | `random_password` → the API's runtime secret (write-only), and CloudFront's origin header | **Yes**, in `random_password.cloudfront_shared_secret` and the distribution: `custom_header` isn't a write-only argument |
 
 **No secret sits in a Lambda's environment** (issue #126). Environment
@@ -476,23 +481,25 @@ Idle to light use, on-demand, us-east-1:
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | S3 packs bucket (an issued pack's PDF, ~1 MB, kept 10 years) | ~0 |
-| S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`) | 7.30 |
+| S3 interface endpoint, 1 AZ (the worker's check of a pack PDF before recording its hash, `packs.tf`; also the API's DEM reads and migrate's reference loads, at $0.01/GB) | 7.30 |
+| S3 tiles bucket (~3.5 GB: the basemap, relief and glyphs) and reference bucket (a few hundred MB), `map_data.tf` | ~0.10 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
-| WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
+| WAF: ACL + 5 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 10.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
-| CloudWatch: 42 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.20 |
+| CloudWatch: 44 alarms, 41 until the renderer is on (incl. the CloudFront request-flood, egress (bytes) and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.30 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $55** (the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
+| **Total** | **≈ $63** (the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop, sign-in CAPTCHA and tiles rules $1.00 each, the S3 endpoint $7.30) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
 at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
 only (CloudFront doesn't bill WAF-blocked requests). The per-IP rate limits
-(`waf.tf`: 100 on `/api/auth/*`, `waf_rate_limit_per_ip` on `/api/*`, and
+(`waf.tf`: 100 on `/api/auth/*`, `waf_rate_limit_per_ip` on `/api/*`,
+`waf_tiles_rate_limit_per_ip` on `/tiles/*`, and
 `waf_site_rate_limit_per_ip`, default 5,000, on every path) stop one client,
 not a botnet keeping each IP under them. The API's limit doesn't count the
 SPA's files, so a cold visit (~150 of them) and the report renderer (which
@@ -502,8 +509,19 @@ let one IP run up allowed-request charges until someone acts on the alarm
 below, and its default blocks one IP at that alarm's own threshold. A
 renderer blocked by any of them is retried with backoff (a WAF `403` has no
 `render_token_refused` code, `backend/src/reports/render.ts`), not failed.
-A botnet at 1,000 requests
-a second costs ~$140–240 a day. Nothing can cap that without dropping the CSP (the
+**Egress is the other unbounded line, and the map's tiles are where it
+lives.** A `/tiles/*` request may move up to 2 MiB (`tiles_range`), about
+$0.00023 of CloudFront egress at Africa's edges against ~$0.0000028 of
+request charges, so a request count understates it about a hundredfold:
+under the site-wide limit alone one IP could pull ~10 GB every 5 minutes
+(~$330 a day) without tripping the request alarm. So `/tiles/*` has its own
+per-IP rule (`waf_tiles_rate_limit_per_ip`, default 1,000: ~2 GB per 5
+minutes at worst), and `cloudfront-bytes` alarms on the first 5 minutes over
+`cloudfront_bytes_alarm_gb_per_5min` (default 0.5 GB, against tens of MB
+for a busy 5 minutes of real use): one IP at the tiles limit trips it in the
+first period; a pull spread under it from many addresses costs ~$12–16 a
+day unseen until the daily budget. A botnet at 1,000 requests
+a second costs ~$140–240 a day in requests alone. Nothing can cap that without dropping the CSP (the
 CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
@@ -517,10 +535,11 @@ office NAT) stuck behind a limit. What to do: [docs/deployment.md §
 Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $59–64/month** (with the database's KMS key). Check the AWS pricing calculator before
-you commit to it. The default `budget_monthly_usd = 90` is set for
-af-south-1: its ACTUAL 80% alert ($72) sits above that idle, so it
-shouldn't fire every month (in us-east-1, ~60 is enough). See
+which comes to **≈ $68–75/month** (with the database's KMS key and the four
+endpoints). Check the AWS pricing calculator before
+you commit to it. The default `budget_monthly_usd = 100` is set for
+af-south-1: its ACTUAL 80% alert ($80) sits above that idle, so it
+shouldn't fire every month (in us-east-1, ~70 is enough). See
 [§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
 (`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
 `sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
@@ -544,7 +563,7 @@ alarms are what bound and report a runaway while it happens.
 
 | Alert | Fires when | Notes |
 | --- | --- | --- |
-| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$7** on $90, ~3.5× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
+| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$8** on $100, ~3.3× af-south-1's ~$2.40/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
 | Monthly, ACTUAL 80% | the month's spend passes $72 (on $90) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
@@ -826,6 +845,15 @@ Claude does not run any of these, and none of them print a secret. Replace
     - Either way, confirm afterwards: the first command lists one monitor,
       `water-management-services`.
 
+12. **The map's data** (when a client deployment wants the basemap, relief,
+    delineation or the land-cover and river proposals): upload the tiles to
+    `tiles_bucket`, set the three `PUBLIC_TILES…` repository variables and
+    release the web; set `delineation_dem = true` and apply once the DEM is
+    up, and `dam_trace_water = true` once `water.pmtiles` is; and load the allowed reference datasets through `load-reference.yml`.
+    The commands, the licence steps that come first and the cost bound are
+    in [deployment.md § Map tiles and § Reference
+    datasets](../docs/deployment.md#map-tiles).
+
 ### Rotating secrets
 
 Every secret below reaches its Lambdas through their runtime secrets
@@ -854,8 +882,13 @@ The apply, for any of the sops keys:
 
 - **`db_app_password`:** edit it with sops, apply, and invoke the migrate Lambda straight away. The API fails DB logins
   until you do:
-  `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
+  `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 920 --region <region> --profile water-management /dev/stdout`
 - **`auth_jwt_secret`:** edit it with sops, apply. Everyone is signed out.
+- **`app_encryption_key`** (two-step sign-in's TOTP secrets, the API only):
+  only if it leaked, since a new key can't open the stored secrets: edit it
+  with sops, apply, then clear `user_totp` and `user_recovery_code` and ask
+  everyone who had two-step sign-in to set it up again (docs/deployment.md
+  § Runbooks 15).
 - **`alerts_token_secret`** (WP-2.13, the worker only): only if it leaked,
   since every unsubscribe link in alert emails already sent stops working
   ("Manage your alerts" still does). Edit it with sops, apply. The alert kill switch is
@@ -1094,9 +1127,13 @@ The database has two guards, both to be lifted on purpose, in this order:
 3. The retained automated backups (`delete_automated_backups = false`) expire
    with the retention period, but the final snapshot is a manual snapshot and
    is kept until someone deletes it. It holds personal information, and the
-   privacy notice (§ 7) says it is kept until deleted: delete it once no
-   longer needed (`aws rds delete-db-snapshot --db-snapshot-identifier …`)
-   and record when in the operator log.
+   privacy notice (§ 7) and the operator agreement (10.2) promise it is kept
+   for **90 days after the shutdown notice**, so an organisation can ask for
+   its projects back, and then deleted (provisional position, pre-counsel
+   research, 2026-10-01). Put the delete-by date in the operator log when
+   the notice goes out, delete it on that date
+   (`aws rds delete-db-snapshot --db-snapshot-identifier …`), and record
+   that it was done.
 
 The tfstate bucket, the KMS key, the child zone and the deploy role belong to
 the bootstrap and survive.

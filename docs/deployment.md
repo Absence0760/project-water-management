@@ -110,11 +110,11 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $52–54/month | ≈ $51/month |
+| Idle cost (infra/README.md § Cost) | ≈ $68–75/month | ≈ $60–63/month | ≈ $59/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 90` allows for them), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 100` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -193,7 +193,8 @@ Keys this app needs:
 | --- | --- |
 | `auth_jwt_secret` | `AUTH_JWT_SECRET` in the API's and worker's runtime secrets: signs session cookies, and keys the run stamps (security.md § Run stamps; rotating it leaves stored runs unverified) (≥ 32 random bytes) |
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
-| `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent |
+| `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links and the "Was this useful?" links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent, and the feedback links of the last 30 days |
+| `app_encryption_key` | `APP_ENCRYPTION_KEY` in the API's runtime secret: seals two-step sign-in's TOTP secrets at rest (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it voids every authenticator ([§ Runbooks](#runbooks) 15) |
 | `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
@@ -224,7 +225,8 @@ write again, and `tf.sh` sets it for you: it reads the sops file's plaintext
 `sops.lastmodified` (which sops rewrites on every edit, without decrypting
 anything) and passes it as `YYYYMMDDhhmmss`. So:
 
-- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`;
+- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`,
+  `app_encryption_key` (which voids every authenticator: § Runbooks 15);
   `cloudfront_private_key` also needs its public key moved, below):
   edit it with sops, then plan and apply through `tf.sh`. The edit moved
   `lastmodified`, so the plan replaces every runtime secret version.
@@ -378,6 +380,10 @@ Lambda environment (set by `infra/lambda.tf`):
 | `SES_CONFIGURATION_SET` | `water-management` |
 | `SES_REGION` | unset: SES is in the Lambda's own region |
 | `RUNS_KEPT_PER_PROJECT` | not set by Terraform, so the backend default (20 runs per project) applies; see [data-model.md § Run output volume](./data-model.md#time-series-storage) |
+
+The worker (`infra/jobs.tf`) also gets `OPERATOR_EMAIL`, set to
+`budget_alert_email`: the operator's copy of the licence-record notices
+([evidence-pack.md § Retention](./evidence-pack.md#retention)).
 
 Besides the email settings, `lambda.tf` sets `ALLOWED_ORIGINS` (the site
 origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
@@ -544,6 +550,7 @@ environment's job is the required reviewer (§ 1), not storage.
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
 | `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
 | secret `WAF_CAPTCHA_API_KEY` | `waf_captcha_api_key` (the CAPTCHA API key for the site's domain; it ships in the public bundle, but the provider marks it sensitive) |
+| `PUBLIC_TILES_URL`, `PUBLIC_TILES_GLYPHS_URL`, `PUBLIC_TERRAIN_URL` | not outputs: set by hand once the files are in the tiles bucket (§ Map tiles); unset, the map draws the plain background |
 
 `PUBLIC_API_URL` is not a GitHub variable: the build reads `/api` from the
 committed `frontend/.env.production`.
@@ -638,7 +645,11 @@ Every workflow pins its actions to a commit SHA, grants least-privilege
 `permissions:` per job, and reaches AWS only through GitHub OIDC; there are
 no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 (`scripts/guards/check_workflows.mjs`, plus actionlint when it is installed).
-Among them: a job that grants `id-token: write` (or `write-all`) must be gated
+Among them: every job gated on `environment: production` must need a job
+that runs `scripts/release/preflight.mjs` (rule `preflight`; the deploy
+workflows run it per component, `load-reference.yml` in `environment` mode),
+since naming a missing environment would create it with no reviewer; and a
+job that grants `id-token: write` (or `write-all`) must be gated
 on `environment: production` (rule `oidc-gate`; the only exception,
 `OIDC_ALLOWLIST`, is Scorecard's `analysis` job, which signs its result for
 scorecard.dev and may run no `run:` step), and a workflow triggered by
@@ -1243,7 +1254,9 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
 
   | Variable | Value |
   | --- | --- |
-  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
+  | `APP_ENCRYPTION_KEY` | The sops key `app_encryption_key` (32+ alphanumeric characters), in the API's runtime secret. Seals two-step sign-in's TOTP secrets (AES-256-GCM, `auth/secretBox.ts`); the API refuses a missing, short or `dev-only-` value at cold start. Rotate only if it leaked ([§ Runbooks](#runbooks) 15) |
+  | `MFA_REQUIRED` | Unset (or `true`). The API and worker refuse `false` at cold start: owners, team admins and assessors always need two-step sign-in in production (`auth/stepUp.ts`) |
+  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links and the "Was this useful?" links (151). Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
   | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |
@@ -1467,6 +1480,15 @@ first deploy):
   worker's `s3:GetObject` on `packs/*`) and holds that one grant. The renderer
   and the worker both need `PACKS_BUCKET` (Terraform sets it; each refuses to
   start without it).
+- **The re-run** (154_pack_reproduce). Issuing also queues a
+  `pack_reproduce` job: the worker reads the pack's bundle
+  (`packs/<project>/<pack>/<sha256>.zip`) back with that same
+  `s3:GetObject` grant, re-runs both runs from it and records the outcome
+  (`pack_reproduced` in the worker's log, `warn` unless it reproduced, with
+  the failed checks' ids and how long it took). It runs the engine twice in
+  the worker (each run as long as it took in the API), well inside the
+  worker's 300 s; 3 attempts when the bucket can't be read, then the pack
+  page says the re-run couldn't be done. No infrastructure of its own.
 - **The bucket**: `water-management-packs-<account>`, private (public access
   blocked, bucket-owner objects), SSE-S3, TLS only, **versioned with Object
   Lock**: every object is retained from its upload for `pack_retention_days`
@@ -1511,6 +1533,178 @@ first deploy):
   say on the pack why its PDF is gone (withdraw it with that reason).
 - **Cost:** a PDF is ~1 MB kept for 10 years, ≈ $0.0003/month each at S3
   Standard (orphans included); the S3 interface endpoint ~$7.30/month idle.
+
+## The Map tab
+
+The Map tab (issue #288, [maps.md](./maps.md)) needs nothing deployed to
+work: features, uploads, areas and the lookup run on the API and RDS as
+they are. Its basemap, labels, relief and delineation need the **map tiles**,
+and its proposals need **reference datasets** in the database; both are
+operator steps after the first apply. `infra/map_data.tf` holds the two
+buckets they use, kept apart because one is public and the other is not.
+
+### Map tiles
+
+The tiles bucket (`tiles_bucket` output) holds what the browser reads, under
+`tiles/`, served same-origin at the site's `/tiles/*` (an ordered CloudFront
+behaviour with its own OAC, `infra/s3_cloudfront.tf`):
+
+| Object | Built by | Frontend variable | Licence step first |
+| --- | --- | --- | --- |
+| `tiles/south-africa.pmtiles` (the basemap, ~1 GB at maxzoom 15) | `pnpm dev:tiles:fetch` | `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` | none (the OSM attribution is always on the map) |
+| `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
+| `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
+| `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
+
+The local commands leave the files in `~/.cache/water-management-tiles/`.
+Upload them with your own SSO session (no workflow or Lambda can write the
+bucket). **An upload is itself the release** of that file: the `/tiles/*`
+behaviour serves whatever is in the bucket to anyone, by byte range,
+whether or not the frontend variable is set. So upload `terrain.pmtiles`
+only once the Art. 6(c) sentence is live in the app's legal text; the
+frontend gate and `delineation_dem` come after that, not instead of it.
+Then invalidate the cache, since CloudFront keeps byte ranges of
+the old file and the PMTiles reader notices a replaced archive by its
+`ETag`:
+
+```bash
+aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
+```
+
+Then set the repository variables in the table (`gh variable set
+PUBLIC_TILES_URL --body /tiles/south-africa.pmtiles`, and so on) and
+release the web (`deploy-frontend.yml` reads them). Its **Map tiles gate**
+(`scripts/release/map-data-gates.mjs frontend`) refuses anything but those
+same-origin paths, and refuses the relief until the Art. 6(c) sentence is in
+the legal text under `frontend/src`. The CSP needs no change: the tiles
+and glyphs are fetched same-origin (`connect-src 'self'`), and MapLibre's
+worker is the app's own (`worker-src 'self'`).
+
+**Delineation** reads the same `terrain.pmtiles` from the API Lambda, by
+ranged S3 GetObject through the S3 interface endpoint. Set
+`delineation_dem = true` in the tfvars and apply, once the file is uploaded
+and the Art. 6(c) sentence is live: Terraform then sets
+`DEM_URL=s3://<tiles_bucket>/tiles/terrain.pmtiles` on the API and lets its
+role read that one key (`api_dem`), and the Map offers **Delineate**. It
+refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
+delineation peaks near 460 MB at its window cap and keeps a 20 s budget
+([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
+which the defaults (1 024 MB, 30 s) hold with room to spare.
+
+**Tracing a dam** (#326 C2, [maps.md § Assisted
+drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API
+Lambda the same way. Set `dam_trace_water = true` in the tfvars and apply
+once the file is uploaded: Terraform sets
+`WATER_URL=s3://<tiles_bucket>/tiles/water.pmtiles` on the API and lets its
+role read that one key (`api_water`), and the Map offers **Trace a dam**. A
+trace reads a handful of small tiles in milliseconds, so it asks nothing of
+the Lambda's size. Unlike the DEM it waits for no legal sentence (GSW's
+licence is settled), and it is independent of `delineation_dem`.
+
+**The cost bound.** Every object under `/tiles/` is public (anyone can
+fetch it, as the browser does), and the archives are gigabytes. The
+`tiles_range` CloudFront Function lets through an archive only by one
+closed byte range of at most 2 MiB (a PMTiles read is a 16 KiB header, then
+directories and tiles far smaller), glyph ranges and the licence whole, and
+answers 404 for anything else, before S3. So one request moves at most
+2 MiB, and the WAF's tiles rule (`waf_tiles_rate_limit_per_ip`, 1 000 per
+5 minutes) bounds one address at about 2 GB per 5 minutes in the worst
+case, about $0.23 of CloudFront egress in South Africa (real map use is a
+few hundred KB a pan). Requests understate this cost about a hundredfold,
+so the `cloudfront-bytes` alarm watches bytes: past 0.5 GB in 5 minutes
+(`cloudfront_bytes_alarm_gb_per_5min`) it fires, which one address at the
+tiles limit does in the first period; a pull spread under it from many
+addresses (~$12–16 a day) is the daily budget's to catch (§ Budget alerts).
+Storage is ~3.5 GB (under $0.10/month), multipart uploads left unfinished
+are aborted after 7 days, and the bucket is versioned: a replaced or
+deleted archive can be restored for 14 days (S3 console → the object →
+Versions, or `aws s3api copy-object` from its version id), then the old
+version expires. Restore it before an invalidation, as for any
+replacement.
+
+### Reference datasets
+
+The map's proposals read global reference tables that the operator loads
+as the schema owner: locally `pnpm import:<kind>` against the dev database
+([maps.md](./maps.md)). Production's database is in a private VPC, so a
+production load runs in the **migrate Lambda**, which already holds the
+owner's credentials: it reads one file from the private **reference
+bucket** (`reference_bucket` output, `reference/<kind>/…`), checks it
+hashes to the SHA-256 the operator gave, and replaces that dataset in one
+transaction with the same parsers and writes the local scripts use
+(`backend/src/geo/referenceLoad.ts`). The bucket grants nothing in its
+policy; the migrate role's own policy reads `reference/*`, and nothing can
+write it but the operator's SSO session. Loads run through
+**`load-reference.yml`** (Actions → Load a reference dataset, or `gh
+workflow run`): its `check` job validates the inputs and the licence gates
+before anyone approves, and its `load` job runs in the `production`
+environment (the required reviewer, then OIDC; no AWS key anywhere) and
+prints counts only. A failure prints a code and a fixed reason; the detail
+is in the migrate Lambda's CloudWatch log, and the dataset stays as it was.
+A third job, `preflight` (no environment, no AWS), runs `preflight.mjs
+environment` first: it refuses the run unless the `production` environment
+exists with a required reviewer and its branch policy, since naming a
+missing environment would create it unprotected. The load runs from `main`
+only, and its AWS session is narrowed (an inline session policy) to
+invoking the migrate function, so the deploy role's other grants never
+reach it.
+
+**Undoing a load.** A load replaces its dataset in one transaction, so a
+failed one changes nothing. To undo one that succeeded but was wrong, load
+the previous file again under the same dataset label: the bucket is
+versioned and keeps an overwritten or deleted file for a year (S3 console →
+the object → Versions, or `aws s3api list-object-versions --prefix
+reference/<kind>/`), so restore that version (copy it back over the key),
+`sha256sum` it, and run the workflow with its hash. Values a project
+already accepted were copied into the project and don't change either way.
+
+Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
+workflow offers those kinds alone, its gate refuses the rest, and the
+Lambda refuses them again by name (`referenceLoad.test.ts` checks the
+Lambda's list against the Sources table):
+
+| Kind | Licence (maps.md § Sources) | The file | How to make it |
+| --- | --- | --- | --- |
+| `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
+| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
+| `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
+| `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
+
+```bash
+sha256sum worldcover.json.gz
+aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldcover-2021.json.gz --profile water-management
+gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
+```
+
+Evaporation is the same with `kind=evaporation` and a key under
+`reference/evaporation/`; the file carries dPET's source, version and
+attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
+`bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
+streams, `-f min_order=<n>`. Approve the run in the `production`
+environment. Never load the synthetic fixtures into production (the label
+`synthetic` is refused).
+
+Limits: the file at most 200 MiB as uploaded and 200 MiB of text unzipped
+(a gzip bomb is cut off, not unpacked), refused with a reason beyond that;
+the migrate Lambda has `migrate_memory_mb` (3 008 MB, the least Terraform
+accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
+peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
+files of 475 000 reaches and 6.9 million cells). A country's WorldCover
+grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
+HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
+32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
+Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
+Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
+minutes of Lambda) and runs one at a time (reserved concurrency 1, the
+workflow's concurrency group). Migrations use the same memory and timeout,
+billed only while they run. Don't run a load while a backend deploy is
+migrating: the migrate Lambda's reserved concurrency of 1 turns the second
+invocation away (the workflow fails with a throttle, nothing is loaded), and
+a load writes only its own dataset's rows, so retrying afterwards is safe.
 
 ## Runbooks
 
@@ -1576,9 +1770,18 @@ Every step is an ordinary app action by an owner unless it says "operator".
 6. **The worker is stuck.** See [§ Background jobs](#background-jobs): check
    the worker's logs and the `jobs-dlq`, redrive or purge it; leases expire
    after 6 minutes and the next tick claims the jobs again.
-7. **A POPIA request to delete a person's account** (operator; there is no
-   self-service deletion yet, issue #112, [security.md § Personal information](./security.md#personal-information-popia)).
-   A request may come by email or any other expedient way (POPIA s24,
+7. **A POPIA request to delete a person's account** (operator; [security.md § Personal information](./security.md#personal-information-popia)).
+   A person who can sign in can do it themselves: Account → **Delete my
+   account** (`DELETE /auth/me`, issue #112) runs the same deletion, refuses
+   the only owner or admin with the list to hand over, and emails them what
+   was done; point them there. It logs
+   `{"event":"account_deleted","via":"self","accountId":"…"}`: the account's
+   random id only, never an address or a name. Both paths, the self-service
+   one and the SQL below, also write the id to the `erasure_log` table (159),
+   which a restore reads to delete the account again
+   ([§ Restoring the database](#restoring-the-database), step 6a). Otherwise
+   (they can't sign in, or ask another way): a request may come by email or
+   any other expedient way (POPIA s24,
    Regulation 3); act on it as soon as reasonably practicable. Confirm it
    comes from the account's address, and tell the WUA (the responsible
    party for its farmers). As the schema owner, in one transaction:
@@ -1589,7 +1792,9 @@ Every step is an ordinary app action by an owner unless it says "operator".
    maker cleared (138: keep the evidence, remove the name), except an
    ensemble they never completed and their **draft** applications, which go;
    sign-offs keep the typed name and registration; the audit log is
-   pseudonymised ("Deleted user"). A `23514` error at commit ("a project must
+   pseudonymised ("Deleted user"), invitation entries' partly hidden
+   address included (160), except in the projects of a team that keeps
+   public records (161), where the name stays. A `23514` error at commit ("a project must
    keep at least one owner", "a team must keep at least one admin") means
    they are the only owner or admin of something: ask them, or the
    project's or team's other members, to hand it over (make someone else
@@ -1618,11 +1823,20 @@ Every step is an ordinary app action by an owner unless it says "operator".
    says which endpoint and what kind of failure; `at` points at the throwing
    line. One route with a SQLSTATE after a deploy is usually a migration the
    code got ahead of (§ A failed migration); every route at once with
-   `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
+   `ECONNREFUSED` or `57P01` is the database (RDS alarms); a failover or
+   restart also leaves `{"event":"db_idle_client_error","code":"57P01"}`
+   warnings, one per pooled connection it dropped (`backend/src/db/pool.ts`:
+   the pool replaces the connection, the process keeps running). Reproduce it
    locally, fix the cause and add a test; the message was deliberately not
    logged (it can hold row values), so the stack and code are the lead.
-10. **Request flood** (the `cloudfront-requests` or `waf-blocked-requests`
-    alarm, operator; both live in us-east-1 and mail the same address).
+10. **Request flood** (the `cloudfront-requests`, `cloudfront-bytes` or
+    `waf-blocked-requests` alarm, operator; all live in us-east-1 and mail
+    the same address). `cloudfront-bytes` alone (requests normal, bytes
+    high) is someone pulling the map's tiles: sampled requests on
+    `/tiles/` show who; one IP is already capped by
+    `waf_tiles_rate_limit_per_ip`, so many IPs mean step 4 (block the
+    sources), and real growth means raising
+    `cloudfront_bytes_alarm_gb_per_5min` (0.1–2).
     Nothing caps CloudFront and WAF request charges: every allowed request
     costs $1.60–2.80 per million (WAF + CloudFront), a blocked one WAF's
     $0.60 per million only. The arithmetic behind the thresholds is in
@@ -1778,6 +1992,49 @@ Every step is an ordinary app action by an owner unless it says "operator".
     7. Find out who and why in CloudTrail (the email names the caller), and
        record it in the operator log.
 
+14. **Someone lost their authenticator app and their recovery codes**
+    (operator; two-step sign-in, [security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+    There is no reset route by design: a reset link to the inbox would be a
+    way round the second factor for anyone who holds the inbox. Confirm who
+    is asking out of band (a call to a number the WUA or consultancy has on
+    file, not one in the request), then, as the schema owner, in one
+    transaction:
+    `DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…'; UPDATE app_user SET sessions_revoked_at = now() WHERE id = '…';`
+    (the last line signs out every session, a thief's included). They sign
+    in with the password and set up a new authenticator on the Account
+    page; if they are an owner, team admin or assessor, they need it before
+    those actions again. If the password may be known to someone else too,
+    have them reset it first. Record the request and how identity was
+    checked in the operator log.
+15. **`APP_ENCRYPTION_KEY` leaked, or must change** (operator). The key seals
+    every TOTP secret; a new one can't open the old rows. Edit
+    `app_encryption_key` with sops and apply (§ Rotating a secret), then, as
+    the schema owner, `DELETE FROM user_recovery_code; DELETE FROM user_totp;`
+    and tell every person who had two-step sign-in on to set it up again
+    (owners, team admins and assessors can't do those actions until they
+    have). Their security log keeps the history.
+16. **A licence record past its closing date** (operator; the "This licence
+    record can now be deleted" email, or a review that went unanswered;
+    [evidence-pack.md § Retention](./evidence-pack.md#retention)). Nothing
+    is deleted without the organisation's written confirmation: ask the
+    project's owners whether it still needs the record (a renewed licence is
+    a later outcome they record; an unanswered review stays as it is). On a
+    written yes, as the schema owner: note the project's evidence pack
+    objects (`SELECT pdf_key, bundle_key FROM evidence_pack WHERE project_id
+    = '…'`), delete the project in one transaction with its two evidence
+    guards disabled for it (`ALTER TABLE project DISABLE TRIGGER
+    project_evidence_guard, DISABLE TRIGGER project_pack_guard; DELETE FROM
+    project WHERE id = '…'; ALTER TABLE project ENABLE TRIGGER
+    project_evidence_guard, ENABLE TRIGGER project_pack_guard;`), then delete
+    every version of each pack object from the packs bucket with
+    `s3:BypassGovernanceRetention` (`aws s3api delete-object --bucket …
+    --key … --version-id … --bypass-governance-retention`, for each version
+    `list-object-versions` shows). A project of a team that keeps public
+    records (`team.public_records`) also needs the client's confirmation
+    that it holds its records or has a disposal authority, recorded as
+    `team.records_disposal_confirmed_on` (operator agreement 3A.2). Record
+    the confirmation, the date and what was deleted in the operator log.
+
 ## Rollback
 
 - **Code:** deploy the last good tag by hand. It goes through the same
@@ -1898,11 +2155,49 @@ replace or destroy; don't apply one.
    `cd infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`.
 6. Invoke the migrate Lambda (the script prints the command). It applies any
    migration newer than the restore point and resets `water_app`'s password.
-7. Check the site and that the data is as of the restore point.
-8. Only then delete the old instance, with a final snapshot (the script
-   prints both commands: turn off its deletion protection, then
-   `delete-db-instance --final-db-snapshot-identifier …`). Export first
-   anything written to it after the restore point that you want back.
+6a. **Re-apply erasures and revocations** (POPIA s14(4), s24; provisional
+   position, pre-counsel research, 2026-10-01). A restore takes the database
+   back to before every deletion and revocation made since the restore
+   point, so a deleted account, project or team, a removed member, an
+   unlinked farmer, a revoked share link or API key would all be live again.
+   Keep the API and the worker stopped until this is done: if traffic is
+   back after step 5's apply, stop them again with step 1's commands. On the
+   **old** instance (still running as `water-management-old-<ts>`), as the
+   schema owner:
+   - `SELECT kind, subject_id, erased_at FROM erasure_log WHERE erased_at > '<restore point>' ORDER BY erased_at;`
+   - `SELECT kind, project_id, subject, created_at FROM audit_event WHERE created_at > '<restore point>' AND kind IN ('member.removed', 'team_member.removed', 'farmer.unlinked', 'share_link.revoked', 'api_key.revoked', 'invite.revoked') ORDER BY created_at;`
+
+   Then on the restored instance, as the schema owner, in one transaction:
+   delete each listed `app_user`, `project` and `team` row (`kind` account,
+   project, team; the triggers pseudonymise and log as they did the first
+   time), and re-apply each removal, unlink and revocation the events name
+   (delete the `project_member`, `team_member` or `farm_link` row; set
+   `revoked_at` on the share link or API key; delete the invite). Only then
+   let traffic back (run step 5's apply again; it restores the concurrency),
+   and at once invoke the worker once (`aws lambda invoke --function-name
+   water-management-worker …`, the production `pnpm dev:jobs:tick`; at
+   reserved concurrency 0 it would be throttled, hence after the apply) so
+   the time-based purges catch up: lapsed invites, deleted notes' text,
+   alert deliveries, pack notices. None of those is served by the API, so
+   the minutes between are harmless. Record each re-applied erasure in the
+   operator log.
+
+   **If the instance itself is gone** (below), there is no old instance to
+   read: take the erasures since `LatestRestorableTime` from the operator
+   log and from CloudWatch, where every self-service deletion logs
+   `account_deleted` with its `accountId`
+   (`filter message.event = "account_deleted"` in Logs Insights on the API's
+   log group, 30 days).
+7. Check the site and that the data is as of the restore point, with the
+   erasures re-applied.
+8. Only then delete the old instance (the script prints the commands: turn
+   off its deletion protection, then `delete-db-instance`). Take a final
+   snapshot (`--final-db-snapshot-identifier …`) only if you may need data
+   written after the restore point, and **delete it within 30 days**: it
+   holds everything erased since the restore point and, unlike automated
+   backups, never expires on its own. Put its delete-by date in the
+   operator log. Export first anything written to the old instance after the
+   restore point that you want back.
 
 **If the instance itself is gone** (deleted, or never coming back from
 `failed`), the script refuses, since it swaps with the live instance. The
@@ -1924,6 +2219,9 @@ runs it against a fake `aws` and `terraform`):
       the modify, as the docs say).
 - [ ] Confirm the plan was in-place only, and the migrate run and the site
       work after the apply.
+- [ ] The re-apply step (6a) against a test erasure made after the restore
+      point: delete a test account and revoke a test share link after it,
+      then confirm both are gone again on the restored instance.
 - [ ] Write down how long the restore, the swap and the whole run took (the
       real RTO), and the date, here.
 
@@ -1936,11 +2234,12 @@ the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
 the report renderer run outside the VPC for the same reason. The database's
-customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $52/month in
-us-east-1, ≈ $59–64 in af-south-1; the breakdown is in
+customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $63/month in
+us-east-1, ≈ $68–75 in af-south-1 (with the S3 endpoint); the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
-request charges have no ceiling; the `cloudfront-requests` alarm (us-east-1)
-fires within 5 minutes of a flood, long before the budgets' billing data
+request charges have no ceiling, and nor does egress (the map's tiles are
+the large objects); the `cloudfront-requests` and `cloudfront-bytes` alarms
+(us-east-1) fire within 5 minutes of a flood or a pull, long before the budgets' billing data
 catches up (§ Runbooks, Request flood). The minimal (defaults)
 and full (Multi-AZ, highly available) configurations, their tfvars and
 monthly cost are compared in [deployment-tiers.md](./deployment-tiers.md).
@@ -1952,11 +2251,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $7/day on $90, about 3.5× the
-  ~$2/day af-south-1 idle): a single day cost more than that. This is the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $8/day on $100, about 3.3× the
+  ~$2.40/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($72 on the default $90, above the
+- **Monthly, ACTUAL 80%** ($80 on the default $100, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
@@ -1975,7 +2274,7 @@ Billing data refreshes at least daily, so every one of these lags the spend
 by up to a day; the Lambda concurrency caps and the CloudWatch alarms are
 what bound and report a runaway as it happens. On any of them: open Cost
 Explorer, group by service and usage type for the last few days, and find
-what grew. `budget_monthly_usd` defaults to 80 (af-south-1; ~60 is enough
+what grew. `budget_monthly_usd` defaults to 100 (af-south-1; ~70 is enough
 in us-east-1, ~170 on the full tier). Before billing access is enabled, set
 it to 0 ([infra/README.md § Operator
 steps](../infra/README.md#operator-steps), step 4).

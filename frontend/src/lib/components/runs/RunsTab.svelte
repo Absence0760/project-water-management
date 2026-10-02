@@ -242,6 +242,8 @@
 	// carries on from there. Once: later jumps (the section menu) find their
 	// panel on the page and are the browser's.
 	let fragmentShown = false;
+	/** The validation statement is open: the known-bug badge opens it (issue #103). */
+	let validationOpen = $state(false);
 	let releaseFragment = () => {};
 	let destroyed = false;
 	$effect(() => {
@@ -249,6 +251,8 @@
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
 		if (!hash.startsWith('res-') || movedHref(hash, null)) return;
+		// The known-bug badge's link (issue #103): the statement opens on load too, not only on a click.
+		if (hash === 'res-validation') validationOpen = true;
 		tick().then(() => {
 			const el = destroyed ? null : document.getElementById(hash);
 			if (!el) return;
@@ -540,7 +544,7 @@
 							<button type="button" class="pick" title={r.label || 'Untitled run'} aria-current={r.id === selectedId || undefined} onclick={() => select(r.id)}>
 								<span class="lbl">{r.label || 'Untitled run'}</span>
 								<span class="meta">{fmtDate(r.createdAt, true)} · {runYears(r.startDate, r.endDate)}</span>
-								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast'}
+								{#if r.id === latest?.id || r.legacy || evidenceById.has(r.id) || r.pinned || r.id === currentPublishedRunId || r.scenarioName || citedByScenario(r).length || r.reproducible === false || r.trigger === 'auto' || r.trigger === 'forecast' || r.errata?.length}
 									<span class="tags">
 										{#if r.id === latest?.id}<span class="tag">latest</span>{/if}
 										{#if r.trigger === 'auto'}<span class="tag" title="Made automatically after new data arrived (Settings → Automatic runs). Only the newest automatic run is kept, unless it is pinned or published.">Auto</span>{/if}
@@ -552,6 +556,7 @@
 										{#if citedByScenario(r).length}<span class="tag" title="The base of {citedByScenario(r).map((c) => `“${c.name}”`).join(', ')}: kept for good while {citedByScenario(r).length === 1 ? 'that scenario exists' : 'those scenarios exist'}, so it can't be deleted or unpinned.">Scenario base</span>{/if}
 										{#if r.reproducible === false}<span class="tag" title="Made before runs stored their input series: it can't be re-run from them, only compared by hash.">Inputs not stored</span>{/if}
 										{#if signedBy(r).length}<span class="tag tag-owner" title="Signed off by {signedBy(r).join(', ')} (see its report). Kept for good: it can't be deleted.">Signed off</span>{/if}
+										{#if r.errata?.length}<span class="tag tag-warn" title="May be affected by {r.errata.length === 1 ? 'a known engine bug' : `${r.errata.length} known engine bugs`} ({r.errata.join(', ')}): each changes results only under its conditions. See the run's validation statement, and re-run on the current engine to compare.">May be affected</span>{/if}
 										{#if r.legacy}<span class="tag tag-warn" title="Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.">Workbook comparison</span>{/if}
 									</span>
 								{/if}
@@ -612,6 +617,14 @@
 							<span class="badge">Former evidence</span>
 						{/if}
 						{#if detail.run.id === currentPublishedRunId}<a class="badge badge-owner" href="#res-publication">Published</a>{/if}
+						{#if detail.run.errata?.length}<a
+								class="badge badge-warn errata-badge"
+								href="#res-validation"
+								title="{detail.run.errata.join(', ')}: each changes results only under its conditions, which the validation statement gives (docs/engine-errata.md). Re-run on the current engine to compare."
+								data-testid="run-errata"
+								onclick={() => (validationOpen = true)}
+								>May be affected by {detail.run.errata.length === 1 ? 'a known bug' : `${detail.run.errata.length} known bugs`}</a
+							>{/if}
 						{#if summary.forecast}<a class="badge badge-warn" href="#res-forecast">Forecast from {summary.forecast.from}</a>{/if}
 						{#if shownEvidence}<a class="muted small evidence-line" href="#res-evidence">{shownEvidence}</a>{/if}
 						<!-- The note leads the reader to the Record group, below the results (sections.ts). -->
@@ -739,7 +752,13 @@
 					</section>
 					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
 					<div class="panel" id="res-validation">
-						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} fitEngineVersion={shownRun.settings?.fitRecord?.engineVersion ?? null} />
+						<ValidationPanel
+							{summary}
+							engineVersion={shownRun.engineVersion}
+							legacy={shownRun.legacy}
+							fitEngineVersion={shownRun.settings?.fitRecord?.engineVersion ?? null}
+							bind:open={validationOpen}
+						/>
 					</div>
 					<section class="panel" id="res-publication">
 						{#if publicationError}
@@ -749,7 +768,7 @@
 							</div>
 						{:else if publication}
 							{#key shownRunId}
-								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} onChange={published} />
+								<PublicationPanel {projectId} run={shownRun} current={publication!.current} history={publication!.history} canEdit={canRun} actsForAuthority={project.actsForAuthority ?? false} onChange={published} />
 							{/key}
 						{:else}
 							<p class="muted" role="status">Loading the publication…</p>
@@ -804,6 +823,10 @@
 {/if}
 
 <style>
+	/* The site badge capitalises each word; this one is a sentence (issue #103). */
+	.errata-badge {
+		text-transform: none;
+	}
 	.runs-page {
 		container: runs-page / inline-size;
 	}

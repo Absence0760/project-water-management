@@ -21,7 +21,9 @@ pnpm setup
 
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
-then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
+then the synthetic reference data (`pnpm import:quaternaries`,
+`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`; see
+[Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
 [Reports](#reports)).
 On first boot of the empty volume, `dev/postgres/00-roles.sql` creates the
@@ -35,6 +37,9 @@ No env files to write. `backend/.env.development` and
 | --- | --- | --- |
 | `DATABASE_URL` | `postgresql://water_app:water_app@127.0.0.1:5434/water` | The runtime connection, bound by RLS |
 | `MIGRATION_DATABASE_URL` | `postgresql://water:water@127.0.0.1:5434/water` | Schema owner, used for migrations |
+
+In a git worktree both URLs point at that worktree's own dev database,
+`water_w<n>` (see below), not `water`.
 | `AUTH_JWT_SECRET` | a dev-only string (≥ 32 chars) | Signs session cookies. Production uses a real secret. |
 | `ALLOWED_ORIGINS` | `http://localhost:7777` | CORS allow-list (with credentials) |
 | `COOKIE_SECURE` | `false` | Session cookie `Secure` flag; local dev is plain http. Unset (Secure on) when deployed. |
@@ -55,7 +60,7 @@ No env files to write. `backend/.env.development` and
 | `PACKS_BUCKET` | `water-packs` | Issued evidence packs' files: the reproduction bundle, stored when a pack is issued (created on first use; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)) |
 | `REPORT_DOWNLOADS` | `presigned` | How the download route signs a PDF link: `presigned` = a 60 s MinIO GET; production uses `cloudfront` (a CloudFront signed URL on the site's `/reports/*`, with `CLOUDFRONT_KEY_PAIR_ID` / `CLOUDFRONT_PUBLIC_KEY` from Terraform and `CLOUDFRONT_PRIVATE_KEY` from sops; security.md § Reports) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
-| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
+| `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe and "Was this useful?" links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
 | `API_PUBLIC_URL` | `http://localhost:3001` | Where a mail client posts an alert's one-click unsubscribe (production: `SITE_URL/api`, the default) |
 | `ALERTS_ENABLED` / `ALERTS_DAILY_CAP` | `true` / `5` | The alert kill switch, and immediate alert emails per person per day |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
@@ -79,6 +84,20 @@ pnpm dev
   opt-in (`pnpm dev:mail:up`, `pnpm dev:s3:up`). Every checkout, git worktrees
   included, drives the same containers: `docker-compose.yml` fixes the compose
   project name, so `pnpm dev:db:down` in any of them stops the shared database.
+- Each checkout has its **own dev database** in that Postgres: `water` in the
+  main checkout, `water_w<n>` in a git worktree (n from a hash of its path,
+  the same as its `water_test_w<n>`). The backend's dev entry points
+  (`backend/src/config/devEnv.ts`) point `DATABASE_URL` and
+  `MIGRATION_DATABASE_URL` at it, and `pnpm dev` / `pnpm dev:db:migrate`
+  create it on first use. A new worktree's database starts empty: run
+  `pnpm seed:examples` there for the demo catchments. This keeps a branch's
+  unmerged migrations out of the main checkout's database; when one branch
+  migrated `water` and then renumbered that migration before merging, the
+  main checkout's dev server refused to start ("applied but its file is
+  missing"). `DEV_DB_NAME=water` (in the worktree's
+  `backend/.env.development.local`) shares the main checkout's database
+  instead; only a local URL naming `water` is redirected, so a custom
+  `DATABASE_URL` is left alone.
 - The backend applies any pending migrations every time it starts or restarts
   (`backend/scripts/dev-server.ts` under `tsx watch`, which also watches `backend/migrations/`).
   So a database set up before a new migration landed, or a `git pull` that adds one while
@@ -106,7 +125,10 @@ Kareebos (Droëvlei), same password; each reads their farm's published
 figures through `GET /projects/:id/farm/:nodeId` (the farm page is
 WP-2.6's). A demo **applicant** (WP-3.3), `applicant@example.com`, is a
 contributor on Sandspruit, linked to Klipdrift, with one submitted
-application doubling its dam: sign in as them for the Applicant view, or as
+application doubling its dam and keeping the EWR in the river before River
+to dam fills it (the hands-off condition a new licence carries, so its
+evidence report passes the river checks, [evidence-pack.md](./evidence-pack.md#what-stops-issue-on-the-river);
+`backend/scripts/examples/application.ts`): sign in as them for the Applicant view, or as
 analyst@ for Sandspruit's **Applications** tab to decide it. To try a **share link** (WP-2.3 phase 2), sign in as the owner
 (analyst@ for Sandspruit, demo@ for the team's catchments), make one on the
 Overview's Share links panel and open it in a private window; none is seeded,
@@ -125,7 +147,7 @@ feature of the current engine:
 | --- | --- |
 | **Kleinberg** (winter rainfall) | A branching network with four fruit farms on drip and micro irrigation. Two winter transfers leave the upper dam by priority. The rain gauge has a blank spell, a logger fault exported as zeros (a flagged zero-rain run) and a fortnight entered as 0 mm (a listed missing period). Bias-corrected CHIRPS fills all three. The weir drowned in the 2013/14 floods, so that water year is excluded from calibration, and its flat top shows in the data checks. A GR4J fit is stored (**Settings → Fit record**), with split-sample and dry → wet validation. |
 | **Droëvlei** (water-stressed) | Farms run short and the EWR is often missed. It has sprinkler, flood and micro irrigation, shallow dams (one a leaky earth dam with seepage), a smaller soil-water store and a higher dam evaporation factor. The curtailment report covers the last four water years. A logger beside the weir drifted high in 2020/21, and the gauge-vs-logger check flags that year. |
-| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. |
+| **Sandspruit** (summer rainfall) | A bigger tree with a mid-catchment gauge and maize under centre pivots. Three transfers: two of equal priority share one dam pro rata, and one has a daily cap. Calibration is scored over a window. It also has a gauge on a neighbouring river as a reference series, a 10-day forecast that extends the run past the record, and a WR2012-style reference: the run notes that its natural flow is 11 % below it. It is the one example with a catchment map (Map tab): boundary, parcels, dams, gauges and streams, all invented. |
 
 Every dam has a surveyed full-supply area, so dam evaporation and rain on the
 dam are not estimated. The only run warnings are the ones each example is built
@@ -160,6 +182,38 @@ still succeeds. If you'd rather not run it at all, put `MAIL_TRANSPORT=log` in
 to the backend console instead. The DB tests use an in-memory transport and
 the e2e stack uses `log`, so neither needs Mailpit.
 
+## Two-step sign-in
+
+An account can add an authenticator app on the Account page (issue #282,
+[security.md § Two-step sign-in](./security.md#two-step-sign-in)): scan the
+QR code with any TOTP app on your phone (Google Authenticator, Microsoft
+Authenticator, Aegis, 1Password …), or type the key it shows. Nothing leaves
+the laptop: the code is checked locally and the QR code is drawn in the page.
+The TOTP secrets are sealed with `APP_ENCRYPTION_KEY`, a `dev-only-`
+placeholder in the committed `backend/.env.development`; changing it voids
+every authenticator set up against your local database.
+
+**Owners, team admins and assessors need it here too**, as in production:
+an owner's actions (members, invites, API keys, data feeds, share links,
+deleting a project), a team admin's, publishing to farmers, deciding an
+application and issuing or withdrawing an evidence pack answer
+`403 mfa_required` until the account has an authenticator, and
+`403 mfa_step_up` from a session signed in before it was added. The seeded
+demo accounts (`pnpm seed:examples`) start without one: set one up on the
+Account page, or, to try those actions without a phone, put
+`MFA_REQUIRED=false` in `backend/.env.development.local` and restart the
+backend (Lambda refuses that setting). With it on, an owner without one sees
+a banner on the workspace pages linking to the Account page; with it off,
+neither that banner nor the Account page's warning shows. The DB tests and the e2e API server
+set it themselves; `stepUp.db.test.ts` and `two-step-signin.spec.ts` test
+the feature with it on and off.
+
+Without a phone, a code for a secret is one line in the backend workspace:
+`pnpm -C backend exec tsx -e "import('./src/auth/totp.ts').then(t => console.log(t.totp(t.base32Decode(process.argv[1]), Date.now())))" <SECRET>`
+(the key the Account page shows, spaces removed). Lost the codes and the
+app locally? `pnpm dev:db:psql`, then
+`DELETE FROM user_recovery_code WHERE user_id = '…'; DELETE FROM user_totp WHERE user_id = '…';`.
+
 ## Alerts
 
 Alert emails (WP-2.13, [architecture.md § Alert emails](./architecture.md#alert-emails))
@@ -174,7 +228,11 @@ go to Mailpit like every other email, sent by the worker, so run
    farmer2@example.com) and the editors and owners.
 2. Mailpit shows the mail with its *Stop these emails* link
    (`/alerts/unsubscribe#t=…`) and its `List-Unsubscribe` headers; the
-   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`.
+   one-click address is `API_PUBLIC_URL/alerts/unsubscribe?token=…`. Under
+   the button, *Was this alert useful? Yes · No* opens
+   `/alerts/feedback#t=…&a=yes|no`: pick an answer, add a comment and press
+   **Send** (opening the link records nothing). The answers show under the
+   rule editor as **Was it useful?**.
 3. Lower the level below the dam (plus 5 points) and save to clear it; raise
    it again for a second crossing and a second mail.
 4. Each person's choices are at `/account/alerts`. More than 5 immediate
@@ -235,7 +293,11 @@ answers every source from the synthetic files in `backend/fixtures/feeds/`,
 re-dated to today, and the panel shows a "Sample data" badge. The sample grid
 is invented: use a cell inside latitude −20.00 to −20.30, longitude 25.00 to
 25.40 (e.g. `-20.12, 25.17`; `-20.27, 25.37` is its "sea", to see a failing
-feed), and any river-gauge (H) code for DWS (e.g. `X0H000`).
+feed), and any river-gauge (H) code for DWS (e.g. `X0H000`). Around it the
+files repeat that grid over 21.0–25.4° E, 20.0–34.0° S (no sea there), so on
+the seeded Sandspruit example **Use the catchment boundary** sets up a rain
+feed from its map's boundary that fetches offline too
+([maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)).
 
 Feeds run on the job worker, so with the worker running (`pnpm dev:full`)
 they fetch daily on their own, and "Run now" fetches at once. Without it:
@@ -308,6 +370,85 @@ that hash on the pack. MinIO keeps it like any object: the production
 bucket's Object Lock retention (infra/packs.tf) has no local stand-in. Without
 the worker the pack's PDF stays "rendering"; `pnpm dev:jobs:tick` prints it.
 
+## Map
+
+The **Map** tab (issue #288, [maps.md](./maps.md)) works on a fresh clone
+with nothing else: features are drawn on a plain background, and GeoJSON
+uploads, points, areas, the quaternary lookup and the dam proposals all
+work. Optional pieces:
+
+```bash
+pnpm import:quaternaries    # the synthetic quaternary dataset (pnpm setup runs it): what Settings → WR2012 check → Propose from the map looks up
+pnpm import:gauge-stations  # the synthetic gauging stations (pnpm setup runs it): what Settings → Data feeds → DWS proposes as the nearest stations
+pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it): what Dams → Proposed from the register and the map proposes capacities from
+pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
+pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal), cut to South Africa and loaded as HydroRIVERS-v10
+pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
+pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
+pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO
+                            # lacks them (first time: downloads the SA extract, about 1 GB at maxzoom 15, needs the pmtiles CLI on PATH),
+                            # and sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in frontend/.env.development.local (PUBLIC_TERRAIN_URL
+                            # too once the relief DEM is cached: it never downloads that); safe to re-run
+pnpm dev:tiles:fetch        # re-download the tiles, then the labels' fonts
+pnpm dev:tiles:fonts        # or only the fonts (Noto Sans glyph ranges, ~14 MB; no pmtiles CLI): the quaternary codes get labels with no basemap
+pnpm dev:tiles:terrain      # the Relief layer's DEM (Copernicus GLO-30, ~2.2 GB at maxzoom 12; TERRAIN_MAXZOOM=11 for ~570 MB); then dev:tiles:up again
+pnpm dev:tiles:water        # tracing a dam's data (JRC Global Surface Water occurrence, ~100 MB of downloads; GDAL or docker); then WATER_URL in backend/.env.development.local
+pnpm dev:tiles:status       # what is cached and what MinIO serves
+```
+
+**Delineate** on the Map needs a DEM on the backend (`DEM_URL`, empty in
+the committed `backend/.env.development`). Put
+`DEM_URL=fixtures/dem/synthetic-dem.pmtiles` in
+`backend/.env.development.local` for the committed synthetic one (invented
+terrain: Enter coordinates 20.7428741, −33.5396777 for its outlet), or
+`DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` after
+`pnpm dev:tiles:terrain` for the real one, and restart `pnpm dev`
+([maps.md § Delineation](./maps.md#delineation)).
+
+**Trace a dam** needs water occurrence data on the backend (`WATER_URL`,
+empty in the committed file). Put
+`WATER_URL=fixtures/water/synthetic-water.pmtiles` in
+`backend/.env.development.local` for the committed synthetic raster
+(invented water: Enter coordinates −33.6724971, 21.3191414 for its dam), or
+`WATER_URL=http://localhost:9002/tiles/water.pmtiles` after
+`pnpm dev:tiles:water` (JRC Global Surface Water; GDAL, or docker for its
+image), and restart `pnpm dev` ([maps.md § Assisted
+drawing](./maps.md#assisted-drawing)).
+
+The fonts come from the Protomaps `basemaps-assets` repository at a pinned
+commit (`TILES_FONTS_REF` overrides it), cached in
+`~/.cache/water-management-tiles/fonts/` and uploaded to MinIO under
+`tiles/fonts/` with their licence (`OFL.txt`). With
+`PUBLIC_TILES_GLYPHS_URL` empty (the committed default) the map draws no
+names and fetches no fonts. The **Quaternary catchments** and **River
+network** layers work with neither: they draw the synthetic outlines and
+reaches and list them beside the map.
+
+The synthetic quaternaries are six invented cells in region Z covering 21.0–21.75° E,
+33.5–34.0° S: a boundary there (the e2e spec's, `e2e/support/map.ts`) gets a
+proposal; anywhere else says no quaternary contains the point. The
+synthetic gauging stations (`Z1H001`–`Z1H005` and a reservoir `Z1R001`) sit
+round the Sandspruit example's outlet, so its Settings → Data feeds →
+**Attach a feed** → DWS lists them nearest first; a real station list loads
+the same way once its licence allows ([maps.md § Gauging-station
+dataset](./maps.md#gauging-station-dataset)).
+
+To see a map without uploading anything, open the **Sandspruit** example
+(`pnpm seed:examples`; analyst@ owns it, demo@ views it; a database seeded before the map existed keeps its map-less examples until `pnpm dev:db:reset` and a re-seed) and its **Map** tab: an
+invented boundary, a parcel and a dam for each farm (linked to its
+hydrological unit, each parcel drawn to the unit's modelled area), the two
+gauges and the four streams, all inside the synthetic quaternaries
+(`backend/scripts/examples/map.ts`). As analyst@, **Use … km²** on a parcel
+proposes the area the model already has, and the WR2012 check's **Propose
+from the map** finds a quaternary. On **Dams**, **Proposed from the register
+and the map** proposes, for most units' dams, an invented registered dam's
+capacity (the synthetic register sits a few hundred metres from the seeded
+dams; Bosrand's is 1.5 km off, so none) and the dam polygon's area; as
+analyst@, **Use** saves one value and History names its source. Real DWS/WR2012
+data is loaded the same way from your own download ([maps.md § Quaternary
+dataset](./maps.md#quaternary-dataset)); never commit it. The DWS register of dams is
+blocked until its licence is confirmed ([maps.md § Sources](./maps.md#sources)).
+
 ## Import the client catchment (demo data)
 
 The client workbooks live outside the repo in `../project-water-management-source/Original/` (never committed). The
@@ -338,6 +479,25 @@ an application). It never updates a project either: to reload one from a
 changed workbook, delete it in the app (or `pnpm dev:db:reset` for a clean
 database) and seed again.
 
+**The fixed workbooks.** The source repo also keeps a fixed copy of each client
+workbook, in `../project-water-management-source/Fixed/workbooks/`: the
+original with the review's formula fixes applied (the findings this repo's
+[engine-audit.md](./engine-audit.md) and [model.md §3](./model.md) describe),
+recalculated, and checked column by column against the engine (that repo's
+`Fixed/README.md` and `Fixed/VERIFICATION.md`). Load them with
+
+```bash
+pnpm seed:demo:fixed
+```
+
+which imports each `*_FIXED_recalculated.xlsx` there as `<Name> (fixed)`, into
+`data/client-<name>-fixed-app/`, beside the original's project; the
+per-workbook settings below apply to both. Expect the two to load almost the
+same model: the app reads only a workbook's inputs (the network, areas, crops,
+rain and flow records, transfer rules) and computes everything itself with
+the corrected methods, so formula fixes don't reach it. What does reach it is
+a fix to an input, such as a client's decision to start the record later.
+
 A b023 gauge column need not measure the modelled catchment itself, so by
 default the seed imports it as a reference gauge (`--gauge-as-reference`)
 rather than as observed flow. Per-workbook settings live beside the workbooks, in
@@ -353,7 +513,9 @@ WBT_GAUGE_SCALE_FACTOR=F
 
 and, for a workbook with units that pump straight from the river, to
 import the units the importer flags as probable run-of-river with the
-run-of-river supply rule (issue #54, 2c/2d; off unless set):
+run-of-river supply rule (issue #54, 2c/2d; off unless set; the in-app
+**Import b023 workbook** review has the same option as its *River pumping
+units* checkbox, [ui.md](./ui.md#import-a-b023-workbook)):
 
 ```bash
 WBT_RUN_OF_RIVER=1
@@ -466,9 +628,9 @@ pnpm dev:jobs:tick          # one job tick, then exit
 pnpm dev:feeds:run          # fetch every enabled data feed once (fixtures by default), then exit
 pnpm dev:db:status          # is Postgres up?
 pnpm dev:db:logs            # follow Postgres logs
-pnpm dev:db:psql            # psql as the owner role
+pnpm dev:db:psql            # psql as the owner role, on this checkout's dev database
 pnpm dev:db:down            # stop Postgres (data is kept in the docker volume)
-pnpm dev:db:reset           # DELETE all local data, recreate and migrate
+pnpm dev:db:reset           # DELETE all local data (every checkout's databases), recreate and migrate
 ```
 
 ## Checks and tests

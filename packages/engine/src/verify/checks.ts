@@ -21,11 +21,12 @@ import { transferActiveMonths, transferDailyLimit } from '../network/transferRat
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
-import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
+import { hasPumpLimit, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey, RIVER_TAKE_SERIES, type PlanTake } from '../network/riverSource';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
-import { DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, defaultProjectSettings, type AllocationLimitBound, type CurtailmentFarm, type DemandObject, type DemandPart, type DroughtRestrictionRule, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 import { FLOW_DAY_FLAGS, FLOW_QUALITY_COLUMN } from '../calibrate/dayFlags';
 import { resolveQualityFlags } from '../calibrate/qualityFlagSettings';
@@ -62,14 +63,17 @@ const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
- * each one's demand and supply series, return share and priority class; null
+ * each one's demand and supply series, return share and supply level; null
  * for a unit without any, an error when a series is missing.
  */
 interface ObjectColumns {
 	demand: number[][];
 	supplied: number[][];
 	returnShare: number[];
+	/** Each object's supply level (engine ≥ 1.64.0, supplyLevels): 0 first, the crops at cropLevel, `levels` in all. */
 	tier: number[];
+	cropLevel: number;
+	levels: number;
 	monthly: Float64Array[];
 	/** Each object's schedule factor per day (engine ≥ 1.17.0), recomputed from the model; null without one. */
 	schedule: (Float64Array | null)[];
@@ -81,7 +85,8 @@ interface ObjectColumns {
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
 	const list = demandObjectsByNode(input.model, []).get(n.id);
 	if (!list) return null;
-	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [], category: [] };
+	const order = supplyLevels(list);
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: order.level, cropLevel: order.cropLevel, levels: order.count, monthly: [], schedule: [], floor: [], category: [] };
 	for (const o of list) {
 		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
 		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
@@ -89,7 +94,6 @@ function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: P
 		out.demand.push(d);
 		out.supplied.push(g);
 		out.returnShare.push(objectReturnShare(o));
-		out.tier.push(PRIORITY_TIER[o.priority] ?? 1);
 		out.monthly.push(objectMonthlyM3Day(o, []));
 		out.schedule.push(scheduleFactors(o.schedule, toEpochDay(run.startDate), run.days, [], ''));
 		out.floor.push(basicNeedsM3Day(o));
@@ -108,6 +112,87 @@ function unitReturn(G: number, returnPerSupplied: number, objs: ObjectColumns | 
 		back += objs.returnShare[k]! * objs.supplied[k]![t]!;
 	}
 	return (G - got) * returnPerSupplied + back;
+}
+
+/** A unit's river abstractions and their published columns (engine ≥ 1.65.0, docs/model.md §2.7j). */
+interface RiverColumns {
+	takes: PlanTake[];
+	cropsOnRiver: boolean;
+	objOnRiver: Uint8Array;
+	got: number[][];
+	pool: (number[] | null)[];
+	evap: (number[] | null)[];
+	/** The pump-limited column (engine ≥ 1.66.0), exactly with a pump capacity; null without one. */
+	pumpLimited: (number[] | null)[];
+}
+
+/**
+ * A unit's river abstractions as the model states them and the run's columns
+ * for each: null without any; an error when a take's column is missing, or a
+ * river_take@ column has no abstraction behind it.
+ */
+function riverColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): RiverColumns | string | null {
+	const river = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
+	const prefixes = [RIVER_TAKE_SERIES.take.prefix, RIVER_TAKE_SERIES.pool.prefix, RIVER_TAKE_SERIES.poolEvaporation.prefix, RIVER_TAKE_SERIES.pumpLimited.prefix];
+	const stray = out.series.find(
+		(x) =>
+			x.nodeId === n.id &&
+			prefixes.some((p) => x.key.startsWith(p)) &&
+			!river?.takes.some(
+				(k) =>
+					x.key === riverTakeKey(k.key) ||
+					(k.pool && (x.key === riverPoolKey(k.key) || x.key === riverPoolEvaporationKey(k.key))) ||
+					(hasPumpLimit(k) && x.key === riverPumpLimitedKey(k.key))
+			)
+	);
+	if (stray) return `${n.id}: a ${stray.key} column without the river abstraction behind it`;
+	if (!river) return null;
+	const cols: RiverColumns = { takes: river.takes, cropsOnRiver: river.cropsOnRiver, objOnRiver: river.objOnRiver, got: [], pool: [], evap: [], pumpLimited: [] };
+	for (const k of river.takes) {
+		const g = get.get(`${n.id}|${riverTakeKey(k.key)}`);
+		const p = k.pool ? get.get(`${n.id}|${riverPoolKey(k.key)}`) : null;
+		const e = k.pool ? get.get(`${n.id}|${riverPoolEvaporationKey(k.key)}`) : null;
+		if (!g || (k.pool && (!p || !e))) return `${n.id}: river abstraction ${k.key} has no ${!g ? 'take' : 'pool'} column`;
+		// Its pump's limit (engine ≥ 1.66.0): exactly with a pump capacity.
+		const pl = hasPumpLimit(k) ? get.get(`${n.id}|${riverPumpLimitedKey(k.key)}`) : null;
+		if (!pl && hasPumpLimit(k)) return `${n.id}: river abstraction ${k.key} has a pump capacity and no pump-limited column`;
+		cols.got.push(g);
+		cols.pool.push(p ?? null);
+		cols.evap.push(e ?? null);
+		cols.pumpLimited.push(pl ?? null);
+	}
+	return cols;
+}
+
+/**
+ * What a unit with river abstractions asks its dam side for each day (engine
+ * ≥ 1.65.0, docs/model.md §2.7j): its dam-sourced demands, the crops' F ÷ e
+ * when theirs and each dam-sourced object's demand, cut by the drought
+ * restriction's level when the rule is on; null for a unit without river
+ * abstractions (its sources are asked for all of its demand).
+ */
+function damSideAsk(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): number[] | null {
+	const riv = riverSourcesOf(n, demandObjectsByNode(input.model, []).get(n.id), []).river;
+	if (!riv) return null;
+	const objs = objectColumns(input, n, get, out);
+	const F = get.get(`${n.id}|crop_requirement`);
+	if (typeof objs === 'string' || !F) return null;
+	const e = runEfficiency(input, n);
+	const DR = get.get(`${n.id}|${RESTRICTION_SERIES.restricted.key}`);
+	const rule = DR ? resolveDroughtRestriction(input.settings.droughtRestriction, []) : null;
+	const LV = get.get(`${n.id}|${RESTRICTION_SERIES.level.key}`) ?? get.get(`null|${RESTRICTION_SERIES.level.key}`);
+	const ask = new Array<number>(out.days).fill(0);
+	for (let t = 0; t < out.days; t++) {
+		const lvl = LV ? LV[t]! : 0;
+		let a = riv.cropsOnRiver ? 0 : rule ? (F[t]! * (1 - checkedCut(rule, lvl, 'crops'))) / e : F[t]! / e;
+		if (objs)
+			for (let k = 0; k < objs.demand.length; k++) {
+				if (riv.objOnRiver[k]) continue;
+				a += rule ? checkedObjectDemand(objs.demand[k]![t]!, checkedCut(rule, lvl, objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
+			}
+		ask[t] = a;
+	}
+	return ask;
 }
 
 /**
@@ -317,7 +402,24 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const XOUT = get.get(`${n.id}|offtake_out`);
 		// Their conveyance losses seeping back to the river below this unit (engine ≥ 1.42.0), part of its outflow.
 		const XRET = get.get(`${n.id}|offtake_loss_return`);
+		// River abstractions' pools (engine ≥ 1.65.0): their change and evaporation leave the unit's balance; each starts full.
+		const riv = riverColumns(input, n, get, out);
+		if (typeof riv === 'string') return riv;
+		const poolPrev = riv ? riv.takes.map((k) => k.pool?.capM3 ?? 0) : [];
 		for (let t = 0; t < out.days; t++) {
+			let pools = 0;
+			if (riv) {
+				for (let a = 0; a < riv.takes.length; a++) {
+					const p = riv.pool[a];
+					if (!p) continue;
+					const v = p[t]!;
+					const capP = riv.takes[a]!.pool!.capM3;
+					if (v < -1e-9 || v > capP + tol(capP)) return `${n.id} day ${t}: pool of river abstraction ${riv.takes[a]!.key} holds ${v}, outside [0, ${capP}]`;
+					if (riv.evap[a]![t]! < 0) return `${n.id} day ${t}: pool evaporation ${riv.evap[a]![t]} < 0`;
+					pools += v - poolPrev[a]! + riv.evap[a]![t]!;
+					poolPrev[a] = v;
+				}
+			}
 			if (SET) {
 				qPrev += SET[t]!;
 				totIn += SET[t]!;
@@ -333,7 +435,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const dep = DEP?.[t] ?? 0;
 			const spl = SPL?.[t] ?? 0;
 			const lhs = H![t]! + I![t]! + J![t]! + qPrev + pd + gw + xin + xret;
-			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout;
+			const rhs = U[t]! + G![t]! - T + Q![t]! + ev + dep + spl + xout + pools;
 			const where = `${n.id} day ${t}`;
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
 			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
@@ -357,7 +459,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			const abNoise = noise + 1e-12 * upAbs;
 			if (AB > 0 || Math.abs(AB - Math.min(AA![t]! - upAA, 0)) > tol(upAA) + abNoise) return `${where}: incremental EWR shortfall ${AB} ≠ MIN(${AA![t]} − ${upAA}, 0)`;
 			totIn += I![t]! + pd + gw + xin + xret;
-			totOut += G![t]! - T + ev + dep + spl + xout;
+			totOut += G![t]! - T + ev + dep + spl + xout + pools;
 			qPrev = Q![t]!;
 		}
 		totOut += qPrev;
@@ -579,7 +681,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farmJ = farms.map((f) => get.get(`${f.id}|transfer`)!);
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	// What a destination's sources are asked for: its demand after the drought restriction when the rule is on (engine ≥ 1.54.0).
-	const farmD = farms.map((f) => get.get(`${f.id}|${RESTRICTION_SERIES.restricted.key}`) ?? get.get(`${f.id}|demand`)!);
+	// A unit with river abstractions (engine ≥ 1.65.0): its dam side's part of it only, as the dam serves no other.
+	const farmD = farms.map((f) => damSideAsk(input, f, get, out) ?? get.get(`${f.id}|${RESTRICTION_SERIES.restricted.key}`) ?? get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
 	const farmRelease = farms.map((f) => resolveRelease(f, []));
 	// The most each destination's dam is drawn each day (engine ≥ 1.31.0, issue #200).
@@ -883,6 +986,16 @@ export function checkReportTotals(input: ModelInput, out: ModelOutput): string |
 		const fs = out.summary.farms.find((f) => f.nodeId === g.nodeId)!;
 		const b = grid(g, farmEwr(g.nodeId!), g.nodeId ?? '?', fs.daysEwrNotMet);
 		if (b) return b;
+	}
+	// River abstractions' pumps (engine ≥ 1.66.0): the summary's pump-limited means and days present exactly
+	// with the column, the mean its daily mean, the days within the run.
+	for (const f of out.summary.farms) {
+		for (const k of f.riverTakes ?? []) {
+			const PL = get.get(`${f.nodeId}|${riverPumpLimitedKey(k.key)}`);
+			if (!!PL !== (k.avgPumpLimitedM3Day !== undefined) || !!PL !== (k.daysPumpLimited !== undefined)) return `river abstraction ${f.nodeId}/${k.key}: pump-limited means ${PL ? 'missing' : 'without the column'}`;
+			if (PL && (!close(k.avgPumpLimitedM3Day!, sum(PL) / out.days, 1e-10, sumAbs(PL) / out.days) || !(k.daysPumpLimited! >= 0 && k.daysPumpLimited! <= PL.filter((v) => v > 0).length)))
+				return `river abstraction ${f.nodeId}/${k.key}: pump-limited mean ${k.avgPumpLimitedM3Day} or ${k.daysPumpLimited} days differ from the daily series`;
+		}
 	}
 
 	// EWR agreement with the observed record: it counts every observed day once,
@@ -1203,6 +1316,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
+		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each pool starts the run full.
+		const riv = riverColumns(input, n, get, out);
+		if (typeof riv === 'string') return riv;
+		const rivPrev = riv ? riv.takes.map((k) => k.pool?.capM3 ?? 0) : [];
 		// The basic-needs floor (engine ≥ 1.44.0): the scenario's restriction alone (a floor holds against it), and
 		// the unit's basic_needs column, Σ MIN(floor, demand) over its floored objects, exactly when it has one.
 		const SC = objs && objs.floor.some((f) => f !== null) ? dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay : null;
@@ -1266,10 +1383,60 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${scaled ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${scaled ? ')' : ''}`;
 			const lvl = LV ? LV[t]! : 0;
-			const dr = DR ? DR[t]! : d;
+			let dr = DR ? DR[t]! : d;
+			// River abstractions (engine ≥ 1.65.0): each takes at most MIN(what it asks, its pump), an object's take is
+			// what it was supplied, and a pool loses its evaporation from its start-of-day surface. The dam side is asked
+			// for the dam-sourced demand only (dr), and gave the rest of G (gd0).
+			let dDay = d;
+			let gRivT = 0;
+			let poolChg = 0;
+			const asks: number[] = [];
+			// Per take (engine ≥ 1.66.0): what it pumped from the flow (its take less what its pool gave) and its pool
+			// once its level had drawn it (before any refill). A pool is drawn or refilled on a day, never both: it is
+			// drawn only once its level has used the flow, which leaves nothing to refill it.
+			const fromFlow: number[] = [];
+			const heldAfter: number[] = [];
+			if (riv) {
+				const cropAsk = rule ? (f * (1 - checkedCut(rule, lvl, 'crops'))) / e : f / e;
+				const objAsk = (k: number) => (rule ? checkedObjectDemand(objs!.demand[k]![t]!, checkedCut(rule, lvl, objs!.category[k]!), objs!.floor[k]!) : objs!.demand[k]![t]!);
+				dr = riv.cropsOnRiver ? 0 : cropAsk;
+				dDay = riv.cropsOnRiver ? 0 : f / e;
+				if (objs)
+					for (let k = 0; k < objs.demand.length; k++) {
+						if (riv.objOnRiver[k]) continue;
+						dr += objAsk(k);
+						dDay += objs.demand[k]![t]!;
+					}
+				for (let a = 0; a < riv.takes.length; a++) {
+					const x = riv.takes[a]!;
+					const ask = x.obj < 0 ? cropAsk : objAsk(x.obj);
+					asks.push(ask);
+					const v = riv.got[a]![t]!;
+					if (v < -tol(0) || v > Math.min(ask, x.pumpM3Day) + tol(ask)) return `${where}: river abstraction ${x.key} pumped ${v}, outside [0, MIN(its demand ${ask}, pump ${x.pumpM3Day})]`;
+					if (x.obj >= 0 && !near(objs!.supplied[x.obj]![t]!, v, v)) return `${where}: demand object ${x.key} was supplied ${objs!.supplied[x.obj]![t]}, not the ${v} its river abstraction pumped`;
+					gRivT += v;
+					fromFlow[a] = v;
+					heldAfter[a] = 0;
+					if (x.pool) {
+						const vp = rivPrev[a]!;
+						const area = vp > 0 ? x.pool.areaFullM2 * Math.pow(Math.min(vp / x.pool.capM3, 1), DAM_AREA_EXPONENT) : 0;
+						const evWant = Math.min((evapMmDay[t]! * area) / 1000, Math.max(vp, 0));
+						const ev = riv.evap[a]![t]!;
+						if (!near(ev, evWant, vp)) return `${where}: pool of river abstraction ${x.key} evaporated ${ev}, not ${evWant} (its start-of-day surface ${area} m²)`;
+						const vq = riv.pool[a]![t]!;
+						const drawn = Math.max(0, vp - ev - vq);
+						fromFlow[a] = v - drawn;
+						heldAfter[a] = Math.min(vq, vp - ev);
+						poolChg += vq - vp + ev;
+						rivPrev[a] = vq;
+					}
+				}
+			}
+			const gd0 = riv ? gg - gRivT : gg;
 			if (objs) {
-				const cuts = rule ? { cut: (c: DemandObject['category']) => checkedCut(rule, lvl, c), crop: f * (1 - checkedCut(rule, lvl, 'crops')) / e } : null;
-				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom, objFactors, cuts);
+				const cropsHere = !riv?.cropsOnRiver;
+				const cuts = rule ? { cut: (c: DemandObject['category']) => checkedCut(rule, lvl, c), crop: cropsHere ? (f * (1 - checkedCut(rule, lvl, 'crops'))) / e : 0 } : null;
+				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, cropsHere ? f / e : 0, gd0, where, SC ? SC[t]! : df, KF ? KF[t]! : 1, t >= abstractFrom, objFactors, cuts, riv?.objOnRiver ?? null);
 				if (bad) return bad;
 				let od = 0;
 				for (const x of objs.demand) od += x[t]!;
@@ -1375,7 +1542,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
 			const sLeft = (RS?.[t] ?? Infinity) - xused;
-			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity, d);
+			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity, dDay);
 			let wantGs: number;
 			let wantGr = 0;
 			const dsl = Math.min(dl, sLeft);
@@ -1393,9 +1560,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(gw, rp.direct, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${rp.direct} (borehole supply order and caps)`;
 			if (!near(gd, rp.dam, Math.max(availScale, d, cap))) return `${where}: groundwater into the dam ${gd} ≠ ${rp.dam}`;
 			if (gd > 0 && avail + gd > cap + tol(Math.max(cap, availScale))) return `${where}: pumped ${gd} into a dam with no room for it`;
-			if (!near(gg - xused - gw - gRiv, wantGs, Math.max(availScale, gd, gRiv)))
-				return `${where}: supplied ${gg} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J${gd ? ' + groundwater into the dam' : ''} − dead storage ${dead}, 0), D ${dr}${DR ? ' after the drought restriction' : ''})${bore ? ` + groundwater ${gw}` : ''}${sup ? ` + from the river ${gRiv}` : ''}`;
-			if (!near(p, avail + gd - (gg - xused - gw - gRiv), Math.max(availScale, gg, gd))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J + groundwater into the dam − what the dam gave`;
+			if (!near(gd0 - xused - gw - gRiv, wantGs, Math.max(availScale, gd, gRiv)))
+				return `${where}: supplied ${gd0}${riv ? ' on the dam side' : ''} ≠ MIN(MAX(Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J${gd ? ' + groundwater into the dam' : ''} − dead storage ${dead}, 0), D ${dr}${DR ? ' after the drought restriction' : ''})${bore ? ` + groundwater ${gw}` : ''}${sup ? ` + from the river ${gRiv}` : ''}`;
+			if (!near(p, avail + gd - (gd0 - xused - gw - gRiv), Math.max(availScale, gg, gd))) return `${where}: interim storage ${p} ≠ Q[t−1] + rain on dam − evaporation − seepage + M + O + K + J + groundwater into the dam − what the dam gave`;
 			if (!near(q, Math.min(p, cap), cap) || !near(r, Math.max(p - cap, 0), cap)) return `${where}: storage ${q} / spill ${r} don't split interim storage ${p} at capacity ${cap}`;
 			if (!near(ss, l + nn - o, Math.max(l, nn, o))) return `${where}: below-dam flow S ${ss} ≠ L + N − O`;
 			if (ZS) {
@@ -1412,9 +1579,48 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				return objs ? `${where}: return flow ${tt} ≠ β·(1 − e) × the crops' part of G + Σ each demand object's return share × its part` : `${where}: return flow ${tt} ≠ β·(1 − e)·G = G × ${returnPerSupplied}`;
 			const spl = SPL?.[t] ?? 0;
 			if (!near(spl, sp * (1 - seepRet), sp)) return `${where}: seepage lost ${spl} ≠ seepage ${sp} × (1 − return ${seepRet})`;
-			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x + xpass - dep - xout + xret, Math.max(r, ss, tt, sp, x, xin, xout, xret)))
+			// What the river abstractions took out of the flow passing the dam (engine ≥ 1.65.0): their takes, less what
+			// their pools gave, plus what refilled them, = Σ take + Σ (ΔV + pool evaporation). At most that flow above what
+			// the unit must leave in the river; while flow is left over (no cap) every take got MIN(its ask, its pump) and
+			// every pool is full.
+			let flowTaken = 0;
+			if (riv) {
+				flowTaken = gRivT + poolChg;
+				const month = monthOfEpochDay(day0 + t);
+				const keepR = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				const past = r + (ss - gRiv) + (sp - spl) + x + xpass;
+				const free = Math.max(0, past - keepR);
+				const sc = Math.max(past, keepR, gRivT);
+				if (flowTaken > free + tol(sc)) return `${where}: the river abstractions took ${flowTaken} from the flow passing the dam, more than the ${free} above the ${keepR} it must leave`;
+				// Each pump's limit (engine ≥ 1.66.0): within the take's shortfall, only once its pump is spent, and, with
+				// no cap, at least the flow left over (the flow its level left can't be less than what was left at the end).
+				for (let a = 0; a < riv.takes.length; a++) {
+					const PLa = riv.pumpLimited[a];
+					if (!PLa) continue;
+					const k = riv.takes[a]!;
+					const pl = PLa[t]!;
+					const got = riv.got[a]![t]!;
+					const short = Math.max(0, asks[a]! - got);
+					if (pl < -tol(0) || pl > short + tol(asks[a]!)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, outside [0, its shortfall ${short}]`;
+					const spent = got >= k.pumpM3Day - tol(Math.max(k.pumpM3Day, asks[a]!));
+					if (pl > tol(asks[a]!) && !spent) return `${where}: river abstraction ${k.key} pump-limited ${pl} with its pump not spent (${got} of ${k.pumpM3Day})`;
+					if (!RS && spent && pl < Math.min(short, free - flowTaken) - tol(sc)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, less than its shortfall ${short} while ${free - flowTaken} of the flow was left`;
+					// No more than was there for it after its level: the flow it may take less what it took from it (the
+					// abstractions at its level and above took at least that), plus its own pool after its draw.
+					const there = Math.max(0, free - fromFlow[a]!) + heldAfter[a]!;
+					if (pl > there + tol(sc)) return `${where}: river abstraction ${k.key} pump-limited ${pl}, more than the ${there} left for it after its level (flow and its pool)`;
+				}
+				if (!RS && free - flowTaken > tol(sc)) {
+					for (let a = 0; a < riv.takes.length; a++) {
+						const k = riv.takes[a]!;
+						if (riv.got[a]![t]! < Math.min(asks[a]!, k.pumpM3Day) - tol(sc)) return `${where}: river abstraction ${k.key} pumped ${riv.got[a]![t]} of ${Math.min(asks[a]!, k.pumpM3Day)} while ${free - flowTaken} of the flow it may take was left`;
+						if (k.pool && riv.pool[a]![t]! < k.pool.capM3 - tol(k.pool.capM3)) return `${where}: pool of river abstraction ${k.key} ends at ${riv.pool[a]![t]} of ${k.pool.capM3} while ${free - flowTaken} of the flow was left to refill it`;
+					}
+				}
+			}
+			if (!near(u, r + (ss - gRiv) + tt + (sp - spl) + x + xpass - dep - xout + xret - flowTaken, Math.max(r, ss, tt, sp, x, xin, xout, xret)))
 				return `${where}: outflow ${u} ≠ R + S${sup ? ' − from the river' : ''} + T + returned seepage${rel ? ' + release' : ''}${XIN ? ' + off-take water passed on' : ''}${bore ? ' − stream depletion' : ''}${XOUT ? ' − taken by river off-takes' : ''}${XRET ? ' + off-take losses seeping back' : ''}`;
-			const vv = h + i + j + pd + gw + gd + xin + xret - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl;
+			const vv = h + i + j + pd + gw + gd + xin + xret - xout - (gg - tt) - ev - (q - qPrev) - u - dep - spl - poolChg;
 			const scale = Math.max(Math.abs(h), Math.abs(i), Math.abs(j), Math.abs(gg), Math.abs(q), Math.abs(qPrev), Math.abs(u), pd, ev, gw, gd, xin, xout, xret);
 			if (Math.abs(v - vv) > tol(scale) || Math.abs(v) > tol(scale)) return `${where}: balance check V ${v} (recomputed ${vv}) is not float noise`;
 			qPrev = q;
@@ -1449,10 +1655,12 @@ function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volum
  * before the unit abstracts), where a restriction (sc < 1) never takes an
  * object with a basic-needs floor below MIN(floor, its unrestricted demand),
  * nor does a full allocation's factor on a restricted day (engine ≥ 1.44.0);
- * each gets between 0 and its demand, together no more than G; classes are
- * served in order (a later class, or the crops after class 0, gets water
- * only once every earlier one is met), and within a class every member
- * (the crops, demand `crop`, in class 1) gets the same share of its demand.
+ * each gets between 0 and its demand, together no more than G; supply
+ * levels (the priority classes, then ranks within a class, engine ≥ 1.64.0)
+ * are served in order (a later level, or the crops after an earlier one,
+ * gets water only once every earlier one is met), and within a level every
+ * member (the crops, demand `crop`, at the 'shared' level) gets the same
+ * share of its demand.
  */
 function checkObjectsDay(
 	objs: ObjectColumns,
@@ -1467,7 +1675,9 @@ function checkObjectsDay(
 	abstracts = true,
 	factors: { df: Float64Array; sc: Float64Array }[] | null = null,
 	/** The drought restriction's cut today (engine ≥ 1.54.0): each object shares by its cut demand, the crops by theirs. */
-	restriction: { cut: (c: DemandObject['category']) => number; crop: number } | null = null
+	restriction: { cut: (c: DemandObject['category']) => number; crop: number } | null = null,
+	/** Objects on a river abstraction (engine ≥ 1.65.0): their demand is checked, but they take no part in the dam side's split of G. */
+	skip: Uint8Array | null = null
 ): string | null {
 	const n = objs.demand.length;
 	let got = 0;
@@ -1475,9 +1685,12 @@ function checkObjectsDay(
 	let scale = Math.max(G, crop);
 	for (let k = 0; k < n; k++) scale = Math.max(scale, objs.demand[k]![t]!);
 	const eps = tol(scale);
-	const share = [NaN, NaN, NaN];
-	const want = [0, crop, 0];
-	const gotBy = [0, 0, 0];
+	const L = objs.levels;
+	const cl = objs.cropLevel;
+	const share = new Array<number>(L).fill(NaN);
+	const want = new Array<number>(L).fill(0);
+	const gotBy = new Array<number>(L).fill(0);
+	want[cl] = crop;
 	for (let k = 0; k < n; k++) {
 		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.54.0).
 		const d = restriction ? checkedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
@@ -1494,24 +1707,25 @@ function checkObjectsDay(
 		if (Math.abs(objs.demand[k]![t]! - expect) > tol(expect))
 			return `${where}: demand object ${k}'s demand ${objs.demand[k]![t]} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}${objs.schedule[k] ? ` × schedule factor ${sf}` : ''}${floored ? `, held at its basic-needs floor ${fl}` : ''}`;
 		if (g < -eps || g > d + eps) return `${where}: demand object ${k} got ${g}, outside [0, its demand ${d}${restriction ? ' after the drought restriction' : ''}]`;
+		if (skip?.[k]) continue;
 		got += g;
 		want[objs.tier[k]!]! += d;
 		gotBy[objs.tier[k]!]! += g;
 		if (d > eps) {
 			const s = g / d;
 			const c = share[objs.tier[k]!]!;
-			if (c === c && Math.abs(c - s) > 1e-9) return `${where}: demand objects of one priority got different shares of their demand (${c} vs ${s})`;
+			if (c === c && Math.abs(c - s) > 1e-9) return `${where}: demand objects of one priority and rank got different shares of their demand (${c} vs ${s})`;
 			share[objs.tier[k]!] = s;
 		}
 	}
 	if (got > G + eps) return `${where}: the demand objects got ${got}, more than the ${G} the unit was supplied`;
-	// The crops' part is what the objects didn't get; in class 1 it takes the class's share.
+	// The crops' part is what the objects didn't get; at their level it takes the level's share.
 	const cropGot = G - got;
-	gotBy[1]! += cropGot;
-	if (crop > eps && share[1] === share[1] && Math.abs(cropGot / crop - share[1]!) > 1e-9 * Math.max(1, scale / crop)) return `${where}: the crops got ${cropGot} of ${crop}, not the share ${share[1]} the demand objects they share with got`;
-	for (let c = 1; c < 3; c++) {
+	gotBy[cl]! += cropGot;
+	if (crop > eps && share[cl] === share[cl] && Math.abs(cropGot / crop - share[cl]!) > 1e-9 * Math.max(1, scale / crop)) return `${where}: the crops got ${cropGot} of ${crop}, not the share ${share[cl]} the demand objects they share with got`;
+	for (let c = 1; c < L; c++) {
 		if (!(gotBy[c]! > eps)) continue;
-		for (let e = 0; e < c; e++) if (gotBy[e]! < want[e]! - eps) return `${where}: a later priority class got water while class ${e} was short (${gotBy[e]} of ${want[e]})`;
+		for (let e = 0; e < c; e++) if (gotBy[e]! < want[e]! - eps) return `${where}: a later supply level got water while level ${e} was short (${gotBy[e]} of ${want[e]})`;
 	}
 	return null;
 }

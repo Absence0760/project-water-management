@@ -11,10 +11,17 @@
 //     each of which a Lambda that checks that setting must refuse.
 // Positive control: the production-shaped env (the same keys Terraform sets)
 // starts every Lambda, entry point included.
+//
+// One esbuild build serves both: the inventory reads its metafile, and the
+// entry-point tests import its bundles natively, a fresh copy each time, the
+// way a Lambda cold start loads one. Not through vitest's module runner: that
+// would transform the whole backend and the engine's source (~3 s of CPU on
+// the shared Vite server alone, far more beside every other file in a full
+// `pnpm test`), which is what made this file time out on a loaded machine.
 import { generateKeyPairSync } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRuntime } from '../__tests__/lambdaRuntime.js';
 import { assertLambdaEnv, assertProductionEnv, productionEnvProblems, ROLES, type Role, SETTINGS } from './production.js';
 import { RUNTIME_SECRETS } from './runtimeSecrets.js';
@@ -33,7 +40,7 @@ const ENTRY: Record<Role, string> = {
 /** Terraform's aws_lambda_function resource for each role. */
 const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fetcher: 'fetcher', renderer: 'renderer', migrate: 'migrate' };
 /** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
-const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'VITEST']);
+const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'NODE_OPTIONS', 'VITEST']);
 
 // Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below):
 // PROD is each environment block, PROD_SECRETS each runtime secret's JSON.
@@ -48,7 +55,7 @@ const pemPair = () =>
 	generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
 const SIGNING = pemPair();
 const PROD_SECRETS: Record<Role, Record<string, string>> = {
-	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey },
+	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey, APP_ENCRYPTION_KEY: 'e'.repeat(64) },
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
 	fetcher: {},
 	renderer: {},
@@ -71,7 +78,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		PACKS_BUCKET: 'water-management-packs-000000000000',
 		REPORT_DOWNLOADS: 'cloudfront',
 		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
-		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey
+		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey,
+		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
+		WATER_URL: 's3://water-management-tiles-000000000000/tiles/water.pmtiles'
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -90,7 +99,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		SES_CONFIGURATION_SET: 'water-management',
 		ALERTS_ENABLED: 'true',
 		ALERTS_DAILY_CAP: '5',
-		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events'
+		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events',
+		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
 	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results') },
 	renderer: {
@@ -108,7 +118,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		DB_NAME: 'water',
 		MASTER_SECRET_ARN: 'arn:aws:secretsmanager:af-south-1:000000000000:secret:rds!db-0000-AbCdEf',
 		...runtimeSecret('migrate'),
-		NODE_EXTRA_CA_CERTS: CA
+		NODE_EXTRA_CA_CERTS: CA,
+		REFERENCE_BUCKET: 'water-management-reference-000000000000',
+		NODE_OPTIONS: '--max-old-space-size=2556'
 	}
 };
 
@@ -127,23 +139,53 @@ const requiredFor = (role: Role, name: string) => !!SETTINGS[name]?.checks?.[rol
 
 /** Env names read by the source modules each entry point reaches. */
 const reachable = {} as Record<Role, Map<string, Set<string>>>;
+/** Each entry point's bundle (a file: URL), and a loader that imports one natively (see the header). */
+const bundle = {} as Record<Role, string>;
+let nativeImport: (url: string) => Promise<Record<string, unknown>>;
+let outDir: string;
+/** Where the bundles' stand-in for config/secretsManager.ts finds the test's Secrets Manager (stubSecretsManager below). */
+const SECRETS_HOOK = '__productionSecurityTestGetSecretString';
 beforeAll(async () => {
 	const { build } = await import('esbuild');
+	// Under node_modules: vitest leaves a module there to Node, so load.mjs's import() is Node's own. Bare imports resolve from backend/node_modules.
+	mkdirSync(`${BACKEND}node_modules/.cache`, { recursive: true });
+	outDir = mkdtempSync(`${BACKEND}node_modules/.cache/production-security-`);
+	writeFileSync(`${outDir}/load.mjs`, 'export const load = (url) => import(url);\n');
+	({ load: nativeImport } = (await import(/* @vite-ignore */ pathToFileURL(`${outDir}/load.mjs`).href)) as { load: typeof nativeImport });
+	// All five in one build, with the flags infra/scripts/package-lambdas.sh bundles them with (less the minifying).
+	const out = await build({
+		entryPoints: Object.fromEntries(ROLES.map((role) => [role, `${SRC}${ENTRY[role]}`])),
+		outdir: outDir,
+		absWorkingDir: BACKEND, // the metafile's paths are relative to it, wherever vitest runs from
+		outExtension: { '.js': '.mjs' },
+		bundle: true,
+		platform: 'node',
+		target: 'node24',
+		format: 'esm',
+		external: ['playwright-core'],
+		banner: { js: "import{createRequire}from'module';const require=createRequire(import.meta.url);" },
+		metafile: true,
+		logLevel: 'silent',
+		plugins: [
+			{
+				// The bundles' Secrets Manager is the test's (it never reaches AWS); the inventory still reads the real file from disk.
+				name: 'test-secrets-manager',
+				setup(b) {
+					b.onLoad({ filter: /[\\/]config[\\/]secretsManager\.ts$/ }, () => ({
+						contents: `export const getSecretString = (...args) => globalThis.${SECRETS_HOOK}(...args);`,
+						loader: 'js'
+					}));
+				}
+			}
+		]
+	});
 	for (const role of ROLES) {
-		const out = await build({
-			entryPoints: [`${SRC}${ENTRY[role]}`],
-			bundle: true,
-			platform: 'node',
-			format: 'esm',
-			external: ['playwright-core'],
-			write: false,
-			metafile: true,
-			logLevel: 'silent'
-		});
+		const [outfile, output] = Object.entries(out.metafile.outputs).find(([f]) => f.endsWith(`/${role}.mjs`))!;
+		bundle[role] = pathToFileURL(`${BACKEND}${outfile}`).href;
 		const names = new Map<string, Set<string>>();
-		const files = Object.keys(out.metafile.inputs).filter((f) => !f.includes('node_modules') && f.endsWith('.ts'));
+		const files = Object.keys(output.inputs).filter((f) => !f.includes('node_modules') && f.endsWith('.ts'));
 		for (const file of files) {
-			const src = readFileSync(file.startsWith('/') ? file : `${BACKEND}${file}`, 'utf8');
+			const src = readFileSync(`${BACKEND}${file}`, 'utf8');
 			// process.env.X, env.X (a function taking `env = process.env`), requireEnv('X').
 			for (const m of src.matchAll(/\b(?:process\.env|env)\.([A-Z][A-Z0-9_]*)\b|requireEnv\('([A-Z][A-Z0-9_]*)'\)/g)) {
 				const name = (m[1] ?? m[2])!;
@@ -158,6 +200,9 @@ beforeAll(async () => {
 		reachable[role] = names;
 	}
 }, 60_000);
+afterAll(() => {
+	if (outDir) rmSync(outDir, { recursive: true, force: true });
+});
 
 /** Each Lambda's environment block in infra/*.tf: key → literal value, or null for an expression. */
 function terraformEnv(): Record<Role, Map<string, string | null>> {
@@ -210,8 +255,7 @@ function devEnv(): [string, string][] {
 
 afterEach(() => {
 	vi.unstubAllEnvs();
-	vi.doUnmock('./secretsManager.js');
-	vi.resetModules();
+	delete (globalThis as Record<string, unknown>)[SECRETS_HOOK];
 });
 
 describe('every setting a Lambda can read is classified', () => {
@@ -307,7 +351,9 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 	const DEV_VALUE_OK: Record<string, string> = {
 		ALERTS_ENABLED: 'true is a real decision in both',
 		REPORTS_BUCKET: 'a name only: each role’s IAM policy grants Terraform’s bucket alone, so a wrong one fails every put',
-		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket'
+		PACKS_BUCKET: 'a name only, as REPORTS_BUCKET: the renderer’s and the API’s roles may put, and the worker’s read, only in Terraform’s packs bucket',
+		DEM_URL: 'empty in the committed file: delineation off, a valid production choice too (a local value is refused: the named local defaults below)',
+		WATER_URL: 'empty in the committed file: tracing a dam off, a valid production choice too (a local value is refused, as DEM_URL)'
 	};
 
 	it.each(ROLES)('%s: every committed backend/.env.development value it checks is refused', (role) => {
@@ -368,9 +414,19 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['migrate', 'MASTER_SECRET_ARN', undefined],
 			['migrate', 'DB_HOST', 'localhost'],
 			['migrate', 'WATER_APP_PASSWORD', 'water_app'],
-			['migrate', 'NODE_EXTRA_CA_CERTS', undefined]
+			['migrate', 'NODE_EXTRA_CA_CERTS', undefined],
+			['api', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
+			['api', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
+			['api', 'DEM_URL', 'https://127.0.0.1/terrain.pmtiles'],
+			['api', 'WATER_URL', 'fixtures/water/synthetic-water.pmtiles'],
+			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
 		];
 		for (const [role, name, value] of cases) expect(problemNames(role, prod(role, { [name]: value })), `${role} ${name}=${value}`).toContain(name);
+	});
+
+	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {
+		for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames('api', prod('api', { DEM_URL: v })), String(v)).not.toContain('DEM_URL');
+		for (const v of [undefined, '', 's3://water-tiles/tiles/water.pmtiles']) expect(problemNames('api', prod('api', { WATER_URL: v })), String(v)).not.toContain('WATER_URL');
 	});
 
 	it('refuses a committed placeholder in any setting, classified or not', () => {
@@ -406,13 +462,9 @@ describe('each entry point runs the check at init', () => {
 		for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value ?? '');
 	}
 
-	const load: Record<Role, () => Promise<unknown>> = {
-		api: () => import('../lambda.js'),
-		worker: () => import('../lambda-worker.js'),
-		fetcher: () => import('../lambda-fetcher.js'),
-		renderer: () => import('../lambda-renderer.js'),
-		migrate: () => import('../lambda-migrate.js')
-	};
+	/** A cold start: a fresh instance of the role's bundle (a new URL is a new module, its whole graph inlined). */
+	let loads = 0;
+	const load = Object.fromEntries(ROLES.map((role) => [role, () => nativeImport(`${bundle[role]}?load=${++loads}`)])) as Record<Role, () => Promise<unknown>>;
 
 	/** Secrets Manager, as the entry point's loader sees it: `secret` for this role's ARN. */
 	function stubSecretsManager(role: Role, secret: Record<string, string>) {
@@ -420,7 +472,7 @@ describe('each entry point runs the check at init', () => {
 			if (id !== SECRET_ARN(role)) throw Object.assign(new Error('not this role’s secret'), { name: 'AccessDeniedException' });
 			return JSON.stringify(secret);
 		});
-		vi.doMock('./secretsManager.js', () => ({ getSecretString: read }));
+		(globalThis as Record<string, unknown>)[SECRETS_HOOK] = read;
 		return read;
 	}
 
@@ -431,7 +483,6 @@ describe('each entry point runs the check at init', () => {
 		await expect(load[role]()).resolves.toHaveProperty('handler');
 		expect(read).toHaveBeenCalledTimes(RUNTIME_SECRETS[role].length ? 1 : 0);
 		for (const k of RUNTIME_SECRETS[role]) expect(process.env[k], k).toBe(PROD_SECRETS[role][k]);
-		vi.resetModules();
 		const name = Object.keys(SETTINGS).find((n) => requiredFor(role, n) && n in PROD[role] && !n.startsWith('RUNTIME_SECRET_'))!;
 		stubProcessEnv(prod(role, { [name]: undefined, ...Object.fromEntries(RUNTIME_SECRETS[role].map((k) => [k, undefined])) }));
 		stubSecretsManager(role, PROD_SECRETS[role]);

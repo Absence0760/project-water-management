@@ -118,6 +118,17 @@ variable "cloudfront_private_key" {
   }
 }
 
+variable "app_encryption_key" {
+  description = "Seals two-step sign-in's TOTP secrets at rest (AES-256-GCM under a key derived from it; backend/src/auth/secretBox.ts). The API only. sops key app_encryption_key; generate with openssl rand -hex 32. Rotating it voids every enrolled authenticator (docs/security.md § Two-step sign-in)."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{32,}$", var.app_encryption_key))
+    error_message = "app_encryption_key in prod.sops.yaml must be 32+ alphanumeric characters (the API refuses shorter). Generate with: openssl rand -hex 32"
+  }
+}
+
 variable "runtime_secret_version" {
   description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed; any change to this number writes every runtime secret again and cold-starts the API, worker and migrate Lambdas. Don't set it in a tfvars file: scripts/tf.sh derives it from prod.sops.yaml's sops.lastmodified (YYYYMMDDhhmmss), so every sops edit rotates, and refuses a var file that pins it. Pass -var runtime_secret_version=… only to force a rewrite of unchanged values (docs/deployment.md § Rotating a secret)."
   type        = number
@@ -160,12 +171,12 @@ variable "db_max_allocated_storage_gb" {
 }
 
 variable "db_backup_retention_days" {
-  description = "Automated backup + point-in-time-recovery window in days."
+  description = "Automated backup + point-in-time-recovery window in days. Must stay below the erasure log's 40 days (backend/src/jobs/runner.ts ERASURE_LOG_RETENTION_DAYS, migration 159), so a restore can always re-apply the erasures made after its restore point; raising the 35-day cap means raising that too."
   type        = number
   default     = 7
   validation {
     condition     = var.db_backup_retention_days >= 7 && var.db_backup_retention_days <= 35
-    error_message = "Keep at least 7 days of backups (max 35)."
+    error_message = "Keep at least 7 days of backups (max 35, below the erasure log's 40 days)."
   }
 }
 
@@ -221,6 +232,31 @@ variable "waf_site_rate_limit_per_ip" {
   validation {
     condition     = var.waf_site_rate_limit_per_ip >= var.waf_rate_limit_per_ip
     error_message = "waf_site_rate_limit_per_ip counts /api/* requests too, so below waf_rate_limit_per_ip it would become the API's limit."
+  }
+}
+
+variable "waf_tiles_rate_limit_per_ip" {
+  description = "WAF rate limit on /tiles/* (the map's PMTiles archives, glyphs): requests per IP per 5-minute rolling window. Each may move up to 2 MiB (tiles_range), so this bounds one address's CloudFront egress: 1000 is ~2 GB per 5 minutes at worst, which the cloudfront-bytes alarm sees in its first period. Real map use is a few hundred range reads in a busy 5 minutes. Between 100 (AWS's minimum) and waf_site_rate_limit_per_ip."
+  type        = number
+  default     = 1000
+  validation {
+    condition     = var.waf_tiles_rate_limit_per_ip >= 100 && var.waf_tiles_rate_limit_per_ip <= var.waf_site_rate_limit_per_ip
+    error_message = "Between 100 (AWS WAF's minimum) and waf_site_rate_limit_per_ip (above it the site-wide rule is the limit and this one bounds nothing)."
+  }
+}
+
+# The egress alarm (alarms.tf cloudfront_bytes). Requests are cheap; bytes are
+# what the tiles cost ($0.110/GB at Africa's edges, $0.085 at US/EU's). A pull
+# just under the threshold from many addresses goes unseen: at 0.5 GB per
+# 5 minutes that is 144 GB a day, ~$12–16 a day, until the daily budget
+# (8–24 h late) says so.
+variable "cloudfront_bytes_alarm_gb_per_5min" {
+  description = "Alarm when CloudFront sends viewers more than this many GB in 5 minutes (BytesDownloaded, us-east-1): the egress alarm for the map's tiles, which the request alarm can't see (one /tiles/ request may be 2 MiB). Default 0.5: a busy 5 minutes for a handful of users is tens of MB; a pull just under it costs ~$12–16/day unseen. Runbook: docs/deployment.md § Runbooks, Request flood."
+  type        = number
+  default     = 0.5
+  validation {
+    condition     = var.cloudfront_bytes_alarm_gb_per_5min >= 0.1 && var.cloudfront_bytes_alarm_gb_per_5min <= 2
+    error_message = "Between 0.1 GB and 2 GB per 5 minutes (at 2 an unseen pull costs ~$50–63 a day, most of the monthly budget in two days)."
   }
 }
 
@@ -285,9 +321,9 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 90 sits above af-south-1's ~$59–64 idle (infra/README.md § Cost), so ACTUAL 80% ($72) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 100 sits above af-south-1's ~$68–75 idle (infra/README.md § Cost), so ACTUAL 80% ($80) doesn't fire at idle; ~70 fits us-east-1 (~$56 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 90
+  default     = 100
 
   validation {
     condition     = var.budget_monthly_usd >= 0
@@ -298,7 +334,7 @@ variable "budget_monthly_usd" {
 # The daily budget is the first-month guard: the monthly FORECASTED alert needs
 # ~5 weeks of history, and daily budgets support ACTUAL notifications only.
 variable "budget_daily_usd" {
-  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $7 on $90, ~3.5× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $8 on $100, ~3.3× af-south-1's ~$2.40/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
   type        = number
   default     = null
 
@@ -363,6 +399,18 @@ variable "lambda_timeout_seconds" {
   }
 }
 
+variable "delineation_dem" {
+  description = "Catchment delineation in production (docs/design/delineation.md, docs/deployment.md § Map tiles): true sets the API's DEM_URL to s3://<tiles bucket>/tiles/terrain.pmtiles and lets its role read that one key. Turn it on only once terrain.pmtiles is uploaded and the Copernicus liability sentence (Art. 6(c)) is in the app's legal notice. false (the default): no Delineate."
+  type        = bool
+  default     = false
+}
+
+variable "dam_trace_water" {
+  description = "Tracing a dam in production (docs/maps.md § Assisted drawing, docs/deployment.md § Map tiles): true sets the API's WATER_URL to s3://<tiles bucket>/tiles/water.pmtiles and lets its role read that one key. Turn it on once water.pmtiles (JRC Global Surface Water, `pnpm dev:tiles:water`) is uploaded. false (the default): no Trace a dam."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_reserved_concurrency" {
   description = <<-EOT
     Max concurrent API Lambda executions. Bounds worst-case spend during an
@@ -379,6 +427,16 @@ variable "lambda_reserved_concurrency" {
   validation {
     condition     = var.lambda_reserved_concurrency >= 1
     error_message = "Must be at least 1: -1 (unreserved) removes the spend and DB-connection cap. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
+}
+
+variable "migrate_memory_mb" {
+  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches, land-cover cells or evaporation cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
+  type        = number
+  default     = 3008
+  validation {
+    condition     = var.migrate_memory_mb >= 3008 && var.migrate_memory_mb <= 10240
+    error_message = "Between 3008 MB (a reference load's 200 MB file peaks near 1.8 GB, geo/referenceLoad.ts MAX_TEXT_BYTES) and 10240 MB (Lambda's maximum)."
   }
 }
 

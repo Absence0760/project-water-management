@@ -440,6 +440,9 @@ const ALLOWED_WITH_IDS = [
 	'POST /projects/:id/scenarios/:sid/members',
 	'DELETE /projects/:id/scenarios/:sid/members/:userId',
 	'GET /projects/:id/scenarios/:sid/packs',
+	// "Ask the assessors why" (164): a party's questions on their own application.
+	'GET /projects/:id/scenarios/:sid/questions',
+	'POST /projects/:id/scenarios/:sid/questions',
 	'PATCH /projects/:id/notes/:noteId',
 	'DELETE /projects/:id/notes/:noteId'
 ];
@@ -452,6 +455,7 @@ const BODY: Record<string, (ids: Record<string, string>) => unknown> = {
 	'POST /projects/:id/scenarios/:sid/withdraw': () => ({}),
 	'POST /projects/:id/scenarios/:sid/reopen': () => ({}),
 	'POST /projects/:id/scenarios/:sid/members': (ids) => ({ userId: ids.userId }),
+	'POST /projects/:id/scenarios/:sid/questions': () => ({ problem: 0, line: 'op 1 (node.set): x' }),
 	'PATCH /projects/:id/notes/:noteId': () => ({ body: 'changed by A' })
 };
 

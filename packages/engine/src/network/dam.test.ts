@@ -182,7 +182,7 @@ describe('dam storage (WP-3.5)', () => {
 		const off = run(input({ damCurve: SURVEY, damCapacityM3: 105_000 }), natural);
 		passed(off);
 		expect(within.summary.warnings.join('\n')).not.toMatch(/tops out/);
-		expect(off.summary.warnings.join('\n')).toMatch(/farm "A": the dam survey curve tops out at 100000 m³ but the capacity is 105000 m³/);
+		expect(off.summary.warnings.join('\n')).toMatch(/unit "A": the dam survey curve tops out at 100000 m³ but the capacity is 105000 m³/);
 	});
 
 	it('the model rules refuse a curve the run could not use, or one on a node without a dam', () => {
@@ -190,7 +190,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelRuleProblems(m)).toEqual(['"A": dam survey curve: the survey area falls from 8000 to 1 m² as the volume rises']);
 		const g = input({}).model;
 		g.nodes[0]!.damCurve = SURVEY;
-		expect(modelRuleProblems(g)).toEqual(['"G": dam survey curve: only a farm has a dam']);
+		expect(modelRuleProblems(g)).toEqual(['"G": dam survey curve: only a unit has a dam']);
 		expect(modelRuleProblems(input({ damCurve: SURVEY }).model)).toEqual([]);
 	});
 

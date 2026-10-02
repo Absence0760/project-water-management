@@ -18,14 +18,4 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-1 strings: 0 on the site, 1 in emails, 0 in the glossary.
-
-## Emails
-
-### mail.alert
-
-Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.
-
-| Id | English | Context | Afrikaans |
-| --- | --- | --- | --- |
-| `mail.alert.stale.seriesWhat` | API data behind |  |  |
+0 strings: 0 on the site, 0 in emails, 0 in the glossary.

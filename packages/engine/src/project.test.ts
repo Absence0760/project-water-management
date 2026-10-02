@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+	DAM_AREA_EXPONENT,
 	defaultProjectSettings,
+	estimatedDamAreaForEngine,
+	estimatedDamAreaM2,
 	IRRIGATION_SYSTEMS,
 	NEW_FARM_IRRIGATION,
 	NEW_FARM_IRRIGATION_SYSTEM,
+	newNetworkNode,
 	PAN_COEFFICIENT_PRESETS,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
@@ -76,5 +80,39 @@ describe('IRRIGATION_SYSTEMS (SABI 2021 system efficiencies, issue #54 Q10)', ()
 		const drip = IRRIGATION_SYSTEMS.find((s) => s.id === NEW_FARM_IRRIGATION_SYSTEM)!;
 		expect(NEW_FARM_IRRIGATION).toEqual({ irrigationEfficiency: drip.efficiency, lossReturnFraction: 0.5 });
 		expect(NEW_FARM_IRRIGATION.irrigationEfficiency).toBe(0.9);
+	});
+});
+
+describe('estimatedDamAreaM2 (Maaren & Moolman 1985, engine ≥ 1.63.0, issue #90 N2)', () => {
+	it('is 7.2 × capacity^0.77 m²: a small dam shallower than a large one', () => {
+		expect(estimatedDamAreaM2(100_000)).toBeCloseTo(7.2 * 100_000 ** 0.77, 9);
+		const depth = (c: number) => c / estimatedDamAreaM2(c);
+		expect(depth(10_000)).toBeCloseTo(1.16, 2);
+		expect(depth(100_000)).toBeCloseTo(1.96, 2);
+		expect(depth(1_000_000)).toBeCloseTo(3.33, 2);
+		expect(estimatedDamAreaM2(0)).toBe(0);
+		expect(estimatedDamAreaM2(-5)).toBe(0);
+	});
+
+	it('gives a stored run the estimate its own engine used: capacity ÷ 3 m before 1.63.0', () => {
+		expect(estimatedDamAreaForEngine(90_000, '1.60.0')).toBe(30_000);
+		expect(estimatedDamAreaForEngine(90_000, '1.62.0')).toBe(30_000);
+		expect(estimatedDamAreaForEngine(90_000, '0.16.0')).toBe(30_000);
+		expect(estimatedDamAreaForEngine(90_000, '1.63.0')).toBe(estimatedDamAreaM2(90_000));
+		expect(estimatedDamAreaForEngine(90_000, '2.0.0')).toBe(estimatedDamAreaM2(90_000));
+		// Absent or unreadable: this engine's.
+		expect(estimatedDamAreaForEngine(90_000)).toBe(estimatedDamAreaM2(90_000));
+		expect(estimatedDamAreaForEngine(90_000, 'dev')).toBe(estimatedDamAreaM2(90_000));
+	});
+});
+
+describe('newNetworkNode (the Network’s Add and the server’s start from the map)', () => {
+	it('makes the outflow gauge when it drains nowhere, else a unit, with the creation defaults', () => {
+		const g = newNetworkNode('g', 0, null);
+		expect(g).toMatchObject({ id: 'g', name: '', kind: 'gauge', downstreamNodeId: null, sortOrder: 0, areaKm2: 0, ewrSite: true });
+		const u = newNetworkNode('u', 3, 'g');
+		expect(u).toMatchObject({ kind: 'farm', downstreamNodeId: 'g', sortOrder: 3, ...NEW_FARM_IRRIGATION, damAreaExponent: DAM_AREA_EXPONENT, pctUpstreamToDam: 1, pctRunoffToDam: 0 });
+		// Two calls share nothing mutable.
+		expect(newNetworkNode('a', 0, 'g')).not.toBe(newNetworkNode('a', 0, 'g'));
 	});
 });

@@ -22,6 +22,7 @@ import {
 	checkPackBundle,
 	declaredRuleRequest,
 	ENGINE_VERSION,
+	localityMapSvg,
 	type Erratum,
 	packManifestText,
 	runEnsemble,
@@ -44,7 +45,7 @@ vi.mock('../jobs/transport.js', async (orig) => ({
 	sendToQueue: async (_url: string | undefined, _name: string, message: Record<string, unknown>) => void sent.push(message)
 }));
 
-import { anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { minioUp, S3_ENDPOINT } from '../__tests__/minio.js';
 import { withUser } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -123,7 +124,50 @@ async function sign(u: User, packId: string, name = 'Dr A. Hydrologist') {
 }
 
 const issue = (u: User, packId: string) => u.call('POST', `${packPath(packId)}/issue`);
+
+const PUMP_CROP = crypto.randomUUID();
+/** The upper farm pumping from the river under run of river for a new crop: no capacity, nothing kept for the EWR (evidence-10). */
+const PUMP = [
+	{ op: 'crop.add', crop: { id: PUMP_CROP, name: 'Lucerne', cropFactor: Array.from({ length: 12 }, () => 0.8) } },
+	{ op: 'cropArea.set', nodeId: '', cropId: PUMP_CROP, areaM2: 50_000 },
+	{ op: 'node.set', nodeId: '', field: 'supplyRule', value: 'runOfRiver' }
+];
+/** A capacity and the EWR kept, so both river checks pass. */
+const PROTECT = [
+	{ op: 'node.set', nodeId: '', field: 'pumpCapacityM3Day', value: 2400 },
+	{ op: 'node.set', nodeId: '', field: 'handsOffEwr', value: true }
+];
+
+/** An application on the baseline owning the upper farm, run, with its paired band on the cited ensemble, so only its own checks can fail. */
+async function scenarioRun(name: string, ops: Record<string, unknown>[]) {
+	const created = await owner.call('POST', `${at()}/scenarios`, { name, baseRunId: baseRun, ops: ops.map((o) => ('nodeId' in o ? { ...o, nodeId: farmId } : o)), ownedNodeIds: [farmId] });
+	expect(created.status, JSON.stringify(created.body)).toBe(201);
+	const ran = await owner.call('POST', `${at()}/scenarios/${created.body.scenario.id}/runs`, {});
+	expect(ran.status, JSON.stringify(ran.body)).toBe(201);
+	const runId = ran.body.run.id as string;
+	const cited = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report.uncertainty.cited.id as string;
+	const base = (await owner.call('GET', `${runPath(baseRun)}/uncertainty/${cited}`)).body.ensemble;
+	await ensemble(runId, { baselineId: cited }, { options: base.options, header: base.result.header, members: base.result.members });
+	return runId;
+}
 const bytesSha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+
+/** A synthetic boundary and the applicant's parcel on the map (§ 1's locality map, evidence-12); deleted by the caller. */
+const square = (lon: number, lat: number, d: number) => [[lon, lat], [lon + d, lat], [lon + d, lat + d], [lon, lat + d], [lon, lat]];
+async function addFeature(body: Record<string, unknown>) {
+	const res = await owner.call('POST', `${at()}/map/features`, body);
+	expect(res.status, JSON.stringify(res.body)).toBe(201);
+	return res.body.feature.id as string;
+}
+async function seedLocality() {
+	return [
+		await addFeature({ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [square(21.3, -33.7, 0.1)] } }),
+		await addFeature({ kind: 'farm_parcel', name: '', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [square(21.31, -33.69, 0.03)] } })
+	];
+}
+const dropFeatures = async (ids: string[]) => {
+	for (const id of ids) expect((await owner.call('DELETE', `${at()}/map/features/${id}`)).status).toBe(204);
+};
 
 /** Issuing a pack stores its reproduction bundle in MinIO (bundle.ts), so the describes that issue need it. */
 const minio = await minioUp('packs.db.test.ts (issuing a pack and what follows)');
@@ -221,7 +265,15 @@ describe('drafting a pack', () => {
 		expect(read.body.manifestMatches).toBe(true);
 		// The issue checklist is an editor's (only editors issue); a viewer gets null.
 		expect(read.body.issue).toBeNull();
-		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({
+			issuable: true,
+			signed: false,
+			runsVerified: true,
+			errataRecorded: true,
+			// The registration check (167): nobody signed yet, and the tests' switch is off (__tests__/setup.ts).
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 	});
 
 	it('freezes an application pack’s licence impact board in the manifest, and its hash still survives storage (evidence-5)', async () => {
@@ -229,7 +281,7 @@ describe('drafting a pack', () => {
 		const read = await viewer.call('GET', packPath(p.id));
 		const manifest = read.body.manifest as PackManifest;
 		expect(read.body.manifestMatches).toBe(true);
-		expect(manifest.report.version).toBe('evidence-9');
+		expect(manifest.report.version).toBe('evidence-15');
 		// The board's floats (the waterfall's means) round-trip through jsonb and re-hash.
 		expect(manifest.report.licenceImpact?.result.status).toBe('ok');
 		const live = (await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report;
@@ -271,6 +323,63 @@ describe('drafting a pack', () => {
 		}
 	});
 
+	it('freezes § 1’s locality map with its SVG’s SHA-256; moving a feature changes the live report, not the pack (evidence-12)', async () => {
+		const features = await seedLocality();
+		try {
+			const p = await draft(editor, appRun);
+			const read = (await viewer.call('GET', packPath(p.id))).body;
+			expect(read.manifestMatches).toBe(true);
+			const loc = (read.manifest as PackManifest).report.localityMap!;
+			expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+				['boundary', null],
+				['applicantParcel', 'Upper']
+			]);
+			expect(loc.svgSha256).toBe(sha256(localityMapSvg(loc).svg));
+			// The parcel moves: the live report draws it elsewhere, the pack keeps what it froze.
+			const moved = await owner.call('PATCH', `${at()}/map/features/${features[1]}`, { geometry: { type: 'Polygon', coordinates: [square(21.35, -33.69, 0.03)] } });
+			expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+			const live = ((await viewer.call('GET', `${runPath(appRun)}/evidence-report`)).body.report as PackManifest['report']).localityMap!;
+			expect(live.svgSha256).not.toBe(loc.svgSha256);
+			const again = (await viewer.call('GET', packPath(p.id))).body;
+			expect(again.manifestMatches).toBe(true);
+			expect((again.manifest as PackManifest).report.localityMap).toEqual(loc);
+			expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+		} finally {
+			await dropFeatures(features);
+		}
+	});
+
+	it('still matches a pack drafted before evidence-12 to its hash: its stored manifest has no locality map, and nothing rebuilds it', async () => {
+		const features = await seedLocality();
+		try {
+			const p = await draft(editor, appRun);
+			const read0 = (await editor.call('GET', packPath(p.id))).body;
+			const now = read0.manifest as PackManifest;
+			expect(now.report.localityMap).toBeTruthy();
+			expect((await editor.call('DELETE', packPath(p.id))).status).toBe(204);
+			// The pack as an evidence-10 draft froze it: the same report without localityMap, under its own id and hash.
+			const id = crypto.randomUUID();
+			const { localityMap: _, ...report } = now.report;
+			const old = { ...now, pack: { ...now.pack, id }, report: { ...report, version: 'evidence-10' } } as unknown as PackManifest;
+			const hash = sha256(packManifestText(old));
+			await asOwner(
+				`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+				 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-10', $8, $9)`,
+				[id, projectId, baseRun, read0.pack.scenarioId, appRun, JSON.stringify(old), hash, now.engine.version, editor.id]
+			);
+			try {
+				const read = (await viewer.call('GET', packPath(id))).body;
+				expect(read.manifestMatches).toBe(true);
+				expect(read.pack.manifestSha256).toBe(hash);
+				expect('localityMap' in read.manifest.report).toBe(false);
+			} finally {
+				expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+			}
+		} finally {
+			await dropFeatures(features);
+		}
+	});
+
 	it('freezes Appendix C’s fixed prompts in the manifest: a later answer changes the live report, not the pack (evidence-8)', async () => {
 		const p = await draft(editor, appRun);
 		const sid = (await editor.call('GET', packPath(p.id))).body.pack.scenarioId as string;
@@ -305,6 +414,95 @@ describe('drafting a pack', () => {
 		const res = await editor.call('POST', `${at()}/packs`, { runId: seedRun });
 		expect(res.status).toBe(409);
 		expect(res.body.details.checks.map((k: { id: string }) => k.id)).toContain('nominated');
+	});
+
+	it('refuses an application whose own river pump has no capacity and leaves the EWR unprotected, naming exactly those checks; capped and protected, it drafts (positive control)', async () => {
+		// Each run's stored model is what the checks read (issue #54, #90 Q15 and Q16, evidence-10).
+		const open = await scenarioRun('Upper pump', PUMP);
+		const res = await editor.call('POST', `${at()}/packs`, { runId: open });
+		expect(res.status).toBe(409);
+		const failing = res.body.details.checks as { id: string; detail: string; fix: string }[];
+		// The paired band is there, so the river checks are all that stop it.
+		expect(failing.map((k) => k.id).sort()).toEqual(['protectsEwr', 'pumpCapacity']);
+		expect(failing.find((k) => k.id === 'pumpCapacity')!.detail).toMatch(/^The application: Upper’s river pump\. /);
+		expect(failing.find((k) => k.id === 'protectsEwr')!.detail).toMatch(/^Upper’s river pump keeps neither the EWR nor a hands-off flow/);
+		const capped = await scenarioRun('Upper pump, capped', [...PUMP, ...PROTECT]);
+		const live = (await viewer.call('GET', `${runPath(capped)}/evidence-report`)).body.report;
+		expect(live.checks.filter((k: { id: string }) => k.id === 'pumpCapacity' || k.id === 'protectsEwr').map((k: { passed: boolean }) => k.passed)).toEqual([true, true]);
+		const ok = await draft(editor, capped);
+		expect((await editor.call('DELETE', packPath(ok.id))).status).toBe(204);
+	});
+
+	it('refuses to issue a pack drafted before evidence-10 on an uncapped pump: its frozen report lacks the checks, the live report has them', async () => {
+		const open = await scenarioRun('Upper pump, old draft', PUMP);
+		// The pack as an evidence-9 draft froze it: the live report without the two checks, which then passed every check.
+		const template = await draft(editor, await scenarioRun('Upper pump, template', [...PUMP, ...PROTECT]));
+		const now = (await editor.call('GET', packPath(template.id))).body.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(template.id))).status).toBe(204);
+		const live = (await viewer.call('GET', `${runPath(open)}/evidence-report`)).body.report as PackManifest['report'];
+		const id = crypto.randomUUID();
+		const checks = live.checks.filter((k) => k.id !== 'pumpCapacity' && k.id !== 'protectsEwr');
+		const old = { ...now, pack: { ...now.pack, id }, report: { ...live, version: 'evidence-9', checks, issuable: true } } as unknown as PackManifest;
+		const sid = (await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [open]))[0]!.scenario_id as string;
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-9', $8, $9)`,
+			[id, projectId, baseRun, sid, open, JSON.stringify(old), sha256(packManifestText(old)), now.engine.version, editor.id]
+		);
+		try {
+			// Its frozen report may be issued (the checklist says so), and it is signed.
+			expect((await editor.call('GET', packPath(id))).body.issue).toMatchObject({ issuable: true });
+			await sign(editor, id);
+			const res = await issue(editor, id);
+			expect(res.status).toBe(409);
+			expect(res.body.error).toMatch(/since its draft was made/);
+			expect((res.body.details.checks as { id: string }[]).map((k) => k.id).sort()).toEqual(['protectsEwr', 'pumpCapacity']);
+			expect((await asOwner('SELECT status FROM evidence_pack WHERE id = $1', [id]))[0]!.status).toBe('draft');
+		} finally {
+			// A signed draft is kept, never deleted: withdrawn, so nothing later meets it.
+			expect((await editor.call('POST', `${packPath(id)}/withdraw`, { reason: 'test: an old draft on an uncapped pump' })).status).toBe(200);
+		}
+	});
+
+	it('keeps a pack drafted before evidence-11 as it froze it: the summed row and its hash, never rebuilt with the combined run (C26)', async () => {
+		const template = await draft(editor, appRun);
+		const now = (await editor.call('GET', packPath(template.id))).body.manifest as PackManifest;
+		expect((await editor.call('DELETE', packPath(template.id))).status).toBe(204);
+		// Positive control: today's draft carries the combined run and its row.
+		expect(now.report.cumulative.combined).toBeDefined();
+		expect(now.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('This and the other applications on this baseline, together');
+		const { combined: _combined, ...cumulative } = now.report.cumulative;
+		void _combined;
+		const summed = {
+			...now.report.rows.find((x) => x.id === 'otherApplications')!,
+			label: 'Other applications on this baseline, summed',
+			basis: 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)'
+		};
+		const id = crypto.randomUUID();
+		const old = {
+			...now,
+			pack: { ...now.pack, id },
+			report: { ...now.report, version: 'evidence-10', cumulative, rows: now.report.rows.map((x) => (x.id === 'otherApplications' ? summed : x)) }
+		} as unknown as PackManifest;
+		const sid = (await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [appRun]))[0]!.scenario_id as string;
+		const sha = sha256(packManifestText(old));
+		await asOwner(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
+			 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, 'evidence-10', $8, $9)`,
+			[id, projectId, baseRun, sid, appRun, JSON.stringify(old), sha, now.engine.version, editor.id]
+		);
+		try {
+			const read = await viewer.call('GET', packPath(id));
+			expect(read.status).toBe(200);
+			expect(read.body.manifestMatches).toBe(true);
+			expect(read.body.pack.manifestSha256).toBe(sha);
+			const got = read.body.manifest as PackManifest;
+			expect(got).toEqual(old);
+			expect(got.report.cumulative).not.toHaveProperty('combined');
+			expect(got.report.rows.find((x) => x.id === 'otherApplications')?.label).toBe('Other applications on this baseline, summed');
+		} finally {
+			expect((await editor.call('DELETE', packPath(id))).status).toBe(204);
+		}
 	});
 
 	it('lets viewers read and not draft; contributors and farmers get 403, a stranger 404', async () => {
@@ -379,10 +577,36 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.cannotSign).toBeNull();
 	});
 
-	it('issues a signed draft, stamping who and when', async () => {
+	it('issues a signed draft, stamping who and when, once the signer’s registration is checked (167: required, as in production)', async () => {
 		const s = await sign(editor, v1.id);
-		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1' });
-		const res = await issue(owner, v1.id);
+		expect(s).toMatchObject({ packId: v1.id, runId: null, statementVersion: 'pack-signoff-1', kind: 'specialist', registrationCheck: null });
+		let res: Awaited<ReturnType<typeof issue>>;
+		vi.stubEnv('REGISTRATION_CHECK_REQUIRED', 'true');
+		try {
+			// No check of the registration recorded: refused, naming the signer, and nothing is bound.
+			const refused = await issue(owner, v1.id);
+			expect(refused.status, JSON.stringify(refused.body)).toBe(409);
+			expect(refused.body).toMatchObject({ code: 'registration_not_checked', details: { signers: ['Dr A. Hydrologist'] } });
+			expect(await asOwner('SELECT 1 FROM signoff_registration_check b JOIN signoff s ON s.id = b.signoff_id WHERE s.pack_id = $1', [v1.id])).toEqual([]);
+			// The host checked the register and an owner records it on the Members page; an editor can't.
+			const check = {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999 / 20',
+				registerName: 'Dr A Hydrologist',
+				outcome: 'registered',
+				checkedByOrg: 'Pack catchment WUA',
+				checkedAt: new Date(Date.now() - 86_400_000).toISOString()
+			};
+			expect((await editor.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check)).status).toBe(403);
+			const recorded = await owner.call('POST', `/projects/${projectId}/members/${editor.id}/registration-checks`, check);
+			expect(recorded.status, JSON.stringify(recorded.body)).toBe(201);
+			const listed = (await editor.call('GET', `${packPath(v1.id)}/signoffs`)).body.signoffs[0];
+			expect(listed.registrationCheck).toMatchObject({ checkedByOrg: 'Pack catchment WUA', bound: false });
+			res = await issue(owner, v1.id);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.pack).toMatchObject({ status: 'issued', issuedBy: 'PkOwner', signoffs: 1 });
 		expect(res.body.pack.issuedAt).toBeTruthy();
@@ -419,6 +643,33 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect((detail.manifest as PackManifest).report.verification.errata.map((e) => e.id)).not.toContain('ER-991');
 		expect(detail.manifestMatches).toBe(true);
 		// v2 (below) is drafted with ER-991 on the list, so records it: its verify lists it once, as recorded.
+	});
+
+	it('keeps an issued pack’s manifest and hash when the authority is named and endorses the baseline afterwards (163, evidence-13)', async () => {
+		const frozen = async () => (await asOwner('SELECT manifest, manifest_sha256, report_version FROM evidence_pack WHERE id = $1', [v1.id]))[0]!;
+		const before = await frozen();
+		expect(before.manifest_sha256).toBe(v1.manifestSha256);
+		expect(before.manifest.report.identity.authority).toBeNull();
+		expect(before.manifest.report.flags.map((f: { id: string }) => f.id)).toContain('notEndorsed');
+		// Name the authority, publish the baseline and endorse it, as a member acting for the authority.
+		const authority = { name: 'Pk catchment management agency', kind: 'cma', office: 'Worcester' };
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { responsibleAuthority: authority } })).status).toBe(200);
+		const pub = await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun });
+		expect(pub.status, JSON.stringify(pub.body)).toBe(201);
+		await actForAuthority(owner, projectId, owner.id);
+		const endorsed = await owner.call('POST', `/projects/${projectId}/publication/${pub.body.publication.id}/endorse`, { note: 'Accepted.' });
+		expect(endorsed.status, JSON.stringify(endorsed.body)).toBe(200);
+		// Positive control: the live report now names both, and drops the flag.
+		const live = (await viewer.call('GET', `${runPath(baseRun)}/evidence-report`)).body.report;
+		expect(live.identity.authority).toEqual(authority);
+		expect(live.identity.baseline.endorsement).toMatchObject({ endorsedBy: 'PkOwner', note: 'Accepted.' });
+		expect(live.flags.map((f: { id: string }) => f.id)).not.toContain('notEndorsed');
+		// The issued pack is as it was issued: its stored manifest, its hash, and what verify and the pack view say.
+		expect(await frozen()).toEqual(before);
+		const detail = (await viewer.call('GET', packPath(v1.id))).body;
+		expect(detail.manifestMatches).toBe(true);
+		expect((detail.manifest as PackManifest).report.identity.authority).toBeNull();
+		expect((await anon('GET', `/verify/${v1.shortCode}`)).body.pack.manifestSha256).toBe(v1.manifestSha256);
 	});
 
 	it('serves the bundle to a viewer as a download whose bytes hash to bundleSha256 and reproduce the run', async () => {
@@ -553,7 +804,19 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		expect(res.body.pack.signers).toEqual([
 			expect.objectContaining({ fullName: 'Dr A. Hydrologist', registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationField: 'water_resources', registrationNo: '400999/20' })
 		]);
-		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual(['fullName', 'registrationBody', 'registrationCategory', 'registrationField', 'registrationNo', 'signedAt']);
+		expect(Object.keys(res.body.pack.signers[0]).sort()).toEqual([
+			'fullName',
+			'kind',
+			'registrationBody',
+			'registrationCategory',
+			'registrationCheck',
+			'registrationField',
+			'registrationNo',
+			'signedAt'
+		]);
+		// The check bound at issue (167): who checked and when, nothing else of it (not the register's name or the note).
+		expect(res.body.pack.signers[0]).toMatchObject({ kind: 'specialist', registrationCheck: { checkedByOrg: 'Pack catchment WUA', checkedAt: expect.any(String) } });
+		expect(Object.keys(res.body.pack.signers[0].registrationCheck).sort()).toEqual(['checkedAt', 'checkedByOrg']);
 		const text = JSON.stringify(res.body);
 		for (const secret of [projectId, baseRun, v1.id, owner.email, editor.email, 'PkOwner', 'PkEditor']) expect(text).not.toContain(secret);
 		expect((await anon('GET', `/verify/${v1.manifestSha256}`)).body.pack.version).toBe(1);
@@ -737,10 +1000,153 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 		});
 	});
 
+	// The server's re-run of v1's runs from its stored bundle (154_pack_reproduce; docs/evidence-pack.md § Reproduction).
+	describe.skipIf(!minio)('its server re-run', () => {
+		const reproduceJobs = () =>
+			asOwner(
+				`SELECT status, dedupe_key AS "dedupeKey", acting_user_id AS "actingUserId", max_attempts AS "maxAttempts", last_error AS error
+				 FROM job WHERE project_id = $1 AND kind = 'pack_reproduce' AND payload->>'packId' = $2 ORDER BY created_at, id`,
+				[projectId, v1.id]
+			);
+		// REPORT_RENDERER=sqs, so a render this tick may claim is a captured message, never a Chromium print.
+		beforeAll(() => {
+			vi.stubEnv('REPORT_RENDERER', 'sqs');
+			vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		});
+		afterAll(() => {
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		});
+
+		it('issuing queued one re-run as the issuer; the tick records it reproduced, with this engine and every check, for whoever reads the pack', async () => {
+			// The PDF tests' ticks above may have run it already; one more runs it if not.
+			await runTick({ feeds: false, reports: false, alerts: false });
+			expect(await reproduceJobs()).toEqual([{ status: 'done', dedupeKey: `pack_reproduce:${v1.id}`, actingUserId: owner.id, maxAttempts: 3, error: null }]);
+			const { reproduction } = (await viewer.call('GET', packPath(v1.id))).body;
+			expect(reproduction).toMatchObject({ status: 'reproduced', engineVersion: ENGINE_VERSION, runEngines: [ENGINE_VERSION], error: null });
+			expect(reproduction.checkedAt).toBeTruthy();
+			expect(reproduction.checks.map((c: { id: string }) => c.id)).toEqual(expect.arrayContaining(['stored', 'files', 'manifest', 'results:baseline', 'reproduce:baseline']));
+			expect(reproduction.checks.every((c: { ok: boolean }) => c.ok)).toBe(true);
+			const [row] = await asOwner('SELECT outcome, engine_version, bundle_sha256 FROM pack_reproduction WHERE pack_id = $1', [v1.id]);
+			expect(row).toEqual({ outcome: 'reproduced', engine_version: ENGINE_VERSION, bundle_sha256: (await viewer.call('GET', packPath(v1.id))).body.pack.bundleSha256 });
+			// Not on verify: it is the app's own claim, not something the pack's hash covers.
+			expect(JSON.stringify((await anon('GET', `/verify/${v1.shortCode}`)).body)).not.toMatch(/reproduc/i);
+			// Nobody outside the pack's readers sees it.
+			for (const u of [contributor, farmer]) expect((await u.call('GET', packPath(v1.id))).status).toBe(403);
+			expect(await withUser(stranger.id, async (db) => (await db.query('SELECT 1 FROM pack_reproduction WHERE pack_id = $1', [v1.id])).rowCount)).toBe(0);
+			expect(await withUser(viewer.id, async (db) => (await db.query('SELECT 1 FROM pack_reproduction WHERE pack_id = $1', [v1.id])).rowCount)).toBe(1);
+		});
+
+		it('records an outcome only from the pack’s own running re-run job, of the bundle it records, once per engine', async () => {
+			const recordAs = (u: User, bundle: string | null, outcome = 'reproduced', engine = ENGINE_VERSION) =>
+				withUser(u.id, (db) =>
+					db.query<{ r: boolean }>('SELECT app_record_pack_reproduction($1, $2, $3, $4, $5, $6) AS r', [v1.id, outcome, engine, [engine], bundle, '[]'])
+				);
+			const bundle = (await asOwner('SELECT bundle_sha256 FROM evidence_pack WHERE id = $1', [v1.id]))[0]!.bundle_sha256 as string;
+			// A member's call, outside any job: refused; and water_app can't write the table at all.
+			await expect(recordAs(owner, bundle, 'reproduced', 'forged-engine')).rejects.toMatchObject({ code: '42501' });
+			await expect(
+				withUser(owner.id, (db) =>
+					db.query(`INSERT INTO pack_reproduction (project_id, pack_id, outcome, engine_version, bundle_sha256, checks) VALUES ($1, $2, 'reproduced', 'x', $3, '[]')`, [projectId, v1.id, bundle])
+				)
+			).rejects.toMatchObject({ code: '42501' });
+			// From a running re-run job of the pack, as its acting user (positive control: past the job check).
+			const { job } = await withUser(owner.id, (db) => enqueueJob(db, { projectId, kind: 'pack_reproduce', payload: { packId: v1.id }, maxAttempts: 1 }));
+			await asOwner(`UPDATE job SET status = 'running', locked_until = now() + interval '1 minute', lease_token = gen_random_uuid(), started_at = now() WHERE id = $1`, [job.id]);
+			try {
+				// Another member, not the job's user: refused.
+				await expect(recordAs(editor, bundle, 'reproduced', 'other-engine')).rejects.toMatchObject({ code: '42501' });
+				// Another bundle than the pack's, or no_bundle for a pack with one: refused.
+				await expect(recordAs(owner, 'c'.repeat(64), 'reproduced', 'other-engine')).rejects.toMatchObject({ code: '23514' });
+				await expect(recordAs(owner, null, 'no_bundle', 'other-engine')).rejects.toMatchObject({ code: '23514' });
+				// This engine's outcome stands: false, nothing changes.
+				expect((await recordAs(owner, bundle, 'not_reproduced')).rows[0]!.r).toBe(false);
+				expect((await asOwner('SELECT outcome FROM pack_reproduction WHERE pack_id = $1', [v1.id])).map((r) => r.outcome)).toEqual(['reproduced']);
+			} finally {
+				await asOwner(`UPDATE job SET status = 'done', finished_at = now(), locked_until = NULL, lease_token = NULL WHERE id = $1`, [job.id]);
+			}
+			// water_app can't change or remove a recorded outcome either: no UPDATE or DELETE grant.
+			await expect(withUser(owner.id, (db) => db.query(`UPDATE pack_reproduction SET outcome = 'not_reproduced' WHERE pack_id = $1`, [v1.id]))).rejects.toMatchObject({ code: '42501' });
+			await expect(withUser(owner.id, (db) => db.query('DELETE FROM pack_reproduction WHERE pack_id = $1', [v1.id]))).rejects.toMatchObject({ code: '42501' });
+		});
+
+		// An editor's "Re-run on the server" (POST …/reproduce): after the job gave up, or on a newer engine.
+		it('re-runs again on request: refused while this engine’s outcome stands, queued once on a newer engine, recorded beside the old', async () => {
+			const rerun = (u: User) => u.call('POST', `${packPath(v1.id)}/reproduce`);
+			// This engine's outcome is recorded (above): it stands, so no re-run is offered or queued.
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', serverEngine: ENGINE_VERSION, canRerun: false });
+			const refused = await rerun(editor);
+			expect(refused.status).toBe(409);
+			expect(refused.body.error).toMatch(/recorded already/);
+			// Editor and above only (the role ladder sweeps the rest).
+			expect((await viewer.call('POST', `${packPath(v1.id)}/reproduce`)).status).toBe(403);
+			const pendingJobs = async () => (await reproduceJobs()).filter((j) => j.status !== 'done').map((j) => [j.status, j.actingUserId]);
+			expect(await pendingJobs()).toEqual([]);
+			// The server's engine moves on: the recorded outcome is now an older engine's.
+			await asOwner(`UPDATE pack_reproduction SET engine_version = '0.0.1-older' WHERE pack_id = $1`, [v1.id]);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: '0.0.1-older', canRerun: true });
+			const asked = await rerun(editor);
+			expect(asked.status).toBe(202);
+			expect(asked.body.reproduction).toMatchObject({ status: 'checking', canRerun: false });
+			// Idempotent while it is pending: the same job comes back, and nothing more is queued.
+			const again = await rerun(owner);
+			expect(again.status).toBe(202);
+			expect(again.body.jobId).toBe(asked.body.jobId);
+			expect(await pendingJobs()).toEqual([['queued', editor.id]]);
+			await runTick({ feeds: false, reports: false, alerts: false });
+			// Recorded beside the older engine's, not in place of it; the newest stands on the page.
+			expect((await asOwner('SELECT engine_version, outcome FROM pack_reproduction WHERE pack_id = $1 ORDER BY checked_at', [v1.id])).map((r) => [r.engine_version, r.outcome])).toEqual([
+				['0.0.1-older', 'reproduced'],
+				[ENGINE_VERSION, 'reproduced']
+			]);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: ENGINE_VERSION, canRerun: false });
+		});
+
+		it('a re-run that gave up says so and may be asked for again (positive control: the next one records)', async () => {
+			// This engine's outcome gone, and the newest job dead, as when the packs bucket was unreachable for all its attempts.
+			await asOwner('DELETE FROM pack_reproduction WHERE pack_id = $1 AND engine_version = $2', [v1.id, ENGINE_VERSION]);
+			await asOwner(
+				`UPDATE job SET status = 'dead', last_error = 'the packs bucket was unreachable' WHERE id = (
+					SELECT id FROM job WHERE project_id = $1 AND kind = 'pack_reproduce' AND payload->>'packId' = $2 ORDER BY created_at DESC, id DESC LIMIT 1)`,
+				[projectId, v1.id]
+			);
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'failed', error: 'the packs bucket was unreachable', canRerun: true });
+			const asked = await editor.call('POST', `${packPath(v1.id)}/reproduce`);
+			expect(asked.status).toBe(202);
+			await runTick({ feeds: false, reports: false, alerts: false });
+			expect((await viewer.call('GET', packPath(v1.id))).body.reproduction).toMatchObject({ status: 'reproduced', engineVersion: ENGINE_VERSION, error: null, canRerun: false });
+		});
+
+		it('a draft is never re-run: no job, state none', async () => {
+			const d = await draft(editor, baseRun);
+			expect((await editor.call('GET', packPath(d.id))).body.reproduction).toEqual({
+				status: 'none',
+				engineVersion: null,
+				runEngines: [],
+				checkedAt: null,
+				checks: [],
+				error: null,
+				serverEngine: ENGINE_VERSION,
+				canRerun: false
+			});
+			// Nor asked for one: 409, and no job.
+			expect((await editor.call('POST', `${packPath(d.id)}/reproduce`)).status).toBe(409);
+			expect(await asOwner(`SELECT 1 FROM job WHERE kind = 'pack_reproduce' AND payload->>'packId' = $1`, [d.id])).toEqual([]);
+			expect((await editor.call('DELETE', packPath(d.id))).status).toBe(204);
+		});
+	});
+
 	it('refuses to issue a signed draft missing an erratum found since it was drafted (409 pack_errata_since_draft); drafted again, it issues (below)', async () => {
 		const stale = await draft(editor, baseRun, v1.id);
 		await sign(editor, stale.id);
-		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({ issuable: true, signed: true, runsVerified: true, errataRecorded: true });
+		expect((await editor.call('GET', packPath(stale.id))).body.issue).toEqual({
+			issuable: true,
+			signed: true,
+			runsVerified: true,
+			errataRecorded: true,
+			registrationUnchecked: [],
+			registrationCheckRequired: false
+		});
 		errataList.push(SINCE_DRAFT);
 		const detail = (await editor.call('GET', packPath(stale.id))).body;
 		expect(detail.issue).toMatchObject({ signed: true, errataRecorded: false });
@@ -819,8 +1225,11 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 describe.skipIf(!minio)('an application pack’s bundle', () => {
 	let first: Awaited<ReturnType<typeof draft>>;
 
-	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists', async () => {
+	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists, and the locality map draws again to its hash', async () => {
+		// The map features are read at drafting: deleted after, the pack keeps its figure.
+		const features = await seedLocality();
 		const p = (first = await draft(editor, appRun));
+		await dropFeatures(features);
 		await sign(editor, p.id);
 		const res = await issue(editor, p.id);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -830,9 +1239,32 @@ describe.skipIf(!minio)('an application pack’s bundle', () => {
 		const checked = await checkPackBundle(bytes as Uint8Array<ArrayBuffer>, { hash, expectManifestSha256: p.manifestSha256 });
 		expect(checked.checks.filter((k) => !k.ok)).toEqual([]);
 		expect(checked.checks.map((k) => k.id)).toEqual(
-			expect.arrayContaining(['changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
+			expect.arrayContaining(['figure:locality', 'changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
 		);
 		expect(checked.ok).toBe(true);
+	});
+
+	it('the server re-run records a stored bundle that isn’t the recorded bytes as not reproduced (the clean pack above reproduced)', async () => {
+		vi.stubEnv('REPORT_RENDERER', 'sqs');
+		vi.stubEnv('RENDER_REQUESTS_QUEUE_URL', 'memory://render-requests');
+		const [row] = await asOwner('SELECT bundle_key, bundle_sha256 FROM evidence_pack WHERE id = $1', [first.id]);
+		const { bytes: original } = await downloadBundle(viewer, first.id);
+		// The stored object replaced by other bytes (MinIO has no Object Lock; production's bucket refuses this).
+		const other = new TextEncoder().encode('not the bundle that was issued');
+		const put = (body: Uint8Array) =>
+			rawS3().send(new PutObjectCommand({ Bucket: packsBucket(), Key: row!.bundle_key, Body: body, ChecksumSHA256: createHash('sha256').update(body).digest('base64') }));
+		try {
+			await put(other);
+			await runTick({ feeds: false, reports: false, alerts: false });
+			const { reproduction } = (await editor.call('GET', packPath(first.id))).body;
+			expect(reproduction).toMatchObject({ status: 'not_reproduced', engineVersion: ENGINE_VERSION, error: null });
+			expect(reproduction.checks).toEqual([{ id: 'stored', ok: false, detail: `the stored bundle hashes to ${bytesSha256(other)}, not the pack’s recorded ${row!.bundle_sha256}` }]);
+			expect((await asOwner(`SELECT status FROM job WHERE kind = 'pack_reproduce' AND payload->>'packId' = $1`, [first.id])).map((j) => j.status)).toEqual(['done']);
+		} finally {
+			await put(original);
+			vi.unstubAllEnvs();
+			sent.length = 0;
+		}
 	});
 
 	it('issues nothing when the bundle can’t be stored; issued again with the store back, it is (positive control)', async () => {

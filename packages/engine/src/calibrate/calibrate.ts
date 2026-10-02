@@ -488,7 +488,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			scoring,
 			observed,
 			rainFlags,
-			zeroRunMask: run.zeroRain?.mask ?? null
+			zeroRunMask: run.zeroRain?.mask ?? null,
+			zeroFlatMinDays: settings.dataQuality.flatlineFlowMaxDays
 		}),
 		reference: input.series?.flow_reference_m3s ? Float64Array.from(aligned('flow_reference_m3s'), (v) => (v === null ? NaN : v)) : null,
 		natural,
@@ -551,14 +552,17 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
 /**
  * Score a parameter set on the given days of a record (the calibration
  * record by default), with the scores' bootstrap intervals and benchmarks
- * unless `bare` (a start's score, where only the objective is read).
+ * unless `bare` (a start's score, where only the objective is read). Given
+ * `benchFrom` (a validation period's calibration days on the same record),
+ * the benchmarks are built from those days' flows (engine ≥ 1.62.0, CR-5).
  */
 function scored(
 	pb: CalibrationProblem,
 	p: ParamSet,
 	idx: Int32Array,
 	rec: Pick<RecordProblem, 'observed' | 'simulate' | 'censor'> = pb,
-	bare = false
+	bare = false,
+	benchFrom?: Int32Array
 ): ScoredPeriod {
 	const sim = rec.simulate(p);
 	// Censored above-rating days count as met once the simulation reaches the highest gauging (CR-19).
@@ -578,7 +582,11 @@ function scored(
 	out.benchmarks = scoreBenchmarks(
 		o,
 		Int32Array.from(idx, (t) => d0 + t),
-		years
+		years,
+		undefined,
+		benchFrom?.length
+			? { o: Float64Array.from(benchFrom, (t) => rec.observed[t]!), days: Int32Array.from(benchFrom, (t) => d0 + t) }
+			: undefined
 	);
 	return out;
 }
@@ -846,7 +854,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		const a = all.slice(0, half);
 		const b = all.slice(half);
 		const p1 = run(a, 'split', seed + 1);
-		splitSample = { params: p1, calibration: scored(pb, p1, a), validation: scored(pb, p1, b) };
+		splitSample = { params: p1, calibration: scored(pb, p1, a), validation: scored(pb, p1, b, pb, false, a) };
 	}
 	if (opts.validate !== false && !cancelled) {
 		// Differential split-sample: driest half of the water years vs the wettest,
@@ -892,7 +900,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 			differential = {
 				params: pd,
 				calibration: scored(pb, pd, di),
-				validation: scored(pb, pd, wi),
+				validation: scored(pb, pd, wi, pb, false, di),
 				dryYears: dry.map((y) => y.year).sort((p, q) => p - q),
 				wetYears: wet.map((y) => y.year).sort((p, q) => p - q),
 				wetDryRatio: ratio,

@@ -1,9 +1,10 @@
 // /projects/:id/allocations — registered and licensed water-use volumes per
 // farm or water user, and how a run's modelled use compares with them
 // (roadmap WP-3.10 first slice; docs/allocations.md, docs/api.md
-// § Allocations). Viewers read volumes; holder names only for editors and
-// owners (decision D3, allocation_holder's RLS in 038_allocations.sql); editors
-// write. Farmers get 403 here like on every viewer route: RLS already scopes
+// § Allocations). Holder names only for editors and owners (decision D3,
+// allocation_holder's RLS in 038_allocations.sql); editors write. Viewers read
+// each volume only when an owner allows it (162, allocation_select), else
+// totals per water source at 5 or more holders (viewerUnits.ts). Farmers get 403 here like on every viewer route: RLS already scopes
 // them to their own farms for when the farm view shows their allocation.
 //
 // The app never decides whether a use is lawful: every response and screen
@@ -42,6 +43,7 @@ import {
 	type ParsedRow
 } from './parse.js';
 import { runUseNodes } from './runUse.js';
+import { allocationUnitsHidden, comparisonTotals, loadVolumes, volumeTotals } from './viewerUnits.js';
 
 /** Most allocations per project (a catchment's WARMS extract is hundreds of rows, not thousands). */
 export const ALLOCATIONS_PER_PROJECT_MAX = 5000;
@@ -129,18 +131,25 @@ const PatchBody = z
 	.refine((b) => Object.keys(b).length > 0, 'send at least one field')
 	.refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] });
 
-const ImportBody = z
+const IMPORT_FIELDS = {
+	kind: z.enum(['warms_extract', 'csv']),
+	fileName: text(255).pipe(z.string().min(1, 'file name is required')),
+	text: z.string().max(IMPORT_MAX_CHARS, `the file is larger than ${IMPORT_MAX_CHARS / 1024 / 1024} MB`),
+	reference: text(500).default('')
+};
+/** A WARMS extract says how it was obtained (162, D3; operator agreement 3A.1(d)): the DWS or CMA letter or terms. */
+export const WARMS_REFERENCE_REQUIRED = 'say how you obtained this extract (the DWS or CMA letter or terms) in its reference';
+const warmsReference = (b: { kind: string; reference: string }) => b.kind !== 'warms_extract' || b.reference.trim() !== '';
+const ImportBody = z.object(IMPORT_FIELDS).strict().refine(warmsReference, { message: WARMS_REFERENCE_REQUIRED, path: ['reference'] });
+const CommitBody = z
 	.object({
-		kind: z.enum(['warms_extract', 'csv']),
-		fileName: text(255).pipe(z.string().min(1, 'file name is required')),
-		text: z.string().max(IMPORT_MAX_CHARS, `the file is larger than ${IMPORT_MAX_CHARS / 1024 / 1024} MB`),
-		reference: text(500).default('')
+		...IMPORT_FIELDS,
+		/** Manual matches from the preview, by file line: a node id, or null to leave the row unmatched. */
+		matches: z.record(z.string().regex(/^\d+$/), z.string().uuid().nullable()).default({})
 	})
-	.strict();
-const CommitBody = ImportBody.extend({
-	/** Manual matches from the preview, by file line: a node id, or null to leave the row unmatched. */
-	matches: z.record(z.string().regex(/^\d+$/), z.string().uuid().nullable()).default({})
-}).strict();
+	.strict()
+	.refine(warmsReference, { message: WARMS_REFERENCE_REQUIRED, path: ['reference'] });
+const ViewerUnitsBody = z.object({ on: z.boolean() }).strict();
 
 /** A one-off band for the comparison (`?tolerance=`); absent = the project's settings.allocationTolerance. */
 const TOLERANCE = z.coerce.number().min(0).lt(1).optional();
@@ -227,7 +236,7 @@ async function matchNodes(db: Db, projectId: string): Promise<MatchNode[]> {
 async function checkNode(db: Db, projectId: string, nodeId: string | null | undefined) {
 	if (!nodeId) return;
 	const { rows } = await db.query('SELECT 1 FROM node WHERE project_id = $1 AND id = $2 AND kind IN (\'farm\', \'user\')', [projectId, nodeId]);
-	if (!rows[0]) throw new ApiError(400, 'nodeId is not a farm or water user of this project');
+	if (!rows[0]) throw new ApiError(400, 'nodeId is not a unit or water user of this project');
 }
 
 async function countAllocations(db: Db, projectId: string): Promise<number> {
@@ -253,7 +262,7 @@ export interface PreviewRow extends ParsedRow {
 }
 
 /** Parse, hash and match a file; the preview and the commit both start here. */
-async function prepareImport(db: Db, projectId: string, body: z.infer<typeof ImportBody>, manual: Record<string, string | null> = {}) {
+async function prepareImport(db: Db, projectId: string, body: Omit<z.infer<typeof CommitBody>, 'matches'>, manual: Record<string, string | null> = {}) {
 	let table;
 	try {
 		table = parseAllocationTable(body.text, body.kind as AllocationSourceKind);
@@ -286,7 +295,7 @@ async function prepareImport(db: Db, projectId: string, body: z.infer<typeof Imp
 		let matchedBy: PreviewRow['matchedBy'] = auto.matchedBy;
 		if (Object.hasOwn(manual, line)) {
 			const m = manual[line]!;
-			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen node is not a farm or water user of this project`);
+			if (m !== null && !nodeIds.has(m)) throw new ApiError(400, `line ${line}: the chosen node is not a unit or water user of this project`);
 			nodeId = m;
 			matchedBy = m === null ? null : 'manual';
 		}
@@ -318,7 +327,12 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const allocations = await loadAllocations(db, id);
 			// The farms and water users an allocation can be matched to.
 			const nodes = await matchNodes(db, id);
-			return c.json({ allocations, sources, nodes, canSeeHolders: rank[role] >= rank.editor });
+			const { rows: flag } = await db.query<{ on: boolean }>('SELECT app_allocations_viewer_units($1) AS "on"', [id]);
+			const viewerUnits = !!flag[0]?.on;
+			// A viewer the owners haven't let read each volume: RLS gave them no row; totals per water source instead (D3).
+			const unitsHidden = role === 'viewer' && !viewerUnits;
+			const totals = unitsHidden ? volumeTotals(await loadVolumes(db, id), new Date().toISOString().slice(0, 10)) : null;
+			return c.json({ allocations, sources, nodes, canSeeHolders: rank[role] >= rank.editor, viewerUnits, unitsHidden, totals });
 		});
 	})
 	.post('/:id/allocations', async (c) => {
@@ -506,11 +520,24 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		});
 	})
-	// The allocations as a CSV in the template's layout (holder names for editors only).
+	// Whether viewers read each registered volume (162, D3): owners only. Switch it on only if every viewer works for, or was
+	// appointed by, the organisation; outside readers (an NGO commenting) get totals at 5 or more holders.
+	.put('/:id/allocations/viewer-units', async (c) => {
+		const id = c.req.param('id');
+		const body = ViewerUnitsBody.parse(await readJson(c));
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'owner');
+			const { rows } = await db.query<{ changed: boolean }>('SELECT app_set_allocations_viewer_units($1, $2) AS changed', [id, body.on]);
+			if (rows[0]?.changed) await recordAudit(db, id, 'allocation.viewer_units', { on: body.on });
+			return c.json({ viewerUnits: body.on });
+		});
+	})
+	// The allocations as a CSV in the template's layout (holder names for editors only; a viewer who can't read each volume, 403).
 	.get('/:id/allocations/export.csv', async (c) => {
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'viewer');
+			if (await allocationUnitsHidden(db, id, role)) throw new ApiError(403, 'each registered volume is shown to this project’s editors and owners only');
 			const withNames = rank[role] >= rank.editor;
 			// One client, one query at a time.
 			const { rows: proj } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
@@ -563,7 +590,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 		const { id, runId } = c.req.param();
 		const q = z.object({ tolerance: TOLERANCE }).parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 			const { rows: run } = await db.query<{
 				label: string;
@@ -586,6 +613,11 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			// The band: a one-off ?tolerance=, else the project's setting now (issue #72), so every run reads against the same one.
 			const tolerance = q.tolerance ?? mergeSettings(r.settings).allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
 			const nodes = await runUseNodes(db, runId, r.startDate, r.forecastFrom, r.nodes);
+			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
+			const runOut = { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom, allocationMode };
+			// A viewer who can't read each volume (162, D3): the use summed per water source and year, at 5 or more holders.
+			if (await allocationUnitsHidden(db, id, role))
+				return c.json({ run: runOut, comparison: null, capYears: [], totals: comparisonTotals({ startDate: r.startDate, nodes, tolerance, rows: await loadVolumes(db, id) }) });
 			const allocations = await loadAllocations(db, id);
 			const comparison = compareAllocations({
 				startDate: r.startDate,
@@ -602,8 +634,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					validTo: a.validTo
 				}))
 			});
-			// What the run's allocation mode did to its use (engine ≥ 1.18.0; a run before it compared only).
-			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
+			// What the run's allocation mode did to its use (engine ≥ 1.18.0; a run before it compared only): allocationMode, above.
 			// A cap run's water years per unit and source (engine ≥ 1.18.0): the years the volume was used up and
 			// (engine ≥ 1.40.0; null before) the days the licence limit bound, by limit. From the run's own summary.
 			const capYears =
@@ -612,6 +643,6 @@ export const allocationRoutes = new Hono<AuthEnv>()
 							n.sources.map((x) => ({ nodeId: n.nodeId, waterSource: x.waterSource, capReached: x.capReached ?? [], limitBound: x.limitBound ?? null }))
 						)
 					: [];
-			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom, allocationMode }, comparison, capYears });
+			return c.json({ run: runOut, comparison, capYears, totals: null });
 		});
 	});

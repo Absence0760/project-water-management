@@ -15,6 +15,8 @@ function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>) {
 		landCover: !!summary.landCover,
 		groundwater: [...farms, ...others].some((f) => f.avgGroundwaterM3Day !== undefined),
 		demandObjects: farms.some((f) => !!f.demandObjects?.length),
+		// A unit's river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j), with their pumps' limits from 1.66.0.
+		riverTakes: farms.some((f) => !!f.riverTakes?.length),
 		users: others.length > 0,
 		// Other water users with a pump capacity (engine ≥ 1.58.0): their own table, drawn beside the curtailment table too.
 		userPumps: others.some((u) => u.avgPumpLimitedM3Day !== undefined)
@@ -23,12 +25,12 @@ function parts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>) {
 
 /**
  * The run has any of the tables: land cover, boreholes (units or users), a
- * unit's demand objects, other water users' pumps (engine ≥ 1.58.0), or,
- * with `users`, other water users.
+ * unit's demand objects, its river abstractions (engine ≥ 1.65.0), other
+ * water users' pumps (engine ≥ 1.58.0), or, with `users`, other water users.
  */
 export function hasHumanImpacts(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms'>, users = true): boolean {
 	const p = parts(summary);
-	return p.landCover || p.groundwater || p.demandObjects || p.userPumps || (users && p.users);
+	return p.landCover || p.groundwater || p.demandObjects || p.riverTakes || p.userPumps || (users && p.users);
 }
 
 /**
@@ -47,7 +49,7 @@ export const usersTableOnSupply = (summary: Pick<RunSummary, 'curtailment'>): bo
 export function otherUsesLink(summary: Pick<RunSummary, 'landCover' | 'users' | 'farms' | 'curtailment'>): { hash: 'res-other-uses' | 'res-curtailment'; what: string; where: string } | null {
 	const p = parts(summary);
 	const usersHere = usersTableOnSupply(summary);
-	const names = [p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.users && usersHere && 'other water users', p.userPumps && 'other water users’ pumps'].filter(
+	const names = [p.landCover && 'land cover', p.groundwater && 'groundwater', p.demandObjects && 'demand objects', p.riverTakes && 'river abstractions', p.users && usersHere && 'other water users', p.userPumps && 'other water users’ pumps'].filter(
 		(x): x is string => !!x
 	);
 	if (names.length) {

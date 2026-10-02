@@ -8,11 +8,13 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
 import { queueAlertEval } from '../alerts/queue.js';
 import { wakeWorker } from '../jobs/wake.js';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
 import { runVerified } from './stamp.js';
 import { EVIDENCE_STATUS_SQL } from './evidence.js';
+import { withErrata, type RunEngines } from '../errata/runs.js';
 import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUNS_PER_PROJECT_MAX, RUN_KEPT_SQL, RUN_PUBLISHED_SQL, runFailure, runLiveModel, trimRuns } from './execute.js';
 
 // A run saved before settings.runoffModel existed (engine < 0.5.0) ran the
@@ -28,7 +30,9 @@ import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUN
 // with input series but no stored references is from before 021;
 // `trigger`: what made it, 'manual', 'auto' or 'forecast' (042_auto_rerun,
 // WP-2.11, WP-2.12); `forecastFrom`: a forecast run's first forecast day
-// (summary.forecast.from), else null.
+// (summary.forecast.from), else null; `fitEngineVersion`: the engine of the
+// automatic fit its parameters came from (settings.fitRecord), else null, so
+// the run list can flag the errata a `fit` erratum keys on (issue #103).
 const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_date AS "startDate",
 	r.end_date AS "endDate", r.created_at AS "createdAt", u.display_name AS "createdBy",
 	COALESCE(r.inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
@@ -40,7 +44,8 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	${CITED_BY_SQL} AS "citedBy",
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,
-	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom"`;
+	r.trigger, r.summary->'forecast'->>'from' AS "forecastFrom",
+	r.inputs->'settings'->'fitRecord'->>'engineVersion' AS "fitEngineVersion"`;
 const FROM_RUN = `FROM model_run r LEFT JOIN app_user u ON u.id = r.created_by LEFT JOIN app_user nu ON nu.id = r.notes_updated_by
 	LEFT JOIN scenario sc ON sc.id = r.scenario_id`;
 /** A run's metadata columns and the FROM they need, for routes elsewhere that answer with a run (scenario runs). */
@@ -99,16 +104,17 @@ export const runRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs', async (c) =>
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
-			const { rows } = await db.query(`SELECT ${RUN_META} ${FROM_RUN} WHERE r.project_id = $1 ORDER BY r.created_at DESC`, [
+			const { rows } = await db.query<RunEngines>(`SELECT ${RUN_META} ${FROM_RUN} WHERE r.project_id = $1 ORDER BY r.created_at DESC`, [
 				c.req.param('id')
 			]);
-			return c.json({ runs: rows });
+			// The known engine bugs that may affect each run (issue #103, errata/runs.ts).
+			return c.json({ runs: rows.map((r) => withErrata(r)) });
 		})
 	)
 	.get('/:id/runs/:runId', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
+			const role = await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 			// The run's own settings snapshot: its fit record and calibration
 			// exclusions are the provenance of its parameters and scores. Its
@@ -136,7 +142,9 @@ export const runRoutes = new Hono<AuthEnv>()
 				 FROM run_series WHERE run_id = $1 ORDER BY node_id NULLS FIRST, key`,
 				[runId]
 			);
-			return c.json({ run: rows[0], series });
+			// A viewer who can't read each registered volume (162, D3) gets the run without its copy of them.
+			const run = (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations(rows[0]) : rows[0];
+			return c.json({ run: withErrata(run as RunEngines), series });
 		});
 	})
 	.get('/:id/runs/:runId/series', async (c) => {

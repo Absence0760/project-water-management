@@ -28,23 +28,31 @@ import {
 	BASIS_NO_FLOW,
 	BASIS_PRAGMATIC,
 	citedEnsemble,
-	CUMULATIVE_BASIS,
-	CUMULATIVE_NO_BAND,
-	CUMULATIVE_NONE,
-	CUMULATIVE_TRUNCATED,
+	COMBINED_BASIS,
+	COMBINED_CONFLICT,
+	COMBINED_LABEL,
+	COMBINED_NO_BAND,
+	COMBINED_NONE,
+	COMBINED_NOT_RUN,
+	COMBINED_ONE,
+	COMBINED_PENDING,
+	COMBINED_PROBLEMS,
 	DEMAND_OBJECTS_NONE,
 	driestMonth,
 	evidenceChecks,
 	evidenceReport,
+	otherUnitsName,
 	firstSiteBelow,
 	NO_BAND,
+	NOT_ENDORSED,
 	NOT_ASSESSED_NO_SITE_BELOW,
 	worksNodeIds
 } from './report';
 import type { EnsembleHeader, MemberMetrics, MemberResult } from '../uncertainty/ensemble';
 import { ENSEMBLE_MEASURES_SINCE } from '../version';
 import type { ScenarioOp } from '../scenario/ops';
-import type { EvidenceEnsembleInput, EvidenceInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
+import { cumulativeImpact } from '../scenario/cumulative';
+import type { EvidenceAssessmentInput, EvidenceCombinedInput, EvidenceEnsembleInput, EvidenceInput, EvidenceMapFeatureInput, EvidenceOtherApplicationInput, EvidenceRunInput } from './types';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -226,6 +234,7 @@ function input(over: Partial<EvidenceInput> = {}): EvidenceInput {
 		applicationRuns: [{ runId: 'app', label: 'app', scenarioName: 'Farm two dam', createdAt: '2026-09-03T00:00:00.000Z', createdBy: 'Applicant' }],
 		otherApplications: [],
 		otherApplicationsTruncated: false,
+		combined: { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false },
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: 'd-1' },
 		...over
 	};
@@ -322,7 +331,7 @@ describe('evidenceReport: an application on the nominated run', () => {
 	});
 
 	it('carries every fixed prompt of Appendix C, an unanswered one as empty (evidence-8)', () => {
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-15');
 		expect(r.applicantStatement?.prompts).toEqual({
 			purposeAndNeed: 'Winter storage for 60 ha of citrus.',
 			mitigation: '',
@@ -391,6 +400,210 @@ describe('evidenceChecks: every refusal, each with its positive control', () => 
 	});
 });
 
+describe('licensing checks on the river abstraction (issue #54, #90 Q15 and Q16, evidence-10)', () => {
+	type Model = EvidenceRunInput['inputs']['model'];
+	type Scn = NonNullable<EvidenceInput['application']>['scenario'];
+	const check = (i: EvidenceInput, id: string) => evidenceChecks(i).find((c) => c.id === id);
+	/** The fixture with its two stored models edited, and the application's ops (all proposals unless classified). */
+	const withModels = (edit: { base?: (m: Model) => Model; app?: (m: Model) => Model; ops?: ScenarioOp[]; classified?: Scn['classified'] }) => {
+		const i = input();
+		const a = i.application!;
+		const ops = edit.ops ?? a.scenario.ops;
+		return {
+			...i,
+			baseline: { ...i.baseline, inputs: { ...i.baseline.inputs, model: (edit.base ?? ((m) => m))(i.baseline.inputs.model) } },
+			application: {
+				...a,
+				inputs: { ...a.inputs, model: (edit.app ?? ((m) => m))(a.inputs.model) },
+				scenario: { ...a.scenario, ops, classified: edit.classified ?? ops.map(() => 'proposal' as const) }
+			}
+		};
+	};
+	const setNode = (id: string, over: Partial<NetworkNode>) => (m: Model): Model => ({ ...m, nodes: m.nodes.map((n) => (n.id === id ? { ...n, ...over } : n)) });
+	const addNode = (n: NetworkNode) => (m: Model): Model => ({ ...m, nodes: [...m.nodes, n] });
+	const both = (f: (m: Model) => Model) => ({ base: f, app: f });
+	const town = node({ id: 'T', name: 'Town', kind: 'user', downstreamNodeId: 'G', userDemandM3Day: new Array(12).fill(800) });
+	const offtake = (over: Partial<import('../project').Transfer> = {}): import('../project').Transfer => ({
+		id: 'OT',
+		fromNodeId: 'F2',
+		toNodeId: 'F1',
+		months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+		maxRateM3s: 0.05,
+		dailyCapM3: null,
+		minStoragePct: 0,
+		enabled: true,
+		priority: 1,
+		source: 'river',
+		...over
+	});
+	const withOfftake = (t: import('../project').Transfer) => (m: Model): Model => ({ ...m, transfers: [...m.transfers, t] });
+
+	it('passes both on the fixture (positive control): no unit takes from the river, and the application adds none', () => {
+		expect(check(input(), 'pumpCapacity')).toMatchObject({ passed: true, blocksIssue: true, refuses: false, fix: null });
+		expect(check(input(), 'pumpCapacity')!.detail).toMatch(/^No unit, other water user or off-take takes from the river in either run/);
+		expect(check(input(), 'protectsEwr')).toMatchObject({ passed: true, blocksIssue: true, refuses: false, detail: 'The application adds or changes no river abstraction on the applicant’s units.' });
+	});
+
+	it('stops issue on a river pump with no capacity in the baseline, naming it; a capacity passes', () => {
+		const open = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: null })));
+		const c = check(open, 'pumpCapacity')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toBe('Both runs: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.');
+		// Only the baseline's (the application gives it a capacity): named as the baseline's.
+		const baseOnly = withModels({ base: setNode('F1', { supplyRule: 'riverFirst' }), app: setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 900 }) });
+		expect(check(baseOnly, 'pumpCapacity')!.detail).toBe('The baseline: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.');
+		expect(c.fix).toBe('Enter the river pump’s capacity (Network › the unit › Supply, pumps × m³/h), then run the model again and nominate the new run, and run the application on it.');
+		const r = evidenceReport(open);
+		expect(r.refused).toBe(false);
+		expect(r.issuable).toBe(false);
+		expect(r.questions.some((q) => q.startsWith('Every river pump has a capacity:'))).toBe(true);
+		for (const rule of ['trigger', 'runOfRiver'] as const) expect(check(withModels(both(setNode('F1', { supplyRule: rule }))), 'pumpCapacity')!.passed).toBe(false);
+		// The control: a capacity (and 0, no river pump) bounds it; dam only never pumps.
+		const capped = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })));
+		expect(check(capped, 'pumpCapacity')!.passed).toBe(true);
+		expect(check(capped, 'pumpCapacity')!.detail).toMatch(/^Every river pump, other water user and off-take in both runs has a capacity/);
+		expect(evidenceReport(capped).issuable).toBe(true);
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 0 }))), 'pumpCapacity')!.passed).toBe(true);
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'damFirst', pumpCapacityM3Day: null }))), 'pumpCapacity')!.passed).toBe(true);
+		// A capacity the run reads as no limit (not a size ≥ 0) is none.
+		expect(check(withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: -1 }))), 'pumpCapacity')!.passed).toBe(false);
+	});
+
+	it('stops issue on an other water user with demand and no pump, in either run; a pump, or no demand, passes', () => {
+		const base = withModels(both(addNode(town)));
+		expect(check(base, 'pumpCapacity')!.detail).toBe('Both runs: Town (other water user). With no capacity, only the river’s flow limits what it takes.');
+		const two = withModels({ ...both(addNode(town)), app: (m) => addNode(town)(setNode('F1', { supplyRule: 'riverFirst' })(m)) });
+		expect(check(two, 'pumpCapacity')!.detail).toBe('Both runs: Town (other water user); the application: Farm one’s river pump. With no capacity, only the river’s flow limits what they take.');
+		// Only the application's (a user it adds): the fix is the scenario's.
+		const app = withModels({ app: addNode(town) });
+		expect(check(app, 'pumpCapacity')).toMatchObject({ passed: false, detail: 'The application: Town (other water user). With no capacity, only the river’s flow limits what it takes.' });
+		expect(check(app, 'pumpCapacity')!.fix).toBe('Enter the other water user’s pump capacity (Network › the user), then run the application again (in the scenario, for the application’s own units).');
+		expect(check(withModels(both(addNode({ ...town, pumpCapacityM3Day: 1000 }))), 'pumpCapacity')!.passed).toBe(true);
+		expect(check(withModels(both(addNode({ ...town, userDemandM3Day: null }))), 'pumpCapacity')!.passed).toBe(true);
+	});
+
+	it('stops issue on a unit with no dam irrigated straight from the upstream river, but not one without demand', () => {
+		const damless = withModels(both(setNode('F1', { pctUpstreamToDam: 1 })));
+		expect(check(damless, 'pumpCapacity')!.detail).toMatch(/^Both runs: Farm one \(no dam: irrigated straight from the river\)\. /);
+		const noCrops = (m: Model): Model => ({ ...setNode('F1', { pctUpstreamToDam: 1 })(m), cropAreas: m.cropAreas.filter((a) => a.nodeId !== 'F1') });
+		expect(check(withModels(both(noCrops)), 'pumpCapacity')!.passed).toBe(true);
+		// With a dam, the upstream share is the on-channel dam catching its inflow, not a take.
+		expect(check(withModels(both(setNode('F1', { pctUpstreamToDam: 1, damCapacityM3: 1e5 }))), 'pumpCapacity')!.passed).toBe(true);
+	});
+
+	it('counts a river off-take as bounded by its rate, and a disabled one as nothing', () => {
+		const ot = withModels(both(withOfftake(offtake())));
+		expect(check(ot, 'pumpCapacity')!.passed).toBe(true);
+		expect(check(ot, 'pumpCapacity')!.detail).toMatch(/^Every river pump/);
+		expect(check(withModels(both(withOfftake(offtake({ enabled: false })))), 'pumpCapacity')!.detail).toMatch(/^No unit/);
+	});
+
+	it('names an off-take whose rate isn’t a number as unbounded, unless its daily cap holds it, and joins the fixes for each kind', () => {
+		const open = withModels(both(withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY }))));
+		const c = check(open, 'pumpCapacity')!;
+		expect(c.detail).toBe('Both runs: the off-take Farm two → Farm one. With no capacity, only the river’s flow limits what it takes.');
+		expect(check(withModels(both(withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY, dailyCapM3: 4000 })))), 'pumpCapacity')!.passed).toBe(true);
+		const mixed = withModels(both((m) => withOfftake(offtake({ maxRateM3s: Number.POSITIVE_INFINITY }))(addNode(town)(setNode('F1', { pctUpstreamToDam: 1 })(m)))));
+		expect(check(mixed, 'pumpCapacity')!.fix).toBe(
+			'Give a unit without a dam the run of river supply rule, with a pump capacity; enter the other water user’s pump capacity (Network › the user); give the off-take a rate that is a number (Transfers), then run the model again and nominate the new run, and run the application on it.'
+		);
+	});
+
+	it('names a river-first unit with no dam twice: its capped pump passes, the river routed to its absent dam doesn’t', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 900, pctUpstreamToDam: 1 })));
+		expect(check(i, 'pumpCapacity')!.detail).toBe('Both runs: Farm one (no dam: irrigated straight from the river). With no capacity, only the river’s flow limits what it takes.');
+	});
+
+	it('applies the capacity check to baseline evidence too', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'runOfRiver' })));
+		const r = evidenceReport({ ...i, application: null });
+		expect(r.checks.find((c) => c.id === 'pumpCapacity')).toMatchObject({ passed: false, detail: 'The run: Farm one’s river pump. With no capacity, only the river’s flow limits what it takes.' });
+		expect(r.checks.find((c) => c.id === 'pumpCapacity')!.fix).not.toMatch(/application/);
+		expect(r.checks.some((c) => c.id === 'protectsEwr')).toBe(false);
+		expect(r.issuable).toBe(false);
+	});
+
+	it('stops an application whose own new river pump keeps neither a hands-off flow nor the EWR; either passes', () => {
+		const pump: ScenarioOp[] = [
+			{ op: 'node.set', nodeId: 'F2', field: 'supplyRule', value: 'runOfRiver' },
+			{ op: 'node.set', nodeId: 'F2', field: 'pumpCapacityM3Day', value: 1200 }
+		];
+		const open = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0 }), ops: pump });
+		const c = check(open, 'protectsEwr')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toMatch(/^Farm two’s river pump keeps neither the EWR nor a hands-off flow in every month it takes, so on a dry day it can take the river below its Reserve\./);
+		expect(c.fix).toMatch(/^In the scenario, give each one a hands-off flow in every month it takes, or keep the EWR/);
+		expect(c.fix).not.toMatch(/other water user/);
+		expect(check(open, 'pumpCapacity')!.passed).toBe(true);
+		expect(evidenceReport(open).issuable).toBe(false);
+		for (const keep of [{ handsOffEwr: true }, { handsOffM3Day: new Array(12).fill(500) }]) {
+			const ok = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0, ...keep }), ops: pump });
+			expect(check(ok, 'protectsEwr')).toMatchObject({ passed: true, detail: 'Farm two’s river pump leaves the EWR, or a hands-off flow, in the river before taking anything, in every month it takes.' });
+		}
+		// A hands-off flow of 0 in every month is none (model.md §2.7h), and one month's leaves the other eleven open.
+		for (const handsOffM3Day of [new Array(12).fill(0), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 500]]) {
+			const part = withModels({ app: setNode('F2', { supplyRule: 'runOfRiver', pumpCapacityM3Day: 1200, damCapacityM3: 0, handsOffM3Day }), ops: pump });
+			expect(check(part, 'protectsEwr')!.passed).toBe(false);
+		}
+	});
+
+	it('judges a new unit the application adds by its pump’s protection, and words two open takes in the plural', () => {
+		const farm = node({ id: 'N', name: 'New farm', downstreamNodeId: 'G', supplyRule: 'runOfRiver', pumpCapacityM3Day: 600 });
+		const crop = (m: Model): Model => ({ ...m, cropAreas: [...m.cropAreas, { nodeId: 'N', cropId: 'c', areaM2: 100_000 }] });
+		const ops: ScenarioOp[] = [{ op: 'node.add', node: farm }, { op: 'cropArea.set', nodeId: 'N', cropId: 'c', areaM2: 100_000 }];
+		expect(check(withModels({ app: (m) => crop(addNode(farm)(m)), ops }), 'protectsEwr')!.passed).toBe(false);
+		expect(check(withModels({ app: (m) => crop(addNode({ ...farm, handsOffEwr: true })(m)), ops }), 'protectsEwr')!.passed).toBe(true);
+		// Two open takes on the applicant's units, one ops each: both named, the plural wording.
+		const both2: ScenarioOp[] = [...ops, { op: 'transfer.add', transfer: offtake() }];
+		const c = check(withModels({ app: (m) => withOfftake(offtake())(crop(addNode(farm)(m))), ops: both2 }), 'protectsEwr')!;
+		expect(c.detail).toMatch(/^New farm’s river pump, the off-take Farm two → Farm one keep neither the EWR nor a hands-off flow in every month they take, so on a dry day they can take the river below its Reserve\./);
+		// One open of two: only the open one is named.
+		const one = check(withModels({ app: (m) => withOfftake(offtake({ handsOffEwr: true }))(crop(addNode(farm)(m))), ops: both2 }), 'protectsEwr')!;
+		expect(one.detail).toMatch(/^New farm’s river pump keeps neither/);
+		const fine = check(withModels({ app: (m) => withOfftake(offtake({ handsOffEwr: true }))(crop(addNode({ ...farm, handsOffEwr: true })(m))), ops: both2 }), 'protectsEwr')!;
+		expect(fine.detail).toBe('New farm’s river pump, the off-take Farm two → Farm one each leave the EWR, or a hands-off flow, in the river before taking anything, in every month they take.');
+	});
+
+	it('judges more of the applicant’s existing river take (a crop area on a unit that pumps), and River to dam', () => {
+		const pumps = both(setNode('F2', { supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 }));
+		const more = withModels({ ...pumps, ops: [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 600_000 }] });
+		expect(check(more, 'protectsEwr')!.passed).toBe(false);
+		const divert = withModels({ app: setNode('F2', { damCapacityM3: 1e5, divertCapacityM3Day: 3000 }), ops: [{ op: 'node.set', nodeId: 'F2', field: 'divertCapacityM3Day', value: 3000 }] });
+		expect(check(divert, 'protectsEwr')!.detail).toMatch(/^Farm two’s River to dam keeps neither/);
+		// A renamed unit changes no take.
+		expect(check(withModels({ ...pumps, ops: [{ op: 'node.set', nodeId: 'F2', field: 'name', value: 'Farm 2' }] }), 'protectsEwr')!.passed).toBe(true);
+	});
+
+	it('leaves the baseline’s existing users alone: another unit’s unprotected pump, untouched by a proposal, passes', () => {
+		const i = withModels(both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })));
+		expect(check(i, 'protectsEwr')).toMatchObject({ passed: true });
+		// And an op on another's unit is a baseline assumption (its own check stops it), never judged here.
+		const theirs = withModels({ ...both(setNode('F1', { supplyRule: 'riverFirst', pumpCapacityM3Day: 2400 })), ops: [{ op: 'cropArea.set', nodeId: 'F1', cropId: 'c', areaM2: 500_000 }], classified: ['baseline'] });
+		expect(check(theirs, 'protectsEwr')!.passed).toBe(true);
+		expect(check(theirs, 'assumptions')!.passed).toBe(false);
+	});
+
+	it('judges an off-take the application adds by its own hands-off flow, not its source unit’s', () => {
+		const ops: ScenarioOp[] = [{ op: 'transfer.add', transfer: offtake() }];
+		const open = withModels({ app: withOfftake(offtake()), ops });
+		expect(check(open, 'protectsEwr')!.detail).toMatch(/^the off-take Farm two → Farm one keeps neither/);
+		// The source unit's hands-off flow binds its own pump, not the off-take (model.md §2.7h).
+		expect(check(withModels({ app: (m) => withOfftake(offtake())(setNode('F2', { handsOffEwr: true })(m)), ops }), 'protectsEwr')!.passed).toBe(false);
+		expect(check(withModels({ app: withOfftake(offtake({ handsOffM3Day: 400 })), ops }), 'protectsEwr')!.passed).toBe(true);
+		expect(check(withModels({ app: withOfftake(offtake({ handsOffEwr: true })), ops }), 'protectsEwr')!.passed).toBe(true);
+		// A dam transfer isn't the river.
+		expect(check(withModels({ app: withOfftake(offtake({ source: 'dam' })), ops }), 'protectsEwr')!.passed).toBe(true);
+	});
+
+	it('stops an application that adds an other water user, which can’t keep a hands-off flow, and says how to model it', () => {
+		const added = { ...town, pumpCapacityM3Day: 1000 };
+		const c = check(withModels({ app: addNode(added), ops: [{ op: 'node.add', node: added }] }), 'protectsEwr')!;
+		expect(c.passed).toBe(false);
+		expect(c.detail).toMatch(/^Town \(other water user\) keeps neither/);
+		expect(c.fix).toMatch(/An other water user can’t keep one in the model: model the new take as a unit that pumps from the river, with a pump capacity and a hands-off flow\.$/);
+	});
+});
+
 describe('the cited ensemble (G4) and the declared rule (ER3)', () => {
 	it('cites the first complete ensemble on the declared rule, and lists every start', () => {
 		const later = ens({ id: 'e2', seed: 99, createdAt: '2026-09-04T00:00:00.000Z' });
@@ -455,6 +668,64 @@ describe('absence is printed, never omitted (rule 3, G6, G16)', () => {
 	});
 });
 
+describe('both impact bases (evidence-14, licensing build item 8)', () => {
+	it('says the full-authorised-use board is not built until the backend gives one, and has none for baseline evidence', () => {
+		expect(evidenceReport(input()).licenceImpactAuthorised).toEqual({ status: 'notBuilt', detail: null, board: null, mix: null, builtAt: null, engineVersion: null });
+		expect(evidenceReport(input({ application: null })).licenceImpactAuthorised).toBeNull();
+	});
+
+	it('carries the board the backend built over the full-allocation pair, a copy of it', () => {
+		const board = evidenceReport(input()).licenceImpact!;
+		const authorisedImpact = {
+			status: 'ok' as const,
+			detail: null,
+			board,
+			mix: { rows: [{ authorisation: 'licence' as const, volumeM3PerYear: 50, entitlement: true }], entitlementM3PerYear: 50, totalM3PerYear: 50 },
+			builtAt: '2026-10-01T08:00:00.000Z',
+			engineVersion: '1.60.0'
+		};
+		const i = input({ authorisedImpact });
+		const r = evidenceReport(i);
+		expect(r.licenceImpactAuthorised).toEqual(authorisedImpact);
+		authorisedImpact.mix.rows[0]!.volumeM3PerYear = 1;
+		expect(r.licenceImpactAuthorised!.mix!.rows[0]!.volumeM3PerYear).toBe(50);
+		// The modelled-use board is still there, second.
+		expect(r.licenceImpact).toEqual(board);
+	});
+});
+
+describe('the responsible authority (evidence-13, 163_licensing_authority)', () => {
+	const authority = { name: 'Breede-Olifants CMA', kind: 'cma' as const, office: 'Worcester' };
+	const endorsement = { endorsedAt: '2026-09-02T09:00:00.000Z', endorsedBy: 'CMA assessor', note: 'Accepted as the 2026 baseline.' };
+
+	it('names the authority in the identity block and prints its endorsement of the baseline', () => {
+		const r = evidenceReport(input({ authority, baselineEndorsement: endorsement }));
+		expect(r.identity.authority).toEqual(authority);
+		expect(r.identity.baseline.endorsement).toEqual(endorsement);
+		expect(r.flags.map((f) => f.id)).not.toContain('notEndorsed');
+	});
+
+	it('flags a baseline the authority hasn’t endorsed, and says no authority when the project names none', () => {
+		const r = evidenceReport(input());
+		expect(r.identity.authority).toBeNull();
+		expect(r.identity.baseline.endorsement).toBeNull();
+		const flag = r.flags.find((f) => f.id === 'notEndorsed');
+		expect(flag).toMatchObject({ level: 'caution', text: NOT_ENDORSED });
+		expect(NOT_ENDORSED).toBe('Baseline not endorsed by the responsible authority.');
+		// The baseline-only report carries it too.
+		expect(evidenceReport(input({ application: null })).flags.map((f) => f.id)).toContain('notEndorsed');
+	});
+
+	it('copies the inputs, so the document never shares an object with them', () => {
+		const i = input({ authority: { ...authority }, baselineEndorsement: { ...endorsement } });
+		const r = evidenceReport(i);
+		i.authority!.name = 'changed';
+		i.baselineEndorsement!.note = 'changed';
+		expect(r.identity.authority!.name).toBe(authority.name);
+		expect(r.identity.baseline.endorsement!.note).toBe(endorsement.note);
+	});
+});
+
 describe('the Reserve site strip: the REC (ER9) and months below the table (G16)', () => {
 	const withTable = (i: EvidenceInput, over: Record<string, unknown>): EvidenceInput => {
 		const settings = { ...i.baseline.inputs.settings, ewrRules: [{ ...reserveTable(), ...over }] as never };
@@ -503,7 +774,7 @@ describe('the Reserve site strip: the REC (ER9) and months below the table (G16)
 		expect(f.level).toBe('caution');
 		expect(s.belowTableExpectedPct).toBe(1);
 		expect(f.text).toBe(
-			`At Gauge the natural flow is drier than the rule table’s driest point in 3 of ${s.monthsA} months: the requirement there is scaled with the flow, a rule pending the hydrologist. With the percentile from the run, about 1 % of months fall there by construction.`
+			`At Gauge the natural flow is drier than the rule table’s driest point in 3 of ${s.monthsA} months: the requirement there is scaled with the flow, a provisional rule not yet confirmed by the catchment’s hydrologist. With the percentile from the run, about 1 % of months fall there by construction.`
 		);
 		expect(f.effect).toMatch(/^The requirement shrinks with the flow in those months, below the table’s driest requirement/);
 	});
@@ -531,7 +802,7 @@ describe('baseline evidence (the nominated run alone)', () => {
 			expect(row.application).toBeNull();
 			expect(row.change).toBeNull();
 		}
-		expect(r.checks.map((c) => c.id)).toEqual(['nominated', 'notLegacy', 'notForecast', 'declaredRule', 'citedEnsemble', 'coverage']);
+		expect(r.checks.map((c) => c.id)).toEqual(['nominated', 'notLegacy', 'notForecast', 'pumpCapacity', 'declaredRule', 'citedEnsemble', 'coverage']);
 		expect(r.applicantStatement).toBeNull();
 		expect(r.users.every((u) => u.suppliedB === null)).toBe(true);
 	});
@@ -598,11 +869,9 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(r.allocations.notAssessed).toBeNull();
 	});
 
-	it('lists each unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14)', () => {
-		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([
-			['Farm one', false, null],
-			['Farm two', true, null]
-		]);
+	it('lists the applicant’s unit with a volume, per water year, with the numbers compareAllocations gives the Allocations tab (G14); one other unit is too few for a total (evidence-15, D3)', () => {
+		expect(r.allocations.units.map((u) => [u.name, u.own, u.onlyIn])).toEqual([['Farm two', true, null]]);
+		expect(r.allocations.othersLeftOut).toBe(1);
 		const cb = comparisonOf(app, appOut, allocations);
 		const ca = comparisonOf(base, baseOut, allocations);
 		for (const u of r.allocations.units) {
@@ -617,17 +886,18 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 			expect(s.countsA!.wholeYears).toBe(5);
 		}
 		expect(meanUse(appOut, 'F2')).toBeGreaterThan(0);
-		// Farm one takes nothing: below its volume every year. Farm two: below it in the baseline, above it in the application.
-		const [f1, f2] = r.allocations.units.map((u) => u.sources[0]!);
-		expect([f1!.countsA!.under, f1!.countsB!.under]).toEqual([5, 5]);
+		// Farm two: below its volume in the baseline, above it in the application.
+		const [f2] = r.allocations.units.map((u) => u.sources[0]!);
 		expect([f2!.countsA!.under, f2!.countsA!.over, f2!.countsB!.over]).toEqual([5, 0, 5]);
 		expect(r.allocations.toleranceA).toBe(0.1);
 		expect(r.allocations.notMatchedA).toBe(0);
 	});
 
-	it('the page-1 row sums the unit-years above the volume, both runs, with no band', () => {
+	it('the page-1 row sums every unit’s years above the volume, both runs, with no band, the units § 5 leaves out included (evidence-15)', () => {
 		const row = r.rows.find((x) => x.id === 'registeredUse')!;
+		// Farm one (left out of § 5) is under its volume every year, so the sums are Farm two's; its 5 whole years count as judged.
 		const sum = (k: 'countsA' | 'countsB') => r.allocations.units.reduce((t, u) => t + u.sources.reduce((v, s) => v + (s[k]?.over ?? 0), 0), 0);
+		expect(r.allocations.unitYears).toEqual({ overA: sum('countsA'), judgedA: 10, overB: sum('countsB'), judgedB: 10 });
 		expect(row.notAssessed).toBeNull();
 		expect(row.baseline).toBe(sum('countsA'));
 		expect(row.application).toBe(sum('countsB'));
@@ -676,19 +946,19 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(older.allocations.units.find((u) => u.nodeId === 'F2')!.sources[0]!.capB).toEqual({ capReached: want.capReached, limitBound: null });
 		// Not a cap run: nothing cited.
 		expect(r.allocations.units.every((u) => u.sources.every((x) => x.capA === null && x.capB === null))).toBe(true);
-		expect(got.version).toBe('evidence-9');
+		expect(got.version).toBe('evidence-15');
 	});
 
 	it('keeps a unit only one run has, marked; registered volumes on no unit are "Not assessed"', () => {
 		const i = withAllocations();
 		const cb = i.application!.allocations!;
-		const onlyBase = evidenceReport({ ...i, application: { ...i.application!, allocations: { ...cb, nodes: cb.nodes.filter((n) => n.nodeId !== 'F1') } } });
-		const f1 = onlyBase.allocations.units.find((u) => u.nodeId === 'F1')!;
-		expect(f1.onlyIn).toBe('baseline');
-		expect(f1.sources[0]!.countsB).toBeNull();
-		expect(f1.sources[0]!.years.every((y) => y.modelledB === null && y.modelledA !== null)).toBe(true);
+		const onlyBase = evidenceReport({ ...i, application: { ...i.application!, allocations: { ...cb, nodes: cb.nodes.filter((n) => n.nodeId !== 'F2') } } });
+		const f2 = onlyBase.allocations.units.find((u) => u.nodeId === 'F2')!;
+		expect(f2.onlyIn).toBe('baseline');
+		expect(f2.sources[0]!.countsB).toBeNull();
+		expect(f2.sources[0]!.years.every((y) => y.modelledB === null && y.modelledA !== null)).toBe(true);
 		// Control: in both runs, it isn't marked.
-		expect(r.allocations.units.find((u) => u.nodeId === 'F1')!.onlyIn).toBeNull();
+		expect(r.allocations.units.find((u) => u.nodeId === 'F2')!.onlyIn).toBeNull();
 
 		const loose = evidenceReport(withAllocations([{ id: 'a9', nodeId: null, waterSource: 'surface', volumeM3PerYear: 1e5 }]));
 		expect(loose.allocations.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
@@ -696,17 +966,22 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(loose.rows.find((x) => x.id === 'registeredUse')!.notAssessed).toBe(ALLOCATIONS_NOT_ASSESSED.notMatched(1));
 	});
 
-	it('baseline evidence: one run’s counts, and the flag names the baseline', () => {
+	it('baseline evidence: no applicant, so no unit is listed; two units are too few for a total, but the page-1 row still counts them (evidence-15)', () => {
 		const i = withAllocations();
 		const b = evidenceReport({ ...i, application: null, changes: [] });
-		expect(b.allocations.units.every((u) => u.sources.every((s) => s.countsB === null && s.years.every((y) => y.statusB === null)))).toBe(true);
+		expect(b.allocations.units).toEqual([]);
+		expect(b.allocations.othersLeftOut).toBe(2);
+		expect(b.allocations.notAssessed).toBeNull();
 		expect(b.allocations.modeB).toBeNull();
 		expect(b.rows.at(-1)!.id).toBe('registeredUse');
 		expect(b.rows.at(-1)!.application).toBeNull();
-		// The baseline never takes more than a volume: no flag. Control: the application's run read as a baseline flags as the baseline.
+		expect(b.rows.at(-1)!.notAssessed).toBeNull();
+		expect(b.rows.at(-1)!.note).toMatch(/^0 of 10 unit-years judged/);
+		// The baseline never takes more than a volume: no flag. The application's run read as a baseline is over on Farm two, which isn't named.
 		expect(b.flags.map((f) => f.id)).not.toContain('allocationsOver');
 		const appAsBase = evidenceReport({ ...i, baseline: { ...i.application!, id: 'base' }, application: null, changes: [] });
-		expect(appAsBase.flags.find((f) => f.id === 'allocationsOver')!.text).toMatch(/^The baseline’s modelled use is more than ±10 % above the registered volume: Farm two, surface water, 5 of 5/);
+		expect(appAsBase.flags.map((f) => f.id)).not.toContain('allocationsOver');
+		expect(appAsBase.rows.at(-1)!.baseline).toBe(5);
 	});
 
 	it('names both bands when the runs used different ones', () => {
@@ -723,13 +998,61 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const i = withAllocations();
 		const short = comparisonOf(app, { ...appOut, series: appOut.series.map((x) => ({ ...x, values: x.values.slice(0, 1600) })) }, allocations);
 		const got = evidenceReport({ ...i, application: { ...i.application!, allocations: short } });
-		const last = got.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		const last = got.allocations.units[0]!.sources[0]!.years.at(-1)!;
 		expect([last.partialA, last.partialB]).toEqual([false, true]);
-		const s = got.allocations.units[1]!.sources[0]!;
+		const s = got.allocations.units[0]!.sources[0]!;
 		expect([s.countsA!.wholeYears, s.countsB!.wholeYears]).toEqual([5, 4]);
 		// Control: the full-length runs have it whole in both.
-		const full = r.allocations.units[1]!.sources[0]!.years.at(-1)!;
+		const full = r.allocations.units[0]!.sources[0]!.years.at(-1)!;
 		expect([full.partialA, full.partialB]).toEqual([false, false]);
+	});
+
+	it('sums 5 or more other units into one total per water source, naming none of them, with the flag on the total (evidence-15, D3)', () => {
+		// Five other units, each with Farm one's use (none) and a small volume, and Farm two (the applicant's).
+		const others = ['O1', 'O2', 'O3', 'O4', 'O5'];
+		const many = (out: ModelOutput, inp: ModelInput, use: number) => {
+			const get = (id: string, key: string) => out.series.find((s) => s.nodeId === id && s.key === key)?.values ?? null;
+			const days = get('F2', 'supplied')!.length;
+			return compareAllocations({
+				startDate: START,
+				tolerance: 0.1,
+				allocations: [...others.map((id) => ({ id: `a-${id}`, nodeId: id, waterSource: 'surface' as const, volumeM3PerYear: 1000 })), allocations[1]!],
+				nodes: [
+					...others.map((id) => ({ nodeId: id, name: `Neighbour ${id}`, kind: 'farm' as const, supplied: new Array<number>(days).fill(use), groundwater: null, riverAbstraction: null })),
+					...inp.model.nodes.filter((n) => n.id === 'F2').map((n) => ({ nodeId: n.id, name: n.name, kind: 'farm' as const, supplied: get(n.id, 'supplied')!, groundwater: get(n.id, 'groundwater_used'), riverAbstraction: get(n.id, 'river_abstraction') }))
+				]
+			});
+		};
+		const i = input();
+		// Each neighbour takes 10 m³ a day, 3 650 m³ a year: far above its 1 000.
+		const got = evidenceReport(input({ baseline: { ...i.baseline, allocations: many(baseOut, base, 10) }, application: { ...i.application!, allocations: many(appOut, app, 10) } }));
+		expect(got.allocations.units.map((u) => [u.nodeId, u.name, u.own, u.aggregate ?? null])).toEqual([
+			['F2', 'Farm two', true, null],
+			['others:surface', otherUnitsName(5), false, 5]
+		]);
+		expect(got.allocations.othersLeftOut).toBe(0);
+		const total = got.allocations.units[1]!.sources[0]!;
+		const y = total.years.find((x) => x.partialA === false)!;
+		expect(y.registeredA).toBeCloseTo(5 * 1000, 6);
+		expect(y.modelledA).toBeCloseTo(5 * 10 * y.days, 6);
+		expect(y.statusA).toBe('over');
+		expect(total.countsA!.over).toBe(total.countsA!.wholeYears);
+		expect(total.capA).toBeNull();
+		// No neighbour's name anywhere in the document.
+		expect(canonicalJson(got)).not.toMatch(/Neighbour/);
+		// The flag names the total, never a neighbour.
+		expect(got.flags.find((f) => f.id === 'allocationsOver')!.text).toContain(`${otherUnitsName(5)}, surface water, 5 of 5 whole water years`);
+		// The page-1 row counts each neighbour's years: 5 units × 5 whole years over, plus Farm two's.
+		const row = got.rows.find((x) => x.id === 'registeredUse')!;
+		expect(row.baseline).toBe(25 + got.allocations.units[0]!.sources[0]!.countsA!.over);
+		// Control: four neighbours are too few, and are left out.
+		const four = (out: ModelOutput, inp: ModelInput) => {
+			const c = many(out, inp, 10);
+			return { ...c, nodes: c.nodes.filter((n) => n.nodeId !== 'O5') };
+		};
+		const few = evidenceReport(input({ baseline: { ...i.baseline, allocations: four(baseOut, base) }, application: { ...i.application!, allocations: four(appOut, app) } }));
+		expect(few.allocations.units.map((u) => u.nodeId)).toEqual(['F2']);
+		expect(few.allocations.othersLeftOut).toBe(4);
 	});
 
 	it('is deterministic, and a changed volume changes the document', () => {
@@ -1005,7 +1328,7 @@ describe('§ 1 the driest month’s FDC beside the largest-change month (evidenc
 	});
 });
 
-describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
+describe('§ 4 other applications on the baseline, each one’s own run (evidence-3)', () => {
 	/** A second application: Farm one builds a dam, run on the same baseline. */
 	const otherInput: ModelInput = {
 		...base,
@@ -1031,7 +1354,7 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 	const days = (o: ModelOutput) => o.summary.catchment.ewrDaysNotMet;
 
 	it('lists each other application’s own change against the baseline, and sums them (not a combined run)', () => {
-		const second = other({ scenarioId: 'scn-3', scenarioName: 'Approved weir', status: 'decided', outcome: 'approved', runId: 'run-3', runCreatedAt: '2026-09-05T00:00:00.000Z' });
+		const second = other({ scenarioId: 'scn-3', scenarioName: 'Approved weir', status: 'decided', outcome: 'licence_issued', runId: 'run-3', runCreatedAt: '2026-09-05T00:00:00.000Z' });
 		const r = evidenceReport(input({ otherApplications: [second, other()] }));
 		const c = r.cumulative;
 		// Oldest run first.
@@ -1041,20 +1364,8 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		expect(c.counted).toBe(2);
 		expect(c.total.ewrDays).toBe(2 * (days(otherOut) - days(baseOut)));
 		expect(c.withThis!.ewrDays).toBe(c.total.ewrDays! + (days(appOut) - days(baseOut)));
-		// Page 1: the last row, no band, its basis saying it is a sum and naming WP-3.11.
-		const row = r.rows.at(-1)!;
-		expect(row.id).toBe('otherApplications');
-		expect(row.basis).toBe(CUMULATIVE_BASIS);
-		expect(row.basis).toMatch(/not one combined run \(WP-3\.11\)$/);
-		expect(row.change).toEqual({ run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null });
-		expect(row.note).toMatch(/^2 applications: “Farm one dam”, “Approved weir”\./);
-	});
-
-	it('names at most three on page 1, so the row stays one row high; § 4 lists every one', () => {
-		const many = Array.from({ length: 5 }, (_, k) => other({ scenarioId: `s${k}`, scenarioName: `App ${k}`, runId: `r${k}`, runCreatedAt: `2026-09-0${k + 1}T00:00:00.000Z` }));
-		const r = evidenceReport(input({ otherApplications: many }));
-		expect(r.rows.at(-1)!.note).toMatch(/^5 applications: “App 0”, “App 1”, “App 2”, 2 more in § 4\./);
-		expect(r.cumulative.applications).toHaveLength(5);
+		// Page 1's row no longer reads this sum (evidence-11): without an assessment it is not assessed.
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', basis: COMBINED_BASIS, change: null });
 	});
 
 	it('leaves out of the sum an application run on another engine, period or runoff model, saying why', () => {
@@ -1066,12 +1377,11 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		// Positive control: the comparable one alone is summed.
 		expect(c.counted).toBe(1);
 		expect(c.total.ewrDays).toBe(days(otherOut) - days(baseOut));
-		expect(r.rows.at(-1)!.note).toMatch(/2 more not counted/);
 	});
 
 	it('says "None" when there is no other application, and baseline evidence has no row', () => {
 		const none = evidenceReport(input());
-		expect(none.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_NONE, change: null });
+		expect(none.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_NONE, change: null });
 		const baseline = evidenceReport(input({ application: null, changes: [], otherApplications: [other()] }));
 		expect(baseline.rows.some((x) => x.id === 'otherApplications')).toBe(false);
 		expect(baseline.cumulative.withThis).toBeNull();
@@ -1083,7 +1393,6 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 		expect(r.cumulative.truncated).toBe(true);
 		expect(r.cumulative.applications).toHaveLength(1);
 		expect(r.cumulative.total).toEqual({ ewrDays: null, reservePp: null });
-		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: CUMULATIVE_TRUNCATED(1), change: null, note: null });
 		// Control: the same list, not cut, is summed.
 		expect(evidenceReport(input({ otherApplications: [other()] })).cumulative.total.ewrDays).not.toBeNull();
 	});
@@ -1097,6 +1406,97 @@ describe('§ 4 other applications on the baseline, summed (evidence-3)', () => {
 	});
 });
 
+describe('page 1’s combined row: every application together (evidence-11, finding C26)', () => {
+	/** A second application, Farm one's dam, and both applications together: their ops touch different farms, so they combine. */
+	const withF1Dam = (m: ModelInput): ModelInput => ({
+		...m,
+		model: { ...m.model, nodes: m.model.nodes.map((n) => (n.id === 'F1' ? { ...n, pctRunoffToDam: 1, pctUpstreamToDam: 0, damCapacityM3: 8e5, damAreaFullM2: 2e5 } : n)) }
+	});
+	const otherOut = runModel(withF1Dam(base));
+	const togetherOut = runModel(withF1Dam(app));
+	const window = { startDate: START, endDate: '1995-09-30' };
+	const cumulative = cumulativeImpact(
+		{ summary: baseOut.summary, ...window },
+		[
+			{ id: 'scn', name: 'Farm two dam', summary: appOut.summary, ...window },
+			{ id: 'scn-2', name: 'Farm one dam', summary: otherOut.summary, ...window }
+		],
+		{ summary: togetherOut.summary, ...window }
+	);
+	const assessment: EvidenceAssessmentInput = {
+		id: 'asm-1',
+		name: 'Both dams',
+		createdAt: '2026-09-10T08:00:00.000Z',
+		createdBy: 'Assessor',
+		engineVersion: ENGINE_VERSION,
+		report: cumulative
+	};
+	const others = [{ scenarioId: 'scn-2', scenarioName: 'Farm one dam', status: 'submitted' as const, outcome: null }];
+	const combined = (over: Partial<EvidenceCombinedInput> = {}): EvidenceCombinedInput => ({ others, unavailable: null, conflicts: [], problems: [], assessment, pending: false, ...over });
+	const days = (o: ModelOutput) => o.summary.catchment.ewrDaysNotMet;
+
+	it('shows the combined change and the interaction, from one run of both, never a sum', () => {
+		const r = evidenceReport(input({ combined: combined() }));
+		const c = r.cumulative.combined!;
+		expect(c.notAssessed).toBeNull();
+		const outlet = cumulative.rows.find((x) => x.metric === 'ewr_days_not_met' && x.isOutlet)!;
+		expect(c.ewrDays).toEqual({ baseline: outlet.baseline, combined: outlet.combined, change: outlet.combinedChange, sumOfSingles: outlet.sumOfSingles, interaction: outlet.interaction });
+		// The run of both, against the baseline: the outlet is the catchment's EWR site.
+		expect(c.ewrDays!.change).toBe(days(togetherOut) - days(baseOut));
+		expect(c.ewrDays!.interaction).toBe(days(togetherOut) - days(baseOut) - (days(appOut) - days(baseOut)) - (days(otherOut) - days(baseOut)));
+		// This one first, each with its own change alone in the assessment.
+		expect(c.applications.map((x) => [x.scenarioName, x.isThis, x.ewrDays])).toEqual([
+			['Farm two dam', true, days(appOut) - days(baseOut)],
+			['Farm one dam', false, days(otherOut) - days(baseOut)]
+		]);
+		expect(c.reserveMonths).not.toBeNull();
+		expect(c.assessment).toEqual({ id: 'asm-1', name: 'Both dams', createdAt: assessment.createdAt, createdBy: 'Assessor', engineVersion: ENGINE_VERSION });
+		const row = r.rows.at(-1)!;
+		expect(row).toMatchObject({ id: 'otherApplications', label: COMBINED_LABEL, basis: COMBINED_BASIS, notAssessed: null, baseline: outlet.baseline, application: outlet.combined });
+		expect(row.change).toEqual({ run: outlet.combinedChange, band: null, bandNote: COMBINED_NO_BAND, worse: null });
+		expect(row.note).toMatch(/^2 applications together: “Farm two dam” \(this one\), “Farm one dam”\. Interaction [+−]\d+ days?: .*Assessment “Both dams” \(2026-09-10, engine /);
+	});
+
+	it('is not assessed when the applications conflict, naming each conflict, and reads no figure (positive control above)', () => {
+		const conflict = '"Farm two dam" op 1 (node.set) and "Farm one dam" op 1 (node.set) both change node "Farm two": damCapacityM3';
+		const r = evidenceReport(input({ combined: combined({ conflicts: [conflict], assessment: null }) }));
+		const c = r.cumulative.combined!;
+		expect(c.notAssessed).toBe(COMBINED_CONFLICT([conflict]));
+		expect(c.notAssessed).toContain(conflict);
+		expect(c.conflicts).toEqual([conflict]);
+		expect(c.ewrDays).toBeNull();
+		expect(c.applications.every((x) => x.ewrDays === null)).toBe(true);
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT([conflict]), change: null, baseline: null, application: null, note: null });
+		// Page 1's questions carry it, so the applicant sees what the assessor will ask.
+		expect(r.questions.some((q) => q.includes(conflict))).toBe(true);
+		// A conflict wins over a stale assessment: never a figure beside a conflict.
+		expect(evidenceReport(input({ combined: combined({ conflicts: [conflict] }) })).cumulative.combined!.ewrDays).toBeNull();
+	});
+
+	it('names an op that applies alone but not together', () => {
+		const problem = '"Farm one dam" op 1 (node.add): a node named "New dam" already exists';
+		const r = evidenceReport(input({ combined: combined({ problems: [problem], assessment: null }) }));
+		expect(r.rows.at(-1)!.notAssessed).toBe(COMBINED_PROBLEMS([problem]));
+	});
+
+	it('says why there is no figure: not assessed yet, under way, too many, or nothing to combine', () => {
+		expect(evidenceReport(input({ combined: combined({ assessment: null }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_NOT_RUN(2));
+		expect(evidenceReport(input({ combined: combined({ assessment: null, pending: true }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_PENDING);
+		expect(evidenceReport(input({ combined: combined({ unavailable: 'more than 8 applications; an assessment takes at most 8.', assessment: null }) })).rows.at(-1)!.notAssessed).toBe(
+			'Not assessed: more than 8 applications; an assessment takes at most 8.'
+		);
+		expect(evidenceReport(input({ combined: combined({ others: [] }) })).rows.at(-1)!.notAssessed).toBe(COMBINED_NONE);
+		// Baseline evidence: no page-1 row, and one other application is nothing to combine.
+		const baseline = evidenceReport(input({ application: null, changes: [], combined: combined({ assessment: null }) }));
+		expect(baseline.rows.some((x) => x.id === 'otherApplications')).toBe(false);
+		expect(baseline.cumulative.combined!.notAssessed).toBe(COMBINED_ONE);
+	});
+
+	it('is deterministic: the same input gives the same document', () => {
+		expect(canonicalJson(evidenceReport(input({ combined: combined() })))).toBe(canonicalJson(evidenceReport(input({ combined: combined() }))));
+	});
+});
+
 describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', () => {
 	const catchment = (out: ModelOutput, key: string) => out.series.find((s) => s.nodeId === null && s.key === key)!.values.map((v) => (Number.isNaN(v) ? null : v));
 	const impact = {
@@ -1107,7 +1507,7 @@ describe('page 1’s licence impact by year class (evidence-5, issue #53 R7)', (
 
 	it('carries the engine’s board for the two runs, built from their stored series', () => {
 		const r = evidenceReport(input({ impact }));
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-15');
 		expect(r.licenceImpact?.result.status).toBe('ok');
 		expect(r.licenceImpact?.result).toEqual({ status: 'ok', impact: licenceImpactByYearClass({ background: baseOut, application: appOut, yearClassMethod: 'auto' }) });
 	});
@@ -1163,7 +1563,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 	const result = (out: ModelOutput, id: string) => out.summary.farms.flatMap((f) => f.demandObjects ?? []).find((o) => o.id === id)!;
 
 	it('lists every object on the applicant’s units, in the application’s order then the removed, and none on another’s unit', () => {
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-15');
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.id, o.change])).toEqual([
 			['d1', 'changed'],
@@ -1240,5 +1640,61 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		expect(none.demandObjects).toEqual({ notAssessed: DEMAND_OBJECTS_NONE, objects: [], bySource: [], demandM3Day: 0 });
 		expect(none.flags.some((x) => x.id === 'demandSource')).toBe(false);
 		expect(evidenceReport(input({ application: null, changes: [] })).demandObjects).toBeNull();
+	});
+});
+
+describe('§ 1’s locality map (evidence-12)', () => {
+	const sq = (lon: number, lat: number, d: number): [number, number][] => [
+		[lon, lat],
+		[lon + d, lat],
+		[lon + d, lat + d],
+		[lon, lat + d],
+		[lon, lat]
+	];
+	const feature = (kind: EvidenceMapFeatureInput['kind'], nodeId: string | null, geometry: EvidenceMapFeatureInput['geometry'], name = ''): EvidenceMapFeatureInput => ({
+		kind,
+		name,
+		nodeId,
+		geometry,
+		updatedAt: '2026-09-30T08:00:00.000Z',
+		source: null
+	});
+	const features = [
+		feature('catchment_boundary', null, { type: 'Polygon', coordinates: [sq(21.3, -33.7, 0.1)] }),
+		feature('farm_parcel', 'F1', { type: 'Polygon', coordinates: [sq(21.36, -33.66, 0.02)] }, 'Farm one parcel'),
+		feature('farm_parcel', 'F2', { type: 'Polygon', coordinates: [sq(21.31, -33.69, 0.03)] }),
+		feature('gauge', 'G', { type: 'Point', coordinates: [21.35, -33.65] })
+	];
+
+	it('is null when the project has no map features (the report says so), and the report still builds', () => {
+		expect(evidenceReport(input()).localityMap).toBeNull();
+		expect(evidenceReport(input({ mapFeatures: [] })).localityMap).toBeNull();
+	});
+
+	it('names the applicant’s unit from the run’s model, draws the other unit neutrally, and the gauge by its node’s name', () => {
+		const loc = evidenceReport(input({ mapFeatures: features })).localityMap!;
+		expect(loc.applicant).toBe(true);
+		expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+			['boundary', null],
+			['parcel', null],
+			['applicantParcel', 'Farm two'],
+			['gauge', 'Gauge']
+		]);
+		// The other unit's parcel carries nothing that says whose it is.
+		expect(JSON.stringify(loc)).not.toContain('Farm one');
+		expect(JSON.stringify(loc)).not.toContain('F1');
+	});
+
+	it('baseline evidence has no applicant: every parcel is drawn alike, none named', () => {
+		const loc = evidenceReport(input({ application: null, mapFeatures: features })).localityMap!;
+		expect(loc.applicant).toBe(false);
+		expect(loc.features.filter((f) => f.layer === 'parcel')).toHaveLength(2);
+		expect(loc.features.some((f) => f.layer === 'applicantParcel')).toBe(false);
+	});
+
+	it('is the same document for the same features, so a pack’s hash covers it', () => {
+		const a = canonicalJson(evidenceReport(input({ mapFeatures: features })).localityMap);
+		const b = canonicalJson(evidenceReport(input({ mapFeatures: structuredClone(features) })).localityMap);
+		expect(b).toBe(a);
 	});
 });

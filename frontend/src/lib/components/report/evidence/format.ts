@@ -37,9 +37,10 @@ export function valueText(row: Pick<EvidenceRow, 'unit'>, v: number | null): str
 /**
  * The Change cell: `main` is the paired median (or, without a band, the
  * run's own difference and "no band"), `sub` the 5–95 % range and the run's
- * own difference, or why there is no band. The other applications' row is a
- * sum of other runs' differences, not this run's: its number stands without
- * "run:".
+ * own difference, or why there is no band. The other applications' row is
+ * one combined run of every application (evidence-11), or in an older pack a
+ * sum of other runs' differences; either way not this run's, so its number
+ * stands without "run:".
  */
 export function changeText(row: Pick<EvidenceRow, 'unit'> & { id?: EvidenceRow['id'] }, c: EvidenceChange | null): { main: string; sub: string | null; banded: boolean } {
 	if (!c) return { main: '–', sub: null, banded: false };

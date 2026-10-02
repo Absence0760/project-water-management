@@ -17,7 +17,7 @@ opened and checked are listed as verified in [§ References](#references).
 Some are cited from their standard references without being reopened, and they
 are marked. Check those before quoting them in a client document.
 
-**Status.** These are recommendations, not decisions. Items the hydrologist
+**Status.** These are recommendations, not decisions; § Provisional decisions (2026-10-01) below records the answers adopted, provisionally, on the hydrologist's open questions. Items the hydrologist
 must decide are marked as such. Tracked work is in
 [followups.md § Calibration research](./followups.md#calibration-research-2026-09-24).
 
@@ -189,16 +189,23 @@ CR-30 and CR-31 are the larger licensing features in roadmap step 3.
    client's purpose? Or does the CMA expect the assurance-table form from the
    gazetted Reserve study for this reach? The app can now take that table and
    report monthly compliance with it (model.md §2.9c); which table, and the
-   method choices listed there, are for the hydrologist.
+   method choices listed there, are for the hydrologist. **Provisional
+   decision 2026-10-01, to be confirmed by the client's hydrologist:** the
+   assurance-table form where a gazetted Reserve covers the reach; the table
+   itself needs the client's gazette ([§ Provisional decisions](#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 3. **Rating (CR-18).** What is the highest field gauging at each observed
    flow site, and which rating curve was used? This decides which days are
    flagged as extrapolated. Engine 1.22.0 takes the answer per record in
    Settings → Calibration record → Quality flags (model.md §2.10h).
 4. **Abstraction (CR-21, CR-32).** Which abstraction estimate is defensible:
-   registered, SAPWAT or metered? And what range around it?
+   registered, SAPWAT or metered? And what range around it? **Provisional
+   decision 2026-10-01:** metered, else SAPWAT4, registered as an upper
+   bound; ×0.7 / ×1.3 ([§ Provisional decisions](#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 5. **Disagreeing MAR estimates (CR-7).** Where two published MARs
    disagree, which does the hydrologist trust, and why? Or should results
-   be reported toward both ends?
+   be reported toward both ends? **Provisional decision 2026-10-01:** neither
+   by default; the WR2012 band filters, and results go toward both ends
+   where published MARs disagree ([§ Provisional decisions](#provisional-decisions-on-the-hydrologists-questions-2026-10-01)).
 
 ## Rain forcing: which record, and how to homogenise it (issue #12)
 
@@ -584,12 +591,95 @@ rainfall for southern Africa*, WRC 1156/1/04 · Dastane 1978, *Effective
 rainfall in irrigated agriculture*, FAO Irrigation and Drainage Paper 25 ·
 Perrin, Michel & Andréassian 2003 and the others in [§ References](#references).
 
+## Provisional decisions on the hydrologist's questions (2026-10-01)
+
+**Status: provisional decision 2026-10-01, to be confirmed by the client's
+hydrologist.** None of these is the hydrologist's sign-off, and the app says
+so wherever it shows one (the labels read "provisional default, not yet
+confirmed by the catchment's hydrologist"). The operator asked for the best
+answer now, from published practice, so the app can be called
+production-ready; the hydrologist can reverse any row on issue #90, and a
+reversal that changes behaviour bumps `ENGINE_VERSION`. The rule followed:
+keep what is built where the literature supports it, change behaviour only
+where the evidence clearly points elsewhere, and where an answer needs the
+client's own data, keep the safe default and make sure the app shows the
+gap. Two rows change the engine (**engine 1.62.0**): CR-5's benchmarks and
+QF-3's zero-flow stretches ([engine-audit.md C3, C4](./engine-audit.md)).
+Sources marked † were read for this pass; the rest are in [§ References](#references).
+
+### Calibration and the record
+
+| Item | Decision | Why (source) | Change |
+| --- | --- | --- | --- |
+| **Modelled area** (plan.md question 3) | Can't be decided here: it needs the client's catchment boundary at the logger. Rule for when they answer: the area draining to the calibration point (the logger's weir), delineated on a DEM and checked against the DWS gauge's catchment area, not the quaternary's WR2012 area, which drains to a different outlet. | WR2012's areas are quaternary outlets (Bailey & Pitman 2016); a gauge's own catchment is what its flow drains. GR4J's depth-to-volume conversion and the WR2012 MAR band both scale with the area, so an area error moves the MAR one for one. | **Needs client data.** The gap is already shown: the run warns when entered areas disagree (`areaMismatches`, model.md §2.10a), and the WR2012 check prints the area it scaled by. |
+| **CR-7** Disagreeing MARs | Trust neither by default: calibrate with the WR2012 band as the plausibility filter (as built), and report results toward both ends where two published MARs disagree by more than the band, never pick one silently. | Published MARs for one site differ by method and era (WR90/2005/2012 naturalisation, quinary ACRU runs); no reconciliation exists ("Where no authoritative guidance was found"). Reporting a range is the defensible course where sources conflict (Beven 2006). | Docs only (the WR2012 band and the fit-sweep's MAR column already show it). |
+| **CR-21 / CR-32** Abstraction estimate | Metered use where a meter record exists; otherwise a SAPWAT4 crop-requirement estimate; the registered (WARMS) volume as a comparison and upper bound, not the estimate. Range: ×0.7 / ×1.3 (the sensitivity run's), wider for a unit with neither meter nor crop survey. | WARMS registrations are self-declared and DWS's verification and validation exists because they overstate lawful use; SAPWAT4 is the SA standard for irrigation requirement (van Heerden & Walker 2016, WRC TT 662/16). A meter measures what was taken. | Docs only (the demand-source labels, model.md §2.7f, already record which a unit uses). |
+| **CR-30** EWR form | Where a gazetted Reserve (Classification and RQOs under NWA s13 and s16) covers the reach, the evidence is the assurance-table form (a Reserve rule table); the 12-value pragmatic EWR is an operational screen and is not presented as the Reserve. Which table: needs the client's gazette for the reach. | The CMA assesses against the determined Reserve, which DWS publishes as monthly assurance rules from the Desktop Reserve Model (Hughes & Hannart 2003). | **Needs client data** (the table). Docs only: the evidence report already prints which EWR form each site uses. |
+| **CR-28** WR2012 bands and the seasonal index | Keep the five-statistic table and its < 4 / 4 / 6 / 6 / 8 % bands, labelled indicative; seasonal index as built (Walsh & Lawler 1981, %), sample SD (n − 1), log base 10 of annual flow in Mm³. | The < 4 % MAR criterion is confirmed by an independent citation of Bailey & Pitman (2016)†; the other bands, the SI definition and the SD/log conventions still can't be checked, because WRC's server returned 504 again for TT 689/16 on 2026-10-01. | Docs only; the "indicative (to be confirmed)" label stays. |
+| **CR-21** Sensitivity runs | Keep the 0.8 decision share, the ranges (rain ×0.9/1.1, pan and dam lake-evaporation ±15 %, abstraction ×0.7/1.3, dams empty/full) and one factor at a time. No worst-case corners. | One-at-a-time runs are a screen, not an uncertainty estimate (Saltelli & Annoni 2010); the joint uncertainty is the behavioural ensemble (CR-1, model.md §2.10e), which samples parameters and forcing together. Stacking every factor at its extreme gives a joint case far less likely than any single one, and would overstate the risk. | Docs only; the panel's label reworded to "provisional default". |
+| **CR-5** Intervals and benchmarks | Keep 90 % intervals from 1 000 water-year resamples, none under 3 years, and the ±7-day climatology. **Change:** on a validation period both benchmarks are built from the test's calibration period. Keep KGE′ as the general default objective; for EWR and low-flow figures use the low/high-flow objective, as #12 already decided for the client (`kgeNp`). | Water-year block resampling with 1 000 samples and a 5th–95th-percentile interval is exactly the `gumboot` practice†; the same study builds every benchmark (the daily mean flow, the mean flow on each calendar day) from the calibration period and applies it to the evaluation period† (Gründemann et al. 2026). A benchmark built from the validation flows already knows them, so it isn't a forecast. The low/high objective helps low flows (Garcia et al. 2017; Pushpalatha et al. 2012) and is a per-fit choice. | **Code (engine 1.62.0)**: `scoreBenchmarks(…, from)`, `builtFrom`; the Fit panel says where each validation benchmark came from. |
+| **CR-34** Representativeness | Keep terciles, ≥ 10 complete water years each with ≥ 95 % of days, and the note below 5 scored water years. | GSIM needs 350 reliable days for a valid year (96 %, Gudmundsson et al. 2018†); terciles are the usual dry/normal/wet split. 10 years is short of a 30-year normal, which is why the note exists. | Docs only. |
+| **Dry → wet ranking** | Keep: rank by the reference gauge's water-year mean when it covers every year (never scored), over the fitted record's days only, else by the record's own flow. | Klemeš (1986)'s differential split-sample test needs an independent wet/dry index, so the ranking isn't tuned on the record being tested; using the same days keeps the index and the test aligned. | Docs only. |
+| **CR-13** Recession diagnostics | Keep ≤ 1 mm on the day and the day before, b within 0.5, rate within a factor of 2, judged from 8 segments, on the rain the run uses (CHIRPS-filled days included), at the calibration site only. | 1 mm is the usual rain-day threshold; b varies by a few tenths between dQ/dt methods (Stoelzle et al. 2013), so 0.5 is beyond method noise; < 8 segments is too few (TOSSH warns below 10). Station-only rain would leave filled days unknown and lose segments; inner gauges are judged when they are the calibration site. | Docs only. |
+| **Automated calibration rules** | Adopt the default rule set provisionally (exclude a year above 20 % flagged days; select on the dry → wet validation score, never in-sample; MAR inside the WR2012 band; Perrin's typical ranges). It stays **not signed off** in the app, so a fit it picks is still not evidence until the hydrologist signs it. | Pre-declared rules stop the result steering the choices (Beven 2006); validation-only selection follows Klemeš (1986). | Docs only (`signedOff` stays false). |
+| **IHACRES** (issue #4 phase 7) | **No.** Don't build it. | A second structure is useful only if it answers a question GR4J can't; the structural alternative already planned for low flows is GR6J (CR-10, Pushpalatha et al. 2011), and SA practice's own benchmark model is Pitman/WRSM, which the WR2012 band stands in for. The climatology benchmark already tests whether GR4J adds skill. | Docs only. |
+| **Fit-sweep size** | Keep 24 cells, raisable on the command line. | Each cell is a full calibration with two validations; 24 covers a 2 × 3 × 2 × 2 grid in minutes, and a larger grid is a deliberate choice. | Docs only. |
+
+### Data quality
+
+| Item | Decision | Why (source) | Change |
+| --- | --- | --- | --- |
+| **Data-quality thresholds** | Keep outliers 5× (rain) / 10× (flow) the 99th percentile and flat-lines 5 days (rain) and 14–90 days by resolution (flow), as project settings. | GSIM flags a flat line at more than 10 equal values above zero and outliers at ±6 SD of log flow by calendar day (Gudmundsson et al. 2018†); the app's resolution-aware flow rule is as strict at normal flows and looser only where a DWS record's 0.001 m³/s resolution holds a slow recession on one value. | Docs only. |
+| **CHIRPS bias correction** | Keep linear scaling per calendar month as the default, the 90-day / 50 mm sample and the 0.25–4 clamp; quantile mapping (CR-23) stays opt-in, recommended where a month has ≥ 30 wet days on both sides. | Linear scaling keeps each month's water, which the water balance needs; distribution mapping does better on intensities and percentiles (Teutschbein & Seibert 2012), and a South African CHIRPS study applies empirical quantile mapping against gauges (UKZN ResearchSpace 10413/20887)†, but needs more data than a short gauge overlap often has. | Docs only. |
+| **D7** CHIRPS scale factor | Yes, CHIRPS needs one, and it already gets it: the run-time bias correction (B1) is the scale factor. A feed stores CHIRPS as published, so the raw record stays auditable. | Satellite products, CHIRPS among them, overestimate light and underestimate heavy daily rain, and CHIRPS agrees with SA gauges far better monthly than daily (UKZN ResearchSpace 10413/20887)†. | Docs only. |
+| **Multi-day accumulations** | Keep the thresholds (20 mm; 3 days; CHIRPS ±1 day < 25 %; CHIRPS over the run ≥ 50 %; 92-day cap) and the gauge total as recorded. | Viney & Bates (2004) describe the pattern; the thresholds are conservative. Scaling up a low window's total needs the station's observer logs. | Docs only; **needs client data** to confirm any one window. |
+| **Zero-rain runs** | Keep them treated as missing by default (CR-20). Whether a given run is a real dry spell needs the station's records. | A zero blocks the gap fill, so a missing stretch exported as zeros dries the catchment (engine-audit B2). | **Needs client data** (which runs are real); keep-dry periods take the answer. |
+| **QF-4** Rating range per record | Can't be decided without the client's gauging list and rating. | — | **Needs client data.** The gap is shown: with no highest gauging entered, the data-quality panel says no day can be flagged extrapolated. |
+| **QF-1 / QF-2** Days outside the rating | Keep: censor above the highest gauging; leave out flows above zero below the lowest gauging; trust zero flow. | Rating extrapolation errors exceed 40 % beyond the gauged range on SA weirs against ±5 % inside it (Wessels & Rooseboom 2009); censoring keeps the information that the flow was at least that high (Beven & Westerberg 2011). Extrapolated low flows carry the same doubt, and the panel tells the user to check EWR low flows against the record itself. | Docs only. |
+| **QF-3** Long zero-flow stretches | **Change:** a stretch of zero flow is never suspect; it is scored as a river that stopped. The Data checks still list it and the panel names it, with the exclusion period as the way out for a logger that died reading zero. | GSIM's flat-line rule flags only values *above zero*, because rivers that stop are real (Gudmundsson et al. 2018†). Many SA rivers are non-perennial; leaving their dry spells out of the fit biases the low-flow end, which EWR verdicts rest on. | **Code (engine 1.62.0)**: `flowDayFlags`, `DayQuality.longZeroDays` and its panel note. |
+| **QF-5** "Human use dominant" | From periods the user enters, not a modelled threshold. | A threshold on modelled abstraction would move with the parameters being fitted (a flag that changes during the fit). | Docs only (CR-25, not built: needs the periods). |
+| **QF-6 / QF-7** Panel call-outs and the run's scores | Keep the 20 % and 25 % call-outs. The run's own calibration statistics keep scoring every observed day; the fit report shows both. | The run's statistics are the record as it is, so flagged days count against the model there; the fit's clean-day scores sit beside its all-day scores (engine-audit C2), so nobody reads one as the other. | Docs only. |
+| **Data-quality alternatives** | Keep all four off. | Deciding needs a semi-arid record with a known drought, which isn't in the repo; turning them on unvalidated would change which rain is used. | Docs only; **needs client data** (a drought record). |
+| **Flow gap filling** | Keep it off by default, with its limits (5-day log interpolation, one donor ratio, r ≥ 0.5 and 365 shared days, the record's own maximum, filled days unscored). | Filled days never scored is the safe default; a seasonal limit or per-month ratio is a refinement for a client record that needs filling. | Docs only. |
+| **Quantile map of a replacement gauge** | Keep ≥ 20 mm heavy days, the 5-point warning, wet days ≥ 1 mm, calendar seasons, and the map keeping wet-day counts. | Calendar seasons are the usual pooling (DJF/MAM/JJA/SON); changing a gauge's wet-day count would invent rain days a real gauge recorded as dry. | Docs only. |
+
+### EWR, assurance and planning outputs
+
+| Item | Decision | Why (source) | Change |
+| --- | --- | --- | --- |
+| **EWR assurance rules** (A1–A3) | Keep: the total and low-flow tables each judged against their own requirement; the percentile from the run (natural MAR within ±15 % of a recorded one, else a warning), or from the gazette's curve per table; linear interpolation; below the driest point the requirement scales with the flow. Which table at which site needs the client's gazette. | Scaling keeps natural flow meeting its own rules, the Reserve's defining invariant; linear interpolation handles the zeros gazette tables contain (Pollard et al. 2011), which a log scale can't. | **Needs client data** (tables); the evidence report's G16 caution now says "provisional". |
+| **Desktop Reserve** (A5–A7) | Keep low flows judged on total volume by default; base flow optional, Lyne–Hollick α 0.995, three passes; freshets capped by natural events and counted per water year; an event at half its peak for half its duration; no DRM high-flow-volume check for now. | The three-pass filter is the standard one (Nathan & McMahon 1990; Ladson et al. 2013). Hughes, Hannart & Watkins (2003) use the same filter family for the DRM's separation, with β 0.5 at a daily step and α between 0.925 and 0.997†; their pass count still couldn't be read (the article's full text was not reachable on 2026-10-01), and an earlier persona reading says the DRM used one forward pass. Three passes damp the filter's start-up and phase shift (Ladson et al. 2013); since base flow is opt-in, the count matters only once someone switches it on, and it is the first thing to check against the paper. | Docs only. |
+| **Assurance of supply** | Keep demand days only, complete water years only, and the node-based workbook's stress thresholds. | Reliability counts the periods with demand (Hashimoto et al. 1982); a winter without irrigation would otherwise inflate it. SA states assurance per year (a 1-in-n-year failure), so part years would bias it. | Docs only. |
+| **τ** allocation-comparison tolerance | Keep 0.1 (a project setting). | It decides only how a comparison reads; ±10 % allows for meter and model error without hiding a real overshoot. | Docs only; help text reworded. |
+| **s21b dam filling** | Keep: supply from a farm's own dam counts as abstraction, storage is compared with dam capacity only. | NWA s21(a) is the taking; s21(b) the storing. Counting the dam's supply as taking avoids double counting the water once as storage and again as use. | Docs only. |
+| **`ewrChargeSource`** | Keep `'pragmatic'` for the daily charge; the Reserve rule table judges compliance monthly. | The rule table is a monthly assurance rule, not a daily flow; spreading it evenly over a month's days invents a daily requirement the gazette doesn't state. | Docs only. |
+| **The forecast month** (K1) | Acceptable: a month the history ends inside is charged on the pragmatic EWR. | Assessing it on the rule table would need the forecast to decide the month's natural percentile, which breaks causality (engine-audit K1). | Docs only. |
+| **`lowFlowMeasure`** | Keep `'total'`; base flow at α 0.995 is the option; judging each month on the record to date is acceptable. | Judging on the record to date keeps completed months fixed as days are added (K1); a DRM low-flow requirement is a monthly volume (Hughes & Hannart 2003). | Docs only. |
+| **Outcome-matrix cut-offs** | Keep 0.90 / 0.75 months met and 0.05 / 0.20 days below the EWR. | No published standard exists; 90 % months met is the conventional high assurance, 75 % is a quartile. | Docs only; badges reworded "provisional". |
+| **Review-trigger storage bands** | Keep terciles by calendar day, the lowest from the lowest storage on record, the total shared pro rata to capacity. | Terciles match the dry/normal/wet classes used elsewhere; the lowest band starting from storage the record has actually seen avoids an empty-dam case that never happened. | Docs only. |
+| **Review-trigger year** | Keep the latest review date the record holds, with every past year's weather. | It reads as a rule by storage band, independent of how each analogue's first half went. | Docs only. |
+| **D11** Traffic lights | Keep 5 % / 20 % of the last 30 days. | No published threshold; the pair matches the outcome-matrix days cut-offs, so the two outputs agree. | Docs only; label reworded "provisional". |
+| **Analogue years** | Keep at least 10. | With fewer, the 10th and 90th percentiles rest on one or two members. | Docs only. |
+| **Lower demand can add days below the EWR** | Confirmed as physical, not a bug: irrigation return flow from dam water reaches the river on dry days. Say so wherever the outlook is shown to a WUA. | Return flows sustain low flows below irrigated areas; the model's same-day return (engine-audit N1) is a simplification of that. | Docs only. |
+| **Licence impact use counting** | Keep consumptive use, steps closing at the outlet, years classed by the baseline's natural flow, the verdict from months below the Reserve (or days below the pragmatic EWR). | The river sees consumptive use, not gross abstraction; classing by natural flow keeps the application from moving its own year classes. | Docs only. |
+
+### Help text and number style
+
+| Item | Decision | Why (source) | Change |
+| --- | --- | --- | --- |
+| **`base-flow`** | Keep the draft (GR4J has no base-flow store; the app uses the Lyne–Hollick filter). | Perrin et al. (2003): GR4J's routing store carries quick and slow flow together. | Docs only. |
+| **`ecological-category`** | Keep A–D as targets, and say E and F aren't management targets. | EcoClassification: E and F describe present state; the lowest recommended category is D (Kleynhans & Louw 2007, WRC TT 329/08). | Help text: one sentence added. |
+| **`ewr`** | Keep "IFR" as the older term; name the Act's term, the Reserve, with the ecological Reserve as its part. | NWA s1 defines "Reserve" (basic human needs and aquatic ecosystems); "IFR" is the pre-Act term (King & Louw 1998). | Help text reworded. |
+| **D10** Thousands separator | Keep the narrow no-break space (300 000). | SI and ISO 80000-1 group digits with a thin space, never a comma or point; SA uses the SI convention. | Docs only. |
+
 ## Where no authoritative guidance was found
 
 - A DWS standard for WULA hydrology (methods, calibration thresholds,
   uncertainty).
 - The WR2012 good-fit thresholds in their primary source. The WRC server timed
-  out, so they come from a consultant report citing WR2012.
+  out (again on 2026-10-01: 504 for TT 689/16), so they come from a consultant
+  report citing WR2012; only the < 4 % MAR band has a second, independent
+  citation.
 - The official DWS Hydstra quality-code definitions (the pages returned 403).
 - A reconciliation of quinary (ACRU) and WR2012 MARs.
 - Guidance on using short private flow records.
@@ -708,4 +798,18 @@ Ndiritu 2009, *Phys. Chem. Earth* 34 (verified) ·
 Pollard, Mallory, Riddell & Sawunyama 2011, WRC K8/881/2 (verified) ·
 Riddell et al. 2014, *HSJ* 59:831, doi:10.1080/02626667.2013.853123 (verified) ·
 Sawunyama & Hughes 2010, *Water SA* 36(4) (verified) ·
-van Heerden & Walker 2016, SAPWAT4, WRC TT 662/16 (verified).
+van Heerden & Walker 2016, SAPWAT4, WRC TT 662/16 (verified) ·
+Kleynhans & Louw 2007, EcoClassification Module A, WRC TT 329/08 ·
+King & Louw 1998, *Aquat. Ecosyst. Health Manag.* 1:109.
+
+**Added for the provisional decisions (2026-10-01).**
+Gründemann, Knoben, Song, van Werkhoven & Clark 2026, *HESS* 30:3439, doi:10.5194/hess-30-3439-2026 (verified: benchmarks from the calibration period; `gumboot` water-year resampling, 1 000 samples, 5th–95th percentile) ·
+Knoben, Freer, Peel, Fowler & Woods 2020, *WRR* 56 (36 models in 559 catchments against a seasonal benchmark) ·
+Gudmundsson, Do, Leonard & Westra 2018, GSIM Part 2, *ESSD* 10:787, doi:10.5194/essd-10-787-2018 (verified: flat lines only above zero; ±6 SD of log flow; 350 days a valid year) ·
+Saltelli & Annoni 2010, *Environ. Model. Softw.* 25:1508 ·
+Hashimoto, Stedinger & Loucks 1982, *WRR* 18:14 ·
+Ladson et al. 2013, *Aust. J. Water Resour.* 17:25 ·
+Nathan & McMahon 1990, *WRR* 26:1465 ·
+Viney & Bates 2004, *Int. J. Climatol.* 24:1171 ·
+Walsh & Lawler 1981, *Weather* 36:201 ·
+UKZN ResearchSpace, handle 10413/20887 (verified abstract: CHIRPS validated and quantile-mapped against South African gauges).

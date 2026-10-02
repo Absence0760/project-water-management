@@ -38,11 +38,12 @@ import { isRiverOfftake, OFFTAKE_SERIES, offtakeOrder, offtakeReturns, planOffta
 import { boreholeOf, boreholesByNode, ga538Warnings, groundwaterAnnualUse } from './network/boreholes';
 import { resolveDamCurve, resolveRelease, seepageReturnOf, type DamCurve, type PlanRelease } from './network/dam';
 import { operatingOf, supplyOf, userPumpOf } from './network/supply';
+import { RIVER_TAKE_SERIES, riverPoolEvaporationKey, riverPoolKey, riverPumpLimitedKey, riverSourcesOf, riverTakeKey } from './network/riverSource';
 import { planRestriction, resolveDroughtRestriction, RESTRICTION_SERIES, restrictionCutKey } from './network/restriction';
-import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsPopulation, dayFloor, DEMAND_OBJECT_SERIES, demandObjectsByNode, objectDemandKey, objectRank, objectSuppliedKey, planObjects, unitBasicNeeds, waterYearMonths, type PlanObjects } from './network/demandObjects';
 import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
-import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
+import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
 import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
@@ -65,9 +66,11 @@ import {
 	calibrationSeriesKey,
 	type EwrAgreementSite,
 	DAM_AREA_EXPONENT,
+	DAM_AREA_EXPONENT_MAX,
 	DEMAND_OBJECT_SOURCES,
 	DEMAND_PARTS,
-	ESTIMATED_DAM_DEPTH_M,
+	ESTIMATED_DAM_AREA_LABEL,
+	estimatedDamAreaM2,
 	LAND_COVER_CLASSES,
 	OBSERVED_SERIES_LABEL,
 	parseGaugeSeriesKey,
@@ -90,6 +93,7 @@ import {
 	type RunAllocationNode,
 	type RunAllocations,
 	type RunAllocationSource,
+	type RiverTakeSummary,
 	type UserSummary
 } from './project';
 import type { AllocationLimitBound } from './project';
@@ -335,6 +339,7 @@ function runNetwork(
 			p.initialDepletionStoreM3 = r.depletionStoreM3;
 			if (r.depletionDeficitM3) p.initialDepletionDeficitM3 = r.depletionDeficitM3;
 			p.initialOnRiver = r.onRiver;
+			if (r.poolStorageM3 && p.river) p.initialPoolM3 = r.poolStorageM3;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
 			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
 		});
@@ -584,7 +589,7 @@ function runNetwork(
 	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'pumpLimited' | 'restrictedDemand' | 'storageSet' | 'objectSupplied' | 'riverTakes' | 'offtakeIn' | 'offtakeOut' | 'offtakeReturn' | 'allocationRoom' | 'allocationLeft'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -687,6 +692,20 @@ function runNetwork(
 			const floor = basicNeeds[i];
 			if (floor) push(node.id, BASIC_NEEDS_SERIES.key, BASIC_NEEDS_SERIES.label, BASIC_NEEDS_SERIES.unit, floor);
 		}
+		// River abstractions (engine ≥ 1.65.0, docs/model.md §2.7j): each one's take and, with a pool, its storage and evaporation.
+		const riv = plan.nodes[i]!.river;
+		if (riv && r.riverTakes) {
+			riv.takes.forEach((x, a) => {
+				push(node.id, riverTakeKey(x.key), RIVER_TAKE_SERIES.take.label(x.name), RIVER_TAKE_SERIES.take.unit, r.riverTakes!.got[a]!);
+				if (x.pool) {
+					push(node.id, riverPoolKey(x.key), RIVER_TAKE_SERIES.pool.label(x.name), RIVER_TAKE_SERIES.pool.unit, r.riverTakes!.pool[a]!);
+					push(node.id, riverPoolEvaporationKey(x.key), RIVER_TAKE_SERIES.poolEvaporation.label(x.name), RIVER_TAKE_SERIES.poolEvaporation.unit, r.riverTakes!.poolEvaporation[a]!);
+				}
+				// Its pump's limit (engine ≥ 1.66.0): only with a pump capacity.
+				const pl = r.riverTakes!.pumpLimited[a];
+				if (pl) push(node.id, riverPumpLimitedKey(x.key), RIVER_TAKE_SERIES.pumpLimited.label(x.name), RIVER_TAKE_SERIES.pumpLimited.unit, pl);
+			});
+		}
 		// The storage reset (engine ≥ 0.46.0): only on a dam it sets.
 		if (r.storageSet) push(node.id, 'dam_storage_set', 'Dam storage set at the start of the day (+ added / − taken; the review triggers)', 'm³', r.storageSet);
 		if (node.kind === 'user') {
@@ -756,6 +775,19 @@ function runNetwork(
 			...groundwaterMeans(plan.nodes[i]!, r),
 			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
 			...(plan.nodes[i]!.objects ? { demandObjects: objectSummaries(plan.nodes[i]!.objects!, r.objectSupplied!, input.model.demandObjects ?? [], mean) } : {}),
+			// Its river abstractions (engine ≥ 1.65.0, docs/model.md §2.7j).
+			...(plan.nodes[i]!.river && r.riverTakes
+				? {
+						riverTakes: plan.nodes[i]!.river!.takes.map((x, a) => ({
+							key: x.key,
+							name: x.name,
+							avgTakeM3Day: mean(r.riverTakes!.got[a]!),
+							pumpM3Day: Number.isFinite(x.pumpM3Day) ? x.pumpM3Day : null,
+							...(r.riverTakes!.pumpLimited[a] ? takePumpMeans(r.riverTakes!.got[a]!, r.riverTakes!.pumpLimited[a]!, mean) : {}),
+							...(x.pool ? { poolM3: x.pool.capM3, avgPoolStorageM3: mean(r.riverTakes!.pool[a]!) } : {})
+						}))
+					}
+				: {}),
 			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
 			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate, plan.nodes[i]!.capacityScale ? (t) => node.damCapacityM3 * plan.nodes[i]!.capacityScale![t]! : undefined) ?? {})
 		});
@@ -996,6 +1028,7 @@ function runNetwork(
 				groundwaterToDam: r.groundwaterToDam,
 				depletion: r.depletion,
 				storage: r.storage,
+				...poolAccount(plan.nodes[i]!, r, days),
 				...(r.storageSet ? { storageSet: r.storageSet } : {}),
 				...(r.offtakeOut ? { offtakeOut: r.offtakeOut } : {}),
 				...(r.offtakeIn ? { offtakeIn: r.offtakeIn } : {}),
@@ -1042,6 +1075,7 @@ function runNetwork(
 				depletionStoreM3: net.depletionStoreM3[i]!,
 				...(net.depletionDeficitM3[i]! > 0 ? { depletionDeficitM3: net.depletionDeficitM3[i]! } : {}),
 				onRiver: net.onRiver[i] === 1,
+				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
@@ -1381,7 +1415,7 @@ export function buildNetworkPlan(
 			continue;
 		}
 		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
-			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between farms; skipped`);
+			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
@@ -1410,10 +1444,21 @@ export function buildNetworkPlan(
 	const lakeK = settings.lakeEvapFactorMonthly;
 	// A day the daily A-pan series covers (engine ≥ 0.38.0, issue #45) takes that day's A-pan instead of the month's mean.
 	const apanDay = apanDailyMm(aligned('evap_apan_mm'));
+	// Whether any day of the run has an A-pan above 0 (the daily series' day, else the month's mean).
+	let anyApan = false;
 	for (let t = 0; t < days; t++) {
 		const m = waterYearIndex(month[t]!);
 		const a = apanDay ? apanDay[t]! : NaN;
 		lakeEvapMmDay[t] = a === a ? (lakeK ? lakeK[m]! : settings.lakeEvapFactor) * a : ((lakeK ? lakeK[m]! : settings.lakeEvapFactor) * settings.apanMm[m]!) / monthDays[m]!;
+		if ((a === a ? a : settings.apanMm[m]!) > 0) anyApan = true;
+	}
+	// No A-pan on any day (a new project's default row; an ET0 grid fills GR4J's PE only, docs/maps.md): open water
+	// loses nothing, which the crop warning below doesn't cover (engine ≥ 1.67.0, persona-hydrologist round 4).
+	if (!anyApan && days > 0) {
+		const pooled = (model.demandObjects ?? []).some((o) => o.enabled !== false && o.waterSource === 'river' && typeof o.riverPoolM3 === 'number' && o.riverPoolM3 > 0);
+		const open = nodes.filter((n) => n.kind === 'farm' && (n.damCapacityM3 > 0 || (n.cropWaterSource === 'river' && typeof n.cropRiverPoolM3 === 'number' && n.cropRiverPoolM3 > 0)));
+		if (open.length || pooled)
+			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
 	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
@@ -1421,11 +1466,11 @@ export function buildNetworkPlan(
 	for (const n of nodes) {
 		if (n.kind !== 'farm' || !(n.damCapacityM3 > 0)) continue;
 		const bad = damCurveProblem(n.damCurve);
-		if (bad) warnings.push(`farm "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
+		if (bad) warnings.push(`unit "${n.name}": dam survey curve not used (${bad}); using the power-law area`);
 		const top = resolveDamCurve(n)?.volume.at(-1);
 		if (top !== undefined && Math.abs(top - n.damCapacityM3) > DAM_CURVE_CAPACITY_TOLERANCE * n.damCapacityM3)
 			warnings.push(
-				`farm "${n.name}": the dam survey curve tops out at ${Math.round(top)} m³ but the capacity is ${Math.round(n.damCapacityM3)} m³ (more than 1 % apart); ` +
+				`unit "${n.name}": the dam survey curve tops out at ${Math.round(top)} m³ but the capacity is ${Math.round(n.damCapacityM3)} m³ (more than 1 % apart); ` +
 					`above the top row the area stays at its last value. Check the capacity against the survey`
 			);
 	}
@@ -1433,7 +1478,7 @@ export function buildNetworkPlan(
 	if (estimated.length) {
 		warnings.push(
 			`${estimated.length} dam${estimated.length === 1 ? ' has' : 's have'} no full-supply area, so dam evaporation uses an estimate: ` +
-				`capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m mean depth (Mantel & Hughes 2023). Enter the area for (${estimated.map((n) => n.name).join('; ')})`
+				`${ESTIMATED_DAM_AREA_LABEL} m², a regional relation that can be far out for any one dam. Enter the area for (${estimated.map((n) => n.name).join('; ')})`
 		);
 	}
 
@@ -1520,9 +1565,10 @@ export function buildNetworkPlan(
 				soilWater: demand[i]!.soilWater,
 				...(u ? { userReturn: u.returnPct, senior: u.senior, seniorClaimed: u.claimed, ...(u.pump !== undefined ? { userPumpM3Day: u.pump } : {}) } : {}),
 				...boreholeOf(n, bores.get(n.id) ?? [], warnings),
-				...supplyOf(n, warnings),
+				...supplyOf(n, warnings, start === undefined ? undefined : { start, end: start + days - 1 }),
 				...operatingOf(n, warnings),
 				...(objectsBy.has(n.id) ? { objects: objectsOf(n)! } : {}),
+				...riverSourcesOf(n, objectsBy.get(n.id), warnings),
 				...(cover[i] ? { landCover: { mar: cover[i]!.mar, lowFlow: cover[i]!.lowFlow } } : {}),
 				...(users.claims[i] ? { seniorClaim: users.claims[i] } : {}),
 				...(reset?.byNode.has(i) ? { storageResetM3: reset.byNode.get(i)! } : {})
@@ -1633,16 +1679,16 @@ function storageResetOf(
 		const i = nodes.findIndex((n) => n.id === id);
 		const n = nodes[i];
 		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) {
-			warnings.push(`damStorageReset: "${id}" is not a farm with a dam; ignored`);
+			warnings.push(`damStorageReset: "${id}" is not a unit with a dam; ignored`);
 			continue;
 		}
 		if (typeof v !== 'number' || !Number.isFinite(v)) {
-			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
+			warnings.push(`damStorageReset: unit "${n.name}" storage ${String(v)} is not a number; ignored`);
 			continue;
 		}
 		// Against the capacity on the reset day (engine ≥ 1.30.0: it can change over the run).
 		const cap = damCapacityOn(n, start + day);
-		if (v < 0 || v > cap) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
+		if (v < 0 || v > cap) warnings.push(`damStorageReset: unit "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
 		byNode.set(i, Math.min(Math.max(v, 0), cap));
 	}
 	return byNode.size ? { day, byNode } : null;
@@ -1812,6 +1858,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			category: o.category,
 			...(o.source && (DEMAND_OBJECT_SOURCES as readonly string[]).includes(o.source) ? { source: o.source } : {}),
 			priority: o.priority,
+			// Its rank within its class as the run used it (engine ≥ 1.64.0), only when one is set on a 'first' or 'last' object.
+			...(objectRank(o) > 0 && o.rank !== null && o.rank !== undefined ? { rank: objectRank(o) } : {}),
 			destination: o.destination,
 			avgDemandM3Day: avgDemand,
 			avgSuppliedM3Day: avgSupplied,
@@ -1906,7 +1954,7 @@ function otherUsers(
 					else for (let t = 0; t < days; t++) c[t]! += Math.min(demand[t]!, pump) * f;
 				}
 			} else {
-				warnings.push(`senior user "${n.name}" has no farm with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
+				warnings.push(`senior user "${n.name}" has no unit with a flow share upstream: its demand can't be passed down to it, so it takes only what reaches it`);
 			}
 		}
 		byNode.set(i, { demand, returnPct, senior, claimed, ...(pump !== undefined ? { pump } : {}) });
@@ -2047,26 +2095,33 @@ function capYears(
 
 /**
  * A dam's evaporation and seepage parameters (audit N2): the full-supply area
- * as entered, or capacity ÷ 3 m when it isn't known (warning W6, in
- * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning);
+ * as entered, or estimatedDamAreaM2 when it isn't known (warning W6, in
+ * buildNetworkPlan); the area exponent (0 < b ≤ 3, else 0.7 with a warning;
+ * above DAM_AREA_EXPONENT_MAX it runs, with a warning, engine ≥ 1.63.0);
  * seepage per day clamped to 0–1. A node without a dam gets none.
  */
 function damLosses(n: NetworkNode, warnings: string[]): { damAreaFullM2: number; damAreaExponent: number; damSeepagePerDay: number } {
 	const cap = n.damCapacityM3;
 	if (n.kind !== 'farm' || !(cap > 0)) return { damAreaFullM2: 0, damAreaExponent: DAM_AREA_EXPONENT, damSeepagePerDay: 0 };
-	let area = n.damAreaFullM2 ?? cap / ESTIMATED_DAM_DEPTH_M;
+	let area = n.damAreaFullM2 ?? estimatedDamAreaM2(cap);
 	if (!(Number.isFinite(area) && area >= 0)) {
-		warnings.push(`farm "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m`);
-		area = cap / ESTIMATED_DAM_DEPTH_M;
+		warnings.push(`unit "${n.name}": dam area ${String(n.damAreaFullM2)} m² is not a size ≥ 0; using ${ESTIMATED_DAM_AREA_LABEL}`);
+		area = estimatedDamAreaM2(cap);
 	}
 	let b = n.damAreaExponent;
 	if (!(b > 0 && b <= 3)) {
-		warnings.push(`farm "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
+		warnings.push(`unit "${n.name}": dam area exponent ${String(b)} is not in (0, 3]; using ${DAM_AREA_EXPONENT}`);
 		b = DAM_AREA_EXPONENT;
+	} else if (b > DAM_AREA_EXPONENT_MAX && !resolveDamCurve(n)) {
+		// Engine ≥ 1.63.0 (issue #90): a save no longer takes b > 1, which no basin has; an older document's runs as entered.
+		warnings.push(
+			`unit "${n.name}": dam area exponent ${String(b)} is above ${DAM_AREA_EXPONENT_MAX}, which no real basin has (the surface would grow faster than the volume); ` +
+				`it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ ${DAM_AREA_EXPONENT_MAX}. Use ${DAM_AREA_EXPONENT}, or enter the dam's survey curve`
+		);
 	}
 	const s = n.damSeepagePerDay;
 	const seep = Number.isFinite(s) ? Math.min(Math.max(s, 0), 1) : 0;
-	if (seep !== s) warnings.push(`farm "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
+	if (seep !== s) warnings.push(`unit "${n.name}": dam seepage ${String(s)} per day is not in [0, 1]; using ${seep}`);
 	return { damAreaFullM2: area, damAreaExponent: b, damSeepagePerDay: seep };
 }
 
@@ -2080,7 +2135,7 @@ function damStorage(n: NetworkNode, warnings: string[]): { damCurve?: DamCurve; 
 	const curve = resolveDamCurve(n);
 	const release = resolveRelease(n, warnings);
 	const ret = seepageReturnOf(n);
-	if (n.damSeepageReturnPct !== undefined && ret !== n.damSeepageReturnPct) warnings.push(`farm "${n.name}": seepage return ${String(n.damSeepageReturnPct)} is not in [0, 1]; using ${ret}`);
+	if (n.damSeepageReturnPct !== undefined && ret !== n.damSeepageReturnPct) warnings.push(`unit "${n.name}": seepage return ${String(n.damSeepageReturnPct)} is not in [0, 1]; using ${ret}`);
 	return { ...(curve ? { damCurve: curve } : {}), ...(release ? { release } : {}), ...(ret < 1 ? { seepageReturn: ret } : {}) };
 }
 
@@ -2095,13 +2150,13 @@ function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficien
 	if (n.kind !== 'farm') return { irrigationEfficiency: 1, lossReturnFraction: 0 };
 	let e = n.irrigationEfficiency;
 	if (!(e > 0 && e <= 1)) {
-		warnings.push(`farm "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
+		warnings.push(`unit "${n.name}": irrigation efficiency ${String(e)} is not in (0, 1]; using 1`);
 		e = 1;
 	}
 	e = fromCrops(e);
 	const b = n.lossReturnFraction;
 	const beta = Number.isFinite(b) ? Math.min(Math.max(b, 0), 1) : 0;
-	if (beta !== b) warnings.push(`farm "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
+	if (beta !== b) warnings.push(`unit "${n.name}": loss return fraction ${String(b)} is not in [0, 1]; using ${beta}`);
 	return { irrigationEfficiency: e, lossReturnFraction: beta };
 }
 
@@ -2442,6 +2497,30 @@ export function resolveReportWindow(
 }
 
 /**
+ * A unit's river abstractions' pools for the water account (engine ≥ 1.65.0):
+ * their storage and evaporation summed per day, in `river.takes` order, and
+ * their start (full, or a resumed run's). {} without a pool.
+ */
+function poolAccount(p: PlanNode, r: NodeResult, days: number): { pool?: { storage: Float64Array; evaporation: Float64Array; initialM3: number } } {
+	const tk = p.river?.takes;
+	if (!tk || !r.riverTakes || !tk.some((x) => x.pool)) return {};
+	const storage = new Float64Array(days);
+	const evaporation = new Float64Array(days);
+	let initialM3 = 0;
+	tk.forEach((x, a) => {
+		if (!x.pool) return;
+		initialM3 += p.initialPoolM3 ? p.initialPoolM3[a]! : x.pool.capM3;
+		const q = r.riverTakes!.pool[a]!;
+		const e = r.riverTakes!.poolEvaporation[a]!;
+		for (let t = 0; t < days; t++) {
+			storage[t]! += q[t]!;
+			evaporation[t]! += e[t]!;
+		}
+	});
+	return { pool: { storage, evaporation, initialM3 } };
+}
+
+/**
  * An other water user's pump over the run (engine ≥ 1.58.0): the mean river
  * take and the mean demand the pump left unmet, and the days it did (more
  * than float noise of the day's take).
@@ -2450,6 +2529,17 @@ function pumpMeans(river: Float64Array, limited: Float64Array, mean: (a: ArrayLi
 	let days = 0;
 	for (let t = 0; t < limited.length; t++) if (limited[t]! > 1e-9 * Math.max(1, river[t]!)) days++;
 	return { avgRiverAbstractionM3Day: mean(river), avgPumpLimitedM3Day: mean(limited), daysPumpLimited: days };
+}
+
+/**
+ * A river abstraction's pump over the run (engine ≥ 1.66.0, docs/model.md
+ * §2.7j): the mean demand its pump left unmet although the water was there,
+ * and the days it did (more than float noise of the day's take), as an other
+ * water user's pumpMeans counts them.
+ */
+function takePumpMeans(got: Float64Array, limited: Float64Array, mean: (a: ArrayLike<number>) => number): Pick<RiverTakeSummary, 'avgPumpLimitedM3Day' | 'daysPumpLimited'> {
+	const { avgPumpLimitedM3Day, daysPumpLimited } = pumpMeans(got, limited, mean);
+	return { avgPumpLimitedM3Day: avgPumpLimitedM3Day!, daysPumpLimited: daysPumpLimited! };
 }
 
 /** Series labels that read differently on an other water user (WP-1.33). */
@@ -2553,7 +2643,7 @@ function buildDemand(
 	const crops: Crop[] = cropDefs.map((c) => {
 		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
 		const e = ownCropEfficiency(c.irrigationEfficiency);
-		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the farm's`);
+		if (e === undefined && c.irrigationEfficiency != null) warnings.push(`crop "${c.name}": irrigation efficiency ${String(c.irrigationEfficiency)} is not in (0, 1]; using the unit's`);
 		return {
 			id: c.id,
 			name: c.name,
@@ -2604,7 +2694,7 @@ function buildDemand(
 		for (const ca of sortedAreas) {
 			if (ca.nodeId !== node.id) continue;
 			if (!cropIds.has(ca.cropId)) {
-				warnings.push(`farm "${node.name}" has an area for an unknown crop; ignored`);
+				warnings.push(`unit "${node.name}" has an area for an unknown crop; ignored`);
 				continue;
 			}
 			areas.set(ca.cropId, (areas.get(ca.cropId) ?? 0) + ca.areaM2);

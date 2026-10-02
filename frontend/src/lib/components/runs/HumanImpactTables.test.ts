@@ -43,6 +43,14 @@ const text = (html: string) => {
 	return out.replace(/\s+/g, ' ');
 };
 
+describe('the demand-objects table’s priority (engine 1.64.0)', () => {
+	it('adds the rank within its class to an object that has one', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: summary([object({ rank: 2 }), object({ id: 'm', name: 'Mill', category: 'industrial' })]) } }).body);
+		expect(body).toContain('Village Domestic first, rank 2 25');
+		expect(body).toContain('Mill Industrial first 25');
+	});
+});
+
 describe('the demand-objects table and the basic-needs floor (engine 1.44.0)', () => {
 	it('shows the floor, the days and volume below it and the litres per person, apart from the days short', () => {
 		const floored = object({ basicNeedsPopulation: 1000, basicNeedsM3Day: 25, daysBelowBasicNeeds: 2, avgBelowBasicNeedsM3Day: 4.5, avgSuppliedLitresPerPersonDay: 20 });
@@ -94,5 +102,33 @@ describe('the other water users’ pumps table (engine 1.58.0)', () => {
 	it('has no pumps table when no user has a pump capacity', () => {
 		const body = text(render(HumanImpactTables, { props: { summary: withUsers([user()]) } }).body);
 		expect(body).not.toContain('pumps');
+	});
+});
+
+describe('the river abstractions table (engine 1.65.0, pumps’ limits 1.66.0)', () => {
+	const withTakes = (riverTakes: object[]) =>
+		({
+			farms: [{ nodeId: 'a', name: 'Upper farm', avgCropRequirementM3Day: 0, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgEwrShortfallM3Day: 0, daysEwrNotMet: 0, riverTakes }],
+			catchment: {},
+			warnings: []
+		}) as unknown as RunSummary;
+
+	it('lists each abstraction with what its pump left unmet, – for one without a pump capacity', () => {
+		const body = text(
+			render(HumanImpactTables, {
+				props: { summary: withTakes([{ key: 'town', name: 'Town', avgTakeM3Day: 400, pumpM3Day: 500, avgPumpLimitedM3Day: 33, daysPumpLimited: 4 }, { key: 'crops', name: 'Upper farm: crops', avgTakeM3Day: 900, pumpM3Day: null }]) }
+			}).body
+		);
+		expect(body).toContain('River abstractions');
+		expect(body).toContain('Upper farm Town 500 400 33 4');
+		expect(body).toContain('Upper farm Crops no limit 900 – –');
+		expect(body).not.toContain('Pool storage');
+	});
+
+	it('has no pump-limited columns on a run before engine 1.66.0, and pool columns only with a pool', () => {
+		const body = text(render(HumanImpactTables, { props: { summary: withTakes([{ key: 'town', name: 'Town', avgTakeM3Day: 400, pumpM3Day: 500, poolM3: 1000, avgPoolStorageM3: 750 }]) } }).body);
+		expect(body).not.toContain('Left unmet by the pump');
+		expect(body).toContain('Upper farm Town 500 400 1');
+		expect(body).toContain('Pool storage');
 	});
 });

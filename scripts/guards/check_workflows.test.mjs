@@ -12,6 +12,7 @@ import {
 	pushFullProblem,
 	topLevelPermissions,
 	triggersOn,
+	unpreflightedProductionJobs,
 	unshaPushSteps
 } from './check_workflows.mjs';
 
@@ -27,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@${SHA} # v6.0.2
       - uses: ./.github/actions/local
+      - run: node scripts/release/preflight.mjs backend
   deploy:
     needs: build
     environment: production
@@ -83,7 +85,7 @@ test('a job granting id-token: write must be production-gated, whatever it runs'
 		`name: x\non: push\npermissions: read-all\njobs:\n  sign:\n    runs-on: ubuntu-latest\n${extra}${perms}    steps:\n      - run: ./mint-a-token.sh\n`;
 	for (const perms of ['    permissions:\n      contents: read\n      id-token: write\n', "    permissions:\n      id-token: 'write'\n", '    permissions: write-all\n', '    permissions: { id-token: write }\n', '    permissions:\n      # OIDC\n      id-token: write # why\n']) {
 		assert.deepEqual(rules(job(perms)), ['oidc-gate'], perms);
-		assert.deepEqual(rules(job(perms, '    environment: production\n')), [], `${perms} (gated)`);
+		assert.deepEqual(rules(job(perms, '    environment: production\n')), ['preflight'], `${perms} (gated, so it needs the preflight too)`);
 	}
 	assert.deepEqual(rules(job('    permissions:\n      id-token: read\n')), [], 'read is not a grant');
 	assert.deepEqual(rules(job('    permissions:\n      contents: read\n')), []);
@@ -143,6 +145,15 @@ test('assuming an AWS role outside environment: production fails', () => {
 	assert.deepEqual(rules(good.replace('    environment: production\n', '')), ['oidc-env', 'oidc-gate']);
 	assert.ok(isProductionGated(['    environment:', '      name: production', '      url: https://x']));
 	assert.ok(!isProductionGated(['    environment: preview']));
+});
+
+test('a production-gated job must need the release preflight, directly or through another job', () => {
+	assert.deepEqual(rules(good.replace('      - run: node scripts/release/preflight.mjs backend\n', '')), ['preflight']);
+	assert.deepEqual(rules(good.replace('      - run: node scripts/release/preflight.mjs backend\n', '      # - run: node scripts/release/preflight.mjs backend\n')), ['preflight'], 'a comment is not a run');
+	const chain = `permissions:\n  contents: read\njobs:\n  pre:\n    steps:\n      - run: node scripts/release/preflight.mjs environment\n  build:\n    needs: pre\n  deploy:\n    needs: [build]\n    environment:\n      name: production\n`;
+	assert.deepEqual(unpreflightedProductionJobs(chain), []);
+	assert.deepEqual(unpreflightedProductionJobs(chain.replace('    needs: pre\n', '')), ['deploy']);
+	assert.deepEqual(unpreflightedProductionJobs(chain.replace('  build:\n    needs: pre\n', '  build:\n    needs: deploy\n')), ['deploy'], 'a cycle ends');
 });
 
 test('jobsOf and needsOf read every needs shape', () => {

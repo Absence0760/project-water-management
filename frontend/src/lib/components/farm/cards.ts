@@ -76,8 +76,9 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
-		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
-		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
+		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction. Shown beside the WUA's own
+		// words too, as the alert email does: the % is the WUA's decision, the notice its explanation (operator, 2026-10-01).
+		pctLine: r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
 		// As /share: the API sends null for a deleted publisher, never English words.
 		byline: `${view.publication.publishedBy ?? t('A former member')}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title,
@@ -129,7 +130,8 @@ export function shortLine(farm: FarmProjection): string {
 	const days = count(DAYS, s.shortDays);
 	const head = months ? t('Short on {days} in {months}', { days, months }) : t('Short on {days}', { days });
 	const one = s.shortDays === 1;
-	if (farm.damCapacityM3 <= 0) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
+	// No dam, or a dam that serves none of the unit's demands (each draws on the river, engine ≥ 1.65.0): the river's days.
+	if (farm.damCapacityM3 <= 0 || s.onlyRiver) return t(one ? '{head}, when the river was too low to take from.' : '{head}, all when the river was too low to take from.', { head });
 	const stop = farm.damMinPct > 0;
 	if (s.shortDaysAtStopLevel >= s.shortDays) {
 		return t(
@@ -233,7 +235,7 @@ export function daysLeftLine(farm: FarmProjection, unit: VolumeUnit, long = fals
 	if (!d || d.usableM3 == null || farm.damMinPct <= 0) return null;
 	if (d.usableM3 <= 0) return [atStopLevel()];
 	if (d.usableDays == null || !(d.use14M3Day > 0)) return null;
-	return tRich(long ? 'At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.' : 'At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
+	return tRich(long ? 'At the use your dam carries over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.' : 'At the use your dam carries over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.', { use: fmtVolume(d.use14M3Day, unit), lasts: lastsFor(d.usableDays) });
 }
 
 /** null for a farm with no dam: no dam card and no dam page. */

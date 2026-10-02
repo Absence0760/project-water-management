@@ -23,6 +23,7 @@
 // reached the tables and routes they claim to.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { plantDelineationProposal, plantStartProposal } from '../__tests__/routeSamples.js';
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 
@@ -52,6 +53,10 @@ const FARMER_MAY_READ: Record<string, { reason: string; where: string }> = {
 	alert_rule: { reason: 'the catchment-wide restriction notice rule (alert_rule_select)', where: `node_id IS NULL AND kind = 'restriction_published'` },
 	alert_event: { reason: 'the restriction notice events (alert_event_select)', where: `node_id IS NULL AND kind = 'restriction_published'` },
 	alert_subscription: { reason: 'their own catchment-wide choices (alert_subscription_own; user_id rule)', where: 'node_id IS NULL' },
+	map_feature: {
+		reason: 'the catchment boundary, rivers and gauges, for orientation on their farm map (map_feature_select_farmer, 152; issue #326 A3)',
+		where: `kind IN ('catchment_boundary', 'river', 'gauge')`
+	},
 	alert_delivery: {
 		reason: 'their own deliveries, of events they may read',
 		where: `event_id IN (SELECT id FROM alert_event WHERE node_id = ANY($3::uuid[]) OR (node_id IS NULL AND kind = 'restriction_published'))`
@@ -106,6 +111,19 @@ beforeAll(async () => {
 		demandObjects: [town(home.id, 'Home town'), town(theirs.id, `Town ${MARKER}`)]
 	};
 	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+	// The map (issue #326 A3): each farm's parcel, the neighbour's named with the marker, and the orientation features.
+	const box = (x: number) => ({ type: 'Polygon', coordinates: [[[x, -33.7], [x + 0.02, -33.7], [x + 0.02, -33.68], [x, -33.68], [x, -33.7]]] });
+	for (const f of [
+		{ kind: 'catchment_boundary', name: 'Catchment', geometry: { type: 'Polygon', coordinates: [[[21.2, -33.8], [21.5, -33.8], [21.5, -33.5], [21.2, -33.5], [21.2, -33.8]]] } },
+		{ kind: 'farm_parcel', name: 'Home parcel', nodeId: home.id, geometry: box(21.3) },
+		{ kind: 'farm_parcel', name: `Parcel ${MARKER}`, nodeId: theirs.id, geometry: box(21.35) },
+		{ kind: 'dam', name: `Dam ${MARKER}`, nodeId: theirs.id, lon: 21.36, lat: -33.69 },
+		{ kind: 'farm_parcel', name: `Unlinked parcel ${MARKER}`, nodeId: unlinked.id, geometry: box(21.4) },
+		{ kind: 'river', name: 'River', geometry: { type: 'LineString', coordinates: [[21.25, -33.6], [21.45, -33.65]] } }
+	]) {
+		const r = await owner.call('POST', `/projects/${projectId}/map/features`, f);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+	}
 	expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(3000) } })).status).toBe(200);
 	const rain = Array.from({ length: 500 }, (_, i) => (i % 23 === 0 ? 12 : 0));
 	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
@@ -144,7 +162,43 @@ beforeAll(async () => {
 	});
 	expect(pub.status).toBe(201);
 	await tick();
+
+	// The map's proposals and provenance (175, 178, 174, 181), planted as the schema owner (no DEM, no grids):
+	// none has a farmer policy, so the sweep below must find a farmer reads none of them, the neighbour's farm's included.
+	await plantDelineationProposal(projectId);
+	await plantStartProposal(projectId);
+	for (const [n, crop] of [
+		[home, lucerne],
+		[theirs, secretCrop]
+	] as const) {
+		await asOwner(
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis, feature_name)
+			 VALUES ($1, $2, $3, 1000, 'synthetic', 'Synthetic', 'v1', 'planted', 'parcel', $4)`,
+			[projectId, n.id, crop.id, `Parcel ${n === theirs ? MARKER : 'home'}`]
+		);
+	}
+	await asOwner(
+		`INSERT INTO evaporation_accepted (project_id, target, monthly_mm, dataset, kind, source, version, method, coverage)
+		 VALUES ($1, 'apan', $2, 'synthetic', 'apan', 'Synthetic', 'v1', 'planted', 1)`,
+		[projectId, monthly(150)]
+	);
 }, 90_000);
+
+const MAP_PROVENANCE = ['delineation_proposal', 'start_proposal', 'crop_area_land_cover', 'evaporation_accepted'];
+
+describe('the map’s proposals and provenance (rounds 1–3)', () => {
+	it('have rows here, a viewer reads them all (positive control), and no farmer or applicant reads any', async () => {
+		const applicant = await signUp('Pvapplicant');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		const count = (u: User, t: string) => withUser(u.id, async (db) => (await db.query(`SELECT count(*)::int AS n FROM "${t}" WHERE project_id = $1`, [projectId])).rows[0].n as number);
+		for (const t of MAP_PROVENANCE) {
+			const [all] = await asOwner(`SELECT count(*)::int AS n FROM "${t}" WHERE project_id = $1`, [projectId]);
+			expect(all!.n, `${t} has rows`).toBeGreaterThan(0);
+			expect(await count(viewer, t), `the viewer reads ${t}`).toBe(all!.n);
+			for (const u of [farmer, cofarmer, neighbour, applicant]) expect(await count(u, t), `a farmer or applicant reads ${t}`).toBe(0);
+		}
+	});
+});
 
 afterAll(async () => {
 	// Leave no job for another file's tick (jobs and feeds tests count them).
@@ -215,7 +269,7 @@ describe('table sweep: a farmer reads only their own farms’ rows', () => {
 	it('finds the project tables and the farm-scoped ones, and the neighbour has rows in them (the sweep is not vacuous)', async () => {
 		expect(inv.tables.length).toBeGreaterThan(30);
 		for (const t of Object.keys(FARMER_MAY_READ)) expect(inv.tables, `FARMER_MAY_READ names ${t}: renamed? update the list`).toContain(t);
-		const core = ['node', 'crop_area', 'transfer', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'invite_node', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
+		const core = ['node', 'crop_area', 'transfer', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'invite_node', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription', 'map_feature'];
 		for (const t of core) {
 			const cols = [...(inv.refs.get(t) ?? [])];
 			expect(cols.length, `${t} names a node`).toBeGreaterThan(0);
@@ -229,7 +283,7 @@ describe('table sweep: a farmer reads only their own farms’ rows', () => {
 			[farmer, home],
 			[neighbour, theirs]
 		] as const) {
-			const tables = ['node', 'crop_area', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription'];
+			const tables = ['node', 'crop_area', 'land_cover', 'borehole', 'demand_object', 'farm_link', 'publication_farm', 'run_series', 'note', 'allocation', 'alert_rule', 'alert_event', 'alert_subscription', 'map_feature'];
 			await withUser(u.id, async (db) => {
 				for (const t of tables) {
 					const cols = [...inv.refs.get(t)!];
@@ -289,7 +343,7 @@ const NEIGHBOUR_TRACES = () => [theirs.id, theirs.name, unlinked.id, unlinked.na
 describe('route sweep: no answer to a farmer carries a neighbour', () => {
 	it('reaches the farm routes, and a viewer’s farm index does name the neighbour (positive control)', async () => {
 		const got = farmerRoutes(home.id, farmer.id).map((r) => r.route);
-		for (const must of ['GET /projects/:id/farm', 'GET /projects/:id/farm/:nodeId', 'GET /projects/:id/farm/:nodeId/export.csv', 'GET /projects/:id/notes', 'GET /projects/:id/alert-events', 'GET /me/alerts', 'GET /projects']) {
+		for (const must of ['GET /projects/:id/farm', 'GET /projects/:id/farm/:nodeId', 'GET /projects/:id/farm/:nodeId/export.csv', 'GET /projects/:id/farm/:nodeId/map', 'GET /projects/:id/notes', 'GET /projects/:id/alert-events', 'GET /me/alerts', 'GET /projects']) {
 			expect(got).toContain(must);
 		}
 		const v = await raw(viewer, 'GET', `/projects/${projectId}/farm`);
@@ -312,9 +366,10 @@ describe('route sweep: no answer to a farmer carries a neighbour', () => {
 		}
 		expect(leaks).toEqual([]);
 		// Positive control: the farmer really was answered, with their own farm.
-		expect(answered).toEqual(expect.arrayContaining(['GET /projects/:id/farm', 'GET /projects/:id/farm/:nodeId', 'GET /projects/:id/notes', 'GET /projects/:id/alert-events', 'GET /me/alerts']));
+		expect(answered).toEqual(expect.arrayContaining(['GET /projects/:id/farm', 'GET /projects/:id/farm/:nodeId', 'GET /projects/:id/farm/:nodeId/map', 'GET /projects/:id/notes', 'GET /projects/:id/alert-events', 'GET /me/alerts']));
 		expect((await raw(farmer, 'GET', `/projects/${projectId}/farm/${home.id}`)).text).toContain(home.name);
 		expect((await raw(farmer, 'GET', `/projects/${projectId}/alert-events`)).text).toContain(home.name);
+		expect((await raw(farmer, 'GET', `/projects/${projectId}/farm/${home.id}/map`)).text).toContain('Home parcel');
 	});
 
 	it('answers every :nodeId route 404 for the neighbour’s farm (positive control: the neighbour is answered)', async () => {

@@ -52,7 +52,8 @@ live](#project-workspace)); Help keeps its contents in the page
 avatar, display name and email (initials only on the phone bar, `compact`)
 that opens a list (same disclosure pattern as the Data/Runs tabs' download
 menu — a button plus a hidden list, not an ARIA `menu`/`menuitem` widget)
-with three entries. At the sidebar's foot it opens upward (`up`); on the
+with three entries (four while two-step sign-in is still needed: the
+two-step sign-in banner, below). At the sidebar's foot it opens upward (`up`); on the
 phone bar, downward.
 
 - **Account** — a link to `/account` (marked `aria-current` while there).
@@ -72,7 +73,7 @@ header (issue #17): **Account**, then who you are as its summary line, the
 initials avatar, display name, email and a Confirmed / Not confirmed badge
 (a region named by the heading). Below it the cards sit in **two columns**
 once the page itself is 52rem wide (a container query, so the 240 px
-sidebar counts): Profile and Password on the left; Language and units,
+sidebar counts): Profile, Password, Two-step sign-in and Delete my account on the left; Language and units,
 Alert emails and Your data on the right; one column below that. The page is
 capped at 92rem from the sidebar's edge, and at 1440 × 960 it fits the
 window without scrolling (`account.spec.ts` › layout pins both widths). Form
@@ -98,6 +99,52 @@ in an alert above the form, with the field it's about marked
 also counts towards the sign-in lockout, whose `429` message is shown as
 is), and the new-password rules checked before any request (*Use at least 8
 characters.*, the two not matching).
+
+**Two-step sign-in** (`lib/components/account/TwoStepSignIn.svelte`, issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in);
+`GET /auth/mfa`). Off: one line on what it does and **Set up two-step
+sign-in**, which asks for the current password (**Continue**), then shows
+two numbered steps: the QR code for the authenticator app, drawn in the page
+(`account/qr.ts`, uqr; black on white in both themes, with its quiet zone,
+220 px; the encoder loads only at that moment) with the key in groups of
+four to type instead, and **Enter the code the app shows** with **Turn on
+two-step sign-in**. Then the ten recovery codes, once, in a highlighted box
+whose heading takes focus: **Download the codes** (a text file, through the download helper loaded on click; if it can’t load, an alert says to copy the codes instead, never to reload, which would lose them) and **I’ve
+saved them**. On: an **On** badge, how many recovery codes are left, a line
+when this browser signed in before it was set up, and **New recovery codes**
+/ **Turn off**, each opening one code field (the app's code; turning off
+also takes a recovery code). A project owner, team admin or assessor without
+it sees a warning that their actions need it (and, on the workspace, the
+two-step sign-in banner, § Invitations below, which links here:
+the panel is `#two-step`). Errors are worded from their
+codes (`mfa_code_wrong`, `mfa_locked`, …). The sign-in page's second step
+is under § Sign-in pages.
+
+**Delete my account** (issue #112; `lib/components/account/DeleteAccount.svelte`,
+`DELETE /auth/me`) is a small card (one line and a danger button) so the
+page still fits the window; the button opens a dialog, **Delete your
+account?**, in the reader's language like the rest of the page. It lists
+what is **Deleted** (name, email and password; memberships and farm links;
+alert choices and the alert emails sent; settings; an unfinished
+uncertainty result and a draft licence application), what is **Kept,
+without your name** (what they made for a project, and the project's
+history, which reads "Deleted user" or "a former member") and what is
+**Kept, with your name** (a sign-off's typed name and registration, and the
+names an evidence pack printed, for the life of the licence record), as
+Privacy §7 says; then the hand-over rule, the confirmation email and the
+backups line, with a link to the privacy notice. The password is typed
+again (a wrong one is *Your current password is wrong.*; an empty one is
+refused before any request). The only owner of a project or only admin of
+a team gets an alert naming each, linked to its page (the `409
+account_sole_holder` details), which takes the focus; Cancel closes the
+dialog with nothing changed. On success the browser forgets the account as
+signing out does (the farm view's saved copies, the note counts) and lands
+on `/login?deleted=1`, whose notice says the account was deleted and that
+an email says what was deleted and what was kept. The History reads such a
+departure as "Deleted user deleted their account and left the project
+(owner)" (`timeline.ts`). Tests: `account-delete.spec.ts` (the refusal, the
+hand-over, the deletion, axe on the dialog in both themes at desktop and
+phone width).
 
 ## Number style
 
@@ -201,12 +248,37 @@ own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
 title is the first `<title>` and these pages run no script to correct it
 (WCAG 2.4.2; `legal.spec.ts`). English
 only: the English text binds; the link labels to them are translated. Linked
-from the landing footer, under every sign-in form (a **Legal** nav in
+from the landing footer (with **Data sources**, below), under every sign-in form (a **Legal** nav in
 `AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
 **The short version**: the four main points of `lib/components/legal/termsSummary.ts`,
 the same list the sign-up form and the re-acceptance notice show translated
 (`TermsSummary.svelte`). Research-based wording the operator accepted without
 counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
+
+**Data sources and credits** (`/data-sources`, `routes/data-sources`, the
+same frame, prerendered; 2026-10-02): the third-party data the service
+serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
+DEM, HydroRIVERS, ESA WorldCover, JRC Global Surface Water (Trace a dam),
+dPET (the evaporation proposals), CHIRPS, the map's label fonts), each with
+what it is used for, its publisher, its licence (and the day it was read, "read on …") and the credit that licence
+asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
+Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit,
+"Source: EC JRC/Google" and dPET's line (the backend's `DPET.attribution`)
+(`lib/components/legal/dataCredits.ts`; `dataCredits.test.ts` checks each
+against [maps.md § Sources](./maps.md#sources), and dPET's against the backend's). A notice, not part of the
+terms, so changing it bumps no `LEGAL_VERSION`. Linked from the footer of
+the legal pages ("Data sources"), from Terms §9, and from the map's
+attribution control while HydroRIVERS reaches are drawn (the River network
+layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
+Inc. (2006-2022), used under license", linking to its section, and on any
+map, the farm map included, that draws a river added from a HydroRIVERS
+reach), and from the relief's credit ("licence notice", to the Copernicus
+section). Its line under the title is the latest day a licence was read
+(`LICENCES_READ`, the latest of the credits' `read` dates, each one a date
+the Sources table records). Also linked from the landing page's footer
+(**Data sources**, translated like its other links; 2026-10-03). The Terms'
+§9 clause on map data licensed to us (HydroRIVERS' end-user terms) points
+back here for the list of sources.
 
 **Sign-up assent.** Directly above the sign-up button (invitations
 included): a bordered box, **The main things you agree to**, with the four
@@ -240,8 +312,11 @@ the title and between the fields are tighter (0.5rem).
 signed-in account whose `termsCurrent` is false (it accepted an older
 version, or none) sees, on any app page, a full-page notice in the sign-in
 pages' frame instead (`auth-extras/TermsUpdate.svelte`, loaded by the root
-layout): **Our terms have changed**, what changed (a short list rewritten
-with each version), links to both pages, the same main points, **Accept the
+layout): **Our terms have changed**, what changed (every version's lines
+after the one the account accepted, `termsVersion` on `/auth/me`, all of
+them when it accepted none; kept version by version in
+`auth-extras/termsChanges.ts` `TERMS_CHANGES`, whose first entry a test
+ties to `LEGAL_VERSION`), links to both pages, the same main points, **Accept the
 new terms** (`POST /auth/me/accept-terms`) and **Sign out**. The URL stays
 the page asked for, which renders once accepted. The public pages (the legal
 pages, emailed links, share links) aren't held behind it. Translated.
@@ -321,7 +396,7 @@ English only: its readers are licensing assessors, like the methods page's.
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
-`/verify-email` and `/alerts/unsubscribe` share one frame,
+`/verify-email`, `/alerts/unsubscribe` and `/alerts/feedback` share one frame,
 `lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
 brand panel with the catchment drawing on the left (55 %), the form on the
 right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
@@ -342,6 +417,14 @@ under a dead-invitation warning).
   the same answer for any address). A taken address gets exactly the same
   pages. Sign-up through a live invitation link is still confirmed, joined and
   signed in at once.
+
+- **Two-step sign-in** (issue #282). For an account with an authenticator,
+  a right password turns the form into its second step: a **Two-step
+  sign-in** heading and **Code from your authenticator app** (numeric,
+  `autocomplete="one-time-code"`, focused), **Sign in**, and **Lost your
+  phone? Use a recovery code**, which swaps the field for **Recovery code**
+  (and back). A wrong code, the 5-minute challenge running out (back to the
+  password step) and the code lockout are alerts worded from their codes.
 
 - **The security check** (the WAF's sign-in CAPTCHA, issue #126;
   [security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)). Only when
@@ -426,11 +509,24 @@ on …", "Open your hydrological unit") and the public `/share` page. The
 client chose it knowing it is more technical for farmers. Engine check
 labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
 
+Engine run warnings, save errors (model rules, scenario ops) and the
+workspace's API errors say **unit** too (engine 1.61.0: `unit "Upper": no
+river pump capacity is set …`, "only a unit has a dam", "unit flow shares
+sum to …"), and a new node is named `Unit N` (operator decision,
+2026-10-01, from #54). Only the words changed, never a field name. A run
+from before 1.61.0 keeps its stored warnings as they were, so the first
+automatic run after the upgrade reads every such warning as new and isn't
+published by itself (`autoPublish` compares warnings by their words): a
+person publishes it once.
+
 What keeps **farm**: the code, database, API and CSV names (`kind: 'farm'`,
 `/farm`, `farms.csv`, `farm_scope`, the invite CSV's `farm` column), URL
-params (`unit=`), test ids, engine and API messages (run warnings, save
-errors, the bulk invite's "no farm named …") and the summary CSV's block
-titles. So do words that mean the real thing rather than the node: a
+params (`unit=`), test ids, the bulk invite's "no farm named …" (the CSV's
+`farm` column), the summary CSV's block titles, and so the xlsx export's
+Summary sheet's "Farm summary" block, which is the summary CSV's own: the
+CSV is a contract other tools read, so its titles stay (the same decision),
+and the evidence report and validation statement, whose words are frozen
+in packs and signed statements. So do words that mean the real thing rather than the node: a
 **farmer** (the person, "Preview as farmer", "farmer views" in the
 publication panel), a **farm dam** (the kind of dam), "a farm, sub-catchment
 or town" where the glossary says what a unit can stand for, the landing
@@ -441,8 +537,7 @@ own decision: the farm notice's title "Before you look at your farm"
 rewording it means a new version every farmer re-accepts), and the Terms
 and Privacy pages (`/terms`, `/privacy`, versioned by `LEGAL_VERSION`). The
 importer's notes keep b023's own terms (and match `extract_project.py`),
-and node names ("Upper farm") are data. A new node is still named
-`Farm N`.
+and node names ("Upper farm") are data.
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
@@ -1163,8 +1258,9 @@ for every workspace tab. Its own chunk.
   its minimum (10%) in its last year", `DamLevel.daysAtMin`; none for a dam
   without one). While the levels load, each card says "Loading dam levels
   (N of M)…". Then links
-  **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
-  and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
+  **On the Network** (`?tab=network&node=<id>`, the node picked on the map),
+  **Show on map** (`?tab=map&node=<id>`, only for a dam's unit with a linked
+  map feature) and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
   this page). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
 - **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
@@ -1210,6 +1306,36 @@ for every workspace tab. Its own chunk.
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
   it), with no chart.
+- **Proposed from the register and the map** (issue #326 B-dams,
+  `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
+  sources and rules in [maps.md § Dams from the register and the
+  map](./maps.md#dams-from-the-register-and-the-map)): a panel under the
+  cards (and under the empty state), shown whenever the model has a
+  hydrological unit. **Dam of** picks the unit (the dams first in the
+  cards' order, then the other units; it opens on `dam=`'s, else the first
+  card's). The box says which dam on the map it searched from (its name,
+  "its polygon's centre" or "a point", the coordinates, **Show on map**),
+  then a table: one row per registered dam within 1 km ("Capacity:
+  Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
+  river and farm under it) and one for the dam polygon's area ("Full-supply
+  area: “Grootdraai dam”"), each with **Saved now** (the saved model's
+  value, "Not set (estimated from capacity)" for no area), **Proposed**,
+  **Source** (the register's dataset and source line, or "The map: …") and
+  **Use**, or "Saved" when the model already holds it (to the nearest m³ or
+  m²), or "Nothing to use" for a register entry without a capacity. **Use**
+  asks first (`confirmWords`: the unit, the old and new value, the source;
+  "Use this capacity" / "Use this area"), saves that one value on the
+  server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
+  the register of dams (Z100/07). Run the model to see its effect.", which
+  takes the keyboard, since the Use button is gone) and reloads the saved
+  model and the proposals. The frame is shared with land cover and
+  evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
+  has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
+  editor can use a value."). Other states: no dam on the map linked to the
+  unit (with **Open the Map**), no register loaded (the loader's command),
+  no registered dam within 1 km, and a "Synthetic test data" warning when a
+  row comes from the committed fixture. The table scrolls in its own box on
+  a phone; the page doesn't. e2e: `dam-proposals.spec.ts`.
 
 ## Project
 
@@ -1287,7 +1413,33 @@ it scrolls, and isn't fitted to the window.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text.
+  consultant or client in the same one. Others see the party as text. Each
+  editor and owner row has an **Acts for the responsible authority** tick
+  box for owners (163_licensing_authority; others see it as text when set):
+  those members record the authority's decisions and endorse a published
+  baseline. A change that would make an editor also part of an applying
+  party is refused with the server's `role_conflict` words. A member with a
+  party has a **Specialist for this party** tick box for owners (167_signers;
+  others see "Specialist for <party>"): the registered professional the
+  applicant appointed, who signs the evidence packs of the party's
+  applications.
+- **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
+  editors and owners): the host's checks of members' registrations against
+  the public SACNASP or ECSA register, newest first (member, registration
+  and the name on the register, found or not, checked when and by whom).
+  An owner, or an editor acting for the responsible authority, gets
+  **Record a check** (member, register, category, number, name on the
+  register, found, the checking organisation, the date, a note; the
+  register's address to look it up), and the owner the tick box "Issuing an
+  evidence pack waits until each specialist signer has a check from the
+  last year" (on by default). `registration-checks.spec.ts` pins it with
+  axe.
+- **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
+  decides the project's licence applications, its name, kind (a catchment
+  management agency or the Department of Water and Sanitation) and office,
+  saved at once by an editor (`settings.responsibleAuthority`; empty clears
+  it); read-only text for a viewer. The decision form and the evidence
+  report's *For* row read it.
 - **Farmers** (WP-2.1, `project/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
@@ -1305,7 +1457,11 @@ it scrolls, and isn't fitted to the window.
   #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
-  Farmer invites stay out of the Members panel's pending list.
+  Farmer invites stay out of the Members panel's pending list. In both
+  pending lists, an invite whose sender is no longer an owner (team admin)
+  carries a **Sender can no longer invite** badge: nobody can accept it
+  until it is re-sent, and Resend makes you its sender
+  (155_invite_sender_role.sql).
   Farmers aren't in the Members list (it hides the `farmer` role), and a
   farmer never sees this page: their own view is WP-2.6. A link to a farm
   deleted but not yet saved reads "a removed farm".
@@ -1332,6 +1488,17 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
+- **Licence record** (161, `project/LicenceRecordPanel.svelte`, words in
+  `project/licenceRecord.ts`), editors and owners, under Share links
+  (heading id `licence-record`, the target of the licence-record emails):
+  how long the issued packs, nominated runs and the names they keep are kept
+  ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
+  says where it stands (nothing to keep yet; the next review; the review is
+  due; granted and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome (Not recorded,
+  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  no outcome is recorded and a review is set, **The record is still
+  needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
@@ -1590,6 +1757,15 @@ workbook part is `WorkbookReview.svelte`.
      read) and updates the counts, notes and report in place; a date without
      a factor (or the other way round) or a non-positive factor is flagged
      and blocks Import.
+   - **River pumping units** (only when the importer flags a unit as
+     probable run-of-river; issue #54, 2c/2d): *Import these N as run of
+     river, pumping from the river*, off by default, its hint naming the
+     flagged units. On, it converts them as the Python importer's
+     `--run-of-river` does: the run-of-river supply rule, the dummy dam
+     dropped and the river pump uncapped (`pumpCapacityM3Day` null) until
+     the capacities are entered under Network → Supply, with a warning per
+     unit; a unit an enabled transfer draws on keeps its dam, and says so.
+     Like the gauge option it re-extracts from the workbook the worker holds.
    - **CHIRPS column** (only when the workbook has one; issue #40 part c):
      which CHIRPS product and version it holds, **CHIRPS v2.0 (usual for
      b023)** preselected, or CHIRPS sat / rnl v3.0, or *Not known*. The
@@ -1681,7 +1857,11 @@ personal copy (the Copy dialog says so).
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
-(below), and **Leave or delete** (*Leave team* for everyone, the only admin
+(below), **Privacy contact** (whom people ask about the personal information
+in the team's projects, POPIA s18(1)(b), 168: admins edit *Name or office*,
+*Email address* and *Postal address (optional)*, *Save contact* and
+*Remove*; members read it, "Only owners can change it."; farmers see it from
+the farm menu and invitations name it), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the project list's
 team note, "Change them on the team page", links there), and closing it drops the
@@ -1691,8 +1871,8 @@ parameter in place, so Back closes it.
 traffic lights" until issue #176): every member reads the rule the team's
 statuses are judged by (linking to the project list), "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
-*These are the team's own thresholds* or *These are the default thresholds,
-still to be confirmed by the hydrologist*. Admins get two number inputs,
+*These are the team's own thresholds* or *These are the default thresholds:
+a provisional default, not yet confirmed by the catchment's hydrologist*. Admins get two number inputs,
 *Green below (%)* and *Amber below (%)*, checked as the API checks them (both
 0–100, green below amber; the message sits under the inputs, which carry
 `aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
@@ -1788,8 +1968,12 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - Beside it (one column below 900 px, the map first), two cards:
     - the **picked node** (`network/NodeCard.svelte`): kind ("Selected ·
       farm", "outflow gauge", "other water user") and name, its notes
-      (`NotesDrawer`, a saved node) and **Edit** (**Details** for a viewer),
-      which opens its form in the node sheet. A farm has two tiles:
+      (`NotesDrawer`, a saved node), **Show on map** (`?tab=map&node=<id>`,
+      only when a map feature is linked to the node, issue #326 A2; which
+      nodes have one comes from `GET …/map/linked-nodes`, the node ids only,
+      fetched once the page has drawn, `workspace/mapLinks.ts`, as on
+      Hydrological units and Dams) and
+      **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, and "no demand" / "not in this run"
@@ -1820,8 +2004,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
-    text, land cover, boreholes, the farmers note, Preview as farmer,
-    make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
+    text, land cover, boreholes, the farmers note, Show on map (as the card's),
+    Preview as farmer, make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
     Move down (removed, issue #174): row order is for display only and the
     list isn't visible from the sheet; the node table reorders (drag, ↑/↓,
     Sort by flow path). The save row
@@ -1986,7 +2170,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
 - **Hints** (not errors, `damHints` in `fields.ts`): the one-node form notes
   under a dam's fields when irrigation may empty it (minimum operating level
   0 %, [engine-audit Q5](./engine-audit.md)), and when its area is unknown, with
-  the capacity ÷ 3 m estimate the run will use (N2, warning W6).
+  the 7.2 × capacity^0.77 m² estimate the run will use (N2, warning W6;
+  engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
   **+ Add other user** (next to + Add node, in both layouts) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's
@@ -2091,7 +2276,20 @@ note's link on the Summary, `notes.ts` `noteHref`).
   River to dam by month** button beside the alert, since Routing is gone), so
   they can be reset. The two boxes' help tips sit beside their labels, not in
   them, so each box's name is its words alone. Read-only for viewers (no
-  calculator).
+  calculator). Between the supply fields and the hands-off flow, on a unit
+  only, **Water for the crops**, under its own heading (engine ≥ 1.65.0, issue
+  #344, [model.md §2.7j](./model.md), `WaterSourceFields.svelte`): **The
+  unit’s supply** (with the supply rule's words in brackets), the default,
+  or **Its own river abstraction**, which shows that abstraction's own
+  pump calculator, capacity and pool, each label naming the demand (**Number
+  of pumps for the crops**, **River pump capacity for the crops** (m³/day,
+  blank = no limit, which the run warns about), **Pool at the pump for the
+  crops** (m³, blank = none; its hint says it starts full and its surface
+  is estimated from the capacity)), so they read apart from the unit's own
+  pump in the same group; each has its history line. The pump and pool are
+  kept when the source goes back to the unit's supply, unused. The unit's
+  pump, an other water user's and each abstraction's share one
+  `PumpCapacityField.svelte` (the pumps × m³/h × 24 calculator).
 - **Month fields** (`network/MonthFields.svelte`, `network/monthFields.ts`):
   every twelve-month row of the one-node form (the dam release, a demand
   object's demand or profile, an other water user's demand, the hands-off flow
@@ -2156,12 +2354,27 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (m³/day by month, or a count × litres a day; picking meter records or an
   AADD sets it to m³/day by month and a norm to a count × litres, and locks
   it with "Set by the source." under it; Other and Not recorded leave it to
-  the modeller), **Priority** (first / with the
-  crops / last), **Destination** (used in the catchment, or piped out, which
+  the modeller), **Priority** (Before the crops / With the crops, pro rata /
+  After the crops: short words, so the edit panel's column no longer cuts
+  them off; shown only while the unit has one object), **Destination** (used in the catchment, or piped out, which
   sets and locks the share returned at 0 %), **Share returned** (%),
+  **Water for** the object (engine ≥ 1.65.0, issue #344, the same
+  `WaterSourceFields` as the crops': from the dam under the supply rule, or
+  its own river abstraction with its pump calculator, capacity and pool),
   **Modelled** (off keeps it on record only), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
-  note: which meter and years, which strategy, which norm). Per unit: **Number of** people / head / units, **Litres per** person
+  note: which meter and years, which strategy, which norm). With two or more
+  objects on the unit (engine ≥ 1.64.0, issue #343, `demandObjectOrder.ts`)
+  the Priority selects give way to a **Supply order on a short day** box
+  above the list: **The crops** and each object by name, in supply order,
+  each with a select of its place (1 is supplied first; demands at one
+  number share pro rata): Before 1, each number, Between n and n + 1, and
+  After the last, so one choice puts a demand in a place of its own anywhere.
+  An **Order:** line under it says the order in words ("Town A, then Town B,
+  then the crops"; announced politely, and each select points at it). The
+  places are stored as each object's priority and its rank within it, and
+  renumber from 1 without gaps; removing a demand closes the ranks up, and a
+  lone one keeps none. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
@@ -2177,7 +2390,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
   covers** picker beside **+ Add window** adds one, off (factor 0), with a
-  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  starting point per span (Days of the week: every week on the ticked days, starting as weekends off, Sat and Sun ticked; Dates
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
@@ -2189,7 +2402,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
-  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  objects**: per object its unit, priority (with ", rank n" when it has a
+  rank, engine ≥ 1.64.0), demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out"). When an object has a
   basic-needs floor (engine ≥ 1.44.0), three more columns: **Per person**
@@ -2287,6 +2501,405 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   table (capacity, yield per day and year, failed water years; the dam's own
   capacity marked "this dam"). A curve whose yield falls somewhere as the dam
   grows carries a warning saying why that can be real.
+
+## Map (`?tab=map`)
+
+Issue #288, roadmap WP-3.12 phases 1–2, laid out as a Network-style
+workspace in #326 (E3–E6, D3) (`lib/components/map/`, a lazy tab;
+[maps.md](./maps.md) has the tiles, uploads, areas and the quaternary
+lookup). It has its own sidebar row under **Build the model**, after the
+Network (`lib/workspace/tabs.ts`; it was `LINKED_ONLY` until #326 D3, and the
+sidebar's rows went to 32 px to keep a row to spare at 1440×960), and the
+Network header's **Map** link and Settings → WR2012 check still open it. A
+core tab: owners, editors and viewers see it (it becomes a results view with
+A1); viewers get no edit tools. The Network's own picture (its "Catchment
+map" card) stays the schematic; this is the geography.
+
+- **Rain from the boundary** (editors; issue #326 B-rain,
+  `MapRainLink.svelte`): a slim line under the header while the map has a
+  boundary and no CHIRPS feed reads it ("No rain feed reads this catchment
+  boundary yet. **Set up the rain feed from the boundary**"), or one read it
+  before it was redrawn ("**Propose its cells again**"). The link opens
+  Settings → Data feeds with the proposal showing. Its wrapper's
+  `data-state` (`loading`, `current`, `changed`, `none`, `error`) says when
+  the feed list is in.
+- **Section header** (`fillHeader`; the header's "Map" is the page's only
+  title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
+  areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
+  when empty, "no boundary" without one), and the actions **Show everything**
+  (frames every feature; with features), **Measure** (anyone, while the map
+  draws; below), **Download GeoJSON** (anyone, with features: the features
+  as a `.geojson` file named after the project and the day, built from the
+  list; the notice says "Downloaded 23 features as
+  example-sandspruit-map-2026-10-01.geojson."; [maps.md §
+  Download](./maps.md#download-geojson)), and for editors **Draw a shape**
+  and **Place a point** (each puts the map in a drawing mode, below; pressed
+  while it is on), **Delineate** (with a DEM on the server; below), **Trace
+  a dam** (with water occurrence data on the server; below) and
+  **Upload GeoJSON** (a link that opens its sheet). Slim
+  notices under it: what an upload, a placed point or a saved drawing did
+  (Dismiss), the no-basemap note (owners and editors only), and "No
+  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
+  (WGS84)." with **Draw the boundary** when there are features but no
+  boundary.
+- **Layout.** The map on the left and a side column on the right
+  (`clamp(18rem, 30%, 24rem)`) once the page's container
+  (`container: map-page`) is 56rem wide (784 px at the 14 px root);
+  narrower, everything stacks: the map, the card, the list. With the side
+  column and a window at least 620 px high the layout is a dashboard: exactly
+  the height left below its measured top, less the 1rem gutter and the save
+  bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
+  and the page doesn't scroll. In the side column the picked feature's card
+  (at most 55 %, at least 6rem while a feature is picked) and the layers box
+  (at most 35 %) each scroll in their box and give way, in proportion to
+  their size, before the list goes below 8rem; the checks line keeps its height (`map-layers.spec.ts` pins it at
+  1440×960 and 1280×800 with a feature and a reach picked; until
+  2026-10-02 the card held its full height and the column ran past a
+  1280×800 window). Without WebGL the map says it can't be drawn
+  and the list does everything; when the tiles can't be read the map drops
+  them and says so.
+- **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
+  boundary (long dashes), parcels, dams, rivers, other features (dotted),
+  points as 28 px buttons told apart by shape; clicking a feature picks it.
+  Under it one key line grouped **Areas** (catchment boundary, parcel, dam,
+  other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
+  drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
+  (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
+  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live).
+- **Results on the map** (#326 A1, the key row under the map,
+  `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
+  (`measure=`: Days short, the default and so absent from the URL;
+  `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
+  colours above) and, for editors and owners when there is more than one run,
+  **Run** (`run=`; each option "name · day · published"). Both are history
+  entries, so Back undoes a change. The run is the published one by default;
+  an editor with nothing published sees their newest; below editor only the
+  published run, a `run=` link is ignored, and with nothing published one line
+  says so ("Nothing is published yet, so the map shows each feature’s kind.";
+  an editor with no run at all: "No run yet, …"). A line names the run ("From
+  the published run “…”, ran 2026-10-01."). The legend names the measure and
+  each band in words with what it means and how many units it holds ("**OK**
+  95% or more of demand days met (2 units)"); areas with no figure, or not
+  linked to a unit, take "No figure"'s colour. A line counts the EWR sites met
+  and missed; the key keeps the boundary, river and point swatches. The
+  picked feature's card adds the measure's line ("Days short: 1 089 of 4 558
+  days short · watch") or a gauge's **EWR** ("EWR missed on 12 days (outlet) ·
+  short"), and Every feature adds **Result** and **Band** columns, so the map
+  is never the only way to read a colour. Loading and a failed load (with
+  Retry) show beside the pickers; dam level loads the run's dam levels as the
+  Network does. The page fits 1440×960 with thirty units and the legend.
+- **The picked feature's card** (top of the side column): its name, Kind,
+  Area (or Position, or Shape for a line), **Stands for** (a select of the
+  nodes of fitting kinds for editors, else the node's name), **Unit’s
+  area** for a parcel or "other" polygon that stands for a hydrological unit
+  (its area *typed*, **From the map** this feature, or from another feature
+  by name), **Area into the model** (editors; parcels and `other` polygons
+  only, never a dam or the boundary): a unit (the linked one by default; the
+  select stops at ~16rem) and **Use 9.257 km²**, which asks first ("Set
+  Upper farm’s area from the map?", the old and new area) and then saves the
+  area to the model, recorded in History with the feature named; disabled
+  while the model has unsaved edits (a line says why) and reading **In use**
+  when that feature's area is the unit's. **From**: the file it came in.
+  **Edit the shape** (a single line or one-ring polygon) or **Move the
+  point** (editors) puts it in the drawing mode, **Split along a line**
+  (editors, a polygon of one outline; #326 C2, below) draws the cut, and
+  **Delete** asks first.
+  With nothing picked: "Select a feature on the map or in the list to see it
+  here."; with nothing on the map, the empty state leads with delineating
+  and drawing (#326 D4): with a DEM, "Nothing on the map yet. Start with the
+  catchment: delineate it from its outlet on the river, or draw its
+  boundary.", a primary **Delineate from the outlet** and **Draw the
+  boundary** (without one, "Start with the catchment boundary: draw it on
+  the map." and a primary **Draw the boundary**), then "Or upload it as a
+  GeoJSON file (WGS84), or place a point." and, for an editor of an empty
+  model, **Start the model from the map**.
+- **Start the model from the map** (editors, while the model has no nodes;
+  issue #326 C3, `StartSheet.svelte`, `startFlow.ts`, [maps.md § Start from
+  the map](./maps.md#start-from-the-map)). From the empty state's link, or
+  the header's **Start from the map** (**Review the proposed model** while
+  one is open, drawn dashed on the map). What the editor chose and ticked
+  is kept by the Map tab, so closing the sheet or leaving it for a tool
+  loses nothing; a tool opened from the sheet brings it back once it
+  saves, and one started any other way never does. A side sheet (`start=1`) with the steps listed at its
+  top (The boundary · The points · The proposal · Data and the first run,
+  the current one `aria-current="step"`), each read from the server:
+  **The boundary**: **Delineate from the outlet** (with a DEM), **Draw the
+  boundary**, **Upload a GeoJSON file**; each closes the sheet into that
+  tool, and the sheet opens again once it saves; with a gauge on the map
+  and no boundary, "go on to the points". **The points**: each dam, other
+  point and gauge with a select (A unit with a dam / A unit at an
+  abstraction point / Another water user (no land) / Not in the model; a
+  gauge: A gauge in the network (no land), the default, / Not in the model),
+  **Place a point** (into the drawing mode, back after the save), the
+  outlet (The boundary’s own outlet, or a gauge), the count ("1 unit, plus
+  the rest of the catchment."), and **Propose the network**. **The
+  proposal** (drawn on the map piece by piece: each unit's piece tinted
+  with its number on it, the rest R): the catchment's
+  area, the warnings and dropped points, the outflow gauge's name, then one
+  card a unit: its number badge (the piece's number and tint, so the cards
+  are the map's key; the card with the focus or the pointer lights its
+  piece), its name, a gauge's "It measures … of the catchment above it",
+  and a tick for each value proposed (Area … saved
+  as its parcel; Drains into …; All of its own runoff reaches the dam),
+  every tick off at first; the rest of the catchment as a unit (a tick,
+  then its name and area); **Tick every value**; **How it was made**
+  (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
+  the reason by the names, while a name is empty or used twice),
+  which asks first ("The empty model gets 3 nodes, with 2 areas … It is
+  saved now as one change in History."). **Data and the first run**: links
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
+  area, the Network and **Run the model**. With nodes typed in, the sheet
+  says the model isn't started from the map and points to Divide the model.
+  With the sheet closed, a piece (or its number) under the pointer shows
+  "Proposed piece 2 / <name>" over the map's corner, a click on one opens
+  the sheet at its card, focused, and a line over the map ("A proposed
+  model is drawn on the map piece by piece, each piece tinted and numbered
+  as its card in the sheet (R: the rest of the catchment) …" with **Review
+  it**) says what the pieces are. The points step counts gauges apart ("1
+  unit and 1 gauge, plus the rest of the catchment.").
+- **Divide the model** (editors, a model with nodes, a DEM on the server;
+  #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
+  Start from the map](./maps.md#start-from-the-map)). **Divide the model**
+  at the end of the key row's first line under the map (an open division
+  is reviewed from the line over the map) opens a side
+  sheet (`divide=1`, "Divide the model from the map"), read from the
+  server: **the points**: each dam, other point and gauge with a select
+  (Not in the division / the nodes its kind may stand for / A new gauge
+  node for an unlinked gauge), a linked point on its node by default, "Two
+  points stand for …" refusing a node twice, **Place a point**, the outlet,
+  the count ("3 points in the division."), **Propose the division**; **the
+  proposal**: the warnings (dropped points, "No point stands for …: it keeps
+  its values", and, as the ticks and the rest's choice change, "After Apply
+  the units would add up to …, more than the … above the outlet, so some
+  land would count twice …" naming the units that keep a typed area,
+  `divideOverlap`, past 1 %), **Tick every value**, the problem the server would refuse
+  (`role="alert"`, Apply disabled while it stands), one card a point with
+  its number badge, the node's name (or "A new gauge" with **Add it to the
+  model as a gauge node** and its name), and a tick for each value with the
+  value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
+  All of its own runoff reaches the dam. Now: 50 %), "(the same)" when
+  equal; the rest of the catchment ("Its area goes to": Nobody / a unit /
+  A new unit, with its name); **How it was made**; **Discard** and **Apply
+  the ticked values** (asks first: "The model takes 2 areas …, 3 drains-into
+  … Every value not ticked stays as it is."). Without a DEM the sheet says
+  dividing needs one; with no single outflow, that the Network must set it.
+- **Delineate** (editors, only when the server has a DEM: `GET
+  …/map/delineation` says `available`; issue #326 B-delineate,
+  `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
+  Delineation](./maps.md#delineation)). The header's **Delineate** puts the
+  map in the point-placing mode with the draw bar headed "Delineating a
+  catchment" ("Click the river at the catchment’s outlet, or just below a
+  dam wall."); **Delineate…** (or the bar's **Enter coordinates**) opens
+  the **Delineate a catchment** sheet (`delineate=1`): "The point is" The
+  catchment’s outlet / Just below a dam wall, the clicked position (or
+  Latitude and Longitude behind **Enter coordinates**), the dataset line
+  (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
+  (“Delineating…”). A refusal shows its sentence in the sheet ("That point
+  is outside the elevation model …"). The proposal is drawn dashed in teal
+  with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
+  when it arrives) and the sheet becomes **The delineated catchment**, its
+  title taking the focus: Area, The point is, Outlet ("128 m from the
+  point, on the channel"), Cells ("33 609 cells, each about 128 m across"),
+  **How it was made** (closed: Dataset with its fingerprint, Method with its
+  version), **Before you accept it** (three caveats), then **Accept as the
+  catchment boundary** (disabled until **Replace the current boundary “…”**
+  is ticked when there is one), **Accept as an area** and **Reject**;
+  **Delineate another point** goes back to the form, and the form's **Back
+  to the proposal** returns while one waits. Delineate (or its Enter
+  coordinates) always opens the form; **Review it** and a reload with
+  `delineate=1` open the waiting proposal. Closed with a proposal open, a
+  slim line among the notices says "A delineated catchment (547.19 km²) is
+  drawn dashed on the map, waiting for your decision." with **Review it**.
+  Accepting saves the feature, picks it and says "Saved Catchment above the
+  outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
+  the map
+  changed.
+- **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
+  [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
+  library decision). A **draw bar** sits over the map while a shape is drawn,
+  a point placed or a feature edited: what is being made (a select of
+  Catchment boundary, Farm parcel, Dam, River, Other area, Other line; or of
+  Gauge, Dam, Other for a point; "Editing “name”" for an edit), how (a line
+  that changes with the phase, saying tap on a phone), the last change in a
+  live region, why it can't be saved yet ("Its outline crosses itself…"), and
+  **Use my location** (phones, placing), **Enter coordinates** (points) or
+  **Paste a shape** (lines and polygons), **Undo**, **Finish** (while
+  drawing), **Remove the picked corner**, **Cancel** (drops the drawing at
+  once; Escape, on the map or in the bar, asks "Discard this drawing?" first
+  once there is work to lose: two corners or more, a finished shape or a
+  changed edit, [maps.md § Drawing](./maps.md#drawing)) and, once drawn,
+  **Save…** (**Save the shape** / **Save the position** for an edit, saved at
+  once). Entering a mode gives the map the keyboard focus. Save… on a new
+  shape opens **Save the drawing** (a side sheet: "This shape is" a kind its
+  geometry allows, Name, Stands for; "It replaces the current catchment
+  boundary." when it would; **Back to the map** keeps the drawing), and on a
+  new point the Place sheet. **Paste a shape** is a side sheet with a
+  GeoJSON-or-WKT field, an example for the shape being drawn and the error
+  in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
+  is picked.
+- **Assisted drawing** (#326 C2; [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)). The draw bar has **Snap to
+  features** (on; for the rest of the tab once unticked) and, while a new
+  shape or line is drawn, **Follow edges**, with "Hold Alt to place one
+  corner exactly."; a ring on the map marks where the pointer would snap,
+  and the live region names it ("…, on “Upper farm”’s corner."; "(2
+  corners followed along it)"). The canvas's accessible name adds "(on the
+  nearest feature’s corner or edge within reach; Alt+Enter places it
+  exactly)". **Split along a line** heads the bar "Splitting “name”"
+  ("Click outside the shape (or on its edge), then across it, and finish
+  outside it …"); once the line is finished (or pasted) the two parts are
+  shaded and "Cut in two: parts of 5 and 7 corners." shows, or why it can't
+  be cut ("Draw the line right across the shape …"); **Split…** opens
+  **Split the shape** (a side sheet: what happens to the shape, for the
+  boundary "The parts are" Areas (sub-catchments to link to units) / Farm
+  parcels, each part's name with its area, **Back to the map**, **Split**),
+  and the notice says "Split Hill farm in two: “Hill farm” and “Hill farm
+  (part 2)”.". **Trace a dam** puts the map in the point-placing mode with
+  the bar headed "Tracing a dam" and "Water in at least [25 %] of the
+  observations"; **Trace the outline** (or **Enter coordinates**, which
+  opens **Trace a dam**, a side sheet with Latitude, Longitude, the share
+  and **Trace**) asks the server; a refusal shows its sentence (in the bar,
+  or the sheet). The outline becomes a Dam drawing in review, with a line
+  "Traced from …: water in at least 25 % of the observations, about 4.30
+  ha. A proposal: check it against the map before you save it." (", then
+  adjusted" once changed); **Save…** opens Save the drawing (kinds Dam and
+  Other area only), which says the method is saved with it.
+- **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
+  Measure](./maps.md#measure)): the drawing mode with nothing saved. A
+  **measure bar** over the map: "Measuring", how ("Click the map to add each
+  point (or press Enter at the crosshair); click the first point, or Close
+  the shape, for its area."), the result in a live region ("Distance: 1.24
+  km (3 points)." while adding; "Area: 52.3 ha. Perimeter: 3.10 km." once
+  closed), the points by coordinates under **The 3 points** (a disclosure),
+  and **Undo**, **Close the shape**, **Start again** and **Done**. Escape (on
+  the map or in the bar) ends it at once: a measurement has nothing to lose.
+  Drawing, placing or editing ends a measurement; Measure is off while a
+  drawing is open. Not in the URL.
+- **Layers** (#326 A6, a small box under the list): **Quaternary
+  catchments**, a checkbox in the URL (`layers=quaternaries`; a history
+  entry, so Back undoes it and a reload keeps it) with a dashed swatch in the
+  layer's colour. On, the map draws the loaded quaternaries around the
+  features as dashed purple outlines under the features, and the box lists
+  them: "6 quaternaries around the catchment, from synthetic." (with
+  **Synthetic test data, never real outlines.** for the repo's dataset;
+  "(the first by code; there are more)" past 100) and their codes as toggle
+  buttons; a code picked there, or a click inside a quaternary on the map
+  where no feature is, draws its outline heavier. The codes are labels on
+  the map only when glyphs are configured. No features: "Nothing on the map
+  yet to show the quaternaries around."; none near: "No quaternary catchment
+  in the loaded dataset is near this catchment." (or that none is loaded).
+  With a DEM configured (`PUBLIC_TERRAIN_URL`, [maps.md §
+  Relief](./maps.md#relief)) a **Relief** checkbox follows, with a
+  light-to-dark swatch (`layers=relief`): on, the land is shaded from the
+  Copernicus 30 m elevation model ("Hills shaded from the Copernicus 30 m
+  elevation model."), or "The relief couldn’t be loaded, so the map is
+  drawn without it." when the DEM can't be read. Without a DEM there is no
+  checkbox. **River network** (issue #345, `layers=rivers`, a dashed
+  cyan-blue swatch) sits between them: on, the map draws the loaded river
+  network around the features, dashed and wider for a higher order, and the
+  box says "10 reaches around the catchment, the biggest first, from
+  synthetic." (with **Synthetic test data, never real rivers.**; "(the
+  smallest streams left out; there are more)" past 1000) and lists the
+  reaches as toggle buttons ("Reach 90000002 · order 3 · 655 km²", " · on
+  the map" once added; the first twelve, then **Show all N**), in a box that
+  scrolls on its own and gives way before the feature list does. A reach
+  picked there or clicked on the map is drawn on top in the selection
+  colour, and its facts and source show above the list (scrolled into view
+  after a click on the map), with **Add to the map as a river** for an editor (it
+  becomes one of the project's rivers; notice "Added “Reach 90000003” to the
+  map as a river, from the river network.") or "On the map as a river." and
+  **Show it**. The key's Lines gain "river network" while it is on
+  ([maps.md § River network](./maps.md#river-network)).
+- **Features** (under the card): every feature grouped by kind, parcels
+  first, then dams, gauges, rivers, other and the boundary, each group
+  largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
+  button (`aria-pressed`) with the name and, under it, the size or
+  position, what it stands for ("linked" when that's its own name) and, for
+  a parcel, its unit's area source ("area typed", "area from the map"). A
+  pick far down is kept in view inside the list, never by scrolling the page;
+  stacked on a phone, a pick from the list brings the card into view. The
+  head's **Every feature** opens the grid.
+- **Checks** (A4, under the list, viewers too): one line, never growing, with
+  the count ("1 warning from the map’s checks") and **Show the checks**, or
+  "The map’s checks found no problems."; the warnings themselves open in a
+  side sheet, **Map checks** (`checks=1`), each with buttons that pick its
+  features and close the sheet ([maps.md § Checks](./maps.md#checks)). The
+  line keeps a thirty-unit catchment's list its room.
+- **Every feature** (`grid=map-features`, a full modal drawn by the tab:
+  `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
+  one rather than through the model's save row): a table in the list's order
+  with Feature (picks it and closes the modal), Kind, Area or position,
+  Stands for, Unit’s area, Result and Band while a measure shows (A1), and
+  for editors Area into the model and Delete
+  (the same controls as the card); "Areas are computed on the server from
+  each polygon (geodesic, WGS84)."; **Where each hydrological unit’s area
+  came from** (every unit, including those with no parcel, with the count
+  "n of N from the map", and the link to Settings → WR2012 check); and
+  **Imported files**. In a narrow modal each row becomes a labelled card.
+  `?tab=network&grid=map-features` (any other tab) lands on the Map with
+  it open.
+- **Upload a GeoJSON file** (`upload=1`, a side sheet, editors;
+  `map/UploadSheet.svelte`, issue #326 D2): two steps. First the file (WGS84,
+  at most 5 MB; a `.zip`/`.shp` is turned away with how to export GeoJSON
+  from QGIS) and **Review**, which reads it on the server
+  (`POST …/map/import/preview`). Then the sheet widens to the review: a line
+  with the file's name and its features counted by kind ("Check each kind
+  before you import; nothing is saved until then"), **Set every row’s
+  kind** (a default for the Kind column: each row whose shape can be that
+  kind takes it, and the line under it counts those that can't), and a
+  table, one row per feature: #, Name (editable), Shape (point, line or
+  polygon, with its area), Kind (only the kinds its shape can be, with
+  "from the file" or "from its shape" under it, and why a kind the file gave
+  wasn't used), Stands for (the nodes that kind can stand for, or "–" for a
+  boundary or river) and Problems. While a row is marked as the boundary
+  and the project has one, a warning over the table says "Importing
+  replaces the current catchment boundary “X”: it goes from the map." with
+  a **Replace the current boundary** tick (off for every file); **Import**
+  waits for it, and the server refuses the import without it. Two rows
+  marked as the boundary, a
+  refused feature, or a file imported already (by SHA-256) show in an alert
+  over the table and disable **Import n features**; **Choose another file**
+  goes back. A refused file imports nothing; a taken one closes the sheet
+  and picks its first feature. On a phone each row is a card of labelled
+  fields (`importReview.ts` holds the rules, `importReview.test.ts`). Under
+  it, **Imported files**: each file with its feature count, date, who
+  imported it and its SHA-256 cut to 12 characters (the full hash in the
+  tooltip) with **Copy**.
+- **Place a point** (`place=1`, a side sheet, editors; #326 D1): kind
+  (gauge, dam, other; the bar's choice), name, what it stands for, and the
+  position. From a clicked or located point it says "Put on the map at
+  33.6200° S, 21.3400° E…" with the latitude and longitude behind an **Enter
+  coordinates** disclosure, filled in from it; opened with no position (the
+  bar's Enter coordinates, a direct `place=1`) the disclosure is open.
+  Decimal degrees ("-33.61" or "33.61 S", a decimal comma taken); errors show
+  under each field on submit (opening the disclosure); a saved point closes
+  the sheet, ends the drawing mode and is picked.
+- **URL.** `feature=<id>` picks a feature; `node=<nodeId>` picks that
+  node's farm parcel (the largest), else its first linked feature
+  (`mapList.ts` `pickedFeature`), so the Network and results can link "Show
+  on map". A pick is a history entry (Back undoes it) and replaces `node`;
+  saves in a sheet and picks from the grid replace in place. Closing a
+  sheet or the grid drops its parameter in place; a viewer's `upload=1` or
+  `place=1` is dropped. Old aliases `?tab=gis` and `?tab=catchment-map`
+  still open the tab.
+- Drawing is tested in `e2e/tests/map-draw.spec.ts` through its non-pointer
+  paths (paste a shape, typed coordinates, the keyboard crosshair, the entry
+  points) and one deterministic mouse-drawn polygon read back from the list,
+  with axe light and dark while drawing; the helpers in
+  `lib/components/map/draw/*.test.ts`.
+- Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
+  picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
+  its card, a linked pick in view, the phone stacks with no sideways
+  scroll), axe light and dark, wide and phone, with the grid open too.
+  `e2e/tests/map-import-review.spec.ts`: a mixed file's proposed kinds and
+  links, one changed and renamed, two boundaries refused in the table, the
+  list grouped after import; a file with a refused feature lists it on its
+  row and imports nothing; the phone's cards, axe.
+  Results: `e2e/tests/map-results.spec.ts` (the seeded Sandspruit as owner
+  and viewer, every parcel's figure in the table, the measure and run in the
+  URL with Back, published-only below editor, the fills re-read on a theme
+  switch through the key row's `data-fill-theme` and each band's
+  `data-colour` against its token, thirty units, axe wide and phone).
 
 ## Crops & demand
 
@@ -2523,6 +3136,42 @@ saves the catchment's model, and override mode there edits the scenario's
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
   the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
+- **From land cover** (issue #326 B-landcover,
+  `crops/CroplandProposalsBox.svelte`, rows in `crops/croplandProposals.ts`;
+  the sources and method in [maps.md § Cultivated area from land
+  cover](./maps.md#cultivated-area-from-land-cover)): under the areas, for a
+  hydrological unit (not another user) that is saved in the model (an
+  unsaved one says "Save the model to see …"). It is in the drawer, not on
+  the Crops page, because the page is sized to the window and a panel below
+  it would sit out of sight; every page that names a unit opens it. A table
+  lists each farm parcel on the map linked to the unit, largest cultivated
+  area first, with **Cultivated** ("51.7 ha of 103 ha") and **Share**, and
+  an **All parcels** footer when there are several; then the whole
+  catchment's cultivated area for reference and **Show … on map** (there
+  with or without a boundary). **Area to use** offers the parcels' sum
+  first, then each parcel with cropland ("All 2 parcels: 62.5 ha", "Lower
+  lands: 50 ha"; a lone parcel stands for the unit). A second table has one
+  row per crop, the crops planted on this unit first (largest first), at
+  most six until **Show all N crops** (`aria-expanded`): **Planted now**,
+  where an accepted area came from under the crop's name ("12.5 ha from
+  land cover (the parcel “Top camp”; synthetic, synthetic 1), used
+  2026-10-01", or "Typed over since: …" once the area no longer matches),
+  and **Use**, or "Saved" when the crop already holds the chosen area.
+  **Use** asks first (`confirmWords`: the crop, the unit, the old and new
+  area, the dataset, and that the land cover doesn't say what grows there or
+  whether it is irrigated; "Use this area"), saves that one value on the
+  server, shows a notice ("Orchard’s planted area on Upper farm is now
+  51.73 ha, from land cover. Run the model to see its effect.", which takes
+  the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
+  saved model and the summary. Use is disabled while the model has
+  unsaved changes, the drawer's own edits included (a hint says why), and a
+  viewer gets no Use ("Only an editor can use a value."). **Source and
+  method** (a disclosure) gives the dataset's source, version, label,
+  attribution and counting method. Other states: no parcel linked (with
+  **Open the Map**), no dataset loaded (the loader's command), no cropland
+  in the parcels, no crop yet, and a "Synthetic test data" warning for the
+  committed grid. On a narrow sheet the Use buttons are 44 px targets; the
+  tables scroll in their own box. e2e: `cropland-proposals.spec.ts`.
 - **Saving:** it edits the shared `ModelEditor`, so an edit shows on the Crops
   tab at once and the other way round. The sheet is modal, which makes the
   page's save bar unreachable, so it repeats the save row: status (unsaved,
@@ -2554,6 +3203,11 @@ Network is a map and Crops & demand cards and bars), so they open anywhere
 but the Scenarios tab, where no grid opens even when the URL names one: the
 modal edits and saves the catchment's model, and override mode there edits
 the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
+A tab's own grid (`TAB_GRIDS`: the Map's `grid=map-features`, which isn't
+the model's) uses the same parameter but is drawn by its tab, not this
+modal: the page leaves the parameter to the tab, and over any other tab
+the link goes to that tab with it open (`movedGridHref`;
+[§ Map](#map-tabmap)).
 
 - **From:** the Network's and Crops & demand's **Tables** menus, and Crops &
   demand's **Edit areas**. More screens will link to it as they simplify
@@ -3312,6 +3966,33 @@ which checks every catchment tab).
     pan coefficient, or the monthly PE row): the engine then refuses GR4J
     runs and fits. Under pan coefficient × A-pan a daily A-pan series counts
     as evaporation, so a project with one isn't warned.
+    Last in the group, **Evaporation from the map** (issue #326 B-evap,
+    `settings/EvaporationProposal.svelte`, its own lazy chunk;
+    [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
+    the catchment boundary's monthly evaporation from the loaded grid. A
+    line says over which boundary, how many cells, the share of it with
+    values, and what it goes into (GR4J's monthly PE for a reference-ET grid,
+    the A-pan row for an A-pan grid). A monthly table then shows the
+    **Proposed** row and the **Saved** row it would replace ("None: GR4J
+    runs on pan coefficient × A-pan" when there is no monthly PE), each with
+    its year total, and for reference ET a third row, **ET₀ ÷ saved A-pan**,
+    the pan coefficient the two imply, as a cross-check: a month outside
+    FAO-56's 0.6–0.85 is bold and named in a note under the table. **Source
+    and method** (collapsed) cites the dataset, its version and period, its
+    attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
+    A-pan evaporation row**; editors) asks first (what reads the values, and
+    that an earlier GR4J fit is marked "Forcing changed since fit"), saves
+    the 12 values as one settings revision, says so in a notice (focused;
+    `proposals/ProposalPanel.svelte`'s frame), and the
+    form reloads the saved settings (the PE kind switches to monthly, its
+    source naming the dataset). Use waits, with the reason, while the form
+    has unsaved changes. When the saved settings hold the proposal it says
+    so instead of offering Use; an accepted row's provenance line says when
+    it was used, or "Typed over since". Without a grid: "No evaporation grid
+    is loaded" with the loader's command; without a boundary: a pointer to
+    the Map; a boundary the grid can't stand for (no value inside, under
+    half covered) says why. Synthetic data carries the "Synthetic test data"
+    warning. With more than one grid loaded, a **Grid** picker.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
@@ -3477,7 +4158,11 @@ which checks every catchment tab).
     over the same columns, with how to read it in its foot (judge by the
     validation columns; the model should clearly beat the mean flow, and in a
     seasonal catchment the climatology; `fit-benchmarks-note`, a note at the
-    panel's end until issue #174), and a warning sentence
+    panel's end until issue #174) and, from engine 1.62.0, a second foot row
+    (`fit-benchmarks-source`) saying where the validation columns'
+    benchmarks came from (the test's calibration period; a column on the
+    other record, or a report from before 1.62.0, its own flows; CR-5), and
+    a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report
     made before 1.19.0 has neither. The formatting lives in
@@ -3646,6 +4331,16 @@ which checks every catchment tab).
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
   inverted band) show next to the field and block Save; the save bar links
   to the WR2012 group.
+  **Propose from the map** (editors; issue #288, [maps.md § Quaternary
+  lookup](./maps.md#quaternary-lookup); `QuaternaryProposal.svelte`, its own
+  chunk) looks up the quaternary at a point (the catchment boundary's centre,
+  a gauge on the map, or typed coordinates) in the loaded quaternary dataset
+  and lists its values (code, area, MAP, MAR, period, monthly means, source)
+  beside what the form holds, each with **Use** (or *Same* / *Used*, or *Not
+  in the data*). A used value goes into the form only; Save keeps it. A
+  proposal from the committed synthetic dataset carries a warning that its
+  values are invented; with no dataset loaded, or no quaternary at the point,
+  it says so.
 - **Flow share between hydrological units**: the method, and the **High/low
   MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
   is *High/low MAP split*, the one method that reads it (issue #174); under
@@ -3767,7 +4462,8 @@ which checks every catchment tab).
   classes**: *Automatic* (terciles, quintiles once the record has 25
   complete years; the default), *Terciles* or *Quintiles*. **Risk
   cut-offs**, one group per measure, each with **Use the default
-  cut-offs** ticked by default and a **Defaults pending the hydrologist**
+  cut-offs** ticked by default and a **Provisional defaults, not yet
+  confirmed by the catchment's hydrologist**
   badge while it is: *Reserve months met* (lower risk from 90 %,
   increasing risk from 75 % of months met) and *Days below the pragmatic
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
@@ -3856,12 +4552,36 @@ part of the Settings tab's chunk; WP-2.10,
   minutes and a reminder that the feed also runs daily.
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
+- **Use the catchment boundary** (editors and owners; issue #326 B-rain,
+  `feeds/BoundaryRain.svelte`, [maps.md § Rain from the
+  boundary](./maps.md#rain-from-the-boundary)): opens **Rain from the
+  catchment boundary** under the list with the proposal: the boundary (name,
+  area, when it last changed), the CHIRPS cells ("14 CHIRPS v3 cells of 0.05°
+  in 4 rows, … km² in all, … km² of it inside the boundary"), the method and
+  source, what **Apply** does (attach a new feed, or give an empty feed the
+  cells), and **The cells** (a disclosure with a table: latitude, longitude,
+  share inside, weight). Owners get **Apply**; editors read "An owner of the
+  project applies it". The applied feed's card reads "14 cells of the
+  catchment boundary “…”, area weighted". The Map tab's link opens it at once
+  (`?rain=boundary`). Without a boundary the error says so, with a link to
+  the map.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
   may write; CHIRPS into the catchment rain series gets a hint under the
   select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
   rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name (no schedule to pick: every feed runs daily), and either an
-  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). The area is
-  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 25; the
+  **Area** (CHIRPS and the forecast) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes). Above the
+  station field, **Nearest gauging stations** (`NearestGauges.svelte`,
+  `nearestGauges.ts`; issue #326 B-gauge, [maps.md § Gauging
+  stations](./maps.md#gauging-stations)) lists the river gauges within 50 km
+  of the catchment's outlet, nearest first: a sentence names the point used
+  (the outflow gauge's point on the map, else the boundary's centre, else it
+  asks for either on the Map tab), then a table of station (code, name and
+  source), river, distance, record (years and span) and **Use** (named "Use
+  Z1H001"). **Use** fills the station field and moves focus there; the row
+  then reads "In the field". Nothing is attached until **Attach feed**. A
+  synthetic list is badged **Sample stations**; no list loaded, or none in
+  range, says so and points back to typing the code. The area is
+  **Grid cells** (one "latitude, longitude[, weight]" per line, up to 100 in 25 grid rows; the
   rainfall is their weighted mean) or a **Bounding box** ("south, west, north,
   east" in degrees, `feeds.ts` `parseBbox`, a typeset minus accepted; the
   area-weighted mean of every 0.05° cell it overlaps, at most 100 cells in 25
@@ -4151,8 +4871,9 @@ read it before.
   (`cardFacts`) the mean shortfall (m³/day and Mm³/a), the demand days short
   in the reporting window (assurance of supply, engine ≥ 0.32.0), the days
   short in the last 7 when there were any, and the cut the curtailment table
-  asks for; links to its node on the Network (`?tab=network&node=`) and its
-  planted areas (the farm drawer, `farm=`). The whole card picks the unit:
+  asks for; links to its node on the Network (`?tab=network&node=`), **Show on
+  map** (`?tab=map&node=`, only for a unit a map feature is linked to; issue
+  #326 A2) and its planted areas (the farm drawer, `farm=`). The whole card picks the unit:
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
@@ -4194,7 +4915,7 @@ read it before.
   restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
   [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
-  demand-object and other-user tables, once under the run summary with no
+  demand-object, river-abstraction and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
@@ -4296,7 +5017,11 @@ read it before.
   together sit together:
   1. **Summary**. The run header carries the evidence line and a one-line
      preview of the run's notes (`notesPreview`), each a link to the Record
-     group. The summary opens with the run's warnings in two parts
+     group, and, for a run a known engine bug may affect (issue #103), an
+     amber **May be affected by a known bug** (or *by n known bugs*) badge
+     that opens its validation statement (also when loaded as a
+     `#res-validation` link), whose errata table says when each bug
+     changes results. The summary opens with the run's warnings in two parts
      (`runs/credibility.ts` `warningGroups`): **things to check before relying
      on this run** (a warning box; any warning not known to be a data note
      lands here, so a new engine warning is never hidden), then, collapsed,
@@ -4370,7 +5095,10 @@ read it before.
   ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
   (latest, Auto for an automatic run made after new data, Published, Evidence / Former evidence, Pinned, Scenario / Scenario
   base, **Inputs not stored** for a run from before stored inputs, which
-  can't be re-run from them, Workbook comparison). Pin and
+  can't be re-run from them, **May be affected** for a run whose engine (or
+  its fit's) had a known bug, its errata ids in the tooltip (mouse only, as
+  the other tags; the header badge says it in words), Workbook
+  comparison). Pin and
   ✕ stack in a narrow column beside it. The full period, days, author and
   engine version are in the results header. From 7 runs up
   (`RUN_FILTER_FROM`) a **Filter runs** box above the list keeps the runs
@@ -4421,7 +5149,13 @@ read it before.
   removed and the run is a workbook comparison only. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
-  the section. Viewers see the status and the notice, no actions. The farm
+  the section. A run that was published says whether the responsible
+  authority endorsed it as a baseline ("Endorsed for the responsible
+  authority <date> by <name>", its note; or **Not endorsed by the
+  responsible authority**, which evidence reports on it say on page 1;
+  163_licensing_authority), and a member acting for the authority gets
+  **Endorse as the responsible authority** with an optional note, once
+  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
@@ -4611,6 +5345,17 @@ read it before.
   the days it did, whole-run means. Drawn on Units & supply too, beside the
   curtailment table (which has no pump columns); the run Summary's Other uses
   line names it.
+- **River abstractions** (engine ≥ 1.65.0, only when a unit has a demand on
+  the river, model.md §2.7j; drawn after Demand objects, the unit tables
+  together, in the order the Summary's Other uses line names them): per
+  abstraction its unit, its name (**Crops** for the crops' take, whose
+  engine name repeats the unit), its pump capacity
+  ("no limit" without one), the mean it pumped and, with a pool, the pool's
+  capacity and mean storage; from engine 1.66.0, when one has a pump
+  capacity, the demand its pump left unmet while the river or its pool had
+  the water (`river_pump_limited@`) and the days it did ("–" for one without
+  a capacity). The summary CSV has the same block; the run Summary's Other
+  uses line names it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the
@@ -5182,7 +5927,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
 - **Around it**: badges for the **measure**, naming its site (Reserve months
   met at the chosen site when every level has a rule table there, else days
   below the pragmatic EWR at the outlet), the method and number of complete years,
-  and **Risk cut-offs pending the hydrologist** while the measure in use has
+  and **Provisional risk cut-offs, not yet confirmed by the catchment's
+  hydrologist** while the measure in use has
   the default cut-offs; the cut-offs in words; the water years not classed
   (part years, or a missing day); and the engine's warnings (e.g. only some
   levels have a rule table, or too few years for every class to judge).
@@ -5640,6 +6386,20 @@ WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
 workspace.
 
+**What a viewer sees** (decision D3, 162). Until an owner switches viewers
+on, a viewer gets one card instead of the page below, *Registered water use
+in this catchment* (`AllocationTotals.svelte`): per water source held by 5
+or more registered users, the holders, the volume registered today and the
+storage (`totalsSentence`), and the run's modelled use against the
+registered volumes summed per water year; "No total is shown" when no
+source has 5 holders. No unit, number, name or Download CSV. Owners get a
+**What viewers see** card at the foot of the page, a checkbox *Viewers see
+each farm's registered volumes* with the note to switch it on only if every
+viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
+The import sheet asks a WARMS extract **How you obtained this extract (the
+DWS or CMA letter or terms)**, required, and refuses the file until it is
+filled; a CSV's reference stays optional.
+
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
 registered volumes · 4 not matched · 6 units above registered";
@@ -5850,8 +6610,9 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   run" when they have); the **Ecological Reserve** (the outlet's days not
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
-  flow and a chart of the outlet's flow and EWR, baseline against theirs, or
-  why not: fewer than five farm holders); **Your hydrological units**
+  flow and a chart of the outlet's flow and EWR, baseline against theirs;
+  below five farm holders natural flow and the EWR only, and why the outlet
+  flow isn't shown); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
@@ -5877,7 +6638,41 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   ("… in this application's runs Kalkoenkrans is called “Kalkoenkrans (2)”",
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
-  applicant never does.
+  applicant never does. An assessor also reads, in an info box, each rule
+  the applicant reads without the other units' figures in its own words
+  (`check.assessorProblems`, 164).
+- **Written objections** (166_public_participation): the warning that a
+  comment in the app is not a written objection, and the notice's
+  **Address** and **Closing date** ("Not given" until set). The owner edits
+  them while it is a draft (**Edit the notice details**: a text box and a
+  date); once submitted they are fixed. Every public comment box and share
+  page prints them.
+- **Public participation record** (the owner and the assessors, once
+  submitted): a link to `/projects/:id/scenarios/:sid/participation`
+  (`routes/projects/[id]/scenarios/[sid]/participation/+page.svelte`), the
+  application's public comments for the reg 19 report, laid out under the
+  GN R267 Annexure D item 8 headings the app holds material for: the
+  application and its notice, access and opportunity to comment (its
+  links), the written comments (author, the email only where they ticked
+  the register box, where and how posted, moderation state, earlier texts),
+  the register of interested and affected parties from the app, and
+  notifying them of the decision. **Print or save as PDF** and **Download
+  the comments (CSV)**. `scenario-share.spec.ts` checks the record.
+- **To sign as the applicant's specialist** (167_signers), in the
+  applicant's Evidence packs list: the drafts the caller may sign as the
+  party's appointed specialist, each with **Sign…** (the sign-off section
+  in a side sheet, signing as "Specialist for the applicant").
+- **Rules you can't see** (`AskAssessors.svelte`, 164; for the
+  application's parties, between the problems note and the changes): each
+  problem line a rule hidden from them broke (`check.maskedRules`), the
+  changes it names and what the rule is about ("change 1: flow shares"), and
+  **Ask the assessors why**, which sends the line, those changes and the
+  rule's kind (never anything hidden) to the assessors. The panel says what
+  the assessors see (the question, the changes it names and the
+  application's name, not the rest of the draft). Once asked: "Asked
+  <date>; waiting for the assessors' answer", then the answer and **Ask
+  again**. Questions about lines the check no longer shows sit under
+  **Earlier questions**.
 - **Comments and share links** (WP-3.15), at the top of the panel: the
   application's **Notes** button (the notes drawer on the scenario, titled
   "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
@@ -5921,7 +6716,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   a decision first, the longest-waiting on top).
 - **The table:** name (a link to it in the Scenarios tab), applicant ("shared
   with N" under it), status as a pill in words (Awaiting a decision;
-  Approved, Approved with conditions or Refused in the band colours, with
+  the authority's outcome in the band colours: *Licence issued (see its
+  conditions)* good, *Licence refused* and *Application rejected (formal
+  requirements)* bad, *Not considered: use already authorised* mixed, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
   "waiting N days" while it awaits a decision), changes and runs, and the
   the application's evidence packs (WP-3.14: each a status badge, newest
@@ -5933,22 +6730,84 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs", its
   packs, its comments) and the page scrolls.
+- **Applicants' questions** (`AssessorQuestions.svelte`, 164), under the
+  card and only when there are any: each "Ask the assessors why" question,
+  unanswered first ("N waiting for an answer"), with the application's
+  name, when it was asked, the changes and the rule's kind, the line as the
+  applicant read it and the rule in its own words, and **Your answer** /
+  **Send the answer** (once; an answer goes to the application's parties,
+  so the note above the list says to write only what they may know of
+  other water users). A question may be about a draft, which stays the
+  applicant's.
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
   decision." and **Show all**).
 
+**Assess together** (roadmap WP-3.11, `&view=assess` in the URL, so Back
+returns to the list; `CumulativeAssessment.svelte`, the pure parts in
+`cumulative.ts`): the section header's **Assess together** link swaps the
+card for the cumulative impact view, and **Back to the list** swaps it back.
+
+- **Pick:** every submitted or decided application, ticked two or more; once
+  one is ticked, an application on another base run can't be (it says
+  "based on another run than …"). A **Name**, then **Check they combine** (a
+  dry run: nothing written) or **Assess together** (writes the assessment
+  and queues its job).
+- **Refused, never merged:** when two applications change the same thing,
+  or one removes what another uses, each conflict is listed: its target
+  (`node "Upper farm": damCapacityM3`), whether both change it or one removes
+  what the other uses, and both changes side by side (each application's
+  name, change number and the change in words). Changes that apply alone but
+  not together (two new dams given one name) are listed too.
+- **The result** (the newest assessment, or one picked under **Assessment**):
+  while it runs, *Queued* or *Running each application alone and all
+  together… N %* (followed every 1.5 s); a refused or failed one says why,
+  line by line. Complete: one matrix, rows = each measure at each EWR site
+  (the outlet first) and for the catchment (days the EWR is not met, mean
+  EWR shortfall, Reserve months met and deficit at each rule-table site,
+  mean flow at the outlet, supplied to existing users and their share of
+  demand met), columns = **Baseline**, each application **alone**, **All
+  together** (each with its change from the baseline under it, coloured
+  worse or better) and **Interaction** (together less the sum of the
+  separate changes; its plain-words reading is the cell's title and is read
+  out), with a one-paragraph explanation of the interaction above it and
+  **Download CSV** (the raw numbers, names guarded against CSV injection)
+  below.
+- Workspace English, like the rest of the assessors' tab.
+
+e2e: `e2e/tests/assess-together.spec.ts` (three submitted applications: a
+conflicting pair refused with both changes named, a pair that combines run
+by a worker tick into the matrix, the CSV, Back to the list; axe light and
+dark).
+
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
-list; only its owner edits it, and an editor who isn't its owner gets the
-**Decide** form (outcome radios, reasons and conditions, **Record the
-decision**; final).
+list; only its owner edits it. An editor who isn't its owner and whom the
+owner marks as acting for the responsible authority gets **Record the
+authority's decision** (163_licensing_authority; provisional position,
+pre-counsel research, 2026-10-01): the outcome in the Act's words with its
+basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
+*Application rejected (formal requirements)*, *Not considered: use already
+authorised*), the authority (empty: the project's), the date of the decision
+letter, the licence or file reference, *Written reasons received?* yes or no,
+and a note for the authority's reasons and conditions; the button waits for
+the outcome, the date and the reasons answer; final. Another editor reads
+that only a member acting for the authority records it. A decided
+application shows the outcome, whose decision it was and its date, the
+reference and the reasons answer, who recorded it and when, the note, and
+that any appeal runs from the decision letter (s148, s41(6); no deadline
+worked out).
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and
 `e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
 fit and a 30-application queue, the status filter's URL and Back, empty
-states, a viewer, the phone cards, axe at desktop light and dark and phone).
+states, a viewer, the phone cards, axe at desktop light and dark and phone)
+and `e2e/tests/ask-assessors.spec.ts` (an applicant asks why a rule
+depending on a farm they can't see refuses their change, the assessor
+answers it on the Applications tab, the applicant reads the answer; axe in
+light and dark).
 
 ## History (`?tab=history`)
 
@@ -6304,7 +7163,10 @@ baseline card links to the published run's report (**Report**, beside
     (decision D10)* line stands above it.
 
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): full name, the registration as three selects (body, SACNASP by
+  opened): first the line "This sign-off is an electronic professional
+  statement in this app. It is not your signature on any form or report the
+  authority requires; sign those as the authority asks." (`signoffForm.ts`
+  `SIGNOFF_NOT_A_SIGNATURE`, 167; Terms §3 says the same); then full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
   discipline, whose list follows the body, and choosing another body clears
   both; engine `liability/registration.ts`), registration number (its
@@ -6434,6 +7296,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
 - **Board 1, the checks** (screen only, open by default): every check the
   engine makes (`evidenceChecks`), failures first, each marked *stops
   issue* or *printed, doesn't stop issue*, with what was found and the fix.
+  Among them (`evidence-10`) *Every river pump has a capacity* and, for an
+  application, *The application's own river abstraction leaves the EWR in
+  the river*, each naming the units it found
+  ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river)).
   Then **Expect questions about:** what an assessor will ask for, with the
   way out (failed checks, "Not assessed" rows, a site without a REC, no stored
   fit, a flagged WR2012 check).
@@ -6461,12 +7327,30 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply,
-    and *Other applications on this baseline, summed* (the other submitted
-    or approved applications' own changes in days below the pragmatic EWR,
-    added up, no band, its basis saying it is a sum of separate runs and not
-    one combined run, WP-3.11; *None* when there are none the reader can
-    see)), with the paired band and "worse in k of n"; then **Impact by year
-    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    and *This and the other applications on this baseline, together*
+    (`evidence-11`: the change in days below the pragmatic EWR at the outlet
+    with this application and every other submitted or approved one run
+    together, from a cumulative assessment of exactly them, and the
+    interaction in its note; no band; *Not assessed* naming each conflict
+    when they conflict, or saying none of exactly them is assessed yet;
+    *None* when there are none the reader can see; an older pack prints its
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    application report, **Against full authorised use** (`evidence-14`,
+    licensing build item 8; `report/evidence/authorised.ts`): the same
+    board over the baseline and the application both run with every holder
+    at their registered volume, worded by `evidenceBoard` from the report's
+    `licenceImpactAuthorised`, and under it the authorised volumes' mix
+    (held as licence, verified existing lawful use, registration, claimed
+    existing lawful use, general authorisation or Schedule 1, the volume,
+    whether it is an entitlement, and the totals) and when and on which
+    engine it was run; without one, a fixed *Not assessed* row says why
+    (not run for this application run, no registered volumes, or out of
+    date); a pack drafted before `evidence-14` says it isn't part of it.
+    Above the report, on screen only, an editor gets **Run at full
+    authorised use** (or **Run it again** when out of date), which runs
+    the pair (`POST …/authorised-impact`) and reads the report again. Then
+    **Against modelled current use**, the **Impact by year
+    class** board (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
     the runs' stored series and the project's `settings.outcomes` (the
@@ -6477,7 +7361,14 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     the river loses most* (the three worst months by paired median, the
     longest run of Reserve months missed, the worst month-year) and *This
     report does not decide*.
-  - **1 The river**: per rule-table site, the site strip (source, component,
+  - **1 The river**: first the **locality map** (`LocalityMap.svelte`,
+    report format `evidence-12`): Figure 1, the engine's SVG of the
+    project's map features as an image from a `data:` URL, with its SHA-256
+    under it and its legend, labels and notes as visually hidden text; *No
+    locality map: the project has no map features* without any, and, on a
+    pack drafted before `evidence-12`, that it isn't part of the pack
+    ([evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)).
+    Then, per rule-table site, the site strip (source, component,
     unit, the REC from the rule table or *Not given*, EWR % nMAR, natural MAR
     against the determination's, and, when there are any, the months whose
     natural flow is drier than the table's driest point, where the
@@ -6521,12 +7412,16 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     Then **Other
     applications on this baseline** (`evidence-cumulative`): each other
     submitted or approved application, its status and its own change in days
-    below the pragmatic EWR and in Reserve months met at the outlet, the sum
-    of those counted (same engine, period and runoff model; any other says
-    why it isn't) and the sum with this application; the words say it is a
-    sum of separate runs, not a combined run (WP-3.11), listed as the reader
-    can see them; past 50 the newest 50 are listed and nothing is summed
-    (page 1's row then *Not assessed*).
+    below the pragmatic EWR and in Reserve months met at the outlet from its
+    own newest run, listed as the reader can see them (past 50 the newest 50).
+    Then **All of them together** (`evidence-11`, `evidence-combined`): this
+    application and each other one, its change alone, the sum of each
+    alone, all together and the interaction, in days below the pragmatic EWR
+    and Reserve months met at the outlet, from the cumulative assessment it
+    names (`evidence-combined-source`); or, in their place, why not
+    (`evidence-combined-na`: the conflicts named, not assessed yet, under
+    way). An older pack (before `evidence-11`) prints its frozen sum of the
+    runs counted and the sum with this application instead.
   - **5 Registered water use** (WP-3.10,
     [allocations.md § In the evidence report](./allocations.md#in-the-evidence-report)):
     the allocation mode each run ran with, the band, volumes on no unit; the
@@ -6541,7 +7436,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     caps, the days the licence limit held use back by limit and the years
     the volume was used up, in the Allocations page's words (`capYearsText`),
     "Not capped" for the run that doesn't cap it. Units by their unit name,
-    never the holder's. *Not assessed* when the runs carry no volumes, or
+    never the holder's, and only the applicant's own (`evidence-15`, D3):
+    every other unit is one *Other registered users (n units)* row per water
+    source, left out below 5 units, and a note says which
+    (`evidence-allocations-others`). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units
@@ -6594,8 +7492,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
   browser's print (always light, A4). There is no server-rendered evidence
   PDF yet: it comes with the issued pack (WP-3.14).
 - Tested by `e2e/tests/evidence-report.spec.ts`, for § 5 with volumes
-  `e2e/tests/evidence-allocations.spec.ts`, and for § 6 with objects
-  `e2e/tests/evidence-demand-objects.spec.ts`.
+  `e2e/tests/evidence-allocations.spec.ts`, for § 6 with objects
+  `e2e/tests/evidence-demand-objects.spec.ts`, and for the applications
+  together, assessed, `e2e/tests/evidence-combined.spec.ts` (the
+  conflicting pair is in `evidence-report.spec.ts`).
 
 ### Evidence pack
 
@@ -6635,7 +7535,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
   **Verify page** once issued, **Share link…** (an editor, once it was
-  issued) and **Notes**, and the version, code, manifest hash, PDF hash
+  issued), **Send to the authority…** (an editor, while it is issued:
+  `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
+  the authority and not through the applicant, the members acting for the
+  responsible authority as ticked checkboxes, an optional note and
+  **Send**, then "Sent to …"; with none, it says the owner marks them in
+  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
@@ -6645,6 +7551,22 @@ their own application's in [their own view](#the-applicants-pack-view).
   its errata item (`errataRecorded`), so **Issue pack** is disabled, and the
   API refuses the issue anyway (`pack_errata_since_draft`). The report below, and so the PDF, prints only the
   errata the manifest recorded.
+  Once issued, a line says what the server's re-run of both runs from the
+  stored bundle found (`reproduction`, 154_pack_reproduce;
+  [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction);
+  `packs/pack.ts` `reproductionNote`, `data-testid="pack-reproduction"`
+  with `data-state` the status): *Reproduced on the server* with the engine
+  and date (an info box), *Not reproduced* with each failed check listed (an
+  error), *Not re-run on the runs' own engine* when only the re-runs differ
+  on another engine (a warning), a quiet *re-running* line with **Check
+  again** while its job runs, or that it couldn't be done and why. An editor
+  gets a button to ask for it again (`POST …/reproduce`,
+  `data-testid="pack-reproduce-again"`): **Try again** when it couldn't be
+  done, **Re-run on engine X** when the outcome is an older engine's than
+  the server's (the line adds that the server now runs X and the new
+  outcome is recorded beside this one), **Re-run on the server** for a pack
+  issued before re-runs; never on the server's own engine's outcome. It is
+  the app's own claim: never printed, never on verify.
 - **Share link…** (WP-3.15, 128_pack_share_notes) opens the same
   `ShareLinksPanel` as an application's Share dialog, for this pack: what a
   link shows (verify's fields, and while it stands the river's figures, never
@@ -6674,7 +7596,24 @@ their own application's in [their own view](#the-applicants-pack-view).
   evidence pack…** opens the run's sign-off dialog with the pack's version,
   manifest hash and engines, the eleventh confirmation, and first a warning
   that the signer's name, registration and date are shown publicly on the
-  verify page, for as long as the pack exists.
+  verify page, even if the pack is withdrawn, for as long as the licence
+  record it supports is kept (three years after the licence expires, or
+  after the application is refused or withdrawn; [evidence-pack.md §
+  Retention](./evidence-pack.md#retention)). An editor chooses **You sign
+  as**: "Specialist for the applicant" (the professional responsible for
+  the evidence; what issue needs) or "Reviewed for the responsible
+  authority" (a second sign-off); the applicant's appointed specialist
+  signs as the specialist only (167_signers). The sign-off list prints
+  **Signed as** and, once the host recorded a check, "Registration (checked
+  against the register by <org>, <date>)" instead of "(self-declared)"; the
+  verify page does the same. The issue checklist adds "Each specialist
+  signer's registration has a current check" while the project requires it.
+- **A fresh code** (`layout/FreshCodeDialog.svelte`, its own chunk, mounted
+  by `routes/+layout.svelte`): when a sign-off, an issue or a withdrawal
+  answers `401 mfa_fresh_code`, a dialog asks for a code from the
+  authenticator app (or a recovery code), sends it to `POST
+  /auth/mfa/step-up`, and the action goes through without being started
+  again; Cancel leaves it undone.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
@@ -6699,6 +7638,18 @@ Part of the workspace, so English, like the rest of the Applicant view
   note that this is their copy: their own units by name, the others
   downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
+- **Their printable copy** (165_applicant_copy): **Make a printable copy**
+  in the head's bar asks the server to print this view as them; *Printing
+  your copy…* while it does (the page reads it again every 2 s for about a
+  minute), then **Download your printable copy** and a line with the
+  copy's own SHA-256, page count and when it was printed, saying it is a
+  copy of this page, not the pack. A failure says why, and the button
+  comes back. Printed (the server's PDF, or the browser's print), the page
+  drops the bar, the notes and the Back link, opens with a boxed
+  "Applicant's copy: other water users' figures withheld. Not the pack.
+  Check the pack at <verify address>" with the pack's code and manifest
+  hash, and repeats that in the footer of every page. The page sets
+  `data-report-ready` once loaded, for the renderer.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
@@ -6712,16 +7663,17 @@ Part of the workspace, so English, like the rest of the Applicant view
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
-  same note as the pack's page and verify), and the signers. No download:
-  the PDF, manifest and bundle are the assessors' copies. The "pack issued"
+  same note as the pack's page and verify), and the signers. No download
+  of the pack's PDF, manifest or bundle: those are the assessors' copies. The "pack issued"
   and "pack withdrawn" emails (133) link the applicant here.
 - 404 (not theirs, not issued, another application's) and 403 each have
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
   view, their farm named and the neighbour beside it, not downstream, not
-  listed (as in the results view), no download, the
-  errata found since issue, a share link opened signed out, axe, the phone
+  listed (as in the results view), no download of the pack, the
+  errata found since issue, their printable copy made by a worker tick and
+  its PDF's hash checked, a share link opened signed out, axe, the phone
   layout).
 
 ## Help (`/help`)
@@ -6901,8 +7853,16 @@ published.
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My hydrological unit", the EN | AF
-  language switch, Menu: your farms, the words, Account, the privacy notice, "Don't keep a copy
+  language switch, Menu: your farms, the words, Account, the privacy notice, on a catchment's
+  pages *Who decides about your farm's information*, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
+- **Who decides about your farm's information** (`/farm/[id]/who-decides`,
+  POPIA s18(1)(b), 168): the organisation that runs the catchment (the
+  project's team) and the person or office to ask, as the team's owners set
+  it in Team settings (`GET /projects/:id/privacy-contact`): name, a
+  `mailto:` email link and the postal address when given. Without a contact
+  it says to ask the person who invited them or the WUA. Both link the
+  privacy notice's § 2.
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
   emails" link lands there): the header's **Your hydrological units** back link in
@@ -6927,7 +7887,10 @@ published.
   the WUA on …. Data up to …", amber with its age when stale: "Data up to
   10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
   becomes "30 days to 10 Jan 2024"); the WUA's
-  notice first (warning or danger fill, icon and level in words), or "No
+  notice first (warning or danger fill, icon and level in words, the WUA's
+  words, and its percentage as "Set by the WUA: a 20 % cut in registered
+  water use." whenever it published one, beside its words as the alert email
+  has it), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
@@ -6965,7 +7928,22 @@ published.
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
+  alone if that fails); **Your hydrological unit on the map** (issue #326
+  A3, `farm/FarmMapCard.svelte`, wording in `farm/farmMap.ts`, section
+  `farm.map`), only when the farm has a parcel or dam of its own on the map
+  (`GET …/map`, [maps.md § The farmer's map](./maps.md#the-farmers-map)):
+  what the map shows and that it shows no other hydrological unit, "Your land
+  is coloured by the model’s look back: **Model: watch**" (no line without a
+  band), each feature in words ("Your land: Vaalbank (3 000 ha)", "Your dam:
+  …", "Rivers: …", "Gauges: …", "The catchment boundary"), "Where: about
+  33.684° S, 21.320° E.", and "There is no background map here, so only these
+  are drawn." when the build has no basemap tiles; then the map itself, a
+  280 px `CatchmentMap` loaded as its own chunk (`farm/FarmMapCanvas.svelte`,
+  MapLibre a chunk further), with its words, zoom buttons and keyboard hint in
+  the reader's language, and a one-line key (the land in its band's colour,
+  "Your land · Model: watch", the dam, river, gauge and boundary drawn as the
+  map draws them). A failed request says so in one line; the offline view
+  leaves it out; "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file (the farm's last 365
   days to `dataUntil`, in whole m³, headed by the series keys; api.md
   § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the
@@ -7076,6 +8054,7 @@ view (`/farm/**`), the sign-in pages (`/login`, `/register`,
 `/forgot-password`, `/reset-password`, `/verify-email`), the "confirm your
 email" banner, the account page and its alert emails page
 (`/account/alerts`), the unsubscribe page (`/alerts/unsubscribe`), the
+"Was this useful?" page (`/alerts/feedback`), the
 public shared view (`/share`), the public landing page (`/` signed out,
 `/welcome`, [§ Landing page](#landing-page)), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
@@ -7352,6 +8331,24 @@ then.
   invitations**, on every signed-in page but the invitations page, while any
   wait. The count is read once per account, again after an accept or
   decline, and when the tab comes back into view (`auth-extras/inviteCount.svelte.ts`).
+- **The two-step sign-in banner** (`layout/MfaBanner.svelte`, issue #282,
+  [security.md § Two-step sign-in](./security.md#two-step-sign-in); in
+  `routes/+layout.svelte` beside the other banners, on the workspace's
+  pages only, English: not on the account, farm, alert or sign-in pages).
+  For a project owner, team admin or assessor without an authenticator
+  (`GET /auth/mfa` `required && !enrolled`), or after any request answers
+  `403 mfa_required`: what their role needs it for and **Set up two-step
+  sign-in**, linking to the Account page's panel (`/account#two-step`).
+  With an authenticator but a password-only session (`!sessionVerified`),
+  or after a `403 mfa_step_up`: **Sign in again**, which signs out and goes
+  to `/login?next=<this page>`. A refusal words it as "That needs …";
+  **Dismiss** hides it until the next refusal (or until the tab closes: a
+  reload keeps it hidden, `sessionStorage`) and moves focus to the page's
+  title. While the need stands, dismissed or not, the account menu's avatar
+  carries a small amber "i" badge (the trigger's name adds ", two-step
+  sign-in needed") and the menu's first entry is **Set up two-step
+  sign-in** (to `/account#two-step`) or **Sign in again with a code**. Its own chunk, loaded only while there is something to say
+  (`lib/auth/mfaPrompt.svelte.ts` decides).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
   it should have access already.
@@ -7370,7 +8367,13 @@ the catalogue, [§ Language](#language)); both unit-tested.
   on 5 of 14 forecast days (alert at 3)", the late or failing feeds and
   series sent by API key (headed **API data behind**, its email's subject
   too), "3 of 14 hydrological units short from … to …, in figures
-  an auto run published (alert at 1)"), or "No alert is firing". An editor gets **Set up alert emails**, which loads the
+  an auto run published (alert at 1)"), or "No alert is firing". A firing
+  EWR forecast alert whose forecast is behind the recorded rain, with no
+  newer forecast made (the API's `forecastOutOfDate`), has an amber line
+  under it (`data-forecast-out-of-date`, `alerts.ts` `outOfDateText`):
+  "Forecast out of date: made 20 Sep 2026 on the rain recorded to 19 Sep
+  2026, but rain is now recorded to 24 Sep 2026 and no newer forecast has
+  been made. Check the forecast data feed." An editor gets **Set up alert emails**, which loads the
   rule editor (`alerts/AlertRulesEditor.svelte`, its own chunk, fetched on
   the click): a checkbox per catchment kind (EWR at risk in the forecast,
   restriction notice, background jobs failed, data feed failing,
@@ -7388,7 +8391,14 @@ the catalogue, [§ Language](#language)); both unit-tested.
   series' rule shows as on, since the next evaluation switches it on and
   Save writes every row), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
-  and that each alert is sent once per crossing.
+  and that each alert is sent once per crossing. Under the rules, **Was it
+  useful?** (`alerts/AlertFeedbackSummary.svelte`, 151, issue #74): what
+  people answered to "Was this alert useful?" over the last year, one line
+  per kind ("Dam low: 3 of 4 said useful"; a digest is "Daily summary"; the
+  most answered first), then **Comments** (the newest 50, each with its
+  kind, useful or not and the day; shown as text), never who gave them;
+  "No answers yet." before any. It says only people who chose to answer are
+  counted, and that nothing records whether an email was opened.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
   kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
   kind by kind and reader by reader). A dam alert to a farmer
@@ -7478,6 +8488,21 @@ the catalogue, [§ Language](#language)); both unit-tested.
   means the link is dead; no signal or a server problem keeps the question
   and its button, with the reason above them, to try again. The page sets
   `no-referrer`, like the reset pages.
+- **`/alerts/feedback`** (an alert email's *Was this alert useful? Yes · No*
+  links, 147, issue #74; signed in or out, on `AuthCard`; translated): reads
+  the token and the link's answer from the fragment (`#t=…&a=yes|no`) once
+  and strips them from the address bar. Titled *Was this alert useful?*,
+  it shows **Your answer** (Yes, it was useful / No, it wasn't useful) with
+  the link's answer chosen, *Anything to add? (optional)* (500 characters
+  at most, said under it when over), the line "Your WUA reads your answer
+  and comment without your name. Nothing is kept until you press Send.", and
+  **Send**. Nothing is recorded until Send (a mail scanner that opens the
+  link answers nothing). Then "Thank you. Your answer goes to the people who
+  run alerts for <catchment>, without your name." with *Manage alerts*.
+  Send with neither chosen says "Choose Yes or No." A dead link ("This link
+  doesn't work any more: it lasts 30 days, and only while you are a member
+  of the catchment.") and a link without its token have their own states;
+  as on the unsubscribe page, only the API's 404 means dead.
 - **Farm view**: while the farm's own dam alert fires, an **Alerts** card
   under the WUA's notice (`farm/FarmAlerts.svelte`): "Your dam is below the
   alert level of 30 %: about 8 % on 20 Sep 2026" (or, on the forecast, "may
@@ -7516,7 +8541,9 @@ signed in or out, for someone outside the project, on a phone first.
   responsibility to anyone who relies on this page." (`shareCaveat()`,
   quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language, else English, else
+  restriction from the WUA"; the WUA's percentage, "Set by the WUA: a 20 %
+  cut in registered water use.", beside its words, as on the farm page and
+  in the alert email), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
@@ -7545,7 +8572,7 @@ signed in or out, for someone outside the project, on a phone first.
   k-ruled series). On paper: "Water Management · Member summary", the
   catchment's name, the period with its dates, the published line and
   "Printed on *date*." (the day of the print, set on `beforeprint`), the caveat; the WUA's notice (level, words, the %
-  when it gave no words, who published it); each EWR site's reserve over
+  beside them, who published it); each EWR site's reserve over
   the period, always with its dates ("Below its reserve on 12 of the 102
   days from 1 Oct 2023 to 10 Jan 2024."); the monthly flow chart over the
   period's months (never fewer than 12, counting back from its last; drawn
@@ -7596,15 +8623,25 @@ signed in or out, for someone outside the project, on a phone first.
   column: the decision's reasons (once decided), **The catchment's totals**
   (flow out, water supplied, units short of 95 % of demand, baseline and
   application; only at five or more units), **Public comments** (oldest
-  first, author and date, *edited*), and **About this page**. A signed-in
-  member gets **Add a comment** (posted for public participation, "Shown
-  with your name to everyone this application is shared with"); anyone else
-  gets **Sign in to comment**, which keeps the link in this tab's
-  `sessionStorage` (never the address bar) so the page opens it again after
-  the sign-in. A server `404` says only members can comment, a `403` that
-  it isn't open for comment. Same two-column layout from 860 px, one
+  first, author and date, *edited*), and **About this page**. The comments
+  card is `share/ShareComments.svelte` (the `share.comments` section; both
+  link kinds; 166_public_participation): first the warning "A comment here
+  is not a written objection. To object, and to keep the right to appeal
+  (National Water Act s148(1)(f)), write to the address in the
+  application's notice before its closing date.", then that address and
+  closing date when the applicant gave them. Anyone signed in, member of
+  the project or not, gets **Add a comment** (posted through the link,
+  `POST /share/comment`), with who receives it (the applicant, the
+  authority, the reg 19 report) and the tick box "Give my name and email to
+  the applicant for the register of interested and affected parties (GN
+  R267 reg 18)"; anyone signed out gets **Sign in to comment**, which keeps
+  the link in this tab's `sessionStorage` (never the address bar) so the
+  page opens it again after the sign-in, and the line that no membership is
+  needed. A server `404` says the link no longer takes comments, a `429`
+  the hourly limit. Same two-column layout from 860 px, one
   column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
-  sign in, comment, the assessor's view) with axe.
+  sign in with no role, the warning and the notice's address, comment with
+  the register tick, the assessor's view, the applicant's record) with axe.
 - **An evidence pack link** (WP-3.15, 128, `/share#t=…&k=pack`,
   `share/PackView.svelte`, words in `share/pack.ts`, the `share.pack`
   section): the same shell, states and comment flow as a scenario link,
@@ -7622,8 +8659,9 @@ signed in or out, for someone outside the project, on a phone first.
   application and the change, and the likely range from the model sets),
   and **Days below the EWR by month** (an application). Both states have
   **Check this pack** (the code, the verify page link, the hashes, the
-  signers) and, on the right, **Public comments** (a signed-in member posts
-  while it stands; closed once it doesn't, the comments kept) and **About
+  signers) and, on the right, **Public comments** (the same card: anyone
+  signed in posts while it stands; closed once it doesn't, the comments
+  kept) and **About
   this page**. `pack-share.spec.ts` pins it (link from the pack page, phone,
   sign in, comment, withdraw: the same link then shows the reason and no
   figure) with axe.

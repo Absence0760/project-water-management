@@ -673,3 +673,196 @@ describe('the daily cap on adding by email (101_invite_throttle)', () => {
 		await expect(withUser(owner.id, (db) => db.query(`UPDATE invite_throttle SET attempts = 0`))).resolves.toMatchObject({ rowCount: 0 });
 	});
 });
+
+// docs/followups.md "An invite outlives its sender's right to send it":
+// invite RLS checks the sender only when the invite is written, so an owner
+// removed or demoted afterwards used to leave invites that still joined
+// people, as owner even. Now every path that lists, describes or accepts an
+// invite takes it only while its sender still owns the project (directly or
+// as the team's admin) or administers the team (155_invite_sender_role.sql).
+// Each case has its positive control: a still-entitled sender's invite works.
+describe('an invite is good only while its sender may still send it (155_invite_sender_role)', () => {
+	type Caller = Awaited<ReturnType<typeof signUp>>;
+	const holder = (name: string) => signUp(name, { acceptInvites: false });
+	const mine = async (u: Caller) => ((await u.call('GET', '/me/invites')).body.invites as { id: string; targetId: string }[]).map((i) => i.id);
+	const roleIn = async (u: { call: Caller['call'] }, pid: string) => {
+		const r = await u.call('GET', `/projects/${pid}`);
+		return r.status === 200 ? (r.body.project.role as string) : r.status;
+	};
+	const ownersList = async (owner: Caller, pid: string) =>
+		(await owner.call('GET', `/projects/${pid}/invites`)).body.invites as { id: string; email: string; senderLapsed: boolean }[];
+
+	/** A project owned by `a`, with `b` as a second owner. */
+	async function twoOwners(tag: string) {
+		const a = await signUp(`${tag}A`);
+		const b = await signUp(`${tag}B`);
+		const pid = await projectOf(a);
+		await a.call('POST', `/projects/${pid}/members`, { email: b.email, role: 'owner' });
+		expect(await roleIn(b, pid)).toBe('owner');
+		return { a, b, pid };
+	}
+	const demote = (a: Caller, pid: string, who: Caller) => a.call('PATCH', `/projects/${pid}/members/${who.id}`, { role: 'editor' });
+
+	it('invitations page: a demoted sender’s invite is neither listed nor accepted; a still-owning sender’s is (positive control)', async () => {
+		const { a, b, pid } = await twoOwners('PageDem');
+		const k1 = await holder('PageDemK1');
+		const k2 = await holder('PageDemK2');
+		const fromB = (await b.call('POST', `/projects/${pid}/members`, { email: k1.email, role: 'owner' })).body.invite;
+		const fromA = (await a.call('POST', `/projects/${pid}/members`, { email: k2.email, role: 'owner' })).body.invite;
+		expect(await mine(k1)).toEqual([fromB.id]);
+		expect((await demote(a, pid, b)).status).toBe(200);
+
+		expect(await mine(k1)).toEqual([]);
+		expect((await k1.call('POST', `/me/invites/${fromB.id}/accept`)).status).toBe(404);
+		expect(await roleIn(k1, pid)).toBe(404);
+		// The remaining owner still sees it, flagged, to re-send or revoke.
+		expect((await ownersList(a, pid)).map((i) => [i.id, i.senderLapsed]).sort()).toEqual(
+			[
+				[fromB.id, true],
+				[fromA.id, false]
+			].sort()
+		);
+		// Positive control: the invite from the owner who still owns the project joins.
+		expect(await mine(k2)).toEqual([fromA.id]);
+		expect((await k2.call('POST', `/me/invites/${fromA.id}/accept`)).status).toBe(200);
+		expect(await roleIn(k2, pid)).toBe('owner');
+
+		// Re-sent by a current owner, it is theirs and good again.
+		await asOwner(`UPDATE invite SET last_sent_at = now() - interval '1 hour' WHERE id = $1`, [fromB.id]);
+		const resent = await a.call('POST', `/projects/${pid}/members`, { email: k1.email, role: 'editor' });
+		expect(resent.body.invite).toMatchObject({ id: fromB.id, invitedBy: 'PageDemA', senderLapsed: false });
+		expect(await mine(k1)).toEqual([fromB.id]);
+		expect((await k1.call('POST', `/me/invites/${fromB.id}/accept`)).status).toBe(200);
+		expect(await roleIn(k1, pid)).toBe('editor');
+	});
+
+	it('invitations page: a sender who left the project leaves invites nobody can accept', async () => {
+		const { a, b, pid } = await twoOwners('PageLeft');
+		const k = await holder('PageLeftK');
+		const inv = (await b.call('POST', `/projects/${pid}/members`, { email: k.email, role: 'owner' })).body.invite;
+		expect((await b.call('DELETE', `/projects/${pid}/members/${b.id}`)).status).toBe(204);
+		expect(await mine(k)).toEqual([]);
+		expect((await k.call('POST', `/me/invites/${inv.id}/accept`)).status).toBe(404);
+		expect(await roleIn(k, pid)).toBe(404);
+		expect((await ownersList(a, pid)).map((i) => i.senderLapsed)).toEqual([true]);
+		// The invitee may still decline it.
+		expect((await k.call('DELETE', `/me/invites/${inv.id}`)).status).toBe(204);
+		expect(await ownersList(a, pid)).toEqual([]);
+	});
+
+	it('sign-up through the link: a lapsed invite’s link is invalid and joins nothing; a live one joins (positive control)', async () => {
+		const { a, b, pid } = await twoOwners('LinkDem');
+		const lapsedEmail = newEmail('linkdem');
+		const liveEmail = newEmail('linklive');
+		await b.call('POST', `/projects/${pid}/members`, { email: lapsedEmail, role: 'owner' });
+		const lapsedToken = tokenIn(lastMailTo(lapsedEmail));
+		await a.call('POST', `/projects/${pid}/members`, { email: liveEmail, role: 'viewer' });
+		const liveToken = tokenIn(lastMailTo(liveEmail));
+		expect((await anon('POST', '/auth/invite-info', { token: lapsedToken })).status).toBe(200);
+		expect((await demote(a, pid, b)).status).toBe(200);
+
+		expect((await anon('POST', '/auth/invite-info', { token: lapsedToken })).status).toBe(404);
+		// The link proves nothing now: the account waits for its confirmation link, and joins nothing.
+		const late = await register(lapsedEmail, lapsedToken);
+		expect(late.user.emailVerified).toBe(false);
+		expect(await roleIn(late, pid)).toBe(404);
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(lapsedEmail)) })).status).toBe(200);
+		expect(await roleIn(late, pid)).toBe(404);
+
+		expect((await anon('POST', '/auth/invite-info', { token: liveToken })).status).toBe(200);
+		const ok = await register(liveEmail, liveToken);
+		expect(ok.user.emailVerified).toBe(true);
+		expect(await roleIn(ok, pid)).toBe('viewer');
+		// The lapsed one is still on the owner's list; the accepted one is gone.
+		expect((await ownersList(a, pid)).map((i) => [i.email, i.senderLapsed])).toEqual([[lapsedEmail, true]]);
+	});
+
+	it('confirmation link: confirming the address accepts only the invites whose sender may still send them', async () => {
+		const { a, b, pid } = await twoOwners('ConfDem');
+		const other = await projectOf(a, 'Other');
+		const email = newEmail('confdem');
+		const invitee = await register(email);
+		await asOwner(`UPDATE email_token SET created_at = now() - interval '2 minutes' WHERE user_id = $1`, [invitee.user.id]);
+		await b.call('POST', `/projects/${pid}/members`, { email, role: 'owner' });
+		await a.call('POST', `/projects/${other}/members`, { email, role: 'editor' });
+		expect((await demote(a, pid, b)).status).toBe(200);
+
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		expect(await roleIn(invitee, pid)).toBe(404);
+		// Positive control: the other project's owner's invite joined.
+		expect(await roleIn(invitee, other)).toBe('editor');
+		expect((await ownersList(a, pid)).map((i) => i.senderLapsed)).toEqual([true]);
+	});
+
+	it('a team admin’s project invite lapses when they stop administering the team (positive control: still admin, it joins)', async () => {
+		const x = await signUp('TeamPathX');
+		const y = await signUp('TeamPathY');
+		const teamId = (await x.call('POST', '/teams', { name: 'Path' })).body.team.id as string;
+		await x.call('POST', `/teams/${teamId}/members`, { email: y.email, role: 'admin' });
+		const pid = (await x.call('POST', '/projects', { name: 'Team-owned', teamId })).body.project.id as string;
+		const k1 = await holder('TeamPathK1');
+		const k2 = await holder('TeamPathK2');
+		const fromY = (await y.call('POST', `/projects/${pid}/members`, { email: k1.email, role: 'owner' })).body.invite;
+		const fromX = (await x.call('POST', `/projects/${pid}/members`, { email: k2.email, role: 'owner' })).body.invite;
+		expect((await x.call('PATCH', `/teams/${teamId}/members/${y.id}`, { role: 'member' })).status).toBe(200);
+
+		expect(await mine(k1)).toEqual([]);
+		expect((await k1.call('POST', `/me/invites/${fromY.id}/accept`)).status).toBe(404);
+		expect(await roleIn(k1, pid)).toBe(404);
+		expect(await mine(k2)).toEqual([fromX.id]);
+		expect((await k2.call('POST', `/me/invites/${fromX.id}/accept`)).status).toBe(200);
+		expect(await roleIn(k2, pid)).toBe('owner');
+	});
+
+	it('a team invite lapses with its sender’s admin role (positive control: a still-admin’s joins)', async () => {
+		const x = await signUp('TeamInvX');
+		const y = await signUp('TeamInvY');
+		const teamId = (await x.call('POST', '/teams', { name: 'Admins' })).body.team.id as string;
+		await x.call('POST', `/teams/${teamId}/members`, { email: y.email, role: 'admin' });
+		const k1 = await holder('TeamInvK1');
+		const k2 = await holder('TeamInvK2');
+		const fromY = (await y.call('POST', `/teams/${teamId}/members`, { email: k1.email, role: 'admin' })).body.invite;
+		const fromX = (await x.call('POST', `/teams/${teamId}/members`, { email: k2.email, role: 'admin' })).body.invite;
+		expect((await x.call('PATCH', `/teams/${teamId}/members/${y.id}`, { role: 'viewer' })).status).toBe(200);
+
+		expect(await mine(k1)).toEqual([]);
+		expect((await k1.call('POST', `/me/invites/${fromY.id}/accept`)).status).toBe(404);
+		expect((await k1.call('GET', `/teams/${teamId}`)).status).toBe(404);
+		const listed = (await x.call('GET', `/teams/${teamId}/invites`)).body.invites as { id: string; senderLapsed: boolean }[];
+		expect(listed.map((i) => [i.id, i.senderLapsed]).sort()).toEqual(
+			[
+				[fromY.id, true],
+				[fromX.id, false]
+			].sort()
+		);
+		expect((await k2.call('POST', `/me/invites/${fromX.id}/accept`)).status).toBe(200);
+		expect((await k2.call('GET', `/teams/${teamId}`)).body.team.role).toBe('admin');
+	});
+
+	it('a deleted sender’s invites go with their account', async () => {
+		const { a, b, pid } = await twoOwners('DelSender');
+		const k = await holder('DelSenderK');
+		await b.call('POST', `/projects/${pid}/members`, { email: k.email, role: 'owner' });
+		expect(await mine(k)).toHaveLength(1);
+		await asOwner('DELETE FROM app_user WHERE id = $1', [b.id]);
+		expect(await mine(k)).toEqual([]);
+		expect(await ownersList(a, pid)).toEqual([]);
+	});
+
+	it('app_invite_sender_lapsed answers only an owner of the invite’s project (positive control: the owner gets an answer)', async () => {
+		const { a, b, pid } = await twoOwners('LapsedFn');
+		const editor = await signUp('LapsedFnEd');
+		await a.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' });
+		const inv = (await b.call('POST', `/projects/${pid}/members`, { email: newEmail('lapsedfn'), role: 'viewer' })).body.invite;
+		await demote(a, pid, b);
+		const ask = (uid: string) =>
+			withUser(uid, async (db) => (await db.query<{ v: boolean | null }>('SELECT app_invite_sender_lapsed($1) AS v', [inv.id])).rows[0]!.v);
+		expect(await ask(a.id)).toBe(true);
+		expect(await ask(editor.id)).toBeNull();
+		expect(await ask(b.id)).toBeNull();
+		// The predicate itself is not water_app's to call.
+		await expect(
+			withUser(editor.id, (db) => db.query('SELECT app_invite_sender_holds($1, $2, NULL)', [a.id, pid]))
+		).rejects.toMatchObject({ code: '42501' });
+	});
+});

@@ -89,4 +89,25 @@ export function statementEngines(s: { engineVersion: string } | { baseline: { en
  * Verification).
  */
 export const PACK_SIGNER_PUBLIC =
-	'Your full name, your registration (body, category, field and number) and the date you sign are printed on the pack and shown publicly, to anyone holding its code, on its verify page. They stay there for as long as the pack exists, even if it is withdrawn.';
+	'Your full name, your registration (body, category, field and number) and the date you sign are printed on the pack and shown publicly, to anyone holding its code, on its verify page. They stay there, even if the pack is withdrawn, for as long as the licence record it supports is kept: until three years after the licence expires, or three years after the application is refused or withdrawn, then the pack is deleted.';
+
+/**
+ * What an in-app sign-off is, and isn't (licensing positions item 9, build
+ * item 17; provisional position, pre-counsel research, 2026-10-01): ECTA
+ * s13(1) asks for an advanced electronic signature wherever a law requires a
+ * signature, so the app's sign-off doesn't stand in for one. Said in the
+ * dialog and in Terms §3.
+ */
+export const SIGNOFF_NOT_A_SIGNATURE =
+	'This sign-off is an electronic professional statement in this app. It is not your signature on any form or report the authority requires; sign those as the authority asks.';
+
+/** Who signed a pack as what (167_signers), as the sign-off lists and the verify page print it. */
+export const SIGNOFF_KIND_LABEL: Record<'specialist' | 'review', string> = {
+	specialist: 'Specialist for the applicant',
+	review: 'Reviewed for the responsible authority'
+};
+
+/** The registration line's heading: checked against the register by the host, or the signer's own declaration (167). */
+export function registrationHeading(check: { checkedAt: string; checkedByOrg: string } | null, fmt: (iso: string) => string): string {
+	return check ? `Registration (checked against the register by ${check.checkedByOrg}, ${fmt(check.checkedAt)})` : 'Registration (self-declared)';
+}

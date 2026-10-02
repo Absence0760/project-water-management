@@ -226,7 +226,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-object',
 		term: 'Demand object',
-		short: 'A demand on a hydrological unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from its dam.',
+		short: 'A demand on a hydrological unit that isn’t a crop (a town, households, livestock, water piped out), from its dam or its own river pump.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['demandObject.category', 'demandObject.priority', 'demandObject.returnPct', 'summary.demandObjects']
@@ -234,7 +234,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-schedule',
 		term: 'Demand schedule',
-		short: 'Date windows that scale a demand object’s daily demand (weekends, a season, a shutdown, Easter); a factor of 0 switches it off.',
+		short: 'Windows that scale a demand object’s daily demand on chosen weekdays or dates (weekends off, a season, Easter); 0 switches it off.',
 		category: 'network',
 		fields: ['demandObject.schedule']
 	},
@@ -252,6 +252,14 @@ export const TIPS: HelpTipText[] = [
 		short: 'Where a demand object’s number comes from, by rule: meter records where they exist, else a strategy’s AADD, else population × litres a day.',
 		category: 'network',
 		fields: ['demandObject.source']
+	},
+	{
+		id: 'water-source',
+		term: 'Water source of a demand',
+		short: 'Whether a demand draws on its hydrological unit’s dam, under the supply rule, or on a river abstraction of its own beside it.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['node.cropWaterSource', 'node.cropRiverPumpM3Day', 'node.cropRiverPoolM3', 'demandObject.waterSource', 'demandObject.riverPumpM3Day', 'demandObject.riverPoolM3', 'summary.riverTakes']
 	},
 	{
 		id: 'supply-rule',
@@ -930,7 +938,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-charge-source',
 		term: 'What the EWR charge follows',
-		short: 'The daily pragmatic EWR (the default), or at a site with a rule table the month’s requirement from the table. Pending the hydrologist.',
+		short: 'The daily pragmatic EWR (default; provisional, not hydrologist-confirmed), or at a site with a rule table the month’s requirement.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['settings.ewrChargeSource', 'run.ewr_charge_shortfall']
@@ -938,7 +946,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'low-flow-measure',
 		term: 'Low flows judged on',
-		short: 'The month’s total flow (the default), or its base flow, so a flood can’t make up for low flows that were short. Pending the hydrologist.',
+		short: 'The month’s total flow (default; provisional, not hydrologist-confirmed), or its base flow, so a flood can’t hide short low flows.',
 		units: 'Mm³ per month or m³/s',
 		category: 'ewr',
 		fields: ['settings.lowFlowMeasure']

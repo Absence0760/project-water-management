@@ -18,16 +18,25 @@
 // pack's standing: once it is superseded or withdrawn it answers that, not
 // the figures.
 import { Hono } from 'hono';
-import type { AuthEnv } from '../auth/middleware.js';
+import { requireUser, type AuthEnv } from '../auth/middleware.js';
 import { newToken, parseToken } from '../auth/tokens.js';
 import { withoutUser, withUser, type Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
+import { requireStepUp } from '../auth/stepUp.js';
+
+/** Whether the caller is an owner of the project (directly or as team admin). */
+async function ownerHere(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ role: Role | null }>('SELECT app_project_role($1) AS role', [projectId]);
+	return rows[0]?.role === 'owner';
+}
 import { stampMatches } from '../runs/stamp.js';
 import {
+	CommentBody,
 	CreateBody,
+	toShareObjection,
 	ListQuery,
 	toSharePack,
 	toShareScenario,
@@ -62,7 +71,7 @@ async function shareableScenario(db: Db, projectId: string, scenarioId: string, 
 	const s = rows[0];
 	if (!s) throw new ApiError(404, 'not found');
 	// A team scenario's ops name the real farms with their values: only an application (its projection hides them) is shared.
-	if (s.origin !== 'applicant') throw new ApiError(409, 'only an application can be shared by link: a team scenario names every farm');
+	if (s.origin !== 'applicant') throw new ApiError(409, 'only an application can be shared by link: a team scenario names every unit');
 	if (rank[role] < rank.editor && s.owner_user_id !== userId) throw new ApiError(403, 'only the assessors or the applicant can share this scenario');
 	if (s.status !== 'submitted' && s.status !== 'decided')
 		throw new ApiError(409, 'only a submitted or decided scenario can be shared: a draft is still changing');
@@ -151,6 +160,8 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 				if (rank[role] >= rank.editor) await shareablePack(db, id, body.targetId!);
 				else await shareableApplicantPack(db, id, body.targetId!);
 			} else await shareableScenario(db, id, body.targetId!, await requireRole(db, id, 'contributor'), userId);
+			// An owner's link to anything is an owner's action: two-step sign-in (auth/stepUp.ts; a baseline link got it in requireRole).
+			if (body.targetKind !== undefined && (await ownerHere(db, id))) await requireStepUp(db);
 			const kind = body.targetKind ?? null;
 			const { token, hash } = newToken();
 			const { rows } = await db.query<{ id: string }>(
@@ -174,6 +185,8 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const { id, linkId } = c.req.param();
 			const role = await requireRole(db, id, 'contributor');
+			// An owner manages every link: an owner's action, so two-step sign-in (auth/stepUp.ts).
+			if (rank[role] >= rank.owner) await requireStepUp(db);
 			if (!UUID.test(linkId)) throw new ApiError(404, 'not found');
 			// RLS: a link the caller may manage (the owner: all; module comment).
 			const { rows: found } = await db.query<{ label: string; revoked: boolean; target_kind: string | null }>(
@@ -193,7 +206,10 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		})
 	);
 
-/** POST /share/view, /share/series, /share/scenario and /share/pack: public, the token is the credential. */
+/**
+ * POST /share/view, /share/series, /share/scenario and /share/pack: public, the token is the credential.
+ * POST /share/comment: the token and a session (a comment has a named author).
+ */
 export const sharePublicRoutes = new Hono<AuthEnv>()
 	.post('/view', async (c) => {
 		const body = ViewBody.parse(await readJson(c));
@@ -223,7 +239,7 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		// Unknown, revoked, expired, a baseline link, or a scenario no longer submitted or decided.
 		if (!row) throw deadLink();
 		c.header('Cache-Control', 'no-store');
-		return c.json(toShareScenario(row, stampMatches));
+		return c.json({ ...toShareScenario(row, stampMatches), objection: await shareObjection(hash) });
 	})
 	.post('/pack', async (c) => {
 		const body = ViewBody.parse(await readJson(c));
@@ -233,5 +249,42 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		// Unknown, revoked, expired, another kind of link, or a pack that was never issued.
 		if (!row) throw deadLink();
 		c.header('Cache-Control', 'no-store');
-		return c.json(toSharePack(row));
+		return c.json({ ...toSharePack(row), objection: await shareObjection(hash) });
+	})
+	// A public-participation comment through the link, by any signed-in account, with no project role (166_public_participation,
+	// docs/security.md § Share links → Link participants). The session is the author; the token is the only reach: the
+	// SECURITY DEFINER app_share_comment writes one note on the link's own target, while the link is live and the target open,
+	// 10 an hour per account. Plain text, never rendered as markup. Every dead or closed link is the same 404.
+	.post('/comment', requireUser, async (c) => {
+		const body = CommentBody.parse(await readJson(c));
+		const hash = parseToken(body.token);
+		if (!hash) throw deadLink();
+		const out = await withUser(c.get('userId'), async (db) =>
+			(await db.query<{ r: { outcome: string; seconds?: number; note?: Record<string, unknown> } | null }>('SELECT app_share_comment($1, $2, $3) AS r', [hash, body.body, body.registerConsent])).rows[0]?.r
+		);
+		if (!out) throw deadLink();
+		if (out.outcome === 'throttled') {
+			const seconds = Math.max(1, Math.ceil(out.seconds ?? 3600));
+			c.header('Retry-After', String(seconds));
+			throw ApiError.coded(429, 'comment_throttled', 'you have posted 10 comments through share links in the last hour; try again later', { seconds });
+		}
+		const n = out.note ?? {};
+		c.header('Cache-Control', 'no-store');
+		return c.json(
+			{
+				comment: {
+					body: typeof n.body === 'string' ? n.body : '',
+					author: typeof n.author === 'string' ? n.author : null,
+					createdAt: typeof n.createdAt === 'string' ? n.createdAt : '',
+					editedAt: typeof n.editedAt === 'string' ? n.editedAt : null
+				}
+			},
+			201
+		);
 	});
+
+/** The notice's objection address and closing date for a live link's application (app_share_objection, 166), or null. */
+async function shareObjection(hash: Buffer): Promise<ReturnType<typeof toShareObjection>> {
+	const v = await withoutUser(async (db) => (await db.query<{ v: unknown }>('SELECT app_share_objection($1) AS v', [hash])).rows[0]?.v);
+	return toShareObjection(v);
+}

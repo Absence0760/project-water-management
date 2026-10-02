@@ -28,8 +28,10 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser, type Db } from './tx.js';
+import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -60,6 +62,9 @@ interface World {
 	/** A submitted application: only an application past draft is shared by link (share/routes.ts shareableScenario). */
 	submittedApplicationId: string;
 	sweepId: string;
+	/** A finished `assessment` job, and a pending assessment on runId (145, WP-3.11). */
+	assessmentJobId: string;
+	assessmentId: string;
 	outlookId: string;
 	/** A complete outlook with one level, "0", and its current publication to farmers (106). */
 	completeOutlookId: string;
@@ -166,6 +171,8 @@ async function world(name: string): Promise<World> {
 				[projectId, runId, u]
 			),
 			sweepId: await one(`INSERT INTO scenario_sweep (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Sweep', $3, 'pending')`, [projectId, runId, u]),
+			assessmentJobId: await job('assessment'),
+			assessmentId: await one(`INSERT INTO assessment (project_id, base_run_id, name, created_by, status) VALUES ($1, $2, 'Assessment', $3, 'pending')`, [projectId, runId, u]),
 			outlookId: await one(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels, created_by, status) VALUES ($1, $2, 'Outlook', '2012-10-01', '2013-04-30', '[{}]', $3, 'pending')`,
 				[projectId, runId, u]
@@ -240,6 +247,8 @@ interface Fk {
 	updatable: boolean;
 	/** The child has an INSERT, UPDATE or ALL policy (else RLS lets water_app write none of it). */
 	writable: boolean;
+	/** Every INSERT or ALL policy on the child requires the (single) column to be NULL: water_app never names it. */
+	insertNull: boolean;
 }
 
 const FK_SQL = `
@@ -255,7 +264,9 @@ const FK_SQL = `
 		con.conrelid IN (SELECT oid FROM scoped) AS "childHasProject",
 		(SELECT bool_and(has_column_privilege('water_app', con.conrelid, a.attnum, 'UPDATE')) FROM unnest(con.conkey) k(n) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.n)
 			AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('w', '*')) AS updatable,
-		EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', 'w', '*')) AS writable
+		EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', 'w', '*')) AS writable,
+		coalesce((SELECT bool_and(position('(' || (SELECT a.attname FROM pg_attribute a WHERE a.attrelid = con.conrelid AND a.attnum = con.conkey[1]) || ' IS NULL)' IN pg_get_expr(p.polwithcheck, p.polrelid)) > 0)
+			FROM pg_policy p WHERE p.polrelid = con.conrelid AND p.polcmd IN ('a', '*')), false) AS "insertNull"
 	FROM pg_constraint con
 	WHERE con.contype = 'f' AND con.connamespace = 'public'::regnamespace
 		AND con.confrelid <> 'project'::regclass AND con.confrelid IN (SELECT oid FROM scoped)
@@ -265,7 +276,7 @@ const FK_SQL = `
  * Foreign keys onto a project-scoped table that need no same-project check,
  * with the reason. The inventory test checks each reason's premise.
  */
-const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' }> = {
+const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not writable' | 'cross-project by design' | 'set only by a definer' }> = {
 	'note_revision.note_id': {
 		reason: 'written only by the note_revision trigger, from the edited note itself (its project_id is the note’s); water_app has no INSERT or UPDATE (115)',
 		premise: 'not writable'
@@ -293,8 +304,36 @@ const EXEMPT: Record<string, { reason: string; premise: 'no project_id' | 'not w
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_fan_out, SECURITY DEFINER, copies the project from the event',
 		premise: 'not writable'
 	},
+	'application_question.scenario_id': {
+		reason: 'water_app inserts none and updates only the answer; app_ask_assessors, SECURITY DEFINER, copies the project from the application itself (164)',
+		premise: 'not writable'
+	},
+	'evidence_pack_applicant_copy.pack_id': {
+		reason: 'water_app writes none of it; app_record_applicant_pack_pdf, SECURITY DEFINER, copies the project from the pack itself (165)',
+		premise: 'not writable'
+	},
+	'alert_feedback.event_id': {
+		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_alert_answer_slot, SECURITY DEFINER, copies the project from the caller’s own delivery (151)',
+		premise: 'not writable'
+	},
 	'pack_notice.pack_id': {
 		reason: 'water_app writes none of it (no INSERT or UPDATE policy); app_pack_notice_queue, SECURITY DEFINER, copies the project from the pack (133)',
+		premise: 'not writable'
+	},
+	'note.share_link_id': {
+		reason: 'water_app never names a link: note_insert requires share_link_id IS NULL and it has no UPDATE on the column; app_share_comment, SECURITY DEFINER, copies the project from the link itself (166)',
+		premise: 'set only by a definer'
+	},
+	'signoff_registration_check.signoff_id': {
+		reason: 'no project_id of its own: the row is its sign-off’s, written only by app_pack_bind_registration_checks, SECURITY DEFINER, from the pack’s own sign-offs and their signers’ checks in that project (167)',
+		premise: 'no project_id'
+	},
+	'signoff_registration_check.check_id': {
+		reason: 'no project_id of its own: app_pack_bind_registration_checks binds a sign-off only to a check app_registration_check_current finds in the sign-off’s project (167)',
+		premise: 'no project_id'
+	},
+	'pack_reproduction.pack_id': {
+		reason: 'water_app writes none of it (SELECT only); app_record_pack_reproduction, SECURITY DEFINER, copies the project from the pack (154), and pack_reproduction_same_project checks it',
 		premise: 'not writable'
 	}
 };
@@ -326,6 +365,21 @@ const CASES: Record<string, Case> = {
 	},
 	'crop_area.crop_id': { ref: (w) => w.cropId, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, h.farm2Id, ref]] },
 	'crop_area.node_id': { ref: (w) => w.farm2Id, insert: (h, ref) => ['INSERT INTO crop_area (project_id, node_id, crop_id, area_m2) VALUES ($1, $2, $3, 1)', [h.projectId, ref, h.cropId]] },
+	// Where a planted area accepted from land cover came from (174: assert_same_project on node_id and crop_id).
+	'crop_area_land_cover.crop_id': {
+		ref: (w) => w.cropId,
+		insert: (h, ref) => [
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis) VALUES ($1, $2, $3, 1, 'x', 'x', 'x', 'x', 'unit')`,
+			[h.projectId, h.farm2Id, ref]
+		]
+	},
+	'crop_area_land_cover.node_id': {
+		ref: (w) => w.farm2Id,
+		insert: (h, ref) => [
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis) VALUES ($1, $2, $3, 1, 'x', 'x', 'x', 'x', 'unit')`,
+			[h.projectId, ref, h.cropId]
+		]
+	},
 	'transfer.from_node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => ['INSERT INTO transfer (id, project_id, from_node_id, to_node_id) VALUES ($1, $2, $3, $4)', [randomUUID(), h.projectId, ref, h.outletId]]
@@ -356,6 +410,14 @@ const CASES: Record<string, Case> = {
 	'allocation.node_id': {
 		ref: (w) => w.farmId,
 		insert: (h, ref) => [`INSERT INTO allocation (project_id, node_id, authorisation, water_source, volume_m3_year) VALUES ($1, $2, 'licence', 'surface', 1)`, [h.projectId, ref]]
+	},
+	// A map feature stands for a node of its project (152: assert_same_project on map_feature.node_id).
+	'map_feature.node_id': {
+		ref: (w) => w.farmId,
+		insert: (h, ref) => [
+			`INSERT INTO map_feature (project_id, kind, node_id, geometry) VALUES ($1, 'dam', $2, '{"type":"Point","coordinates":[21.3,-33.6]}')`,
+			[h.projectId, ref]
+		]
 	},
 	'alert_rule.node_id': {
 		ref: (w) => w.farm2Id,
@@ -398,6 +460,21 @@ const CASES: Record<string, Case> = {
 	'model_revision.restored_from': {
 		ref: (w) => w.revisionId,
 		insert: (h, ref) => [`INSERT INTO model_revision (project_id, created_by, source, snapshot, restored_from) VALUES ($1, $2, 'restore', '{}', $3)`, [h.projectId, u(), ref]]
+	},
+	// Page 1's board against full authorised use (165, licensing build item 8): authorised_impact_same_project checks both runs.
+	'authorised_impact.application_run_id': {
+		ref: (w) => w.scenarioRunId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, ref, h.runId]
+		]
+	},
+	'authorised_impact.base_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => [
+			`INSERT INTO authorised_impact (project_id, application_run_id, base_run_id, engine_version, year_class_method, result) VALUES ($1, $2, $3, 'x', 'auto', '{"status":"ok"}')`,
+			[h.projectId, h.scenarioRunId, ref]
+		]
 	},
 	'model_run.scenario_id': {
 		ref: (w) => w.scenarioId,
@@ -516,6 +593,26 @@ const CASES: Record<string, Case> = {
 	'scenario_member.scenario_id': {
 		ref: (w) => w.applicationId,
 		insert: (h, ref) => ['INSERT INTO scenario_member (scenario_id, project_id, user_id) VALUES ($1, $2, $3)', [ref, h.projectId, viewer.id]]
+	},
+	// An assessment (145_assessment, WP-3.11): assessment_guard checks its base run and job, assessment_member_guard its assessment and scenario.
+	'assessment.base_run_id': { ref: (w) => w.runId, insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name) VALUES ($1, $2, 'x')`, [h.projectId, ref]] },
+	'assessment.job_id': {
+		ref: (w) => w.assessmentJobId,
+		insert: (h, ref) => [`INSERT INTO assessment (project_id, base_run_id, name, job_id) VALUES ($1, $2, 'x', $3)`, [h.projectId, h.runId, ref]]
+	},
+	'assessment_member.assessment_id': {
+		ref: (w) => w.assessmentId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256) VALUES ($1, $2, $3, 6, 'y', 'team', '[]', repeat('a', 64))`,
+			[ref, h.projectId, h.submittedApplicationId]
+		]
+	},
+	'assessment_member.scenario_id': {
+		ref: (w) => w.scenarioId,
+		insert: (h, ref) => [
+			`INSERT INTO assessment_member (assessment_id, project_id, scenario_id, position, name, origin, ops, ops_sha256) VALUES ($1, $2, $3, 7, 'y', 'team', '[]', repeat('a', 64))`,
+			[h.assessmentId, h.projectId, ref]
+		]
 	},
 	'scenario_sweep.base_run_id': { ref: (w) => w.runId, insert: (h, ref) => [`INSERT INTO scenario_sweep (project_id, base_run_id, name) VALUES ($1, $2, 'x')`, [h.projectId, ref]] },
 	'scenario_sweep.job_id': {
@@ -684,6 +781,8 @@ describe('the inventory of references between project-scoped tables', () => {
 			if (exempt) {
 				if (exempt.premise === 'no project_id') expect(fk.childHasProject, key).toBe(false);
 				else if (exempt.premise === 'not writable') expect(fk.writable, key).toBe(false);
+				// Never written by water_app: no UPDATE on the column, and every INSERT policy requires it NULL.
+				else if (exempt.premise === 'set only by a definer') expect([fk.updatable, fk.insertNull], key).toEqual([false, true]);
 				// Fixed at insert: the insert-time readability check can't be sidestepped by an UPDATE.
 				else expect(fk.updatable, key).toBe(false);
 				continue;
@@ -762,6 +861,84 @@ const modelOf = (w: World, patch: Record<string, unknown> = {}) => ({
 });
 const transferOf = (from: string, to: string) => ({ id: randomUUID(), fromNodeId: from, toNodeId: to, months: [1, 2, 3], maxRateM3s: 1, dailyCapM3: 0, minStoragePct: 0, enabled: true, priority: 0 });
 
+/** The synthetic land-cover grid loaded, and a farm parcel of `w`'s farm in its half-cropland block (once per project). */
+const landCoverParcels = new Map<string, string>();
+async function landCoverParcel(w: World): Promise<string> {
+	if (!landCoverParcels.size) await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
+	const had = landCoverParcels.get(w.projectId);
+	if (had) return had;
+	const square = [[[21.31, -33.69], [21.32, -33.69], [21.32, -33.68], [21.31, -33.68], [21.31, -33.69]]];
+	const f = await dual.call('POST', `/projects/${w.projectId}/map/features`, { kind: 'farm_parcel', name: 'Field', nodeId: w.farmId, geometry: { type: 'Polygon', coordinates: square } });
+	expect(f.status, JSON.stringify(f.body)).toBe(201);
+	landCoverParcels.set(w.projectId, f.body.feature.id);
+	return f.body.feature.id as string;
+}
+
+/**
+ * Start from the map (178) only proposes for an empty model, and A and B have
+ * nodes: each call makes a fresh empty project of the editor's with a
+ * boundary (no DEM: the plan comes from the points), and names a feature made
+ * in it (control, r = h) or in the referenced project (attack).
+ */
+async function startProposal(h: World, r: World, field: 'outletFeatureId' | 'featureId'): Promise<Res> {
+	const home = (await dual.call('POST', '/projects', { name: `Start ${randomUUID()}` })).body.project.id as string;
+	const square = [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]];
+	await dual.call('POST', `/projects/${home}/map/features`, { kind: 'catchment_boundary', name: 'B', geometry: { type: 'Polygon', coordinates: square } });
+	const at = r === h ? home : r.projectId;
+	const f = await dual.call('POST', `/projects/${at}/map/features`, { kind: field === 'outletFeatureId' ? 'gauge' : 'dam', lon: 21.31, lat: -33.69 });
+	expect(f.status, JSON.stringify(f.body)).toBe(201);
+	const id = f.body.feature.id as string;
+	const prev = process.env.DEM_URL;
+	process.env.DEM_URL = '';
+	try {
+		return await dual.call('POST', `/projects/${home}/map/start`, field === 'outletFeatureId' ? { outletFeatureId: id, points: [] } : { points: [{ featureId: id, role: 'dam' }] });
+	} finally {
+		if (prev === undefined) delete process.env.DEM_URL;
+		else process.env.DEM_URL = prev;
+	}
+}
+
+/**
+ * Dividing a model from the map (182) needs the DEM and a model with an
+ * outflow: each call makes a fresh project of the editor's with a typed model
+ * (the outflow, two units) and the synthetic DEM's valley points, and names a
+ * feature or node made in it (control, r = h) or in the referenced project
+ * (attack): the outlet gauge, a point, the node a point stands for, or the
+ * unit the rest of the catchment goes to.
+ */
+async function divideProposal(h: World, r: World, field: 'outletFeatureId' | 'featureId' | 'nodeId' | 'rest.nodeId'): Promise<Res> {
+	const home = (await dual.call('POST', '/projects', { name: `Divide ${randomUUID()}` })).body.project.id as string;
+	const o = node('Outflow', null);
+	const farm = node('Unit', o.id);
+	const other = node('Other unit', o.id);
+	expect((await dual.call('PUT', `/projects/${home}/model`, { nodes: [o, farm, other], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+	const at = r === h ? home : r.projectId;
+	const lonLat = (x: number, y: number) => {
+		const [lon, lat] = fixtureLonLat(x + 0.5, y + 0.5);
+		return { lon, lat };
+	};
+	const feature = async (project: string, body: Record<string, unknown>) => {
+		const f = await dual.call('POST', `/projects/${project}/map/features`, body);
+		expect(f.status, JSON.stringify(f.body)).toBe(201);
+		return f.body.feature.id as string;
+	};
+	const outlet = await feature(field === 'outletFeatureId' ? at : home, { kind: 'gauge', ...lonLat(OUTLET_CELL.x, OUTLET_CELL.y) });
+	const dam = await feature(field === 'featureId' ? at : home, { kind: 'dam', ...lonLat(DAM_CELL.x, DAM_CELL.y + 1) });
+	const nodeId = field === 'nodeId' && r !== h ? r.farmId : farm.id;
+	const prev = process.env.DEM_URL;
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	try {
+		const p = await dual.call('POST', `/projects/${home}/map/divide`, { outletFeatureId: outlet, points: [{ featureId: dam, nodeId }] });
+		if (field !== 'rest.nodeId') return p;
+		expect(p.status, JSON.stringify(p.body)).toBe(201);
+		const units = p.body.proposal.plan.units.map((u: { key: string }) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false }));
+		return await dual.call('POST', `/projects/${home}/map/divide/${p.body.proposal.id}/apply`, { units, rest: { to: 'node', nodeId: r === h ? other.id : r.farmId } });
+	} finally {
+		if (prev === undefined) delete process.env.DEM_URL;
+		else process.env.DEM_URL = prev;
+	}
+}
+
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
@@ -770,6 +947,9 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/reports runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/reports`, { runId: r.runId }),
 	'POST /projects/:id/sweeps baseRunId': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/sweeps`, { name: `W ${randomUUID()}`, baseRunId: r.runId, members: [{ name: 'm', ops: [{ op: 'demand.scale', factor: 0.9 }] }] }),
+	// Both scenarios of the other project: loadScenario reads within the project (404), and assessment_member_guard refuses one too.
+	'POST /projects/:id/assessments scenarioIds': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/assessments`, { name: `A ${randomUUID()}`, scenarioIds: [r.scenarioId, r.submittedApplicationId] }),
 	'POST /projects/:id/yield runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: h.farmId, runId: r.runId, kind: 'firm' }),
 	'POST /projects/:id/yield nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/yield`, { nodeId: r.farmId, runId: h.run2Id, kind: 'firm' }),
 	'POST /projects/:id/notes runId': (h, r) => dual.call('POST', `/projects/${h.projectId}/notes`, { body: 'On a run', runId: r.runId }),
@@ -792,6 +972,46 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'PUT /me/alerts/:projectId nodeId': (h, r) => farmer.call('PUT', `/me/alerts/${h.projectId}`, { items: [{ kind: 'dam_below', nodeId: r.farmId, mode: 'immediate' }] }),
 	'POST /projects/:id/allocations nodeId': (h, r) =>
 		dual.call('POST', `/projects/${h.projectId}/allocations`, { nodeId: r.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 }),
+	'POST /projects/:id/map/features nodeId': (h, r) => dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.3, lat: -33.6, nodeId: r.farmId }),
+	'PATCH /projects/:id/map/features/:fid nodeId': async (h, r) => {
+		const f = await dual.call('POST', `/projects/${h.projectId}/map/features`, { kind: 'dam', lon: 21.31, lat: -33.61 });
+		return dual.call('PATCH', `/projects/${h.projectId}/map/features/${f.body.feature.id}`, { nodeId: r.farmId });
+	},
+	// The review's per-feature node (issue #326 D2): one point, standing for the farm.
+	'POST /projects/:id/map/import features.nodeId': (h, r) =>
+		dual.call('POST', `/projects/${h.projectId}/map/import`, {
+			fileName: `xref-${randomUUID()}.geojson`,
+			text: JSON.stringify({ type: 'Feature', properties: { name: randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } }),
+			features: [{ index: 1, kind: 'dam', nodeId: r.farmId }]
+		}),
+	// The feature is made in the referenced project, then named from the home one.
+	'POST /projects/:id/nodes/:nodeId/area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.31, -33.7], [21.31, -33.69], [21.3, -33.69], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'other', geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/area-from-map`, { featureId: f.body.feature.id });
+	},
+	// A dam polygon linked to the referenced project's farm, named from the home one (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId': async (h, r) => {
+		const square = [[[21.3, -33.7], [21.302, -33.7], [21.302, -33.698], [21.3, -33.698], [21.3, -33.7]]];
+		const f = await dual.call('POST', `/projects/${r.projectId}/map/features`, { kind: 'dam', nodeId: r.farmId, geometry: { type: 'Polygon', coordinates: square } });
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+	},
+	// A planted area from land cover (issue #326 B-landcover, geo/croplandRoutes.ts): the home farm's parcel lies in the
+	// synthetic grid's half-cropland block; the crop, or the parcel, is the referenced project's.
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId': async (h, r) => {
+		await landCoverParcel(h);
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/crop-area-from-land-cover`, { cropId: r.cropId, dataset: 'synthetic' });
+	},
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId': async (h, r) => {
+		const featureId = await landCoverParcel(r);
+		return dual.call('POST', `/projects/${h.projectId}/nodes/${h.farmId}/crop-area-from-land-cover`, { cropId: h.cropId, dataset: 'synthetic', featureId });
+	},
+	'POST /projects/:id/map/start outletFeatureId': (h, r) => startProposal(h, r, 'outletFeatureId'),
+	'POST /projects/:id/map/start points.featureId': (h, r) => startProposal(h, r, 'featureId'),
+	'POST /projects/:id/map/divide outletFeatureId': (h, r) => divideProposal(h, r, 'outletFeatureId'),
+	'POST /projects/:id/map/divide points.featureId': (h, r) => divideProposal(h, r, 'featureId'),
+	'POST /projects/:id/map/divide points.nodeId': (h, r) => divideProposal(h, r, 'nodeId'),
+	'POST /projects/:id/map/divide/:spid/apply rest.nodeId': (h, r) => divideProposal(h, r, 'rest.nodeId'),
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
 			...modelOf(h),
@@ -856,6 +1076,16 @@ const FIELDS: Record<string, string[] | string> = {
 	'alerts/routes.ts:feedId': ['PUT /projects/:id/alert-rules feedId'],
 	'alerts/routes.ts:seriesId': ['PUT /projects/:id/alert-rules seriesId'],
 	'allocations/routes.ts:nodeId': ['POST /projects/:id/allocations nodeId'],
+	'geo/routes.ts:nodeId': ['POST /projects/:id/map/features nodeId', 'PATCH /projects/:id/map/features/:fid nodeId', 'POST /projects/:id/map/import features.nodeId'],
+	'geo/routes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/area-from-map featureId'],
+	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
+	'delineation/start.ts:outletFeatureId': ['POST /projects/:id/map/start outletFeatureId'],
+	'delineation/start.ts:featureId': ['POST /projects/:id/map/start points.featureId'],
+	'delineation/divide.ts:outletFeatureId': ['POST /projects/:id/map/divide outletFeatureId'],
+	'delineation/divide.ts:featureId': ['POST /projects/:id/map/divide points.featureId'],
+	'delineation/divide.ts:nodeId': ['POST /projects/:id/map/divide points.nodeId', 'POST /projects/:id/map/divide/:spid/apply rest.nodeId'],
+	'geo/croplandRoutes.ts:cropId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId'],
+	'geo/croplandRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',
 	'share/links.ts:scenarioId': 'a read filter within the project (the share-link list): another project’s scenario matches nothing',
 	'scenarios/routes.ts:runId':
@@ -868,12 +1098,15 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:reportId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:packId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:projectId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'jobs/transport.ts:runId': 'a queue envelope between the app’s own Lambdas, not a request',
+	'jobs/transport.ts:scenarioId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'lambda-fetcher.ts:feedId': 'a queue envelope between the app’s own Lambdas, not a request',
 	'model/validate.ts:downstreamNodeId': ['PUT /projects/:id/model downstreamNodeId'],
@@ -909,6 +1142,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'calibration/schema.ts:calibrationId': 'a job payload: jobs/trust.security.db.test.ts',
 	'calibration/schema.ts:uncertaintyId': 'a job payload: jobs/trust.security.db.test.ts',
 	'sweeps/schema.ts:sweepId': 'a job payload: jobs/trust.security.db.test.ts',
+	'assessments/schema.ts:assessmentId': 'a job payload: jobs/trust.security.db.test.ts',
 	'yield/routes.ts:runId': ['POST /projects/:id/yield runId'],
 	'yield/routes.ts:scenarioId': 'a read filter within the project',
 	'yield/routes.ts:nodeId': 'a read filter within the project',

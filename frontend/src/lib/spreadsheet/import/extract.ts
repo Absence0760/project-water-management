@@ -12,7 +12,7 @@ import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { cropTableNotes, grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';
-import { type FarmSpec, farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, type FarmSpec, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
 import { type ImportedSeries, readFlowData } from './flowData';
 import { duplicateLogger, type GaugeScaling, gaugeAsReference, validateScaling } from './gauge';
 import { projectIds } from './ids';
@@ -71,6 +71,12 @@ export interface ExtractOptions {
 	 * (--gauge-scaling-from / --gauge-scale-factor).
 	 */
 	gaugeAsReference?: boolean | GaugeScaling;
+	/**
+	 * --run-of-river: import the units flagged as probable run-of-river (a
+	 * dummy dam or no dam, taking 100 % of the upstream inflow) with the
+	 * run-of-river supply rule, no dam and an uncapped river pump (asRunOfRiver).
+	 */
+	runOfRiver?: boolean;
 	/** Called as each part of the workbook is read: (sheet, step, steps). */
 	onProgress?: (sheet: string, i: number, n: number) => void;
 }
@@ -168,16 +174,22 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	});
 	// A repeated element name maps to its last node, as the Python's dict does.
 	const nodeId = new Map(nodes.map((n) => [n.name, n.id]));
+	const flagged: NetworkNode[] = [];
 	for (const n of nodes) {
 		if (n.kind !== 'farm') continue;
 		const note = runOfRiverNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day, n.pctRunoffToDam);
-		if (note) report.note('probable-run-of-river', note, { sheet: 'Farm spec', element: n.name });
+		if (note) {
+			report.note('probable-run-of-river', note, { sheet: 'Farm spec', element: n.name });
+			flagged.push(n);
+		}
+		const pool = placeholderPoolNote(n.name, n.pctUpstreamToDam, n.damCapacityM3, n.divertCapacityM3Day);
+		if (pool) report.note('placeholder-pool', pool, { sheet: 'Farm spec', element: n.name });
 	}
 	const dams =nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
 	if (dams.length) {
 		report.note(
 			'dam-area-unknown',
-			`${dams.length} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam ` +
+			`${dams.length} dam(s) have no surface area in the workbook; runs estimate it as 7.2 x capacity^0.77 m2 for dam ` +
 				'evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure',
 			{ sheet: 'Farm spec' }
 		);
@@ -247,13 +259,23 @@ export function extractProject(workbook: WorkbookSource, opts: ExtractOptions): 
 	{
 		const byId = new Map(nodes.map((n) => [n.id, n]));
 		const demanding = new Set([...cropAreas.filter((a) => a.areaM2 > 0).map((a) => a.nodeId), ...demandObjects.map((o) => o.nodeId)]);
+		const flaggedIds = new Set(flagged.map((n) => n.id));
 		for (const t of modelTransfers) {
 			const src = byId.get(t.fromNodeId)!;
 			const dst = byId.get(t.toNodeId)!;
-			const flagged = src.kind === 'farm' && runOfRiverNote(src.name, src.pctUpstreamToDam, src.damCapacityM3, src.divertCapacityM3Day, src.pctRunoffToDam) !== null;
-			if (!flagged || dst.kind !== 'farm' || dst.damCapacityM3 > 0 || demanding.has(dst.id)) continue;
+			if (!flaggedIds.has(src.id) || dst.kind !== 'farm' || dst.damCapacityM3 > 0 || demanding.has(dst.id)) continue;
 			Object.assign(t, IMPORTED_OFFTAKE);
 			report.note('transfer-river-offtake', offtakeNote(src.name, dst.name, t.maxRateM3s, t.enabled), { sheet: 'Transfers', element: src.name });
+		}
+	}
+	// The run-of-river option (issue #54, 2c/2d; extract_project.py --run-of-river): the flagged units become run of
+	// river, after the transfers are known. A river off-take draws on the river, not the source's dam, so it doesn't
+	// keep the dam; an enabled transfer from the dam does.
+	if (opts.runOfRiver) {
+		const sources = new Set(modelTransfers.filter((t) => t.enabled && (t.source ?? 'dam') === 'dam').map((t) => t.fromNodeId));
+		for (const n of flagged) {
+			const kept = sources.has(n.id);
+			report.note(kept ? 'run-of-river-kept-dam' : 'run-of-river-imported', asRunOfRiver(n, kept), { sheet: 'Farm spec', element: n.name });
 		}
 	}
 	checkTransferFormulas(

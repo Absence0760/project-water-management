@@ -29,7 +29,7 @@ test('SPA routes (no extension) are served index.html', () => {
 });
 
 test('the prerendered pages are served from their own HTML', () => {
-	for (const p of ['welcome', 'welcome/af', 'privacy', 'terms', 'methods']) assert.equal(outcome(`/${p}`), `/${p}.html`);
+	for (const p of ['welcome', 'welcome/af', 'privacy', 'terms', 'methods', 'data-sources']) assert.equal(outcome(`/${p}`), `/${p}.html`);
 });
 
 test('a landing page in a language the build has not written is the SPA, and its HTML is not served directly (issue #137)', () => {
@@ -127,4 +127,63 @@ test('api_strip_prefix strips /api and overwrites the viewer address', () => {
 	assert.equal(r.headers['x-viewer-address'].value, '198.51.100.7');
 	assert.equal(api.handler(viewerRequest('/api')).uri, '/');
 	assert.equal(api.handler(viewerRequest('/api/')).uri, '/');
+});
+
+// tiles_range (/tiles/*): the map's public archives only by one bounded byte
+// range, so one request can't pull gigabytes (the cost bound, docs/deployment.md
+// § Map tiles); glyph ranges and the font licence whole; nothing else.
+const tiles = loadFunction('tiles_range', ['MAX_RANGE']);
+const tilesRequest = (uri, range, method = 'GET') => ({
+	request: { method, uri, querystring: {}, headers: range === undefined ? {} : { range: { value: range } }, cookies: {} },
+	viewer: { ip: '198.51.100.7' }
+});
+const tilesOutcome = (uri, range, method) => {
+	const r = tiles.handler(tilesRequest(uri, range, method));
+	return 'statusCode' in r ? r.statusCode : 'S3';
+};
+
+test('tiles: an archive passes by one closed range up to 2 MiB (the PMTiles header, a directory, a tile)', () => {
+	assert.equal(tiles.MAX_RANGE, 2 * 1024 * 1024);
+	for (const [uri, range] of [
+		['/tiles/south-africa.pmtiles', 'bytes=0-16383'],
+		['/tiles/terrain.pmtiles', 'bytes=1048576000-1048627199'],
+		['/tiles/terrain.pmtiles', `bytes=0-${2 * 1024 * 1024 - 1}`],
+		['/tiles/south-africa.pmtiles', 'bytes=5-5']
+	]) {
+		assert.equal(tilesOutcome(uri, range), 'S3', `${uri} ${range}`);
+	}
+	assert.equal(tilesOutcome('/tiles/terrain.pmtiles', undefined, 'HEAD'), 'S3');
+});
+
+test('tiles: an archive without a bounded range is refused with 416 before S3 (no whole-file download)', () => {
+	for (const range of [undefined, '', 'bytes=0-', 'bytes=-500', `bytes=0-${2 * 1024 * 1024}`, 'bytes=10-5', 'bytes=0-99,200-299', 'items=0-10', 'bytes=0-1e9', 'bytes= 0-10', 'bytes=0-9999999999999999']) {
+		assert.equal(tilesOutcome('/tiles/terrain.pmtiles', range), 416, String(range));
+	}
+	const r = tiles.handler(tilesRequest('/tiles/terrain.pmtiles'));
+	assert.equal(r.headers['cache-control'].value, 'no-store');
+});
+
+test('tiles: glyph ranges and the font licence pass whole', () => {
+	for (const uri of ['/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf', '/tiles/fonts/Noto%20Sans%20Italic/65280-65535.pbf', '/tiles/fonts/Noto%20Sans%20Medium/256-511.pbf', '/tiles/fonts/OFL.txt']) {
+		assert.equal(tilesOutcome(uri), 'S3', uri);
+	}
+});
+
+test('tiles: anything else under /tiles/ is a 404 from the function', () => {
+	for (const uri of [
+		'/tiles/',
+		'/tiles/index.html',
+		'/tiles/South-Africa.pmtiles',
+		'/tiles/a/b.pmtiles',
+		'/tiles/../reference/x.json',
+		'/tiles/fonts/Noto%20Sans%20Regular/1-256.pbf',
+		'/tiles/fonts/Noto%20Sans%20Regular/65536-65791.pbf',
+		'/tiles/fonts/Noto%20Sans%20Regular/0-255.pbf.bak',
+		'/tiles/fonts/../../x/0-255.pbf',
+		'/tiles/fonts/OFL.txt.zip',
+		'/tiles/fonts/a/b/0-255.pbf'
+	]) {
+		assert.equal(tilesOutcome(uri, 'bytes=0-10'), 404, uri);
+	}
+	assert.ok(Buffer.byteLength(functionCode('tiles_range')) < 8 * 1024);
 });

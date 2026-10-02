@@ -84,6 +84,22 @@ export function packPdfKey(projectId: string, packId: string, sha256: string): s
 	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/${sha256}.pdf`;
 }
 
+/**
+ * The object key of an applicant's copy of a pack (165_applicant_copy;
+ * app_record_applicant_pack_pdf builds the same key in SQL): beside the
+ * pack's own PDF, under `applicant/`, by the copy's own SHA-256.
+ */
+export function applicantPackPdfKey(projectId: string, packId: string, sha256: string): string {
+	if (!UUID.test(projectId) || !UUID.test(packId)) throw new Error('applicantPackPdfKey: ids must be UUIDs');
+	if (!SHA256.test(sha256)) throw new Error('applicantPackPdfKey: the hash must be a lowercase hex SHA-256');
+	return `packs/${projectId.toLowerCase()}/${packId.toLowerCase()}/applicant/${sha256}.pdf`;
+}
+
+/** An applicant's copy's download file name: "evidence-pack", its version and short code, "applicant-copy". No catchment name: the applicant may not read the project's. */
+export function applicantPackFileName(version: number, shortCode: string): string {
+	return `evidence-pack-v${version}-${shortCode.replace(/[^0-9a-f-]/gi, '')}-applicant-copy.pdf`;
+}
+
 /** A pack PDF's download file name: the catchment, "evidence-pack", its version and short code. */
 export function packFileName(projectName: string, version: number, shortCode: string): string {
 	const slug = reportFileName(projectName, 'x').replace(/-report-x\.pdf$/, '');
@@ -263,6 +279,35 @@ export async function putPackBundle(key: string, body: Uint8Array, sha256: strin
 		throw err;
 	}
 	assertStoredChecksum(key, checksum, stored.ChecksumSHA256);
+}
+
+/**
+ * Read a pack's reproduction bundle back from the packs bucket (the
+ * pack_reproduce job, jobs/handlers/pack-reproduce.ts; 154_pack_reproduce).
+ * Checksum mode is on, so the SDK checks the bytes against the SHA-256 they
+ * were stored with; the job also hashes them against the pack's recorded
+ * bundle_sha256. `null` when there is no object under the key; refused (an
+ * Error) when the object is larger than `maxBytes`, before its body is read.
+ */
+export async function getPackBundle(key: string, maxBytes: number): Promise<Uint8Array<ArrayBuffer> | null> {
+	await ensureBucket(packsBucket());
+	const { s3: c, sdk } = await s3();
+	let res;
+	try {
+		res = await c.send(new sdk.GetObjectCommand({ Bucket: packsBucket(), Key: key, ChecksumMode: 'ENABLED' }));
+	} catch (err) {
+		const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+		if (e.name === 'NoSuchKey' || e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) return null;
+		throw err;
+	}
+	if (res.ContentLength !== undefined && res.ContentLength > maxBytes) {
+		res.Body?.transformToWebStream().cancel().catch(() => {});
+		throw new Error(`the stored bundle ${key} is ${res.ContentLength} bytes, more than a bundle holds (${maxBytes})`);
+	}
+	if (!res.Body) throw new Error(`the stored bundle ${key} has no body`);
+	const bytes = await res.Body.transformToByteArray();
+	if (bytes.length > maxBytes) throw new Error(`the stored bundle ${key} is more than a bundle holds (${maxBytes} bytes)`);
+	return new Uint8Array(bytes);
 }
 
 /** A conditional write refused because the object exists (HTTP 412). */

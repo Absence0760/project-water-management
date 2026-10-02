@@ -15,6 +15,14 @@ process.env.MAIL_TRANSPORT = 'memory';
 // hundreds of accounts from one address; signupThrottle.security.db.test.ts
 // turns it back on. Lambda refuses the setting (config/production.ts).
 process.env.SIGNUP_THROTTLE = 'off';
+// Seals TOTP secrets (auth/secretBox.ts).
+process.env.APP_ENCRYPTION_KEY = 'test-only-app-encryption-key-00000000000';
+// TEST-ONLY: the second-factor requirement for owners, team admins and
+// assessors off (auth/stepUp.ts): the fixtures sign owners in with a password
+// only. stepUp.db.test.ts turns it back on. Lambda refuses the setting.
+process.env.MFA_REQUIRED = 'false';
+// Their fixtures sign packs with invented registrations nobody checked (167_signers); evidence/packs.db.test.ts turns it back on for its issue test.
+process.env.REGISTRATION_CHECK_REQUIRED = 'false';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<n> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.

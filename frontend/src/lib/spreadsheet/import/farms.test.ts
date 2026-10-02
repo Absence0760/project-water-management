@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { farmOperatingRules, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -145,5 +145,60 @@ describe('runOfRiverNote (run_of_river_note)', () => {
 				'upstream inflow, and a farm without a dam irrigates straight from the river routed to it, with no pump limit. ' +
 				'Set its supply rule to run of river with a pump capacity to cap it (issue #54, 2d)'
 		);
+	});
+});
+
+// Ported from scripts/wbt-import/test_run_of_river.py RunOfRiverOption (same text).
+describe('asRunOfRiver (as_run_of_river): the run-of-river option', () => {
+	const unit = (name: string, damCapacityM3: number) => ({ name, damCapacityM3, damInitialPct: 0.5, damSeepagePerDay: 0 });
+
+	it('drops a dummy dam and gives the unit an uncapped river pump, keys after the existing ones as Python adds them', () => {
+		const node = unit('River pool', 259200);
+		const note = asRunOfRiver(node, false);
+		expect(node).toEqual({ name: 'River pool', damCapacityM3: 0, damInitialPct: 0, damSeepagePerDay: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: null });
+		expect(Object.keys(node)).toEqual(['name', 'damCapacityM3', 'damInitialPct', 'damSeepagePerDay', 'supplyRule', 'pumpCapacityM3Day']);
+		expect(note).toBe(
+			'WARNING: farm River pool: imported as run of river (--run-of-river): its 259200 m³ dummy dam is dropped, and a river pump ' +
+				"takes its demand from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this unit's " +
+				"take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply section (issue #54, 2c/2d)"
+		);
+	});
+
+	it('rounds the dropped dam half up, and says a dam-less unit has no dam', () => {
+		expect(asRunOfRiver(unit('Pool', 0.5), false)).toContain('its 1 m³ dummy dam is dropped');
+		const none = unit('No dam', 0);
+		expect(asRunOfRiver(none, false)).toContain('farm No dam: imported as run of river (--run-of-river): it has no dam, and a river pump');
+		expect(none).toMatchObject({ damCapacityM3: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: null });
+	});
+
+	it('leaves a unit an enabled transfer draws on as a farm dam, and says why', () => {
+		const node = unit('Source', 259200);
+		const note = asRunOfRiver(node, true);
+		expect(node).toEqual(unit('Source', 259200));
+		expect(note).toBe(
+			'WARNING: farm Source: not imported as run of river (--run-of-river): an enabled transfer draws on its dam, so it stays a ' +
+				'farm dam; convert it by hand once the transfer is settled (issue #54, 2d)'
+		);
+	});
+});
+
+// Same cases and text as test_run_of_river.py PlaceholderPoolNote (issue #90 Q18).
+describe('placeholder pool note', () => {
+	it('flags a near-empty dam that takes less than all the upstream inflow', () => {
+		expect(placeholderPoolNote('Pool', 0, 0.5, 0)).toBe(
+			"WARNING: farm Pool: probable placeholder pool, for the modeller to confirm: its dam holds 0.5 m³, less than a " +
+				"day's peak irrigation of one hectare, and takes 0 % of the upstream inflow, so it stores nothing from one day to " +
+				'the next. If it is a placeholder, set the dam capacity to 0; if the unit pumps from the river, set its supply ' +
+				'rule to run of river with a pump capacity (issue #90 Q18)'
+		);
+		expect(placeholderPoolNote('Tank', 0.5, 99.9, 0)).not.toBeNull();
+		expect(placeholderPoolNote('Pool', 0.25, 129.5, 12960)).not.toBeNull();
+	});
+
+	it('leaves a real dam, no dam and a run-of-river candidate alone', () => {
+		expect(placeholderPoolNote('Small dam', 0, 100, 0)).toBeNull();
+		expect(placeholderPoolNote('Small dam', 0.5, 4000, 12960)).toBeNull();
+		expect(placeholderPoolNote('No dam', 0, 0, 0)).toBeNull();
+		expect(placeholderPoolNote('Dummy dam', 1, 0.5, 0)).toBeNull();
 	});
 });

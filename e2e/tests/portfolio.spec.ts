@@ -121,7 +121,7 @@ test('the team filter states which thresholds apply, and judges by the team’s 
 	await outcomesReady(page);
 	const note = page.getByTestId('team-thresholds');
 	await expect(note).toContainText('green when it was not met on under 5 % of them, amber under 20 %, red otherwise');
-	await expect(note).toContainText('These are the default thresholds, still to be confirmed by the hydrologist.');
+	await expect(note).toContainText('These are the default thresholds: a provisional default, not yet confirmed by the catchment’s hydrologist.');
 	await expect(row(page, 'Pf published T').locator('td.c-ewr')).toContainText(statusText(pub)!);
 
 	// A team viewer reads the same rule, and who can change it.

@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Issue #326 A4, the map's consistency checks wired into the Map tab (mapChecks.ts geometry checks + MapChecks.svelte in the checks sheet). Measured 1459 KB gzipped total on feat/326-map-round-1 after merging round 1 (layout +5 KB, links +1 KB entries already in), against a 1456 KB ceiling; this raises it to 1459 with no headroom."
+}

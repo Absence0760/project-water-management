@@ -412,7 +412,7 @@ describe('diffInputs', () => {
 		f.damAreaFullM2 = null;
 		f.damSeepagePerDay = 0.002;
 		expect(texts(a, b)).toEqual([
-			'Rooikloof: dam area when full 0 m² → estimated (capacity ÷ 3 m)',
+			'Rooikloof: dam area when full 0 m² → estimated (7.2 × capacity^0.77)',
 			'Rooikloof: dam seepage per day 0% → 0.2%',
 			'Dam evaporation factor (× A-pan): 0.75 → 0.6'
 		]);
@@ -717,6 +717,33 @@ describe('diffInputs', () => {
 		expect(rest).toEqual([]);
 		// fmtValue groups thousands with a narrow space.
 		expect(text).toMatch(/^Rooikloof: demand object "Town" Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first → Municipal \(town\), 600 m³\/day on average, return 0\.5, priority first, serves 12\D000 people$/);
+	});
+
+	it('lists a demand object’s rank within its class, and reads none and null alike (engine 1.64.0)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.rank = null;
+		expect(texts(a, b)).toEqual([]);
+		b.model.demandObjects![0]!.rank = 2;
+		expect(texts(a, b)).toEqual(['Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first rank 2']);
 	});
 
 	it('lists a demand object whose source changed (engine 1.56.0); absent and null are both not recorded', () => {

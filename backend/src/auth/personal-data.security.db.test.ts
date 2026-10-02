@@ -11,7 +11,8 @@
 //      to the person (the fixture must reach each one, so a new sectioned
 //      key without a fixture fails too), and every APP_USER_EXPORTED column
 //      comes out with the stored value.
-//   2. Deletion: after the operator deletes the account, no column of any
+//   2. Deletion: after the person deletes the account (DELETE /auth/me, the
+//      self-service path, issue #112), no column of any
 //      table (every text, citext, varchar, json, jsonb, uuid and array
 //      column in information_schema) still holds the person's email or
 //      display name, and their id survives only where the table in
@@ -22,12 +23,14 @@
 // deletion, and still finds the owner (who stays) afterwards.
 import { runEnsemble } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, anon, app, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
 import { APP_USER_EXPORTED, USER_FK_COVERAGE } from './export.js';
+import { base32Decode, totp } from './totp.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Doc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -48,8 +51,12 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 	id: {
 		// 048: events about a person keep the random id, which no longer resolves; the name goes.
 		'audit_event.subject': 'pseudonymised: the event keeps a random id that resolves to no one, never the name',
+		// 159: a restore re-applies erasures from this list; the id only, purged after 40 days (above the 35-day backups).
+		'erasure_log.subject_id': 'the erasure log: the deleted account’s random id only, so a restore can delete it again; purged after 40 days',
 		// 101: the daily cap on adding by email counts by the adder's id, not linked to the account.
-		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends'
+		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends',
+		// 186: the hourly cap on dam traces counts by the user's id, not linked to the account.
+		'map_compute_throttle.bucket': 'the hourly cap on dam traces, keyed by the user’s id; gone when its one-hour window ends'
 	},
 	email: {
 		// Keyed by the typed address, not the account: a day without attempts forgets it.
@@ -146,13 +153,16 @@ beforeAll(async () => {
 	const rain = Array.from({ length: 60 }, (_, i) => (i % 5 === 0 ? 12 : 0));
 	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-10-01', values: rain });
 	await call(subject, 'PATCH', `/projects/${projectId}`, { settings: { lakeEvapFactor: 0.9 } });
-	// member.party names them in the log (pseudonymised on deletion, 048).
-	await call(owner, 'PATCH', `/projects/${projectId}/members/${subject.id}`, { party: 'WUA' });
+	// member.authority names them in the log (pseudonymised on deletion, 048). An owner can't be in an
+	// applying party any more (163's conflict guard), which member.party used to stand in for here.
+	await actForAuthority(owner, projectId, subject.id);
 	await call(subject, 'POST', `/projects/${projectId}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
 	await call(subject, 'PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked' });
 	const pub = await call(subject, 'POST', `/projects/${projectId}/publication`, { runId });
 	await call(subject, 'PATCH', `/projects/${projectId}/publication/${pub.publication.id}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } });
+	// They endorse it for the responsible authority (163): run_publication.endorsed_by, cleared on deletion.
+	await call(subject, 'POST', `/projects/${projectId}/publication/${pub.publication.id}/endorse`, { note: 'Accepted as the baseline.' });
 	const key = await call(subject, 'POST', `/projects/${projectId}/api-keys`, { name: 'logger' });
 	await call(subject, 'DELETE', `/projects/${projectId}/api-keys/${key.key.id}`);
 	const link = await call(subject, 'POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 });
@@ -172,6 +182,17 @@ beforeAll(async () => {
 		scope: 'water balance',
 		confirmed: statement.confirmations.map((k: { id: string }) => k.id),
 		statementSha256
+	});
+	// The host's check of their own registration, recorded by them as a member acting for the authority (167):
+	// registration_check.user_id and .recorded_by. No issued pack rests on it, so the deletion removes it.
+	await call(subject, 'POST', `/projects/${projectId}/members/${subject.id}/registration-checks`, {
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationNo: `R-${tag}`,
+		registerName: TYPED_NAME,
+		outcome: 'registered',
+		checkedByOrg: 'Personal-data WUA',
+		checkedAt: '2026-01-01'
 	});
 	await call(subject, 'PUT', `/projects/${projectId}/alert-rules`, { rules: [{ kind: 'dam_below', nodeId: farm.id, threshold: 0.25, enabled: false }] });
 	await call(subject, 'PUT', `/me/alerts/${projectId}`, { items: [{ kind: 'dam_below', mode: 'daily_digest' }] });
@@ -193,6 +214,12 @@ beforeAll(async () => {
 		subject.id,
 		projectId
 	]);
+	// Their "Was this useful?" answer to it, with a comment (151_alert_feedback).
+	await asOwner(
+		`INSERT INTO alert_feedback (project_id, user_id, event_id, kind, nonce, token_hash, useful, comment, answered_at)
+		 VALUES ($1, $2, $3, 'dam_below', sha256(gen_random_uuid()::text::bytea), sha256(gen_random_uuid()::text::bytea), true, 'Helpful, thanks', now())`,
+		[projectId, subject.id, event.id]
+	);
 	// A series replaced (a revision), a reset link, a render token, an allocation import.
 	await call(subject, 'PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-10-01', values: rain.map((v) => v + 1) });
 	expect((await anon('POST', '/auth/forgot-password', { email: subject.email })).status).toBe(202);
@@ -202,6 +229,26 @@ beforeAll(async () => {
 		fileName: 'pd.csv',
 		text: 'registration_no,farm,authorisation,water_source,volume_m3_year\nPD-1,Farm Pd,licence,surface,500\n'
 	});
+	// A map import (152): who imported the file and made its feature is set null on deletion; the features stay with the project.
+	await call(subject, 'POST', `/projects/${projectId}/map/import`, {
+		fileName: 'pd.geojson',
+		kind: 'other',
+		text: JSON.stringify({ type: 'Feature', properties: { name: 'Pd feature' }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+	});
+	// A delineation they proposed and rejected (175): created_by and decided_by are set null on deletion; the proposal stays
+	// with the project. Against the committed synthetic DEM (its valley's outlet).
+	const demBefore = process.env.DEM_URL;
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	const proposal = await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
+	await call(subject, 'POST', `/projects/${projectId}/map/delineation/${proposal.proposal.id}/reject`, {});
+	// A start-from-the-map proposal they made and discarded (178), on an empty project of the owner's where they edit: the same.
+	const emptyId = (await call(owner, 'POST', '/projects', { name: `Pd start ${tag}` })).project.id;
+	await call(owner, 'POST', `/projects/${emptyId}/members`, { email: subject.email, role: 'editor' });
+	const weir = (await call(owner, 'POST', `/projects/${emptyId}/map/features`, { kind: 'gauge', name: 'Pd weir', lon: 20.7428741, lat: -33.5396777 })).feature.id;
+	const start = await call(subject, 'POST', `/projects/${emptyId}/map/start`, { outletFeatureId: weir, points: [] });
+	await call(subject, 'POST', `/projects/${emptyId}/map/start/${start.proposal.id}/discard`, {});
+	if (demBefore === undefined) delete process.env.DEM_URL;
+	else process.env.DEM_URL = demBefore;
 	// An application, decided by the subject.
 	const [applicant, consultant] = (await Promise.all([`PdApplicant${tag}`, `PdConsultant${tag}`].map((n) => signUp(n)))) as [User, User];
 	for (const u of [applicant, consultant]) {
@@ -217,11 +264,13 @@ beforeAll(async () => {
 	// A comment on the application, then edited by them (115): the text before the edit is a note_revision (edited_by).
 	const comment = await call(subject, 'POST', `/projects/${projectId}/notes`, { body: `application comment ${tag}`, scenarioId: sid });
 	await call(subject, 'PATCH', `/projects/${projectId}/notes/${comment.note.id}`, { body: `application comment ${tag}, edited` });
-	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { outcome: 'refused', note: 'Too little left in dry years.' });
+	await call(subject, 'POST', `/projects/${projectId}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused', note: 'Too little left in dry years.' });
 	// A sweep, an outlook and a yield result they asked for; the workers aren't under test.
 	// The rows as the subject makes them (their stamp triggers set created_by), without the jobs.
 	await withUser(subject.id, async (tx) => {
 		await tx.query(`INSERT INTO scenario_sweep (project_id, base_run_id, name) VALUES ($1, $2, 'pd sweep')`, [projectId, runId]);
+		// A cumulative assessment (145): created_by is SET NULL when they go; its completion trigger fires only on the outcome columns.
+		await tx.query(`INSERT INTO assessment (project_id, base_run_id, name) VALUES ($1, $2, 'pd assessment')`, [projectId, runId]);
 		const [o] = (
 			await tx.query(
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels)
@@ -279,6 +328,11 @@ beforeAll(async () => {
 		subject.id,
 		projectId
 	]);
+	// A "known engine bug" email sent to them as an owner (153_erratum_notices): as the schema owner, the pipeline isn't under test.
+	await asOwner(
+		`INSERT INTO erratum_notice (erratum_id, project_id, user_id, run_count, status, sent_at, settled_at) VALUES ('ER-1', $1, $2, 1, 'sent', now(), now())`,
+		[projectId, subject.id]
+	);
 	// Evidence that names its maker (138, issue #112): a project they imported (with its import report) and a team they
 	// made, each with the owner as a second owner or admin; a run of theirs, nominated as evidence, with a completed
 	// ensemble; and a team scenario. All stay after the deletion, with the maker cleared.
@@ -310,6 +364,13 @@ beforeAll(async () => {
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);
+	// Two-step sign-in (150, issue #282), last, since it makes signing in two-step: an authenticator they set up
+	// (user_totp, user_recovery_code, account_security_event), then a wrong code (mfa_throttle).
+	const enrol = await call(subject, 'POST', '/auth/mfa/totp/enrol', { password: 'correct horse' });
+	await call(subject, 'POST', '/auth/mfa/totp/confirm', { code: totp(base32Decode(enrol.secret)!, Date.now()) });
+	expect((await subject.call('POST', '/auth/mfa/recovery-codes', { code: 'AAAAA-AAAAA' })).status).toBe(400);
+	// Enrolling checked the password, which cleared the mistyped one's count: mistype it again (login_throttle).
+	expect((await anon('POST', '/auth/login', { email: subject.email, password: 'wrong horse' })).status).toBe(401);
 }, 120_000);
 
 afterAll(async () => {
@@ -362,8 +423,8 @@ describe('while the account exists, only its deletion clears who made a row (066
 		expect(await asOwner('SELECT created_by FROM alert_rule WHERE project_id = $1', [projectId])).toEqual([{ created_by: subject.id }]);
 	});
 
-	it('refuses water_app a change to who asked for a sweep or an outlook', async () => {
-		for (const table of ['scenario_sweep', 'seasonal_outlook']) {
+	it('refuses water_app a change to who asked for a sweep, an outlook or an assessment', async () => {
+		for (const table of ['scenario_sweep', 'seasonal_outlook', 'assessment']) {
 			await expect(withUser(owner.id, (tx) => tx.query(`UPDATE ${table} SET created_by = NULL WHERE project_id = $1`, [projectId]))).rejects.toMatchObject({
 				code: '42501'
 			});
@@ -398,7 +459,14 @@ describe('deleting the account leaves no copy of the person outside the document
 		}
 		before = {};
 		for (const [k, v] of Object.entries(needles())) before[k] = await whereIs(v);
-		await asOwner('DELETE FROM app_user WHERE id = $1', [subject.id]);
+		// Through "Delete my account" (DELETE /auth/me, issue #112), as the person under RLS: the operator's path
+		// (the schema owner deleting the row) runs the same keys and triggers, checked end to end in account-deletion.db.test.ts.
+		const res = await app.request('/auth/me', {
+			method: 'DELETE',
+			headers: { cookie: subject.cookie, origin: ORIGIN, 'content-type': 'application/json' },
+			body: JSON.stringify({ password: 'correct horse' })
+		});
+		expect(res.status).toBe(204);
 	});
 
 	it('had a row behind every cascade and set-null key to app_user before the deletion (the fixture reaches each)', () => {

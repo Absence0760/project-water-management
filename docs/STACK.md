@@ -31,6 +31,20 @@ sides share.
   Alert emails (`src/alerts/`) are evaluated by an `alert_eval` job and sent
   by the tick, each built as its recipient under RLS (Mailpit locally;
   `ALERTS_ENABLED=false` is the kill switch).
+  Catchment delineation from a click on the Map (`src/delineation/`) reads a
+  Terrarium DEM (PMTiles, its own WebP/PNG decoders, no dependency) named by
+  `DEM_URL`: empty (the default) is off; the committed synthetic DEM
+  (`backend/fixtures/dem/`) or the Relief's DEM after `pnpm dev:tiles:terrain`
+  ([maps.md § Delineation](./maps.md#delineation)); the same routing divides
+  a catchment into units at the map's dams, abstraction points and gauges to
+  start an empty model, or to divide one that has nodes (`start.ts`,
+  `divide.ts`, `subcatchments.ts`,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)).
+  Tracing a dam (`src/delineation/damTrace.ts`) reads a water occurrence
+  raster through the same readers, named by `WATER_URL`: empty (the default)
+  is off; the committed synthetic raster (`backend/fixtures/water/`) or JRC
+  Global Surface Water after `pnpm dev:tiles:water` ([maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
@@ -40,7 +54,9 @@ sides share.
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome` and `/welcome/af`, prerendered once per language, architecture.md), Vite, TypeScript, uPlot
-  charts, vitest. No spreadsheet library ships: the `.xlsx` run export
+  charts, vitest. The Map tab draws with MapLibre GL (`maplibre-gl`, BSD-3) and
+  reads its self-hosted PMTiles basemap with `pmtiles`, both dynamic imports
+  that load only when the map is drawn ([maps.md](./maps.md)). No spreadsheet library ships: the `.xlsx` run export
   writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
   import reads workbooks with its own streaming reader
   (`lib/spreadsheet/import/`). SheetJS CE 0.20.3 (`xlsx`, Apache-2.0) is a
@@ -64,7 +80,10 @@ sides share.
   fork's image, since upstream stopped publishing one).
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
-  bound by RLS. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
+  bound by RLS. Each checkout has its own dev database: `water` in the main
+  checkout, `water_w<n>` in a git worktree (`backend/src/config/devEnv.ts`,
+  created on first `pnpm dev`, empty until `pnpm seed:examples`), so a
+  branch's unmerged migrations never reach main's. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored, except
   the synthetic workbook fixture for the importer parity test and the
@@ -76,7 +95,9 @@ sides share.
   EventBridge tick, and the data feeds' fetcher, `backend/src/lambda-fetcher.ts`,
   outside the VPC with its two queues, and the report renderer,
   `backend/src/lambda-renderer.ts`, a container image in ECR, outside the VPC,
-  with its two queues and a private reports bucket) + RDS Postgres 17
+  with its two queues and a private reports bucket) + the map's tiles bucket
+  (`/tiles/*`) and private reference bucket, which the migrate Lambda loads
+  the allowed reference datasets from (`load-reference.yml`) + RDS Postgres 17
   in a private VPC + SES + Route 53 + ACM + budget/alarms. Not deployed yet
   ([plan.md Phase 6](./plan.md#phase-6-deploy-to-aws)).
 
@@ -86,7 +107,7 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 ## Commands (run from repo root)
 
 ```bash
-pnpm setup                  # install, start Postgres, apply migrations, start Mailpit and MinIO (one-time)
+pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
 pnpm dev:run:frontend       # one side only
@@ -107,6 +128,8 @@ pnpm dev:mail:down | dev:mail:status | dev:mail:logs | dev:mail:open
 pnpm dev:mail:bounce <email> [--complaint | --transient]   # stand in for an SES bounce: pauses that account's alert emails (run-locally.md § Alerts)
 pnpm dev:s3:up              # MinIO: report PDFs (API :9002, console :9003, minioadmin / minioadmin)
 pnpm dev:s3:down | dev:s3:status | dev:s3:logs
+pnpm dev:tiles:up           # optional basemap for the Map tab, one step, re-runnable: MinIO, tiles + fonts (cached, else fetched), a cached relief DEM, the frontend's URLs; restart pnpm dev
+pnpm dev:tiles:fetch        # re-download the SA extract (pmtiles CLI) into MinIO; dev:tiles:terrain (the Relief layer's DEM) | dev:tiles:water (Trace a dam's GSW occurrence; GDAL or docker) | dev:tiles:status | dev:tiles:env (maps.md)
 
 pnpm build                  # all workspaces (frontend/build, backend/dist/lambda.mjs)
 pnpm build:frontend | build:backend
@@ -118,10 +141,24 @@ pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; nee
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets and the V8 deopt stress run of the assurance of supply (issue #192; same caveat)
 pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:v8-osr    # does this Node still miscompile the pre-fix assurance loop (issue #232)? [--rev <rev>] [--node <bin>] [-- <V8 flags>]; alone, minutes, not in CI
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
+pnpm import:quaternaries    # load the synthetic quaternary dataset the Map's lookup proposes from (pnpm setup runs it);
+                             # <boundaries.geojson> --dataset <label> --source "<study>" [--values <csv>] loads your own DWS/WR2012 download (maps.md)
+pnpm import:dam-register    # load the synthetic register of dams the Dams page's proposals read (pnpm setup runs it);
+                             # <list.csv> <overlay.kml> --dataset <label> --source "<list, edition>" loads your own DSO download, once its licence allows (maps.md § Sources)
+pnpm import:rivers          # load the synthetic river network the Map's River network layer draws and proposes rivers from (pnpm setup runs it);
+                             # pnpm dev:tiles:rivers fetches HydroRIVERS (GDAL's ogr2ogr) and loads it (maps.md § River network)
+pnpm import:land-cover      # load the synthetic cropland grid a unit's planted-areas drawer proposes from (pnpm setup runs it);
+                             # <tile.tif> … --dataset <label> [--cell 0.0025] [--bbox w,s,e,n] loads your own ESA WorldCover tiles (maps.md § Cultivated area from land cover)
+pnpm import:evaporation     # load the synthetic evaporation grid Settings → Evaporation from the map proposes from (pnpm setup runs it);
+                             # <file> … --dataset <label> [--bbox w,s,e,n] loads dPET years (.nc, or the totals --reduce <dir> wrote) as monthly means;
+                             # [--out <grid.json[.gz]>] writes them for a production load instead (deployment.md § Reference datasets)
+pnpm import:evaporation:fetch [first] [last]  # download dPET (CC BY 4.0, ~2.4 GB a year, deleted once reduced) and load it (maps.md § Evaporation from the map)
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
 pnpm seed:demo              # seed:examples + each client workbook in ../project-water-management-source/Original/ (WBT_SOURCE_DIR), one project each (needs Python + openpyxl)
+pnpm seed:demo:fixed        # the same from the fixed workbooks in ../project-water-management-source/Fixed/workbooks/, each as "<Name> (fixed)" (run-locally.md § Import the client catchment)
 pnpm import:project <project.json> --email you@example.com [--name …] [--password …] [--run] [--skip-existing]
                              # [--settings <patch.json>] [--transfers <patch.json>] [--fit [--fit-seed n] [--fit-starts n] [--fit-budget n]]:
                              # patch the settings and transfer rules (by end-node names), fit GR4J before importing (model.md §2.10b)
@@ -136,7 +173,7 @@ pnpm reproduce:pack <bundle.zip> [--expect <manifest hash>] [--no-run] [--json]
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 
-pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, a release preflight before every production-gated job, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings in scripts/guards/check_web_bundle_budget.mjs
@@ -149,6 +186,8 @@ pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNA
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
+pnpm gen:dem-fixture        # rewrite the synthetic DEM delineation is tested against (backend/fixtures/dem/; no DB; maps.md § Delineation)
+pnpm gen:water-fixture      # rewrite the synthetic water occurrence raster tracing a dam is tested against (backend/fixtures/water/; no DB; maps.md § Assisted drawing)
 pnpm gen:example            # rewrite the example catchment the empty project list starts from (Kleinberg; no DB; issue #286)
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
@@ -232,13 +271,15 @@ Deploying (only when the client is ready for it) is covered in
 
 - `docs/model.md`: the water-balance model, formulas, workbook quirks, glossary
 - `docs/engine-audit.md`: where and why the engine departs from the workbook (finding IDs); `docs/engine-review.md`: the earlier faithfulness review
+- `docs/upstream/`: bug reports drafted for upstream projects (the V8 Maglev OSR miscompile behind engine-audit.md V1, issue #232)
 - `docs/legal/disclaimer-review.md`: the report disclaimer, sign-off statement and farmer liability lines, quoted for the client's legal review (issue #47)
-- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
+- `docs/legal/operator-agreement.md` (POPIA s20–21 template for each client) and `docs/legal/incident-procedure.md` (personal-information breach: who decides, timelines, the Regulator's report); `docs/legal/known-defect-procedure.md` (a confirmed engine bug: the errata row, the runs' May be affected flag, the owners' email); `docs/legal/information-officer.md` (registering with the Information Regulator); `docs/legal-status.md` tracks what is open
 - `docs/calibration-research.md`: literature and South African practice review of calibration, recession, data uncertainty and EWR reporting, with prioritised recommendations (CR-1 … CR-34)
 - `docs/data-model.md`: tables, workbook mapping, roles and RLS, series storage
 - `docs/api.md`: HTTP contract
 - `docs/ui.md`: the catchment workspace (tabs, Add data, schematic, results dashboard)
 - `docs/run-comparison.md`: comparing two runs (matching rules, what the input diff sees)
+- `docs/maps.md`: the Map tab: the self-hosted basemap and its fetch recipe, GeoJSON upload checks, server-side areas, the quaternary lookup and loading its dataset, the cultivated area from land cover, the evaporation from the map, the sources table, CSP
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/evidence-pack.md`: licensing evidence packs: the manifest and its hash, the short code, the lifecycle (draft, sign, issue, supersede, withdraw) and the public verify lookup
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)

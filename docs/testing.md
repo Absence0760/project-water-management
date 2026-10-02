@@ -17,7 +17,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 | `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) | seconds; the stress run ~1–5 min |
-| `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 59-mutant self-test; Python 3.14, no DB (CI's `verify` job runs 200 of each with `VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`). Run it when you change `packages/engine` or `verify/`, or the model's docs | ~2–3 min |
+| `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 60-mutant self-test; Python 3.14, no DB (CI's `verify` job runs 200 of each with `VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`). Run it when you change `packages/engine` or `verify/`, or the model's docs | ~2–3 min |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
 ## Performance budgets
@@ -47,6 +47,15 @@ thrash: like the budgets, it runs alone. Run it when you touch
 `network/reliability.ts` and on every Node version bump. Its unstressed half,
 `model/assurance-jit.test.ts`, is in `pnpm test`.
 
+`pnpm test:backend:v8-osr` (`backend/scripts/v8-osr-stress.ts`, issue #232)
+is the same stress against the engine at any git revision, built with
+`git archive` and no checkout. By default it builds the last revision with
+the day loop V8 miscompiled (`47e1ddb1^`), so it answers "does this Node
+still have the bug?": exit 1 when a stressed run differs from the
+unstressed one. `--node <binary>` tries another Node, and V8 flags go after
+`--`. It takes several minutes, so it is not in CI; run it alone, before and
+after a Node major bump ([upstream/v8-maglev-osr.md](./upstream/v8-maglev-osr.md)).
+
 ## The loop
 
 1. While editing: `pnpm test:changed` (or one file: `pnpm -C <ws> exec vitest run <path>`).
@@ -66,6 +75,18 @@ thrash: like the budgets, it runs alone. Run it when you touch
    which `svelte-kit sync` writes, and without it every frontend test file
    fails at startup with "Could not resolve 'node:module' … Tsconfig not
    found" (Vite's dependency optimiser can't find the tsconfig).
+6. A test of a runes state class (a `.svelte.ts` module whose constructor
+   starts an `$effect`, like the map's layers) is a `*.svelte.test.ts`
+   file: the frontend's vitest runs those in its `runes` project
+   (`frontend/vitest.config.ts`, `frontend/vitest.client-env.ts`), Node with
+   Vite's client transforms. Under the plain `node` environment (the `unit`
+   project, every other test) Svelte compiles the module for the server,
+   where `$effect` and `$effect.root` do nothing, so the constructor's effect
+   never runs and a test awaiting its request waits forever. Wrap the class
+   in `$effect.root(…)`, call `flushSync()` after changing its inputs, and
+   pass its requests in rather than importing `$lib/api` (whose
+   `$env/static/public` exists only under SvelteKit;
+   `components/map/riverLayer.svelte.test.ts` is the pattern).
 
 ## Layout checks and fonts
 
@@ -119,7 +140,19 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   case (`fuzz/shard.ts`): raise that budget before raising the release's
   count. The
   determinism check compares outputs value by value (`sameOutput`), not by
-  serialising them twice, which cost as much as a run.
+  serialising them twice, which cost as much as a run. A shard is fixed,
+  CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with
+  the four shards side by side and about 20 s at a load average near 40,
+  against its 120 s limit, and no seed passed 0.8 s.
+- **Loading the Lambda entry points** (`backend/src/config/production.security.test.ts`):
+  the test starts each Lambda's entry point to show it runs the production
+  config check at init. It imports esbuild bundles of them natively (the same
+  build its env-read inventory reads), not the source through vitest's module
+  runner, which transformed the whole backend and the engine's source on the
+  shared Vite server: ~3 s alone, and a timeout beside a full `pnpm test` on
+  a loaded machine (2026-10-02). A test that needs a whole entry point's
+  graph, fresh for each case, should do the same rather than `vi.resetModules()`
+  and re-import it.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
   WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
   6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C
@@ -151,6 +184,12 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   retires them so only the leaking file fails. It runs after the file's own
   `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
   `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
+  The same guard covers the notice queues, which the tick also drains
+  globally: a file that leaves a `pack_notice`, `erratum_notice` or
+  `alert_delivery` pending, sending or waiting for the digest fails, so a
+  file that issues or withdraws a pack, sweeps an erratum or fires an alert
+  sends the mail (`runTick`) or settles it
+  (`settlePendingNotices(projectId)` in `__tests__/helpers.ts`).
 - **e2e ticks are scoped to the test's own projects.** Playwright's workers
   share one e2e database and run in parallel, so unlike the DB files an e2e
   test can't count on nobody else ticking: `runJobsTick` requires the

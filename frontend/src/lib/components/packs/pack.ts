@@ -5,7 +5,7 @@
 // itself is WebCrypto's (sha256Hex).
 import { packManifestText, type PackManifest } from '@water-management/engine';
 import { fmtDate } from '$lib/format/number';
-import type { Pack, PackIssueChecks, PackStatus, PackVerification } from '$lib/api';
+import type { Pack, PackBundleCheck, PackIssueChecks, PackReproductionState, PackStatus, PackVerification } from '$lib/api';
 
 /** A pack's status in a word, as its badges say it. */
 export const PACK_STATUS_LABEL: Record<PackStatus, string> = {
@@ -170,7 +170,19 @@ export const issuedOf = (packs: readonly Pack[], scenarioId: string | null) => p
 export const packHref = (base: string, projectId: string, packId: string) => `${base}/projects/${encodeURIComponent(projectId)}/packs/${encodeURIComponent(packId)}`;
 
 /** A draft's checklist before issue, from the API's `issue` (an editor's read of a draft), in the order to do them. */
-export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks; ok: boolean; done: string; todo: string }[] {
+export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks | 'registrationChecked'; ok: boolean; done: string; todo: string }[] {
+	const unchecked = c.registrationUnchecked ?? [];
+	// The registration check (167_signers): listed only while the project requires it.
+	const registration = c.registrationCheckRequired
+		? [
+				{
+					id: 'registrationChecked' as const,
+					ok: unchecked.length === 0,
+					done: 'Each specialist signer’s registration has a current check against the professional register.',
+					todo: `The registration of ${unchecked.join(', ')} hasn’t been checked against the professional register: an owner records the check on the Project tab (Registration checks).`
+				}
+			]
+		: [];
 	return [
 		{
 			id: 'issuable',
@@ -195,7 +207,8 @@ export function issueChecklist(c: PackIssueChecks): { id: keyof PackIssueChecks;
 			ok: c.signed,
 			done: 'Signed off under the current pack statement.',
 			todo: 'Not signed under the current pack statement: a registered professional signs it in Appendix B.2 (again, if the statement changed since).'
-		}
+		},
+		...registration
 	];
 }
 
@@ -239,5 +252,58 @@ export async function lookUpCode(
 	} catch (e) {
 		if (isNotFound(e)) return { status: 'not-found' };
 		return { status: 'error', error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
+/**
+ * What the pack view says about the server's re-run of the pack from its
+ * stored bundle (detail.reproduction, 154_pack_reproduce): a tone, one
+ * sentence, the checks that failed, and the label of an editor's re-run
+ * button when one may be asked for (`rerun`: after the re-run gave up, or when
+ * the outcome is an older engine's than the server's; POST …/reproduce). Null
+ * when there is nothing to say (a draft). It is the app's own claim, so it
+ * shows in the view's bar only: never printed, never on verify.
+ */
+export function reproductionNote(r: PackReproductionState): { tone: 'good' | 'bad' | 'warn' | 'quiet'; text: string; failed: PackBundleCheck[]; rerun: string | null } | null {
+	const failed = r.checks.filter((c) => !c.ok);
+	const when = r.checkedAt ? ` on ${fmtDate(r.checkedAt)}` : '';
+	const reruns = r.checks.filter((c) => c.id.startsWith('reproduce:')).length;
+	const runs = reruns === 1 ? 'its run' : 'both its runs';
+	// An outcome of an older engine than the server's: the server may record its own beside it.
+	const older = r.canRerun && r.engineVersion !== null && r.engineVersion !== r.serverEngine;
+	const newer = older ? ` The server now runs engine ${r.serverEngine}: re-run it to record that engine’s outcome beside this one.` : '';
+	const rerun = older ? `Re-run on engine ${r.serverEngine}` : null;
+	switch (r.status) {
+		case 'reproduced':
+			return {
+				tone: 'good',
+				text: `Reproduced on the server${when}: re-run with engine ${r.engineVersion} from the stored reproduction bundle, ${runs} gave the same results, and every one of its ${r.checks.length} checks passed. This is the app’s own check; the bundle lets anyone repeat it.${newer}`,
+				failed,
+				rerun
+			};
+		case 'not_reproduced':
+			return {
+				tone: 'bad',
+				text: `Not reproduced on the server${when}: re-run with engine ${r.engineVersion} from the stored reproduction bundle, ${failed.length === 1 ? '1 check' : `${failed.length} checks`} failed.${newer}`,
+				failed,
+				rerun
+			};
+		case 'other_engine':
+			return {
+				tone: 'warn',
+				text: `Not re-run on the runs’ own engine${when}: they were made with engine ${r.runEngines.join(' and ')} and the server runs ${r.engineVersion}, on which ${reruns === 1 ? 'the run’s results differ' : 'their results differ'}. Every other check passed; check out engine ${r.runEngines.join(' and ')} to reproduce the bundle.${newer}`,
+				failed,
+				rerun
+			};
+		case 'no_bundle':
+			// Another engine finds no bundle either: nothing to re-run.
+			return { tone: 'quiet', text: 'Not re-run on the server: this pack was issued without a reproduction bundle.', failed: [], rerun: null };
+		case 'checking':
+			return { tone: 'quiet', text: 'The server is re-running this pack’s runs from its stored reproduction bundle.', failed: [], rerun: null };
+		case 'failed':
+			return { tone: 'bad', text: `The server couldn’t re-run this pack${r.error ? `: ${r.error}` : '.'}`, failed: [], rerun: r.canRerun ? 'Try again' : null };
+		case 'none':
+			// A pack issued before the server re-ran packs: it may be re-run now.
+			return r.canRerun ? { tone: 'quiet', text: 'Not re-run on the server yet: this pack was issued before the server re-ran packs.', failed: [], rerun: 'Re-run on the server' } : null;
 	}
 }

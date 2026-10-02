@@ -1387,6 +1387,16 @@ must build WP-2.15 Phase B.
 
 ### WP-3.11 Cumulative impact assessment
 
+- **Status.** Built (2026-10-01, issue #287): engine `combineScenarios`,
+  `scenarioConflicts` and `cumulativeImpact` (no `runModel` change, so no
+  engine bump), migration `145_assessment.sql` (`assessment`,
+  `assessment_member`: the members' ops copied from their scenarios; no
+  `combined_run_id`, since the runs are stored as summaries like a sweep's,
+  never as `model_run` rows), `backend/src/assessments/` and the
+  `assessment` job, and the Applications tab's **Assess together** view with
+  CSV ([scenarios.md § Cumulative impact](../scenarios.md#cumulative-impact-wp-311)).
+  Left: the evidence report reading the combined run, yield per dam, and a
+  full-allocation baseline ([followups.md § Cumulative impact](../followups.md#cumulative-impact-wp-311)).
 - **Goal.** Several submitted applications against one published
   baseline, each **on its own and all together**, in one view.
 - **Changes**
@@ -1444,6 +1454,19 @@ must build WP-2.15 Phase B.
 
 ### WP-3.12 Catchment map
 
+- **Status (2026-10-01): phases 1–2 built** (issue #288): migration 152
+  (`map_feature`, `geo_source`, `node.area_source` / `area_feature_id`, and
+  `quaternary_reference`), `backend/src/geo/` (GeoJSON checks, the geodesic
+  area on the ellipsoid, the routes), the **Map** tab (MapLibre and PMTiles
+  lazy, a self-hosted basemap that is optional locally and off in
+  production until `/tiles/*` is deployed; D8 (b) as the bundle guard's
+  `mapKb`), areas accepted from polygons, and phase 2: Settings → WR2012
+  check → **Propose from the map**, a point → its quaternary → the reference
+  values used one by one, from a synthetic dataset in the repo and the
+  operator's own DWS/WR2012 download otherwise ([maps.md](../maps.md)).
+  Left: shapefiles, the production basemap and dataset loading, the WR2012
+  licence decision, contributor-owned features, feeds from the boundary
+  ([followups.md § Catchment map](../followups.md#catchment-map-issue-288)).
 - **Goal.**
   - Upload the catchment boundary (GeoJSON or zipped shapefile);
   - place farms, dams and gauges;
@@ -1940,9 +1963,11 @@ must build WP-2.15 Phase B.
       to a note on a scenario or pack, because public-participation notes
       must keep their history.
     - WP-2.7's soft delete stays; editors moderate.
-  - Commenting needs an account. NGO users join as `viewer` (never
-    `contributor`: they don't file applications) through the normal invite
-    flow, or read signed-out through a targeted link.
+  - Commenting needs an account, but no role: an NGO reads signed out
+    through a targeted link and, signed in, comments through it as a *link
+    participant* (166_public_participation, D5), never as a `viewer` (who
+    reads every farm's figures) or a `contributor` (who could file
+    applications).
   - *Backend:* `backend/src/publish/` (the share routes) and
     `backend/src/notes/` are extended; no new modules.
   - *Frontend:* the WP-2.3 `/share` route gains scenario and pack views in
@@ -2159,11 +2184,11 @@ What Step 3 needs from Step 2's open decisions:
 
 | # | Decision | Options | Recommendation | Who decides |
 | --- | --- | --- | --- | --- |
-| D1 | Who hosts the published baseline an application runs on | (a) the CMA; (b) the WUA from Step 2, with CMA staff as editors; (c) the client consultancy as a neutral host | (b) for the pilot, (a) when a CMA commits. Never a team whose members also act for applicants: `app_project_role()` would make them editors of every application (WP-3.3). | Client, with the pilot CMA |
-| D2 | How much of the published baseline a `contributor` (applicant) sees | (a) the WP-2.1 farmer scope plus catchment series, EWR sites and anonymised downstream deltas; (b) everything a viewer sees on the published run, including all farms' inputs; (c) a per-project switch | (a) by default, matching Step 2 D1's farm confidentiality. (c) if a catchment agrees to open its baseline (common where a CMA hosts it). The role itself (below `viewer`, WP-2.1's pattern) is not in question: copying the project or a linked applicant project loses id matching and cumulative assessment. | Client (Q15) + the pilot CMA |
-| D3 | Who sees registered volumes and user names | (a) assessors only; (b) plus the matching registrant; (c) volumes public, names hidden; (d) all public | (b) for names, (c) for volumes in share views, pending legal advice on WARMS data terms | Client + legal adviser |
+| D1 | Who hosts the published baseline an application runs on | (a) the CMA; (b) the WUA from Step 2, with CMA staff as editors; (c) the client consultancy as a neutral host | (b) for the pilot, (a) when a CMA commits. **Provisional position (pre-counsel research, 2026-10-01), built in 163_licensing_authority:** the National Water Act constrains who *decides* (the responsible authority, s1, s40(1), s41, s42) and whose evidence it accepts (s41(2)), not who hosts. So the app stops depending on the host: each licensing project names its responsible authority (`settings.responsibleAuthority`, DWS or a CMA with the power); only members the owner marks as acting for it (`project_member.acts_for_authority`, editor or above) record its decision or endorse a published baseline; packs print whom they are for and whether the baseline was endorsed (`evidence-13`). (a) and (b) then work unchanged; (c) is allowed only under the conflict guard, which the database enforces: nobody who edits the project may be in an applying party, own an application or be shared one (`409 role_conflict`), so editors never also act for applicants ([scenarios.md § Applications](../scenarios.md#applications-wp-33)). Pending the client and counsel (#92). | Client, with the pilot CMA; counsel |
+| D2 | How much of the published baseline a `contributor` (applicant) sees | (a) the WP-2.1 farmer scope plus catchment series, EWR sites and anonymised downstream deltas; (b) everything a viewer sees on the published run, including all farms' inputs; (c) a per-project switch | (a) by default, matching Step 2 D1's farm confidentiality. (c) if a catchment agrees to open its baseline (common where a CMA hosts it). The role itself (below `viewer`, WP-2.1's pattern) is not in question: copying the project or a linked applicant project loses id matching and cumulative assessment. **Provisional position (pre-counsel research, 2026-10-01), built in 164_applicant_visibility and 165_applicant_copy:** keep (a): other farms' figures are personal or commercial information (POPIA s1; PAIA s36, s64) the host may not hand an applicant without a basis; fairness to the applicant is the authority's (PAJA s3, s5), met by explaining the gist. (c) only behind an owner action that records its basis (not built). Built with it: an issued pack's applicant copy keeps the units it was issued about whatever the owner links later (the copy belongs to the application, PAIA s50(1)(a)); the k rule is split, the river's natural flow and EWR always shown, the impacted series and volumes still at five holders (a dominance rule is a follow-up); a rule broken by hidden farms gives the catchment's aggregate past five hidden holders, the real words to the assessors only, and an **Ask the assessors why** question; and the applicant's printable copy of an issued pack, other users' figures withheld, while the full pack goes to the members acting for the authority. | Client (Q15) + the pilot CMA; counsel |
+| D3 | Who sees registered volumes and user names | (a) assessors only; (b) plus the matching registrant; (c) volumes public, names hidden; (d) all public | (b) for names, (c) for volumes in share views, pending legal advice on WARMS data terms. **Provisional position (pre-counsel research, 2026-10-01), built in 162_allocation_viewer_units:** names to editors, owners and the matching registrant (the linked farmer) only; viewers read per-farm volumes only when an owner allows it, else totals at 5 or more holders; share links and evidence packs never name anyone, and § 5 of a pack lists only the applicant's own units, the rest as totals (`evidence-15`) ([allocations.md § Who sees what](../allocations.md#who-sees-what)). | Client + legal adviser; counsel |
 | D4 | How to keep old evidence reproducible when the engine changes | (a) reproduce at the git tag (a bundle plus the CLI); (b) keep every released engine bundle runnable in the app (versioned engine chunks on S3) | (a) now. Leave room for (b) as a Step 4 item if assessors need in-app re-runs of old versions. | Operator |
-| D5 | Comment identity for public participation | (a) an account required; (b) anonymous with moderation | (a): abuse control and a participation record | Client |
+| D5 | Comment identity for public participation | (a) an account required; (b) anonymous with moderation | (a): abuse control and a participation record. **Provisional position (pre-counsel research, 2026-10-01), built in 166_public_participation:** (a), with read-only links and no project role: anyone signed in comments **through a live link** (a *link participant*, 10 an hour), never as a `viewer` (a viewer reads every farm's figures, POPIA s10). Every comment box and share page warns that a comment in the app is not a written objection: only a timeous written objection to the notice's address keeps a right of appeal (NWA s148(1)(f), s42(a); R267 reg 17(4)(b)(vii)), and prints the notice's address and closing date when the applicant gives them. The applicant and the assessors download the reg 19 record (R267 reg 19(1)(a), Annexure D item 8 headings), with a commenter's email only where they ticked the reg 18 register box (POPIA s18 notice at the box; Privacy §5). | Client; counsel |
 | D6 | *(settled: WP-2.15 Phase B renders the pack)* | – | – | – |
 | D7 | Basemap detail vs size | maxzoom 12 / 13 / 15 | 13: enough to recognise farm dams. Measure the SA extract size before committing. | Operator |
 | D8 | Bundle budget for MapLibre | (a) raise the ceilings with a logged entry; (b) a separate ceiling for the lazy map chunk, as WP-1.28 does for its worker chunk | (b): keeps the initial-load ratchet honest and follows the Step 1 precedent | Operator |
@@ -2172,6 +2197,9 @@ What Step 3 needs from Step 2's open decisions:
 | D11 | Assurance and yield defaults | Hard-coded standards vs project settings | Project settings with no pre-filled "standard", so the signer must choose | Hydrologist + authority |
 | D12 | Where issued packs live | (a) WP-2.15's report bucket (7-day lifecycle: unsuitable); (b) a `packs/` prefix in that bucket with its own lifecycle; (c) a separate bucket with versioning and object lock | (c): immutability and retention differ from reports. Retention length follows Step 4 D10. | Operator + legal adviser |
 | D13 | Can a farmer also be an applicant on the same project? | (a) yes: `contributor` keeps farm links (WP-3.3); (b) no: separate accounts | (a): the irrigator raising their own dam is the common case | Operator |
+| D14 | The words for a decision on an application | (a) the app's own (`approved`, `approved_with_conditions`, `refused`, decided by any editor); (b) the Act's and GN R267's, recorded for the authority | **Provisional position (pre-counsel research, 2026-10-01), built in 163_licensing_authority:** (b). Every licence carries conditions (s28(1)(d)), so "approved with conditions" has no meaning of its own, and no app user has statutory power to decide. The outcomes are `licence_issued` (s27, s28(1)(d)), `licence_refused` (s42), `application_rejected` (formal requirements, R267 regs 9(1)(b), 11(2), 12(2)(b)) and `not_considered` (use already authorised, s40(4)); the action is **Record the authority's decision**, open only to members acting for the authority (D1), with the authority's name, the decision letter's date, its reference and whether written reasons were received; the app says appeals run from the decision letter (s148(3), s41(6)) and computes no deadline. Older decisions were mapped (approved → licence issued, refused → licence refused). The pilot authority may want its own house-style labels. | Client, with the pilot authority; counsel |
+| D15 | What an application's licence impact is judged against | (a) the baseline's modelled current use; (b) full authorised use (every holder at their registered volume); (c) both, labelled | **Provisional position (pre-counsel research, 2026-10-01), built in 165_applicant_copy (report format `evidence-14`):** (c), with (b) the headline. NWA s27(1)(a), (f) and s29(1)(a)(iii) and R267's "cumulative impact" ("existing and potential impacts") point to authorised use as the protective basis; the modelled-use board answers what changes tomorrow. Only a licence or a verified existing lawful use is an entitlement, so the authorised board prints the volume's mix by how it is held. An editor runs the full-allocation pair from the evidence report; a fixed row says when there is none. Which board an assessor weighs is theirs. If Bill B1-2026's s34A (curtailing unused existing lawful use) is enacted, the modelled-use board gains weight. | Client's hydrologist, with the pilot authority; counsel |
+| D16 | Who signs an evidence pack, and how | (a) the host's editors only; (b) the applicant's appointed specialist, an editor's review optional; with or without step-up MFA and a registration check | **Provisional position (pre-counsel research, 2026-10-01), built in 167_signers and the fresh-code step-up:** (b). The evidence is the applicant's (s41(2)(a)(ii)), so the owner marks a party member as its specialist, who signs the party's drafts (`signoff.kind` `specialist`); an editor may add a `review`. Every sign-off, issue and withdrawal needs a code from the authenticator within 10 minutes (a reasonable POPIA s19 safeguard; ECTA s13(3)(b)). The registration rule (SACNASP Pr.Sci.Nat. or ECSA professional) stays the product rule; the host, not the operator, checks the register and an owner or an authority-flagged member records it, and issue waits for it while the project requires it (on by default). The dialog and Terms §3 say an in-app sign-off isn't the signature the authority requires (ECTA s13(1)). | Client; counsel |
 
 ## 12. Risks
 

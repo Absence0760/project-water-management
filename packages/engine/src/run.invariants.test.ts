@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './network/stats';
 import { runModel } from './run';
 import { OPERATING_DEFAULTS, upgradeLegacyModel, type ModelInput } from './project';
-import { randomInput, Rng } from './testing/fuzz';
+import { randomInput, Rng, withoutRiverSources } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
 import { clientCatchmentDirs } from './testing/client-catchment-fixture';
@@ -90,6 +90,9 @@ describe('engine invariants on random networks', () => {
 		// n7's supply was Xused + MIN(the rest, D − Xused), which rounds one ulp above D: 3439.3663942672592 >
 		// 3439.366394267259 on day 0, a curtailment row supplied above its demand (20 000-case soak on 1.20.0, #164).
 		const input = randomInput(15467);
+		// Engine 1.65.0's generator puts some of this seed's demands on river abstractions (n7's among them), and an
+		// off-take serves only the dam side's demand; they go back to the dam so n7 still takes the off-take water.
+		withoutRiverSources(input);
 		const out = runModel(input);
 		expect(out.series.some((s) => s.key === 'offtake_in' && s.nodeId === 'n7' && s.values.some((v) => v > 0))).toBe(true);
 		const get = new Map(out.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));

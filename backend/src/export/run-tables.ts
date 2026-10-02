@@ -1,6 +1,7 @@
 // Pure builders for a run's CSV exports: column order for the daily table and
 // the multi-block summary sheet. Unit-tested in run-tables.test.ts.
 import {
+	CROPS_TAKE_KEY,
 	demandPctNote,
 	DOUBLE_MASS_MIN_DAYS,
 	DOUBLE_MASS_MIN_YEARS,
@@ -1004,6 +1005,10 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 		yield '';
 		yield* demandObjectLines(summary);
 	}
+	if (summary.farms?.some((f) => f.riverTakes?.length)) {
+		yield '';
+		yield* riverTakeLines(summary);
+	}
 	yield '';
 
 	yield* ewrSiteLines(summary.curtailment);
@@ -1406,6 +1411,7 @@ const BALANCE_COLUMNS: [header: string, value: (r: WaterBalanceRow) => number | 
 	['Transfers, net (m³)', (r) => r.transfersM3],
 	['Rain on dams (m³)', (r) => r.rainOnDamsM3 ?? null],
 	['Dam evaporation (m³)', (r) => r.damEvaporationM3 ?? null],
+	['Evaporation from river abstractions’ pools (m³)', (r) => r.poolEvaporationM3 ?? null, true],
 	['Other users’ use: taken − returned (m³)', (r) => r.otherUseM3 ?? null, true],
 	['Groundwater pumped (m³)', (r) => r.groundwaterM3 ?? null, true],
 	['Stream depletion from pumping (m³)', (r) => r.streamDepletionM3 ?? null, true],
@@ -1562,6 +1568,41 @@ export function* columnGuideLines(): Generator<string> {
 }
 
 /**
+ * River abstractions beside a unit's dam (engine ≥ 1.65.0, docs/model.md
+ * §2.7j): each one's pump, its mean take and, with a pool, the pool's
+ * capacity and mean storage; with a pump capacity (engine ≥ 1.66.0) the mean
+ * demand its pump left unmet although the river or its pool had it, and the days it did.
+ * The pump-limited columns only when some abstraction has them, blank for one
+ * without a capacity; the pool columns only when one has a pool.
+ */
+export function* riverTakeLines(summary: RunSummary): Generator<string> {
+	const rows = (summary.farms ?? []).flatMap((f) => (f.riverTakes ?? []).map((k) => ({ unit: f.name, k })));
+	if (!rows.length) return;
+	const pool = rows.some(({ k }) => k.poolM3 !== undefined);
+	const limited = rows.some(({ k }) => k.avgPumpLimitedM3Day !== undefined);
+	yield csvRow(['River abstractions (whole run)']);
+	yield csvRow([
+		'Hydrological unit',
+		'River abstraction',
+		'Pump capacity (m³/day)',
+		'Average pumped (m³/day)',
+		...(limited ? ['Average demand the pump capacity left unmet (m³/day)', 'Days the pump capacity left demand unmet'] : []),
+		...(pool ? ['Pool capacity (m³)', 'Average pool storage (m³)'] : [])
+	]);
+	for (const { unit, k } of rows) {
+		yield csvRow([
+			unit,
+			// The crops' take is named "<unit>: crops" by the engine; the unit has its own column.
+			k.key === CROPS_TAKE_KEY ? 'Crops' : k.name,
+			k.pumpM3Day ?? 'no limit',
+			k.avgTakeM3Day,
+			...(limited ? [k.avgPumpLimitedM3Day ?? '', k.daysPumpLimited ?? ''] : []),
+			...(pool ? [k.poolM3 ?? '', k.avgPoolStorageM3 ?? ''] : [])
+		]);
+	}
+}
+
+/**
  * Other water users (engine ≥ 0.22.0, WP-1.33): the whole-run means, then the
  * reporting window's EWR charge and whether it is curtailed (a senior user is
  * not; docs/model.md §2.11). Only in runs that have users.
@@ -1616,7 +1657,8 @@ export function* otherUserLines(summary: RunSummary): Generator<string> {
  * shortfall) and what it got per person, and where each one's number comes
  * from (engine ≥ 1.56.0: meter, aadd, perCapita, other, or "not recorded").
  * Only in runs with objects; the floor columns only when an object has one,
- * the source column only when an object has one.
+ * the source column only when an object has one, and a rank column (its
+ * place within its priority class, engine ≥ 1.64.0) only when an object has one.
  */
 export function* demandObjectLines(summary: RunSummary): Generator<string> {
 	const rows = (summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o })));
@@ -1624,6 +1666,7 @@ export function* demandObjectLines(summary: RunSummary): Generator<string> {
 	const off = rows.some(({ o }) => o.daysOff !== undefined);
 	const floor = rows.some(({ o }) => o.basicNeedsM3Day !== undefined);
 	const source = rows.some(({ o }) => o.source !== undefined);
+	const rank = rows.some(({ o }) => o.rank !== undefined);
 	yield csvRow(['Demand objects (whole run)']);
 	yield csvRow([
 		'Hydrological unit',
@@ -1631,6 +1674,7 @@ export function* demandObjectLines(summary: RunSummary): Generator<string> {
 		'Category',
 		...(source ? ['Source'] : []),
 		'Priority',
+		...(rank ? ['Rank within priority'] : []),
 		'Destination',
 		'Average demand (m³/day)',
 		'Average supplied (m³/day)',
@@ -1648,6 +1692,7 @@ export function* demandObjectLines(summary: RunSummary): Generator<string> {
 			o.category,
 			...(source ? [o.source ?? 'not recorded'] : []),
 			o.priority,
+			...(rank ? [o.rank ?? ''] : []),
 			o.destination,
 			o.avgDemandM3Day,
 			o.avgSuppliedM3Day,

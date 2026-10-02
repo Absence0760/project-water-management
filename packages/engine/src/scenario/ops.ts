@@ -11,6 +11,7 @@ import {
 	BOREHOLE_MODES,
 	BOREHOLE_RULES,
 	BOREHOLE_TARGETS,
+	DAM_AREA_EXPONENT_MAX,
 	GA538_GROUNDWATER_RATES,
 	isGa538Rate,
 	CALIBRATION_FLOW_KINDS,
@@ -18,9 +19,11 @@ import {
 	DAM_CURVE_MAX_ROWS,
 	DEMAND_OBJECT_CATEGORIES,
 	DEMAND_OBJECT_DESTINATIONS,
+	DEMAND_OBJECT_MAX_RANK,
 	DEMAND_OBJECT_PRIORITIES,
 	DEMAND_OBJECT_SIZINGS,
 	DEMAND_OBJECT_SOURCES,
+	WATER_SOURCES,
 	DEMAND_PARTS,
 	DEMAND_SCHEDULE_SPANS,
 	DAM_RELEASE_RULES,
@@ -203,6 +206,12 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
  * too, and River to dam by month. Farms only (a model rule).
  */
 const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as const;
+/**
+ * Where a farm's crops take their water (engine ≥ 1.65.0, issue #344,
+ * docs/model.md §2.7j): the dam, or a river abstraction with its own pump
+ * and pool. Farms only (a model rule).
+ */
+const CROP_SOURCE = ['cropWaterSource', 'cropRiverPumpM3Day', 'cropRiverPoolM3'] as const;
 
 /**
  * The fields `node.set` may change, per node kind. Never `id`, `kind`,
@@ -212,7 +221,7 @@ const OPERATING = ['handsOffM3Day', 'handsOffEwr', 'divertMonthlyM3Day'] as cons
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY, ...OPERATING, ...CROP_SOURCE],
 	user: ['name', ...USER, ...USER_PUMP, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
@@ -239,7 +248,7 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	damInitialPct: frac,
 	damMinPct: frac,
 	damAreaFullM2: nullable(nonNeg),
-	damAreaExponent: range(0, 3, { loOpen: true }),
+	damAreaExponent: range(0, DAM_AREA_EXPONENT_MAX, { loOpen: true }),
 	damSeepagePerDay: frac,
 	divertCapacityM3Day: nonNeg,
 	irrigationEfficiency: range(0, 1, { loOpen: true }),
@@ -271,6 +280,9 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	handsOffM3Day: nullable(monthlyOf(nonNeg)),
 	handsOffEwr: boolean,
 	divertMonthlyM3Day: nullable(monthlyOf(nonNeg)),
+	cropWaterSource: oneOf(WATER_SOURCES),
+	cropRiverPumpM3Day: nullable(nonNeg),
+	cropRiverPoolM3: nullable(nonNeg),
 	ewrSite: boolean
 };
 
@@ -738,11 +750,16 @@ export const DEMAND_OBJECT_SET_FIELDS = [
 	'monthlyFactor',
 	'returnPct',
 	'priority',
+	'rank',
 	'destination',
 	'enabled',
 	'schedule',
 	'population',
 	'source',
+	// Where its water comes from (engine ≥ 1.65.0): the dam or a river abstraction, its pump and pool.
+	'waterSource',
+	'riverPumpM3Day',
+	'riverPoolM3',
 	'note'
 ] as const;
 export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
@@ -795,6 +812,8 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	monthlyFactor: nullable(monthlyOf(nonNeg)),
 	returnPct: frac,
 	priority: oneOf(DEMAND_OBJECT_PRIORITIES),
+	// Its rank within its class (engine ≥ 1.64.0); null = 1, as an object saved before ranks.
+	rank: nullable(range(1, DEMAND_OBJECT_MAX_RANK, { int: true })),
 	destination: oneOf(DEMAND_OBJECT_DESTINATIONS),
 	enabled: boolean,
 	schedule: demandSchedule,
@@ -802,6 +821,10 @@ const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
 	population: nullable(nonNeg),
 	// Where its number comes from (engine ≥ 1.56.0); null = not recorded. Its fit with the sizing is a model rule.
 	source: nullable(oneOf(DEMAND_OBJECT_SOURCES)),
+	// Where its water comes from (engine ≥ 1.65.0); null = the dam. A pump of null is no limit, a pool of null none.
+	waterSource: nullable(oneOf(WATER_SOURCES)),
+	riverPumpM3Day: nullable(nonNeg),
+	riverPoolM3: nullable(nonNeg),
 	note: (v) => (typeof v === 'string' && v.length <= 1000 ? null : 'must be text of at most 1000 characters')
 };
 
@@ -818,8 +841,8 @@ export function demandObjectValue(field: DemandObjectSetField, value: unknown): 
 }
 
 const DEMAND_OBJECT_FIELDS: Record<string, Check> = { id, nodeId: id, ...DEMAND_OBJECT_FIELD_CHECKS };
-/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no note: as an object saved before them. */
-const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'note']);
+/** Left out = no schedule (every day at its month's demand), no population (its count), no source (not recorded), no rank (1), no note: as an object saved before them. */
+const DEMAND_OBJECT_OPTIONAL = new Set(['schedule', 'population', 'source', 'rank', 'waterSource', 'riverPumpM3Day', 'riverPoolM3', 'note']);
 
 /**
  * A `demandObject.add` op's object rebuilt from its known fields (its
@@ -1039,6 +1062,8 @@ const NODE_OPTIONAL = new Set<string>([
 	'damSeepagePerDay',
 	...SUPPLY,
 	...OPERATING,
+	// The crops on the dam unless given (engine ≥ 1.65.0).
+	...CROP_SOURCE,
 	...DAM_STORAGE,
 	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,

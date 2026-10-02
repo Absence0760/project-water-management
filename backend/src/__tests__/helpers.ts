@@ -5,7 +5,7 @@ import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
 import { withUser } from '../db/tx.js';
-import { RETIRE_PENDING_JOBS_SQL } from './pendingJobs.js';
+import { RETIRE_PENDING_JOBS_SQL, settlePendingNoticesSql } from './pendingJobs.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
@@ -174,6 +174,20 @@ export async function retirePendingJobs(...projectIds: (string | undefined)[]) {
 }
 
 /**
+ * Settle the notice emails a file queued for these projects without sending
+ * them: "pack issued / withdrawn" (133_pack_notices), "known engine bug"
+ * (153_erratum_notices) and alert deliveries (051_alerts, a digest-waiting one
+ * included). Test cleanup, as retirePendingJobs is for jobs: the tick sends
+ * every pending notice in the shared database, so one left behind lands in a
+ * later file's outbox, and db-setup.ts fails the file that left it.
+ */
+export async function settlePendingNotices(...projectIds: (string | undefined)[]) {
+	const ids = projectIds.filter((id): id is string => !!id);
+	if (!ids.length) return;
+	for (const sql of settlePendingNoticesSql('AND project_id = ANY($1::uuid[])')) await asOwner(sql, [ids]);
+}
+
+/**
  * Turn a run just made through the API into one saved on the legacy runoff
  * model before engine 1.0.0 removed it (issue #16), which the API can no
  * longer make: its settings say 'legacy', its summary has no runoff balance
@@ -255,3 +269,16 @@ export async function plantCompleteOutlook(
 		return rows[0]!.id;
 	});
 }
+
+/**
+ * Mark a member as acting for the project's responsible authority (163_licensing_authority):
+ * the owner's PATCH, as the members page sends it. Only a marked editor or owner
+ * records a decision (POST …/decide) or endorses a baseline.
+ */
+export async function actForAuthority(owner: { call: Call }, projectId: string, userId: string): Promise<void> {
+	const res = await owner.call('PATCH', `/projects/${projectId}/members/${userId}`, { actsForAuthority: true });
+	if (res.status !== 200) throw new Error(`marking ${userId} as acting for the authority failed: ${res.status} ${JSON.stringify(res.body)}`);
+}
+
+/** The authority's part of a decision body (POST …/decide), beside `outcome` and `note`. */
+export const DECISION = { authority: 'Test catchment management agency', decisionDate: '2026-09-30', reference: 'WU-TEST-1', reasonsReceived: true } as const;

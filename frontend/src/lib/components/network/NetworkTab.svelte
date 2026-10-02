@@ -27,6 +27,8 @@
 	import NodeCard from './NodeCard.svelte';
 	import NodeDetail from './NodeDetail.svelte';
 	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { mapNodeHref } from '$lib/workspace/mapLinks';
+	import { MappedNodes } from '$lib/workspace/mappedNodes.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import UserFields from './UserFields.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
@@ -209,8 +211,14 @@
 	function openEdit(id: string, replace = false) {
 		return goto(withParam(page.url, 'edit', id), { replaceState: replace, noScroll: true, keepFocus: true });
 	}
-	onMount(() => {
-		loadFarmers();
+	// Which nodes have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
+	// tab has drawn, so the map's list never delays it (workspace/mapLinks.ts).
+	const mapped = new MappedNodes(() => projectId, api.map.linkedNodes);
+	onMount(() => loadFarmers());
+	// After the first paint, and again if the workspace switches project under this tab; the grid modal's node table has no card to link from.
+	$effect(() => {
+		void projectId;
+		if (only !== 'table') void untrack(() => mapped.load());
 	});
 
 	// Farmers linked to each farm (WP-2.1), for the detail note and the delete
@@ -452,6 +460,8 @@
 
 {#snippet headerContext()}<span data-testid="network-summary">{nodes.length ? summaryLine : 'No nodes yet'}</span>{/snippet}
 {#snippet headerActions()}
+	<!-- A shortcut to the geographic map (issue #288), which also has its own sidebar row since #326 D3. -->
+	<a class="btn" href="?tab=map" data-testid="network-open-map">Map</a>
 	<!-- Escape closes it, as the header's other disclosures (routes/projects/[id]). -->
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<details class="grids-menu" bind:open={gridsOpen} bind:this={gridsEl} onkeydown={gridsKeydown}>
@@ -770,6 +780,7 @@
 						{projectId}
 						saved={editor.savedNodeIds.has(picked.id)}
 						farmHref={withParam(page.url, 'farm', picked.id)}
+						mapHref={mapped.has(picked.id) ? mapNodeHref(picked.id) : null}
 						{readonly}
 						onedit={() => openEdit(picked.id)}
 					/>
@@ -821,6 +832,7 @@
 					{readonly}
 					onremove={() => remove(editing!.id, editing!.name || 'unnamed node')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
+					mapHref={mapped.has(editing.id) ? mapNodeHref(editing.id) : null}
 					previewHref={editing.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}` : null}
 					onmakeoutlet={() => setOutlet(editing.id)}
 					landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === editing.id)}

@@ -20,6 +20,10 @@ const PUBLIC = new Set([
 	// "Send the link again" on the sign-in page (issue #57): the same 202 for any address.
 	'POST /auth/resend-confirmation',
 	'POST /auth/invite-info',
+	// Two-step sign-in's second step (issue #282): the challenge cookie that
+	// only a right password gets is the credential, under the code throttle
+	// (auth/mfa.db.test.ts).
+	'POST /auth/mfa/verify',
 	// The headless report renderer's sign-in (WP-2.15 Phase B): the single-use
 	// render token is the credential, and the session it buys reads one
 	// project and run only (reports/reports.db.test.ts).
@@ -44,6 +48,11 @@ const PUBLIC = new Set([
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
 	// route exempt from the CSRF check (app.ts): a mail client form-posts it.
 	'POST /alerts/unsubscribe',
+	// "Was this useful?" on an alert email (151_alert_feedback): the token is
+	// the credential, and it can only answer its own mail, through
+	// app_alert_answer (alerts/feedback.db.test.ts). Same-origin from the
+	// feedback page, so the CSRF check applies.
+	'POST /alerts/feedback',
 	// Verify an evidence pack (WP-3.14): the code is printed on the pack, not
 	// a secret; app_verify_pack returns only a pack's printed fields, and
 	// nothing for a draft (evidence/packs.db.test.ts).
@@ -90,9 +99,18 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/withdraw',
 			'GET /projects/:id/packs/:packId/pdf',
 			'POST /projects/:id/packs/:packId/pdf',
+			// Re-running an issued pack on the server again (154_pack_reproduce's job).
+			'POST /projects/:id/packs/:packId/reproduce',
+			// Sending the issued pack to the members acting for the responsible authority (licensing build item 13).
+			'POST /projects/:id/packs/:packId/send',
+			// Page 1's board against full authorised use (licensing build item 8): an editor runs the full-allocation pair.
+			'POST /projects/:id/runs/:runId/authorised-impact',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
-			'GET /projects/:id/scenarios/:sid/packs/:packId'
+			'GET /projects/:id/scenarios/:sid/packs/:packId',
+			// Their printable copy of one (165_applicant_copy).
+			'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+			'GET /projects/:id/scenarios/:sid/packs/:packId/pdf'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
@@ -110,17 +128,28 @@ describe('route auth inventory', () => {
 	});
 
 	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts),
-	// and so does "download my data" (POPIA; auth/export.db.test.ts), and accepting new terms (auth/auth.db.test.ts).
+	// and so does "download my data" (POPIA; auth/export.db.test.ts), accepting new terms (auth/auth.db.test.ts),
+	// and "delete my account" (issue #112; auth/delete-me.db.test.ts).
 	it('inventories the account routes as auth-gated', () => {
-		for (const r of ['PATCH /auth/me', 'POST /auth/change-password', 'GET /auth/me/export', 'POST /auth/me/farm-notice', 'POST /auth/me/accept-terms']) {
+		for (const r of ['PATCH /auth/me', 'DELETE /auth/me', 'POST /auth/change-password', 'GET /auth/me/export', 'POST /auth/me/farm-notice', 'POST /auth/me/accept-terms']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
 	});
 
+	// Two-step sign-in (issue #282): everything but the sign-in step needs a session (auth/mfa.db.test.ts).
+	it('inventories the two-step sign-in routes: the sign-in step public, the rest auth-gated', () => {
+		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes', 'POST /auth/mfa/step-up']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+		expect(routes).toContain('POST /auth/mfa/verify');
+		expect(PUBLIC.has('POST /auth/mfa/verify')).toBe(true);
+	});
+
 	// The data feeds (WP-2.10): auth-gated like every project route.
 	it('inventories the feed routes as auth-gated', () => {
-		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now'];
+		const feeds = ['GET /projects/:id/feeds', 'POST /projects/:id/feeds', 'PATCH /projects/:id/feeds/:feedId', 'DELETE /projects/:id/feeds/:feedId', 'POST /projects/:id/feeds/:feedId/run-now', 'GET /projects/:id/feeds/chirps/from-boundary', 'POST /projects/:id/feeds/chirps/from-boundary'];
 		for (const r of feeds) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
@@ -168,6 +197,14 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Cumulative impact assessments (WP-3.11, 145_assessment): auth-gated like every project route (editors only, assessments.db.test.ts).
+	it('inventories the assessment routes as auth-gated', () => {
+		for (const r of ['POST /projects/:id/assessments', 'GET /projects/:id/assessments', 'GET /projects/:id/assessments/:aid']) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Automated calibration run by the server (issue #153, 108_auto_calibration): auth-gated like every project route.
 	it('inventories the automated calibration routes as auth-gated', () => {
 		for (const r of [
@@ -209,7 +246,12 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/reopen',
 			'POST /projects/:id/scenarios/:sid/decide',
 			'POST /projects/:id/scenarios/:sid/members',
-			'DELETE /projects/:id/scenarios/:sid/members/:userId'
+			'DELETE /projects/:id/scenarios/:sid/members/:userId',
+			// "Ask the assessors why" (164_applicant_visibility).
+			'POST /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/application-questions',
+			'POST /projects/:id/application-questions/:qid/answer'
 		];
 		for (const r of applications) {
 			expect(routes).toContain(r);
@@ -241,11 +283,17 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/publication',
 			'POST /projects/:id/publication',
 			'PATCH /projects/:id/publication/:pubId',
+			// The responsible authority's endorsement of a published baseline (163).
+			'POST /projects/:id/publication/:pubId/endorse',
 			'GET /projects/:id/runs/:runId/publication',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
 			'GET /projects/:id/farm/:nodeId/export.csv',
-			'GET /projects/:id/farm/:nodeId/access'
+			'GET /projects/:id/farm/:nodeId/access',
+			// The farm's map (issue #326 A3).
+			'GET /projects/:id/farm/:nodeId/map',
+			// Who decides about the project's information: its team's privacy contact (168, POPIA s18(1)(b)).
+			'GET /projects/:id/privacy-contact'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);
@@ -306,12 +354,21 @@ describe('route auth inventory', () => {
 
 	// Share links (WP-2.3 phase 2): the owner's routes are auth-gated, the two reads are public.
 	// Alerts (WP-2.13): preferences and rules need a session; only the unsubscribe is public.
-	it('inventories the alert routes as auth-gated, and the unsubscribe as public', () => {
-		for (const r of ['GET /me/alerts', 'PUT /me/alerts/:projectId', 'POST /me/alerts/resume', 'GET /projects/:id/alert-rules', 'PUT /projects/:id/alert-rules', 'GET /projects/:id/alert-events']) {
+	it('inventories the alert routes as auth-gated, and the unsubscribe and feedback answer as public', () => {
+		for (const r of [
+			'GET /me/alerts',
+			'PUT /me/alerts/:projectId',
+			'POST /me/alerts/resume',
+			'GET /projects/:id/alert-rules',
+			'PUT /projects/:id/alert-rules',
+			'GET /projects/:id/alert-events',
+			'GET /projects/:id/alert-feedback'
+		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
 		expect(routes).toContain('POST /alerts/unsubscribe');
+		expect(routes).toContain('POST /alerts/feedback');
 	});
 
 	it('exempts only POST /alerts/unsubscribe from the CSRF check: a form post with no Origin reaches it, and is refused elsewhere', async () => {
@@ -323,6 +380,8 @@ describe('route auth inventory', () => {
 		// Any other route: the CSRF check refuses the same form post.
 		expect((await app.request('/auth/login', form)).status).toBe(403);
 		expect((await app.request('/share/view', form)).status).toBe(403);
+		// The feedback answer too: only the feedback page (same origin) posts it.
+		expect((await app.request('/alerts/feedback', form)).status).toBe(403);
 	});
 
 	it('inventories the share-link routes as auth-gated, and the share reads as public', () => {
@@ -386,6 +445,7 @@ describe('route auth inventory', () => {
 		'POST /auth/resend-confirmation',
 		'POST /auth/invite-info',
 		'POST /auth/render-session',
+		'POST /auth/mfa/verify',
 		'POST /share/view',
 		'POST /share/series',
 		'POST /share/pack',

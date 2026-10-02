@@ -17,13 +17,14 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; for an account with two-step sign-in, `200 { mfaRequired: true }` and **no** session, only the 5-minute `wm_mfa` challenge cookie (send a code to `POST /auth/mfa/verify`, § Two-step sign-in); `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
 | POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
+| DELETE | `/auth/me` | `{ password }` | "Delete my account" (issue #112): `204`, the account deleted and this browser's session and trusted-device cookies cleared, then an email to its address saying what was done; `403 wrong_current_password`; `429 signin_locked` + `Retry-After` while the address is locked; `409 account_sole_holder` with `details: { projects: [{ id, name }], teams: [{ id, name }] }`, the projects the person is the only owner of and the teams they are the only admin of (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -31,10 +32,50 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
-| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
+| POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
+
+### Two-step sign-in
+
+TOTP (RFC 6238) from an authenticator app, with ten recovery codes (issue
+#282, [security.md § Two-step sign-in](./security.md#two-step-sign-in)). A
+`code` is the app's six digits (spaces forgiven) or, where it says so, a
+recovery code (`ABCDE-FGH23`, case and the dash forgiven). Every code check
+counts on the account's code throttle first: the 5th wrong code in a row
+answers `429 mfa_locked` (`params.seconds`, `Retry-After`) for a minute,
+doubling to 15, right codes included. The session JWT carries `amr`:
+`["pwd"]`, or `["pwd", "otp"]` once signed in with a code, and `otp_at`,
+when the session last gave a code: a sign-off (of a run or a pack), issuing
+and withdrawing a pack answer `401 mfa_fresh_code` when it is more than 10
+minutes old; send a code to `POST /auth/mfa/step-up`, then the action again.
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/auth/mfa` | – | `200 { enrolled, enrolledAt, recoveryCodesLeft, required, sessionVerified }`: `required`, the person is a project owner, team admin or assessor (false while `MFA_REQUIRED=false`); `sessionVerified`, this session signed in with a code (signed in) |
+| POST | `/auth/mfa/totp/enrol` | `{ password }` | `200 { secret, uri }` (`Cache-Control: no-store`): a new base32 secret and its `otpauth://totp/…` URI, unconfirmed until …/confirm; starting again replaces an unconfirmed one. `403 wrong_current_password` (through the sign-in lockout, `429 signin_locked`); `409 mfa_already_enrolled` (signed in) |
+| POST | `/auth/mfa/totp/confirm` | `{ code }` | `200 { recoveryCodes }` (ten, shown only now) + this browser's session reissued with `amr: ["pwd", "otp"]`; `400 mfa_code_wrong`; `409 mfa_not_started` (signed in) |
+| DELETE | `/auth/mfa/totp` | `{ code }` (app or recovery code) | `204`, the authenticator and the codes gone, **every other session signed out**, this browser's session (and trusted-device cookie) reissued as `["pwd"]`; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/recovery-codes` | `{ code }` (the app's) | `200 { recoveryCodes }`, a new set; the old ones stop working; `400 mfa_code_wrong`; `409 mfa_not_enrolled` (signed in) |
+| POST | `/auth/mfa/verify` | `{ code }` (app or recovery code) + the `wm_mfa` cookie | `200 { user, usedRecoveryCode? }` + the session (`amr: ["pwd", "otp"]`) and the trusted-device cookie; the challenge is used up. `400 mfa_code_wrong`; `401 mfa_challenge_expired` no challenge, an expired or used one, or one from before a password reset (public: the challenge is the credential) |
+| POST | `/auth/mfa/step-up` | `{ code }` (app or recovery code) | `200 { ok, usedRecoveryCode? }` + this browser's session reissued with `amr: ["pwd", "otp"]` and `otp_at` now: what a sign-off, issuing or withdrawing an evidence pack need within 10 minutes (their `401 mfa_fresh_code`; [security.md § Two-step sign-in](./security.md#two-step-sign-in) → A fresh code). `400 mfa_code_wrong`; `403 mfa_required` no authenticator (signed in) |
+
+**Actions that need it.** Project owners, team admins and assessors must
+sign in with a code before: any route that needs the owner role (members,
+invites, API keys, data feeds, share links, renaming a team project,
+deleting a project), any that needs team admin (and removing someone else
+from a team; removing someone else from a project; an owner making or
+revoking any share link), publishing to farmers (`POST` / `PATCH …/publication`,
+`POST …/outlooks/:outlookId/publish`, `DELETE …/outlook-publication`),
+recording the authority's decision on an application (`POST …/scenarios/:sid/decide`),
+endorsing a published baseline (`POST …/publication/:pubId/endorse`), issuing or
+withdrawing an evidence pack, and signing a run or a pack (`POST
+…/runs/:runId/signoffs`, `POST …/packs/:packId/signoffs`: every signer, since
+any editor may sign). Checked after the role, so an outsider still
+gets `404` and a viewer `403` without a code: `403 mfa_required` (no
+authenticator yet: set one up) or `403 mfa_step_up` (one is set up, but this
+session signed in with the password only: sign in again).
 
 **Email links.** Tokens are 32 random bytes (43 base64url chars), single-use,
 stored only as SHA-256 hashes. Links point at `SITE_URL`:
@@ -71,7 +112,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent, renderSession? }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, termsVersion, farmNoticeCurrent, renderSession? }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -87,6 +128,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   by role](./ui.md)); `null` until they choose (the app then hides its default
   sections: History, Allocations, Applications), `[]` once they chose to show
   every one. Only ever their own.
+  `termsVersion` is the version it accepted (`null`: none), from which the
+  re-acceptance notice lists what changed since.
   `termsCurrent` is whether the account accepted the terms and privacy
   notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
   `false` after the version changes, and for an account `import:project`
@@ -107,16 +150,48 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   understand" (`POST /auth/me/farm-notice`), and again after the version
   changes; the farm pages show the notice instead of the figures until then
   ([ui.md § Farmer view](./ui.md)).
+- **`DELETE /auth/me`** ("Delete my account", POPIA s24; issue #112;
+  `backend/src/auth/deleteAccount.ts`, 143_delete_my_account.sql) checks
+  the password through the **same lockout as `change-password`** (a wrong
+  one is a failed attempt, `403`; a locked address `429`, logged as
+  `login_failed` with `route: "/auth/me"`). Then, as the person under RLS:
+  the projects they are the only owner of (`project_member`) and the teams
+  they are the only admin of give `409 account_sole_holder`, naming them in
+  `details`, and nothing changes; hand them over first. The owner and admin
+  rows of those projects and teams are locked (`FOR UPDATE`) before the
+  check, so a co-owner deleting their account or leaving at the same moment
+  waits for this request rather than both passing. Otherwise it records
+  one audit event in each project and team they belonged to
+  (`member.removed` / `team_member.removed` with `self: true,
+  accountDeleted: true`, and a farmer's `farmer.unlinked` with cause
+  `member_removed`), deletes the account through
+  `app_delete_my_account()` (the same foreign keys and triggers as the
+  operator's deletion: keep the evidence, remove the name; [security.md §
+  Personal information](./security.md#personal-information-popia)), and
+  fires the deferred owner and admin checks inside the request (`SET
+  CONSTRAINTS ALL IMMEDIATE`), so a co-owner who left just before still
+  gets the `409`, not a deletion. The response clears both cookies;
+  the old session cookie is void anyway (its account is gone). The email
+  (`account_deleted`, in the account's language) lists the projects and
+  teams the person left, what was deleted, what stays without the name and
+  what keeps it (POPIA s24(4)); a failed send is logged and doesn't undo
+  the deletion. The log line `{"event":"account_deleted","via":"self"}`
+  names nobody.
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
   exportedAt, account, projectMemberships, teamMemberships, farms, notes,
-  signoffs, invites, alertSubscriptions, alertDeliveries, packNotices, preferences,
-  reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
+  signoffs, invites, alertSubscriptions, alertDeliveries, alertFeedback, packNotices, erratumNotices, preferences,
+  reportSubscriptions, auditEvents, auditEventsTruncated }`. `alertFeedback`
+  is their "Was this useful?" rows on alert emails, answered or not,
+  `[{ projectId, kind, sentAt, useful, comment, answeredAt }]` (151; never
+  the token's hash or nonce). `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `packNotices` is the evidence pack emails
   sent to them (each kept 30 days after it was sent, skipped or failed), `[{ projectId, packId, event, status,
-  createdAt, sentAt }]` (133). `account` is
+  createdAt, sentAt }]` (133). `erratumNotices` is the known engine bug
+  emails sent to them as an owner (kept 30 days likewise), `[{ projectId,
+  erratumId, status, createdAt, sentAt }]` (153). `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
   087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
@@ -221,18 +296,34 @@ the frontend catalogue (same contract: add, never rename):
   erratum found since the draft was made applies to its runs' engines (or
   their fits') and its manifest doesn't record it; the message names the
   errata and says to draft the pack again ([§ Evidence packs](#evidence-packs)).
+- `mfa_fresh_code` (`401` from a sign-off, `POST …/packs/:packId/issue` and
+  `…/withdraw`): the session's last code from the authenticator is more than
+  10 minutes old. The workspace asks for one, sends it to
+  `POST /auth/mfa/step-up` and repeats the action (§ Two-step sign-in).
+- `registration_not_checked` (`409` from `POST …/packs/:packId/issue`,
+  167): the project requires a registration check and a specialist signer
+  of the current statement has no current one; `details.signers` names
+  them ([§ Evidence packs](#evidence-packs)).
+- `role_conflict` (`409` from a member's role or party change, a team
+  member's role change, moving a project into a team, sharing an
+  application): the change would make someone who edits the project (an
+  editor or owner, directly or through its team) also part of an applying
+  party there: in a party, owning an application, or shared one
+  (`163_licensing_authority`'s conflict guard; provisional position,
+  pre-counsel research, 2026-10-01). Take them out of the party, or keep
+  them below editor.
 
 | Code | Status | When |
 | --- | --- | --- |
 | `not_signed_in` | 401 | no valid session |
 | `wrong_credentials` | 401 | sign-in with a wrong email or password |
 | `email_unconfirmed` | 403 | sign-in with the right password to an account whose address was never confirmed |
-| `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
+| `signin_locked` | 429 | sign-in, a password change or deleting the account while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or `POST /auth/me/accept-terms` without `version`, or with a version that isn't the current one (a page loaded before the terms changed); `params.version` is the current one. On sign-up, checked before the sign-up throttle counts |
 | `farm_notice_changed` | 409 | `POST /auth/me/farm-notice` with a version that isn't the current one (a farm page loaded before the notice changed); `params.version` is the current one |
-| `wrong_current_password` | 403 | `POST /auth/change-password` |
+| `wrong_current_password` | 403 | `POST /auth/change-password`, `DELETE /auth/me` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
 | `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
@@ -245,11 +336,22 @@ the frontend catalogue (same contract: add, never rename):
 | `note_delete_denied` | 403 | deleting someone else's note without the editor role |
 | `note_comment_closed` | 403 | a public comment on a scenario that isn't open for comment (WP-3.15) |
 | `note_audience_denied` | 403 | a scenario note with an audience the caller may not post to, or a farmer commenting on a scenario (WP-3.15) |
+| `comment_throttled` | 429 | `POST /share/comment` past 10 comments an hour per account (166); `params.seconds` (also `Retry-After`) |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
+| `feedback_link_gone` | 404 | an alert email's "Was this useful?" link that no longer works (unknown, more than 30 days old, or its person left the catchment) |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
 | `body_refused` | 400 | any route: a JSON body with a NUL character, a number that overflows (`1e400`), or nesting past 64 levels (security.md § Input handling) |
+| `mfa_code_wrong` | 400 | a wrong two-step sign-in code (§ Two-step sign-in) |
+| `mfa_locked` | 429 | five wrong codes in a row; `params.seconds` (also `Retry-After`) |
+| `mfa_challenge_expired` | 401 | `POST /auth/mfa/verify` without a live sign-in challenge: sign in again |
+| `mfa_already_enrolled` | 409 | `POST /auth/mfa/totp/enrol` with an authenticator already on |
+| `mfa_not_started` | 409 | `POST /auth/mfa/totp/confirm` with nothing started |
+| `mfa_not_enrolled` | 409 | turning off, or new recovery codes, with two-step sign-in off |
+| `mfa_required` | 403 | an owner's, team admin's or assessor's action, or a sign-off, without an authenticator set up |
+| `mfa_step_up` | 403 | the same with one set up, from a session signed in with the password only |
 | `run_unverified` | 409 | `POST …/runs/:runId/signoffs` for, or `POST …/scenarios/:sid/decide` with, a run whose server stamp is missing or no longer matches its rows (security.md § Run stamps) |
+| `account_sole_holder` | 409 | `DELETE /auth/me` from the only owner of a project or the only admin of a team; `details: { projects, teams }` names them (`[{ id, name }]` each) |
 
 **Farmers** (role `farmer`, WP-2.1) get `403` from every `/projects/:id`
 route except leaving (`DELETE /projects/:id/members/:self`); `GET /projects`
@@ -290,8 +392,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   that team's settings), is judged by the defaults (5 %, 20 %). A project
   where your role is `farmer` or `contributor` is left out, as on the
   portfolio. Sorted by name.
+- **The responsible authority** (163_licensing_authority; provisional
+  position, pre-counsel research, 2026-10-01): `settings.responsibleAuthority
+  = { name: 1–200, kind: 'dws' | 'cma', office?: ≤ 200 } | null` names who
+  decides the project's licence applications (DWS, or a CMA with the power),
+  set through `PATCH /projects/:id` like any setting (editor; `400` for a
+  blank name or another kind). No model input: runs don't record it and
+  saving it alone leaves `updatedAt` alone. `project.actsForAuthority`
+  (boolean) says whether the caller acts for it: an editor or owner whom an
+  owner marked (`PATCH …/members/:userId { actsForAuthority }`); only they
+  record the authority's decision on an application and endorse a published
+  baseline.
 - `project` (`GET`/`PATCH /projects/:id`, create, import, copy) is a
-  `ProjectSummary` plus `settings`, `rerunQueuedFor` and `timeZone`: an
+  `ProjectSummary` plus `settings`, `rerunQueuedFor`, `actsForAuthority` and `timeZone`: an
   IANA zone name (058_project_time_zone, `Africa/Johannesburg` by default)
   that dates the project's downloads (§ Export) and every other day a
   person reads from the server: the portfolio's ages, a feed's health, the
@@ -825,9 +938,9 @@ out, and a re-import of an export records itself as a `project-file` import.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
+| GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party, actsForAuthority }[] }` | viewer |
 | POST | `/projects/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Invites); `409` if a verified account with that address is already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
-| PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
+| PATCH | `/projects/:id/members/:userId` | `{ role?, party?, specialist?, actsForAuthority? }` (at least one) | `{ member }` (with `specialist` and `actsForAuthority`). `specialist` (167_signers): the applying party's appointed specialist, who signs the draft evidence packs of the party's applications; `409` without a party; a party change ends it unless the same request sets it; logged as `member.specialist`. `actsForAuthority` (163_licensing_authority) marks the member as acting for the project's responsible authority: as an editor or owner they then record its decisions on applications and endorse a published baseline. Only an owner sets it (the database refuses anyone else, `project_member_authority`); a new membership never has it; logged as `member.authority`. **Conflict guard** (D1 (c)): a role or party change that would make an editor or owner (directly or through the project's team) also a member of an applying party, the owner of an application or someone it is shared with is `409 role_conflict`; change both in one request to move someone out of a party and up to editor. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
 `409 a project must keep at least one owner` when demoting or removing the
@@ -864,7 +977,8 @@ account with that address is already a member (change a farmer's farms with
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
   displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
   applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
-  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale }`
+  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale,
+  senderLapsed }` (`senderLapsed` as on an `Invite`, [§ Invites](#invites))
   (farmer invites, and applicant invites that carry farms; an applicant
   invite without farms is only in `GET /invites`). An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
@@ -932,8 +1046,11 @@ A window is 24 hours from its first add.
 | GET | `/projects/:id/invites` | – | `{ invites: Invite[] }` (newest first, expired ones included) | owner |
 | DELETE | `/projects/:id/invites/:inviteId` | – | `204` (revoke; the link stops working) | owner |
 
-- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired }` —
-  `invitedBy` is the display name of whoever last sent it.
+- `Invite = { id, email, role, invitedBy, createdAt, expiresAt, expired,
+  senderLapsed }` — `invitedBy` is the display name of whoever last sent
+  it. `senderLapsed`: they no longer own the project (administer the team),
+  so nobody can accept it, nor sign up through its link, until an owner
+  re-sends it, which makes them its sender (155_invite_sender_role.sql).
 - Farmer invites ([§ Farmers](#farmers)) are listed here too, with `role:
   "farmer"`; `GET /projects/:id/farmers` lists them with their farms. The
   Members panel leaves them to the Farmers panel.
@@ -946,8 +1063,8 @@ teams alike. Any signed-in account; each call sees only its own.
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only, newest first; empty for an unverified address |
-| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired or doesn't exist |
+| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only (unexpired, and their sender still owns the project or administers the team, 155), newest first; empty for an unverified address |
+| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired, its sender lost the right to send it (155) or doesn't exist |
 | DELETE | `/me/invites/:inviteId` | – | `204` (decline: the invite is deleted; a project's History records `invite.declined` with the masked address and no actor); `404` as above |
 
 - `MyInvite = { id, kind: 'project' | 'team', targetId, name, role,
@@ -971,7 +1088,7 @@ email show them by the project role they give, viewer / editor / owner
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
 | POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
-| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
+| PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below) | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
 | POST | `/teams/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
@@ -984,7 +1101,7 @@ email show them by the project role they give, viewer / editor / owner
   re-roling and removing a member (or their leaving, or accepting a team
   invite), and deleting the team, record `team_member.added/role/removed` /
   `team.deleted` on each of the team's projects (072).
-- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds }` — `role` is
+- `Team = { id, name, role, createdAt, memberCount, projectCount, settings, portfolioThresholds, privacyContact }` — `role` is
   **your** role in the team. `settings` is the stored document
   (055_team_settings): `{ portfolio?: { thresholds?: { green, amber } } }`.
   `portfolioThresholds = { green, amber, source: 'team' | 'default' }` is what
@@ -994,6 +1111,16 @@ email show them by the project role they give, viewer / editor / owner
   allowed); anything else, or an unknown key anywhere in `settings`, is a
   `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
   in the database). Every member reads them; only an admin changes them.
+- **Privacy contact** (168_team_privacy_contact, POPIA s18(1)(b)):
+  `privacyContact = { name, email, postal } | null`, whom people ask about
+  the personal information in the team's projects (the team, as the client
+  organisation, is the responsible party for it). `name` 1–200 characters
+  and a valid `email` (≤ 254) are required, `postal` (≤ 500) is optional
+  (blank = `null`); both trimmed; an unknown key is a `400`
+  (`backend/src/teams/privacyContact.ts`; CHECKs hold the same in the
+  database). Every member reads it; only an admin changes it. Farmers read
+  it through `GET /projects/:id/privacy-contact` ([Farm](#farm)), and
+  invitation emails to the team or its projects name it.
 - `TeamMember = { userId, email, displayName, role }`
 - `409 a team must keep at least one owner` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
@@ -1082,6 +1209,8 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
 | PUT | `/projects/:id/alert-rules` | `{ rules: { kind, nodeId?, feedId?, seriesId?, threshold, enabled }[] }` (1–500) | `{ rules: AlertRule[] }`. Upserts each, records `alert_rules.changed`, and queues an `alert_eval` (a kind switched on over a figure already past it fires at once) | editor |
 | GET | `/projects/:id/alert-events?state=firing\|all` | – | `{ events: AlertEvent[] }`, newest first, at most 100: the firing ones (default), or firing and cleared. As RLS lets the caller see them: a farmer gets their own farms' dam alerts and the restriction-notice events, never another farm's; an applicant gets `[]` | farmer |
 | POST | `/alerts/unsubscribe` *(public)* | JSON `{ token }`, or a form post with `?token=` | JSON: `200 { kind, project: { name }, farm }`; form: `204` | – |
+| GET | `/projects/:id/alert-feedback` | – | `{ since, kinds: { kind, yes, no }[], comments: { kind, useful, comment, answeredAt }[] }`: the answers to "Was this useful?" given in the last 365 days (`since`), counted per kind (`kind` an alert kind or `digest`), and the newest 50 comments; never who gave them (issue #74, 151) | editor |
+| POST | `/alerts/feedback` *(public)* | `{ token, useful: boolean, comment?: string \| null }` (comment ≤ 500 characters) | `200 { kind, project: { name } }` | – |
 
 - Kinds, what fires them, and who gets them by default:
 
@@ -1127,7 +1256,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   `seriesName` the series as the Data page names it, its name else its kind's label, e.g. "Weir" or
   "Flow — logger"; `seriesKeyFed` whether an API key still writes it, false once a person wrote over the
   key's days).
-- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail }`.
+- `AlertEvent = { id, kind, state, value, threshold, nodeId, nodeName, feedId, seriesId, openedAt, clearedAt, detail, forecastOutOfDate }`.
   `detail` holds the figures the alert was raised on: `dam_below`
   `{ source: 'latest'|'forecast', pct, date, madeOn?, publishedAt }` (that
   farm's own projection only); `ewr_forecast_fail` `{ days, of, from, to,
@@ -1143,6 +1272,17 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   forecast's `madeOn` is the day the run was made, and "still current" (its
   `to` not yet past) is judged against today, both in the project's time
   zone.
+- `forecastOutOfDate` is `{ madeOn, observedTo, rainUntil }` on a **firing**
+  `ewr_forecast_fail` event while the project's newest forecast run is
+  behind the recorded rain (its `lastObserved`, `observedTo` here, before
+  `rainUntil`, the last day with a catchment or CHIRPS rain value; read at
+  request time, `alerts/evaluate.ts` `newestForecast`), and `null`
+  otherwise (a current forecast, a cleared event, every other kind). Such a
+  forecast neither opens nor clears the event, so without a newer forecast
+  (the forecast feed failing, which `feed_failing` reports) the event keeps
+  the figures of the last current one; this says so. A mail of the event
+  sent meanwhile (a digest line the next morning) adds the same in a
+  sentence (`mail.alert.ewr.outOfDate`).
 - **Unsubscribe.** Every alert email links to the site's
   `/alerts/unsubscribe#t=<token>` (the token in the fragment, so it reaches
   no server log), and carries `List-Unsubscribe: <API/alerts/unsubscribe?token=…>`
@@ -1154,6 +1294,23 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   catchment-wide `all`), without signing in; a repeat is harmless. `404`
   for a malformed or tampered token, one a later re-enable replaced, or one
   whose person is no longer a member; `400` without a token.
+- **"Was this useful?"** (issue #74, `151_alert_feedback`). Every alert
+  email and digest asks it, after the button, with two plain links, **Yes**
+  and **No**, to the site's `/alerts/feedback#t=<token>&a=yes|no` (token
+  and answer in the fragment, so neither reaches a server log). There is no
+  open or click tracking and no image or pixel in any alert email: opening
+  the mail or following a link records nothing. The page preselects the
+  link's answer and asks first; only **Send** posts `POST /alerts/feedback`,
+  so a mail scanner that opens links answers nothing. The token is
+  single-purpose (its own HMAC label beside the unsubscribe token's,
+  `alerts/tokens.ts`; neither works at the other's route) and answers only
+  its own email, without signing in; answering again replaces the answer.
+  `404 feedback_link_gone` for a malformed, tampered or unknown token, a
+  link more than 30 days old, or a person who is no longer a member of the
+  catchment; `400` for a missing answer or a comment over 500 characters.
+  Same-origin from the page, so the CSRF check applies (unlike the
+  unsubscribe). Editors see the answers in the rule editor
+  (`GET …/alert-feedback`).
 
 ### How alert mail is sent
 
@@ -1215,7 +1372,9 @@ each rule's `transfer_rule@<id>` (what it took, before losses), and
 `summary.waterBalance` and the water account gain `conveyanceLossM3` (what
 was lost, net of the seepage returned);
 nodes carry `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`
-(nullable), `damAreaExponent` and `damSeepagePerDay`. A body without them
+(nullable), `damAreaExponent` (0 < b ≤ 1 from engine 1.63.0; a stored node
+with a larger value from before loads and runs, with a warning, and must be
+brought to 1 or below to save) and `damSeepagePerDay`. A body without them
 (an older document or tab) is read as migration 006 stored the database.
 
 Other water users (engine ≥ 0.22.0, migration 011, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)):
@@ -1297,15 +1456,19 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 'other'), sizing ('monthly' | 'perUnit'), monthlyM3Day (12 values ≥ 0, Oct–Sep,
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
-priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, schedule (below, or null), population (≥ 0 or null),
-source ('meter' | 'aadd' | 'perCapita' | 'other', or null), note (≤ 1000
+priority ('first' | 'shared' | 'last'), rank (a whole number 1–99, or
+null; engine ≥ 1.64.0, issue #343: its place within 'first' or 'last', 1
+before 2, equal ranks pro rata; null = 1; ignored on 'shared'),
+destination ('internal' | 'external'), enabled, schedule (below, or null),
+population (≥ 0 or null), source ('meter' | 'aadd' | 'perCapita' | 'other',
+or null), waterSource ('dam' | 'river', or null = the dam), riverPumpM3Day
+(≥ 0 or null = no limit), riverPoolM3 (≥ 0 or null = none), note (≤ 1000
 chars) }[]`,
 at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
-internal, true, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
+null, internal, true, null, null, null, null, null, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, an external one with a return share above 0, a
-negative population, an unknown source, and a source whose sizing it doesn't
+negative population, a rank outside 1–99 or not whole, an unknown source, and a source whose sizing it doesn't
 have.
 
 A demand object's `source` (engine ≥ 1.56.0, migration 139, issue #54 Q11,
@@ -1316,6 +1479,20 @@ strategy's AADD) are volumes, so the object must be `monthly`; `perCapita`
 estimate, a workbook's typed-over demand) may be either. Null = not recorded
 (every object saved before it). It changes no number in the run; `note` keeps
 the detail (which meter, which strategy, which norm).
+
+A demand object's `waterSource` (engine ≥ 1.65.0, migration 170, issue #344,
+[model.md §2.7j](./model.md)) is where its water comes from: null or `'dam'`,
+the unit's dam side under its supply rule (every object saved before it);
+`'river'`, a river abstraction of its own beside the dam, with the pump
+`riverPumpM3Day` and the pool `riverPoolM3` (capacity only: it starts full,
+its area is estimated). A pump or pool on a dam-sourced object is kept but
+unused. `PUT` refuses an unknown source and a negative or infinite pump or
+pool. Runs of a unit with a river abstraction store, per abstraction (key the
+object's id or `crops`), `river_take@<key>` (m³/day, part of `supplied`) and,
+with a pool, `river_pool@<key>` (m³, end of the day) and
+`river_pool_evaporation@<key>` (m³/day); its `FarmSummary.riverTakes` lists
+each one's mean take, pump and pool, and the water balance gains
+`poolEvaporationM3`.
 
 A demand object's `population` (engine ≥ 1.44.0, migration 127, issue #123,
 [model.md §2.7f](./model.md)) is the people it serves, for the basic-needs
@@ -1353,6 +1530,17 @@ farm without a dam, `"runOfRiver"` on a farm with a dam capacity above 0, and
 a stop level below the trigger. Runs of a farm with a rule other than
 `"damFirst"` store the series `river_abstraction` (m³/day, part of
 `supplied`) and its summary gains `avgRiverAbstractionM3Day`.
+
+The crops' water source (engine ≥ 1.65.0, migration 170, issue #344,
+[model.md §2.7j](./model.md)): every node carries `cropWaterSource`
+(`"dam"` | `"river"`), `cropRiverPumpM3Day` (≥ 0 or `null` = no limit) and
+`cropRiverPoolM3` (≥ 0 or `null` = none). A body without them gets `"dam"`,
+`null` and `null` (no change to any run). `PUT` refuses `"river"`, a pump or
+a pool on a node that isn't a farm, an unknown source and a negative pump or
+pool. Under `"river"` the unit's crops take from a river abstraction of their
+own beside the dam (series `river_take@crops`, and with a pool
+`river_pool@crops` and `river_pool_evaporation@crops`); the supply rule then
+serves the unit's dam-sourced demand objects only.
 
 Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114,
 issue #204, [model.md §2.7h](./model.md)): every node carries
@@ -1552,12 +1740,18 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
   or `forecast`; `forecastFrom` a forecast run's first forecast day
-  (`summary.forecast.from`), else `null`.
+  (`summary.forecast.from`), else `null`. `fitEngineVersion` is the engine
+  of the automatic fit the run's parameters came from
+  (`settings.fitRecord.engineVersion`), else `null`; `errata` the ids of the
+  known engine bugs that may affect the run (issue #103,
+  [engine-errata.md](./engine-errata.md)): the errata whose range holds its
+  engine, or its fit's for a `fit` erratum, `[]` for none. The list and
+  `GET …/runs/:runId` carry it; other routes answering with a run may not.
   `legacy` is `settings.runoffModel === 'legacy'` (absent → legacy, for runs
   saved before the setting existed): a run of the legacy runoff model, which
   engine 1.0.0 removed, so only a stored run from before it can be one. The
@@ -1749,12 +1943,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 - Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
-  name, category, source?, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  name, category, source?, priority, rank?, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
   in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`;
   `source`, engine ≥ 1.56.0, only on an object that records one: the model's
-  `source`, as a report grades the demand by). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  `source`, as a report grades the demand by; `rank`, engine ≥ 1.64.0, only
+  on a `first` or `last` object with a rank set: its place within its class). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together. The basic-needs floor (engine ≥ 1.44.0, issue
   #123): a domestic or municipal object with people adds `basicNeedsPopulation`,
   `basicNeedsM3Day` (the floor, m³/day abstracted), `daysBelowBasicNeeds` and
@@ -2070,6 +2265,15 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   id, as }[]` (the same readers) lists the items an application added under
   the id of one its applicant can't see, and the fresh id each has in its
   runs; always `[]` for a team scenario.
+  An application's check also carries `maskedRules: { problem, ops, rules }[]`
+  (164, every reader): each problem line a rule hidden from its applicant
+  broke, its index in `problems`, the ops it names (0-based) and the rules'
+  kinds (`shares`, `area`, `supplyTrigger`, `bhEmergency`…; never an id, a
+  name or a value), and, to editors and up only, `assessorProblems:
+  string[]`: `problems` line for line with every rule in its real words and
+  hidden names restored. A contributor never receives `assessorProblems`.
+  Neither field is on a team scenario's check. A submit refused for problems
+  (`422`) carries `details.maskedRules` beside `details.problems`.
 - **Ops** are validated by the engine's `validateScenarioOps` (every error by
   path: `400 { error: "invalid request", details: [{ message: "ops[3].value: must be at most 1" }] }`),
   with every id a UUID (`ops[0].nodeId: must be a UUID`), at most 500. Whether
@@ -2084,8 +2288,15 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
   the scenario routes too, for applications ([Applications](#applications)).
 - Since 045 `Scenario` also has `origin: 'team' | 'applicant'`,
   `submittedAt`, `decidedAt`, `decidedBy` (a display name), `outcome:
-  'approved' | 'approved_with_conditions' | 'refused' | null`,
-  `decisionNote` and `members: { userId, displayName }[]`; `baseRun.label` is
+  'licence_issued' | 'licence_refused' | 'application_rejected' |
+  'not_considered' | null` (since 163; a decision recorded before it was
+  mapped, `approved` and `approved_with_conditions` to `licence_issued`,
+  `refused` to `licence_refused`), `decisionNote`, the authority's record
+  `decisionAuthority` (its name, `null` until decided; `"Not recorded
+  (before 163)"` on an older decision), `decisionDate` (`YYYY-MM-DD`, the
+  date on its decision letter, `null` before 163), `decisionReference` (its
+  licence or file reference, `''` = none) and `reasonsReceived` (`boolean`,
+  `null` before 163), and `members: { userId, displayName }[]`; `baseRun.label` is
   `''` and `baseRun.createdAt` `null` for a caller who can't read the run.
 - `GET /projects/:id/scenarios/:sid/base` → `{ baseRunId, settings, model,
   anonymisedNodeIds }`: the base run's settings and model as the caller may
@@ -2106,20 +2317,33 @@ below work on it too, for an editor.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/scenarios` | – | as above; a contributor gets their own applications and those shared with them | contributor |
 | POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, purposeAndNeed?, mitigation?, monitoring?, ops? }` | as above. A contributor's `baseRunId` must be a published run (current or in the history): `404 published run not found` otherwise, as if it didn't exist; `409` when that published run is a forecast run (as for a team scenario). `ownedNodeIds` are their farm links (sending any is `403`) | contributor (a viewer: `403`) |
-| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, purposeAndNeed?, mitigation?, monitoring?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
+| PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, purposeAndNeed?, mitigation?, monitoring?, objectionAddress?, objectionClosingDate?, ops? }` | as above; only the owner (`403` for anyone else, the assessors included). `objectionAddress` (≤ 500, trimmed, `''`/`null` clears) and `objectionClosingDate` (`YYYY-MM-DD` or `null`): where and by when written objections go, as the application's notice gives them (166_public_participation; GN R267 reg 17(4)(b)(vi)–(vii)); only while a draft (`409` once submitted); every share page prints them beside the warning that a comment is not an objection. `status` is `409` on an application (use the routes below), `ownedNodeIds` `403` | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid` | – | `204`, a draft or withdrawn one; its runs that nothing keeps go with it | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` | as above; for a contributor `run` is metadata only (`id, label, engineVersion, startDate, endDate, createdAt, scenarioId`: the summary names every farm) and the application keeps its newest 5 runs | its owner or a shared member, or an editor; not a viewer |
 | POST | `/projects/:id/scenarios/:sid/rebase` | as above | as above; a contributor's new base must be published | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/submit` | – | `200 { scenario, check, checkError }`: `draft → submitted`, the ops (and their hash), base and own nodes frozen. `422` with `details.problems` when any op doesn't apply; `409` unless a draft | its owner (a team scenario: an editor) |
 | POST | `/projects/:id/scenarios/:sid/withdraw` | – | `submitted → withdrawn`; `409` otherwise | its owner (team: an editor) |
 | POST | `/projects/:id/scenarios/:sid/reopen` | – | `withdrawn → draft`; `409` otherwise | its owner (team: an editor) |
-| POST | `/projects/:id/scenarios/:sid/decide` | `{ outcome: 'approved' \| 'approved_with_conditions' \| 'refused', note?: ≤ 4000 }` | `submitted → decided`, with `decidedAt`, `decidedBy`; final. `403` for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor |
+| POST | `/projects/:id/scenarios/:sid/decide` | **Record the authority's decision** (163_licensing_authority; provisional position, pre-counsel research, 2026-10-01): `{ outcome: 'licence_issued' \| 'licence_refused' \| 'application_rejected' \| 'not_considered', authority?: ≤ 200, decisionDate: 'YYYY-MM-DD', reference?: ≤ 200, reasonsReceived: boolean, note?: ≤ 4000 }` (`authority` omitted: the project's `settings.responsibleAuthority.name`, `400` when it names none; `decisionDate` a real date, not after tomorrow) | `submitted → decided`, with `decidedAt` (the app's stamp), `decidedBy` and the record above; final. `403` unless the caller acts for the responsible authority (an editor or owner the owner marked, `actsForAuthority`), and for the application's own owner; `409` unless submitted; `409` `run_unverified` while any of its runs doesn't verify (security.md § Run stamps). Every single-scenario answer (`GET`, `PATCH`, the status moves) carries `unverifiedRunIds`: an application's runs that don't verify, to an editor or owner (`null` for a team scenario or a lower role) | editor acting for the authority |
 | GET | `/projects/:id/scenarios/:sid/share-candidates` | – | `{ candidates: { userId, displayName }[] }` (049): whom the owner may share it with. For a contributor, the other contributor-or-above members of their own applying party (`project_member.party`, set by the project owner); nobody without a party. For a viewer and up, every contributor-or-above member. Names only. `409` for a team scenario | owner of the application |
 | POST | `/projects/:id/scenarios/:sid/members` | `{ userId }`, or `{ email }` for a viewer and up | `201 { members }` (`200` if already shared). `{ userId }`: `404 not someone you can share this application with` for every id not among the candidates, a member or not. `{ email }` from a contributor: `403`, whatever the address (an applicant never probes an address); from a viewer and up, `404 no contributor or above on this project has that address` for an unknown address, a non-member or a farmer alike. `409` for a team scenario or yourself | owner of the application |
 | DELETE | `/projects/:id/scenarios/:sid/members/:userId` | – | `204`; the owner removes anyone, a member removes themselves | owner, or that member |
 | GET | `/projects/:id/scenarios/:sid/results?runId=` | – | `{ run, results }`: one run of the application (the newest by default; `{ run: null, results: null }` before any) as its applicant sees it against its base (below). `run`: `id, label, engineVersion, startDate, endDate, createdAt, baseRunId, current` (`current`: made from the ops and base the application has now). `404` for a run that isn't one of its runs or an application the caller doesn't read; `409` for a team scenario (the compare page compares those), or when the run's base is no longer a published run | any reader of the application (contributor and up) |
 | GET | `/projects/:id/applications` | – | `{ applications: Scenario[] }`: every application not a draft, newest submission first | editor |
+| POST | `/projects/:id/scenarios/:sid/questions` | `{ problem: int, line: string }` (strict) | `201 { question }`, the parties' view below: "Ask the assessors why" (164) about problem line `problem` of the application's check, quoting it as the caller read it. `409` when the check's line is no longer `line` (read it again), or for a team scenario; `422` when no hidden rule broke that line; `409` past 50 questions on one application; `403` for a reader who isn't one of its parties (its owner or someone it is shared with); `404` for an application the caller can't read | a party of the application |
+| GET | `/projects/:id/scenarios/:sid/questions` | – | `{ questions }`, newest first. A party: `{ id, askedAt, problem, opIndexes, rules, answer, answeredAt }` (`app_application_questions`: never the real words or the ops). An editor: also `scenarioId, scenarioName, ops, assessorText`. `404` for anyone else | a party, or an editor |
+| GET | `/projects/:id/application-questions` | – | `{ questions }` (the editors' shape above), unanswered first, then newest, at most 200: every application's questions, drafts' included (the draft itself stays its applicant's) | editor |
+| POST | `/projects/:id/application-questions/:qid/answer` | `{ answer: 1–4000 }` (strict) | `200 { question }`; once (`409` when answered). `404` for no such question | editor |
 
+- **"Ask the assessors why"** (164, [scenarios.md § Applications](./scenarios.md#applications-wp-33)):
+  an application with a problem a hidden rule broke can't be submitted, and
+  the assessors never read a draft, so its parties ask through
+  `…/questions` instead of a note. The question holds the line as they read
+  it, the ops it names as they stood, the rules' kinds, the application's
+  name and the line in its real words (written by the server; only editors
+  read it). The audit trail records `application.question_asked` and
+  `application.question_answered` (ids, op indexes and the rules' kinds;
+  never the words).
 - **What a contributor sees of the base** (`…/base`): the settings, their own farms and the gauges in full, every
   other node by kind and place under an anonymous name ("Farm 3") with its
   values blanked, and only their own farms' crops, crop areas, transfers and
@@ -2138,10 +2362,13 @@ below work on it too, for an editor.
   `application` `{ months, met, rate, longestNotMetRun, deficitM3 }`.
   `catchment`: `ewrDaysNotMet` and `ewrFractionDaysNotMet` `{ base,
   application }` always; `figures` (mean natural flow and outlet flow, base
-  and application) and `series` (the outlet's daily `outflow` and `ewr`,
-  base and application) only at five or more farm holders and when every op
-  was a proposal, else null with `withheld: 'few_farm_holders' |
-  'baseline_assumptions'` (and `deficitM3` null). `units[]`: their own units
+  and application) and `series` (`{ outflow, ewr }`, the outlet's daily
+  series, base and application) only when every op was a proposal, else
+  null with `withheld: 'baseline_assumptions'`. Within them the k rule is
+  split (164): natural flow and the `ewr` series at any holder count; the
+  outlet flow (`meanSimulatedOutflowM3Day`), the `outflow` series and every
+  `deficitM3` only at five or more farm holders, else null with
+  `withheld: 'few_farm_holders'`. `units[]`: their own units
   (their farm links as they read them now) and the ones the ops add
   (`added`), `{ nodeId, name, kind, base, application }` with demand,
   supply, share met, EWR charge and dam figures. `downstream[]`: every other
@@ -2164,7 +2391,8 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-9`: § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-15`: § 5 lists only the applicant's own units one by one and every other unit in one total per water source, `allocations.units[]` with `nodeId: 'others:<source>'`, `name` "Other registered users (n units)" and `aggregate: n`, left out (counted in `allocations.othersLeftOut`) below 5 units; `allocations.unitYears` `{ overA, judgedA, overB, judgedB }` the page-1 row's per-unit counts; absent from a pack's report drafted before `evidence-15` (`evidence-15`); page 1's headline board against full authorised use, `licenceImpactAuthorised` `{ status: 'ok' \| 'notBuilt' \| 'noAllocations' \| 'stale', detail, board, mix: { rows: [{ authorisation, volumeM3PerYear, entitlement }], entitlementM3PerYear, totalM3PerYear } \| null, builtAt, engineVersion }` (the board an editor's `POST …/authorised-impact` kept for this application run, when it was run on the baseline's engine with the project's outcome settings as they are now; otherwise why not; null for baseline evidence; absent from a pack's report drafted before `evidence-14`; [evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)) (`evidence-14`); the identity block's `identity.authority` `{ name, kind: 'dws' \| 'cma', office } \| null` (the project's `settings.responsibleAuthority`) and `identity.baseline.endorsement` `{ endorsedAt, endorsedBy, note } \| null` (the newest endorsement of a publication of the baseline run), with the page-1 caution `flags[id=notEndorsed]` without one; both absent from a pack's report drafted before `evidence-13` (163_licensing_authority, [evidence-pack.md § The responsible authority](./evidence-pack.md#the-responsible-authority)) (`evidence-13`); § 1's locality map, `localityMap` `{ version: 'locality-1', applicant, features: [{ layer, label, geometry }], asOf, sources: [{ fileName, sha256, importedAt }], drawnInApp, svgSha256 }` (the project's map features as the reader reads them now, `layer` one of `boundary`, `parcel`, `dam`, `applicantParcel`, `applicantDam`, `river`, `gauge`, `ewrSite`; another unit's parcel or dam has `label: null` and no node; geometries at 6 decimals, simplified to the figure; `svgSha256` the SHA-256 of the engine's `localityMapSvg` of it; null with no map features; absent from a pack's report drafted before `evidence-12`; [evidence-pack.md § The locality map](./evidence-pack.md#the-locality-map)) (`evidence-12`); page 1's row over the other applications reads one combined run from a cumulative assessment, `cumulative.combined` (below; absent from a pack's report drafted before `evidence-11`, whose row is the sum) (`evidence-11`); the checks `pumpCapacity` (every river pump, other water user and off-take in either run has a capacity) and, for an application, `protectsEwr` (its own new or changed river abstraction leaves the EWR or a hands-off flow in the river in every month it takes), both `blocksIssue`, read from the runs' stored models ([evidence-pack.md § What stops issue on the river](./evidence-pack.md#what-stops-issue-on-the-river); absent from a pack's report drafted before `evidence-10`) (`evidence-10`); § 6 the applicant's demand objects, `demandObjects` `{ notAssessed, objects, bySource, demandM3Day }` (each object on the applicant's units, or that the application adds, changes or removes: `{ id, name, nodeId, unit, category, change: 'added' \| 'changed' \| 'removed' \| 'unchanged', enabled, sizing, monthlyM3Day, count, litresPerUnitDay, lossPct, priority, destination, source, note, demandA, demandB, suppliedB }`, the model's fields as the application ran it, the baseline's for one it removes, each run's mean demand from its summary; `bySource` the application's demand by source, `{ source, demandM3Day, share, objects }`, the engine's `demandSourceShares`, not recorded as `source: null`; null for baseline evidence; absent from a pack's report drafted before `evidence-9`), with the page-1 caution `flags[id=demandSource]` when less than half of it is from meter records (`evidence-9`); Appendix C's fixed prompts, `applicantStatement.prompts` `{ purposeAndNeed, mitigation, monitoring }` (the scenario's answers as it holds them, `''` for *Not given*; absent from a pack's report drafted before `evidence-8`) (`evidence-8`); § 1's paired change in each Reserve site's FDC check curve, `river[].fdcChange` (per calendar month, one `{ run, band, bandNote, worse }` per table point; null for baseline evidence or without a paired band on the curve; `evidence-7`); § 5's cap per unit and source, `allocations.units[].sources[].capA` / `capB` (`{ capReached, limitBound }` from each cap run's `RunSummary.allocations`, null when that run doesn't cap the source; `evidence-6`); page 1's licence impact by year class, `licenceImpact` (null for baseline evidence), built from the runs' stored `natural_flow` and `ewr_shortfall` and the project's `settings.outcomes` (`evidence-5`); § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
+| POST | `/projects/:id/runs/:runId/authorised-impact` | none, or `{}` (strict) | `200 { authorised }` (the `licenceImpactAuthorised` above, `status: 'ok'`): runs the application run's baseline and its recorded ops with every holder at their registered volume (`settings.allocationMode: 'fullAllocation'`), builds page 1's board over the pair and the authorised volumes' mix by `authorisation`, and keeps it (`authorised_impact`, replacing the run's older one); the two runs aren't stored. Synchronous, as a scenario run is. `409` for a run that isn't an application run, a baseline that ran with no registered volumes, a baseline on another engine than the server's (run it again first), or ops that don't apply at full allocation (`details.problems`, in their real words); `404` for a run the caller can't read. Licensing build item 8 | editor |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -2183,9 +2411,8 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
   methodology, limitations and errata.
-- **Other applications on the baseline** (`cumulative`, § 4 and page 1's
-  *Other applications on this baseline, summed*): every other scenario that is
-  submitted, or decided `approved` / `approved_with_conditions`, with its
+- **Other applications on the baseline** (`cumulative`, § 4): every other scenario that is
+  submitted, or decided `licence_issued` (`approved` / `approved_with_conditions` in a pack drafted before `evidence-13`), with its
   newest run of its current ops (`inputs.scenario.opsSha256` equal to the
   scenario's) on this baseline, the newest 50 (with more, `cumulative.truncated` and nothing is summed). Read under the reader's RLS, so a
   viewer's report lists no submitted application (editors read those) and
@@ -2193,7 +2420,25 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   outlet's Reserve `overall` leave the database, not the runs. The engine
   lists each one's own change against the baseline and sums those of the same
   engine, period and runoff model (any other difference is the application's own ops): a sum of separate runs, not one combined
-  run (WP-3.11).
+  run. A document since `evidence-11` doesn't print that sum.
+- **All of them together** (`cumulative.combined`, `evidence-11`, page 1's
+  *This and the other applications on this baseline, together*, row id
+  `otherApplications`): `{ applications: { scenarioId, scenarioName, status,
+  outcome, isThis, ewrDays, reserveMonths }[], assessment: { id, name,
+  createdAt, createdBy, engineVersion } | null, conflicts, problems, ewrDays,
+  reserveMonths, warnings, notAssessed }`, each measure `{ baseline,
+  combined, change, sumOfSingles, interaction }` at the outlet. The
+  applications are this one and every other the reader sees that is
+  submitted or decided with approval and based on this baseline (no run
+  needed); the figures come from the newest complete assessment (editors
+  only, RLS) of exactly those scenarios with their current ops
+  (`assessment_member.ops_sha256`; this application's by the ops its run
+  recorded) on this baseline. Without one the backend checks the
+  combination (`checkCombination`, no model run): conflicts and ops that
+  don't apply together make it *Not assessed*, naming each; else it says an
+  assessment is under way, or that none exists. More than 8, or this
+  application not submitted, is *Not assessed* too
+  ([evidence-pack.md § The other applications together](./evidence-pack.md#the-other-applications-together)).
 - **Always answers.** A run that isn't evidence still gets `200` with
   `refused: true` and the failed checks (`checks[]`: nominated, legacy,
   forecast, base, engine, period, runoff model refuse; baseline assumptions,
@@ -2215,13 +2460,18 @@ reproduction bundle).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails; `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
+| POST | `/projects/:id/packs` | `{ runId, supersedesId? }` (strict) | `201 { pack: Pack }`, a draft. `runId` names the report as for [Evidence report](#evidence-report): a scenario run (an application pack) or the nominated run (baseline evidence). `409` with `details.checks` (`{ id, label, detail, fix }[]`) when the report is refused or a check that blocks issue fails (among them, since `evidence-10`, `pumpCapacity` and `protectsEwr`); `404` for a run or a `supersedesId` the caller can't see in this project; `409` when `supersedesId` isn't an issued pack, or is of another application (or of an application, for a baseline pack) | editor |
 | GET | `/projects/:id/packs` | – | `{ packs: Pack[] }`, newest first, at most 200. No manifest | viewer |
-| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
+| GET | `/projects/:id/packs/:packId` | – | `{ pack: Pack, manifest: PackManifest, manifestMatches, signoffs: Signoff[], pdf: PackPdfState, reproduction: PackReproductionState, issue, errataFoundSince }`. `manifestMatches`: the stored manifest still hashes to `manifestSha256`. `errataFoundSince` (`{ id, summary }[]`, 132): as on verify (below), the errata that apply now to either run's engine or its fit's and that the manifest didn't record (on a draft, found since it was drafted). `pdf`: where its PDF is (below). `reproduction`: what the server's re-run of its runs from the stored bundle found (below; not on verify). `issue` (a draft, to an editor; else `null`): `{ issuable, signed, runsVerified, errataRecorded }` (`errataRecorded`: `errataFoundSince` is empty), what stands between it and its issue as stored (the issue route checks the live report too) | viewer |
 | DELETE | `/projects/:id/packs/:packId` | – | `204`. `409` for a pack past draft (withdraw it) and for a signed draft (withdraw it: a sign-off is kept) | editor |
-| GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>` | viewer |
-| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off | `201 { signoff }` (`runId: null`, `packId`). The same `400`s and `409`s as a run's, and `409` for a pack that isn't a draft | editor |
-| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
+| GET | `/projects/:id/packs/:packId/signoffs` | – | As the run's (below), with the pack statement: `{ statement: PackSignoffStatement, statementSha256, disclaimer, cannotSign, kinds, signoffs }`. `cannotSign` adds `only a draft pack is signed; this one is <status>`. `kinds` (167): what the caller may sign as, `['specialist', 'review']` for an editor, `['specialist']` for the application's appointed specialist, `[]` otherwise. Each sign-off carries `kind` and `registrationCheck` (`{ checkedAt, checkedByOrg, bound }` or `null`: self-declared). Below viewer, only the application's appointed specialist (`403` for anyone else) | viewer; contributor (the specialist) |
+| POST | `/projects/:id/packs/:packId/signoffs` | as a run's sign-off, plus `kind?: 'specialist' \| 'review'` (default `specialist`) | `201 { signoff }` (`runId: null`, `packId`). The same `400`s, `403`s and `409`s as a run's, and `409` for a pack that isn't a draft. `review` is an editor's (`403` for the specialist). Needs a code from the last 10 minutes (`401 mfa_fresh_code`) | editor; contributor (the application's appointed specialist) |
+| GET | `/projects/:id/registration-checks` | – | `{ checks: RegistrationCheck[], required }` (167): the host's checks of members' registrations against the public SACNASP / ECSA register, newest first (`{ id, userId, registrationBody, registrationCategory, registrationNo, registerName, outcome: 'registered' \| 'not_registered', checkedByOrg, checkedAt, note, recordedBy, recordedAt }`); `required`, the owner's setting that issue waits for them | editor |
+| POST | `/projects/:id/members/:userId/registration-checks` | `{ registrationBody, registrationCategory, registrationNo, registerName, outcome, checkedByOrg, checkedAt (date or date-time, not in the future), note? }` | `201 { check }`. Insert-only; a later check supersedes. `404` for someone who isn't a member. Audited as `registration.checked` | owner, or an editor acting for the responsible authority (163); either with two-step sign-in (403 `mfa_required` / `mfa_step_up`) |
+| PUT | `/projects/:id/registration-check-required` | `{ required: boolean }` | `{ required }`: whether issuing a pack waits until each specialist signer has a current check (on by default). Audited as `registration.requirement` | owner |
+| POST | `/projects/:id/packs/:packId/issue` | none, or `{}` (strict) | `200 { pack, pdf: { status: 'rendering', error: null } }`, issued; a new version's predecessor becomes `superseded` in the same transaction, and its PDF's render (a `pack_render` job, as the issuer) is queued in it too ([evidence-pack.md § The PDF](./evidence-pack.md#the-pdf)), as is the server's re-run of its runs from the bundle (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)), and so are the "pack issued" emails to the other editors and the application's owner ([evidence-pack.md § Notices](./evidence-pack.md#notices)). The pack's reproduction bundle is built, checked, stored and recorded in the same transaction (`pack.bundleSha256`; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): if the bundle can't be stored the request fails (`500`) and nothing is issued. `409` when: it isn't a draft; another pack of the same application (or baseline evidence) is issued and this one doesn't supersede it (one issued at a time: draft a new version instead); the stored manifest no longer hashes to its hash; the frozen or the live report can't be issued (with `details.checks`); there is no sign-off of the current pack statement; the predecessor is no longer issued; a run's stored inputs can't rebuild it (a run from before stored inputs, or one that fails its hash check). `409` `run_unverified` when either run's server stamp no longer matches. `409` `pack_errata_since_draft` when an erratum found since the draft was made applies to either run's engine or its fit's and the manifest doesn't record it (the pack's `errataFoundSince`; draft it again, which records it) | editor |
+| POST | `/projects/:id/packs/:packId/reproduce` | none, or `{}` (strict) | `202 { jobId, reproduction: PackReproductionState }`: re-runs an issued pack on the server again from its stored bundle, as the caller (a `pack_reproduce` job, [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)): after the last re-run gave up, or on a newer engine than the recorded outcome's, which is kept and the new engine's recorded beside it. Idempotent while one is pending: the pending job's id comes back and nothing more is queued. `409` for a pack never issued, and once an outcome is recorded on the server's engine (one per pack and engine stands). Contributors and farmers `403`, a stranger `404` | editor |
+| POST | `/projects/:id/packs/:packId/send` | `{ userIds?: uuid[] (1–20), note?: ≤ 1000 }` (strict) | `200 { recipients: { userId, displayName }[], sent, failed }`: emails the members acting for the responsible authority (163's `actsForAuthority`, editors and owners; all of them but the caller, or `userIds`) a link to the pack's page and its verify page, never a file or a download link ([evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority)); records `pack.sent`. `409` unless the pack is issued, or when no other member acts for the authority; `422` when a `userIds` entry isn't one of them; `404` for a pack of another project | editor |
 | GET | `/projects/:id/packs/:packId/bundle` | – | `302` to a one-minute signed GET of the pack's reproduction bundle (a pre-signed MinIO URL locally; a CloudFront signed URL on the site's `/packs/*` in production), downloaded as `pack-<shortCode>.zip`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Its bytes hash to `pack.bundleSha256`. `409` for a draft (built at issue) or a pack issued without one. Check it with `pnpm reproduce:pack` | viewer |
 | GET | `/projects/:id/packs/:packId/pdf` | – | `302` to a signed URL of the pack's PDF, valid 60 s (a pre-signed MinIO GET locally, a CloudFront signed URL on `/packs/*` in production), named `<catchment>-evidence-pack-v<N>-<short code>.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` while none is recorded (a pack never issued, or its render not done). Contributors and farmers `403`, a stranger `404` | viewer |
 | POST | `/projects/:id/packs/:packId/pdf` | none, or `{}` (strict) | `202 { jobId, pdf: { status: 'rendering', error: null } }`: asks again for the PDF of a pack that was issued and has none recorded (its last render failed, or its answer never came). One pending per pack. `409` for a pack never issued, and once a PDF is recorded (a pack is printed once) | editor |
@@ -2244,6 +2494,17 @@ reproduction bundle).
   job is queued, running, retrying or waiting for the renderer's answer;
   `failed` when the last render gave up (`error` says why; an editor asks
   again with `POST …/pdf`); `none` for a pack never issued.
+- `PackReproductionState = { status, engineVersion, runEngines, checkedAt,
+  checks: { id, ok, detail }[], error, serverEngine, canRerun }`
+  (154_pack_reproduce): a recorded outcome, `reproduced`, `not_reproduced`,
+  `other_engine` (only the re-runs differ, on another engine than the runs')
+  or `no_bundle`, with the engine that re-ran the runs, theirs, when, and
+  every check; else `checking` while a job is queued, running or retrying,
+  `failed` when the newest job gave up after the newest outcome (`error`
+  says why), or `none` (a draft, or a pack issued before re-runs). The
+  newest outcome stands. `serverEngine` is the engine this server re-runs
+  with; `canRerun`, whether an editor may ask again (`POST …/reproduce`):
+  issued, none pending, and no outcome on `serverEngine` yet.
 - `PackManifest` is the engine's `buildPackManifest` (`pack-1`): `{ version,
   pack: { id, version, supersedes: { id, manifestSha256 } | null }, project:
   { id, name }, engine: { version, build }, report: EvidenceReport }`.
@@ -2258,8 +2519,10 @@ reproduction bundle).
   until the PDF is recorded), bundleSha256,
   successorSha256, withdrawnReason, methodology: { version, sha256 },
   errata: { id, summary }[], errataFoundSince: { id, summary }[], signers: { fullName, registrationBody,
-  registrationCategory, registrationField, registrationNo, signedAt }[] }`,
-  and nothing else (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
+  registrationCategory, registrationField, registrationNo, signedAt, kind,
+  registrationCheck }[] }`, and nothing else (`kind` 167: `specialist` or
+  `review`; `registrationCheck`: `{ checkedAt, checkedByOrg }` bound at
+  issue, or `null`: self-declared) (`app_verify_pack`, mapped field by field; security.md § Evidence packs).
   `errata` is what the manifest recorded when the pack was drafted, never
   changed; `errataFoundSince` (132) lists the errata of the current list
   (engine-errata.md) that apply to either run's engine, or to the engine of
@@ -2274,8 +2537,11 @@ They read no pack row, so the routes above answer them `403`.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/scenarios/:sid/packs` | – | `{ packs: ApplicantPackMeta[] }`, newest version first: its issued, superseded and withdrawn-after-issue packs, never a draft. `404` for a scenario the caller can't read; `[]` to anyone who reads it but isn't a party (an editor reads the packs through `GET …/packs`) | contributor |
+| GET | `/projects/:id/scenarios/:sid/participation-export` | `?format=json` (default) or `csv` | The application's public participation record for its reg 19 report (166): `{ application: { id, name, status, submittedAt, decidedAt, outcome, objectionAddress, objectionClosingDate }, links: [{ target, packVersion, createdAt, expiresAt, revokedAt }], comments: [{ id, target: 'application' \| 'pack', packVersion, author, email, registerConsent, viaLink, createdAt, editedAt, state: 'shown' \| 'withdrawn' \| 'removed', deletedAt, body, revisions }], register: [{ name, email }] }`, `Cache-Control: no-store`; the CSV is one row per text (`comment_id,on,text_version,text_written_at,posted_at,author,email,register_consent,posted_through,state,text`). `email` only where the commenter ticked the reg 18 box; a withdrawn or removed comment's `body` and `revisions` to the editors only. For the application's owner and the editors who read it; anyone else `404`. Audited as `scenario.participation_exported` | contributor (owner of the application) |
+| GET | `/projects/:id/scenarios/:sid/packs` | – | `{ packs: ApplicantPackMeta[], toSign: SpecialistDraft[] }` (`toSign`, 167: the drafts the caller may sign as the application's appointed specialist, `{ id, title, version, manifestSha256, createdAt, signoffs }`, empty for anyone else), newest version first: its issued, superseded and withdrawn-after-issue packs, never a draft. `404` for a scenario the caller can't read; `[]` to anyone who reads it but isn't a party (an editor reads the packs through `GET …/packs`) | contributor |
 | GET | `/projects/:id/scenarios/:sid/packs/:packId` | – | `ApplicantPack` (below); `Cache-Control: no-store`. `404` alike for a pack that isn't theirs, isn't of this application, is a draft or was never issued | contributor |
+| POST | `/projects/:id/scenarios/:sid/packs/:packId/pdf` | none, or `{}` (strict) | Their printable copy (165_applicant_copy, [evidence-pack.md § Applicants](./evidence-pack.md#applicants)): `202 { copy }` with `copy.status: 'rendering'` after queuing an `applicant_pack_render` job as the caller (one pending per pack and party), or while one is; `200 { copy }` once recorded (it stands: asking again changes nothing). `404` alike as above | a party of the application |
+| GET | `/projects/:id/scenarios/:sid/packs/:packId/pdf` | – | `302` to a one-minute signed GET of the copy, downloaded as `evidence-pack-v<n>-<code>-applicant-copy.pdf`; `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. `409` until it is recorded; `404` alike as above | a party of the application |
 
 - `ApplicantPackMeta = { id, scenarioId, title, mode, version, status:
   'issued' | 'superseded' | 'withdrawn', issuedAt, manifestSha256,
@@ -2290,15 +2556,22 @@ They read no pack row, so the routes above answer them `403`.
   timeReliabilityA, timeReliabilityB, annualReliabilityA,
   annualReliabilityB, change: { run, band, worse } | null }[], others: {
   kind: 'farm' | 'user', name, changePts }[] | null }`, or `null` when the
-  report changed a baseline assumption. `own`: the application's owned
-  nodes its owner still links and the nodes it adds; `others`: the other
+  report changed a baseline assumption. `own`: the units the pack froze as
+  the applicant's (the report's own units within the application's stored
+  own nodes, whatever the owner links now; 164) and the nodes it adds;
+  `others`: the other
   farms and water users downstream of those in the application run, as the
   results view lists them (`GET …/results` `downstream`), under the same
   anonymous `name` ("Farm 3", as on `…/base`), in its order, with
   `changePts` their change in share of demand supplied in whole percentage
   points; `null` when the run's base is no longer a published run, so those
-  names can't be given. Never another unit's real name or id.
-- No PDF, manifest or bundle: each carries the whole report.
+  names can't be given. Never another unit's real name or id. `copy:
+  { status: 'ready' | 'rendering' | 'failed' | 'none', sha256, pages,
+  renderedAt, error }`: their printable copy (165), with its own SHA-256
+  once ready; `failed` gives why their last request gave up.
+- No PDF, manifest or bundle of the pack: each carries the whole report.
+  Their printable copy instead (above): the same view, printed as them, not
+  the pack.
 
 - A pack cites both its runs (`citedBy` kind `pack`, name `version N`): they
   can't be deleted or trimmed, and the scenario can't be deleted. A project
@@ -2315,7 +2588,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps); `403 mfa_required` / `mfa_step_up` without two-step sign-in (§ Two-step sign-in) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
@@ -2352,24 +2625,52 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
   Each sign-off is in the project's history (`signoff.created`).
 
-## Allocations
+## Licence record
 
-Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migrations 038 and 103,
-[allocations.md](./allocations.md)). The app compares; it never decides
-whether a use is lawful.
+How long a project's licence record (its issued packs, nominated runs and
+the names they keep) is kept (161_licence_record; [evidence-pack.md §
+Retention](./evidence-pack.md#retention)). Provisional position (pre-counsel
+research, 2026-10-01).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
+| GET | `/projects/:id/licence-record` | – | `{ licenceRecord: LicenceRecord }` | editor |
+| PUT | `/projects/:id/licence-record` | `{ outcome: 'granted', outcomeOn, expiresOn, reason }`, `{ outcome: 'refused' \| 'withdrawn', outcomeOn, reason }` or `{ outcome: null, reason }` (strict; dates `YYYY-MM-DD`, `reason` 1–2 000) | `200 { licenceRecord }`; records `licence.outcome`. `400` for a grant without an expiry or one expiring before it was granted | owner |
+| POST | `/projects/:id/licence-record/confirm` | none, or `{}` (strict) | `200 { licenceRecord }`, the next review five years from today; records `licence.confirmed`. `409` once an outcome is recorded | owner |
+
+- `LicenceRecord = { outcome: 'granted' | 'refused' | 'withdrawn' | null,
+  outcomeOn, expiresOn, reason, closesOn, reviewDueOn }`: `closesOn` is the
+  expiry (granted) or the decision date, + 3 years; `reviewDueOn` the next
+  5-yearly review while no outcome is recorded (null before the first issued
+  pack or nomination).
+- `DELETE /projects/:id` and `DELETE /teams/:id` answer `409`
+  (`details.publicRecords: true`) for a project of, or a team that keeps,
+  public records until the client has confirmed their disposal, and
+  `PATCH /projects/:id` the same for moving such a project out of its team.
+
+## Allocations
+
+Registered and licensed water-use volumes per farm or water user, and a run's
+modelled use against them (roadmap WP-3.10, migrations 038, 103 and 162,
+[allocations.md](./allocations.md)). The app compares; it never decides
+whether a use is lawful. A viewer reads each volume only when an owner has
+let viewers do so (`viewerUnits`, 162, decision D3); until then a viewer
+gets totals per water source held by 5 or more registered users, and no
+route hands them a copy of the volumes ([allocations.md § Who sees
+what](./allocations.md#who-sees-what)).
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders, viewerUnits, unitsHidden, totals }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners; `viewerUnits` whether the owners let viewers read each volume (162); `unitsHidden` true for a viewer while it is off, and then `allocations` is `[]` (RLS) and `totals` is `[{ waterSource, holders, registeredM3PerYear, storageM3 }]`, the volumes (21(a) takes) and storage in force today summed per water source, only for a source held by 5 or more registered users (counted by name, else a name on another row of the same unit, else the unit, else the row; `app_allocation_volumes`); `totals` is `null` otherwise | viewer |
+| PUT | `/projects/:id/allocations/viewer-units` | `{ on: boolean }` | `200 { viewerUnits }`: whether viewers read each registered volume (162, D3; on only if every viewer works for, or was appointed by, the organisation). History `allocation.viewer_units` `{ on }` when it changes | owner |
 | POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
 | PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; only the fields sent change (issue #72: before, every field not sent went back to its default, the name and registration number included); `holder: ''` removes the name | editor |
 | DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
-| POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
+| POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB; `reference` required, not blank, for a `warms_extract`: how it was obtained, the DWS or CMA letter or terms, else `400`; 162, operator agreement 3A.1(d)) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
-| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `, `water_use` `21a` / `21b`) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison, capYears }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `, `water_use` `21a` / `21b`) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'`. `403` for a viewer while `viewerUnits` is off | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison \| null, capYears, totals }`; for a viewer while `viewerUnits` is off, `comparison` is `null`, `capYears` `[]` and `totals` is `{ tolerance, sources: [{ waterSource, holders, units, years: [{ waterYear, partial, registeredM3, modelledM3, status }] }] }`, the comparison summed per water source over the units with a volume on it, only for a source 5 or more registered users hold (`totals` is `null` for everyone else); `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
@@ -2445,7 +2746,17 @@ whether a use is lawful.
 - **Farmers** get `403` on every route, like every viewer route; RLS limits
   them to their own farms' allocations, which the farm view sums
   (`FarmView.registered`, [§ Farm](#farm)).
-- History: `allocation.created/changed/deleted/imported/import_deleted`; the
+- **A viewer while `viewerUnits` is off** (162, D3) reads no copy of the
+  volumes: `GET /projects/:id/model-input` has no `allocations` (RLS);
+  `GET …/runs/:runId`, `GET /compare/runs` and the run's `summary.csv` give
+  the run with `model.allocations` (`inputs.model.allocations`) `[]` and
+  `summary.allocations.nodes` `[]` (mode, band and counts kept);
+  `GET …/runs/:runId/model-input` leaves the allocations out of a
+  compare-only run and answers `403` for a cap or full-allocation run, whose
+  numbers rest on them; the farm view's `registered` is `null`. A capped
+  run's per-unit daily series (`supplied`, `allocation_left_*`) still reach
+  them ([followups.md § Allocations](./followups.md#allocations-wp-310)).
+- History: `allocation.created/changed/deleted/imported/import_deleted/viewer_units`; the
   preview is exempt (it writes nothing).
 
 ## Publication
@@ -2469,6 +2780,7 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | GET | `/projects/:id/publication` | – | `{ current: Publication \| null, history: PublicationMeta[] }`, newest first, the current one included (at most 12) | farmer |
 | POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series). Records `publication.published` in the season decision log (the notice, window, run identity and per-farm figures, issue #119; [data-model.md § Change history](./data-model.md)) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`, and records `publication.notice_changed` with the whole notice as it then stands (issue #119). `409` for a superseded publication | editor |
+| POST | `/projects/:id/publication/:pubId/endorse` | `{ note?: ≤ 2000 }` | `{ publication: PublicationMeta }` with its `endorsement`: the responsible authority endorses this published baseline (163_licensing_authority; s41(2): the authority decides what evidence it accepts). Once per publication, current or superseded (an application may rest on either); the database stamps `endorsedAt` and `endorsedBy` and never lets them change. Needs two-step sign-in; records `publication.endorsed`. `403` unless the caller acts for the authority; `404` for another project's publication; `409` once endorsed | editor acting for the authority |
 | GET | `/projects/:id/runs/:runId/publication` | – | `RunPublication` (below): one run's place in the publications, for the printable report (issue #70). `404` for a run not in this project (or not a UUID) | viewer |
 
 - `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
@@ -2482,8 +2794,12 @@ received. For a **forecast run** (WP-2.12) it is the day before
   trimmed the same way. `nextExpectedOn` is a date
   (`YYYY-MM-DD`) or `null` (design E10). Without `restriction` a
   publication has none.
-- `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt }`;
+- `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt, endorsement? }`;
   `publishedBy` is a display name (`null` once that account is gone).
+  `endorsement = { endorsedAt, endorsedBy, note } | null` (163): the
+  responsible authority's endorsement, `null` = not endorsed; to viewers and
+  above only (a farmer's answer has no `endorsement`). The same field is on
+  `Publication`.
 - `Publication = PublicationMeta & { note?, restriction: { level, pct, notice }, nextExpectedOn, catchmentView, updatedAt, updatedBy }`,
   `notice` as above (`{}` for none), only the languages the WUA wrote.
   `note` is the modeller's note to the project's staff: returned to viewers
@@ -2534,6 +2850,7 @@ never a farm's row, name or id.
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
 | POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |
 | POST | `/share/pack` *(public)* | `{ token }` | `SharePack` (below), `Cache-Control: no-store` | – |
+| POST | `/share/comment` | `{ token, body: 1–4000 chars (trimmed), registerConsent?: boolean }` | `201 { comment: { body, author, createdAt, editedAt } }` (166_public_participation): a `public_participation` comment through a live link to a submitted or decided application or an issued pack, by **any** signed-in account, with no project role (a link participant). `registerConsent`: give my name and email to the applicant for the register (GN R267 reg 18). `401` signed out; `404` for a dead, revoked, baseline or closed link; `429 comment_throttled` (`params.seconds`, `Retry-After`) past 10 an hour per account | signed in |
 
 - `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt, targetKind, targetId, mine }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
@@ -2557,16 +2874,18 @@ never a farm's row, name or id.
   one catchment series of the published run as monthly means (m³/day; a
   month without a value is `null`) from the run's first month, and the last
   365 days daily. `key` must be one of `natural_flow`, `simulated_outflow`,
-  `observed_flow`, `ewr`, `ewr_shortfall`. It answers only when the
+  `observed_flow`, `ewr`, `ewr_shortfall`. `natural_flow` and `ewr` (the
+  river) answer at any holder count; the other three (the use) only when the
   catchment has at least `FARMER_K` = 5 farm **holders** (farms linked to one
   user count once, an unlinked farm on its own; design
   [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)):
-  in a smaller catchment the flows would reveal the farms' use.
+  in a smaller catchment natural flow minus outflow would reveal the farms'
+  use (164).
 - Every dead link answers the same `404 { error: "not found" }`: unknown,
   malformed, revoked or expired token, or nothing published. `/share/series`
   answers the same `404` for a key off the allowlist (every farm key), a key
-  the run doesn't have (`observed_flow` without observed data), and below
-  `k` holders. A body without `token` (or `key`) is `400`.
+  the run doesn't have (`observed_flow` without observed data), and a use
+  key below `k` holders. A body without `token` (or `key`) is `400`.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
@@ -2587,12 +2906,15 @@ never a farm's row, name or id.
   `base` and `run` `null`) or `unverified` (no candidate run's stamp verifies, or the base's fails: `base`, `run` and
   `classified` `null`). `comments` are the notes on it with `public_participation`
   visibility (the newest 500), oldest first, `{ body, author, createdAt, editedAt }` (the
-  author's display name: posting a public comment says so). No other farm's
-  name, id or figures, no member list, no e-mail, no allocation holder.
+  author's display name: posting a public comment says so). `objection`
+  (166): `{ address, closingDate }` from the application's notice, or
+  `null`. No other farm's name, id or figures, no member list, no e-mail,
+  no allocation holder.
 - `SharePack` (WP-3.15, 128, `app_share_pack`, a redacted projection of
   the pack's own frozen report,
   [evidence-pack.md § Sharing and comments](./evidence-pack.md#sharing-and-comments)):
-  `{ project: { id }, pack: { id, title, mode, version, shortCode }, verify, figures, comments }`.
+  `{ project: { id }, pack: { id, title, mode, version, shortCode }, verify, figures, comments, objection }`
+  (`objection` as a scenario link's, for an application's pack; else `null`).
   `verify` is exactly [`GET /verify/:code`](#evidence-packs)'s `pack` for
   it. `figures`, only while the pack is `issued` (`null` once superseded or
   withdrawn: `verify.status`, `withdrawnReason` and `successorSha256` say
@@ -2618,6 +2940,163 @@ never a farm's row, name or id.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
   `revokedBy`), not yet as audit events (WP-2.4,
   [followups.md](./followups.md)).
+
+## Catchment map
+
+The map's features, GeoJSON imports, areas accepted from polygons and the
+quaternary lookup (issue #288, roadmap WP-3.12, `152_catchment_map.sql`,
+[maps.md](./maps.md)). Geometry is GeoJSON in WGS84 longitude/latitude, 2D;
+every geometry is checked and every area computed on the server
+(`backend/src/geo`). Nothing here changes the model except `area-from-map`,
+`dam-capacity-from-register` and `dam-area-from-map` (one value each, an
+editor's explicit action), and the quaternary lookup and the dam proposals
+only propose.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
+| GET | `/projects/:id/map/linked-nodes` | – | `{ nodeIds: string[] }`: each node at least one feature is linked to, once, and no geometry. The "Show on map" links on Network, Hydrological units and Dams (issue #326) read this rather than the feature list. A farmer gets `403`, as from `/map/features` | viewer |
+| POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry, traced? }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one. `traced: { lon, lat, minOccurrence: 10 \| 25 \| 50 \| 75, edited }` (#326 C2, a `dam` or `other` polygon only): the outline was traced from the water occurrence data at that point; the server traces it again, refuses (`400`) an outline sent with `edited: false` that isn't that trace, writes the method in `properties.description` and audits `map.feature_created` with `from: 'dam_trace'`, the dataset, the share and `edited`; `409` when tracing is off, `422` with `details.reason` when the point no longer traces, `429` past the trace cap (as `POST …/map/dam-trace`; a `traced` save counts as a trace) | editor |
+| PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
+| POST | `/projects/:id/map/features/:fid/split` | `{ parts: [Polygon, Polygon], names?: [string, string], as?: 'farm_parcel' \| 'other' }` | `201 { features: [MapFeature, MapFeature] }` (#326 C2; the cut is made in the browser, `draw/split.ts`). Each part passes the geometry checks; together their areas must be the shape's within 0.1 % (+1 m²) and they must lie within its bounds (else `400`). A parcel, dam or other area keeps its id, name and link on the first part (renamed by `names[0]`) and the second is a new feature of its kind (`names[1]`, default "<name> (part 2)", no node, `properties.description` "Split from “<name>” along a drawn line."). The catchment boundary stays whole and both parts are new `as` features (default `other`, named "<boundary> part 1/2"); `as` on anything else is a `400`. `400` for a point, a line, or a polygon with holes or several parts. One `map.feature_split` event: the shape's id, kind and name, `into`, both parts' ids and areas | editor |
+| GET | `/projects/:id/map/dam-trace` | – | `200 { available, dataset: { label, attribution, fingerprint, maxZoom, bounds } \| null }`: whether tracing a dam is on (`WATER_URL` configured and readable) | viewer |
+| POST | `/projects/:id/map/dam-trace` | `{ lon, lat, minOccurrence?: 10 \| 25 \| 50 \| 75 }` (default 25) | `200 { trace: { click, seed, snapDistanceM, geometry: Polygon, areaM2, cells, cellSizeM, zoom, minOccurrence, dataset, attribution, datasetFingerprint, method, methodVersion } }`: the outline of the water round the point (#326 C2, [maps.md § Assisted drawing](./maps.md#assisted-drawing)); nothing is saved or audited. `409` when tracing is off; `422 { details: { reason } }` refused: `outside` the data, `no_data` there or at the water's edge, `no_water` (none at that share within about 60 m), `too_large` (past about 16 km), `too_small`, `outline`; `429` past 300 traces a project or 600 a user an hour (every attempt counted before the work, refused ones too; saving a traced outline counts one), with `Retry-After`; `503` when the data can't be read | editor |
+| DELETE | `/projects/:id/map/features/:fid` | – | `204`; its import goes with its last feature. A node whose area came from it keeps the area and loses the link | editor |
+| POST | `/projects/:id/map/import/preview` | `{ fileName, text }`: the file, under the import's own body limit | `200 { fileName, sha256, duplicate, currentBoundary: { name } \| null, features: { index, geometryType, name, areaM2, kind, kindFrom: 'property' \| 'geometry', note?, nodeId }[], problems: { feature: n \| null, message }[], nodes: { id, name, kind }[] }`. Saves nothing. Each feature's proposed kind (from a `kind`/`type`/`layer` property, else its shape; [maps.md § Uploads](./maps.md#uploads)) and the node of the same name it can stand for; a refused feature is a row with `geometryType`, `kind` null and its problem in `problems`; `duplicate` when the same file (SHA-256) is in already; `currentBoundary` the project's boundary now (a row imported as the boundary replaces it, so the review warns and asks for `replaceBoundary`). Issue #326 D2 | editor |
+| POST | `/projects/:id/map/import` | `{ fileName, text }` and either `features: { index, kind, name?, nodeId? }[]` (every feature of the file once, as reviewed; `name` omitted keeps the file's, `nodeId` omitted links by name, `null` none) or `kind` (every feature that kind), and `replaceBoundary?: boolean` (with `features`). The file ≤ 5 MB; this route has its own body limit, 7 MB of JSON | `201 { source: { id, fileName, sha256 }, features }`. With `kind`: a `catchment_boundary` file's polygons become one boundary; other kinds one feature each, linked to a node of the same name (case-insensitive) and a fitting kind. A boundary replaces the project's current one: with `features`, only with `replaceBoundary: true` (else `409` naming the current boundary, and nothing is imported); the one-kind `kind: 'catchment_boundary'` import names the whole file the boundary and replaces it without the flag, as before. A file holds at most one. `422 { error, details: { feature: n \| null, message }[] }` with every problem, per feature (a kind that doesn't fit the geometry, a node of a kind the feature can't stand for, two boundaries, a refused geometry; nothing is imported); `400` for both or neither of `kind`/`features`, a feature listed twice or missing, or another project's node; `409` for the same file twice (SHA-256; the same answer when two identical imports race past the check and the unique index stops the second) or a reviewed boundary that would replace the current one without `replaceBoundary: true`; `413` over the limit | editor |
+| POST | `/projects/:id/nodes/:nodeId/area-from-map` | `{ featureId }` | `200 { nodeId, areaKm2, areaSource: 'map', areaFeatureId, revisionId }`: the farm's `areaKm2` set to the polygon's area, recorded as a model revision whose reason names the feature (History, the run comparison's diff). `400` for a node that isn't a farm, a feature without an area, or a dam or the catchment boundary (only a `farm_parcel` or an `other` polygon is a unit's catchment area; `AREA_KINDS`); `404` for another project's feature | editor |
+| GET | `/projects/:id/map/stations` | `?lon=&lat=` (both or neither), `?within=` km (default 50, at most 200) | `{ point: [lon, lat] \| null, pointFrom: 'query' \| 'outlet_gauge' \| 'boundary_centre' \| null, pointName, withinKm, stations: GaugeStationProposal[], datasets: { dataset, count }[] }`: the river gauges (H codes) in `gauge_station_reference` within `within` km of the point, nearest first (ties by code), at most 10; each `{ code, name, river, lon, lat, catchmentKm2, recordStart, recordEnd, recordYears, distanceKm, dataset, synthetic, source }`. Without a point, the catchment's outlet: the map gauge linked to the outflow gauge node, else the boundary's centre, else `point: null` and no stations ([maps.md § Gauging stations](./maps.md#gauging-stations)). Writes nothing (issue #326 B-gauge) | viewer |
+| GET | `/projects/:id/map/quaternary` | `?lon=&lat=` | `{ point: [lon, lat], quaternary: QuaternaryProposal \| null, datasets: { dataset, count }[] }`: the quaternary in the loaded dataset that contains the point (null: none does, or none is loaded). Writes nothing | viewer |
+| GET | `/projects/:id/map/rivers` | `?bbox=minLon,minLat,maxLon,maxLat` (WGS84, west < east, south < north, at most 2° a side) | `{ bbox, reaches: RiverReach[], truncated, datasets: { dataset, count }[] }`: the reaches of `river_reference` whose bounding box meets the bbox, the highest Strahler order first (then the largest area upstream, then id), at most 1000 (`truncated` when there are more); each `{ dataset, reachId, name, strahler, upstreamKm2, lengthKm, dischargeM3s, synthetic, source, geometry, featureId }`, `featureId` the project's river feature added from it, or null. The Map tab's **River network** layer (issue #345, `geo/rivers.ts`, [maps.md § River network](./maps.md#river-network)). `400` for a missing, malformed, inverted or oversized bbox; a farmer `403` | viewer |
+| POST | `/projects/:id/map/rivers/add` | `{ dataset, reachId }` | `201 { feature: MapFeature }`: that one reach added as the project's `river` feature, named after it ("Reach <id>" when unnamed), its source in `properties.description` and `river-network:<dataset>:<reachId>` in `properties.ref`; audited as `map.feature_created` with `from: 'river_network'`. `404` for a reach not in the loaded network, `409` when it is on the map already (an advisory lock serialises two adds), `400` for a bad body | editor |
+| GET | `/projects/:id/map/quaternaries` | `?bbox=minLon,minLat,maxLon,maxLat` (WGS84, west < east, south < north, at most 5° a side) | `{ bbox, quaternaries: { code, dataset, synthetic, geometry }[], truncated, datasets: { dataset, count }[] }`: the quaternaries whose bounding box meets the bbox, by code, at most 100 (`truncated` when there are more); codes and outlines only, no reference values (those stay with `/map/quaternary`). The Map tab's **Quaternary catchments** layer (issue #326 A6, `geo/quaternaryLayer.ts`). `400` for a missing, malformed, inverted or oversized bbox; a farmer `403` | viewer |
+| GET | `/projects/:id/nodes/:nodeId/dam-proposals` | – | `200 { nodeId, nodeName, current: { damCapacityM3, damAreaFullM2 }, dam: { id, name, geometryType, point: [lon, lat], areaM2 } \| null, radiusM: 1000, register: RegisterDamProposal[], area: { featureId, featureName, areaM2, method } \| null, datasets: { dataset, count }[] }` (issue #326 B-dams, `geo/damRoutes.ts`, [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)): the hydrological unit's dam on the map (a linked `dam` feature, a polygon first, then the earliest), the registered dams within 1 km of its centroid or point, nearest first, at most 5, and the polygon's area as the full-supply area (`null` for a point). `dam: null` when no dam feature is linked. `current` is the saved model's. Writes nothing. `400` for a node that isn't a farm; `404` for another project's node | viewer |
+| POST | `/projects/:id/nodes/:nodeId/dam-capacity-from-register` | `{ registerNo }` | `200 { nodeId, damCapacityM3, registerNo, revisionId }`: the unit's `damCapacityM3` set to the registered dam's capacity, recorded as a model revision whose reason names the dam, its number, capacity, distance and source line. The server re-derives the proposals: `400` for a node that isn't a farm, a unit with no dam on the map, a register number not within 1 km of it (or not loaded), or an entry without a capacity; `404` for another project's node. The number is matched case-insensitively | editor |
+| POST | `/projects/:id/nodes/:nodeId/dam-area-from-map` | `{ featureId }` | `200 { nodeId, damAreaFullM2, areaFeatureId, revisionId }`: the unit's `damAreaFullM2` set to the dam polygon's geodesic area, recorded as a model revision whose reason names the feature. `400` for a node that isn't a farm, a feature that isn't a `dam`, a dam point (no area), a dam linked to another unit, or a unit with no dam capacity; `404` for another project's feature or node | editor |
+| GET | `/projects/:id/nodes/:nodeId/cropland-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { nodeId, nodeName, dataset: CroplandDataset \| null, datasets: { dataset, version, synthetic }[], parcels: { featureId, name, areaM2, cultivatedM2 }[], unit: { areaM2, cultivatedM2 } \| null, catchment: { featureId, name, areaM2, cultivatedM2 } \| null, crops: { cropId, name, areaM2, accepted: CropAreaFromLandCover \| null }[] }` (issue #326 B-landcover, `geo/croplandRoutes.ts`, [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)): each `farm_parcel` linked to the unit (oldest first) with its area and the area the land cover maps as cropland in it (m², rounded), their sum (`unit`, null without parcels), the catchment boundary's for reference, and the project's crops with the unit's planted area now (0 = none) and where an accepted area came from. A polygon that can't be summarised (too big) has `problem` in place of the figures. No dataset loaded: `dataset: null` and no figures. Writes nothing. `400` for a node that isn't a farm or an unknown dataset; `404` for another project's node | viewer |
+| POST | `/projects/:id/nodes/:nodeId/crop-area-from-land-cover` | `{ cropId, dataset, featureId? }` | `200 { nodeId, cropId, areaM2, dataset, revisionId }`: the crop's planted area on the unit set to the cultivated area of the unit's parcels (or the one parcel `featureId`), re-derived on the server, recorded as a model revision whose reason cites the dataset, its version and the method, and as a `crop_area_land_cover` row (174). The client names the crop; the land cover never does. `400` for a node that isn't a farm, an unknown dataset, a unit with no parcel, a feature that isn't a parcel linked to it, parcels the land cover can't summarise or with no cropland; `404` for another project's node, crop or feature | editor |
+| GET | `/projects/:id/evaporation-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { dataset: EvaporationDataset \| null, datasets: { dataset, kind, version, synthetic }[], boundary: { featureId, name } \| null, target: 'pe' \| 'apan' \| null, proposal: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null, settings: { apanMm, peKind, peMm, dailyApan }, accepted: EvaporationAccepted[] }` (issue #326 B-evap, `geo/evaporationRoutes.ts`, [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)): the catchment boundary's 12 monthly means (Oct … Sep, mm, to 0.1) from the grid, area-weighted over the cells it covers, with the share of the boundary that has values; `target` is where the dataset's kind goes (`et0` → `pe`, GR4J's monthly PE; `apan` → `apan`, the A-pan row), never converted. `settings` is the saved settings' A-pan row, PE kind and monthly PE row (null under `pan`), and `dailyApan`, the days a daily A-pan record (`evap_apan_mm`) covers, `{ from, to }` to its last value, or null without one: it replaces the monthly A-pan row on those days, and the panel's confirmation says so. `proposal: null` without a dataset or a boundary; `{ problem }` when the grid can't stand for it (no value inside, under 50 % covered, too big). Writes nothing. `400` for an unknown dataset | viewer |
+| POST | `/projects/:id/evaporation-from-map` | `{ dataset }` | `200 { target, monthlyMm, dataset, revisionId }`: the 12 values, re-derived on the server from the boundary as it is, written into `settings.pe` (`{ kind: 'monthly', mm, source }`, the source naming the dataset; for a reference-ET grid) or `settings.apanMm` (for an A-pan grid), recorded as one settings revision whose reason cites the dataset, its version, period and method, and as an `evaporation_accepted` row (181). `400` for an unknown dataset, no catchment boundary, a boundary the grid can't summarise, or no evaporation in it | editor |
+
+- `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
+  'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
+  areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
+  `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
+  points and lines; `center` is a point itself, a polygon's centroid (its
+  largest part's), a line's middle vertex; `properties` holds only
+  `description` and `ref` from a file. A boundary or parcel is a Polygon or
+  MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
+  dam a Point or polygon, `other` any of these. A parcel or dam stands for a
+  farm or water user, a gauge for a gauge; a boundary or river for nothing.
+- `QuaternaryProposal = { code, dataset, synthetic, areaKm2, mapMm, marMm3,
+  monthlyMm3 (12, Oct … Sep, Mm³) | null, periodStart, periodEnd, source,
+  loadedAt }`. `synthetic` is true for the repo's invented dataset. The
+  client fills the WR2012 check's form from it value by value; saving goes
+  through `PATCH /projects/:id` like any typed value.
+- `RegisterDamProposal = { registerNo, name, river, farm, lon, lat,
+  distanceM, capacityM3, wallHeightM, surfaceAreaM2, completionYear,
+  dataset, synthetic, source, loadedAt }`, from `dam_register_reference`
+  (154). `synthetic` is true for the repo's invented register. The wall
+  height and completion year are for reference: the model has no field for
+  them. A capacity or area accepted from a proposal is an ordinary model
+  value afterwards: a later typed change replaces it (History keeps both).
+- `CroplandDataset = { dataset, source, version, method, attribution,
+  cellDeg, classes, loadedAt, synthetic }`, from `cropland_dataset` (173);
+  `method` is the counting in words, cited with every accepted value.
+  `CropAreaFromLandCover = { areaM2, dataset, source, version, method,
+  basis: 'unit' | 'parcel', featureName, acceptedAt, current }`: `current`
+  while the unit's planted area for that crop still equals `areaM2` (a typed
+  change replaces it; History keeps both).
+- `EvaporationDataset = { dataset, kind: 'et0' | 'apan', source, version,
+  method, attribution, firstYear, lastYear, cellDeg, originLon, originLat,
+  loadedAt, synthetic }`, from `evaporation_dataset` (180). `EvaporationAccepted
+  = { target: 'pe' | 'apan', monthlyMm, dataset, kind, source, version,
+  method, coverage, acceptedAt, current }`: `current` while the saved
+  settings still hold `monthlyMm` (to 0.05 mm; a typed change replaces it,
+  History keeps both).
+- Each write is in the audit log (`map.imported`, `map.feature_created`,
+  `map.feature_changed`, `map.feature_deleted`, `map.feature_split`: ids, kind, name, never the
+  geometry; delineation's `map.delineation_*` in [§ Delineation](#delineation)). Farmers and applicants get `403` on every route here (RLS lets
+  them read the boundary, gauges, rivers and their own farm's features, for a
+  later farm view).
+
+## Delineation
+
+A catchment proposed from the DEM upstream of a clicked point, then accepted
+or rejected (issue #326 B-delineate, `175_delineation.sql`,
+`backend/src/delineation/`, [maps.md § Delineation](./maps.md#delineation),
+[design/delineation.md](./design/delineation.md)). Off while the server's
+`DEM_URL` is empty. Nothing here changes the model: an accepted polygon is a
+map feature like any other.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[] }`: the newest 10, any status. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall' }` | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon); nothing is saved. `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included; security.md § Map uploads); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
+| POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+
+- `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
+  'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
+  geometry (a Polygon), areaM2, cells, cellSizeM, zoom, windowCells,
+  dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
+  createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
+  `featureId` the accepted feature (`null` again once it is deleted).
+- Each write is in the audit log (`map.delineation_proposed`,
+  `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
+  kind, the area, the dataset; never the polygon). A stranger gets `404`.
+
+## Start from the map
+
+An empty model started from the map (issue #326 C3, `178_start_proposal.sql`,
+`backend/src/delineation/start.ts` and `subcatchments.ts`, [maps.md § Start
+from the map](./maps.md#start-from-the-map),
+[design/start-from-map.md](./design/start-from-map.md)): the server proposes
+units at the map's dams and abstraction points, each unit's own
+sub-catchment (area and outline), who drains into whom, and the rest of the
+catchment; the editor applies the values they tick. With `DEM_URL` empty the
+proposal has the units only (no areas, everything draining into the outflow
+gauge), and the rest of the catchment is the boundary. A model that has
+nodes is **divided** instead (`182_divide_proposal.sql`,
+`backend/src/delineation/divide.ts`): each point stands for a node, and its
+own area, drains-into and runoff to its dam are proposed beside the node's
+values now, taken only when ticked.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[] }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied | viewer |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge' }[] }` (at most 50, each once) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's); `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, drainsInto, runoffToDam }[], rest: { include, name, area } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …"). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method) and becomes its area with `area_source = 'map'`; an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam = 1` (dam units only). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, or a model that has nodes | editor |
+| POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }` (a start or a division; audited as `map.start_discarded` or `map.divide_discarded`); `409` for one that isn't open | editor |
+| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, points: { featureId, nodeId: uuid \| null }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's; `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
+| POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, drainsInto, runoffToDam, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId } \| { to: 'new', name } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …"). Only what is ticked changes: a ticked area becomes the node's (`area_source = 'map'`, saved as its `farm_parcel`, "<name>: own sub-catchment"; a parcel an earlier start or division made for it is redrawn in place); a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` sets `pctRunoffToDam = 1` (dam units); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to one of the plan's `untouched` units, or a new unit draining into the outflow. Unlinked points are linked to their nodes. `409` for a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values, and the rest's candidates' areas), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
+
+- `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
+  'superseded', plan, fromDem, dataset, datasetFingerprint, method,
+  methodVersion, decision, createdBy, createdAt, decidedBy, decidedAt }`.
+  `plan = { fromDem, outlet: { featureId, name, point, snapDistanceM,
+  foundIn }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
+  (upstream first), rest: { name, areaM2, geometry }, dropped: { featureId,
+  name, reason }[], warnings: string[], cellSizeM, zoom, windowCells }`;
+  `StartUnit = { key (the feature's id), featureName, role, name, point,
+  snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
+  for the outflow gauge), drainsIntoProposed }`. `decision` (once applied):
+  the ticks, the node and parcel ids made, the revision id. Every proposal
+  carries `mode: 'start' | 'divide'`.
+- `DivideProposal` = the same with `mode: 'divide'` and `plan = { mode,
+  outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn },
+  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry
+  }, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
+  dropped, warnings, cellSizeM, zoom, windowCells }`; `DivideUnit = { key,
+  featureName, nodeId (null: a new gauge), name, role, point,
+  snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto, current: {
+  areaKm2, areaSource, downstreamNodeId, downstreamName, pctRunoffToDam } \|
+  null }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
+  land); a gauge's `totalAreaM2` is what it measures.
+- Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
+  `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
+  `map.divide_discarded`: ids and counts; never a polygon). A stranger gets
+  `404`.
 
 ## Notes
 
@@ -2682,7 +3161,7 @@ CORS (gateways aren't browsers), JSON bodies only.
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | GET | `/ingest/v1/whoami` | – | `{ project: { id, name }, key: { id, name, scopes, allowedSeries } }` |
-| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
+| POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null, autoPublishHeld: boolean }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
   `mergeInto`): the series is created if it doesn't exist (only when the
@@ -2719,6 +3198,13 @@ CORS (gateways aren't browsers), JSON bodies only.
   re-run is queued (`rerunQueuedFor: null`), and every automatic re-run
   waits, doing nothing, until a person runs the model
   ([security.md § API keys](./security.md#api-keys)).
+- `autoPublishHeld`: `true` when the push changed days, wasn't held, and
+  no outlier limit could be taken (`limitFrom` would be `null`: the series
+  is too short to judge by, so only negatives were checked). The automatic
+  re-run is queued as usual, but it isn't **published** by itself (even with
+  `publish: 'if_no_new_warnings'`) until a person runs the model; the merge
+  records `series.unchecked` as the key ([security.md § API
+  keys](./security.md#api-keys)).
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in
@@ -2760,6 +3246,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 50 MB; streamed like every CSV, [Export](#export)) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
+| GET | `/projects/:id/farm/:nodeId/map` | `FarmMap = { features: { id, kind, name, geometry, areaM2, center, credit? }[] }`: the farm's map (issue #326 A3): the parcels and dams linked to **this** farm, then the gauges, rivers and catchment boundary for orientation, never another farm's feature or an `other` one, and no node id, properties or author; `credit: 'hydrorivers'` (2026-10-02) on a river added from a HydroRIVERS reach, so the map shows that licence's credit (maps.md § Sources), absent otherwise. The query names the farm, so a viewer previewing it gets what its farmer gets. `{ features: [] }` when the farm has no parcel or dam on the map (the page shows no map). No status: the page colours the land from the farm view's own band. `404` for a farm the caller can't open. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/privacy-contact` | `{ wuaName, contact: { organisation, name, email, postal } \| null }`: "Who decides about your farm's information" (POPIA s18(1)(b), 168): the project's team's name and its privacy contact ([Teams](#teams)), for every member, farmers included, through `app_project_privacy_contact` (a farmer can't read the team row); nothing else about the team. `contact` is `null` for a project without a team or a team without a contact; `wuaName` as in `FarmIndex`. `404` for a non-member | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
 - `farm` is the stored `FarmProjection` (season and last-30 totals, the dam,
@@ -3018,6 +3506,59 @@ kept fit is the server's too.
   automatic re-run); with `apply` and signed-off rules, its job applies the
   kept fit and makes an `auto` run.
 
+## Assessments
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311)): several scenarios on one
+base run, each alone and all together, run by one background `assessment`
+job on the base run's stored input. **Editors only**: an assessment names
+submitted applications, which neither contributors nor viewers read.
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| POST | `/projects/:id/assessments` | `{ name, scenarioIds, dryRun? }` | `202 { assessment: Assessment, jobId, job: JobMeta }`; with `dryRun: true`, `200 { check: { ok: true, conflicts: [], problems: [] } }` and nothing written | editor |
+| GET | `/projects/:id/assessments` | – | `{ assessments: Assessment[] }`, newest first, **without** `report` | editor |
+| GET | `/projects/:id/assessments/:aid` | – | `{ assessment: Assessment }` with its `report`; `404` for one that isn't this project's | editor |
+
+- Body (strict): `name` 1–200 characters (trimmed); `scenarioIds` **2–8**
+  distinct UUIDs (`ASSESSMENT_SCENARIOS_MIN`/`MAX`).
+- Each scenario must be one the caller reads in this project (`404`: an
+  application still a draft is its applicant's alone), a team scenario or a
+  submitted or decided application (`409` for a withdrawn one), and all on
+  one base run (`422 these scenarios are based on different runs …`). The
+  base run is rebuilt from its stored input as for a scenario (`409` when it
+  can't be).
+- **Refused, never merged:** `422` when the scenarios don't combine, with
+  `details: { conflicts, problems }`. A conflict is
+  `{ reason: 'same_target' | 'removed_in_use', target, a, b, message }`,
+  `a`/`b` = `{ scenario, scenarioId, opIndex, op }`; `problems` are lines
+  naming the scenario (`"App B" alone: op 2 …`, or `"App B": op 1 …` for an
+  op that applies alone but not on top of the others). The message says how
+  many conflicts. Nothing is written.
+- **At most 2 assessment jobs queued or running per user** (`429`; a dry run
+  doesn't count). A job gets 2 attempts. A project keeps its newest **20**
+  assessments; one goes with its base run.
+- `Assessment = { id, name, baseRunId, baseRun: { id, label, createdAt },
+  status, problems, report?, engineVersion, job, createdBy, createdAt,
+  completedAt, members: AssessmentMember[] }`. `status`: `pending`, then
+  `complete` (`report` is the engine's `CumulativeReport`), `refused` (the
+  job found the scenarios no longer combine, or one doesn't apply alone;
+  `problems` says why) or `failed` (the engine refused an input). `job` as
+  for a sweep.
+- `AssessmentMember = { id, position, scenarioId, name, origin, opsSha256,
+  opCount, status, problems, startDate, endDate }`: the scenario's ops are
+  **copied** when the assessment is written (by the database, never from the
+  request), so a team scenario edited or deleted later (`scenarioId` then
+  `null`) doesn't change it. `status`: `pending`, `done` (its run alone is
+  stored), `problems` or `failed`.
+- `CumulativeReport = { scenarios: [{ id, name }], rows: CumulativeRow[],
+  warnings }`; a row is one measure at one EWR site (`siteNodeId` null = the
+  outlet) or of the catchment (`site` null): `{ metric, siteNodeId, site,
+  isOutlet, unit, higherIsWorse, baseline, singles[], combined,
+  singleChanges[], sumOfSingles, combinedChange, interaction }`, a missing
+  value `null` ([scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)
+  lists the measures).
+
 ## Seasonal outlooks
 
 The seasonal outlook (issue #53 R5, [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core),
@@ -3147,13 +3688,15 @@ gauge, merged into one series each ([architecture.md § Data feeds](./architectu
 | POST | `/projects/:id/feeds` | `FeedInput` | `201 { feed: FeedMeta }`. `409` if another feed already writes that series, or the project has 20 feeds, or the series holds another CHIRPS product or version (below) | owner |
 | PATCH | `/projects/:id/feeds/:feedId` | any of `FeedInput`'s fields | `200 { feed }`. The fields sent replace the saved ones, and the whole is validated again (a new `source` needs its `config`). Saving makes you the feed's acting user; a new source, place or series clears its health. The version check below runs when the save changes the source, the product or the target; `replaceSeries: true` alone confirms replacing the current target | owner |
 | DELETE | `/projects/:id/feeds/:feedId` | – | `204`. The series keeps its days | owner |
+| GET | `/projects/:id/feeds/chirps/from-boundary` | – | The rain feed from the map's catchment boundary (issue #326 B-rain, [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)): `{ boundary: { featureId, name, updatedAt, areaKm2 }, cells: { lat, lon, weight, share }[], rows, cellsKm2, insideKm2, method, apply, canApply }`. `apply` is what Apply would do: `{ action: "none", feedId }` (a CHIRPS feed reads this version already), `{ action: "update", feedId, targetKind, targetName }` (a CHIRPS feed whose series holds no days) or `{ action: "create", targetKind: "rain_chirps_mm", targetName }` (`""`, or `"CHIRPS boundary"` when that series holds a record). `409 { error, details: { code } }`: `no_boundary`, or `boundary_cells` (too big: over 100 cells or 25 rows; not a polygon; beyond 60°) | editor |
+| POST | `/projects/:id/feeds/chirps/from-boundary` | `{ featureId, updatedAt, feedId?, targetName? }`, strict | Apply it: with `feedId`, `200 { feed }` gives that CHIRPS feed the cells (its product, start date and threshold kept); without, `201 { feed }` attaches a CHIRPS feed into `rain_chirps_mm` / `targetName` (default: the proposal's). The feed's `config` is `{ cells, boundary }` (`boundary` as in the proposal; only this route writes it, and the plain routes refuse it with `400`). Records `feed.configured` with `boundary: { featureId, name }` and `cells` (the count). `409`: `boundary_changed` (the boundary's id or `updatedAt` isn't the current one: another project's feature never matches), `no_boundary`, `boundary_cells`, `series_area` (the target series already holds a record: a feed never splices two areas), `feed_fetching` (with `feedId`: a fetch for that feed is still out, asked for with its old cells; the feed's row is held while it checks, so a late answer can't land under the new cells), a non-CHIRPS feed, the 20-feed cap; `404` for a feed not in the project | owner |
 | POST | `/projects/:id/feeds/:feedId/run-now` | – | `202 { job: JobMeta, created: true }`: a `feed_fetch` is queued, due now, as you. One pending fetch per feed: while one waits, `200 { job, created: false }`, and a pending one waiting for later (a backfill's next window, a retry) is made due now. Rate-limited per feed (`RUN_NOW_RATE`, feeds/routes.ts): 6 presses that queue a fetch or pull a waiting one forward, then one more every 10 minutes; a press onto a fetch already due takes none. Past that, `429 { error, details: { retryAfter } }` with `Retry-After` (seconds), and nothing is queued or moved. `409` for a switched-off feed | editor |
 
 - `FeedInput = { source, config, targetKind?, targetName?, schedule?, enabled?, replaceSeries? }`,
   strict (unknown fields are `400`):
   - `source` ∈ `chirps`, `chirps_gefs`, `dws`;
   - `config` for `chirps` / `chirps_gefs`: exactly one of `{ cells: { lat, lon, weight? }[] }`,
-    1–25 cells, lat −60…60, lon −180…180, weight > 0 (default 1), or
+    1–100 cells in at most 25 grid rows (issue #326 B-rain raised it from 25, the box's limit), lat −60…60, lon −180…180, weight > 0 (default 1), or
     `{ bbox: { south, west, north, east } }` in degrees (south < north, west <
     east, no crossing of 180°, the same ranges), read as the area-weighted mean
     of every 0.05° cell the box overlaps and at most 100 cells in 25 rows

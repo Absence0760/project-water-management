@@ -180,14 +180,17 @@ export function volumeRows(base: SharedRun, run: SharedRun): VolumeRow[] {
 export function statusLine(sc: ShareScenario['scenario']): string {
 	if (sc.status === 'decided') {
 		const when = sc.decidedAt ? fmtStampDay(sc.decidedAt) : '';
+		// The responsible authority's decision, in the Act's words (163_licensing_authority).
 		const outcome =
-			sc.outcome === 'approved'
-				? t('Approved')
-				: sc.outcome === 'approved_with_conditions'
-					? t('Approved with conditions')
-					: sc.outcome === 'refused'
-						? t('Refused')
-						: t('Decided');
+			sc.outcome === 'licence_issued'
+				? t('Licence issued')
+				: sc.outcome === 'licence_refused'
+					? t('Licence refused')
+					: sc.outcome === 'application_rejected'
+						? t('Application rejected')
+						: sc.outcome === 'not_considered'
+							? t('Not considered: use already authorised')
+							: t('Decided');
 		return when ? t('{outcome} on {date}.', { outcome, date: when }) : `${outcome}.`;
 	}
 	return sc.submittedAt ? t('Submitted on {date}, awaiting a decision.', { date: fmtStampDay(sc.submittedAt) }) : t('Submitted, awaiting a decision.');

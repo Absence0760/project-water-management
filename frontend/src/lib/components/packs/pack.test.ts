@@ -5,8 +5,8 @@
 import { packManifestText, type PackManifest } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Pack } from '$lib/api';
-import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, sha256Hex, verifyUrl } from './pack';
+import type { Pack, PackReproductionState } from '$lib/api';
+import { checkableAccept, checkableFiles, checkFile, errataFoundSinceNote, issueChecklist, issuedOf, latestOnly, lookUpCode, manifestFileName, manifestFileText, packHref, packStamp, packsByScenario, packsOfRun, packVerifyLine, packVerifyRef, reproductionNote, sha256Hex, verifyUrl } from './pack';
 
 const tz = process.env.TZ;
 afterEach(() => {
@@ -200,6 +200,12 @@ describe('issueChecklist', () => {
 	it('fails a draft missing an erratum found since it was made, saying to draft it again', () => {
 		const stale = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: false, signed: true });
 		expect(stale.filter((c) => !c.ok).map((c) => c.id)).toEqual(['errataRecorded']);
+		// The registration check (167): listed only while the project requires it, naming who isn't checked.
+		expect(issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: true, registrationCheckRequired: false, registrationUnchecked: ['Dr X'] }).map((c) => c.id)).not.toContain(
+			'registrationChecked'
+		);
+		const unchecked = issueChecklist({ issuable: true, runsVerified: true, errataRecorded: true, signed: true, registrationCheckRequired: true, registrationUnchecked: ['Dr X'] });
+		expect(unchecked.filter((c) => !c.ok)).toEqual([expect.objectContaining({ id: 'registrationChecked', todo: expect.stringContaining('Dr X') })]);
 		expect(stale[2]!.todo).toMatch(/can’t be issued\. Draft the pack again/);
 	});
 });
@@ -272,5 +278,76 @@ describe('errataFoundSinceNote', () => {
 		expect(n.note).toMatch(/so it can’t be issued: draft the pack again/);
 		// A pack withdrawn before it was issued was never issued either.
 		expect(errataFoundSinceNote(pack({ status: 'withdrawn', issuedAt: null })).heading).toBe('Errata found since this draft was made');
+	});
+});
+
+describe('reproductionNote', () => {
+	const ok = (id: string) => ({ id, ok: true, detail: 'fine' });
+	const bad = (id: string) => ({ id, ok: false, detail: 'differs' });
+	const state = (over: Partial<PackReproductionState>): PackReproductionState => ({
+		status: 'none',
+		engineVersion: null,
+		runEngines: [],
+		checkedAt: null,
+		checks: [],
+		error: null,
+		serverEngine: '9.1.0',
+		canRerun: false,
+		...over
+	});
+
+	it('says nothing for a draft; offers a pack issued before re-runs its first', () => {
+		expect(reproductionNote(state({}))).toBeNull();
+		expect(reproductionNote(state({ canRerun: true }))).toMatchObject({ tone: 'quiet', text: expect.stringMatching(/^Not re-run on the server yet/), rerun: 'Re-run on the server' });
+	});
+
+	it('offers an editor a re-run on the server’s newer engine, beside the older engine’s outcome; never on its own engine', () => {
+		const older = reproductionNote(state({ status: 'reproduced', engineVersion: '9.0.0', serverEngine: '9.1.0', canRerun: true, checks: [ok('reproduce:baseline')] }))!;
+		expect(older.rerun).toBe('Re-run on engine 9.1.0');
+		expect(older.text).toMatch(/The server now runs engine 9\.1\.0: re-run it to record that engine’s outcome beside this one\.$/);
+		for (const status of ['not_reproduced', 'other_engine'] as const) {
+			expect(reproductionNote(state({ status, engineVersion: '9.0.0', runEngines: ['8.0.0'], serverEngine: '9.1.0', canRerun: true }))!.rerun).toBe('Re-run on engine 9.1.0');
+		}
+		// Its own engine's outcome stands; the server says when it can't be asked (a viewer reads the same state).
+		expect(reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', canRerun: false }))!.rerun).toBeNull();
+		expect(reproductionNote(state({ status: 'reproduced', engineVersion: '9.0.0', canRerun: false }))!.text).not.toContain('now runs');
+		// No bundle: another engine has nothing to re-run either.
+		expect(reproductionNote(state({ status: 'no_bundle', engineVersion: '9.0.0', canRerun: true }))!.rerun).toBeNull();
+	});
+
+	it('names the engine, the date and both runs when it reproduced; one run for a baseline pack', () => {
+		process.env.TZ = 'Pacific/Kiritimati';
+		const both = reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', runEngines: ['9.1.0'], checkedAt: '2026-09-30T23:30:00Z', checks: [ok('stored'), ok('reproduce:baseline'), ok('reproduce:application')] }))!;
+		expect(both.tone).toBe('good');
+		expect(both.text).toMatch(/^Reproduced on the server on 2026-10-01: re-run with engine 9\.1\.0 .*both its runs gave the same results, and every one of its 3 checks passed/);
+		expect(both.failed).toEqual([]);
+		const one = reproductionNote(state({ status: 'reproduced', engineVersion: '9.1.0', checks: [ok('reproduce:baseline')] }))!;
+		expect(one.text).toContain('its run gave the same results');
+		expect(one.text).not.toContain(' on 2');
+	});
+
+	it('lists the failed checks when it didn’t reproduce', () => {
+		const n = reproductionNote(state({ status: 'not_reproduced', engineVersion: '9.1.0', checks: [ok('stored'), bad('results:baseline'), bad('reproduce:baseline')] }))!;
+		expect(n.tone).toBe('bad');
+		expect(n.text).toContain('2 checks failed');
+		expect(n.failed.map((c) => c.id)).toEqual(['results:baseline', 'reproduce:baseline']);
+		expect(reproductionNote(state({ status: 'not_reproduced', engineVersion: '9.1.0', checks: [bad('stored')] }))!.text).toContain('1 check failed');
+	});
+
+	it('warns, rather than fails, when only the re-runs differ on another engine than the runs’', () => {
+		const n = reproductionNote(state({ status: 'other_engine', engineVersion: '9.2.0', runEngines: ['9.1.0'], checks: [ok('files'), bad('reproduce:baseline'), bad('reproduce:application')] }))!;
+		expect(n.tone).toBe('warn');
+		expect(n.text).toContain('made with engine 9.1.0 and the server runs 9.2.0, on which their results differ');
+		expect(n.text).toContain('check out engine 9.1.0');
+	});
+
+	it('says the server is re-running it, that it couldn’t (with the reason), or that there is no bundle', () => {
+		expect(reproductionNote(state({ status: 'checking' }))).toMatchObject({ tone: 'quiet', text: expect.stringMatching(/is re-running/) });
+		expect(reproductionNote(state({ status: 'failed', error: 'the store was down' }))).toMatchObject({ tone: 'bad', text: 'The server couldn’t re-run this pack: the store was down' });
+		expect(reproductionNote(state({ status: 'failed' }))!.text).toBe('The server couldn’t re-run this pack.');
+		// A re-run that gave up may be asked for again; one still running may not.
+		expect(reproductionNote(state({ status: 'failed', canRerun: true }))!.rerun).toBe('Try again');
+		expect(reproductionNote(state({ status: 'checking' }))!.rerun).toBeNull();
+		expect(reproductionNote(state({ status: 'no_bundle' }))!.text).toMatch(/without a reproduction bundle/);
 	});
 });

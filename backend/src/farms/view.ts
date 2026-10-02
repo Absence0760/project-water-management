@@ -13,11 +13,14 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
+import { centerOf, type Geometry, type Position } from '../geo/geojson.js';
+import { isUnnamedReach } from '../geo/reachName.js';
 import { csvDownload } from '../export/download.js';
 import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
 import { isStale } from '../portfolio/status.js';
+import { projectPrivacyContact } from '../teams/privacyContact.js';
 import type { StoredCatchmentView } from '../publish/publish.js';
 
 const isoDate = z
@@ -144,7 +147,84 @@ export async function farmerProjection(db: Db, projectId: string, nodeId: string
 	return { ...view, river: { ...view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 }
 
+/** What the farm's map draws (FarmMap): its own parcels and dams, and the catchment's boundary, rivers and gauges for orientation. */
+export type FarmMapKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river';
+
+/** One feature on a farm's map: no node id, no properties, no author (FarmMap). */
+export interface FarmMapFeature {
+	id: string;
+	kind: FarmMapKind;
+	name: string;
+	geometry: Geometry;
+	/** Geodesic area of a polygon, m²; null for points and lines. */
+	areaM2: number | null;
+	/** A point at its middle (lon, lat). */
+	center: Position;
+	/**
+	 * The licence credit the map must show while it draws this feature: only
+	 * 'hydrorivers', on a river added from a HydroRIVERS reach (its `ref`,
+	 * geo/rivers.ts riverRef; docs/maps.md § Sources). Absent otherwise. Its
+	 * properties themselves never leave (no author, no node).
+	 */
+	credit?: 'hydrorivers';
+}
+
+/** A river feature added from a HydroRIVERS reach: its ref names the dataset (`river-network:HydroRIVERS-v10:<id>`). */
+export const hydroRiversRef = (ref: string | null | undefined): boolean => !!ref && /^river-network:hydro\s*(rivers|sheds)/i.test(ref);
+
+/** GET /projects/:id/farm/:nodeId/map (issue #326 A3, WP-2.6). */
+export interface FarmMap {
+	features: FarmMapFeature[];
+}
+
+/** The order a farm's map lists its features in: the farm's own first, then the orientation features. */
+const FARM_MAP_ORDER: Record<FarmMapKind, number> = { farm_parcel: 0, dam: 1, gauge: 2, river: 3, catchment_boundary: 4 };
+
+/**
+ * A farm's map (issue #326 A3, decision D-A1/A3): the parcels and dams linked
+ * to *this* farm, and the boundary, rivers and gauges (public orientation, as
+ * the farm view's gauge names are). Never another farm's parcel or dam: the
+ * query names the farm, so a viewer previewing it (whose RLS reads every
+ * feature) is answered as its farmer is, and the farmer's RLS
+ * (map_feature_select_farmer, 152) is the second layer. No status here: the
+ * page colours the parcel from the farm view's own published figures. Empty
+ * when the farm has no parcel or dam on the map, and the page then shows no map.
+ */
+export async function farmMap(db: Db, projectId: string, nodeId: string): Promise<FarmMap> {
+	const { rows } = await db.query<{ id: string; kind: FarmMapKind; name: string; geometry: Geometry; area_m2: number | null; ref: string | null }>(
+		`SELECT id, kind, name, geometry, area_m2, properties ->> 'ref' AS ref FROM map_feature
+		 WHERE project_id = $1
+			AND (kind IN ('catchment_boundary', 'river', 'gauge') OR (kind IN ('farm_parcel', 'dam') AND node_id = $2))`,
+		[projectId, nodeId]
+	);
+	if (!rows.some((r) => r.kind === 'farm_parcel' || r.kind === 'dam')) return { features: [] };
+	const features = rows
+		.map((r) => ({
+			id: r.id,
+			kind: r.kind,
+			// A reach added without a name of its own ("Reach 11234567"): no name, so the card says "A river" (persona-farmer, round 4).
+			name: r.kind === 'river' && isUnnamedReach(r.name, r.ref) ? '' : r.name,
+			geometry: r.geometry,
+			areaM2: r.area_m2,
+			center: centerOf(r.geometry),
+			...(r.kind === 'river' && hydroRiversRef(r.ref) ? { credit: 'hydrorivers' as const } : {})
+		}))
+		.sort((a, b) => FARM_MAP_ORDER[a.kind] - FARM_MAP_ORDER[b.kind] || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+	return { features };
+}
+
 export const farmViewRoutes = new Hono<AuthEnv>()
+	// Who decides about this project's information (POPIA s18(1)(b), 168): its team's name and privacy contact,
+	// for every member, farmers included (the farm menu's "Who decides about your farm's information").
+	// contact null: the project has no team, or the team has set no contact.
+	.get('/:id/privacy-contact', async (c) => {
+		const id = c.req.param('id');
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'farmer');
+			const { rows: p } = await db.query<{ wuaName: string | null }>('SELECT wua_name AS "wuaName" FROM project WHERE id = $1', [id]);
+			return c.json({ wuaName: p[0]?.wuaName ?? null, contact: await projectPrivacyContact(db, id) });
+		});
+	})
 	// The caller's farms in this project, and whether anything is published.
 	.get('/:id/farm', async (c) => {
 		const id = c.req.param('id');
@@ -209,6 +289,14 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				registered: await farmRegistered(db, id, nodeId, today)
 			};
 			return c.json(body);
+		});
+	})
+	// The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges.
+	.get('/:id/farm/:nodeId/map', async (c) => {
+		const { id, nodeId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireFarm(db, id, nodeId);
+			return c.json(await farmMap(db, id, nodeId), 200, { 'Cache-Control': 'no-store' });
 		});
 	})
 	// "Who can see my farm" (design §10.2): names and roles, never emails.

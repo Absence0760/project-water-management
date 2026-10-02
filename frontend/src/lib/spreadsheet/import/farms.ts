@@ -1,7 +1,7 @@
 // [Farm spec]: each farm's areas, flow share, dam and irrigation parameters,
 // and the fragmentation method (extract_project.py read_farm_spec and
 // farm_operating_rules).
-import { DAM_AREA_EXPONENT, irrigationFromReturnFlow, type FlowShareMethod } from '@water-management/engine';
+import { DAM_AREA_EXPONENT, irrigationFromReturnFlow, type FlowShareMethod, type NetworkNode } from '@water-management/engine';
 import { cellAddress, clean, num, pyFormatG, pyRepr } from './cells';
 import type { Report } from './report';
 import type { B023Workbook } from './workbook';
@@ -152,15 +152,14 @@ export function farmOperatingRules(name: string, spec: Partial<FarmSpec>, report
 // where a real farm dam holds days to months of its diversion) or holds
 // exactly a whole number of m³/s for one day and takes none of the farm's own
 // runoff (a real on-channel dam catches that runoff too, which rules out a
-// surveyed capacity that happens to be a multiple of 86,400 m³). The importer
-// only warns: the modeller confirms, and run-of-river supply waits for pump
-// capacity (#54, 2c).
+// surveyed capacity that happens to be a multiple of 86,400 m³). By default the
+// importer only warns, for the modeller to confirm; the run-of-river option
+// converts the flagged units (asRunOfRiver, below).
 const RUN_OF_RIVER_PCT_UPSTREAM = 0.9999; // 100 %, allowing for float rounding
 const RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION = 0.01;
 const RUN_OF_RIVER_POOL_MAX_M3 = 1;
 const SECONDS_PER_DAY = 86400;
 
-/** run_of_river_note(): a WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river. */
 /** The WARNING for a farm with no dam that takes 100 % of the upstream inflow (no_dam_note; same text). */
 export function noDamNote(name: string): string {
 	return (
@@ -170,6 +169,7 @@ export function noDamNote(name: string): string {
 	);
 }
 
+/** run_of_river_note(): a WARNING when a farm's dam looks like b023's dummy dam for a unit that pumps from the river. */
 export function runOfRiverNote(name: string, pctUpstream: number, capacity: number, divert: number, pctRunoff: number): string | null {
 	if (pctUpstream < RUN_OF_RIVER_PCT_UPSTREAM) return null;
 	// No dam at all: the engine lets a dam-less farm irrigate from the river routed to it, with no limit
@@ -188,5 +188,58 @@ export function runOfRiverNote(name: string, pctUpstream: number, capacity: numb
 		`WARNING: farm ${name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream ` +
 		`inflow and ${why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; ` +
 		'the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)'
+	);
+}
+
+// A probable placeholder pool (issue #90 Q18): extract_project.py
+// placeholder_pool_note, whose comment has the reasoning. A farm dam that takes
+// less than 100 % of the upstream inflow (so runOfRiverNote never flags it) and
+// holds under 100 m³ (less than a day of one hectare's peak irrigation) or under
+// 1 % of a day of its diversion capacity stores nothing across a daily step.
+const PLACEHOLDER_POOL_MAX_M3 = 100;
+
+/** placeholder_pool_note(): a WARNING for a near-empty dam runOfRiverNote leaves alone (same text). */
+export function placeholderPoolNote(name: string, pctUpstream: number, capacity: number, divert: number): string | null {
+	if (capacity <= 0 || pctUpstream >= RUN_OF_RIVER_PCT_UPSTREAM) return null;
+	if (!(capacity < PLACEHOLDER_POOL_MAX_M3 || capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert)) return null;
+	return (
+		`WARNING: farm ${name}: probable placeholder pool, for the modeller to confirm: its dam holds ${pyFormatG(capacity)} m³, ` +
+		`less than a day's peak irrigation of one hectare, and takes ${pyFormatG(pctUpstream * 100)} % of the upstream inflow, ` +
+		'so it stores nothing from one day to the next. If it is a placeholder, set the dam capacity to 0; if the unit ' +
+		'pumps from the river, set its supply rule to run of river with a pump capacity (issue #90 Q18)'
+	);
+}
+
+/**
+ * as_run_of_river(): with the run-of-river option (--run-of-river), turn a
+ * unit runOfRiverNote() flags into a run-of-river unit, in place, and say so
+ * (same text). b023 has no pump capacity, and nothing in it caps what a dummy
+ * dam or a dam-less farm takes from the water routed to it, so the river pump
+ * is left uncapped (null), as the workbook had it; the modeller enters the
+ * real capacity. A dummy dam's storage is dropped, since run of river has no
+ * dam (the model rules refuse one). A unit that is the source of an enabled
+ * transfer from its dam keeps the dam, which the transfer draws on, and the
+ * note says why nothing changed. New keys go after the existing ones, as
+ * Python's dict.update() puts them (the parity test compares key order).
+ */
+export function asRunOfRiver(
+	node: Pick<NetworkNode, 'name' | 'damCapacityM3' | 'damInitialPct' | 'supplyRule' | 'pumpCapacityM3Day'>,
+	sourceOfTransfer: boolean
+): string {
+	const name = node.name;
+	if (sourceOfTransfer) {
+		return (
+			`WARNING: farm ${name}: not imported as run of river (--run-of-river): an enabled transfer draws on its dam, ` +
+			'so it stays a farm dam; convert it by hand once the transfer is settled (issue #54, 2d)'
+		);
+	}
+	const dropped = node.damCapacityM3;
+	Object.assign(node, { damCapacityM3: 0, damInitialPct: 0, supplyRule: 'runOfRiver', pumpCapacityM3Day: null });
+	const what = dropped > 0 ? `its ${Math.floor(dropped + 0.5)} m³ dummy dam is dropped` : 'it has no dam';
+	return (
+		`WARNING: farm ${name}: imported as run of river (--run-of-river): ${what}, and a river pump takes its demand ` +
+		'from the river below it. The workbook gives no pump capacity (b023 has none, and nothing there capped this ' +
+		"unit's take), so the pump is uncapped and each run warns; enter the capacity in the Network tab's Supply " +
+		'section (issue #54, 2c/2d)'
 	);
 }

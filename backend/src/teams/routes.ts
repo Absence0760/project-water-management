@@ -8,14 +8,24 @@ import { accountByEmail, countInvites, inviteByEmail } from '../invites/invites.
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
+import { requireStepUp } from '../auth/stepUp.js';
 import { readJson } from '../http/body.js';
 import { recordTeamAudit } from '../history/record.js';
 import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatch } from './settings.js';
+import { PrivacyContactInput, toPrivacyContact } from './privacyContact.js';
 
 const RoleEnum = z.enum(TEAM_ROLES);
 const Name = z.string().trim().min(1).max(200);
 
+/**
+ * Friendly 409 before the deferred team_member_keep_admin trigger would abort
+ * the commit. Locks the team's admin rows first, in user order, so two
+ * admins leaving (or demoting each other) at the same moment can't both
+ * pass: the second waits for the first and then counts what it committed
+ * (149_last_owner_lock, as assertNotLastOwner in projects/routes.ts).
+ */
 async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
+	await db.query(`SELECT 1 FROM team_member WHERE team_id = $1 AND role = 'admin' ORDER BY user_id FOR UPDATE`, [teamId]);
 	const { rows } = await db.query<{ admins: number; target_is_admin: boolean }>(
 		`SELECT count(*) FILTER (WHERE role = 'admin')::int AS admins,
 			bool_or(user_id = $2 AND role = 'admin') AS target_is_admin
@@ -29,7 +39,7 @@ async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 const PROJECT_ROLE: Record<TeamRole, string> = { viewer: 'viewer', member: 'editor', admin: 'owner' };
 
 /** A team member as a team_member.* audit subject names them: the team, the person, their team role and what it makes them here. */
-async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
+export async function memberSubject(db: Db, teamId: string, userId: string): Promise<Record<string, unknown> | null> {
 	const { rows } = await db.query<{ team: string; display_name: string; role: TeamRole }>(
 		`SELECT t.name AS team, u.display_name, m.role FROM team_member m JOIN team t ON t.id = m.team_id JOIN app_user u ON u.id = m.user_id
 		 WHERE m.team_id = $1 AND m.user_id = $2`,
@@ -42,21 +52,33 @@ async function memberSubject(db: Db, teamId: string, userId: string): Promise<Re
 const TEAM_SUMMARY = `t.id, t.name, app_team_role(t.id) AS role, t.created_at AS "createdAt",
 	(SELECT count(*)::int FROM team_member m WHERE m.team_id = t.id) AS "memberCount",
 	(SELECT count(*)::int FROM project p WHERE p.team_id = t.id) AS "projectCount",
-	t.settings`;
+	t.settings, t.privacy_contact_name, t.privacy_contact_email, t.privacy_contact_postal`;
 
-/** A team as the API returns it: the stored settings, and the portfolio thresholds they come to (the team's or the defaults). */
-const toTeam = <T extends { settings: unknown }>(row: T) => ({ ...row, portfolioThresholds: appliedThresholds(row.settings) });
+type TeamRow = { settings: unknown; privacy_contact_name: string | null; privacy_contact_email: string | null; privacy_contact_postal: string | null };
+
+/**
+ * A team as the API returns it: the stored settings, the portfolio thresholds they come to (the team's or the
+ * defaults), and its privacy contact (168; null = not set).
+ */
+const toTeam = <T extends TeamRow>({ privacy_contact_name, privacy_contact_email, privacy_contact_postal, ...row }: T) => ({
+	...row,
+	portfolioThresholds: appliedThresholds(row.settings),
+	privacyContact: toPrivacyContact({ privacy_contact_name, privacy_contact_email, privacy_contact_postal })
+});
 
 async function getTeam(db: Db, id: string) {
-	const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
+	const { rows } = await db.query<TeamRow>(`SELECT ${TEAM_SUMMARY} FROM team t WHERE t.id = $1`, [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return toTeam(rows[0]);
 }
 
 const TeamPatch = z
-	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional() })
+	// privacyContact: the organisation's privacy contact (168, POPIA s18(1)(b)); null removes it.
+	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional(), privacyContact: PrivacyContactInput.nullable().optional() })
 	.strict()
-	.refine((b) => b.name !== undefined || b.settings !== undefined, { message: 'nothing to change: send name or settings' });
+	.refine((b) => b.name !== undefined || b.settings !== undefined || b.privacyContact !== undefined, {
+		message: 'nothing to change: send name, settings or privacyContact'
+	});
 
 /**
  * Change the team's settings (admin; the caller checked). Records
@@ -84,7 +106,7 @@ async function patchSettings(db: Db, id: string, patch: TeamSettingsPatch) {
 export const teamRoutes = new Hono<AuthEnv>()
 	.get('/', async (c) =>
 		withUser(c.get('userId'), async (db) => {
-			const { rows } = await db.query<{ settings: unknown }>(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
+			const { rows } = await db.query<TeamRow>(`SELECT ${TEAM_SUMMARY} FROM team t ORDER BY t.name`);
 			return c.json({ teams: rows.map(toTeam) });
 		})
 	)
@@ -118,6 +140,17 @@ export const teamRoutes = new Hono<AuthEnv>()
 			await requireTeamRole(db, id, 'admin');
 			if (body.name !== undefined) mustChange(await db.query('UPDATE team SET name = $2 WHERE id = $1', [id, body.name]));
 			if (body.settings) await patchSettings(db, id, body.settings);
+			if (body.privacyContact !== undefined) {
+				const pc = body.privacyContact;
+				mustChange(
+					await db.query('UPDATE team SET privacy_contact_name = $2, privacy_contact_email = $3, privacy_contact_postal = $4 WHERE id = $1', [
+						id,
+						pc?.name ?? null,
+						pc?.email ?? null,
+						pc?.postal ?? null
+					])
+				);
+			}
 			return c.json({ team: await getTeam(db, id) });
 		});
 	})
@@ -125,6 +158,15 @@ export const teamRoutes = new Hono<AuthEnv>()
 		withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
+			// A team that keeps public records (161, NARSSA s13(2)(a)) is kept until the client confirms
+			// their disposal to the operator; team_public_records_guard refuses the DELETE too.
+			const { rows: kept } = await db.query<{ kept: boolean }>('SELECT public_records AND records_disposal_confirmed_on IS NULL AS kept FROM team WHERE id = $1', [id]);
+			if (kept[0]?.kept)
+				throw new ApiError(
+					409,
+					"this team can't be deleted yet: it keeps public records (a government body's records under the National Archives Act), so it is deleted only after the organisation confirms to the operator, in writing, that it holds its records or has a disposal authority.",
+					{ publicRecords: true }
+				);
 			// Recorded first, while the projects are still the team's: every member
 			// loses the access the team gave them on each one.
 			const { rows } = await db.query<{ name: string; members: number }>(
@@ -184,6 +226,8 @@ export const teamRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireTeamRole(db, id, 'viewer');
 			if (userId !== c.get('userId') && role !== 'admin') throw new ApiError(403, 'requires team admin');
+			// Removing someone else is a team admin's action: two-step sign-in (auth/stepUp.ts). Leaving isn't.
+			if (userId !== c.get('userId')) await requireStepUp(db);
 			if (!UUID.test(userId)) throw new ApiError(404, 'not found');
 			await assertNotLastAdmin(db, id, userId);
 			// Recorded before the row goes, while the leaver can still write events on the team's projects.

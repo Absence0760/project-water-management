@@ -16,8 +16,15 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
+import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
+import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
+import { fileURLToPath } from 'node:url';
+import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
+import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
+import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { splitHalves } from '../__tests__/routeSamples.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -127,6 +134,26 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/members/${c.member.id}`, { role: 'editor' })
 	},
 	{
+		// The host's check of a member's registration (167_signers), recorded before the member leaves below.
+		route: `POST ${P}/members/:userId/registration-checks`,
+		records: ['registration.checked'],
+		call: (c) =>
+			c.owner.call('POST', `${at(c)}/members/${c.member.id}/registration-checks`, {
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationNo: '400999/20',
+				registerName: 'Guard Member',
+				outcome: 'registered',
+				checkedByOrg: 'Guard WUA',
+				checkedAt: '2026-01-01'
+			})
+	},
+	{
+		route: `PUT ${P}/registration-check-required`,
+		records: ['registration.requirement'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/registration-check-required`, { required: false })
+	},
+	{
 		route: `DELETE ${P}/members/:userId`,
 		records: ['member.removed'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/members/${c.member.id}`)
@@ -223,6 +250,15 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } })
 	},
 	{
+		route: `POST ${P}/publication/:pubId/endorse`,
+		records: ['publication.endorsed', 'member.authority'],
+		call: async (c) => {
+			// Marking the owner as acting for the authority is its own recorded change (member.authority, 163).
+			expect((await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `${at(c)}/publication/${c.pubId}/endorse`, { note: 'Accepted as the baseline.' });
+		}
+	},
+	{
 		route: `POST ${P}/share-links`,
 		records: ['share_link.created'],
 		call: async (c) => {
@@ -250,6 +286,17 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/api-keys/:keyId`,
 		records: ['api_key.revoked'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/api-keys/${c.apiKeyId}`)
+	},
+	// The licence record (161). Confirmed first: once an outcome is recorded there is no review to confirm.
+	{
+		route: `POST ${P}/licence-record/confirm`,
+		records: ['licence.confirmed'],
+		call: (c) => c.owner.call('POST', `${at(c)}/licence-record/confirm`)
+	},
+	{
+		route: `PUT ${P}/licence-record`,
+		records: ['licence.outcome'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/licence-record`, { outcome: 'refused', outcomeOn: '2026-03-01', reason: 'guard' })
 	},
 	// Alert rules (WP-2.13). Saved switched off here, so no alert check is left queued for other files' ticks.
 	{
@@ -359,6 +406,195 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['allocation.import_deleted'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/allocations/sources/${c.allocationSourceId}`)
 	},
+	{
+		route: `PUT ${P}/allocations/viewer-units`,
+		records: ['allocation.viewer_units'],
+		call: (c) => c.owner.call('PUT', `${at(c)}/allocations/viewer-units`, { on: true })
+	},
+	// --- the Map tab (152, issue #288) -----------------------------------------------------
+	{
+		route: `POST ${P}/map/import`,
+		records: ['map.imported'],
+		call: async (c) => {
+			const square = [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]];
+			const text = JSON.stringify({ type: 'Feature', properties: { name: 'Guard parcel' }, geometry: { type: 'Polygon', coordinates: square } });
+			const r = await c.owner.call('POST', `${at(c)}/map/import`, { fileName: 'guard.geojson', kind: 'farm_parcel', text });
+			c.mapParcelId = r.body.features[0].id;
+			return r;
+		}
+	},
+	{
+		// An area from the map is a model change: a revision whose reason names the feature.
+		route: `POST ${P}/nodes/:nodeId/area-from-map`,
+		records: ['revision'],
+		call: (c) => c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/area-from-map`, { featureId: c.mapParcelId })
+	},
+	{
+		// A dam's full-supply area from its polygon (issue #326 B-dams): a revision whose reason names the dam.
+		route: `POST ${P}/nodes/:nodeId/dam-area-from-map`,
+		records: ['revision'],
+		call: async (c) => {
+			// Round the synthetic register's Z100/07, so the next entry has a registered dam to propose.
+			const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
+			const f = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'dam', name: 'Guard dam', nodeId: c.farmId, geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-area-from-map`, { featureId: f.body.feature.id });
+		}
+	},
+	{
+		// A dam's capacity from the register of dams: a revision whose reason names the registered dam.
+		route: `POST ${P}/nodes/:nodeId/dam-capacity-from-register`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/dam-capacity-from-register`, { registerNo: 'Z100/07' });
+		}
+	},
+	{
+		// A planted area from land cover (issue #326 B-landcover): a revision whose reason names the dataset, version and method.
+		route: `POST ${P}/nodes/:nodeId/crop-area-from-land-cover`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
+			// Inside the synthetic grid's 0.5 block, linked to Farm A.
+			const square = [[[21.33, -33.67], [21.34, -33.67], [21.34, -33.66], [21.33, -33.66], [21.33, -33.67]]];
+			const f = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard field', nodeId: c.farmId, geometry: { type: 'Polygon', coordinates: square } });
+			expect(f.status).toBe(201);
+			return c.owner.call('POST', `${at(c)}/nodes/${c.farmId}/crop-area-from-land-cover`, { cropId: c.cropId, dataset: 'synthetic' });
+		}
+	},
+	{
+		route: `POST ${P}/map/features`,
+		records: ['map.feature_created'],
+		call: async (c) => {
+			const r = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'gauge', name: 'Guard gauge', lon: 21.31, lat: -33.69 });
+			c.mapPointId = r.body.feature.id;
+			return r;
+		}
+	},
+	{
+		route: `PATCH ${P}/map/features/:fid`,
+		records: ['map.feature_changed'],
+		call: (c) => c.owner.call('PATCH', `${at(c)}/map/features/${c.mapPointId}`, { name: 'Guard weir' })
+	},
+	{
+		// A reach of the river network added as a river feature (issue #345): recorded as a feature placed, from the network.
+		route: `POST ${P}/map/rivers/add`,
+		records: ['map.feature_created'],
+		call: async (c) => {
+			await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/map/rivers/add`, { dataset: 'synthetic', reachId: 90000001 });
+		}
+	},
+	{
+		// A parcel cut in two along a drawn line (issue #326 C2): one event for the split, naming both parts.
+		route: `POST ${P}/map/features/:fid/split`,
+		records: ['map.feature_split'],
+		call: async (c) => {
+			const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
+			const made = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'farm_parcel', name: 'Guard split', geometry: { type: 'Polygon', coordinates: square } });
+			return c.owner.call('POST', `${at(c)}/map/features/${made.body.feature.id}/split`, { parts: splitHalves(21.36, -33.66, 0.01) });
+		}
+	},
+	{
+		route: `DELETE ${P}/map/features/:fid`,
+		records: ['map.feature_deleted'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/map/features/${c.mapPointId}`)
+	},
+	// --- delineation from a click (175, issue #326 B-delineate) -----------------------------
+	{
+		route: `POST ${P}/map/delineation`,
+		records: ['map.delineation_proposed'],
+		call: async (c) => {
+			process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+			const [lon, lat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			const r = await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' });
+			c.delineationId = r.body.proposal?.id;
+			const again = await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' });
+			c.delineationId2 = again.body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/delineation/:pid/reject`,
+		records: ['map.delineation_rejected'],
+		call: async (c) => {
+			// The first proposal was superseded by the second; reject the open one, then propose a third to accept.
+			const r = await c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId2}/reject`);
+			const [lon, lat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			c.delineationId3 = (await c.owner.call('POST', `${at(c)}/map/delineation`, { lon, lat, from: 'outlet' })).body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/delineation/:pid/accept`,
+		records: ['map.delineation_accepted'],
+		call: (c) => c.owner.call('POST', `${at(c)}/map/delineation/${c.delineationId3}/accept`, { as: 'other' })
+	},
+	// --- start a model from the map (178, issue #326 C3): on an empty project of its own ----
+	{
+		route: `POST ${P}/map/start`,
+		records: ['map.start_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+			c.startProject = (await c.owner.call('POST', '/projects', { name: 'Guard start' })).body.project.id;
+			const sat = `/projects/${c.startProject}`;
+			const [olon, olat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y + 0.5);
+			const [dlon, dlat] = fixtureLonLat(OUTLET_CELL.x + 0.5, OUTLET_CELL.y - 99.5);
+			const gauge = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'gauge', name: 'Guard weir', lon: olon, lat: olat })).body.feature.id;
+			const dam = (await c.owner.call('POST', `${sat}/map/features`, { kind: 'dam', name: 'Guard dam', lon: dlon, lat: dlat })).body.feature.id;
+			const body = { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] };
+			const r = await c.owner.call('POST', `${sat}/map/start`, body);
+			c.startBody = body;
+			c.startId = (await c.owner.call('POST', `${sat}/map/start`, body)).body.proposal?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/discard`,
+		records: ['map.start_discarded'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const r = await c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId}/discard`);
+			const again = await c.owner.call('POST', `/projects/${c.startProject}/map/start`, c.startBody);
+			c.startId2 = again.body.proposal?.id;
+			c.startUnits = again.body.proposal?.plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: true, drainsInto: true, runoffToDam: true }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/start/:spid/apply`,
+		records: ['map.start_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) =>
+			c.owner.call('POST', `/projects/${c.startProject}/map/start/${c.startId2}/apply`, {
+				outletName: 'Guard weir',
+				units: c.startUnits,
+				rest: { include: true, name: 'Rest of the catchment', area: true }
+			})
+	},
+	// --- divide that model from the map (182): the dam's point stands for its unit now; the rest a new unit (a change, so a revision) ----
+	{
+		route: `POST ${P}/map/divide`,
+		records: ['map.divide_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const sat = `/projects/${c.startProject}`;
+			const features = (await c.owner.call('GET', `${sat}/map/features`)).body.features as { id: string; kind: string; nodeId: string | null }[];
+			const dam = features.find((f) => f.kind === 'dam')!;
+			const outlet = features.find((f) => f.kind === 'gauge')!;
+			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: dam.id, nodeId: dam.nodeId }] });
+			c.divideId = r.body.proposal?.id;
+			c.divideUnits = r.body.proposal?.plan.units.map((u: { key: string }) => ({ key: u.key, area: true, drainsInto: true, runoffToDam: false, add: false }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/divide/:spid/apply`,
+		records: ['map.divide_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.startProject}/map/divide/${c.divideId}/apply`, { units: c.divideUnits, rest: { to: 'new', name: 'Guard rest, divided' } })
+	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{
 		route: `POST ${P}/scenarios/:sid/submit`,
@@ -380,7 +616,8 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.decided'],
 		call: async (c) => {
 			expect((await c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/submit`)).status).toBe(200);
-			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { outcome: 'approved' });
+			await c.owner.call('PATCH', `${at(c)}/members/${c.owner.id}`, { actsForAuthority: true });
+			return c.owner.call('POST', `${at(c)}/scenarios/${c.scenarioId}/decide`, { ...DECISION, outcome: 'licence_issued' });
 		}
 	},
 	{
@@ -407,6 +644,42 @@ const WRITE_ROUTES: Entry[] = [
 		records: ['scenario.unshared'],
 		call: (c) => (c.applicant as User).call('DELETE', `${at(c)}/scenarios/${c.applicationId}/members/${(c.consultant as User).id}`)
 	},
+	// --- "Ask the assessors why" (164_applicant_visibility) -------------------------------
+	{
+		route: `POST ${P}/scenarios/:sid/questions`,
+		records: ['application.question_asked'],
+		projectOf: (c) => c.questionProject as string,
+		call: async (c) => {
+			// A project of its own: the applicant's flow share pushes the catchment past 100 % only with five hidden farms' shares.
+			const applicant = await signUp('Gasker');
+			const projectId = (await c.owner.call('POST', '/projects', { name: 'Guard questions' })).body.project.id as string;
+			const q = `/projects/${projectId}`;
+			const outlet = node('Gauge', null);
+			const own = node('Asker farm', outlet.id, { flowShareManual: 0.05 });
+			const others = ['A', 'B', 'C', 'D', 'E'].map((n) => node(`Hidden ${n}`, outlet.id, { flowShareManual: 0.18 }));
+			expect((await c.owner.call('PUT', `${q}/model`, { nodes: [outlet, own, ...others], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+			expect((await c.owner.call('PATCH', q, { settings: { apanMm: monthly(150), flowShareMethod: 'manual' } })).status).toBe(200);
+			const rain = Array.from({ length: 40 }, (_, i) => (i % 7 === 0 ? 20 : 0));
+			expect((await c.owner.call('PUT', `${q}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+			const runId = (await c.owner.call('POST', `${q}/runs`, { label: 'Guard questions' })).body.run.id as string;
+			expect((await c.owner.call('POST', `${q}/publication`, { runId })).status).toBe(201);
+			expect((await c.owner.call('POST', `${q}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+			expect((await c.owner.call('PUT', `${q}/farmers/${applicant.id}`, { nodeIds: [own.id] })).status).toBe(200);
+			const ops = [{ op: 'node.set', nodeId: own.id, field: 'flowShareManual', value: 0.3 }];
+			const s = await applicant.call('POST', `${q}/scenarios`, { name: 'Guard asks', baseRunId: runId, ops });
+			expect(s.body.check.maskedRules, JSON.stringify(s.body)).toHaveLength(1);
+			c.questionProject = projectId;
+			const r = await applicant.call('POST', `${q}/scenarios/${s.body.scenario.id}/questions`, { problem: 0, line: s.body.check.problems[0] });
+			c.questionId = r.body.question?.id;
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/application-questions/:qid/answer`,
+		records: ['application.question_answered'],
+		projectOf: (c) => c.questionProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.questionProject}/application-questions/${c.questionId}/answer`, { answer: 'Guard answer' })
+	},
 	// --- feeds and report schedules ------------------------------------------------------
 	{
 		route: `POST ${P}/feeds`,
@@ -426,6 +699,28 @@ const WRITE_ROUTES: Entry[] = [
 		route: `DELETE ${P}/feeds/:feedId`,
 		records: ['feed.configured'],
 		call: (c) => c.owner.call('DELETE', `${at(c)}/feeds/${c.feedId}`)
+	},
+	{
+		// The rain feed from the map's boundary (#326 B-rain): records feed.configured naming the boundary.
+		route: `POST ${P}/feeds/chirps/from-boundary`,
+		records: ['feed.configured'],
+		call: async (c) => {
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-boundary`, { featureId: b.body.feature.id, updatedAt: b.body.feature.updatedAt });
+		}
+	},
+	{
+		// Evaporation from the map (issue #326 B-evap): a settings revision whose reason names the dataset, version and method.
+		route: `POST ${P}/evaporation-from-map`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			expect(b.status).toBe(201);
+			return c.owner.call('POST', `${at(c)}/evaporation-from-map`, { dataset: 'synthetic' });
+		}
 	},
 	{
 		route: `POST ${P}/report-schedules`,
@@ -494,6 +789,19 @@ const WRITE_ROUTES: Entry[] = [
 		needsMinio: true
 	},
 	{
+		// The issued pack sent to a member acting for the responsible authority (licensing build item 13).
+		route: `POST ${P}/packs/:packId/send`,
+		records: ['pack.sent'],
+		call: async (c) => {
+			const assessor = await signUp('Gauthority');
+			expect((await c.owner.call('POST', `/projects/${c.packProjectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+			expect((await c.owner.call('PATCH', `/projects/${c.packProjectId}/members/${assessor.id}`, { actsForAuthority: true })).status).toBe(200);
+			return c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/send`, {});
+		},
+		projectOf: (c) => c.packProjectId as string,
+		needsMinio: true
+	},
+	{
 		route: `POST ${P}/packs/:packId/withdraw`,
 		records: ['pack.withdrawn'],
 		call: (c) => c.owner.call('POST', `/projects/${c.packProjectId}/packs/${c.packId}/withdraw`, { reason: 'Guard withdrawal' }),
@@ -510,6 +818,7 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
+	{ route: `POST ${P}/map/dam-trace`, exempt: 'proposes a dam outline and saves nothing; a traced outline is recorded when it is saved (map.feature_created, from dam_trace)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
 	{
 		route: `POST ${P}/auto-calibrations`,
@@ -520,21 +829,38 @@ const WRITE_ROUTES: Entry[] = [
 		exempt: 'records a settings revision (calibration/store.ts applyCalibration) and run.created for its run; exercised end to end in calibration/calibration.db.test.ts, which needs a fitted calibration this sweep has none of'
 	},
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
+	{
+		route: `POST ${P}/runs/:runId/authorised-impact`,
+		exempt: "computes page 1's board against full authorised use for an application run and keeps it for its evidence report (licensing build item 8); no run is stored and no model, setting, run or publication changes"
+	},
+	{
+		route: `POST ${P}/scenarios/:sid/packs/:packId/pdf`,
+		exempt: "queues the print of an applicant's own copy of an issued pack (165_applicant_copy); the pack, its standing and the model are untouched"
+	},
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (098_nomination_withdrawal.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },
+	{ route: `POST ${P}/map/import/preview`, exempt: 'the import review (issue #326 D2) reads a GeoJSON file and proposes each feature’s kind, and writes nothing; the import records map.imported' },
 	{ route: `POST ${P}/notes`, exempt: 'a note is its own record: its author and created_at are on the row, and a delete is soft (037_notes.sql)' },
 	{ route: `PATCH ${P}/notes/:noteId`, exempt: 'only the author edits their own note, and the row stamps edited_at (037_notes.sql note_guard)' },
 	{ route: `POST ${P}/yield`, exempt: 'queues a yield job; its yield_result row keeps who asked, the job and the engine version, and no input changes (040_yield.sql)' },
 	{ route: `POST ${P}/yield/:jobId/cancel`, exempt: 'stops a queued or running yield job; the job row stamps cancel_requested_at and no input changes (040_yield.sql)' },
+	{
+		route: `POST ${P}/assessments`,
+		exempt: 'queues an assessment job (or with dryRun only checks); the assessment row keeps who asked, its base run, each member’s ops copied from its scenario and the engine version, and no input changes (145_assessment.sql)'
+	},
 	{ route: `POST ${P}/sweeps`, exempt: 'queues a sweep job; the scenario_sweep row keeps who asked, its base run, its members’ ops and the engine version, and no input changes (062_scenario_sweeps.sql)' },
 	{ route: `POST ${P}/outlooks`, exempt: 'queues an outlook job; the seasonal_outlook row keeps who asked, its base run, season, levels and share and the engine version, and no input changes (063_seasonal_outlook.sql)' },
 	{ route: `POST ${P}/reports`, exempt: 'renders a PDF of a run; the report row records who asked (023_reports.sql) and nothing changes' },
 	{
 		route: `POST ${P}/packs/:packId/pdf`,
 		exempt: 'asks again for an issued pack’s PDF; its pack_render job keeps who asked, and the PDF, once recorded, is fixed on the pack (119_pack_render)'
+	},
+	{
+		route: `POST ${P}/packs/:packId/reproduce`,
+		exempt: 're-runs an issued pack on the server again; its pack_reproduce job keeps who asked, and each outcome is its own row, once per engine, with the engine and every check (154_pack_reproduce); no input changes'
 	}
 ];
 
@@ -601,6 +927,7 @@ describe('every write route records its change', () => {
 		ctx.farmId = a.id;
 		ctx.otherFarmId = b.id;
 		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		ctx.cropId = crop.id;
 		const model = {
 			nodes: [outlet, a, b],
 			crops: [crop],
@@ -616,8 +943,12 @@ describe('every write route records its change', () => {
 		expect((await owner!.call('PUT', `/projects/${ctx.projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
 	}, 60_000);
 
-	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render); nothing here runs it, so no later file's tick may claim it.
-	afterAll(() => retirePendingJobs(ctx.packProjectId as string | undefined));
+	// Issuing the pack queues its PDF's render (pack_render, 119_pack_render) and its re-run (pack_reproduce, 154_pack_reproduce); nothing here runs them, so no later file's tick may claim them.
+	// Issuing and withdrawing it also queue its emails (pack_notice, 133): settled here, or the next file's tick sends them into its outbox.
+	afterAll(async () => {
+		await retirePendingJobs(ctx.packProjectId as string | undefined);
+		await settlePendingNotices(ctx.packProjectId as string | undefined);
+	});
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);
 	for (const e of recorded) {
@@ -758,6 +1089,21 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 		},
 		projectsOf: (c) => [c.ingestProjectId as string]
 	},
+	{
+		// "Delete my account" (issue #112): the person leaves every project and team, recorded (as "Deleted user") on each.
+		route: 'DELETE /auth/me',
+		records: ['team_member.removed'],
+		call: async (c) => {
+			// A team of its own: the entries above may have deleted the shared one.
+			const teamId = (await c.admin.call('POST', '/teams', { name: 'Leaver WUA' })).body.team.id;
+			const pid = (await c.admin.call('POST', '/projects', { name: 'Leaver catchment', teamId })).body.project.id;
+			c.leaverProjects = [pid];
+			const leaver = await signUp('Tleaver');
+			expect((await c.admin.call('POST', `/teams/${teamId}/members`, { email: leaver.email, role: 'member' })).status).toBe(201);
+			return leaver.call('DELETE', '/auth/me', { password: 'correct horse' });
+		},
+		projectsOf: (c) => c.leaverProjects as string[]
+	},
 	// --- exempt: they change no project's inputs, results or access ---------------------
 	{ route: 'POST /projects', exempt: 'a new project has nothing to diff yet; its first change records a baseline revision (recordModelRevision)' },
 	{ route: 'POST /teams', exempt: 'a new team has no projects, so no project history; a project moved in records project.changed' },
@@ -765,8 +1111,10 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'PUT /me/alerts/:projectId', exempt: 'a member’s own alert subscription: their preference, not the project’s rules (alert_rules.changed covers those)' },
 	{ route: 'POST /me/alerts/resume', exempt: 'resumes the caller’s own paused alert emails; a personal delivery setting, not project data' },
 	{ route: 'POST /alerts/unsubscribe', exempt: 'a recipient’s one-click unsubscribe from alert emails: a personal delivery setting, not project data' },
+	{ route: 'POST /alerts/feedback', exempt: 'a recipient’s “Was this useful?” answer on their own alert email (151): their own feedback, not project data' },
 	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'POST /share/comment', exempt: 'a public comment through a share link (166_public_participation): the note is the record, with its author and the link it came through, and its edits are kept (note_revision)' },
 	{ route: 'POST /share/scenario', exempt: 'reads one scenario through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'POST /share/pack', exempt: 'reads one evidence pack through a share link; writes nothing to the project (share/routes.ts)' },
 	{ route: 'PATCH /auth/me', exempt: 'the caller’s own account settings; history rows keep a snapshot of the name as it was (actor_label)' },
@@ -780,6 +1128,14 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/me/farm-notice', exempt: 'records the caller’s own acknowledgement of the farm view notice on their account (093); changes no project' },
 	{ route: 'POST /auth/me/accept-terms', exempt: 'records which terms the caller’s own account accepted (app_user.terms_version, stamped by the database); changes no project' },
 	{ route: 'POST /auth/change-password', exempt: 'the caller’s own credential; changes no project, and the password is never logged' },
+	// Two-step sign-in (issue #282): the account's own factor. No project is touched, so no project history; each
+	// change the account would want to see is in its own append-only log, account_security_event (auth/mfa.db.test.ts).
+	{ route: 'POST /auth/mfa/totp/enrol', exempt: 'starts adding the caller’s own authenticator (unconfirmed); no project, and nothing to log until it is confirmed' },
+	{ route: 'POST /auth/mfa/totp/confirm', exempt: 'the caller’s own authenticator turned on; recorded as mfa.enrolled in the account’s own security log, not a project’s history' },
+	{ route: 'DELETE /auth/mfa/totp', exempt: 'the caller’s own authenticator turned off; recorded as mfa.disabled in the account’s own security log, not a project’s history' },
+	{ route: 'POST /auth/mfa/recovery-codes', exempt: 'a new set of the caller’s own recovery codes; recorded as mfa.recovery_regenerated in the account’s own security log' },
+	{ route: 'POST /auth/mfa/step-up', exempt: 'a code again inside the caller’s own session (a sign-off, issuing or withdrawing a pack need one from the last 10 minutes); a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
+	{ route: 'POST /auth/mfa/verify', exempt: 'signs the caller in with a code; a recovery code used is recorded as mfa.recovery_used in the account’s own security log' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },
 	{ route: 'POST /auth/invite-info', exempt: 'reads what an invite token is for, to show on the sign-up page; writes nothing' },

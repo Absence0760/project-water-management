@@ -62,6 +62,9 @@ describe('routeAccess', () => {
 		expect(routeAccess('/alerts/unsubscribe', '', false)).toBe('show');
 		expect(routeAccess('/alerts/unsubscribe', '', true)).toBe('show');
 		expect(isPublicPath('/app/alerts/unsubscribe', '/app')).toBe(true);
+		// Its "Was this useful?" link the same way (151_alert_feedback).
+		expect(routeAccess('/alerts/feedback', '', false)).toBe('show');
+		expect(routeAccess('/alerts/feedback', '', true)).toBe('show');
 		expect(routeAccess('/account/alerts', '', false)).toBe('login');
 		expect(routeAccess('/alerts', '', false)).toBe('login');
 	});
@@ -107,7 +110,7 @@ describe('routeAccess', () => {
 	});
 
 	it('opens the legal pages and the methods page to anyone, signed in or out', () => {
-		for (const p of ['/privacy', '/terms', '/methods']) {
+		for (const p of ['/privacy', '/terms', '/methods', '/data-sources']) {
 			expect(routeAccess(p, '', false)).toBe('show');
 			expect(routeAccess(p, '', true)).toBe('show');
 		}

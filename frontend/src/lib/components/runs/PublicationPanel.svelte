@@ -4,7 +4,9 @@
 	(editors, with a confirm dialog saying what changes for them) and the WUA's
 	restriction notice, which an editor can change without re-publishing.
 	Farmers see the published run's figures for their own farm; everyone on
-	the project sees the notice.
+	the project sees the notice. Whether the responsible authority endorsed
+	this run as a baseline, and, for a member the owner marks as acting for
+	it, the action to endorse it, once (163_licensing_authority).
 -->
 <script lang="ts">
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
@@ -18,6 +20,7 @@
 		current,
 		history,
 		canEdit,
+		actsForAuthority = false,
 		onChange
 	}: {
 		projectId: string;
@@ -26,6 +29,8 @@
 		current: Publication | null;
 		history: PublicationMeta[];
 		canEdit: boolean;
+		/** The caller acts for the responsible authority (163): they endorse a published baseline. */
+		actsForAuthority?: boolean;
 		onChange?: (p: { current: Publication; history: PublicationMeta[] }) => void;
 	} = $props();
 
@@ -35,6 +40,31 @@
 	const blocker = $derived(publishBlocker(run));
 	const noStop = $derived(damsWithoutStopLevel(run.model?.nodes as { kind?: string; damCapacityM3?: number; damMinPct?: number }[] | undefined));
 	const wasPublished = $derived(!isCurrent && history.some((h) => h.runId === run.id));
+	/** This run's newest publication (the history is newest first), and an endorsement of any of them. */
+	const ownPublication = $derived(history.find((h) => h.runId === run.id) ?? null);
+	const endorsement = $derived(history.find((h) => h.runId === run.id && h.endorsement)?.endorsement ?? null);
+
+	let endorseNote = $state('');
+	let endorsing = $state(false);
+	let endorseError = $state<string | null>(null);
+	async function endorse(e: SubmitEvent) {
+		e.preventDefault();
+		if (!ownPublication || !current) return;
+		endorsing = true;
+		endorseError = null;
+		try {
+			const meta = await api.publication.endorse(projectId, ownPublication.id, endorseNote.trim());
+			onChange?.({
+				current: current.id === meta.id ? { ...current, endorsement: meta.endorsement } : current,
+				history: history.map((h) => (h.id === meta.id ? { ...h, endorsement: meta.endorsement } : h))
+			});
+			endorseNote = '';
+		} catch (err) {
+			endorseError = err instanceof Error ? err.message : String(err);
+		} finally {
+			endorsing = false;
+		}
+	}
 
 	let dialogOpen = $state(false);
 	let editing = $state(false);
@@ -173,6 +203,27 @@
 		{/if}
 		{#if wasPublished}It was published before, so it is kept while the publication history holds it.{/if}
 	</p>
+	{#if ownPublication}
+		<p data-testid="publication-endorsement">
+			{#if endorsement}
+				Endorsed for the responsible authority {fmt(endorsement.endorsedAt)}{endorsement.endorsedBy ? ` by ${endorsement.endorsedBy}` : ''}.{#if endorsement.note}
+					<span class="muted">“{endorsement.note}”</span>{/if}
+			{:else}
+				<strong>Not endorsed by the responsible authority.</strong> Evidence reports on this baseline say so on page 1.
+			{/if}
+		</p>
+		{#if actsForAuthority && !endorsement && current}
+			<form class="edit" onsubmit={endorse} aria-label="Endorse this baseline">
+				<label for="{uid}-endorse">Endorsement note <span class="muted">(optional)</span></label>
+				<textarea id="{uid}-endorse" rows="2" maxlength={PUBLICATION_TEXT_MAX} bind:value={endorseNote}></textarea>
+				<div class="acts">
+					<button type="submit" class="btn btn-sm" disabled={endorsing}>{endorsing ? 'Endorsing…' : 'Endorse as the responsible authority'}</button>
+				</div>
+				<p class="muted small">An endorsement is recorded once, with your name, and can’t be changed or withdrawn.</p>
+			</form>
+		{/if}
+		{#if endorseError}<div class="alert alert-error" role="alert">{endorseError}</div>{/if}
+	{/if}
 
 	{#if current}
 		<dl class="notice" aria-label="Current notice">

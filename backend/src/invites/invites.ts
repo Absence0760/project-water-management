@@ -16,7 +16,10 @@
 // so adding someone never tells the adder whether the address has an account,
 // nor shows them its name, and never makes a stranger a member unasked.
 // Owners (projects) / admins (teams) list and revoke pending invites; RLS
-// enforces the same.
+// enforces the same. An invite is good only while its sender still owns the
+// project (administers the team): one whose sender lost that role is listed
+// for the owners as `senderLapsed`, and nobody can accept it until one of them
+// re-sends it, which makes them its sender (155_invite_sender_role.sql).
 import { Hono, type Context } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { issueEmailToken } from '../auth/email-routes.js';
@@ -25,7 +28,8 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { maskEmail, recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
-import { farmerInviteMail, inviteMail, siteLink, sitePage, type InviteMode, type Locale } from '../mail/templates.js';
+import { farmerInviteMail, inviteMail, siteLink, sitePage, type InviteContact, type InviteMode, type Locale } from '../mail/templates.js';
+import { projectPrivacyContact, toPrivacyContact } from '../teams/privacyContact.js';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { requireTeamRole } from '../teams/access.js';
@@ -92,6 +96,7 @@ type InviteRow = {
 	invited_by_name: string;
 	created_at: Date;
 	expires_at: Date;
+	sender_lapsed: boolean | null;
 };
 
 export const toInvite = (r: InviteRow) => ({
@@ -101,12 +106,15 @@ export const toInvite = (r: InviteRow) => ({
 	invitedBy: r.invited_by_name,
 	createdAt: r.created_at.toISOString(),
 	expiresAt: r.expires_at.toISOString(),
-	expired: r.expires_at.getTime() <= Date.now()
+	expired: r.expires_at.getTime() <= Date.now(),
+	// Its sender no longer owns the project (administers the team), so it
+	// can't be accepted until an owner re-sends it (155_invite_sender_role).
+	senderLapsed: r.sender_lapsed === true
 });
 
 const selectInvites = (kind: InviteKind) => `
 	SELECT i.id, i.email, i.${COLS[kind].role}::text AS role, u.display_name AS invited_by_name,
-		i.created_at, i.expires_at
+		i.created_at, i.expires_at, app_invite_sender_lapsed(i.id) AS sender_lapsed
 	FROM invite i JOIN app_user u ON u.id = i.invited_by`;
 
 /** A prepared invite email; send it after the transaction has committed. */
@@ -196,8 +204,9 @@ export async function inviteByEmail(
 		mode = 'confirm';
 	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
+	const contact = await inviteContact(db, kind, targetId);
 	if (farmer) {
-		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms }, mode, locale);
+		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms, contact }, mode, locale);
 		return { invite: toInvite(row), mail };
 	}
 	const mail = inviteMail(
@@ -205,9 +214,25 @@ export async function inviteByEmail(
 		link,
 		row.invited_by_name,
 		{ kind, name: named[0]?.name ?? '', role },
-		mode
+		mode,
+		contact
 	);
 	return { invite: toInvite(row), mail };
+}
+
+/**
+ * Who decides about the information the invite concerns (POPIA s18(1)(b), 168_team_privacy_contact), for the
+ * email: a project's team's contact (the inviter is an owner, so app_project_privacy_contact answers), or the
+ * invited team's own (the inviter is its admin, so team_select shows the row). null when none is set.
+ */
+async function inviteContact(db: Db, kind: InviteKind, targetId: string): Promise<InviteContact | null> {
+	if (kind === 'project') return projectPrivacyContact(db, targetId);
+	const { rows } = await db.query<{ name: string; privacy_contact_name: string | null; privacy_contact_email: string | null; privacy_contact_postal: string | null }>(
+		'SELECT name, privacy_contact_name, privacy_contact_email, privacy_contact_postal FROM team WHERE id = $1',
+		[targetId]
+	);
+	const c = rows[0] ? toPrivacyContact(rows[0]) : null;
+	return c ? { organisation: rows[0]!.name, ...c } : null;
 }
 
 /**

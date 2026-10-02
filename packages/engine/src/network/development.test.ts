@@ -8,7 +8,7 @@ import type { ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
 import { modelRuleIssues } from '../modelRules';
 import { checkWorkings } from '../verify/checks';
-import { abstractionStartDay, capacityScaleOf, damCapacityFactor, damCapacityOn, developmentProblem, DAM_CAPACITY_SERIES } from './development';
+import { abstractionStartDay, capacityScaleOf, damCapacityFactor, damCapacityOn, damPresence, developmentProblem, DAM_CAPACITY_SERIES } from './development';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -84,7 +84,7 @@ describe('the capacity factor', () => {
 		expect(developmentProblem({ ...dam, damSurveyDate: null })).toMatch(/needs the date the capacity was surveyed/);
 		expect(developmentProblem({ ...dam, damSedimentPctPerYear: 0.5 })).toMatch(/0 to 20 %/);
 		expect(developmentProblem({ ...dam, damInServiceFrom: '2021-02-30' })).toMatch(/in-service date must be a date/);
-		expect(developmentProblem({ ...dam, kind: 'user' })).toMatch(/only a farm has a dam/);
+		expect(developmentProblem({ ...dam, kind: 'user' })).toMatch(/only a unit has a dam/);
 		expect(developmentProblem({ ...dam, kind: 'gauge', damSurveyDate: null, damSedimentPctPerYear: null, abstractionFrom: '2021-01-01' })).toMatch(/gauge takes no water/);
 		expect(developmentProblem(dam)).toBeNull();
 		const i = input({ damSedimentPctPerYear: 0.01 });
@@ -95,6 +95,17 @@ describe('the capacity factor', () => {
 		const w: string[] = [];
 		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('1990-01-01'), 60, w);
 		expect(w.join()).toMatch(/holds up to 1\.62 × its surveyed capacity/);
+		// No in-service date: the warning asks for one (provisional decision 2026-10-01, engine-audit.md S1).
+		expect(w.join()).toMatch(/enter the date it came into service/);
+		const dated: string[] = [];
+		capacityScaleOf(
+			node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02, damInServiceFrom: '1985-01-01' }),
+			toEpochDay('1990-01-01'),
+			60,
+			dated
+		);
+		expect(dated.join()).toMatch(/holds up to 1\.62 ×/);
+		expect(dated.join()).not.toMatch(/came into service/);
 		const quiet: string[] = [];
 		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('2019-01-01'), 60, quiet);
 		expect(quiet).toEqual([]);
@@ -123,6 +134,29 @@ describe('the capacity factor', () => {
 		expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2020-01-01' }), d0, 60, w)).toBe(0);
 		expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2030-01-01' }), d0, 60, w)).toBe(60);
 		expect(w).toEqual([]);
+	});
+});
+
+describe('damPresence: is the dam there on every day of a span, and on any', () => {
+	const span = { start: toEpochDay('2021-01-01'), end: toEpochDay('2021-12-31') };
+	const farm = (over: Partial<NetworkNode>) => node('A', 'farm', 'G', { damCapacityM3: 1e5, ...over });
+	it('a dam there throughout, none entered, and a gauge', () => {
+		expect(damPresence(farm({}), span)).toEqual({ always: true, ever: true });
+		expect(damPresence(farm({ damCapacityM3: 0 }), span)).toEqual({ always: false, ever: false });
+		expect(damPresence(node('G', 'gauge', null, { damCapacityM3: 1e5 }), span)).toEqual({ always: false, ever: false });
+	});
+	it('in service inside the span: there on some days; before it: throughout; after it: never', () => {
+		expect(damPresence(farm({ damInServiceFrom: '2021-06-01' }), span)).toEqual({ always: false, ever: true });
+		expect(damPresence(farm({ damInServiceFrom: '2020-06-01' }), span)).toEqual({ always: true, ever: true });
+		expect(damPresence(farm({ damInServiceFrom: '2022-06-01' }), span)).toEqual({ always: false, ever: false });
+	});
+	it('silted empty inside the span: there on some days; silted before it: never; a slow rate: throughout', () => {
+		expect(damPresence(farm({ damSurveyDate: '2016-06-01', damSedimentPctPerYear: 0.2 }), span)).toEqual({ always: false, ever: true });
+		expect(damPresence(farm({ damSurveyDate: '2010-01-01', damSedimentPctPerYear: 0.2 }), span)).toEqual({ always: false, ever: false });
+		expect(damPresence(farm({ damSurveyDate: '2016-06-01', damSedimentPctPerYear: 0.01 }), span)).toEqual({ always: true, ever: true });
+	});
+	it('without a span, the entered capacity alone decides', () => {
+		expect(damPresence(farm({ damInServiceFrom: '2022-06-01' }))).toEqual({ always: true, ever: true });
 	});
 });
 

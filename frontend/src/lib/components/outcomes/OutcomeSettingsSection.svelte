@@ -65,7 +65,7 @@
 		<fieldset class="metric">
 			<legend>
 				{m.legend}
-				{#if !pair}<span class="badge badge-warn" data-testid="cutoffs-pending-{m.id}">Defaults pending the hydrologist</span>{/if}
+				{#if !pair}<span class="badge badge-warn" data-testid="cutoffs-pending-{m.id}">Provisional defaults, not yet confirmed by the catchment’s hydrologist</span>{/if}
 			</legend>
 			<label class="check">
 				<input type="checkbox" disabled={readonly} checked={!pair} onchange={(e) => setDefault(m.id, e.currentTarget.checked)} />

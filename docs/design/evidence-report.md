@@ -193,7 +193,7 @@ engine or backend has it now), *partial*, or *ask* (§9).
 | C23 | Sign-off by a registered natural scientist, bound to a statement hash | Professional responsibility (evidence: roadmap WP-3.13, [SACNASP]) | WP-3.13 | Appendix B.2 |
 | C24 | Reproducibility: input series hashes, ops hash, manifest hash and short code, verify link, reproduction bundle, page count | Verify an unaltered, reproducible report (evidence: roadmap WP-3.1, WP-3.14) | partial: series hashes (Appendix A.3) and stored values built; manifest WP-3.14 | Every footer; Appendix A.3, B.4 |
 | C25 | Registered water use: each unit's registered volumes (WARMS registrations, licences) against its modelled use per water year, baseline and application; units by name, never the holder (D3) | s27 "existing lawful water uses"; the licence applicant persona asked for a registered-vs-modelled row (judgement) | built (WP-3.10 comparison per run, each run's own volumes; no band) | Page 1 row "Registered vs modelled use" and flag; § 5 |
-| C26 | What else is proposed on the baseline: every other submitted or approved application's own change, and their sum | s27 "other water users" (licensing authority persona); a true cumulative run is WP-3.11 | built (`cumulative`, evidence-3): a sum of separate runs, said so, no band | Page 1 row "Other applications on this baseline, summed"; § 4 |
+| C26 | What else is proposed on the baseline: every other submitted or approved application's own change, and all of them with this one in one combined run, with the interaction | s27 "other water users" and the cumulative effect (licensing authority persona; WP-3.11) | built: each one's own run (`cumulative`, evidence-3); the combined run from a cumulative assessment of exactly these applications (`cumulative.combined`, evidence-11), a conflict *Not assessed* with the conflicts named, no band | Page 1 row "This and the other applications on this baseline, together"; § 4 |
 
 ## 4. Information architecture
 
@@ -257,7 +257,7 @@ manifest, and that is when it moves into `evidenceReport`.
 | 1 | The river | Per EWR site: the site strip (C9); month × water-year heat maps, baseline and application side by side, changed months outlined; extra days below the EWR by month of the year (paired interval plot); the flow-duration curve against the EWR curve for the month with the largest change and, beside it, the river's driest month; the compliance table; the application's EWR charge (C16) | C9–C13, C16 |
 | 2 | Uncertainty | The coverage warning if any; the cited ensemble; the ledger of every start on the baseline; the baseline's bands against the nominated run; the paired bands against zero; R1 and R2 | C18 |
 | 3 | Model and data | Calibration record, validation, WR2012 (and the five-statistic table), data-quality checks, the nomination history | C3, C5–C8, C17 |
-| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change and their sum | C14, C15, C26 |
+| 4 | Other users | The downstream table (anonymised), the applicant's own supply and assurance; for a baseline-evidence report, every farm's supply; the other applications on the baseline, each one's own change, and all of them together (each alone, their sum, the combined change, the interaction) | C14, C15, C26 |
 | 5 | Registered water use | The allocation mode each run ran with and the band; the over/under-use chart (modelled ÷ registered per whole water year, both runs); whole years above, within and below per unit and source; every water year's volume and use. *Not assessed* when the runs carry no volumes | C25 |
 | 6 | The applicant's demand objects | Application only (`evidence-9`): each demand object on the applicant's units, or that the application adds, changes or removes, with its sizing, its source and the note on it, its demand in both runs and its share supplied; the share of that demand by source; *Not assessed* when the applicant has none | – |
 
@@ -390,6 +390,80 @@ whose length is the application's; the caution carries it to page 1. A
 pack drafted before `evidence-9` has no `demandObjects`, and its report has
 no § 6 at all, rather than a § 6 saying it wasn't part of the pack: the
 section is new, not a changed one, so the old pack prints as it did.
+
+**Report version `evidence-10`** (issue #54, #90 Q15 and Q16): two checks
+that stop issue on the river abstraction a pack rests on. `pumpCapacity`:
+every river pump, other water user and off-take in either run has a
+capacity (an uncapped pump is limited only by the river's flow, no basis
+for licensing a volume). `protectsEwr`, applications only: the river
+abstraction the application's proposals add or change leaves the EWR, or a
+hands-off flow, in the river in every month it takes, since under the NWA the Reserve comes first and a new
+licence normally carries a hands-off condition. Both read the runs' stored
+models (engine `evidence/riverWorks.ts`). Judgement: issue-blocking, not
+refusing, so the report still previews and says what to fix; the
+baseline's existing users are exempt from the second, because the baseline
+is current use and modelling a protection they may not honour would
+misstate the river the application is measured against; and nothing gates
+a model save or a run, so exploring stays unrestricted. A pack drafted
+before `evidence-10` keeps its frozen checks; issuing it checks the live
+report, which has both ([evidence-pack.md § What stops issue on the
+river](../evidence-pack.md#what-stops-issue-on-the-river)).
+
+**Report version `evidence-11`** (finding C26, WP-3.11): page 1's row over
+the other applications reads one combined run of this application and every
+other submitted or approved one on the baseline, from a completed cumulative
+assessment of exactly those applications and ops, instead of a sum of their
+separate runs; § 4 adds the combined table with the interaction. A conflict
+makes the row *Not assessed*, naming each conflict: never a silent merge.
+Judgement: the report reads a stored assessment rather than running the
+combination itself, since that is up to ten model runs inside a report
+request; it checks the combination for conflicts itself (no model run), so
+a conflict is named before anyone assesses. A pack drafted before
+`evidence-11` keeps its frozen sum ([evidence-pack.md § The other
+applications together](../evidence-pack.md#the-other-applications-together)).
+
+**Report version `evidence-12`** (issue #326 A5): § 1 opens with a site
+locality map, as a licence application normally carries one. It is drawn
+from the project's map features (152 `map_feature`) as they are when the
+report is built: the catchment boundary, the applicant's unit (its parcels
+and dam, from the application's owned nodes, named), every other unit's
+parcels and dams drawn neutrally and never named, rivers, gauges, and the
+gauges that are the report's Reserve sites, with a scale bar, a north arrow,
+coordinate ticks, a legend, the features' date and source files, and "Base:
+the project's map features; no basemap". No tiles: the figure is one SVG the
+engine writes (`geo/localityMap.ts`, a local equirectangular projection on
+the WGS84 radii), the same bytes in the browser, the server's PDF and
+`pnpm reproduce:pack`, so the report names its SHA-256 and a pack's manifest
+freezes both. Judgement: in § 1 rather than on page 1, which stays the
+change table; a figure, not a section, so the section list doesn't move.
+With no map features § 1 says *No locality map: the project has no map
+features*; a pack drafted before `evidence-12` says the figure isn't part of
+it ([evidence-pack.md § The locality map](../evidence-pack.md#the-locality-map)).
+
+**Report version `evidence-13`** (163_licensing_authority; provisional
+position, pre-counsel research, 2026-10-01): the identity block has a
+*For* row naming the project's responsible authority (DWS or a CMA, and its
+office), and *Baseline* says whether that authority endorsed it, when and by
+whom; without an endorsement page 1 carries the caution *Baseline not
+endorsed by the responsible authority.* (a fixed flag, G6). § 4's decided
+applications carry the Act's outcome words; only a licence issued counts
+among the other applications. A pack drafted before `evidence-13` has
+neither ([evidence-pack.md § The responsible authority](../evidence-pack.md#the-responsible-authority)).
+
+**Report version `evidence-14`** (licensing build item 8, decision D15;
+provisional position, pre-counsel research, 2026-10-01): page 1 leads with
+the licence impact board against **full authorised use** (every holder at
+their registered volume) with the authorised volume's mix by how it is held,
+and the board against modelled use follows; a fixed row says when there is
+none. A pack drafted before `evidence-14` says it has no such board
+([evidence-pack.md § Both impact bases](../evidence-pack.md#both-impact-bases)).
+
+**Report version `evidence-15`** (decision D3; provisional position,
+pre-counsel research, 2026-10-01): § 5 lists only the applicant's own units
+one by one; every other unit's registered volume and modelled use is one
+*Other registered users (n units)* total per water source, left out below 5
+units. Page 1's row still counts unit-years per unit. A pack drafted before
+`evidence-15` names every unit ([allocations.md § In the evidence report](../allocations.md#in-the-evidence-report)).
 
 In the mock-up §4 is folded into page 1 because Sandspruit's application has
 two downstream farms; a catchment with more gets its own page.
@@ -527,7 +601,7 @@ source in [`evidence-report-prototype/evidence-report.html`](./evidence-report-p
 
 | Board / sheet | Shows |
 | --- | --- |
-| Board 1 · In-app preview | The route's bar in evidence mode: title, Download draft PDF, Generate PDF (WP-2.15 Phase B), and **Issue** disabled with the reason; the issue checks (nomination, base run, engine, assumptions, cited ensemble and paired band, coverage warning, sign-off missing); page thumbnails |
+| Board 1 · In-app preview | The route's bar in evidence mode: title, Download draft PDF, Generate PDF (WP-2.15 Phase B), and **Issue** disabled with the reason; the issue checks (nomination, base run, engine, assumptions, river pump capacity and the EWR kept, cited ensemble and paired band, coverage warning, sign-off missing); page thumbnails |
 | Board 2 · Refused | A scenario run based on a replaced baseline that also changes the pan coefficient: the two failed checks, and the ways out |
 | Sheet 1 · Summary | §4.1 in full, with the mock-up's figures |
 | Sheet 2 · The river | Site strip ("Class, REC, EWR % nMAR: not given for this site"), the two heat maps with 3 months lost and 1 gained outlined, the paired by-month plot, the May FDC against the EWR curve, the compliance table, R2 |

@@ -257,13 +257,13 @@ describe('operatingOf (issue #204)', () => {
 		expect(r.divertM3DayByMonth![9]).toBe(0); // September, −5
 		expect(r.divertM3DayByMonth![8]).toBe(50);
 		expect(w).toEqual([
-			'farm "F": hands-off flow should have 12 monthly values, has 3; missing months are 0',
-			'farm "F": hands-off flow has a month that is not a size ≥ 0 m³/day; that month is 0',
-			'farm "F": River to dam by month has a month that is not a size ≥ 0 m³/day; that month is 0'
+			'unit "F": hands-off flow should have 12 monthly values, has 3; missing months are 0',
+			'unit "F": hands-off flow has a month that is not a size ≥ 0 m³/day; that month is 0',
+			'unit "F": River to dam by month has a month that is not a size ≥ 0 m³/day; that month is 0'
 		]);
 		const g: string[] = [];
 		expect(operatingOf(node('U', 'user', 'G', { handsOffEwr: true }), g)).toEqual({});
-		expect(g).toEqual(['user "U": only a farm has a hands-off flow and River to dam by month; ignored']);
+		expect(g).toEqual(['user "U": only a unit has a hands-off flow and River to dam by month; ignored']);
 	});
 });
 

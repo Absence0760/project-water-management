@@ -6,6 +6,7 @@ import { addMember, putModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { loadSyntheticLandCover } from '../support/landCover.ts';
 
 const drawer = (page: Page, farm: string) => page.getByRole('dialog', { name: `${farm}: planted areas` });
 
@@ -107,6 +108,11 @@ test('a viewer sees a farm’s planted areas read-only, and a farm that is gone 
 
 test.describe('phone', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
+	// The drawer's land-cover panel shows its map link only with a land-cover
+	// grid loaded; load it here rather than rely on another spec in the shard.
+	test.beforeAll(async () => {
+		await loadSyntheticLandCover();
+	});
 
 	test('the drawer fills the screen and has no violations', async ({ page, owner }) => {
 		void owner;
@@ -120,6 +126,9 @@ test.describe('phone', () => {
 		expect(box.width).toBeGreaterThan(360);
 		await expect(d.getByLabel('Orchard on Upper farm, ha')).toBeFocused();
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+		// Check the drawer whole: the land-cover panel at its foot loaded (its map link is a phone target too).
+		await expect(d.getByTestId('cropland-body')).toHaveAttribute('data-ready', 'true');
+		await expect(d.getByTestId('cropland-catchment').getByRole('link')).toBeVisible();
 		await expectNoViolations(page);
 	});
 });

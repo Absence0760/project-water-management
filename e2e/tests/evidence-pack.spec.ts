@@ -22,6 +22,7 @@ import { addMember, createRun, nominateRun, seedRunnableProject, updateSettings 
 import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { box } from '../support/map.ts';
 
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
 const RULE = { members: 30, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: -10, wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null } };
@@ -100,9 +101,15 @@ async function getPack(request: APIRequestContext, projectId: string, packId: st
 	return ((await (await request.get(`${API_URL}/projects/${projectId}/packs/${packId}`)).json()) as { pack: ApiPack }).pack;
 }
 
-test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser }) => {
+test('a baseline pack is created, signed, issued and verified signed out; a copy is checked in the browser; withdrawn, it says why', async ({ page, owner, browser, signIn }) => {
 	void owner;
-	const { project, baseline } = await seed(page, 'Pack catchment');
+	const { project, baseline, upper } = await seed(page, 'Pack catchment');
+	// § 1's locality map (evidence-12): a boundary and a parcel, read when the pack is drafted.
+	for (const data of [
+		{ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [box(21.3, -33.7, 0.1)] } },
+		{ kind: 'farm_parcel', name: 'Upper block', nodeId: upper, geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.03)] } }
+	])
+		expect((await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data })).status()).toBe(201);
 
 	// The evidence report lists no pack yet, and offers to create one (the report may be issued).
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);
@@ -188,6 +195,13 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	expect(download.suggestedFilename()).toBe(`evidence-pack-${code}-manifest.json`);
 	const manifest = await readFile((await download.path())!);
 
+	// § 1's locality map: the figure on the pack is the SVG whose SHA-256 its manifest names (pixel-free: its bytes and its text).
+	const loc = (JSON.parse(manifest.toString('utf8')) as { report: { localityMap: { svgSha256: string } } }).report.localityMap;
+	const src = (await page.getByTestId('evidence-locality-figure').getAttribute('src'))!;
+	expect(createHash('sha256').update(decodeURIComponent(src.slice(src.indexOf(',') + 1)), 'utf8').digest('hex')).toBe(loc.svgSha256);
+	await expect(page.getByTestId('evidence-locality-sha')).toHaveText(loc.svgSha256);
+	await expect(page.getByTestId('evidence-locality-legend').getByRole('listitem')).toHaveText(['Catchment boundary', 'Units’ parcels']);
+
 	// So does the reproduction bundle, through the API's redirect: its bytes are the ones recorded.
 	expect(issued.bundleSha256).toMatch(/^[0-9a-f]{64}$/);
 	await expect(page.getByTestId('pack-bundle-sha')).toHaveText(issued.bundleSha256!);
@@ -213,6 +227,24 @@ test('a baseline pack is created, signed, issued and verified signed out; a copy
 	await expect(errataSince.getByRole('listitem')).toHaveText('ER-999 A bug found after this pack was issued');
 	await expectNoViolations(page);
 	await page.unroute(packUrl);
+	await page.reload();
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+
+	// Sent to the responsible authority (licensing build item 13): to the member the owner marked as acting for it.
+	await page.getByTestId('pack-send-open').click();
+	const sendDialog = page.getByRole('dialog', { name: 'Send evidence pack v1 to the responsible authority' });
+	await expect(sendDialog.getByTestId('pack-send-none')).toContainText('No other member acts for the responsible authority');
+	await sendDialog.getByRole('button', { name: 'Close', exact: true }).click();
+	const assessor = await signIn('Authority assessor');
+	await addMember(page.request, project.id, assessor.user.email, 'editor');
+	expect((await page.request.patch(`${API_URL}/projects/${project.id}/members/${assessor.user.id}`, { data: { actsForAuthority: true } })).status()).toBe(200);
+	await page.getByTestId('pack-send-open').click();
+	await expect(sendDialog.getByRole('checkbox', { name: 'Authority assessor' })).toBeChecked();
+	await sendDialog.getByLabel('Note (optional)').fill('For the assessment of the catchment baseline.');
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await sendDialog.getByRole('button', { name: 'Send', exact: true }).click();
+	await expect(sendDialog.getByTestId('pack-send-done')).toHaveText('Sent to Authority assessor.');
+	await sendDialog.getByRole('button', { name: 'Close', exact: true }).click();
 
 	// The evidence report lists it now.
 	await page.goto(`/projects/${project.id}/report?run=${baseline}&evidence`);

@@ -53,6 +53,8 @@ export const en = {
 	'mail.invite.signUpExpires': 'This invitation expires in 7 days.',
 	'mail.invite.signUpIgnore': "If you weren't expecting this, you can ignore this email.",
 	'mail.invite.privacy': 'How we handle your information: {url}',
+	'mail.invite.contact': '{organisation} decides about your information in this catchment. Questions about it: {name}, {email}.',
+	'mail.invite.contactPost': 'Or write to {name} at: {postal}',
 	'mail.invite.confirm': 'There is already a {product} account for {email}. Confirm that this is your email address to accept.',
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',
@@ -76,6 +78,11 @@ export const en = {
 	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
 	'mail.alert.unsubscribe': 'Stop these emails',
 	'mail.alert.manage': 'Manage your alerts',
+	// "Was this useful?" (151_alert_feedback): two links to a page that asks before it records anything.
+	'mail.alert.feedback.question': 'Was this alert useful?',
+	'mail.alert.feedback.digestQuestion': 'Was this summary useful?',
+	'mail.alert.feedback.yes': 'Yes',
+	'mail.alert.feedback.no': 'No',
 	'mail.alert.digest.subject': 'Your alerts for {project} — {product}',
 	'mail.alert.digest.heading': 'Your alerts for {project}',
 	'mail.alert.digest.intro': 'Since the last summary:',
@@ -102,6 +109,8 @@ export const en = {
 	'mail.alert.ewr.what': 'River flow at risk in the forecast',
 	'mail.alert.ewr.body':
 		'On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.',
+	'mail.alert.ewr.outOfDate':
+		'This forecast is out of date: it used the rain recorded to {observedTo}, rain has since been recorded to {rainUntil}, and no newer forecast has been made yet. Check the forecast data feed.',
 	'mail.alert.stale.what': 'Data feed behind',
 	'mail.alert.stale.body.one': 'These data feeds are more than {threshold} day later than usual:',
 	'mail.alert.stale.body.other': 'These data feeds are more than {threshold} days later than usual:',
@@ -148,7 +157,22 @@ export const en = {
 	'mail.pack.action': 'Check the pack',
 	'mail.pack.open': 'Open the pack in the catchment',
 	'mail.pack.why.editor': 'You get this email because you can issue and withdraw evidence packs in {project}.',
-	'mail.pack.why.applicant': 'You get this email because the application “{name}” is yours.'
+	'mail.pack.why.applicant': 'You get this email because the application “{name}” is yours.',
+
+	// Your account was deleted (issue #112, DELETE /auth/me): what was done, as POPIA s24(4) asks.
+	'mail.deleted.subject': 'Your account has been deleted — {product}',
+	'mail.deleted.heading': 'Your account has been deleted',
+	'mail.deleted.body': 'As you asked, we deleted the {product} account for {email}.',
+	'mail.deleted.gone':
+		'Deleted with it: your name, email address and password, your memberships and hydrological unit links, your alert choices and the alert emails sent to you, your settings, and any uncertainty result you started and never finished or licence application still in draft.',
+	'mail.deleted.left': 'You are no longer a member of {list}.',
+	'mail.deleted.kept':
+		'Kept without your name: what you made for a project (the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes) and the project’s history. It now reads “a former member” or “Deleted user”, and is never put in someone else’s name.',
+	'mail.deleted.signed':
+		'Kept with your name: a sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.',
+	'mail.deleted.backups': 'Copies in our backups are deleted as the backups expire, within 35 days.',
+	'mail.deleted.action': 'Read the privacy notice',
+	'mail.deleted.notYou': 'If you didn’t delete your account, contact us straight away: the privacy notice says how.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -166,11 +190,13 @@ export const sections: Record<string, string> = {
 	'mail.farmer':
 		'Email: the farmer invite. The WUA gives a farmer access to their hydrological unit(s), the model’s name for a farm, in a catchment. {farms} is one or more hydrological unit names joined with “and” (or “your hydrological unit”).',
 	'mail.invite':
-		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline.',
+		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline. The “contact” lines name the organisation responsible for the catchment’s information ({organisation}, a team’s name) and the person or office to ask about it ({name}, {email}, {postal}, as the organisation typed them); they appear only when the organisation has set a contact.',
 	'mail.alert':
 		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
 	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',
 	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.',
+	'mail.deleted':
+		'Email: sent once an account has been deleted, from the account page’s “Delete my account”, saying what was deleted and what was kept (the law asks us to tell the person what we did). {list} is the names of the catchments and teams they left, joined with “and”.',
 	'mail.pack':
 		'Evidence pack emails: sent to the catchment’s editors and to the applicant when an evidence pack (a frozen, signed copy of the evidence report for a water-use licence application) is issued or withdrawn. {version} and {previous} are numbers; {code} is a short code like “3f2a-91bc-07de”; {project} is the catchment; {what} is one of the “what” lines; {name} is the application’s name (or the “name” line, for baseline evidence).'
 };

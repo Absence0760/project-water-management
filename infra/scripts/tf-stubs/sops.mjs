@@ -12,6 +12,7 @@ const DEFAULT = {
 	db_app_password: 'synthetic0db0password0123456789',
 	alerts_token_secret: 'synthetic0alerts0token0123456789abcdef',
 	cloudfront_private_key: 'synthetic signing key\nsecond line',
+	app_encryption_key: 'synthetic0app0encryption0key0123456789',
 };
 
 const args = process.argv.slice(2);

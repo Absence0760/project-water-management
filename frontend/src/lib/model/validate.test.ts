@@ -133,7 +133,7 @@ describe('validateModel', () => {
 			expect(messages(model([g, l, f, h], { transfers: [{ ...t, lossReturnPct: 0.5, lossReturnNodeId: at }] }))).toContain('Transfer 1: the seepage can rejoin the river only below the source or a hydrological unit downstream of it.');
 	});
 
-	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 3], seepage 0–100 % (N2)', () => {
+	it('checks the dam evaporation fields: area ≥ 0 or unknown, exponent in (0, 1], seepage 0–100 % (N2)', () => {
 		const a = node('a', 'A', null);
 		a.damAreaFullM2 = null;
 		expect(messages(model([a]))).toEqual([]);
@@ -142,9 +142,15 @@ describe('validateModel', () => {
 		a.damSeepagePerDay = 2;
 		expect(messages(model([a]))).toEqual([
 			'"A": percentages must be between 0% and 100%.',
-			'"A": the dam area exponent must be above 0 and at most 3.',
+			'"A": the dam area exponent must be above 0 and at most 1.',
 			'"A": the dam area can\'t be negative.'
 		]);
+		// No basin has b > 1 (engine ≥ 1.63.0); 1 itself, a vertical-sided pan, is allowed.
+		const b = node('b', 'B', null);
+		b.damAreaExponent = 1;
+		expect(messages(model([b]))).toEqual([]);
+		b.damAreaExponent = 1.2;
+		expect(messages(model([b]))).toEqual(['"B": the dam area exponent must be above 0 and at most 1.']);
 	});
 
 	it('checks an other water user as the API does (WP-1.33)', () => {
@@ -324,6 +330,12 @@ describe('validateModel', () => {
 			[{ source: 'meter', sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, true],
 			[{ source: 'aadd', sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, true],
 			[{ source: 'survey' }, true],
+			// Its rank within its priority (engine 1.64.0): none, or a whole number 1–99.
+			[{ rank: null }, false],
+			[{ rank: 3 }, false],
+			[{ rank: 0 }, true],
+			[{ rank: 1.5 }, true],
+			[{ rank: 100 }, true],
 			// A schedule (engine 1.17.0): a good window, a bad date, too many windows.
 			[{ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }] }, false],
 			[{ schedule: [{ label: '', span: 'yearly', from: '02-30', to: '03-01', easterFrom: null, easterTo: null, weekdays: null, factor: 0 }] }, true],

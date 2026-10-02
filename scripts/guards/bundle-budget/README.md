@@ -1645,4 +1645,15 @@ ceilings still append here.
             the next addition there trips that ceiling.
             Re-measured with main @ 11b181da merged (engine 1.55.0, #267's
             1365): 1365 locally, CI ~3 KB above. Headroom ~2 KB on CI.
+2026-10-01  new ceiling mapKb 305 KB (issue #288, the catchment map;
+            roadmap WP-3.12 decision D8 (b)). MapLibre (maplibre-gl 6.10.0)
+            and the PMTiles reader (pmtiles 4.5.0) measured 301 KB: two
+            MapLibre chunks (the main thread's and the code it shares with
+            its worker, ~140 KB each), the PMTiles reader and MapLibre's
+            CSS. They load only when the Map tab draws its map
+            (a dynamic import below the tab's own), so they have a ceiling
+            of their own and are left out of the total and the per-chunk
+            ceiling; MapLibre's 6 KB worker entry counts as a worker. The
+            app's own map code (the tab, the map component, the quaternary
+            proposal, the worker entry) is in the total, by entry file.
 ```

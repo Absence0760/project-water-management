@@ -9,6 +9,7 @@ import type {
 	FlaggedYearShare,
 	ObjectiveId,
 	CatchmentView,
+	CumulativeReport,
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
@@ -35,6 +36,7 @@ import type {
 	PackSignoffStatement,
 	RegistrationBodyCode,
 	RunSummary,
+	ScenarioConflict,
 	ScenarioOp,
 	SeasonalOutlook,
 	SeriesMeta,
@@ -55,6 +57,12 @@ export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 /** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
 export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
 /** How a role reads (a `contributor` is an applicant, a team `admin` an owner): ./roleLabels.ts. */
+
+/** What a deletion would leave with no owner or admin: DELETE /auth/me's 409 `account_sole_holder` details (issue #112). */
+export interface SoleHoldings {
+	projects: { id: string; name: string }[];
+	teams: { id: string; name: string }[];
+}
 
 export interface User {
 	id: string;
@@ -80,6 +88,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The version of the terms the account accepted (app_user.terms_version); null = none. The re-acceptance step lists the changes since. */
+	termsVersion?: string | null;
 	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
 	renderSession?: boolean;
 	/**
@@ -88,6 +98,24 @@ export interface User {
 	 * notice instead of the figures while this is false.
 	 */
 	farmNoticeCurrent?: boolean;
+}
+
+/** GET /auth/mfa: two-step sign-in on the Account page (issue #282, docs/api.md § Two-step sign-in). */
+export interface MfaStatus {
+	/** An authenticator app is set up. */
+	enrolled: boolean;
+	enrolledAt: string | null;
+	/** Unused recovery codes left (0 when off). */
+	recoveryCodesLeft: number;
+	/** The person is a project owner, team admin or assessor: those actions need it. */
+	required: boolean;
+	/** This session signed in with a code. */
+	sessionVerified: boolean;
+}
+
+/** POST /auth/login for an account with an authenticator: no session yet, enter a code (api.auth.mfa.verify). */
+export interface MfaChallenge {
+	mfaRequired: true;
 }
 
 export interface UserPreferences {
@@ -174,14 +202,28 @@ export interface OutlookSettings {
 	review?: { month: number; day: number } | null;
 }
 
+/**
+ * settings.responsibleAuthority (163_licensing_authority, backend
+ * projects/authoritySettings.ts): who decides the project's licence
+ * applications, DWS or a CMA with the power. null = none named. Not a model input.
+ */
+export interface ResponsibleAuthority {
+	name: string;
+	kind: 'dws' | 'cma';
+	/** '' = not given. */
+	office: string;
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
+	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	actsForAuthority?: boolean;
 }
 
 /** What a series merge or replace answers: the series, and when the automatic re-run it queued is due (null: none queued). */
@@ -260,6 +302,10 @@ export interface Member {
 	role: Role;
 	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
 	party: string | null;
+	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
+	specialist: boolean;
+	/** The owner marked them as acting for the responsible authority (163). Absent from an older API. */
+	actsForAuthority?: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -299,6 +345,8 @@ export interface InvitedFarmer {
 	invitedBy: string;
 	expiresAt: string;
 	locale: InviteLocale;
+	/** Its sender no longer owns the project: nobody can accept it until an owner re-sends it (155); absent from servers before it. */
+	senderLapsed?: boolean;
 }
 
 /** A row of GET /projects/:id/farmers: a farmer, or (owners only) a pending farmer invite. */
@@ -344,6 +392,25 @@ export interface Team {
 	settings: { portfolio?: { thresholds?: { green: number; amber: number } } };
 	/** The portfolio thresholds that apply: the team's, or the defaults. */
 	portfolioThresholds: PortfolioThresholds;
+	/** Whom to ask about the personal information in the team's projects (168, POPIA s18(1)(b)); null = not set. */
+	privacyContact: PrivacyContact | null;
+}
+
+/** A team's privacy contact: a name (or office) and an email address, a postal address optional (168). */
+export interface PrivacyContact {
+	name: string;
+	email: string;
+	postal: string | null;
+}
+
+/**
+ * GET /projects/:id/privacy-contact: who decides about a project's information, for every member, farmers
+ * included. contact null: the project has no team, or its team has set no contact.
+ */
+export interface ProjectPrivacyContact {
+	/** The WUA the farm pages name (095), or null. */
+	wuaName: string | null;
+	contact: (PrivacyContact & { organisation: string }) | null;
 }
 
 /**
@@ -493,6 +560,12 @@ export interface AlertEvent {
 	clearedAt: string | null;
 	/** The figures the alert was raised on (dam: source, pct, date; forecast: days, of, from, to, madeOn; feeds: label, …). */
 	detail: Record<string, unknown>;
+	/**
+	 * A firing ewr_forecast_fail event whose forecast is behind the recorded
+	 * rain, with no newer forecast made since: the day it was made, its last
+	 * recorded rain day, and the recorded rain's last day now. null otherwise.
+	 */
+	forecastOutOfDate: { madeOn: string; observedTo: string; rainUntil: string } | null;
 }
 
 /** POST /alerts/unsubscribe (the landing page's JSON form). */
@@ -500,6 +573,19 @@ export interface Unsubscribed {
 	kind: AlertKind | 'all';
 	project: { name: string };
 	farm: string | null;
+}
+
+/** POST /alerts/feedback: what the answered mail was about (151_alert_feedback). */
+export interface FeedbackAnswered {
+	kind: AlertKind | 'digest';
+	project: { name: string };
+}
+
+/** GET /projects/:id/alert-feedback (editors): answers counted per kind, and comments, never who gave them. */
+export interface AlertFeedbackSummary {
+	since: string;
+	kinds: { kind: AlertKind | 'digest'; yes: number; no: number }[];
+	comments: { kind: AlertKind | 'digest'; useful: boolean; comment: string; answeredAt: string }[];
 }
 
 export interface Portfolio {
@@ -526,6 +612,12 @@ export interface Invite {
 	createdAt: string;
 	expiresAt: string;
 	expired: boolean;
+	/**
+	 * Its sender no longer owns the project (administers the team), so nobody
+	 * can accept it until an owner re-sends it (155_invite_sender_role); absent
+	 * from servers before it.
+	 */
+	senderLapsed?: boolean;
 }
 
 /** What an invite link is for (POST /auth/invite-info). */
@@ -621,6 +713,15 @@ export interface RunMeta {
 	 * from an older API (= manual).
 	 */
 	trigger?: RunTrigger;
+	/** The engine of the automatic fit its parameters came from (settings.fitRecord); null for entered parameters. Absent from an older API. */
+	fitEngineVersion?: string | null;
+	/**
+	 * The known engine bugs that may affect it (issue #103, docs/engine-errata.md):
+	 * the ids of the errata whose range holds its engine, or its fit's for a `fit`
+	 * erratum, computed by the API (backend errata/runs.ts). Empty for none; absent
+	 * from an older API.
+	 */
+	errata?: string[];
 }
 
 export type RunTrigger = 'manual' | 'auto' | 'forecast';
@@ -892,6 +993,12 @@ export interface Scenario {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/**
+	 * Where written objections go and by when, as the application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
+	 * 166_public_participation); null: not given. Set while a draft, frozen once submitted.
+	 */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -920,6 +1027,11 @@ export interface Scenario {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
+	/** The authority's decision as recorded (163): its name, the date on its letter, its reference, and whether written reasons came. null/'' until decided; the date and the reasons flag are null on a decision recorded before 163. */
+	decisionAuthority?: string | null;
+	decisionDate?: string | null;
+	decisionReference?: string;
+	reasonsReceived?: boolean | null;
 	/** Who else reads an application: the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -930,13 +1042,39 @@ export interface Scenario {
 }
 
 export type ScenarioOrigin = 'team' | 'applicant';
-/** An assessor's decision on an application (backend scenarios/schema.ts SCENARIO_OUTCOMES; the words pending the licensing authority). */
-export type ScenarioOutcome = 'approved' | 'approved_with_conditions' | 'refused';
-export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['approved', 'approved_with_conditions', 'refused'];
+/**
+ * The responsible authority's decision on an application, in the National
+ * Water Act's and GN R267's words (backend scenarios/schema.ts
+ * SCENARIO_OUTCOMES, 163_licensing_authority; provisional position,
+ * pre-counsel research, 2026-10-01).
+ */
+export type ScenarioOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered';
+export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered'];
 export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
-	approved: 'Approved',
-	approved_with_conditions: 'Approved with conditions',
-	refused: 'Refused'
+	licence_issued: 'Licence issued (see its conditions)',
+	licence_refused: 'Licence refused',
+	application_rejected: 'Application rejected (formal requirements)',
+	not_considered: 'Not considered: use already authorised'
+};
+/** POST …/decide: "Record the authority's decision" (163). */
+export interface DecideRequest {
+	outcome: ScenarioOutcome;
+	/** The authority's name; omitted, the project's settings.responsibleAuthority. */
+	authority?: string;
+	/** The date on its decision letter, YYYY-MM-DD. */
+	decisionDate: string;
+	/** Its licence or file reference ('' = none). */
+	reference?: string;
+	reasonsReceived: boolean;
+	note?: string;
+}
+
+/** The outcome's basis in the Act or the regulations, printed beside the choice. */
+export const OUTCOME_BASIS: Record<ScenarioOutcome, string> = {
+	licence_issued: 'NWA s27, s28(1)(d): every licence carries conditions',
+	licence_refused: 'NWA s42',
+	application_rejected: 'GN R267 regs 9(1)(b), 11(2), 12(2)(b)',
+	not_considered: 'NWA s40(4)'
 };
 
 /**
@@ -964,7 +1102,8 @@ export interface ApplicantEwrFigures {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	meanSimulatedOutflowM3Day: number;
+	/** The use's figure: only at 5 or more farm holders (164); else null. */
+	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
 }
@@ -1001,7 +1140,9 @@ export interface ApplicantResults {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
 		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		series: { outflow: ApplicantSeriesPair; ewr: ApplicantSeriesPair } | null;
+		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
+		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
@@ -1052,6 +1193,43 @@ export interface ScenarioCheck {
 	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
 	 */
 	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
+	/**
+	 * An application's problem lines a rule hidden from its applicant broke
+	 * (164): the line's index in `problems`, the ops it names (0-based) and
+	 * the rules' kinds (`shares`, `area`, `supplyTrigger`…), never an id, a
+	 * name or a value. What "Ask the assessors why" sends. Absent on a team
+	 * scenario.
+	 */
+	maskedRules?: MaskedRuleRef[];
+	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
+	assessorProblems?: string[];
+}
+
+/** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
+export interface MaskedRuleRef {
+	problem: number;
+	ops: number[];
+	rules: string[];
+}
+
+/** An "Ask the assessors why" question as an application's parties read it (164): never the rule's real words. */
+export interface ApplicationQuestion {
+	id: string;
+	askedAt: string;
+	/** The problem line as the applicant read it. */
+	problem: string;
+	opIndexes: number[];
+	rules: string[];
+	answer: string | null;
+	answeredAt: string | null;
+}
+
+/** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
+export interface AssessorQuestion extends ApplicationQuestion {
+	scenarioId: string;
+	scenarioName: string;
+	ops: ScenarioOp[];
+	assessorText: string;
 }
 
 /**
@@ -1108,6 +1286,16 @@ export interface PublicationMeta {
 	publishedBy: string | null;
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
+	/** The responsible authority's endorsement of this baseline (163): null = not endorsed. Viewers and above only (absent for a farmer, or from an older API). */
+	endorsement?: PublicationEndorsement | null;
+}
+
+/** Who endorsed a published baseline for the responsible authority, and when (163; POST …/publication/:pubId/endorse). */
+export interface PublicationEndorsement {
+	endorsedAt: string;
+	/** null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
 }
 
 /** The current publication (GET …/publication, POST, PATCH). */
@@ -1378,7 +1566,23 @@ export interface ShareScenario {
 	base: SharedRun | null;
 	run: SharedRun | null;
 	/** Comments posted for public participation, oldest first; plain text. */
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** Where written objections go, when the applicant gave it (166). */
+	objection: ShareObjection | null;
+}
+
+/** A public comment as a share page shows it. */
+export interface SharedComment {
+	body: string;
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+}
+
+/** The application's notice details on a share page (166_public_participation); null fields when not given. */
+export interface ShareObjection {
+	address: string | null;
+	closingDate: string | null;
 }
 
 /** A band as a pack link shows it (backend share/links.ts SharedBand). */
@@ -1438,7 +1642,19 @@ export interface SharePack {
 		byMonth: { month: number; run: number | null; band: SharedBand | null }[] | null;
 		disclaimerVersion: string | null;
 	} | null;
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** For an application's pack, where written objections go, when given (166). */
+	objection: ShareObjection | null;
+}
+
+/** A draft pack the caller may sign as the application's appointed specialist (167_signers). */
+export interface SpecialistDraft {
+	id: string;
+	title: string;
+	version: number;
+	manifestSha256: string;
+	createdAt: string;
+	signoffs: number;
 }
 
 /** One pack of an application as its party sees it (131_applicant_packs; backend evidence/applicantPacks.ts). */
@@ -1491,6 +1707,17 @@ export interface ApplicantPack {
 	 * published run, so those names can't be given.
 	 */
 	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; name: string; changePts: number }[] | null } | null;
+	/** Their printable copy of it (165_applicant_copy): their own page printed as them, other water users' figures withheld. */
+	copy: ApplicantCopyState;
+}
+
+/** The applicant's printable copy of a pack: ready (its own SHA-256), rendering, failed (why) or none (never asked for). */
+export interface ApplicantCopyState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	sha256: string | null;
+	pages: number | null;
+	renderedAt: string | null;
+	error: string | null;
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
@@ -1585,6 +1812,8 @@ export interface NoteCreate {
 	/** An evidence pack: `team` or `public_participation` only (128). */
 	packId?: string;
 	visibility?: NoteVisibility;
+	/** A public comment only: give my name and email to the applicant for the I&AP register (GN R267 reg 18; 166). */
+	registerConsent?: boolean;
 }
 
 /** GET …/notes/:noteId/revisions: each earlier text of a scenario note, oldest first. */
@@ -1627,7 +1856,13 @@ export interface Signoff {
 	signedAt: string;
 	/** The caller signed it. */
 	mine: boolean;
+	/** `specialist`: the professional statement of whoever is responsible for the evidence; `review`: an authority-side reviewer's (167). */
+	kind: SignoffKind;
+	/** The host's check of the registration against the public register (167): bound at issue, else the current one; null: self-declared. */
+	registrationCheck: { checkedAt: string; checkedByOrg: string; bound: boolean } | null;
 }
+
+export type SignoffKind = 'specialist' | 'review';
 
 /** GET /projects/:id/runs/:runId/signoffs. */
 export interface SignoffList {
@@ -1643,6 +1878,8 @@ export interface SignoffList {
 /** GET /projects/:id/packs/:packId/signoffs: the pack statement in place of the run's (docs/api.md § Evidence packs). */
 export interface PackSignoffList extends Omit<SignoffList, 'statement'> {
 	statement: PackSignoffStatement;
+	/** The kinds the caller may sign as: an editor both, the applicant's specialist `specialist` only, anyone else none (167). */
+	kinds: SignoffKind[];
 }
 
 // --- Evidence packs (WP-3.14, issue #71, docs/evidence-pack.md, docs/api.md § Evidence packs) ---
@@ -1690,6 +1927,10 @@ export interface PackIssueChecks {
 	runsVerified: boolean;
 	/** No erratum found since the draft was made applies to its runs (errataFoundSince is empty); issue refuses otherwise (pack_errata_since_draft). */
 	errataRecorded: boolean;
+	/** The specialist signers of the current statement whose registration has no current check (167). */
+	registrationUnchecked?: string[];
+	/** Whether issue waits for those checks (the project's setting; 409 registration_not_checked otherwise). */
+	registrationCheckRequired?: boolean;
 }
 
 /** GET /projects/:id/packs/:packId. */
@@ -1701,6 +1942,8 @@ export interface PackDetail {
 	signoffs: Signoff[];
 	/** Where its server-rendered PDF is (119_pack_render). */
 	pdf: PackPdfState;
+	/** The server's re-run of its runs from the stored bundle (154_pack_reproduce): the app's own claim, never on verify. */
+	reproduction: PackReproductionState;
 	issue: PackIssueChecks | null;
 	/** Errata that apply now to its runs' engines (or their fits') and that the manifest didn't record (132): found since it was drafted. */
 	errataFoundSince: { id: string; summary: string }[];
@@ -1711,6 +1954,37 @@ export interface PackPdfState {
 	status: 'ready' | 'rendering' | 'failed' | 'none';
 	/** Why the last render gave up (`failed`). */
 	error: string | null;
+}
+
+/** One check of a reproduction bundle (engine evidence/bundle.ts checkPackBundle), plus the server's `stored`. */
+export interface PackBundleCheck {
+	/** `stored`, `archive`, `files`, `manifest`, `runs`, `inputs:<run>`, `changes`, `scenario`, `results:<run>`, `reproduce:<run>`. */
+	id: string;
+	ok: boolean;
+	detail: string;
+}
+
+/**
+ * The server's re-run of an issued pack from its stored bundle
+ * (backend/src/evidence/packReproduce.ts; docs/evidence-pack.md § Reproduction).
+ * A recorded outcome: `reproduced`, `not_reproduced`, `other_engine` (only the
+ * re-runs differ, and the runs were made with another engine) or `no_bundle`;
+ * else `checking` (its job is queued or running), `failed` (the job gave up:
+ * `error`) or `none` (a draft, or issued before re-runs).
+ */
+export interface PackReproductionState {
+	status: 'reproduced' | 'not_reproduced' | 'other_engine' | 'no_bundle' | 'checking' | 'failed' | 'none';
+	/** The engine that re-ran the runs (a recorded outcome only). */
+	engineVersion: string | null;
+	/** The engines the runs were made with. */
+	runEngines: string[];
+	checkedAt: string | null;
+	checks: PackBundleCheck[];
+	error: string | null;
+	/** The engine this server re-runs with. */
+	serverEngine: string;
+	/** An editor may ask for a re-run now (POST …/reproduce): issued, none pending, no outcome on serverEngine yet. */
+	canRerun: boolean;
 }
 
 /** GET /verify/:code (public): only what the pack prints (app_verify_pack). */
@@ -1740,6 +2014,10 @@ export interface PackVerification {
 		registrationField: string | null;
 		registrationNo: string;
 		signedAt: string;
+		/** Who signed as what (167); absent from an answer older than it. */
+		kind?: SignoffKind;
+		/** The check bound when the pack was issued; null or absent: the registration is self-declared (167). */
+		registrationCheck?: { checkedAt: string; checkedByOrg: string } | null;
 	}[];
 }
 
@@ -1755,6 +2033,67 @@ export interface SignoffRequest {
 	/** Every confirmation id of the statement. */
 	confirmed: string[];
 	statementSha256: string;
+	/** A pack only: `review` for an editor signing as the authority's reviewer (167); default `specialist`. */
+	kind?: SignoffKind;
+}
+
+/** The host's check of a member's registration against the public register (167; GET /projects/:id/registration-checks). */
+export interface RegistrationCheck {
+	id: string;
+	userId: string | null;
+	registrationBody: string;
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note: string;
+	/** The display name of the owner who recorded it. */
+	recordedBy: string | null;
+	recordedAt: string;
+}
+
+export interface RegistrationCheckRequest {
+	registrationBody: 'sacnasp' | 'ecsa';
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note?: string;
+}
+
+/** GET …/scenarios/:sid/participation-export (166): the reg 19 record of one application. */
+export interface ParticipationExport {
+	application: {
+		id: string;
+		name: string;
+		status: string;
+		submittedAt: string | null;
+		decidedAt: string | null;
+		outcome: string | null;
+		objectionAddress: string | null;
+		objectionClosingDate: string | null;
+	};
+	links: { target: 'application' | 'pack'; packVersion: number | null; createdAt: string; expiresAt: string; revokedAt: string | null }[];
+	comments: {
+		id: string;
+		target: 'application' | 'pack';
+		packVersion: number | null;
+		author: string | null;
+		email: string | null;
+		registerConsent: boolean;
+		viaLink: boolean;
+		createdAt: string;
+		editedAt: string | null;
+		state: 'shown' | 'withdrawn' | 'removed';
+		deletedAt: string | null;
+		body: string | null;
+		revisions: { body: string; writtenAt: string; editedAt: string }[];
+	}[];
+	register: { name: string; email: string }[];
 }
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
@@ -1826,6 +2165,23 @@ export interface AllocationSource {
 	rows: number;
 }
 
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
+export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+export interface LicenceRecord {
+	outcome: LicenceOutcome | null;
+	outcomeOn: string | null;
+	expiresOn: string | null;
+	reason: string;
+	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	closesOn: string | null;
+	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
+	reviewDueOn: string | null;
+}
+export type LicenceOutcomeInput =
+	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: null; reason: string };
+
 export interface AllocationList {
 	allocations: Allocation[];
 	sources: AllocationSource[];
@@ -1833,6 +2189,31 @@ export interface AllocationList {
 	nodes: { id: string; name: string }[];
 	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
 	canSeeHolders: boolean;
+	/** The owners let viewers read each registered volume (162, D3). */
+	viewerUnits: boolean;
+	/** This caller is a viewer who can't (allocations is then empty): `totals` instead. */
+	unitsHidden: boolean;
+	/** Per water source held by 5 or more registered users; null unless unitsHidden. */
+	totals: AllocationTotal[] | null;
+}
+
+/** A water source's registered volumes in force today, summed (a viewer's view, 162). */
+export interface AllocationTotal {
+	waterSource: 'surface' | 'groundwater';
+	holders: number;
+	registeredM3PerYear: number;
+	storageM3: number | null;
+}
+
+/** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
+export interface AllocationComparisonTotals {
+	tolerance: number;
+	sources: {
+		waterSource: 'surface' | 'groundwater';
+		holders: number;
+		units: number;
+		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+	}[];
 }
 
 /** The fields an editor sends to create or change an allocation. */
@@ -1968,6 +2349,57 @@ export interface SweepRequest {
 	name: string;
 	baseRunId: string;
 	members: { name: string; ops: ScenarioOp[] }[];
+}
+
+/** One scenario of a cumulative assessment (backend assessments/store.ts AssessmentMemberRow). */
+export interface AssessmentMember {
+	id: string;
+	position: number;
+	/** The scenario it was copied from; null once a team scenario is deleted (the copy stays). */
+	scenarioId: string | null;
+	name: string;
+	origin: 'team' | 'applicant';
+	opsSha256: string;
+	opCount: number;
+	/** done: its run alone is stored; problems: its ops don't apply alone; failed: the engine refused it. */
+	status: 'pending' | 'done' | 'problems' | 'failed';
+	problems: string[];
+	startDate: string | null;
+	endDate: string | null;
+}
+
+/** A cumulative impact assessment (roadmap WP-3.11, docs/api.md § Assessments). */
+export interface Assessment {
+	id: string;
+	name: string;
+	baseRunId: string;
+	baseRun: { id: string; label: string; createdAt: string };
+	/** refused: the scenarios no longer combine (`problems`); failed: the engine refused an input. */
+	status: 'pending' | 'complete' | 'refused' | 'failed';
+	problems: string[];
+	/** Only on GET …/assessments/:aid, and only when complete. */
+	report?: CumulativeReport | null;
+	engineVersion: string | null;
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	members: AssessmentMember[];
+}
+
+/** POST /projects/:id/assessments. */
+export interface AssessmentRequest {
+	name: string;
+	scenarioIds: string[];
+	/** Only check that the scenarios combine; write nothing. */
+	dryRun?: boolean;
+}
+
+/** Whether scenarios combine: the 422's details, or a dry run's answer. */
+export interface AssessmentCheck {
+	ok: boolean;
+	conflicts: ScenarioConflict[];
+	problems: string[];
 }
 
 /** One fit of a server run of the calibration rules (docs/api.md § Automated calibration, issue #153). */
@@ -2128,4 +2560,565 @@ export interface YieldResult {
 	engineVersion: string;
 	createdBy: string | null;
 	createdAt: string;
+}
+
+// --- Catchment map (issue #288, WP-3.12; docs/api.md § Catchment map, docs/maps.md) ---
+
+/** Mirrors backend geo/routes.ts MAP_FEATURE_KINDS (and 152's CHECK). */
+export type MapFeatureKind = 'catchment_boundary' | 'farm_parcel' | 'dam' | 'gauge' | 'river' | 'other';
+export type MapPosition = [number, number];
+/** GeoJSON geometry as the server stores it: WGS84 longitude/latitude, 2D. */
+export type MapGeometry =
+	| { type: 'Point'; coordinates: MapPosition }
+	| { type: 'LineString'; coordinates: MapPosition[] }
+	| { type: 'MultiLineString'; coordinates: MapPosition[][] }
+	| { type: 'Polygon'; coordinates: MapPosition[][] }
+	| { type: 'MultiPolygon'; coordinates: MapPosition[][][] };
+
+/** One feature on the map (GET /projects/:id/map/features). */
+export interface MapFeature {
+	id: string;
+	kind: MapFeatureKind;
+	name: string;
+	nodeId: string | null;
+	nodeName: string | null;
+	geometry: MapGeometry;
+	properties: Record<string, string>;
+	/** Geodesic area of a polygon, m², computed on the server; null for points and lines. */
+	areaM2: number | null;
+	/** A point at its middle (lon, lat). */
+	center: MapPosition;
+	sourceId: string | null;
+	createdBy: string | null;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** One feature on a farm's map (GET /projects/:id/farm/:nodeId/map, issue #326 A3): the farm's own parcels and dams, the boundary, rivers and gauges. No node, no properties, no author. */
+export interface FarmMapFeature {
+	id: string;
+	kind: Exclude<MapFeatureKind, 'other'>;
+	name: string;
+	geometry: MapGeometry;
+	areaM2: number | null;
+	center: MapPosition;
+	/** The licence credit the map shows while it draws this feature: 'hydrorivers' on a river added from a HydroRIVERS reach. */
+	credit?: 'hydrorivers';
+}
+
+/** GET /projects/:id/farm/:nodeId/map: empty when the farm has no parcel or dam of its own on the map. */
+export interface FarmMap {
+	features: FarmMapFeature[];
+}
+
+export interface MapSource {
+	id: string;
+	fileName: string;
+	sha256: string;
+	crs: string;
+	importedAt: string;
+	importedBy: string | null;
+	features: number;
+}
+
+/** A node and where its area came from (152 node.area_source). */
+export interface MapNodeArea {
+	id: string;
+	name: string;
+	kind: 'farm' | 'gauge' | 'user';
+	areaKm2: number;
+	areaSource: 'typed' | 'map';
+	areaFeatureId: string | null;
+}
+
+export interface MapFeatureList {
+	features: MapFeature[];
+	sources: MapSource[];
+	nodes: MapNodeArea[];
+	/** The quaternary datasets loaded (empty: the lookup has nothing to propose from). */
+	quaternaryDatasets: { dataset: string; count: number }[];
+}
+
+/** GET …/map/linked-nodes: the nodes at least one feature is linked to, each once (no geometry). */
+export interface MapLinkedNodes {
+	nodeIds: string[];
+}
+
+/** POST/PATCH …/map/features: a point from the coordinates form, or a geometry. */
+export interface MapFeatureInput {
+	kind?: MapFeatureKind;
+	name?: string;
+	nodeId?: string | null;
+	lon?: number;
+	lat?: number;
+	geometry?: MapGeometry;
+	/** A dam outline traced from the water occurrence data (issue #326 C2): where and how, and whether it was adjusted after. POST only. */
+	traced?: { lon: number; lat: number; minOccurrence: MinOccurrence; edited: boolean };
+}
+
+/** The share of observations (%) a cell must be water in to count when tracing a dam (issue #326 C2). */
+export type MinOccurrence = 10 | 25 | 50 | 75;
+
+/** GET …/map/dam-trace: whether the server has water occurrence data, and which. */
+export interface DamTraceState {
+	available: boolean;
+	dataset: { label: string; attribution: string; fingerprint: string; maxZoom: number; bounds: [number, number, number, number] } | null;
+}
+
+/** POST …/map/dam-trace: the outline of the water round a click, proposed (nothing saved; docs/api.md § Catchment map). */
+export interface DamTraceProposal {
+	click: MapPosition;
+	/** The water cell the trace started from (the click, or the nearest water within about 60 m). */
+	seed: MapPosition;
+	snapDistanceM: number;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }>;
+	areaM2: number;
+	cells: number;
+	cellSizeM: number;
+	zoom: number;
+	minOccurrence: MinOccurrence;
+	dataset: string;
+	attribution: string;
+	datasetFingerprint: string;
+	method: string;
+	methodVersion: string;
+}
+
+/** One problem in an imported file (422 `details`): the feature's place from 1, or null for the file. */
+export interface MapImportProblem {
+	feature: number | null;
+	message: string;
+}
+
+/** One feature of a file in the import's review (POST …/map/import/preview, issue #326 D2). A refused feature has no geometry type and no kind. */
+export interface MapImportPreviewFeature {
+	index: number;
+	geometryType: MapGeometry['type'] | null;
+	name: string;
+	areaM2: number | null;
+	/** The proposed kind: from the feature's `kind`/`type`/`layer` property, or inferred from its shape. */
+	kind: MapFeatureKind | null;
+	kindFrom: 'property' | 'geometry' | null;
+	/** Why a kind the file gave wasn't used. */
+	note?: string;
+	/** The node of the same name, of a kind the proposed kind can stand for. */
+	nodeId: string | null;
+}
+
+/** The review before an import: nothing is saved until POST …/map/import with each feature's kind. */
+export interface MapImportPreview {
+	fileName: string;
+	sha256: string;
+	/** The same file is in the project already: the import would be refused. */
+	duplicate: boolean;
+	/** The project's catchment boundary now (its name, possibly empty), or null: a row imported as the boundary replaces it, only with `replaceBoundary: true`. */
+	currentBoundary: { name: string } | null;
+	features: MapImportPreviewFeature[];
+	problems: MapImportProblem[];
+	/** The project's nodes, for each row's Stands for. */
+	nodes: { id: string; name: string; kind: MapNodeArea['kind'] }[];
+}
+
+/** One feature as the editor reviewed it (POST …/map/import `features`). */
+export interface MapImportReviewed {
+	index: number;
+	kind: MapFeatureKind;
+	name?: string;
+	nodeId?: string | null;
+}
+
+/** The reference values the quaternary at a point proposes (GET …/map/quaternary). Never applied by the server. */
+export interface QuaternaryProposal {
+	code: string;
+	dataset: string;
+	/** The repo's invented dataset: never real values. */
+	synthetic: boolean;
+	areaKm2: number | null;
+	mapMm: number | null;
+	marMm3: number | null;
+	monthlyMm3: number[] | null;
+	periodStart: number | null;
+	periodEnd: number | null;
+	source: string;
+	loadedAt: string;
+}
+
+export interface QuaternaryLookup {
+	point: MapPosition;
+	quaternary: QuaternaryProposal | null;
+	datasets: { dataset: string; count: number }[];
+}
+
+/** The quaternary outlines around a bbox (GET …/map/quaternaries, issue #326 A6): codes and polygons only. */
+export interface QuaternaryLayer {
+	bbox: [number, number, number, number];
+	quaternaries: { code: string; dataset: string; synthetic: boolean; geometry: MapGeometry }[];
+	/** More met the bbox than one answer carries (the first by code are given). */
+	truncated: boolean;
+	datasets: { dataset: string; count: number }[];
+}
+
+/** A reach of the loaded river network (GET …/map/rivers, issue #345). */
+export interface RiverReach {
+	dataset: string;
+	/** The source's own id (HydroRIVERS' HYRIV_ID). */
+	reachId: number;
+	/** '' when the source names none (HydroRIVERS never does). */
+	name: string;
+	strahler: number | null;
+	upstreamKm2: number | null;
+	lengthKm: number | null;
+	dischargeM3s: number | null;
+	/** The repo's invented network: never real rivers. */
+	synthetic: boolean;
+	source: string;
+	geometry: MapGeometry;
+	/** The project's river feature made from this reach (POST …/map/rivers/add), or null. */
+	featureId: string | null;
+}
+
+/** The river network around a bbox (GET …/map/rivers, issue #345): the highest orders first, at most 1000. */
+export interface RiverLayer {
+	bbox: [number, number, number, number];
+	reaches: RiverReach[];
+	/** More met the bbox than one answer carries (the smallest streams are left out). */
+	truncated: boolean;
+	datasets: { dataset: string; count: number }[];
+}
+
+/** A gauging station proposed as the observed-flow source (GET …/map/stations, issue #326 B-gauge). Never applied by the server. */
+export interface GaugeStationProposal {
+	/** The DWS station code, e.g. A2H012 (Z… in the synthetic dataset). */
+	code: string;
+	name: string;
+	river: string;
+	lon: number;
+	lat: number;
+	catchmentKm2: number | null;
+	/** YYYY-MM-DD; recordEnd null = still open (or not given). */
+	recordStart: string | null;
+	recordEnd: string | null;
+	/** Years the record spans, to one decimal; null without a start date. */
+	recordYears: number | null;
+	/** Great-circle distance from the point, km. */
+	distanceKm: number;
+	dataset: string;
+	/** The repo's invented dataset: never a real station. */
+	synthetic: boolean;
+	source: string;
+}
+
+/** Where the point came from: given, the map gauge linked to the outflow gauge node, or the boundary's centre. */
+export type GaugeStationPointFrom = 'query' | 'outlet_gauge' | 'boundary_centre';
+
+export interface GaugeStationLookup {
+	/** Null when no point was given and the map has neither an outlet gauge nor a boundary. */
+	point: MapPosition | null;
+	pointFrom: GaugeStationPointFrom | null;
+	/** The outlet gauge's or the boundary's name on the map (null for a given point). */
+	pointName: string | null;
+	withinKm: number;
+	/** River gauges within withinKm, nearest first, at most 10. */
+	stations: GaugeStationProposal[];
+	datasets: { dataset: string; count: number }[];
+}
+
+/** A loaded land-cover product (issue #326 B-landcover; docs/maps.md § Cultivated area from land cover). */
+export interface CroplandDataset {
+	dataset: string;
+	source: string;
+	version: string;
+	/** How the cells were counted and a polygon summed, in words (cited in History and evidence packs). */
+	method: string;
+	attribution: string;
+	cellDeg: number;
+	classes: number[];
+	loadedAt: string;
+	/** The repo's invented grid: never real values. */
+	synthetic: boolean;
+}
+
+/** A polygon's land-cover summary, m², or why it couldn't be read. */
+export type CultivatedSummary = { areaM2: number; cultivatedM2: number } | { problem: string };
+
+/** A planted area accepted from land cover, as it was cited then. */
+export interface CropAreaFromLandCover {
+	areaM2: number;
+	dataset: string;
+	source: string;
+	version: string;
+	method: string;
+	basis: 'unit' | 'parcel';
+	featureName: string | null;
+	acceptedAt: string;
+	/** The saved model still holds it (not typed over since). */
+	current: boolean;
+}
+
+/** GET …/nodes/:nodeId/cropland-proposals: a unit's cultivated area from land cover, and its crops. */
+export interface CroplandProposals {
+	nodeId: string;
+	nodeName: string;
+	/** The dataset summarised (a real one before the synthetic grid); null with none loaded. */
+	dataset: CroplandDataset | null;
+	datasets: { dataset: string; version: string; synthetic: boolean }[];
+	/** The farm parcels on the map linked to the unit; no summary without a dataset. */
+	parcels: { featureId: string; name: string; areaM2?: number; cultivatedM2?: number; problem?: string }[];
+	/** The parcels summed; null without parcels, a dataset, or when one couldn't be read. */
+	unit: { areaM2: number; cultivatedM2: number } | null;
+	/** The catchment boundary's summary, for reference (no model value takes it). */
+	catchment: ({ featureId: string; name: string } & CultivatedSummary) | null;
+	/** The project's crops: what the unit holds now (m²; 0 = none) and where an accepted area came from. */
+	crops: { cropId: string; name: string; areaM2: number; accepted: CropAreaFromLandCover | null }[];
+}
+
+/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE) or Class-A pan (the A-pan row). */
+export type EvaporationKind = 'et0' | 'apan';
+/** The settings an accepted evaporation row goes into: GR4J's monthly PE (settings.pe) or the A-pan row (settings.apanMm). */
+export type EvaporationTarget = 'pe' | 'apan';
+
+/** A loaded evaporation grid (issue #326 B-evap; docs/maps.md § Evaporation from the map). */
+export interface EvaporationDataset {
+	dataset: string;
+	kind: EvaporationKind;
+	source: string;
+	version: string;
+	/** How the cells were summarised and the boundary averaged, in words (cited in History and evidence packs). */
+	method: string;
+	attribution: string;
+	firstYear: number;
+	lastYear: number;
+	cellDeg: number;
+	originLon: number;
+	originLat: number;
+	loadedAt: string;
+	/** The repo's invented grid: never real values. */
+	synthetic: boolean;
+}
+
+/** The boundary's monthly evaporation, Oct … Sep, mm, or why it couldn't be read. */
+export type EvaporationSummary = { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string };
+
+/** An evaporation row accepted from the map, as it was cited then. */
+export interface EvaporationAccepted {
+	target: EvaporationTarget;
+	monthlyMm: number[];
+	dataset: string;
+	kind: EvaporationKind;
+	source: string;
+	version: string;
+	method: string;
+	coverage: number;
+	acceptedAt: string;
+	/** The saved settings still hold it (not typed over since). */
+	current: boolean;
+}
+
+/** GET /projects/:id/evaporation-proposals: the boundary's evaporation from a grid, beside the saved settings. */
+export interface EvaporationProposals {
+	/** The dataset summarised (a real one before the synthetic grid); null with none loaded. */
+	dataset: EvaporationDataset | null;
+	datasets: { dataset: string; kind: EvaporationKind; version: string; synthetic: boolean }[];
+	boundary: { featureId: string; name: string } | null;
+	/** Where the dataset's values go; null without a dataset. */
+	target: EvaporationTarget | null;
+	/** Null without a dataset or a boundary. */
+	proposal: EvaporationSummary | null;
+	/** The saved settings: the A-pan row, the PE kind and, under 'monthly', its row. */
+	/**
+	 * What the settings hold now, and the project's daily A-pan record's days
+	 * (series evap_apan_mm, first day to last value), which replaces the monthly
+	 * A-pan row on every day it covers; null without one. Absent from an
+	 * older server.
+	 */
+	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null; dailyApan?: { from: string; to: string } | null };
+	accepted: EvaporationAccepted[];
+}
+
+/** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
+export interface RegisterDamProposal {
+	registerNo: string;
+	name: string;
+	river: string | null;
+	farm: string | null;
+	lon: number;
+	lat: number;
+	/** From the dam's place on the map, m. */
+	distanceM: number;
+	capacityM3: number | null;
+	wallHeightM: number | null;
+	surfaceAreaM2: number | null;
+	completionYear: number | null;
+	dataset: string;
+	/** The repo's invented list: never real values. */
+	synthetic: boolean;
+	source: string;
+	loadedAt: string;
+}
+
+/** GET …/nodes/:nodeId/dam-proposals: what the register and the map propose for a unit's dam. */
+export interface DamProposals {
+	nodeId: string;
+	nodeName: string;
+	/** The saved model's values (the proposals are compared with these, not the unsaved form). */
+	current: { damCapacityM3: number; damAreaFullM2: number | null };
+	/** The dam on the map linked to the unit (a polygon first), or null. */
+	dam: { id: string; name: string; geometryType: MapGeometry['type']; point: MapPosition; areaM2: number | null } | null;
+	radiusM: number;
+	register: RegisterDamProposal[];
+	/** The dam polygon's area, proposed as the full-supply area; null for a point or no dam. */
+	area: { featureId: string; featureName: string; areaM2: number; method: string } | null;
+	datasets: { dataset: string; count: number }[];
+}
+
+/** A catchment the DEM proposed upstream of a clicked outlet or dam wall (issue #326 B-delineate, docs/api.md § Delineation). */
+export interface DelineationProposal {
+	id: string;
+	status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
+	from: 'outlet' | 'dam_wall';
+	click: MapPosition;
+	/** The snapped outlet: the most-accumulating cell's centre near the click. */
+	outlet: MapPosition;
+	snapDistanceM: number;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }>;
+	areaM2: number;
+	cells: number;
+	cellSizeM: number;
+	zoom: number;
+	windowCells: number;
+	dataset: string;
+	datasetFingerprint: string;
+	method: string;
+	methodVersion: string;
+	featureId: string | null;
+	createdBy: string | null;
+	createdAt: string;
+	decidedBy: string | null;
+	decidedAt: string | null;
+}
+
+/** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
+export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
+
+/** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
+export interface StartUnit {
+	key: string;
+	featureName: string;
+	role: StartRole;
+	name: string;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	/** Its own sub-catchment's area (m²) and outline; null without an elevation model, and for a water user or a gauge (they own no land). */
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	/** The unit it drains into (its key), or null for the outflow gauge. */
+	drainsInto: string | null;
+	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
+	drainsIntoProposed: boolean;
+}
+
+/** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
+export interface StartPlan {
+	fromDem: boolean;
+	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null };
+	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
+	units: StartUnit[];
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number | null;
+	zoom: number | null;
+	windowCells: number | null;
+}
+
+/** The ticks an editor sends to apply a start proposal: every unit once, each value ticked or not. */
+export interface StartTicks {
+	outletName: string;
+	units: { key: string; name: string; area: boolean; drainsInto: boolean; runoffToDam: boolean }[];
+	rest: { include: boolean; name: string; area: boolean };
+}
+
+export interface StartProposal {
+	id: string;
+	mode: 'start';
+	status: 'proposed' | 'applied' | 'discarded' | 'superseded';
+	plan: StartPlan;
+	fromDem: boolean;
+	dataset: string | null;
+	datasetFingerprint: string | null;
+	method: string;
+	methodVersion: string;
+	decision: unknown;
+	createdBy: string | null;
+	createdAt: string;
+	decidedBy: string | null;
+	decidedAt: string | null;
+}
+
+/** A node's values a division would replace, as they stood when it was proposed (182, docs/api.md § Start from the map). */
+export interface DivideCurrent {
+	areaKm2: number;
+	areaSource: 'typed' | 'map';
+	downstreamNodeId: string | null;
+	downstreamName: string | null;
+	pctRunoffToDam: number;
+}
+
+/** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
+export interface DivideUnit {
+	key: string;
+	featureName: string;
+	nodeId: string | null;
+	name: string;
+	role: StartRole;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	drainsInto: string | null;
+	current: DivideCurrent | null;
+}
+
+/** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
+export interface DividePlan {
+	mode: 'divide';
+	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' };
+	catchment: { areaM2: number; boundaryAreaM2: number | null };
+	units: DivideUnit[];
+	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	untouched: { nodeId: string; name: string; areaKm2: number }[];
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number;
+	zoom: number;
+	windowCells: number;
+}
+
+/** The ticks an editor sends to apply a division: every point once. */
+export interface DivideTicks {
+	units: { key: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
+	rest: { to: 'none' } | { to: 'node'; nodeId: string } | { to: 'new'; name: string };
+}
+
+export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {
+	mode: 'divide';
+	plan: DividePlan;
+}
+
+/** GET …/map/start: whether the server has a DEM, whether the model is empty or was started from the map, and the latest proposals of either mode (newest first). */
+export interface StartState {
+	elevation: boolean;
+	dataset: DelineationState['dataset'];
+	modelEmpty: boolean;
+	startedFromMap: boolean;
+	proposals: (StartProposal | DivideProposal)[];
+}
+
+/** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */
+export interface DelineationState {
+	available: boolean;
+	dataset: { label: string; attribution: string; fingerprint: string; tileType: string; maxZoom: number; bounds: [number, number, number, number] } | null;
+	proposals: DelineationProposal[];
 }

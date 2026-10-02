@@ -36,7 +36,7 @@ export function clearFarmMemo() {
 	memo.clear();
 }
 
-type FarmApi = Pick<Api, 'farm'> & { projects: Pick<Api['projects'], 'list'> };
+type FarmApi = { farm: Pick<Api['farm'], 'index' | 'view'> } & { projects: Pick<Api['projects'], 'list'> };
 
 export class FarmState {
 	phase = $state<FarmPhase>({ kind: 'loading' });

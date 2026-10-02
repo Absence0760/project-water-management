@@ -1,5 +1,6 @@
 // Schema invariants read from the Postgres catalogue. Each one guards a rule in
 // CLAUDE.md so a future migration can't silently break it.
+import { existsSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -11,6 +12,14 @@ const APP_URL = process.env.DATABASE_URL!;
  * anyone is signed in; it now does so through SECURITY DEFINER lookups).
  */
 const NO_RLS = new Set(['schema_migrations']);
+/**
+ * Owner-only tables: RLS on, no policy, and no grant of any kind to
+ * water_app. The erasure log holds the ids of deleted accounts, projects and
+ * teams for a restore to re-apply (159_erasure_log.sql); its triggers and its
+ * purge write it as SECURITY DEFINER functions, and only the operator, as the
+ * schema owner, reads it (deployment.md § Restoring the database).
+ */
+const OWNER_ONLY = new Set(['erasure_log']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -34,14 +43,20 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
+	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
 	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
 	report: ['bytes', 'error', 'finished_at', 'pages', 'status'],
-	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql).
+	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql),
+	// and the responsible authority's endorsement, once (163_licensing_authority.sql).
 	run_publication: [
+		'endorsed_at',
+		'endorsed_by',
+		'endorsement_note',
 		'next_expected_on',
 		'note',
 		'notice',
@@ -67,6 +82,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	// A run of the calibration rules: its rules, plan and input hash are fixed at insert; its cases, outcome and application change once each (108_auto_calibration.sql).
 	auto_calibration: ['applied_at', 'applied_run_id', 'cases', 'chosen', 'error', 'job_id', 'report', 'status', 'uncertainty_id'],
 	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
+	// An assessment's base run, job and name, and its members' copied ops, are fixed at insert; each gets its outcome once (145_assessment.sql).
+	assessment: ['combined_summary', 'completed_at', 'end_date', 'engine_version', 'problems', 'report', 'start_date', 'status'],
+	assessment_member: ['end_date', 'finished_at', 'problems', 'start_date', 'status', 'summary'],
 	// An outlook's base run, job, season, levels and share are fixed at insert; it is completed once (063_seasonal_outlook.sql).
 	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status', 'triggers'],
 	// An outlook publication's level, season and publisher never change; it is ended once (106_outlook_triggers_publication.sql).
@@ -112,23 +130,30 @@ const APPEND_ONLY = new Set([
  * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
- * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (037_notes.sql). An API key too: audit events name it
+ * soft-deleted and hidden (037_notes.sql); 90 days later the tick erases it
+ * through app_purge_deleted_notes, a SECURITY DEFINER function, the only path
+ * that removes a note row (158_note_purge.sql), so water_app still has no
+ * DELETE on it. An API key too: audit events name it
  * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
  * only by the operator, as the schema owner, on a POPIA request
  * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
  * publication is ended, not deleted; the newest 12 are kept by its cap
- * trigger (106_outlook_triggers_publication.sql).
+ * trigger (106_outlook_triggers_publication.sql). An account's security
+ * event is append-only, so a thief can't erase that they turned two-step
+ * sign-in off (150_mfa.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication', 'account_security_event']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
  * dam (040_yield.sql). An outlook member is written once, complete, by its
  * job, and goes with its outlook (063_seasonal_outlook.sql). A signed-out
- * session is recorded once and aged out (102_session_revocation.sql).
+ * session is recorded once and aged out (102_session_revocation.sql). A
+ * recovery code is issued, then used or replaced (deleted), and an account's
+ * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session']);
+// Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -142,9 +167,47 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * written by the migration runner from the engine's language table
  * (080_language.sql, scripts/migrate.ts syncLanguages); and a person's pack
  * notices, written only by 133_pack_notices' SECURITY DEFINER functions, so
- * no caller can choose a recipient.
+ * no caller can choose a recipient; the same for a person's erratum notices
+ * and the record of which errata were swept (153_erratum_notices); alert
+ * feedback, written only by 151_alert_feedback's, so no caller answers for
+ * someone else; and a pack's server re-run outcomes, written only by its
+ * pack_reproduce job through app_record_pack_reproduction (154_pack_reproduce),
+ * so no member can claim a pack reproduced. The quaternary reference dataset is
+ * loaded by the operator as the schema owner (152_catchment_map.sql,
+ * `pnpm import:quaternaries`); the app only proposes from it. So is the
+ * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`),
+ * the register of dams (157_dam_register.sql, `pnpm import:dam-register`),
+ * the land-cover cropland grid (173_cropland_reference.sql, `pnpm import:land-cover`)
+ * and the evaporation grid (180_evaporation_reference.sql, `pnpm import:evaporation`).
+ * An applicant's "Ask the assessors why" question is filed and answered only
+ * through 164_applicant_visibility's app_ask_assessors (the project and the
+ * name from the application) and app_answer_assessors_question (an editor,
+ * once). An applicant's printable copy of a pack is recorded only by
+ * 165_applicant_copy's app_record_applicant_pack_pdf, from the party's own
+ * running render job.
  */
-const READ_ONLY = new Set(['language', 'pack_notice']);
+const READ_ONLY = new Set([
+	'language',
+	'pack_notice',
+	'alert_feedback',
+	'erratum_notice',
+	'erratum_sweep',
+	'quaternary_reference',
+	'pack_reproduction',
+	'gauge_station_reference',
+	'dam_register_reference',
+	'river_reference',
+	'cropland_dataset',
+	'cropland_cell_reference',
+	'evaporation_dataset',
+	'evaporation_cell_reference',
+	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
+	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
+	'registration_check',
+	'signoff_registration_check',
+	'application_question',
+	'evidence_pack_applicant_copy'
+]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -152,11 +215,13 @@ const READ_ONLY = new Set(['language', 'pack_notice']);
  * run or scenario, viewers and above like model_run (040_yield.sql). time_series
  * holds flow volumes that reveal neighbours' use (020); its site_node_id
  * (084_gauge_records) names a gauge, and series_revision (viewers and above,
- * 030) keeps that site since 085. Every table with a node column needs a
+ * 030) keeps that site since 085. crop_area_land_cover is where a planted area accepted from land cover came
+ * from, the modeller's provenance (174_crop_area_land_cover.sql), viewers and
+ * above. Every table with a node column needs a
  * farmer-aware SELECT policy (one that calls app_farm_nodes) or a place here,
  * so a new per-farm table can't ship without a decision about farmers.
  */
-const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result']);
+const FARMERS_NEVER_READ = new Set<string>(['invite_node', 'series_revision', 'time_series', 'yield_result', 'crop_area_land_cover']);
 /** farm_link is the link itself: a farmer reads their own rows by user id, not through app_farm_nodes. */
 const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 
@@ -180,7 +245,10 @@ const FARMER_SCOPED_BY_USER = new Set(['farm_link']);
 const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = {
 	// A person's alert mails and choices are theirs (051_alerts.sql); a rule is the project's.
 	'alert_delivery.user_id': 'cascade',
+	'alert_feedback.user_id': 'cascade',
 	'pack_notice.user_id': 'cascade',
+	// A person's known-engine-bug emails (153_erratum_notices).
+	'erratum_notice.user_id': 'cascade',
 	'alert_rule.created_by': 'set null',
 	'alert_subscription.user_id': 'cascade',
 	'allocation_source.imported_by': 'set null',
@@ -190,11 +258,22 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'data_feed.acting_user_id': 'set null',
 	'data_feed.created_by': 'set null',
 	'account_mail_quota.user_id': 'cascade',
+	// A count for the elevation-model cap; goes with the account (184_dem_attempt).
+	'dem_attempt.user_id': 'cascade',
 	'email_token.user_id': 'cascade',
 	// An evidence pack is the project's evidence; it stays with who drafted or issued it cleared (112_evidence_pack.sql).
 	'evidence_pack.created_by': 'set null',
 	'evidence_pack.issued_by': 'set null',
 	'farm_link.added_by': 'set null',
+	// A map feature and its import are the project's; who placed or imported them is cleared (152_catchment_map.sql).
+	'geo_source.imported_by': 'set null',
+	'map_feature.created_by': 'set null',
+	// A delineation proposal (175): who proposed and decided it is a pointer only; the acts are audited.
+	'delineation_proposal.created_by': 'set null',
+	'delineation_proposal.decided_by': 'set null',
+	// A start-from-the-map proposal (178): the same.
+	'start_proposal.created_by': 'set null',
+	'start_proposal.decided_by': 'set null',
 	'invite.invited_by': 'cascade',
 	'job.acting_user_id': 'cascade',
 	'model_revision.created_by': 'set null',
@@ -216,6 +295,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// What the WUA published to farmers stays with who published or ended it cleared (106).
 	'outlook_publication.ended_by': 'set null',
 	'outlook_publication.published_by': 'set null',
+	'run_publication.endorsed_by': 'set null',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
 	'run_uncertainty.created_by': 'set null',
@@ -225,6 +305,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
 	'scenario_sweep.created_by': 'set null',
+	// An assessment is derived (its base run and scenarios are the evidence); it stays with who asked cleared (145_assessment.sql).
+	'assessment.created_by': 'set null',
 	// A run of the calibration rules is derived; it stays with who asked for or applied it cleared (108_auto_calibration.sql).
 	'auto_calibration.applied_by': 'set null',
 	'auto_calibration.created_by': 'set null',
@@ -234,11 +316,36 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
+	// A registration check stays as the record of what verify showed when a pack was issued, without the account (167_signers).
+	'registration_check.user_id': 'set null',
+	'registration_check.recorded_by': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).
 	'user_preferences.user_id': 'cascade',
+	// Two-step sign-in is the person's own and goes with them (150_mfa.sql).
+	'user_totp.user_id': 'cascade',
+	'user_recovery_code.user_id': 'cascade',
+	'mfa_throttle.user_id': 'cascade',
+	'account_security_event.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
+};
+
+/**
+ * Every foreign key to job. The 30-day job clean-up (app_purge_jobs,
+ * 016_jobs.sql) deletes finished jobs, so each is ON DELETE SET NULL and the
+ * row it sits on must take that update. A table with an UPDATE trigger (a
+ * complete-once guard) must let a cleared job_id through, or the purge rolls
+ * back and no job is ever cleaned again (148_job_purge_clears_links.sql), so
+ * it names the DB test that ages its job past 30 days and runs the purge.
+ */
+const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
+	'assessment.job_id': { updateTrigger: true, purgeTest: 'src/assessments/assessments.db.test.ts' },
+	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
+	'report.job_id': { updateTrigger: false },
+	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
+	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
+	'yield_result.job_id': { updateTrigger: false }
 };
 
 let db: pg.Client;
@@ -287,14 +394,30 @@ describe('schema catalogue', () => {
 			 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
 			   AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)`
 		);
-		expect(rows.map((r) => r.relname)).toEqual([]);
+		expect(rows.map((r) => r.relname).filter((t) => !OWNER_ONLY.has(t))).toEqual([]);
+	});
+
+	it('keeps owner-only tables closed to water_app: RLS on, no policy, no privilege (erasure_log)', async () => {
+		for (const table of OWNER_ONLY) {
+			const { rows: rls } = await db.query<{ on: boolean }>('SELECT relrowsecurity AS on FROM pg_class WHERE oid = $1::regclass', [`public.${table}`]);
+			expect(rls[0]?.on, `${table} RLS`).toBe(true);
+			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: policies } = await db.query('SELECT polname FROM pg_policy WHERE polrelid = $1::regclass', [`public.${table}`]);
+			expect(policies, `${table} policies`).toEqual([]);
+		}
+		// Positive control: the same check sees water_app's SELECT on an ordinary table.
+		const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', 'public.note', 'SELECT') AS ok`);
+		expect(rows[0]!.ok).toBe(true);
 	});
 
 	it('grants every app table to water_app, which owns nothing and cannot bypass RLS', async () => {
 		// Each privilege on its own: has_table_privilege with a list is true if *any* is held.
 		const missing = [];
 		for (const t of await tables()) {
-			if (t.relname === 'schema_migrations') continue;
+			if (t.relname === 'schema_migrations' || OWNER_ONLY.has(t.relname)) continue;
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;
@@ -358,7 +481,7 @@ describe('schema catalogue', () => {
 		}
 	});
 
-	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice)', async () => {
+	it('grants water_app only SELECT, and has only a read policy, on read-only tables (language, pack_notice, erratum_notice, erratum_sweep)', async () => {
 		for (const table of READ_ONLY) {
 			for (const priv of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE']) {
 				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
@@ -458,6 +581,21 @@ describe('schema catalogue', () => {
 		);
 		expect(rows.length).toBeGreaterThan(30);
 		expect(Object.fromEntries(rows.map((r) => [r.col, r.action]))).toEqual(APP_USER_ON_DELETE);
+	});
+
+	it('every foreign key to job is ON DELETE SET NULL, and a table with an UPDATE trigger names its purge test (148)', async () => {
+		const { rows } = await db.query<{ col: string; action: string; update_trigger: boolean }>(
+			`SELECT c.conrelid::regclass || '.' || a.attname AS col, c.confdeltype::text AS action,
+				EXISTS (SELECT 1 FROM pg_trigger t WHERE t.tgrelid = c.conrelid AND NOT t.tgisinternal AND (t.tgtype & 16) <> 0) AS update_trigger
+			 FROM pg_constraint c JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+			 WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace AND c.confrelid = 'job'::regclass
+			 ORDER BY 1`
+		);
+		expect(rows.every((r) => r.action === 'n')).toBe(true);
+		expect(Object.fromEntries(rows.map((r) => [r.col, r.update_trigger]))).toEqual(
+			Object.fromEntries(Object.entries(JOB_REFERENCES).map(([col, ref]) => [col, ref.updateTrigger]))
+		);
+		for (const ref of Object.values(JOB_REFERENCES)) if (ref.updateTrigger) expect(existsSync(new URL(`../../${ref.purgeTest}`, import.meta.url)), ref.purgeTest).toBe(true);
 	});
 
 	// The pseudonymisation that goes with the set-null keys (D12).

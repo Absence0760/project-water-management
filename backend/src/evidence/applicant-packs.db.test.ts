@@ -149,7 +149,11 @@ function report(mode: 'baseline' | 'application', assumptionsChanged = false, ti
 			user(klip, { onlyIn: 'baseline', change: null })
 		],
 		allocations: { rows: [{ holder: HOLDER }] },
-		cumulative: { applications: [{ scenarioName: OTHER_APP }] },
+		// evidence-11: the combined run names the other applications and their conflicts; none of it leaves (allowlist).
+		cumulative: {
+			applications: [{ scenarioName: OTHER_APP }],
+			combined: { applications: [{ scenarioName: OTHER_APP }], conflicts: [`"${OTHER_APP}" op 1 (node.set) and "x" op 1 (node.set) both change node "Rooikloof": damCapacityM3`] }
+		},
 		appendix: { baselineInputs: { model: { nodes: [outlet, gauge, kalk, berg, doorn, water, klip] } }, changes: [], series: [], warnings: { baseline: ['Bergvliet has no crops'], application: null } },
 		verification: { methodology: { version: 'm1', sha256: 'a'.repeat(64) }, limitations: [], errata: [{ id: 'E1', summary: 'An erratum' }], disclaimerVersion: 'v3' },
 		applicantStatement: mode === 'application' ? { scenarioName: title, description: STATEMENT, ownerName: 'x', notes: STATEMENT, notesUpdatedAt: null, notesUpdatedBy: 'x' } : null,
@@ -233,8 +237,9 @@ beforeAll(async () => {
 
 	await arrange(async (q) => {
 		const base = await plantRun(q);
-		// A's application owns Kalkoenkrans (still linked) and Bergvliet (never A's link: the database keeps it out).
-		appA = await plantScenario(q, 'Raise the weir dam', applicantA.id, base, [kalk.id, berg.id]);
+		// A's application owns Kalkoenkrans. The report also flags Bergvliet as theirs, which the application's stored
+		// own list never held: the database keeps it out (164 freezes the report's own units, within that list).
+		appA = await plantScenario(q, 'Raise the weir dam', applicantA.id, base, [kalk.id]);
 		appA2 = await plantScenario(q, 'A second dam', applicantA.id, base, [kalk.id]);
 		appB = await plantScenario(q, 'B plan', applicantB.id, base, []);
 		await q('INSERT INTO scenario_member (project_id, scenario_id, user_id, added_by) VALUES ($1, $2, $3, $4)', [projectId, appA, consultantA.id, applicantA.id]);

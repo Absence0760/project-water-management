@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FeedFormatError } from '../errors.js';
-import { lzwDecode, openGrid, pixelOf, readPoints, type RangeRead } from './tiff.js';
+import { gdalItems, lzwDecode, openGrid, pixelOf, readPoints, type RangeRead } from './tiff.js';
 import { lzwEncode, writeGrid, type GridSpec } from './tiff-write.js';
 
 /** A RangeRead over bytes in memory, counting reads. */
@@ -311,5 +311,21 @@ describe('openGrid + readPoints', () => {
 			corrupt.fill(0xff, offset, offset + bytes);
 			await expect(readPoints(reader(corrupt).read, g, [{ lat: -20.12, lon: 25.17 }])).rejects.toThrow(FeedFormatError);
 		});
+	});
+});
+
+describe('gdalItems', () => {
+	it('reads the scale and offset items, any case, and skips the rest', () => {
+		const xml = '<GDALMetadata><Item name="x" role="scale">2</Item><Item name="y" role="Description">d</Item><ITEM role="offset" sample="0">-1</ITEM><Items role="scale">9</Items></GDALMetadata>';
+		expect(gdalItems(xml)).toEqual([
+			{ role: 'scale', text: '2' },
+			{ role: 'offset', text: '-1' }
+		]);
+	});
+
+	it('is linear on a megabyte of unclosed `<Item` (the regex it replaced backtracked quadratically)', () => {
+		const t = performance.now();
+		expect(gdalItems('<Item role="scale" '.repeat(55_000))).toEqual([]);
+		expect(performance.now() - t).toBeLessThan(1_000);
 	});
 });

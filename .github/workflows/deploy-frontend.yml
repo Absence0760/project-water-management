@@ -139,11 +139,27 @@ jobs:
       - name: Engine invariants and soak (the build record)
         run: node scripts/release/engine-build.mjs --soak-cases 1600
 
+      # The catchment map's tiles (docs/deployment.md § Map tiles): each
+      # empty (frontend/.env.production's default: the plain background, no
+      # labels, no relief) until the operator has uploaded it to the tiles
+      # bucket and set the repository variable. The gate refuses anything but
+      # a same-origin /tiles/ path the /tiles/* behaviour serves, and the
+      # relief until the Copernicus liability sentence is in the legal text.
+      - name: Map tiles gate
+        env:
+          PUBLIC_TILES_URL: ${{ vars.PUBLIC_TILES_URL }}
+          PUBLIC_TILES_GLYPHS_URL: ${{ vars.PUBLIC_TILES_GLYPHS_URL }}
+          PUBLIC_TERRAIN_URL: ${{ vars.PUBLIC_TERRAIN_URL }}
+        run: node scripts/release/map-data-gates.mjs frontend
+
       - name: Build frontend
         env:
           SITE_ORIGIN: ${{ vars.PUBLIC_SITE_URL }}
           PUBLIC_WAF_CAPTCHA_SCRIPT_URL: ${{ vars.WAF_CAPTCHA_SCRIPT_URL }}
           PUBLIC_WAF_CAPTCHA_API_KEY: ${{ secrets.WAF_CAPTCHA_API_KEY }}
+          PUBLIC_TILES_URL: ${{ vars.PUBLIC_TILES_URL }}
+          PUBLIC_TILES_GLYPHS_URL: ${{ vars.PUBLIC_TILES_GLYPHS_URL }}
+          PUBLIC_TERRAIN_URL: ${{ vars.PUBLIC_TERRAIN_URL }}
         run: pnpm build:frontend
 
       # The CloudFront CSP header allows inline scripts only because SvelteKit's

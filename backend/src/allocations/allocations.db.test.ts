@@ -4,9 +4,12 @@
 //    its file hash as provenance, refuses a second import of the same file,
 //    and an import can be undone;
 //  - manual entry, edit (manual match) and delete; history records each;
-//  - viewers read volumes but never holder names (D3), editors read both, a
-//    farmer reads only the allocations (and names) on their own farm, another
-//    project's member reads nothing;
+//  - viewers never read holder names (D3), and read each volume only once an
+//    owner allows it (162): before that, totals per water source held by 5 or
+//    more registered users, and no copy of the volumes in a run they read;
+//    editors read both, a farmer reads only the allocations (and names) on
+//    their own farm, another project's member reads nothing;
+//  - a WARMS extract needs its reference (how it was obtained, 162);
 //  - a run's comparison sums the run's own supplied series per water year;
 //  - the export guards formula-looking cells and hides names from viewers.
 import { compareAllocations } from '@water-management/engine';
@@ -179,6 +182,102 @@ describe('entering allocations by hand', () => {
 		expect((await viewer.call('POST', `/projects/${projectId}/allocations`, base)).status).toBe(403);
 		expect((await farmer.call('GET', `/projects/${projectId}/allocations`)).status).toBe(403);
 		expect((await stranger.call('GET', `/projects/${projectId}/allocations`)).status).toBe(404);
+	});
+});
+
+describe('what a viewer reads before the owners allow each volume (162, decision D3)', () => {
+	const surfaceToday = 120_000 + 80_000 + 4_000 + 60_000 + 95_000 + 70_000 + 10_000;
+
+	it('gives a viewer no allocation row, only totals for a source 5 or more registered users hold; an editor reads every row (positive control)', async () => {
+		expect(await rowsAs(viewer, 'SELECT id FROM allocation WHERE project_id = $1', [projectId])).toEqual([]);
+		expect((await rowsAs(editor, 'SELECT id FROM allocation WHERE project_id = $1', [projectId])).length).toBe(10);
+		const asViewer = (await viewer.call('GET', `/projects/${projectId}/allocations`)).body;
+		expect(asViewer).toMatchObject({ allocations: [], viewerUnits: false, unitsHidden: true, canSeeHolders: false });
+		// Surface water: six registered users (A–E and Z). Groundwater: three (A, D, E), too few for a total.
+		expect(asViewer.totals).toEqual([{ waterSource: 'surface', holders: 6, registeredM3PerYear: surfaceToday, storageM3: 150_000 + 90_000 + 75_000 + 100_000 }]);
+		expect(JSON.stringify(asViewer)).not.toMatch(/SYN-00|Invented Holdings|Portion 1/);
+		const asEditor = (await editor.call('GET', `/projects/${projectId}/allocations`)).body;
+		expect(asEditor).toMatchObject({ viewerUnits: false, unitsHidden: false, totals: null });
+		expect(asEditor.allocations).toHaveLength(10);
+	});
+
+	it('refuses the totals’ volumes for a source fewer than 5 hold, counting a holder once however many farms or rows they have', async () => {
+		const rows = await rowsAs<{ water_source: string; holders: number }>(viewer, 'SELECT DISTINCT water_source, holders FROM app_allocation_volumes($1)', [projectId]);
+		expect(rows).toEqual([{ water_source: 'surface', holders: 6 }]);
+		// One more groundwater row under a holder already counted (A, in other spacing and case) is still three holders.
+		const extra = await editor.call('POST', `/projects/${projectId}/allocations`, { nodeId: farmB.id, holder: '  invented   HOLDINGS a ', authorisation: 'licence', waterSource: 'groundwater', volumeM3PerYear: 1 });
+		expect(extra.status).toBe(201);
+		expect((await rowsAs(viewer, "SELECT 1 FROM app_allocation_volumes($1) WHERE water_source = 'groundwater'", [projectId])).length).toBe(0);
+		expect((await editor.call('DELETE', `/projects/${projectId}/allocations/${extra.body.allocation.id}`)).status).toBe(204);
+		// An unnamed surface row on Farm A (whose rows name A) is A's, not a seventh holder.
+		const unnamed = await editor.call('POST', `/projects/${projectId}/allocations`, { nodeId: farmA.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1 });
+		expect(unnamed.status).toBe(201);
+		expect(await rowsAs(viewer, 'SELECT DISTINCT water_source, holders FROM app_allocation_volumes($1)', [projectId])).toEqual([{ water_source: 'surface', holders: 6 }]);
+		expect((await editor.call('DELETE', `/projects/${projectId}/allocations/${unnamed.body.allocation.id}`)).status).toBe(204);
+		// A stranger isn't let in at all.
+		await expect(rowsAs(stranger, 'SELECT 1 FROM app_allocation_volumes($1)', [projectId])).rejects.toThrow(/not a member/);
+	});
+
+	it('serves a viewer the run’s use summed per water source and year, and no comparison by unit', async () => {
+		const res = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations`);
+		expect(res.status).toBe(200);
+		expect(res.body.comparison).toBeNull();
+		expect(res.body.capYears).toEqual([]);
+		const { totals } = res.body;
+		expect(totals.sources.map((s: { waterSource: string }) => s.waterSource)).toEqual(['surface']);
+		// The same sums as the editor's comparison over the units with a surface volume.
+		const full = (await editor.call('GET', `/projects/${projectId}/runs/${runId}/allocations`)).body.comparison;
+		const held = full.nodes.filter((n: { surface: { allocationIds: string[] } }) => n.surface.allocationIds.length > 0);
+		const want = held.reduce((s: number, n: { surface: { years: { modelledM3: number }[] } }) => s + n.surface.years[0]!.modelledM3, 0);
+		expect(totals.sources[0].years[0].modelledM3).toBeCloseTo(want, 6);
+		expect(totals.sources[0].units).toBe(held.length);
+		expect(JSON.stringify(res.body)).not.toMatch(/Farm [A-E]/);
+	});
+
+	it('leaves the volumes out of the run a viewer reads, and refuses them the allocations CSV', async () => {
+		// A run made with the volumes in its input.
+		const made = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'with volumes' });
+		expect(made.status).toBe(201);
+		const id = made.body.run.id;
+		const asEditor = (await editor.call('GET', `/projects/${projectId}/runs/${id}`)).body.run;
+		expect(asEditor.model.allocations.length).toBeGreaterThan(0);
+		const asViewer = (await viewer.call('GET', `/projects/${projectId}/runs/${id}`)).body.run;
+		expect(asViewer.model.allocations).toEqual([]);
+		expect(asViewer.summary.allocations.nodes).toEqual([]);
+		// Compare-only: its numbers don't rest on the volumes, so its input comes without them.
+		const input = (await viewer.call('GET', `/projects/${projectId}/runs/${id}/model-input`)).body.input;
+		expect(input.model.allocations).toEqual([]);
+		expect((await editor.call('GET', `/projects/${projectId}/runs/${id}/model-input`)).body.input.model.allocations.length).toBeGreaterThan(0);
+		const compare = await viewer.call('GET', `/compare/runs?a=${encodeURIComponent(`${projectId}:${id}`)}&b=${encodeURIComponent(`${projectId}:${runId}`)}`);
+		expect(compare.status, JSON.stringify(compare.body)).toBe(200);
+		expect(compare.body.a.run.inputs.model.allocations).toEqual([]);
+		expect(JSON.stringify(compare.body)).not.toContain('"volumeM3PerYear":120000');
+		const csv = await app.request(`/projects/${projectId}/allocations/export.csv`, { headers: { cookie: viewer.cookie, origin: 'http://localhost:7777' } });
+		expect(csv.status).toBe(403);
+		expect((await owner.call('DELETE', `/projects/${projectId}/runs/${id}`)).status).toBe(204);
+	});
+
+	it('lets only an owner switch it, records it, and the app can’t write the column itself', async () => {
+		expect((await editor.call('PUT', `/projects/${projectId}/allocations/viewer-units`, { on: true })).status).toBe(403);
+		await expect(rowsAs(owner, 'UPDATE project SET allocations_viewer_units = true WHERE id = $1', [projectId])).rejects.toThrow(/only an owner/);
+		const res = await owner.call('PUT', `/projects/${projectId}/allocations/viewer-units`, { on: true });
+		expect(res.status).toBe(200);
+		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'allocation.viewer_units' ORDER BY id DESC LIMIT 1`, [projectId]);
+		expect(ev.subject).toEqual({ on: true });
+		// Now the viewer reads each row (the tests below rely on it), never a name.
+		expect((await rowsAs(viewer, 'SELECT id FROM allocation WHERE project_id = $1', [projectId])).length).toBe(10);
+		expect((await viewer.call('GET', `/projects/${projectId}/allocations`)).body).toMatchObject({ viewerUnits: true, unitsHidden: false, totals: null });
+	});
+
+	it('needs a WARMS extract’s reference: how it was obtained', async () => {
+		const res = await editor.call('POST', `/projects/${projectId}/allocations/import`, importBody({ reference: '  ' }));
+		expect(res.status).toBe(400);
+		expect(JSON.stringify(res.body)).toContain('DWS or CMA letter or terms');
+		// A CSV of the template needs none (positive control: it reaches the parser, which reads the file).
+		expect((await editor.call('POST', `/projects/${projectId}/allocations/import`, importBody({ kind: 'csv', reference: '' }))).status).not.toBe(400);
+		await expect(asOwner(`INSERT INTO allocation_source (project_id, kind, file_name, sha256) VALUES ($1, 'warms_extract', 'x.csv', $2)`, [projectId, 'b'.repeat(64)])).rejects.toThrow(
+			/allocation_source_warms_reference/
+		);
 	});
 });
 

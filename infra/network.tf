@@ -120,7 +120,7 @@ resource "aws_security_group" "api_lambda" {
 
 resource "aws_security_group" "migrate_lambda" {
   name        = "${local.project}-migrate-lambda"
-  description = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
+  description = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager and S3 endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-migrate-lambda" }
 }

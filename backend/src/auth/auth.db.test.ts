@@ -15,7 +15,7 @@ describe('auth', () => {
 		const u = await signUp('Ann', { verified: false });
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
-		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, termsVersion: LEGAL_VERSION, farmNoticeCurrent: false });
 		expect(JSON.stringify(me.body)).not.toContain('password');
 	});
 
@@ -162,12 +162,15 @@ describe('terms acceptance', () => {
 		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(true);
 		await asOwner('UPDATE app_user SET terms_version = $2 WHERE id = $1', [u.id, '2020-01-01']);
 		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(false);
+		// The version it accepted, so the notice lists every change since (TermsUpdate.svelte).
+		expect((await u.call('GET', '/auth/me')).body.user.termsVersion).toBe('2020-01-01');
 		// Made by a script (seed:examples, import:project): app_register without a version accepted nothing.
 		const email = `script-${crypto.randomUUID()}@x.io`;
 		const [made] = (await asOwner("SELECT app_register($1, 'Script', 'x', NULL) AS id", [email])) as { id: string }[];
 		expect(await record(email)).toEqual([{ terms_version: null, terms_accepted_at: null }]);
 		const me = await anon('GET', '/auth/me', undefined, `${SESSION_COOKIE}=${await signSession(made!.id)}`);
 		expect(me.body.user.termsCurrent).toBe(false);
+		expect(me.body.user.termsVersion).toBeNull();
 	});
 
 	it('POST /auth/me/accept-terms records the current version for an account that accepted an older one, or none', async () => {
@@ -397,7 +400,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		const u = await signUp('Renamed');
 		const res = await u.call('PATCH', '/auth/me', { displayName: '  Dr Renamed  ' });
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, termsVersion: LEGAL_VERSION, farmNoticeCurrent: false });
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
@@ -415,7 +418,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 
 		const res = await change(u.cookie, 'correct horse', 'battery staple');
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, termsVersion: LEGAL_VERSION, farmNoticeCurrent: false });
 		const fresh = cookieOf(res);
 		expect(fresh).toMatch(/^wm_session=.+/);
 

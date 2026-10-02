@@ -4,7 +4,8 @@
 // rebuilt and hashed. Every figure comes from the runs' own stored summaries
 // and the stored ensembles, by the same definitions the compare page and the
 // ensemble use (G14): nothing here re-runs the model.
-import type { AllocationNodeComparison, AllocationSourceComparison, AllocationWaterSource, AllocationYear } from '../allocations/compare';
+import { allocationStatus, DEFAULT_ALLOCATION_TOLERANCE, type AllocationNodeComparison, type AllocationSourceComparison, type AllocationWaterSource, type AllocationYear } from '../allocations/compare';
+import { FARMER_K } from '../views/farmView';
 import { ALLOCATION_MODE_LABEL } from '../allocations/mode';
 import { errataFor, type Erratum } from '../liability/errata';
 import type { EwrAssuranceSite } from '../reserve/assurance';
@@ -20,6 +21,9 @@ import { demandSourceShares, type DemandSourceShare } from '../network/demandSou
 import { declaredRuleError, declaredRuleMismatches, type DeclaredUncertaintyRule } from '../uncertainty/options';
 import { ENGINE_VERSION, ENSEMBLE_MEASURES_SINCE } from '../version';
 import { licenceImpactSection } from './impact';
+import { authorisedUnavailable } from './authorised';
+import { localitySection } from './locality';
+import { proposedRiverWorks, riverWorks, riverWorksName, unboundedRiverWorks, type RiverWorks } from './riverWorks';
 import {
 	EVIDENCE_REPORT_VERSION,
 	type EvidenceAllocationCounts,
@@ -30,6 +34,9 @@ import {
 	type EvidenceAllocationYear,
 	type EvidenceChange,
 	type EvidenceCheck,
+	type EvidenceCombined,
+	type EvidenceCombinedInput,
+	type EvidenceCombinedMeasure,
 	type EvidenceCumulative,
 	type EvidenceCumulativeApplication,
 	type EvidenceDemandObject,
@@ -111,6 +118,19 @@ const oldestFirst = <T extends { createdAt: string; id: string }>(rows: readonly
 // ---------------------------------------------------------------------------
 // Checks
 // ---------------------------------------------------------------------------
+
+/** What to enter for each kind of unbounded river abstraction, in the check's fix. */
+function capacityFix(ws: readonly RiverWorks[]): string {
+	const kinds = new Set(ws.map((w) => w.kind));
+	const parts: string[] = [];
+	if (kinds.has('pump')) parts.push('enter the river pump’s capacity (Network › the unit › Supply, pumps × m³/h)');
+	if (kinds.has('noDam')) parts.push('give a unit without a dam the run of river supply rule, with a pump capacity');
+	if (kinds.has('user')) parts.push('enter the other water user’s pump capacity (Network › the user)');
+	if (kinds.has('offtake')) parts.push('give the off-take a rate that is a number (Transfers)');
+	if (kinds.has('abstraction')) parts.push('enter the river abstraction’s pump capacity (Network › the unit › Water for the crops or the demand object)');
+	const text = parts.join('; ');
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 /** Every check the report makes on its inputs, in the order the board lists them. */
 export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
@@ -210,6 +230,65 @@ export function evidenceChecks(input: EvidenceInput): EvidenceCheck[] {
 		blocksIssue: true,
 		fix: 'Take the baseline-assumption changes out of the application, or make them in the baseline (a new nominated run) first.'
 	});
+	}
+	// Licensing evidence rests on bounded, Reserve-protecting abstraction (issue #54, #90 Q15 and Q16): a model
+	// may run without either while exploring (each run warns), but a pack isn't issued on it. From each run's
+	// stored model, so the check reads what the pack cites, never the live project.
+	const winB = { startDate: b.startDate, endDate: b.endDate };
+	const winA = a ? { startDate: a.startDate, endDate: a.endDate } : winB;
+	const unbounded = { b: unboundedRiverWorks(b.inputs.model, winB), a: a ? unboundedRiverWorks(a.inputs.model, winA) : [] };
+	const listWorks = (ws: readonly RiverWorks[]) => ws.map(riverWorksName).join(', ');
+	// Named once: in both runs, the baseline's only, the application's only (by kind and id, so a renamed unit is one).
+	const key = (w: RiverWorks) => `${w.kind}:${w.id}`;
+	const inA = new Set(unbounded.a.map(key));
+	const inB = new Set(unbounded.b.map(key));
+	const all: { who: string; ws: RiverWorks[] }[] = a
+		? [
+				{ who: 'Both runs', ws: unbounded.b.filter((w) => inA.has(key(w))) },
+				{ who: 'the baseline', ws: unbounded.b.filter((w) => !inA.has(key(w))) },
+				{ who: 'the application', ws: unbounded.a.filter((w) => !inB.has(key(w))) }
+			]
+		: [{ who: 'The run', ws: unbounded.b }];
+	const groups = all.filter((g) => g.ws.length > 0);
+	const nUnbounded = groups.reduce((n, g) => n + g.ws.length, 0);
+	const capitalise = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+	add({
+		id: 'pumpCapacity',
+		label: 'Every river pump has a capacity',
+		passed: nUnbounded === 0,
+		detail:
+			nUnbounded === 0
+				? riverWorks(b.inputs.model, winB).length + (a ? riverWorks(a.inputs.model, winA).length : 0) === 0
+					? `No unit, other water user or off-take takes from the river${a ? ' in either run' : ''}.`
+					: `Every river pump, other water user and off-take${a ? ' in both runs' : ''} has a capacity, so what it takes is bounded.`
+				: capitalise(groups.map((g) => `${g.who}: ${listWorks(g.ws)}`).join('; ')) +
+					`. With no capacity, only the river’s flow limits what ${nUnbounded === 1 ? 'it takes' : 'they take'}.`,
+		refuses: false,
+		blocksIssue: true,
+		fix: `${capacityFix([...unbounded.b, ...unbounded.a])}, then ${
+			unbounded.b.length ? `run the model again and nominate the new run${a ? ', and run the application on it' : ''}` : 'run the application again (in the scenario, for the application’s own units)'
+		}.`
+	});
+	if (a) {
+		const works = proposedRiverWorks(a.scenario.ops, a.scenario.classified, b.inputs.model, a.inputs.model, winA);
+		const open = works.filter((w) => !w.protectsEwr);
+		const users = open.some((w) => w.kind === 'user');
+		add({
+			id: 'protectsEwr',
+			label: 'The application’s own river abstraction leaves the EWR in the river',
+			passed: open.length === 0,
+			detail:
+				works.length === 0
+					? 'The application adds or changes no river abstraction on the applicant’s units.'
+					: open.length === 0
+						? `${listWorks(works)} ${works.length === 1 ? 'leaves' : 'each leave'} the EWR, or a hands-off flow, in the river before taking anything, in every month ${works.length === 1 ? 'it takes' : 'they take'}.`
+						: `${listWorks(open)} ${open.length === 1 ? 'keeps' : 'keep'} neither the EWR nor a hands-off flow in every month ${open.length === 1 ? 'it takes' : 'they take'}, so on a dry day ${open.length === 1 ? 'it' : 'they'} can take the river below its Reserve. The baseline’s existing users are current use and are not judged here.`,
+			refuses: false,
+			blocksIssue: true,
+			fix: `In the scenario, give each one a hands-off flow in every month it takes, or keep the EWR in the river (Network › the unit › Supply; an off-take’s rule on Transfers), and run it again.${
+				users ? ' An other water user can’t keep one in the model: model the new take as a unit that pumps from the river, with a pump capacity and a hands-off flow.' : ''
+			}`
+		});
 	}
 	const rule = declaredRuleOf(b);
 	add({
@@ -318,9 +397,9 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 	const river = sites(b, a, fdcBandsOf(input, cited, baseSum, paired, change));
 	const users = userRows(b, a, paired, change);
 	const served = servedSection(b, a);
-	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
+	const cumulative: EvidenceCumulative = { ...cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated), combined: combinedOf(a, input.combined) };
 	const licenceImpact = licenceImpactSection(b, a, input.impact);
-	if (a) rows.push(cumulativeRow(cumulative));
+	if (a) rows.push(combinedRow(cumulative.combined!));
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : [])
@@ -349,8 +428,10 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 				createdBy: b.createdBy,
 				nomination: isCurrent ? { nominatedAt: last!.nominatedAt, nominatedBy: last!.nominatedBy, reason: last!.reason } : null,
 				published: !pub ? 'none' : pub.runId === b.id ? 'this' : 'other',
-				publishedAt: pub?.publishedAt ?? null
+				publishedAt: pub?.publishedAt ?? null,
+				endorsement: input.baselineEndorsement ? { ...input.baselineEndorsement } : null
 			},
+			authority: input.authority ? { ...input.authority } : null,
 			application: a
 				? {
 						runId: a.id,
@@ -396,7 +477,15 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		cumulative,
 		allocations,
 		licenceImpact,
+		// The full-authorised-use board (evidence-14): as the backend found it, or not built.
+		licenceImpactAuthorised: a ? (input.authorisedImpact ? structuredClone(input.authorisedImpact) : authorisedUnavailable('notBuilt')) : null,
 		demandObjects,
+		localityMap: localitySection(input.mapFeatures, {
+			applicant: !!a,
+			ownedNodeIds: a?.scenario.ownedNodeIds ?? [],
+			ewrSiteNodeIds: river.flatMap((s) => (s.isOutlet ? [] : [s.key])),
+			models: [a?.inputs.model, b.inputs.model]
+		}),
 		appendix: {
 			baselineInputs: b.inputs,
 			changes: a ? input.changes : [],
@@ -1031,14 +1120,25 @@ export function driestMonth(site: Pick<EwrAssuranceSite, 'months' | 'byMonth'>):
 // § 4 Other users
 // ---------------------------------------------------------------------------
 
-/** What the cumulative row and table say they are (licensing authority: never read a sum as a combined run). */
-export const CUMULATIVE_BASIS = 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)';
+/** § 4's table of each other application's own run: what it says when there is none. */
 export const CUMULATIVE_NONE = 'None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.';
+
+/** What page 1's combined row is (evidence-11, finding C26): one run of every application together, never a sum. */
+export const COMBINED_BASIS =
+	'Days below the pragmatic EWR at the outlet: this application and every other submitted or approved one on this baseline, run together (a cumulative assessment, WP-3.11)';
+export const COMBINED_LABEL = 'This and the other applications on this baseline, together';
+export const COMBINED_NO_BAND = 'no band: one combined run, not an ensemble';
+export const COMBINED_NONE = 'None: no other submitted or approved application on this baseline is visible to the account that built this report.';
+export const COMBINED_CONFLICT = (conflicts: readonly string[]) =>
+	`Not assessed: these applications conflict, so they are not run together (a conflict is never merged): ${conflicts.join('; ')}.`;
+export const COMBINED_PROBLEMS = (problems: readonly string[]) => `Not assessed: an op doesn’t apply with these applications together: ${problems.join('; ')}.`;
+export const COMBINED_PENDING = 'Not assessed yet: an assessment of these applications together is under way on this baseline; build the report again once it has completed.';
+export const COMBINED_NOT_RUN = (n: number) =>
+	`Not assessed: these ${n} applications have not been assessed together on this baseline with their current ops. An editor runs Applications › Assess together with them, and the report reads that assessment.`;
+export const COMBINED_ONE = 'Not combined: one application on this baseline; its own run is in the table above.';
+export const COMBINED_NO_OUTLET = 'Not assessed: the assessment has no pragmatic EWR at the outlet.';
 /** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
-const CUMULATIVE_NAMED = 3;
-export const CUMULATIVE_TRUNCATED = (n: number) =>
-	`Not assessed: more than ${n} other applications have runs on this baseline; § 4 lists the newest ${n}, and a sum of part of them would understate it.`;
-export const CUMULATIVE_NO_BAND = 'no band: a sum of other runs’ own differences';
+const COMBINED_NAMED = 3;
 
 /** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
 function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
@@ -1082,25 +1182,83 @@ function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: r
 	return { applications, counted: counted.length, truncated, total, withThis };
 }
 
-/** Page 1's row over the other applications (application reports only). */
-function cumulativeRow(c: EvidenceCumulative): EvidenceRow {
-	const all = c.applications.filter((x) => x.comparable).map((x) => `“${x.scenarioName}”`);
-	const names = all.length > CUMULATIVE_NAMED ? [...all.slice(0, CUMULATIVE_NAMED), `${all.length - CUMULATIVE_NAMED} more in § 4`] : all;
-	const left = c.applications.length - c.counted;
+/**
+ * Every application on the baseline together (evidence-11, finding C26): read
+ * from a completed cumulative assessment of exactly this application and the
+ * others with their current ops, which ran the baseline, each alone and all
+ * together on one engine. A conflict, or an op that doesn't apply together,
+ * makes it not assessed with the reason named: never a silent merge.
+ */
+function combinedOf(a: EvidenceInput['application'], c: EvidenceCombinedInput): EvidenceCombined {
+	const report = c.assessment?.report ?? null;
+	const outletRow = (metric: 'ewr_days_not_met' | 'reserve_months_met') => report?.rows.find((r) => r.metric === metric && r.isOutlet) ?? null;
+	const ewrRow = outletRow('ewr_days_not_met');
+	const reserveRow = outletRow('reserve_months_met');
+	const position = new Map((report?.scenarios ?? []).map((x, i) => [x.id, i]));
+	const single = (row: typeof ewrRow, id: string) => {
+		const i = position.get(id);
+		return row && i !== undefined ? (row.singleChanges[i] ?? null) : null;
+	};
+	const others = [...c.others].sort((x, y) => (x.scenarioName < y.scenarioName ? -1 : x.scenarioName > y.scenarioName ? 1 : x.scenarioId < y.scenarioId ? -1 : 1));
+	const applications: EvidenceCombined['applications'] = [
+		...(a
+			? [{ scenarioId: a.scenario.id, scenarioName: a.scenario.name, status: a.scenario.status, outcome: null, isThis: true }]
+			: []),
+		...others.map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome, isThis: false }))
+	].map((x) => ({ ...x, ewrDays: single(ewrRow, x.scenarioId), reserveMonths: single(reserveRow, x.scenarioId) }));
+	const measure = (row: typeof ewrRow): EvidenceCombinedMeasure | null =>
+		row ? { baseline: row.baseline, combined: row.combined, change: row.combinedChange, sumOfSingles: row.sumOfSingles, interaction: row.interaction } : null;
+	const notAssessed = !others.length
+		? COMBINED_NONE
+		: applications.length < 2
+			? COMBINED_ONE
+			: c.unavailable
+			? `Not assessed: ${c.unavailable}`
+			: c.conflicts.length
+				? COMBINED_CONFLICT(c.conflicts)
+				: c.problems.length
+					? COMBINED_PROBLEMS(c.problems)
+					: c.assessment
+						? ewrRow
+							? null
+							: COMBINED_NO_OUTLET
+						: c.pending
+							? COMBINED_PENDING
+							: COMBINED_NOT_RUN(applications.length);
+	const assessed = notAssessed === null;
+	return {
+		applications: assessed ? applications : applications.map((x) => ({ ...x, ewrDays: null, reserveMonths: null })),
+		assessment: c.assessment && assessed ? { id: c.assessment.id, name: c.assessment.name, createdAt: c.assessment.createdAt, createdBy: c.assessment.createdBy, engineVersion: c.assessment.engineVersion } : null,
+		conflicts: [...c.conflicts],
+		problems: [...c.problems],
+		ewrDays: assessed ? measure(ewrRow) : null,
+		reserveMonths: assessed ? measure(reserveRow) : null,
+		warnings: assessed ? [...(report?.warnings ?? [])] : [],
+		notAssessed
+	};
+}
+
+/** Page 1's row over every application together (application reports only). */
+function combinedRow(c: EvidenceCombined): EvidenceRow {
+	const m = c.ewrDays;
+	const all = c.applications.map((x) => (x.isThis ? `“${x.scenarioName}” (this one)` : `“${x.scenarioName}”`));
+	const names = all.length > COMBINED_NAMED ? [...all.slice(0, COMBINED_NAMED), `${all.length - COMBINED_NAMED} more in § 4`] : all;
+	const at = c.assessment;
 	return {
 		id: 'otherApplications',
-		label: 'Other applications on this baseline, summed',
-		basis: CUMULATIVE_BASIS,
+		label: COMBINED_LABEL,
+		basis: COMBINED_BASIS,
 		subject: null,
 		unit: 'days',
 		higherIsWorse: true,
-		baseline: null,
-		application: null,
-		change: c.counted && !c.truncated ? { run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null } : null,
-		notAssessed: c.truncated ? CUMULATIVE_TRUNCATED(c.applications.length) : !c.applications.length ? CUMULATIVE_NONE : !c.counted ? `Not assessed: none of the ${c.applications.length} other applications ran on this baseline’s engine, period and runoff model (§ 4).` : null,
-		note: c.counted && !c.truncated
-			? `${c.counted} application${c.counted === 1 ? '' : 's'}: ${names.join(', ')}${left ? `; ${left} more not counted (§ 4)` : ''}.${c.withThis?.ewrDays != null ? ` With this one: ${signed(fixed(c.withThis.ewrDays, 0))} days.` : ''}`
-			: null
+		baseline: m?.baseline ?? null,
+		application: m?.combined ?? null,
+		change: m ? { run: m.change, band: null, bandNote: COMBINED_NO_BAND, worse: null } : null,
+		notAssessed: c.notAssessed,
+		note:
+			m && at
+				? `${all.length} applications together: ${names.join(', ')}.${m.interaction === null ? '' : ` Interaction ${signed(fixed(m.interaction, 0))} ${Math.abs(Math.round(m.interaction)) === 1 ? 'day' : 'days'}: what they do together beyond the sum of each alone.`} Assessment “${at.name}” (${day(at.createdAt)}${at.engineVersion ? `, engine ${at.engineVersion}` : ''}).`
+				: null
 	};
 }
 
@@ -1257,7 +1415,9 @@ function countsOf(side: AllocationSourceComparison): EvidenceAllocationCounts {
  * water source with one, every water year of both runs: the registered
  * volume and the modelled use, and whole years counted over, within and
  * under the band. Units are matched by node id (as § 4 matches them) and
- * named by the unit, never the holder (D3).
+ * named by the unit, never the holder (D3). Only the applicant's own units
+ * are listed one by one (evidence-15): every other unit is in one total per
+ * water source (otherUnitTotals), at FARMER_K or more units.
  */
 function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceAllocations {
 	const ca = b.allocations ?? null;
@@ -1315,16 +1475,116 @@ function allocationSection(b: EvidenceRunInput, a: EvidenceInput['application'])
 		return { nodeId, name: n.name, kind: n.kind, own: owned.has(nodeId), onlyIn: a && !nb ? 'baseline' : a && !na ? 'application' : null, sources };
 	});
 
+	const toleranceA = ca?.tolerance ?? null;
+	const toleranceB = cb?.tolerance ?? null;
+	const A = allocationTotals({ units }, 'A');
+	const B = a ? allocationTotals({ units }, 'B') : null;
+	const others = otherUnitTotals(
+		units.filter((u) => !u.own),
+		toleranceA,
+		toleranceB
+	);
 	return {
 		notAssessed: total === 0 ? ALLOCATIONS_NOT_ASSESSED.none : units.length === 0 ? ALLOCATIONS_NOT_ASSESSED.notMatched(total) : null,
 		modeA: b.summary.allocations?.mode ?? null,
 		modeB: a ? (a.summary.allocations?.mode ?? null) : null,
-		toleranceA: ca?.tolerance ?? null,
-		toleranceB: cb?.tolerance ?? null,
-		units,
+		toleranceA,
+		toleranceB,
+		units: [...units.filter((u) => u.own), ...others.units],
 		notMatchedA: ca ? ca.unmatchedAllocationIds.length + ca.notInRunAllocationIds.length : 0,
-		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null
+		notMatchedB: a ? (cb ? cb.unmatchedAllocationIds.length + cb.notInRunAllocationIds.length : 0) : null,
+		othersLeftOut: others.leftOut,
+		unitYears: { overA: A.over, judgedA: A.judged, overB: B ? B.over : null, judgedB: B ? B.judged : null }
 	};
+}
+
+/** The label of a total of other units (evidence-15). */
+export const otherUnitsName = (n: number) => `Other registered users (${n} units)`;
+
+const sumOrNull = (xs: (number | null)[]) => (xs.some((x) => x !== null) ? xs.reduce<number>((s, x) => s + (x ?? 0), 0) : null);
+
+/**
+ * Every unit that isn't the applicant's, summed per water source and water
+ * year (evidence-15, D3): the registered volume and modelled use of each run,
+ * the status of the sums, and the whole years counted from them. A source
+ * fewer than FARMER_K such units hold is left out (counted in `leftOut`).
+ */
+function otherUnitTotals(others: EvidenceAllocationUnit[], tolA: number | null, tolB: number | null): { units: EvidenceAllocationUnit[]; leftOut: number } {
+	const units: EvidenceAllocationUnit[] = [];
+	const left = new Set<string>();
+	for (const src of SOURCES) {
+		const holding = others.filter((u) => u.sources.some((s) => s.waterSource === src));
+		if (!holding.length) continue;
+		if (holding.length < FARMER_K) {
+			for (const u of holding) left.add(u.nodeId);
+			continue;
+		}
+		const parts = holding.map((u) => u.sources.find((s) => s.waterSource === src)!);
+		const wys = [...new Set(parts.flatMap((p) => p.years.map((y) => y.waterYear)))].sort((x, y) => x - y);
+		const years: EvidenceAllocationYear[] = wys.map((wy) => {
+			const ys = parts.map((p) => p.years.find((y) => y.waterYear === wy)).filter((y): y is EvidenceAllocationYear => !!y);
+			const side = (reg: (y: EvidenceAllocationYear) => number | null, mod: (y: EvidenceAllocationYear) => number | null, part: (y: EvidenceAllocationYear) => boolean | null, tol: number | null) => {
+				const registered = sumOrNull(ys.map(reg));
+				const modelled = sumOrNull(ys.map(mod));
+				const partial = ys.some((y) => part(y) !== null) ? ys.some((y) => part(y) === true) : null;
+				const status = registered === null || modelled === null ? null : allocationStatus(modelled, registered, tol ?? DEFAULT_ALLOCATION_TOLERANCE);
+				return { registered, modelled, partial, status };
+			};
+			const sa = side((y) => y.registeredA, (y) => y.modelledA, (y) => y.partialA, tolA);
+			const sb = side((y) => y.registeredB, (y) => y.modelledB, (y) => y.partialB, tolB);
+			return {
+				waterYear: wy,
+				days: ys[0]!.days,
+				yearDays: ys[0]!.yearDays,
+				partialA: sa.partial,
+				partialB: sb.partial,
+				registeredA: sa.registered,
+				modelledA: sa.modelled,
+				statusA: sa.status,
+				registeredB: sb.registered,
+				modelledB: sb.modelled,
+				statusB: sb.status
+			};
+		});
+		const run = (r: 'A' | 'B') => {
+			const has = parts.some((p) => (r === 'A' ? p.countsA : p.countsB) !== null);
+			if (!has) return { counts: null, meanModelled: null, meanRegistered: null };
+			const whole = years.filter((y) => (r === 'A' ? y.partialA : y.partialB) === false);
+			const st = (y: EvidenceAllocationYear) => (r === 'A' ? y.statusA : y.statusB);
+			const n = (f: (s: ReturnType<typeof st>) => boolean) => whole.filter((y) => f(st(y))).length;
+			const mean = (f: (y: EvidenceAllocationYear) => number | null) => (whole.length ? whole.reduce((s, y) => s + (f(y) ?? 0), 0) / whole.length : null);
+			return {
+				counts: { wholeYears: whole.length, over: n((s) => s === 'over'), within: n((s) => s === 'within'), under: n((s) => s === 'under'), noVolume: n((s) => s === 'unregistered' || s === 'none') },
+				meanModelled: mean((y) => (r === 'A' ? y.modelledA : y.modelledB)),
+				meanRegistered: mean((y) => (r === 'A' ? y.registeredA : y.registeredB))
+			};
+		};
+		const ra = run('A');
+		const rb = run('B');
+		units.push({
+			nodeId: `others:${src}`,
+			name: otherUnitsName(holding.length),
+			kind: 'farm',
+			own: false,
+			onlyIn: null,
+			aggregate: holding.length,
+			sources: [
+				{
+					waterSource: src,
+					years,
+					countsA: ra.counts,
+					countsB: rb.counts,
+					meanModelledA: ra.meanModelled,
+					meanRegisteredA: ra.meanRegistered,
+					meanModelledB: rb.meanModelled,
+					meanRegisteredB: rb.meanRegistered,
+					capA: null,
+					capB: null
+				}
+			]
+		});
+	}
+	return { units, leftOut: left.size };
 }
 
 /**
@@ -1342,7 +1602,7 @@ function capOf(run: Pick<EvidenceRunInput, 'summary'>, nodeId: string, source: A
 }
 
 /** Σ over units and sources of a run's whole years over, and of those judged. */
-function allocationTotals(al: EvidenceAllocations, run: 'A' | 'B') {
+function allocationTotals(al: Pick<EvidenceAllocations, 'units'>, run: 'A' | 'B') {
 	let over = 0;
 	let judged = 0;
 	for (const u of al.units)
@@ -1363,8 +1623,10 @@ const modeWords = (m: EvidenceAllocations['modeA']) => (m === null ? 'not record
 
 /** Page 1's fixed "Registered vs modelled use" row (G6): unit-years above the registered volume, both runs. */
 function registeredUseRow(al: EvidenceAllocations, app: boolean): EvidenceRow {
-	const A = allocationTotals(al, 'A');
-	const B = app ? allocationTotals(al, 'B') : null;
+	// Per unit, before § 5's totals of other units (evidence-15).
+	const uy = al.unitYears;
+	const A = uy ? { over: uy.overA, judged: uy.judgedA } : allocationTotals(al, 'A');
+	const B = app ? (uy && uy.overB !== null && uy.judgedB !== null ? { over: uy.overB, judged: uy.judgedB } : allocationTotals(al, 'B')) : null;
 	const judged = A.judged + (B?.judged ?? 0);
 	const notAssessed = al.notAssessed ?? (judged === 0 ? ALLOCATIONS_NOT_ASSESSED.noWholeYear : null);
 	const mode =
@@ -1488,6 +1750,9 @@ function demandSourceFlag(d: EvidenceDemandObjects | null): string | null {
 // Flags and questions
 // ---------------------------------------------------------------------------
 
+/** Page 1's flag when the responsible authority hasn't endorsed the baseline (evidence-13). */
+export const NOT_ENDORSED = 'Baseline not endorsed by the responsible authority.';
+
 function evidenceFlags(
 	input: EvidenceInput,
 	ctx: {
@@ -1543,14 +1808,14 @@ function evidenceFlags(
 		);
 	}
 	for (const s of ctx.river) {
-		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a rule pending the hydrologist.
+		// G16: below the table's driest point the requirement is scaled with the flow (model.md §2.9c), a provisional rule (2026-10-01) not yet confirmed by the hydrologist.
 		const below = Math.max(s.belowTableA, s.belowTableB ?? 0);
 		if (below) {
 			const counts = s.belowTableB === null || s.belowTableB === s.belowTableA ? `${s.belowTableA} of ${s.monthsA} months` : `${s.belowTableA} of ${s.monthsA} months in the baseline and ${s.belowTableB} in the application`;
 			add(
 				`belowTable-${s.key}`,
 				'caution',
-				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a rule pending the hydrologist.${
+				`At ${s.name} the natural flow is drier than the rule table’s driest point in ${counts}: the requirement there is scaled with the flow, a provisional rule not yet confirmed by the catchment’s hydrologist.${
 					s.belowTableExpectedPct === null ? '' : ` With the percentile from the run, about ${fixed(s.belowTableExpectedPct, 0)} % of months fall there by construction.`
 				}`,
 				'The requirement shrinks with the flow in those months, below the table’s driest requirement, so they are easier to meet than if it were held at that level.'
@@ -1578,6 +1843,8 @@ function evidenceFlags(
 	const wa = b.summary.warnings.length;
 	const wb = a?.summary.warnings.length ?? 0;
 	add('warnings', 'count', a ? `${wa} warning${wa === 1 ? '' : 's'} on the baseline and ${wb} on the application, verbatim in Appendix A.5.` : `${wa} run warning${wa === 1 ? '' : 's'}, verbatim in Appendix A.5.`);
+	// evidence-13: the authority decides what evidence it accepts (NWA s41(2)); say when it hasn't endorsed the baseline.
+	if (!input.baselineEndorsement) add('notEndorsed', 'caution', NOT_ENDORSED, 'The responsible authority has not said it accepts this baseline as the basis for assessing applications.');
 	const order = { red: 0, caution: 1, count: 2 } as const;
 	return out.map((f, i) => ({ f, i })).sort((x, y) => order[x.f.level] - order[y.f.level] || x.i - y.i).map((x) => x.f);
 }

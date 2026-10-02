@@ -27,6 +27,14 @@
 	// since the manifest was frozen (detail.errataFoundSince, 132): never
 	// printed, since the pack prints only what its manifest recorded.
 	//
+	// The bar also says what the server's re-run of the pack from its stored
+	// reproduction bundle found (detail.reproduction, 154_pack_reproduce):
+	// reproduced, not reproduced (with the failed checks), another engine, or
+	// still re-running. It is the app's own claim: never printed, never on
+	// verify. An editor may ask for it again (POST …/reproduce) when the last
+	// re-run gave up, or when the outcome is an older engine's than the
+	// server's: the new outcome is recorded beside the old.
+	//
 	// Sharing and comments (WP-3.15, 128_pack_share_notes): an editor makes a
 	// read-only share link to an issued pack here (Share link…, the same
 	// ShareLinksPanel as an application's) and withdraws any of them, a
@@ -46,9 +54,10 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { packAudiences } from '$lib/components/notes/notes';
 	import ShareLinksPanel from '$lib/components/project/ShareLinksPanel.svelte';
+	import PackSendDialog from '$lib/components/packs/PackSendDialog.svelte';
 	import PackActions from '$lib/components/packs/PackActions.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
-	import { errataFoundSinceNote, latestOnly, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
+	import { errataFoundSinceNote, latestOnly, reproductionNote, manifestFileName, manifestFileText, packStamp, packVerifyLine, packVerifyRef } from '$lib/components/packs/pack';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
 
 	const loadReport = () => import('$lib/components/report/evidence/EvidenceReport.svelte');
@@ -118,6 +127,8 @@
 	const pack = $derived(detail?.pack ?? null);
 	/** Where the server-rendered PDF is (119_pack_render): ready, rendering, failed or none. */
 	const pdf = $derived(detail?.pdf ?? null);
+	/** What the server's re-run from the stored bundle found (154_pack_reproduce); null when there is nothing to say. */
+	const reproduction = $derived(detail?.reproduction ? { state: detail.reproduction, note: reproductionNote(detail.reproduction) } : null);
 
 	let renderingAgain = $state(false);
 	let renderError = $state<string | null>(null);
@@ -135,11 +146,29 @@
 			renderingAgain = false;
 		}
 	}
+	let rerunning = $state(false);
+	let rerunError = $state<string | null>(null);
+	/** An editor asks the server to re-run the pack again (POST …/reproduce), then reads the pack again. */
+	async function rerunAgain() {
+		if (!pack) return;
+		rerunning = true;
+		rerunError = null;
+		try {
+			await api.packs.reproduce(projectId, pack.id);
+			await reload();
+		} catch (e) {
+			rerunError = e instanceof Error ? e.message : String(e);
+		} finally {
+			rerunning = false;
+		}
+	}
 	const report = $derived(detail?.manifest.report ?? null);
 	const canEdit = $derived(hasRole(project?.role, 'editor'));
 	/** Share links to it (an editor, once it was issued) and its notes (whoever reads it); never in a render session, which reads no project. */
 	const canShare = $derived(canEdit && !!pack && pack.status !== 'draft');
 	let shareOpen = $state(false);
+	/** Send the issued pack to the members acting for the responsible authority (licensing build item 13). */
+	let sendOpen = $state(false);
 	const ready = $derived(status === 'loaded');
 	const stamp = $derived(pack ? packStamp(pack) : '');
 	const verify = $derived(pack ? packVerifyRef(pack, page.url.origin, base) : null);
@@ -217,6 +246,7 @@
 			{#if bundleUrl}<a class="btn" href={bundleUrl} data-testid="pack-bundle-download">Download reproduction bundle</a>{/if}
 			{#if verify}<a class="btn" href="{base}/verify/{encodeURIComponent(pack.shortCode)}">Verify page</a>{/if}
 			{#if canShare}<button type="button" class="btn" onclick={() => (shareOpen = true)} data-testid="pack-share-open">Share link…</button>{/if}
+			{#if canEdit && pack.status === 'issued'}<button type="button" class="btn" onclick={() => (sendOpen = true)} data-testid="pack-send-open">Send to the authority…</button>{/if}
 			{#if project}<NotesDrawer {projectId} target={{ kind: 'pack', packId: pack.id, name: `evidence pack v${pack.version}`, audiences: packAudiences(pack.status === 'issued') }} />{/if}
 			<p class="muted small">
 				Version {pack.version}{pack.supersedesId ? ' (replaces an earlier version)' : ''} · code <span class="mono" data-testid="pack-code">{pack.shortCode}</span> · manifest SHA-256
@@ -244,6 +274,28 @@
 					{#if renderError}<span data-testid="pack-pdf-retry-error">({renderError})</span>{/if}
 				</div>
 			{/if}
+			{#if reproduction?.note}
+				{@const r = reproduction.note}
+				<div
+					class="reproduction small"
+					class:alert={r.tone !== 'quiet'}
+					class:alert-info={r.tone === 'good'}
+					class:alert-error={r.tone === 'bad'}
+					class:alert-warning={r.tone === 'warn'}
+					class:muted={r.tone === 'quiet'}
+					role={r.tone === 'bad' ? 'alert' : 'status'}
+					data-testid="pack-reproduction"
+					data-state={reproduction.state.status}
+				>
+					{r.text}
+					{#if reproduction.state.status === 'checking'}<button type="button" class="btn btn-sm" onclick={reload}>Check again</button>{/if}
+					{#if canEdit && r.rerun}<button type="button" class="btn btn-sm" onclick={rerunAgain} disabled={rerunning} data-testid="pack-reproduce-again">{r.rerun}</button>{/if}
+					{#if rerunError}<span data-testid="pack-reproduce-error">({rerunError})</span>{/if}
+					{#if r.failed.length}
+						<ul class="failed-checks">{#each r.failed as c (c.id)}<li><span class="mono">{c.id}</span>: {c.detail}</li>{/each}</ul>
+					{/if}
+				</div>
+			{/if}
 		</div>
 		{#if canShare}
 			<Dialog bind:open={shareOpen} title="Share evidence pack v{pack.version} read-only" side>
@@ -252,6 +304,9 @@
 					<button type="button" class="btn" onclick={() => (shareOpen = false)}>Close</button>
 				{/snippet}
 			</Dialog>
+		{/if}
+		{#if canEdit && pack.status === 'issued'}
+			<PackSendDialog bind:open={sendOpen} {projectId} packId={pack.id} version={pack.version} authority={project?.settings.responsibleAuthority?.name ?? null} />
 		{/if}
 		<PackActions {projectId} {pack} issue={detail.issue} manifestMatches={detail.manifestMatches} {canEdit} onchange={reload} />
 		<Lazy load={loadReport}>
@@ -281,6 +336,15 @@
 	.errata-alert {
 		flex-basis: 100%;
 		margin: 0;
+	}
+	.reproduction {
+		flex-basis: 100%;
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.failed-checks {
+		margin: 0.35rem 0 0;
+		padding-left: 1.2rem;
 	}
 	.errata-since {
 		margin: 0.35rem 0;

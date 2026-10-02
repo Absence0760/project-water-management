@@ -4,7 +4,9 @@
 	// the shared ModelEditor, as the Crops tab's Planted areas table does, so an
 	// edit here shows there and the other way round. The sheet is modal, which
 	// makes the page's save bar unreachable while it is open, so it carries the
-	// same save row: reason, Save changes (the page's save), and Done.
+	// same save row: reason, Save changes (the page's save), and Done. Under the
+	// areas, "From land cover" proposes a crop's area from the unit's parcels on
+	// the map (issue #326 B-landcover, CroplandProposalsBox.svelte).
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -13,6 +15,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
 	import { farmDemands } from './demand';
 	import { farmPlanting } from './farmDrawer';
 
@@ -23,7 +26,9 @@
 		nodeId,
 		readonly,
 		onsave,
-		reason = $bindable('')
+		reason = $bindable(''),
+		projectId,
+		onModelChanged = () => {}
 	}: {
 		open?: boolean;
 		editor: ModelEditor;
@@ -35,6 +40,10 @@
 		onsave: () => void;
 		/** The save bar's reason, shared, so it goes with whichever save runs. */
 		reason?: string;
+		/** The project: with it, a hydrological unit's drawer proposes areas from land cover. */
+		projectId?: string;
+		/** After a value from land cover is saved to the model: reload the inputs. */
+		onModelChanged?: () => Promise<void> | void;
 	} = $props();
 
 	const node = $derived(editor.model.nodes.find((n) => n.id === nodeId) ?? null);
@@ -93,6 +102,13 @@
 			</p>
 		{:else}
 			<p class="muted small">Nothing planted, so this hydrological unit draws no irrigation water.</p>
+		{/if}
+	{/if}
+	{#if node && node.kind === 'farm' && projectId}
+		{#if editor.savedNodeIds.has(node.id)}
+			<CroplandProposalsBox {projectId} nodeId={node.id} {readonly} dirty={editor.dirty} {onModelChanged} />
+		{:else}
+			<p class="muted small" data-testid="cropland-unsaved">Save the model to see this hydrological unit’s cultivated area from land cover.</p>
 		{/if}
 	{/if}
 

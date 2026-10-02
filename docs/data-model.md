@@ -61,7 +61,7 @@ erDiagram
 | --- | --- | --- |
 | `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (a `language` code, NULL = not chosen; 080) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql); `terms_version` (the terms and privacy notice accepted at sign-up, their effective date `YYYY-MM-DD`, the engine's `LEGAL_VERSION`) and `terms_accepted_at` (stamped by the database, never the caller: `app_register` and the `app_user_terms_stamp` trigger, which also refuses to clear a record), both NULL for an account a script made, 087_terms_acceptance.sql; `farm_notice_version` (the farm view's "Before you look at your farm" notice acknowledged with "I understand", its effective date, the engine's `FARMER_NOTICE_VERSION`) and `farm_notice_accepted_at` (stamped by the database through the `app_user_farm_notice_stamp` trigger, which also refuses to clear a record), both NULL until acknowledged, 093_farm_notice.sql | none (the workbook has no users) |
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
-| `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
+| `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); `privacy_contact_name` / `_email` / `_postal` (168: whom to ask about the team's projects' personal information); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
 | `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `calibrationSiteNodeId` (engine 1.41.0: where calibration scores, null = the outlet or a gauge above it with a flow record, [model.md §2.10k](./model.md#210k-calibrating-at-a-gauge-inside-the-network-engine--1410); no SQL migration, null from `mergeSettings`), `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `chirpsQuantileMap` (engine 1.53.0, CR-23: the CHIRPS gap fill's opt-in quantile map, `{ wetDayMm }` or null, [model.md §2.4b](./model.md#quantile-map-engine--1530-cr-23); no SQL migration, null from `mergeSettings`), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `lakeEvapFactorSource` (engine 1.49.0: free-text provenance of the dam evaporation factors, e.g. a lake-factor preset's note, [model.md §2.7a](./model.md) item 4; never read by the model; no SQL migration, '' from `mergeSettings`), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Three keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
@@ -70,12 +70,14 @@ erDiagram
 | `crop_area` | Planted m² per (farm node, crop) | `[Farm demand]` crop-area grid |
 | `land_cover` | A land-cover patch on a farm (migration 013, engine ≥ 0.24.0, [model.md §2.5a](./model.md)): `node_id`, `cover_class` (`eucalyptus`, `pine`, `invasive`, `invasiveRiparian`, `other`), `area_km2` ≥ 0, `density_pct` 0–1 (condensed cover), `factors jsonb` null or `{ mar, lowFlow }` each 0–1 (CHECKs). Part of the model document, rewritten whole on save like `crop_area`; cascades with its node. RLS viewer/editor policies, same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no land cover) |
 | `borehole` | An individual borehole on a farm or other user (migration 043, engine ≥ 0.36.0, WP-3.9, [model.md §2.7d](./model.md)): `node_id`, `name` (1–200 chars), `capacity_m3_day` ≥ 0, `annual_cap_m3` ≥ 0 or null (no cap; per water year), `mode` (`none`, `supplemental`, `primary`, `emergency`), `emergency_below_pct` 0–1, `target` (`direct`, `dam`), `depletion_factor` 0–1 (CHECKs). They add to the node's combined `borehole_capacity_m3_day` (012), whose `stream_depletion_lag_days` they share. Part of the model document (`ProjectModel.boreholes`, present only when there are any), rewritten whole on save like `land_cover`; cascades with its node. RLS viewer/editor policies plus `borehole_select_farmer` (own linked farms only), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | none (b023 has no boreholes) |
-| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
+| `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `priority_rank` smallint or null (migration 169, engine ≥ 1.64.0, issue #343: its rank within `first` or `last`, 1 supplied before 2, equal ranks pro rata, CHECKed to 1–99; null = 1, so every object saved before it runs unchanged; ignored on a `shared` object; the API's `rank`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `water_source` text or null (migration 170, engine ≥ 1.65.0, issue #344: where its water comes from, `dam` or `river`, CHECKed to that list; null = the dam), `river_pump_m3_day` and `river_pool_m3` float8 ≥ 0 (finite) or null (its river abstraction's pump capacity, null = no limit, and pool, null or 0 = none; read only under `river`), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
 | `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
+| `assessment` | A cumulative impact assessment (145, WP-3.11): several scenarios on one base run, each alone and all together, run as one `assessment` job; `status` (`pending` / `complete` / `refused` / `failed`), `problems`, `report` (the `CumulativeReport`); editors only; see [Assessments](#assessments-145_assessmentsql) | none |
+| `assessment_member` | One scenario of an assessment (145): its `name`, `origin`, `ops` and own nodes copied from the scenario at insert, then once its run alone (`summary`) or its `problems` | none |
 | `scenario_sweep` | A scenario sweep (062, issue #53 R2): a base run × named op sets, run as one `sweep` job; `base_run_id`, `job_id`, `name`, `status` (`pending` / `complete`), `engine_version`; see [Scenario sweeps](#scenario-sweeps-062_scenario_sweepssql) | none (the workbook is copied by hand for each what-if) |
 | `scenario_sweep_member` | One member of a sweep (062): `position` (0–11), `name`, `ops`, `ops_sha256`, then once its outcome: `status` (`pending`, `done`, `problems`, `failed`), `problems`, `summary` (the `RunSummary`), `series` (catchment-level outcome series), `start_date` / `end_date` | none |
 | `seasonal_outlook` | A seasonal outlook (063, issue #53 R5): a base run × a season (`decision_date`, `season_end`) × demand `levels`, over the record's analogue years, run as one `outlook` job; `planning_share`, `analogue_years`, `status`, `result` (the engine's summary), `engine_version`; see [Seasonal outlooks](#seasonal-outlooks-063_seasonal_outlooksql) | none (the sketch S3 was worked by hand) |
@@ -96,8 +98,8 @@ erDiagram
 | `dam_initial_pct` | Initial dam volume (%) | |
 | `dam_min_pct` | (not imported; the workbook's "Min dam volume" is the transfer minimum) | The dam's **minimum operating level** (dead storage, engine ≥ 0.16.0, Q5): irrigation draws only above `capacity × dam_min_pct`, and transfers keep `capacity × MAX(rule min, dam_min_pct)`. Migration 006 reset every stored value to 0; the importer writes 0 |
 | `divert_capacity_m3_day` | Downstream diversion back to dam | The workbook enters m³/s and converts it. We store m³/day. |
-| `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate capacity ÷ 3 m and warn (W6). The importer writes NULL |
-| `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3, default 0.7 (Liebe et al. 2005) |
+| `dam_area_full_m2` | (none) | Dam surface area when full, m² (≥ 0, nullable; engine ≥ 0.16.0, [audit N2](./engine-audit.md)). NULL = unknown: runs estimate 7.2 × capacity^0.77 m² (Maaren & Moolman 1985; capacity ÷ 3 m before engine 1.63.0) and warn (W6). The importer writes NULL |
+| `dam_area_exponent` | (none) | b in A = A_full × (S / capacity)^b, 0 < b ≤ 3 in the column (the API takes 0 < b ≤ 1 from engine 1.63.0: no basin has b > 1), default 0.7 (Liebe et al. 2005) |
 | `dam_seepage_per_day` | (none) | Seepage as a fraction of storage per day (0–1), default 0; it joins the farm's outflow (less the share lost, below) |
 | `dam_curve` | (none: b023 has no survey) | Migration 041, engine ≥ 0.35.0 ([model.md §2.7a](./model.md), "Dam geometry, losses and releases"): the dam's survey rows `[{levelM, areaM2, volumeM3}]` as `jsonb` (an array of at most 200, CHECK); NULL = the power-law area. On the node rather than a child table: always read and written with the node, so the node's RLS covers it (members, and a farmer's own linked nodes). The API checks each row's shape and the engine's save rule the monotonicity |
 | `dam_release_rule` | (none) | `none` (default), `passInflow` or `fixed` (CHECK): a release before irrigation |
@@ -123,6 +125,9 @@ erDiagram
 | `pump_capacity_m3_day` | (none) | The river pump's capacity, m³/day (≥ 0, CHECK); NULL = no limit; on a farm inert under `damFirst`. On an other water user (engine ≥ 1.58.0, no migration: 060's column has no kind check) its own river pump, [model.md §2.7c](./model.md); the column comment from 060 still says farms only. Stored per day, not as pumps × m³/h (the form's calculator) |
 | `supply_trigger_pct` | (none) | `trigger` only: switch to the river below this fraction of dam capacity (0–1, default 0.4) |
 | `supply_stop_pct` | (none) | `trigger` only: switch back to the dam at this fraction (0–1, default 0.6); the API refuses one below the trigger |
+| `crop_water_source` | (none: b023's crops draw on the dam) | Farms only (migration 170, engine ≥ 1.65.0, issue #344, [model.md §2.7j](./model.md)): where the unit's crops take their water, `dam` (default, every existing row: the dam side under the supply rule) or `river` (a river abstraction of their own beside the dam), CHECKed to that list. The API refuses `river` (or a crop pump or pool) off a farm (`modelRuleIssues`, `cropSourceKind`) |
+| `crop_river_pump_m3_day` | (none) | The crops' river pump capacity, m³/day (≥ 0, finite, CHECK); NULL = no limit (the run warns). Read only under `river` |
+| `crop_river_pool_m3` | (none) | A pool at the crops' river pump, m³ (≥ 0, finite, CHECK); NULL or 0 = none. It starts a run full and its surface is estimated from the capacity. Read only under `river` |
 | `hands_off_m3_day` | (none: b023 leaves only senior users' demand) | Farms only (migration 114, engine ≥ 1.32.0, WP-3.8, issue #204, [model.md §2.7h](./model.md)): the hands-off flow, `float8[]` of 12 m³/day values by water-year month (Oct–Sep), left in the river before the river pump and River to dam take anything (on a farm with no dam, before what it irrigates straight from the river). NULL (default, every existing row) = none. CHECK 12 values, none NULL, none negative |
 | `hands_off_ewr` | (none) | Farms only (migration 114): also leave the EWR required at the farm (its cumulative requirement) in the river, as a river off-take's `transfer.hands_off_ewr` does. `false` (default, every existing row). Keep = MAX(the month's hands-off amount, the EWR when ticked) |
 | `divert_monthly_m3_day` | (none: b023's one m³/s) | Farms only (migration 114): River to dam's capacity by water-year month, `float8[]` of 12 m³/day values; when set it replaces `divert_capacity_m3_day` (0 in a month = no diversion, a dam filled in winter only). NULL (default) = the one value all year. CHECK 12 values, none NULL, none negative. The API refuses any of the three off a farm (the engine's `modelRuleIssues`, `operatingKind`) |
@@ -680,11 +685,24 @@ the result change?", and put back any earlier version.
   `report_schedule.configured`, `scenario.created/changed/deleted`, the
   application workflow's `scenario.submitted/withdrawn/reopened/decided/shared/unshared`
   (045; an application's events carry `application: true` and no name until
-  it is decided),
+  it is decided; since 163 `scenario.decided` also carries the `authority`
+  and `decisionDate`), `member.authority` (163: an owner marked or unmarked
+  a member as acting for the responsible authority, `actsForAuthority`),
+  `publication.endorsed` (163: `publicationId`, `runId`, `note`),
+  `member.specialist` (167: an owner appointed or ended a party's
+  specialist, `specialist`, `party`), `registration.checked` (167: a
+  member's registration check recorded: body, number, outcome, the checking
+  organisation), `registration.requirement` (167: the owner's switch,
+  `required`), `scenario.participation_exported` (166: the reg 19 record
+  downloaded: `format`, how many `comments` and `emails`, no name),
+  `application.question_asked` / `application.question_answered`
+  (164: "Ask the assessors why": the application's and the question's ids,
+  the op indexes and the rules' kinds, never the line, the real words or
+  the answer),
   `note.deleted` (a note hidden by its author or an editor: its target, the
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
-  registration, statement version and hash),
+  registration, statement version and hash; since 167 its `kind`),
   `calibration_rules.signed_off` / `calibration_rules.sign_off_withdrawn`
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
@@ -742,6 +760,14 @@ the result change?", and put back any earlier version.
   (`project_member_keep_owner`, `team_member_keep_admin`). The readers that
   joined `app_user` on these columns left-join it, and the API answers
   `null` for the maker's name.
+- **Deleting your own account (143, issue #112).** `app_delete_my_account()`
+  (`SECURITY DEFINER`, `search_path` pinned, `EXECUTE` for `water_app`
+  only, no arguments) deletes the `app_user` row of `app_current_user_id()`
+  and nobody else's, and refuses a transaction with no user (`42501`).
+  `DELETE /auth/me` calls it under `withUser`, after recording the audit
+  events, so everything above (the keys, `app_user_pseudonymise`, the
+  owner and admin checks) runs exactly as for the operator's deletion.
+  water_app still has no `DELETE` on `app_user` (068).
 - **Data-subject export (052).** `app_subject_export()` (`SECURITY
   DEFINER`, `search_path` pinned, `EXECUTE` for `water_app` only, no
   arguments) returns, as one jsonb document, the rows keyed to
@@ -953,7 +979,12 @@ run's stored input (above), never the live model.
   new policy or grant: 045's scenario policies and 024's table-level grant
   cover them, so who reads and writes them is who reads and writes the
   scenario. Like `description`, a submission doesn't freeze them; a
-  decision can't change them (`scenario_guard`, below).
+  decision can't change them (`scenario_guard`, below). Since
+  `166_public_participation`, `objection_address` (≤ 500, trimmed) and
+  `objection_closing_date`: where and by when written objections go, as the
+  application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii)); an
+  application's only (`scenario_objection_application`), and frozen once it
+  is submitted (`scenario_objection_frozen`, its own trigger).
 - **`NO ACTION`, not the plan's `RESTRICT`**, on `base_run_id`: checked at the
   end of the statement, so deleting a whole project (which cascades to both
   `model_run` and `scenario`) still works, as for `run_nomination`. Any other
@@ -1067,6 +1098,23 @@ results for plausibility; and that they read its known limitations
   092; `packId` since 112). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
 
+- **Who signed as what (167_signers).** `signoff.kind`: `specialist` (the
+  professional statement issue needs) or `review` (an authority-side
+  reviewer's second sign-off of a pack, by an editor; `signoff_review_pack`:
+  never a run's).
+- **The registration check (167).** `registration_check`: `project_id` (→
+  `project`, cascade), `user_id` (→ `app_user`, `SET NULL`), body, category,
+  number, `register_name`, `outcome` (`registered` | `not_registered`),
+  `checked_by_org`, `checked_at`, `note`, `recorded_by` (→ `app_user`,
+  `SET NULL`), `recorded_at`; insert-only (`registration_check_insert_only`)
+  and written only by `app_record_registration_check` (an owner, or a member
+  acting for the authority). `signoff_registration_check (signoff_id,
+  check_id)` binds a sign-off to the check that stood at issue
+  (`app_pack_bind_registration_checks`). `registration_check_forget` deletes
+  an unbound check whose account is gone. `project.require_registration_check`
+  (boolean, default true; only an owner changes it,
+  `project_registration_check_owner`): issue waits for the checks.
+
 ### Evidence packs (112_evidence_pack.sql)
 
 Roadmap WP-3.14, [evidence-pack.md](./evidence-pack.md). One version of a
@@ -1166,7 +1214,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   already); returns the key ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **Audit**: `pack.drafted`, `pack.deleted`, `pack.issued`,
   `pack.superseded`, `pack.withdrawn` (ids, version, short code and hash; a
-  withdrawal its reason; an issue the bundle's hash), and `signoff.created`
+  withdrawal its reason; an issue the bundle's hash), `pack.sent` (the
+  issued pack sent to the members acting for the responsible authority,
+  licensing build item 13: the recipients' ids, the authority's name and
+  whether a note went, never the note), and `signoff.created`
   with `packId`.
 - Guards: `backend/src/evidence/packs.db.test.ts`, the catalogue,
   role-ladder, mass-assignment and cross-project sweeps.
@@ -1196,6 +1247,82 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   downloads), `jobs/trust.security.db.test.ts` (a `pack_render` job naming
   another project's pack touches nothing of it),
   `db/cross-project-refs.security.db.test.ts` (`render_token.pack_id`).
+
+**The applicant's printable copy (165_applicant_copy.sql;** [evidence-pack.md § Applicants](./evidence-pack.md#applicants)**).**
+
+- `job.kind` accepts `applicant_pack_render`: a party of the application
+  queues one as themselves (`POST …/scenarios/:sid/packs/:packId/pdf`),
+  deduplicated per pack and party (`applicant_copy:<pack>:<user>`); the
+  production retry is `applicant_copy_retry:<pack>:<user>:<n>` and the
+  renderer's answer `applicant_copy_result:<pack>`. `job_insert_applicant_copy`
+  lets a party insert one for an issued pack of their application
+  (`app_applicant_copy_target`, through `app_applicant_pack_meta`);
+  `job_select_applicant_copy` lets a contributor read the ones they
+  queued.
+- **`evidence_pack_applicant_copy`**: one per pack (`pack_id` primary key →
+  `evidence_pack`, cascade; `project_id` → `project`, cascade, indexed;
+  `evidence_pack_applicant_copy_same_project`), `pdf_key` (a CHECK holds it
+  to `packs/<project>/<pack>/applicant/<sha256>.pdf`), `pdf_sha256`,
+  `pdf_pages`, `rendered_at`. RLS: the project's viewers and up and the
+  pack's parties read; `water_app` has `SELECT` only (catalogue
+  `READ_ONLY`). Not the pack's PDF, and not on verify.
+- **`app_record_applicant_pack_pdf(pack, sha256, pages)`** (`SECURITY
+  DEFINER`): the one writer, as `app_record_pack_pdf` but for a *running*
+  `applicant_pack_render` job of the caller's and a caller who is still a
+  party; the first copy stands (false after).
+- `render_token.purpose` accepts `applicant_pack` (a `pack_id`, no run),
+  issued only to a party (`render_token_issue`, `render_token_insert`);
+  `app_consume_render_token` returns the purpose too.
+- **`app_applicant_copy_render_target(pack)`**: the production worker's
+  lookup for the renderer's answer, as `app_pack_render_target`.
+- Guards: `evidence/applicant-copy.db.test.ts`, `jobs/trust.security.db.test.ts`
+  (a copy job naming another project's pack touches nothing of it),
+  `db/catalogue.db.test.ts`, `db/cross-project-refs.security.db.test.ts`.
+
+**The board against full authorised use (165_applicant_copy.sql § 5;** [evidence-pack.md § Both impact bases](./evidence-pack.md#both-impact-bases)**).**
+
+- **`authorised_impact`**: page 1's board over an application run's
+  full-allocation pair (licensing build item 8): `application_run_id` and
+  `base_run_id` → `model_run` (cascade; `authorised_impact_same_project`),
+  `engine_version`, the outcome settings it was built with
+  (`year_class_method`, `reserve_site`, the Reserve site's node id or null
+  for the outlet), `result` (the engine's `EvidenceAuthorisedImpact`, status
+  `ok`: the board, the authorised volumes' mix, when, which engine) and
+  `created_at`. RLS: read by a viewer and up who reads the application run
+  (`model_run`'s RLS in the policy's subquery); an editor inserts, and
+  deletes the run's older ones (the route keeps one per run); no `UPDATE`
+  (catalogue `NO_UPDATE`). The pair's runs themselves aren't stored.
+
+**The server's re-run (154_pack_reproduce.sql;** [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)**).**
+
+- `job.kind` accepts `pack_reproduce`: issuing a pack queues one in the
+  issue's transaction, as the issuer, deduplicated per pack
+  (`pack_reproduce:<pack>`, 3 attempts).
+- **`pack_reproduction`**: what the job found, one row per pack and engine
+  version (`UNIQUE (pack_id, engine_version)`, which covers `pack_id` →
+  `evidence_pack`, cascade; `project_id` → `project`, cascade, indexed;
+  `pack_reproduction_same_project`). `outcome` is `reproduced`,
+  `not_reproduced`, `other_engine` (only the re-runs differ, and a run was
+  made with another engine than the one that re-ran it) or `no_bundle`;
+  `engine_version` is the engine that re-ran the runs, `run_engines` theirs,
+  `bundle_sha256` the bundle checked (the pack's; NULL only for
+  `no_bundle`), `checks` every check as `[{ id, ok, detail }]` (the job's
+  `stored`, then the engine's `checkPackBundle`), `checked_at`. RLS: read by
+  whoever reads the pack (`evidence_pack_select` through the policy's
+  subquery); `water_app` has `SELECT` only (catalogue `READ_ONLY`). Not on
+  verify: it is the app's own claim.
+- **`app_record_pack_reproduction(pack, outcome, engine, run_engines,
+  bundle_sha256, checks)`** (`SECURITY DEFINER`, `water_app` only): the one
+  writer. It needs a signed-in caller with a *running* `pack_reproduce` job
+  of that pack, in its project, as its acting user (`42501` otherwise), a
+  pack that was issued, and the bundle the pack records (`no_bundle` only
+  for a pack without one; `23514` otherwise); a second outcome for the same
+  engine changes nothing and returns false.
+- Guards: `evidence/packs.db.test.ts` (queued at issue, recorded as
+  reproduced, a stored bundle replaced by other bytes recorded as not
+  reproduced, the writer's refusals), `jobs/handlers/pack-reproduce.test.ts`,
+  `jobs/trust.security.db.test.ts` (a `pack_reproduce` job naming another
+  project's pack touches nothing of it), the catalogue.
 
 **Notices (133_pack_notices.sql;** [evidence-pack.md § Notices](./evidence-pack.md#notices)**).**
 
@@ -1234,6 +1361,64 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   (`pack_notice.pack_id`: not writable), `auth/export.db.test.ts`
   (`USER_FK_COVERAGE`: the `packNotices` section).
 
+### Engine errata notices (153_erratum_notices.sql)
+
+The known-defect procedure's emails ([legal/known-defect-procedure.md](./legal/known-defect-procedure.md),
+issue #103). The errata themselves live in code (`ENGINE_ERRATA`, from
+[engine-errata.md](./engine-errata.md)); the database records only which
+were swept and who was mailed.
+
+- **`erratum_sweep`**: one row per erratum id with the range it was swept
+  with (`keyed_on`, `first_affected`, `fixed_in`). Public facts; a signed-in
+  person reads it (`erratum_sweep_read`; never an API key, which sees only its
+  own series), only `app_erratum_sweep` writes it.
+- **`erratum_notice`**: one email per erratum, project and recipient, ever
+  (the primary key), with `run_count` (the project's runs in range when
+  swept) and pack_notice's life (pending → sending → sent | skipped |
+  failed). Personal: cascades with the account, in the data export
+  (`erratumNotices`), purged **30 days** after it is settled. RLS: SELECT
+  your own rows (`erratum_notice_own`); `water_app` holds `SELECT` only.
+- **`app_erratum_sweep(errata jsonb)`**: the worker's context only. For each
+  erratum not yet swept with its range, finds the projects with a run whose
+  engine (`model_run.engine_version`, or for a `fit` erratum
+  `inputs.settings.fitRecord.engineVersion`) is in [first affected, fixed
+  in), compared numerically (`engine_version_key`), and queues each owner
+  (project owner or team admin) with a confirmed, unsuppressed address.
+- **`app_erratum_notice_claim`**, **`app_erratum_notice_finish`**,
+  **`app_purge_erratum_notices(age ≥ 30 days)`**: as pack notices'.
+- Guards: `errata/notices.db.test.ts`, the catalogue (`READ_ONLY`,
+  `APP_USER_ON_DELETE`: cascade), `auth/personal-data.security.db.test.ts`
+  (`USER_FK_COVERAGE`: the `erratumNotices` section).
+
+### Licence record (161_licence_record.sql)
+
+[evidence-pack.md § Retention](./evidence-pack.md#retention). Columns on
+`project` and `team`; provisional position (pre-counsel research,
+2026-10-01).
+
+- **`project.licence_outcome`** (`granted`, `refused`, `withdrawn`, NULL),
+  `licence_outcome_on`, `licence_expires_on` (exactly when granted, not
+  before the decision), `licence_outcome_reason`; **`record_closes_on`**
+  (generated: expiry or decision + 3 years); **`record_review_due_on`** (set
+  by `licence_record_start` when the project first issues a pack or
+  nominates a run, + 5 years; backfilled for existing projects); the tick's
+  bookkeeping `record_reminders_sent` (0–3), `record_reminded_at`,
+  `record_close_notified_at`. Two partial indexes serve the tick.
+- Written only through **`app_set_licence_outcome`** and
+  **`app_confirm_licence_record`** (SECURITY DEFINER, owners) and the
+  tick's **`app_licence_record_due(limit)`** (marks and returns the due
+  notices with the owners to tell); `licence_record_guard` and
+  `licence_record_insert_guard` refuse `water_app`'s own writes of these
+  columns (`project_update` lets an editor update the row).
+- **`team.public_records`**, **`team.records_disposal_confirmed_on`**: set
+  by the operator as the schema owner (`team_public_records_guard` refuses
+  `water_app`). For such a team `app_user_pseudonymise` leaves the audit log
+  of its projects as it is, and `project_public_records_guard` /
+  `team_public_records_guard` refuse deleting its projects or the team, and
+  moving a project out of it, until the disposal is confirmed
+  (`app_project_public_records`).
+- Guards: `licence/licence-record.db.test.ts`.
+
 ### Allocations (038_allocations.sql, 103_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
@@ -1245,6 +1430,10 @@ water-use volumes per farm or water user.
   `app_user`, `SET NULL`), `imported_at`. Unique `(project_id, sha256)`: a
   file is imported once per project (the index also covers the project key).
   Deleting a source deletes its allocations (undo an import).
+  `allocation_source_warms_reference` (162): a `warms_extract` has a
+  non-blank `reference`, how it was obtained (the DWS or CMA letter or
+  terms; rows from before 162 without one read "Not recorded (imported
+  before the reference was required)").
 - **`allocation`**: `id`, `project_id`, `source_id` (NULL = typed into the app;
   composite key `(source_id, project_id)` → `allocation_source (id,
   project_id)`, cascade, so a source is always the same project's), `node_id`
@@ -1276,12 +1465,25 @@ water-use volumes per farm or water user.
   `allocation_node_check` (`SECURITY DEFINER`: the node is a `farm` or `user`,
   and it stamps `updated_at`); `node_unmatch_allocations` (a node that becomes
   a gauge leaves its allocations unmatched, as a deleted node does).
-- **RLS.** `allocation_source` and `allocation`: `SELECT` viewer, writes
-  editor; `allocation_select_farmer` lets a farmer read the allocations on
+- **RLS.** `allocation_source`: `SELECT` viewer, writes editor.
+  `allocation`: `SELECT` editor, or a viewer while
+  `project.allocations_viewer_units` is true (`allocation_select`, redefined
+  in 162 through the definer `app_allocations_viewer_units`; decision D3,
+  provisional position, pre-counsel research 2026-10-01), writes editor;
+  `allocation_select_farmer` lets a farmer read the allocations on
   their linked farms (`app_farm_nodes`, the catalogue guard's farmer-aware
   policy). `allocation_holder`: `SELECT` editor, or a farmer for an allocation
   on their own farm; **viewers read no names**; writes editor. `water_app` has
   `SELECT, INSERT, UPDATE, DELETE` on all three.
+- **Viewers' switch and totals (162).** `project.allocations_viewer_units`
+  (default false) is set only through `app_set_allocations_viewer_units`
+  (`SECURITY DEFINER`, owners; `allocation_viewer_units_guard` refuses
+  `water_app` writing it). `app_allocation_volumes(project)` (`SECURITY
+  DEFINER`, any member viewer and up) returns the rows behind a viewer's
+  totals, per water source held by at least 5 registered users (distinct by
+  the holder's name ignoring case and spacing, else a name another row of the same unit carries, else the unit, else the row):
+  water source, holder count, node, volume, storage, water use, validity;
+  never a name, number or property. The API sums them (`allocations/viewerUnits.ts`).
 - **No personal identifiers.** No ID-number, phone or email column exists;
   the importer refuses files that carry them ([security.md](./security.md)).
 - **In every run's input** (engine ≥ 1.18.0, `runs/execute.ts`
@@ -1305,6 +1507,198 @@ water-use volumes per farm or water user.
   controls: an editor reads names, the owner reads the rows a stranger can't,
   a farmer reads their own farm's), the catalogue tests and the route
   inventories.
+
+
+### Catchment map (152_catchment_map.sql)
+
+Issue #288, roadmap WP-3.12, [maps.md](./maps.md). GeoJSON in `jsonb`, no
+PostGIS (areas and point-in-polygon are computed in `backend/src/geo`; room
+is left for PostGIS when Step 4 needs cross-catchment spatial queries).
+
+- **`geo_source`**: an imported GeoJSON file. `id`, `project_id` (cascade),
+  `file_name` (1–255), `sha256`, `crs` (always `EPSG:4326`: the server takes
+  WGS84 only), `imported_by` (→ `app_user`, `SET NULL`), `imported_at`.
+  Unique `(project_id, sha256)`. Deleting it deletes its features; the API
+  deletes it with its last feature.
+- **`map_feature`**: `id`, `project_id`, `kind` (`catchment_boundary` |
+  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100),
+  `node_id` (→ `node`, `SET NULL`; same project by `assert_same_project`; a
+  parcel or dam stands for a farm or water user, a gauge for a gauge, a
+  boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
+  geometry; CHECKs hold the type to the kind), `properties` (allowlisted
+  strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
+  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
+  `created_at`, `updated_at`. At most one `catchment_boundary` per project
+  (partial unique index). It is Step 2's `catchment_geometry` source for the
+  feeds' polygon extraction (wiring the fetcher to it is a follow-up).
+- **`node.area_source`** (`typed` | `map`, default `typed`) and
+  **`node.area_feature_id`** (composite key `(area_feature_id, project_id)`
+  → `map_feature (id, project_id)`, `ON DELETE SET NULL (area_feature_id)`):
+  where a node's `area_km2` came from. `POST …/nodes/:nodeId/area-from-map`
+  sets `map` and the feature; a model save that changes the area (or the
+  node's kind) sets `typed` and clears the feature (`model/store.ts`).
+  Deleting the feature keeps the area. Not part of the engine's model.
+- **`quaternary_reference`**: the dataset the quaternary lookup proposes
+  from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
+  label; `synthetic` for the committed fixture, region Z), `geometry`
+  (Polygon or MultiPolygon), its bounding box (`min_lon`, `min_lat`,
+  `max_lon`, `max_lat`, indexed for the lookup's first pass), `area_km2`,
+  `map_mm`, `mar_mm3`, `monthly_mm3` (12, Oct … Sep), `period_start`,
+  `period_end`, `source` (1–500, shown with every proposed value),
+  `loaded_at`. Global (no project): loaded by the operator as the schema
+  owner (`pnpm import:quaternaries`), read-only to `water_app`.
+- **`gauge_station_reference`** (`156_gauge_stations.sql`, issue #326
+  B-gauge): the gauging stations the nearest-gauge proposal reads. `code`
+  (primary key, a DWS station code `^[A-Z][0-9][A-Z][0-9]{3}$`, e.g.
+  `A2H012`; the third character is the station type, H a river gauge),
+  `name`, `river`, `lon`, `lat` (WGS84; indexed `(lat, lon)` for the
+  bounding-box first pass), `catchment_km2`, `record_start`, `record_end`
+  (dates; a NULL end is an open record), `dataset` (`synthetic` for the
+  committed fixture, region Z; indexed), `source` (1–500, shown with every
+  proposal), `loaded_at`. Global: loaded by the operator as the schema owner
+  (`pnpm import:gauge-stations`), SELECT for anyone signed in, read-only to
+  `water_app` (the catalogue guard's `READ_ONLY`).
+- **RLS**: viewers read `geo_source` and `map_feature`, editors write. A
+  farmer or contributor reads the boundary, gauges and rivers and the
+  features tied to their own linked nodes (`app_farm_nodes`), never another
+  farm's; no route serves them yet. `quaternary_reference` is readable by
+  anyone signed in (public reference data) and written by no app role.
+  Covering indexes on every foreign key.
+- **`dam_register_reference`** (`157_dam_register.sql`, issue #326 B-dams,
+  [maps.md § Dams from the register and the map](./maps.md#dams-from-the-register-and-the-map)):
+  the register of dams the dam proposals read. `register_no` (primary key,
+  1–20, the register's "No of dam"; the fixture's are `Z…`), `dataset` (the
+  load's label; `synthetic` for the committed fixture), `name`, `river`,
+  `farm`, `lon`, `lat` (WGS84; indexed `(lat, lon)` for the 1 km box),
+  `capacity_m3` (the register's thousands of m³, converted), `wall_height_m`,
+  `surface_area_m2` (when the source publishes it; the DSO list doesn't),
+  `completion_year`, `source` (1–500, shown with every proposal),
+  `loaded_at`. Global, loaded by the operator as the schema owner
+  (`pnpm import:dam-register`), readable by anyone signed in, written by no
+  app role, like `quaternary_reference`. A capacity or full-supply area
+  accepted from it (or from a dam polygon's `area_m2`) is stored in
+  `node.dam_capacity_m3` / `node.dam_area_full_m2` like a typed one; its
+  provenance is the model revision's reason (no column on `node`).
+- **`delineation_proposal`** (`175_delineation.sql`, issue #326
+  B-delineate, [maps.md § Delineation](./maps.md#delineation)): a catchment
+  the DEM proposed upstream of a clicked point, and the editor's decision.
+  `id`, `project_id` (cascade), `status` (`proposed` | `accepted` |
+  `rejected` | `superseded`; at most one `proposed` per project, partial
+  unique index), `click_kind` (`outlet` | `dam_wall`), `click_lon`,
+  `click_lat`, `outlet_lon`, `outlet_lat` (the snapped outlet),
+  `snap_distance_m`, `geometry` (a GeoJSON Polygon, checked by
+  `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
+  `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
+  (16 hex: SHA-256 of the archive's header and root directory),
+  `method` (1–1000), `method_version` (`delineate-1`), `feature_id`
+  (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
+  (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
+  `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
+  accepted or rejected). RLS: viewers read, editors insert, update and
+  delete all but an accepted one (the route prunes superseded and rejected
+  rows past the newest 50 a project; accepted ones stay as their features'
+  provenance, 185). Every column but the decision's never changes (what
+  was proposed, its project; `created_by` only cleared with its account),
+  and an insert's `created_by` is the signed-in user
+  (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
+  column, so farmers never read it. Covering indexes on every foreign key.
+- **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
+  proposed for an empty project from its map, and the editor's decision.
+  `id`, `project_id` (cascade), `status` (`proposed` | `applied` |
+  `discarded` | `superseded`; at most one `proposed` per project, partial
+  unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
+  areas and outlines, the order, the rest of the catchment, the outlet, the
+  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
+  `method_version` (`start-2`), `mode` (`start` | `divide`, 182: a
+  division of a model that has nodes, always `from_dem`; never changes),
+  `decision` (jsonb, set exactly when
+  `applied`: the ticks, the node and parcel ids, the revision),
+  `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
+  `decided_at` (set exactly when applied or discarded). The plan, the mode
+  and every other column but the decision's never change (185: dataset,
+  method, project; `created_by` only cleared with its account, and set to
+  the signed-in user on insert), and a decision is final
+  (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
+  editors insert, update and delete all but an applied one (the route
+  prunes superseded and discarded rows past the newest 50 a project). What apply makes is
+  ordinary model data: nodes, `farm_parcel` features linked to them, and
+  `node.area_source = 'map'` for a ticked area. A division's plan
+  (`divide.ts` `DividePlan`) also keeps each node's values when proposed
+  (`current`), which apply checks before replacing one. No node column, so
+  farmers never read it.
+- **`river_reference`** (`171_river_network.sql`, issue #345,
+  [maps.md § River network](./maps.md#river-network)): the river network
+  the Map tab's River network layer draws and proposes rivers from. Primary
+  key `(dataset, reach_id)` (the load's label, `synthetic` for the committed
+  fixture; the source's own reach id, HydroRIVERS' `HYRIV_ID`), `name` (''
+  when the source names none), `strahler` (1–15), `upstream_km2`,
+  `length_km`, `discharge_m3s` (each NULL when not given), `geometry`
+  (LineString or MultiLineString), its bounding box (`min_lon`, `min_lat`,
+  `max_lon`, `max_lat`, indexed for the layer's bbox query), `source`
+  (1–500, copied into every reach added to a project), `loaded_at`. Global,
+  loaded by the operator as the schema owner (`pnpm import:rivers`),
+  readable by anyone signed in, written by no app role (the catalogue
+  guard's `READ_ONLY`). A reach added to a project is an ordinary
+  `map_feature` of kind `river`, its source in `properties.description` and
+  `river-network:<dataset>:<reach_id>` in `properties.ref` (how the layer
+  knows it is on the map, and how the add refuses a second copy); no new
+  column.
+- **`cropland_dataset`** and **`cropland_cell_reference`**
+  (`173_cropland_reference.sql`, issue #326 B-landcover,
+  [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)):
+  the land-cover grid the planted-area proposals read. A dataset row:
+  `dataset` (primary key, 1–50; `synthetic` for the committed fixture),
+  `source`, `version`, `method` (the counting in words), `attribution`,
+  `cell_deg`, `classes` (the product's class codes counted as cultivated),
+  `loaded_at`. A cell row: `dataset` (cascades with it), `row_idx`, `col_idx`
+  (the cell with south-west corner `col_idx × cell_deg`, `row_idx × cell_deg`;
+  primary key `(dataset, row_idx, col_idx)`, also a polygon's range lookup)
+  and `fraction` (0 < f ≤ 1, the share of the cell that is cropland). Only
+  cells with cropland are stored. Global, loaded by the operator as the
+  schema owner (`pnpm import:land-cover`), readable by anyone signed in,
+  written by no app role.
+- **`crop_area_land_cover`** (`174_crop_area_land_cover.sql`): where a
+  planted area accepted from land cover came from. Primary key
+  `(node_id, crop_id)`; `project_id`, `area_m2` (the value accepted),
+  `dataset`, `source`, `version`, `method` (copied from the dataset then, so
+  a reload doesn't rewrite what was cited), `basis` (`unit` or `parcel`),
+  `feature_name` (the parcel, for `parcel`), `accepted_at`. Not keyed to
+  `crop_area`, which a model save rewrites whole: it is current while
+  `crop_area.area_m2` equals `area_m2`, and goes with its project, unit or
+  crop. Viewers read, editors write, same-project trigger on `node_id` and
+  `crop_id`, covering indexes on `project_id` and `crop_id`. Farmers don't
+  read it (the catalogue guard's `FARMERS_NEVER_READ`).
+- **`evaporation_dataset`** and **`evaporation_cell_reference`**
+  (`180_evaporation_reference.sql`, issue #326 B-evap,
+  [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
+  the evaporation grid the Settings proposal reads. A dataset row: `dataset`
+  (primary key, 1–50; `synthetic` for the committed fixture), `kind` (`et0`,
+  FAO-56 reference ET, proposed as GR4J's monthly PE; `apan`, Class-A pan,
+  proposed as the A-pan row; no S-pan), `source`, `version`, `method` (the
+  summarising in words), `attribution`, `first_year` and `last_year` (the
+  years the means average), `cell_deg`, `origin_lon` and `origin_lat` (0 ≤
+  origin < cell: dPET's cells are centred on whole tenths, so their corners
+  sit 0.05° off), `loaded_at`. A cell row: `dataset` (cascades with it),
+  `row_idx`, `col_idx` (the cell with south-west corner `origin_lon + col_idx
+  × cell_deg`, `origin_lat + row_idx × cell_deg`; primary key `(dataset,
+  row_idx, col_idx)`, also a polygon's range lookup) and `monthly_mm` (12
+  mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
+  are stored. Global, loaded by the operator as the schema owner (`pnpm
+  import:evaporation`; in production `load-reference.yml` through the
+  migrate Lambda, deployment.md § Reference datasets), readable by anyone signed in, written by no app role.
+- **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
+  evaporation row accepted from the map came from. Primary key
+  `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
+  A-pan row), matching `kind` (`et0` or `apan`; a check); `monthly_mm` (the
+  12 values written), `dataset`, `kind`, `source`, `version`, `method`
+  (copied from the dataset then), `coverage` (the share of the boundary with
+  values), `accepted_at`. Not keyed to the settings, which a save rewrites
+  whole: it is current while the settings still hold `monthly_mm`, and goes
+  with its project. Viewers read, editors write; no node column, so no
+  same-project trigger and no farmer decision.
 
 ### Import reports (017_project_import.sql)
 
@@ -1369,6 +1763,12 @@ the import's own transaction ([api.md § Import report](./api.md#import-report))
 Whoever creates a project becomes its first `owner`. This happens in a trigger,
 atomically with the insert. A deferred constraint trigger makes sure that a
 project always keeps **at least one owner**. Any member may remove themselves.
+The trigger (`project_member_keep_owner`, latest 149_last_owner_lock) takes
+a per-project advisory lock before it counts the owners, so two
+owners leaving or being demoted at the same moment serialise: the second
+waits for the first to commit, re-reads, and is refused. The member routes
+lock the owner rows before their own `409` check for the same reason
+(docs/security.md § Authorization).
 
 ### Farmers (019_farmer_role.sql, 020_farm_scope.sql)
 
@@ -1515,14 +1915,27 @@ projection's read and narrows their series further:
 - **`scenario.origin`** `'team' | 'applicant'`, stamped by `scenario_guard`
   from the creator's role and never changed, plus the decision:
   `submitted_at`, `decided_at`, `decided_by → app_user` (covering index),
-  `outcome` (`approved`, `approved_with_conditions`, `refused`; only when
-  decided) and `decision_note` (≤ 4000). A partial index
+  `outcome` (since 163_licensing_authority, the responsible authority's
+  outcome in the Act's words: `licence_issued`, `licence_refused`,
+  `application_rejected`, `not_considered`; only when decided; 163 mapped
+  `approved` and `approved_with_conditions` to `licence_issued`, `refused`
+  to `licence_refused`) and `decision_note` (≤ 4000), plus the authority's
+  record (163): `decision_authority` (1–200, trimmed; NOT NULL exactly when
+  there is an outcome, `scenario_decision_recorded`: every decided
+  application, never a team scenario an editor only marks decided; "Not recorded (before 163)" on an
+  older decision), `decision_date` (the decision letter's date; `decided_at`
+  is the app's stamp), `decision_reference` (≤ 200, `''` = none) and
+  `reasons_received` (boolean); the last three are empty unless decided
+  (`scenario_decision_fields`), and NULL only on a decision before 163. A partial index
   `(project_id, status) WHERE origin = 'applicant'` serves the Applications
   list. `scenario_guard` (from 024's body) also: an application's base is a
   published run of the project (on insert and rebase); only its owner moves
   it (submit, withdraw, back to draft) or edits it; only an editor who isn't
-  its owner decides it, with an outcome and nothing else changed; the
-  decision is set once. The one change it lets through is the assessor's
+  its owner **and acts for the responsible authority** (163,
+  `app_acts_for_authority`; also for an outcome on a team scenario, though
+  an editor may still mark a team scenario decided without one) decides it, with an
+  outcome, the authority, the date and the reasons flag, and nothing else
+  changed; the decision and its record are set once. The one change it lets through is the assessor's
   account going (052): an update whose only change is `decided_by` becoming
   NULL, once the account it named no longer exists (the foreign key's
   `SET NULL`), passes untouched, so the decision stays with no assessor.
@@ -1538,6 +1951,28 @@ projection's read and narrows their series further:
   `app_share_allowed(project, owner, member)` allows (049), never its owner.
   RLS: read by whoever reads the application; only its owner adds; the owner
   removes anyone and anyone listed may leave; no update.
+- **`application_question`** (164_applicant_visibility): "Ask the
+  assessors why": an application's party asks about a problem line of its
+  check that a rule hidden from them broke. `scenario_id` (cascade: it goes
+  with the application; `assert_same_project`), `asked_at`, `scenario_name`
+  (the application's name when asked: the assessors can't read a draft's
+  row), `problem` (the line as the applicant read it), `op_indexes` and
+  `ops` (the ops it names, as they stood), `rules` (the rules' kinds, never
+  an id or a name), `assessor_text` (the line in its real words, written by
+  the server), `answer` and `answered_at` (set once). No account column:
+  who asked and who answered is the audit trail's
+  (`application.question_asked` / `_answered`). RLS: editors and up read;
+  water_app writes nothing directly. `app_ask_assessors(scenario, …)`
+  (SECURITY DEFINER) files one for a party of an applicant's application,
+  taking the project and the name from the application;
+  `app_answer_assessors_question(project, question, answer)` lets an editor
+  answer once (`'answered'`, `'already'`, `'none'`);
+  `application_question_guard` refuses a question born answered, a second
+  answer or any other change; `app_application_questions(scenario)` gives
+  the parties their questions without `assessor_text` or `ops`.
+  `app_application_hidden_holders(scenario)` (server only, capped at 5)
+  counts the farm holders of an application's hidden farms, its owner left
+  out, for the check's masked-rule aggregate.
 - **`project_member.party`** (049, text ≤ 80, trimmed, null for none): the
   **applying party** the project owner puts a member in (the applicant, their
   consultant, their client). `app_share_allowed`: a contributor-or-above
@@ -1549,6 +1984,33 @@ projection's read and narrows their series further:
   applicant names someone, so no answer says who else is a member.
   `project_member_prune_shares` (after a change of party or role) deletes
   the shares the rule no longer allows.
+- **`project_member.specialist`** (167_signers, boolean, default false,
+  needs a party: `project_member_specialist_party`): the applying party's
+  appointed specialist, who signs the draft evidence packs of the party's
+  applications (`app_pack_specialist`; `signoff_insert_specialist`,
+  `signoff_select_specialist`). Set by an owner (`member_update`); a party
+  change clears it unless the same update sets it. water_app's column
+  `UPDATE` grant now includes it.
+- **`project_member.acts_for_authority`** (163_licensing_authority, boolean,
+  default false): the owner marks the members who act for the project's
+  responsible authority (`settings.responsibleAuthority`, backend
+  `projects/authoritySettings.ts`, no model input). `project_member_authority`
+  forces it false on insert and refuses a change by anyone but an owner of
+  the project; water_app's `UPDATE` grant on `project_member` is now the
+  columns `role`, `party` and `acts_for_authority`. `app_acts_for_authority(project)`
+  (`SECURITY DEFINER`, pinned `search_path`): the current user is editor or
+  above and marked. It gates the decision (`scenario_guard`) and the
+  baseline endorsement (`run_publication_endorse`).
+- **The conflict guard** (163, D1 (c)): `app_member_role(project, user)`
+  (any user's effective role, direct or through the team; not granted to
+  water_app) and `app_assert_no_role_conflict(project, user)`, called by
+  `AFTER` triggers on `project_member` (insert, role, party), `team_member`
+  (insert, role: every project of the team), `project` (moving into a team:
+  every member of it), `scenario` (an application's insert) and
+  `scenario_member` (insert, update). It raises `check_violation` with the
+  constraint name `role_conflict` when an editor or owner is in an applying
+  party, owns an application or is shared one; the API answers `409
+  role_conflict`. Existing conflicts aren't rewritten.
 - **Who reads a scenario** is one function, `app_scenario_visible(project,
   id, origin, status, owner)` (taking columns so the insert's `RETURNING`
   passes it); `app_scenario_readable(id)` looks the row up and calls it. A
@@ -1622,7 +2084,16 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   NULL` allows one **current** publication per project; publishing
   supersedes the current one in the same transaction (under a per-project
   advisory lock). Indexed on `(project_id, published_at DESC)`, `run_id`,
-  `published_by`, `updated_by`.
+  `published_by`, `updated_by`, `endorsed_by`.
+- **The responsible authority's endorsement** (163_licensing_authority):
+  `endorsed_by → app_user SET NULL`, `endorsed_at`, `endorsement_note`
+  (≤ 2000), granted to water_app's `UPDATE`. `run_publication_endorse`
+  stamps `endorsed_at` and `endorsed_by` itself and refuses anyone but
+  `app_acts_for_authority`; `run_publication_final` (from 067's) lets an
+  endorsement onto a superseded publication too (an application may rest on
+  it) and refuses any change to one once made, except the endorser's
+  account going clearing `endorsed_by`. The `run_publication_endorsement`
+  CHECK keeps `endorsed_by` and the note empty without `endorsed_at`.
 - **The notice, by language (081_notice_languages.sql, issue #58).**
   `notice` is one jsonb object from a language code to the WUA's words in
   that language, `{"en": "…", "af": "…"}`; `{}` is no notice (never NULL).
@@ -1834,9 +2305,10 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     cascade away with a withdrawn application; deleting the project still
     takes it. A farmer reads and writes none of them. A
     note's author always reads it, and a deleted one stays readable to its
-    author and to editors, as for every note. In practice: an NGO joins as a
-    viewer and posts `public_participation`; the applicant and their
-    consultant talk to the assessors in `parties` or `assessors`.
+    author and to editors, as for every note. In practice: an NGO comments
+    through the link with no role (a link participant, below); the
+    applicant and their consultant talk to the assessors in `parties` or
+    `assessors`.
   - **A pack note** (128, WP-3.15) is `team` or `public_participation`
     only (`note_pack_audience`):
 
@@ -1849,13 +2321,38 @@ Plain-text notes and comments kept against what they are about (WP-2.7;
     `issued` and has a live pack link. A pack past draft is never deleted
     (112), so its comments stay; a draft's team notes go with it (cascade).
     Every edit of a scenario or pack note is kept (`note_write_revision`).
+  - **Link participants (166_public_participation).** `note.share_link_id`
+    (→ `share_link`, `SET NULL`, covering index; `public_participation`
+    only): the link a comment was posted through, written only by
+    `app_share_comment` (`SECURITY DEFINER`; `note_insert` refuses a
+    `share_link_id` from water_app). Any signed-in account comments through a
+    live link to a submitted or decided application, or an issued pack, with
+    no `project_member` row, 10 an hour per account; they read nothing of the
+    project. `note.register_consent` (boolean, `public_participation` only,
+    fixed at insert): the commenter agreed to give their name and email to
+    the applicant for the GN R267 reg 18 register.
+    `app_participation_export(project, scenario)` builds the reg 19 record
+    for the application's owner and its editors (emails only where
+    consented); `app_share_objection(token hash)` the notice's details for a
+    share page; `app_subject_participation()` a person's own public comments
+    for their export; `app_link_comment_author(note)` a link comment's author
+    name for the project's members.
   - Indexed on `(project_id, created_at DESC)` and each foreign key.
-- **Soft delete.** `deleted_at` / `deleted_by`: the row and its body stay
-  for the audit trail. `water_app` has no `DELETE` (the catalogue test's
-  keep-forever list) and may `UPDATE` only `body`, `edited_at`,
-  `deleted_at` and `deleted_by` (its column-only list). The `note_guard`
-  trigger lets only the author change the body, stamps `edited_at` and
-  `deleted_by` itself, and refuses to touch a deleted note.
+- **Soft delete, then erasure after 90 days.** `deleted_at` / `deleted_by`:
+  the note is hidden at once, and its row, body and earlier texts stay for
+  90 days so a mistake or a complaint can be looked into. Then the job tick
+  erases them (`app_purge_deleted_notes`, 158_note_purge.sql, called with
+  `DELETED_NOTE_RETENTION_DAYS` in `jobs/runner.ts`; `note_revision` goes by
+  its cascade). The `note.deleted` audit event, which never held the body,
+  stays. A note on a scenario past draft (submitted, withdrawn, decided) or
+  a pack past draft is part of that licence record and is kept, hidden, with
+  it (POPIA s14(6)(b); provisional position, pre-counsel research,
+  2026-10-01). `water_app` has no `DELETE` (the catalogue test's
+  keep-forever list: the definer function is the only path) and may
+  `UPDATE` only `body`, `edited_at`, `deleted_at` and `deleted_by` (its
+  column-only list). The `note_guard` trigger lets only the author change
+  the body, stamps `edited_at` and `deleted_by` itself, and refuses to touch
+  a deleted note.
 - **RLS.**
   - SELECT: viewers and above see every note that isn't deleted; editors, and
     a note's author, also see deleted ones (Postgres checks an updated row
@@ -2011,7 +2508,8 @@ Direct project membership still works on top — the **effective role is the
 higher of the two** (`app_project_role()`). Every project policy goes through
 `app_has_role()`, which uses the effective role, so team access applies to all
 project-scoped tables at once. The team's creator becomes its first admin and a
-team always keeps at least one admin (same trigger pattern as project owners).
+team always keeps at least one admin (same trigger pattern as project owners,
+including the per-team advisory lock, 149).
 Deleting a team keeps its projects with their direct members (`ON DELETE SET
 NULL`). No project is orphaned, because the keep-owner trigger counts direct
 `project_member` rows only: the creator starts as a direct owner, and a project
@@ -2023,6 +2521,17 @@ only read. `project_insert` and `project_update` enforce this (008);
 `project_update` only gates a *change* of team, so a direct editor can still
 edit a project whose team they only view. A viewer copying a team project gets
 a personal copy.
+
+**Privacy contact** (168_team_privacy_contact, POPIA s18(1)(b)): the team,
+as the client organisation, is the responsible party for its projects'
+information, so it names whom people ask: `privacy_contact_name` and
+`privacy_contact_email` (both or neither; CHECK
+`team_privacy_contact_complete`) and an optional `privacy_contact_postal`.
+`team_select` lets members read them and `team_update` lets only an admin
+change them. A farmer has no team role, so `app_project_privacy_contact(p_project)`
+(SECURITY DEFINER, pinned search path) returns the team's name and the three
+fields, and nothing else, to anyone with a role on the project; no row for a
+non-member, a project without a team, or a team without a contact.
 
 `app_project_role()` maps each team role explicitly and gives an unknown one no
 access (NULL), so a role added later can never fall through to `editor`. The
@@ -2054,7 +2563,7 @@ records nothing (nothing it holds changed).
 | DB role | Used by | Privileges |
 | --- | --- | --- |
 | `water` | The migration runner (and `pnpm dev:db:psql`) | Owns the schema; runs DDL |
-| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040; `scenario_sweep` and `scenario_sweep_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 062; `seasonal_outlook`: the same, 063; `seasonal_outlook_member`: `SELECT/INSERT/DELETE`, no `UPDATE`, 063). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
+| `water_app` | The backend at runtime (the API and the job worker) | `SELECT/INSERT/UPDATE/DELETE` on the app tables only (`model_run`: `UPDATE` on `notes` alone, 007; `job`: `SELECT/INSERT` only, 016; `yield_result`: `SELECT/INSERT/DELETE`, 040; `scenario_sweep` and `scenario_sweep_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 062; `seasonal_outlook`: the same, 063; `seasonal_outlook_member`: `SELECT/INSERT/DELETE`, no `UPDATE`, 063; `assessment` and `assessment_member`: `SELECT/INSERT/DELETE` and `UPDATE` of the outcome columns only, 145). **No `BYPASSRLS`, no superuser, owns nothing**, so every policy applies to it. |
 
 Locally both roles have throwaway passwords (`dev/postgres/00-roles.sql`,
 `backend/.env.development`). In production, `water_app`'s password is a real
@@ -2143,9 +2652,11 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
+| `dem_attempt` (184) | One row per elevation-model request (delineate, start, divide): `user_id` (cascade), `kind`, `started_at`, `finished_at`. For the account's cap (2 running, 60 an hour); rows older than a day are deleted on the next attempt. SECURITY DEFINER access only (`app_dem_attempt`, `app_dem_attempt_done`) |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** or **applicant** (`contributor`, 097) invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` or `contributor` invite of the same project |
 | `invite_throttle` (101) | The daily cap on adding people by email (issue #51): `bucket` (`user:<id>`, `project:<id>` or `team:<id>`), `window_start`, `attempts`. Deny-all RLS; only `app_invite_attempt` (SECURITY DEFINER, the project's owner or the team's admin) counts; rows go once their 24-hour window is over |
+| `map_compute_throttle` (186) | The hourly cap on tracing a dam, counted before the work: `bucket` (`user:<id>:trace` or `project:<id>:trace`), `window_start`, `attempts`. Deny-all RLS; only `app_map_compute_attempt` (SECURITY DEFINER, an editor of the project) counts; rows go once their hour is over |
 | `revoked_session` (102) | Sessions signed out with `POST /auth/logout` (issue #51): `user_id` (cascade) + `jti` (the key), `expires_at` (the token's own expiry), `revoked_at`. Deny-all RLS; `app_revoke_session` records one for the signed-in account and `app_session_state` (read with the watermark on every request) checks it; rows go once expired, at the next sign-out |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
@@ -2167,7 +2678,15 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   another role keeps it and gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
   sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
-  never overwritten), and deletes those invites. Invites cascade away with their project or team,
+  never overwritten), and deletes those invites. Each of those functions,
+  and `app_my_invites` / `app_accept_invite` (109), takes an invite only
+  while its `invited_by` still holds owner on the project (directly or as
+  the team's admin) or admin on the team (155_invite_sender_role.sql,
+  `app_invite_sender_holds`, SECURITY INVOKER, not granted to `water_app`):
+  an invite whose sender lost that role is kept, accepted by nobody, and
+  flagged for the owners by `app_invite_sender_lapsed(invite)` (SECURITY
+  DEFINER; NULL to anyone who can't see the invite) until one of them re-sends
+  it (becoming its sender) or revokes it. Invites cascade away with their project or team,
   and with the account that sent them (`invited_by` cascade). An invite that
   lapsed unaccepted is listed as expired for 90 days past `expires_at`, then
   the job tick deletes it with its `invite_node` rows
@@ -2244,6 +2763,29 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - Goes with the account (cascade) and is in the data-subject export
   (`preferences`).
 
+### Two-step sign-in (150_mfa.sql)
+
+| Table | Holds |
+| --- | --- |
+| `user_totp` | One row per account with an authenticator: `user_id` (primary key, cascade), `secret_enc` (the TOTP secret sealed by the backend, AES-256-GCM under `APP_ENCRYPTION_KEY` with the account id as authenticated data; `auth/secretBox.ts`), `confirmed_at` (null while enrolment waits for its first code; an unconfirmed row signs nobody in and satisfies no requirement), `last_used_step` (the last 30-second step a code was accepted for; earlier or equal steps are refused, so a code can't be replayed), `created_at` |
+| `user_recovery_code` | The account's unused recovery codes: `(user_id, code_hash)` (primary key; SHA-256 of the normalised code, 32 bytes), `created_at`. Ten at a time; a used one is deleted, a new set replaces the old |
+| `mfa_throttle` | The code throttle, per account: `user_id` (primary key, cascade), `failures`, `locked_until`, `last_attempt_at`. Deny-all policy; only `app_mfa_attempt(free, base, max)` and `app_mfa_succeeded()` (SECURITY DEFINER, the current user only) touch it, like `login_throttle` |
+| `account_security_event` | The account's own security log: `id`, `user_id` (cascade), `kind` (`mfa.enrolled`, `mfa.disabled`, `mfa.recovery_used`, `mfa.recovery_regenerated`), `created_at`. Append-only |
+
+- RLS: `user_totp` is the account's own row for every command
+  (`user_totp_own`); `user_recovery_code` its own rows for select, insert
+  and delete (no update grant); `account_security_event` its own rows for
+  select and insert only (no update or delete grant, even for its owner).
+  Proven with positive controls in `src/auth/mfa.db.test.ts`.
+- `audit_event` isn't used for these: it is a project's log (`project_id`
+  not null), and these events belong to no project.
+- All four go with the account (cascade). The data-subject export has
+  `twoStepSignIn` (when it was added and confirmed, and how many recovery
+  codes are left, never the secret or the hashes) and `securityEvents`.
+- The session JWT's `amr` (`["pwd"]` or `["pwd", "otp"]`) is not stored:
+  the requirement for owners, team admins and assessors reads it from the
+  request ([security.md § Two-step sign-in](./security.md#two-step-sign-in)).
+
 ### Languages (080_language.sql)
 
 | Table | Holds |
@@ -2304,7 +2846,10 @@ The background job queue's source of truth ([architecture.md § Background work]
     lease (a stale worker gets `NULL` and rolls back); `done`, `failed` with
     backoff, or `dead`.
   - `app_purge_jobs(age)`: deletes `done`/`dead` jobs finished longer ago
-    than `age` (at least a day; the tick passes 30 days).
+    than `age` (at least a day; the tick passes 30 days). Every key to `job`
+    is ON DELETE SET NULL, so the rows that named a purged job stay with
+    `job_id` cleared; a table whose UPDATE trigger guards its outcome lets
+    that update through ([§ The job purge clears links](#the-job-purge-clears-links-148_job_purge_clears_linkssql)).
   - `app_job_stats()`: counts and the oldest due job's age, for the
     production backlog alarm.
   - `app_job_progress(id, lease, pct)` (040): sets `progress` on a running
@@ -2478,6 +3023,50 @@ project. `job` holds status, progress and errors.
   key), `base_run_id`, `job_id`, `created_by`; on members the unique
   `(sweep_id, position)` and `(sweep_id, lower(name))`, and `project_id`.
 
+### Assessments (145_assessment.sql)
+
+Cumulative impact (roadmap WP-3.11, [scenarios.md § Cumulative
+impact](./scenarios.md#cumulative-impact-wp-311), [api.md §
+Assessments](./api.md#assessments)): several scenarios on one base run,
+each alone and all together, run as one `assessment` job. The sweep's
+pattern: written at the start with everything the result depends on, then
+completed once by whoever asked and never changed after. Derived, not
+evidence: an editor may delete one; the API keeps the newest 20 per project.
+
+`assessment`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `base_run_id` | The run every member's scenario is based on. `ON DELETE CASCADE`. Never a scenario or forecast run (`assessment_guard`) |
+| `job_id` | The `assessment` job (`ON DELETE SET NULL` when the 30-day purge deletes it) |
+| `name` | 1–200 characters |
+| `status` | `pending`, `complete`, `refused` (the scenarios no longer combine, or one doesn't apply alone) or `failed` (the engine refused an input) |
+| `problems` | Why it was refused or failed (non-empty exactly then) |
+| `report`, `combined_summary`, `start_date`, `end_date` | The engine's `CumulativeReport`, and the combined run's summary and window, when `complete` |
+| `engine_version`, `completed_at` | Set when it leaves `pending` |
+| `created_by`, `created_at` | Stamped by the insert trigger; `created_by` is `ON DELETE SET NULL` |
+
+`assessment_member`:
+
+| Column | Holds |
+| --- | --- |
+| `assessment_id`, `project_id` | Its assessment (`ON DELETE CASCADE`) and project |
+| `scenario_id` | The scenario it was copied from (`ON DELETE SET NULL`: a team scenario can be deleted; the copy stays). `UNIQUE (scenario_id, assessment_id)` |
+| `position` | 0–7: at most 8 (`ASSESSMENT_SCENARIOS_MAX`). `UNIQUE (assessment_id, position)` |
+| `name`, `origin`, `ops`, `ops_sha256`, `owned_node_ids` | **Copied from the scenario** by `assessment_member_guard` (SECURITY INVOKER: RLS hides a draft application, so it can't be named), which also checks it is this project's, on the assessment's base run, and a team scenario or a submitted or decided application. The job runs these, never the live scenario |
+| `status`, `problems`, `summary`, `start_date`, `end_date`, `finished_at` | Its run alone: `pending`, then `done` (`summary` its `RunSummary`), `problems` or `failed`, once |
+
+- **RLS: editors only, read and write.** Contributors never (an assessment
+  reveals other applications), and viewers neither (it names submitted
+  applications, which a viewer reads only once decided).
+- **Grants:** `SELECT, INSERT, DELETE`, and `UPDATE` of the outcome columns
+  only. The completion triggers (`assessment_complete`,
+  `assessment_member_outcome`) fire only on those columns, so the foreign
+  keys' own `SET NULL`s (the job purge, an account deletion, a team scenario
+  deleted) pass, and water_app can't write those columns.
+- `job.kind` accepts `assessment`.
+
 ### Seasonal outlooks (063_seasonal_outlook.sql)
 
 A base run × a season × demand levels over the record's analogue years,
@@ -2627,6 +3216,43 @@ functions and changes no table, policy or grant:
   exists, instead of putting the old creator back;
 - `app_user_pseudonymise` removes the person from `report.email_to` (a
   `uuid[]` with no key) on reports someone else asked for.
+
+### Erasure log (159_erasure_log.sql)
+
+`erasure_log (id, kind, subject_id, erased_at)`: one row for every deleted
+`app_user` (`account`), `project` and `team`, written by an `AFTER DELETE`
+trigger on each (`erasure_log_record`, SECURITY DEFINER), so both
+account-deletion paths (the operator's SQL and `DELETE /auth/me`) are
+covered. It holds the internal id only, no foreign keys (the row outlives
+what it names), RLS on with no policy and no grant to `water_app`:
+only the schema owner reads it (`catalogue.db.test.ts` `OWNER_ONLY`). The
+job tick deletes entries older than 40 days (`app_purge_erasure_log`,
+`ERASURE_LOG_RETENTION_DAYS`; the function refuses under 36), above the
+35-day maximum of `db_backup_retention_days`. Its one reader is the restore
+runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the-database),
+step 6a), which reads it on the old instance and deletes each row again on
+the restored one.
+
+### The job purge clears links (148_job_purge_clears_links.sql)
+
+The tick's `app_purge_jobs` deletes jobs finished more than 30 days ago,
+and every key to `job` clears the row's `job_id` (SET NULL). Until 148,
+`scenario_sweep_complete` and `seasonal_outlook_complete` refused that
+update (a complete row is "completed once and never changed"; a pending one,
+its job dead, is changed only by whoever asked, and the purge runs with no
+user), so the purge's DELETE rolled back once any sweep's or outlook's job
+was 30 days old, and from then on no job was cleaned up. 148 redefines both
+from 066 and changes no table, policy or grant: an update that only clears
+`created_by` or `job_id` (each unchanged or going to NULL, every other
+column unchanged) passes; water_app holds UPDATE on neither column, so only
+a key (or the schema owner) makes it, and any change to the outcome still
+meets the guard. `auto_calibration_update` (108) already let a cleared
+`job_id` through, and `assessment_complete` (145) fires only on its outcome
+columns (`BEFORE UPDATE OF …`), so a cleared `job_id` never reaches it;
+`report` and `yield_result` have no UPDATE trigger.
+`catalogue.db.test.ts` `JOB_REFERENCES` lists every key to `job`, and each
+table with an UPDATE trigger names the DB test that ages its job past 30
+days and runs the purge.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql, 111_feed_daily_only.sql)
 
@@ -2838,6 +3464,7 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
 | `alert_event` | Each time a rule fired: `rule_id`, `project_id`, `kind` and `node_id` (copied from the rule, for the policies), `state` (`firing` → `cleared`, never back), `value`, `detail` (jsonb ≤ 8 KB: the figures the mail and pages show, from the recipient's scope only), `run_id` (`SET NULL` when the run is trimmed), `opened_at`, `cleared_at` (set exactly when cleared). A partial unique index allows **one firing event per rule**: the hysteresis, in the schema |
 | `alert_subscription` | A person's choice: `user_id`, `project_id`, `kind` (the kinds, or `all`: the catchment-wide switch), `node_id` (a farmer's farm for `dam_below`; else NULL), `channel` (`email`; room for WhatsApp/SMS), `mode` (`immediate`, `daily_digest`, `off`; `all` is `immediate` or `off`), `unsubscribe_nonce` (32 random bytes), `unsubscribe_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, nonce); unique; NULL until the worker first mails with that nonce), `created_at`, `updated_at`. Unique `(user_id, project_id, kind, node_id) NULLS NOT DISTINCT`. No row means the role's default |
 | `alert_delivery` | One email (or digest line) per event and person, ever: primary key `(event_id, user_id)`; `project_id`, `mode` (what they had chosen at fan-out), `status` (`pending` / `digest` → `sending` → `sent`, `skipped` with a `reason`, or `failed`), `via` (`immediate` or `digest`), `attempts`, `created_at`, `claimed_at` (the daily cap counts these), `locked_until`, `sent_at`. Kept **180 days** (`app_purge_alerts`, from the tick) |
+| `alert_feedback` | "Was this useful?" on an alert email (151, issue #74): one row per email a person got, made when the worker builds it (`app_alert_answer_slot`, as the recipient, only for a delivery of theirs being sent). `project_id`, `user_id` (`ON DELETE CASCADE`), `event_id` (the alert, a digest's first line; `SET NULL` when the alert is purged), `kind` (the alert's, or `digest`), `nonce` (32 random bytes), `token_hash` (SHA-256 of the token HMAC(`ALERTS_TOKEN_SECRET`, `"wm-alert-feedback/v1/"` + nonce); unique), `sent_at`, then once answered `useful`, `comment` (1–500 characters, optional) and `answered_at`. Unique `(user_id, event_id)`: a retried mail reuses the row and its link. **Retention**: unanswered 30 days after `sent_at` (the link stops working then), an answer 365 days after `answered_at` (`app_purge_alert_answers`, from the tick). No open or click is ever recorded: a row says only that the email offered the question, which `alert_delivery` already holds |
 
 - **RLS**:
   - `alert_rule`: SELECT for viewers; a farmer the rules on their own farms
@@ -2859,6 +3486,14 @@ Email alerts (roadmap WP-2.13; [api.md § Alerts](./api.md#alerts),
     `node_id` must be one of their farms (`app_farm_nodes`).
   - `alert_delivery`: SELECT your own rows. No write policy: every write is a
     `SECURITY DEFINER` function below.
+  - `alert_feedback` (151): SELECT your own rows, and the project's editors
+    and owners every row of the project (the route sends them counts and
+    comments, never who gave them). `water_app` has SELECT only: the worker
+    writes through `app_alert_answer_slot`, the public answer through
+    `app_alert_answer(hash, useful, comment)` (no session; nothing for an
+    unknown hash, a link over 30 days old, or a person who can no longer
+    open the project), the purge through `app_purge_alert_answers()` (the
+    worker's own context only).
 - **Who gets an alert** (`alert_audience`, a plain SQL function run only
   inside the definer functions, not granted to `water_app`): each member's
   current role on the project, directly or through its team, then the kind's
@@ -2966,7 +3601,10 @@ ids are rejected.
   checked. `001` may still be edited until the first production deploy: the
   test and e2e setups rebuild their schema from scratch every run, so they
   pick an edit up; a dev database refuses it, and `pnpm dev:db:reset`
-  rebuilds it. Production recovery: [deployment.md § Migration
+  rebuilds it. Each checkout migrates its own dev database (`water`, or a
+  worktree's `water_w<n>`; [run-locally.md](./run-locally.md)), so a
+  branch's migration never reaches the main checkout's before it merges
+  under its final number. Production recovery: [deployment.md § Migration
   integrity](./deployment.md#migration-integrity).
 - **Timeouts.** Each migration's transaction runs with `lock_timeout = 5s`
   (so it fails instead of queueing behind live traffic, with every later

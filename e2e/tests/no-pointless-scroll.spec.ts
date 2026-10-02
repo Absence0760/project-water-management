@@ -11,7 +11,7 @@ import { rulesCard } from '../support/transfers.ts';
 const GUTTER = 14;
 
 const TABS = [
-	'overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'river',
+	'overview', 'network', 'map', 'crops', 'transfers', 'series', 'settings', 'runs', 'river',
 	'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project', 'applications', 'history'
 ];
 
@@ -42,7 +42,9 @@ test('pages whose content fits the window do not scroll', async ({ page, owner }
 	await createRun(page.request, small.id, 'Baseline');
 	const empty = await createProject(page.request, 'Short pages empty');
 	// The empty project's Data tab ended 53 px above the window's foot and scrolled 3 px under the old padding.
-	for (const url of ['/', '/teams', '/account', `/projects/${empty.id}?tab=series`, `/projects/${empty.id}?tab=overview`, `/projects/${small.id}?tab=compare`]) {
+	// /account is not here: with the two-step sign-in and delete-account cards (#282, #112) its content is taller
+	// than 960 px, so it scrolls for a reason; the gutter test below still holds it to a 1rem gutter at three sizes.
+	for (const url of ['/', '/teams', `/projects/${empty.id}?tab=series`, `/projects/${empty.id}?tab=overview`, `/projects/${small.id}?tab=compare`]) {
 		await page.goto(url);
 		await expect(page.locator('h1').first()).toBeVisible();
 		await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight), { message: url }).toBe(0);

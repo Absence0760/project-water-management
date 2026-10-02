@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Issue #326 A2, Show on map links from the Network, Hydrological units and Dams (workspace/mapLinks.ts, mappedNodes.svelte.ts and three call sites), well under 1 KB gzipped. Measured 1450 KB (rounded up) against a 1450 KB ceiling locally on feat/326-map-round-1 @ ca1e3036 plus this change, so no headroom without it."
+}

@@ -17,13 +17,23 @@
 		"test:db": "vitest run --project db",
 		"test:perf": "vitest run --project perf",
 		"test:perf:db": "vitest run --project perf-db",
-		"db:migrate": "tsx scripts/migrate.ts",
+		"test:v8-osr": "tsx scripts/v8-osr-stress.ts",
+		"db:migrate": "tsx scripts/migrate-cli.ts",
+		"db:psql": "tsx scripts/db-psql.ts",
 		"import:project": "tsx scripts/import-project.ts",
 		"seed:examples": "tsx scripts/seed-examples.ts",
 		"gen:example": "tsx scripts/example-file.ts",
 		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts",
 		"fit-sweep": "tsx scripts/fit-sweep.ts",
-		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts"
+		"reproduce:pack": "tsx ../scripts/reproduce-pack/reproduce-pack.ts",
+		"import:quaternaries": "tsx scripts/import-quaternaries.ts",
+		"import:gauge-stations": "tsx scripts/import-gauge-stations.ts",
+		"import:rivers": "tsx scripts/import-rivers.ts",
+		"import:dam-register": "tsx scripts/import-dam-register.ts",
+		"gen:dem-fixture": "tsx scripts/dem-fixture.ts",
+		"gen:water-fixture": "tsx scripts/water-fixture.ts",
+		"import:land-cover": "tsx scripts/import-land-cover.ts",
+		"import:evaporation": "tsx scripts/import-evaporation.ts"
 	},
 	"dependencies": {
 		"@aws-sdk/client-s3": "3.1141.0",
@@ -47,6 +57,7 @@
 		"@types/nodemailer": "8.0.2",
 		"@types/pg": "8.23.1",
 		"esbuild": "0.28.2",
+		"h5wasm": "0.10.3",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
 		"vitest": "^5.0.2"

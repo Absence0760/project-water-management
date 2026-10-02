@@ -35,7 +35,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	demandFactor: true, partDemandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
 	gaPropertyAreaHa: true, gaRateM3HaYear: true,
 	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true,
-	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true
+	handsOffM3Day: true, handsOffEwr: true, divertMonthlyM3Day: true,
+	cropWaterSource: true, cropRiverPumpM3Day: true, cropRiverPoolM3: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationEfficiency: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -49,11 +50,12 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
 	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true,
 	avgRiverAbstractionM3Day: true, damEndM3: true, damAgoM3: true, damLowM3: true, damLowDate: true, damDaysAtMin: true,
-	demandObjects: true
+	demandObjects: true, riverTakes: true
 };
 const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
 	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
-	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, schedule: true, population: true, source: true, note: true
+	monthlyFactor: true, returnPct: true, priority: true, rank: true, destination: true, enabled: true, schedule: true, population: true, source: true, note: true,
+	waterSource: true, riverPumpM3Day: true, riverPoolM3: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,

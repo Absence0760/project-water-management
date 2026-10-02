@@ -5,7 +5,7 @@
 // refuses an op that introduces one (scenario/structure.ts). Keeping both on
 // this function means a scenario can only produce a model the backend would
 // accept as a save, and a rule added here reaches both.
-import { DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, type ProjectModel } from './project';
+import { DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_OBJECT_SOURCES, SUPPLY_DEFAULTS, WATER_SOURCES, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
@@ -45,7 +45,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		const n = byId.get(p.nodeId);
 		if (!n) add(`lcNode:${p.id}`, `land cover ${p.id} references an unknown node`);
 		else if (n.kind !== 'farm')
-			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a farm (a hydrological unit), not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
+			add(`lcKind:${p.id}`, `land cover on "${n.name}": land cover lies on a unit, not a ${n.kind === 'user' ? 'user' : 'gauge'}`);
 	}
 	// Individual boreholes (WP-3.9): on a farm or other user; emergency mode and pumping into the dam need a farm dam.
 	dupes('borehole id', (m.boreholes ?? []).map((b) => b.id));
@@ -72,6 +72,9 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// The people it serves, for the basic-needs floor (engine ≥ 1.44.0): a number ≥ 0, or none.
 		if (o.population !== null && o.population !== undefined && !(typeof o.population === 'number' && Number.isFinite(o.population) && o.population >= 0))
 			add(`doPopulation:${o.id}`, `demand object "${o.name}": the people it serves must be a number ≥ 0`);
+		// Its rank within its priority class (engine ≥ 1.64.0): a whole number from 1 to DEMAND_OBJECT_MAX_RANK, or none (1).
+		if (o.rank !== null && o.rank !== undefined && !(Number.isInteger(o.rank) && o.rank >= 1 && o.rank <= DEMAND_OBJECT_MAX_RANK))
+			add(`doRank:${o.id}`, `demand object "${o.name}": its rank must be a whole number from 1 to ${DEMAND_OBJECT_MAX_RANK}`);
 		// Where its number comes from (engine ≥ 1.56.0): one of the sources, sized the way that source gives a volume.
 		if (o.source !== null && o.source !== undefined) {
 			if (!(DEMAND_OBJECT_SOURCES as readonly unknown[]).includes(o.source))
@@ -87,6 +90,8 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 					);
 			}
 		}
+		// Where its water comes from (engine ≥ 1.65.0, docs/model.md §2.7j): the dam or a river abstraction, whose pump and pool are sizes.
+		waterSourceIssues(o.waterSource, o.riverPumpM3Day, o.riverPoolM3, (k, why) => add(`${k}:${o.id}`, `demand object "${o.name}": ${why}`));
 		// Its schedule (engine ≥ 1.17.0): each window runs as entered, and not too many of them.
 		if (Array.isArray(o.schedule)) {
 			if (o.schedule.length > DEMAND_SCHEDULE_MAX_WINDOWS) add(`doScheduleCount:${o.id}`, `demand object "${o.name}": its schedule has ${o.schedule.length} windows, at most ${DEMAND_SCHEDULE_MAX_WINDOWS}`);
@@ -112,22 +117,26 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		// An other water user has a pump capacity but no supply rule (engine ≥ 1.58.0); a gauge has neither.
 		const supply = n.supplyRule ?? 'damFirst';
 		const hasPump = n.pumpCapacityM3Day !== null && n.pumpCapacityM3Day !== undefined;
-		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule; an other water user always takes from the river, up to its pump capacity`);
-		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a farm has a supply rule and river pump`);
+		if (n.kind === 'user' && supply !== 'damFirst') add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule; an other water user always takes from the river, up to its pump capacity`);
+		else if (n.kind === 'gauge' && (supply !== 'damFirst' || hasPump)) add(`supplyKind:${n.id}`, `"${n.name}": only a unit has a supply rule and river pump`);
 		else if (supply === 'trigger' && !(n.damCapacityM3 > 0)) add(`supplyTrigger:${n.id}`, `"${n.name}": the trigger supply rule needs a farm dam to switch on`);
 		else if (supply === 'runOfRiver' && n.damCapacityM3 > 0) add(`supplyRor:${n.id}`, `"${n.name}": run of river has no dam; set the dam capacity to 0 or pick another supply rule`);
+		// The crops' water source (engine ≥ 1.65.0, docs/model.md §2.7j): a unit's; the dam or a river abstraction.
+		const cropRiver = (n.cropWaterSource !== null && n.cropWaterSource !== undefined && n.cropWaterSource !== 'dam') || (n.cropRiverPumpM3Day ?? null) !== null || (n.cropRiverPoolM3 ?? null) !== null;
+		if (n.kind !== 'farm' && cropRiver) add(`cropSourceKind:${n.id}`, `"${n.name}": only a unit's crops have a water source`);
+		else waterSourceIssues(n.cropWaterSource, n.cropRiverPumpM3Day, n.cropRiverPoolM3, (k, why) => add(`crop${k[0]!.toUpperCase()}${k.slice(1)}:${n.id}`, `"${n.name}": the crops' ${why}`));
 		if (n.kind === 'farm' && supply === 'trigger' && (n.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct) < (n.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct))
 			add(`supplyStop:${n.id}`, `"${n.name}": the supply rule's stop level must be at least its trigger level`);
 		// Hands-off flow and River to dam by month (engine ≥ 1.32.0): a farm's, 12 monthly values each.
 		const hasOps = (n.handsOffM3Day !== null && n.handsOffM3Day !== undefined) || n.handsOffEwr === true || (n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined);
-		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a farm has a hands-off flow and River to dam by month`);
+		if (n.kind !== 'farm' && hasOps) add(`operatingKind:${n.id}`, `"${n.name}": only a unit has a hands-off flow and River to dam by month`);
 		else {
 			if (n.handsOffM3Day && n.handsOffM3Day.length !== 12) add(`handsOffMonths:${n.id}`, `"${n.name}": the hands-off flow needs 12 values (m³/day, Oct–Sep)`);
 			if (n.divertMonthlyM3Day && n.divertMonthlyM3Day.length !== 12) add(`divertMonths:${n.id}`, `"${n.name}": River to dam by month needs 12 values (m³/day, Oct–Sep)`);
 		}
-		// Dam survey curve (WP-3.5): only a farm has a dam, and the curve must be one the run can use.
+		// Dam survey curve (WP-3.5): only a unit has a dam, and the curve must be one the run can use.
 		if (n.damCurve && n.damCurve.length) {
-			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
+			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a unit has a dam`;
 			if (bad) add(`damCurve:${n.id}`, `"${n.name}": dam survey curve: ${bad}`);
 		}
 		// Development over the run (engine ≥ 1.30.0): the sediment rate, its survey date and the dates read.
@@ -165,7 +174,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			const at = t.lossReturnNodeId;
 			if (a && at !== null && at !== undefined) {
 				if (offtakeReturnAt(t, nodeIndex.get(a.id)!, m.nodes, nodeIndex) === undefined)
-					add(`trRiverReturnAt:${t.id}`, `river off-take ${t.id}: its seepage can rejoin the river only below "${a.name}" or a farm downstream of it`);
+					add(`trRiverReturnAt:${t.id}`, `river off-take ${t.id}: its seepage can rejoin the river only below "${a.name}" or a unit downstream of it`);
 			}
 		}
 	}
@@ -212,3 +221,16 @@ function drainsInto(m: ProjectModel, from: string, to: string, except: string): 
 
 /** The model's broken rules as distinct sentences (empty = valid): what a save or an import is refused with. */
 export const modelRuleProblems = (m: ProjectModel): string[] => [...new Set(modelRuleIssues(m).values())];
+
+/**
+ * A demand's water source fields (engine ≥ 1.65.0): the source one of
+ * WATER_SOURCES (or none: the dam), the river pump a size ≥ 0 or none (no
+ * limit), the pool a size ≥ 0 or none. A pump or pool kept on a demand that
+ * draws on the dam is inert, so it is allowed.
+ */
+function waterSourceIssues(source: unknown, pump: unknown, pool: unknown, add: (key: string, why: string) => void): void {
+	const size = (v: unknown) => v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0);
+	if (source !== null && source !== undefined && !(WATER_SOURCES as readonly unknown[]).includes(source)) add('waterSource', `water source must be one of ${WATER_SOURCES.join(', ')}`);
+	if (!size(pump)) add('riverPump', 'river pump capacity must be a size ≥ 0 m³/day, or none for no limit');
+	if (!size(pool)) add('riverPool', 'pool at the river pump must be a size ≥ 0 m³, or none');
+}

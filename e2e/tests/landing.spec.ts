@@ -271,21 +271,26 @@ test('the largest contentful paint is the hero render, never the background text
 		await page.setViewportSize(size);
 		await page.goto('/welcome');
 		await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
-		// Every candidate has loaded by the page's load event (the texture too,
-		// when it was a mask). An image is reported on the paint after it is
-		// decoded, not after it loads, and the hero's AVIF/WebP decodes off the
-		// main thread, later than its load on a busy machine (CI once read the
-		// H1 as the last entry at 1280 px): so wait for the hero's decode, then
-		// two frames past it, and the last entry is the page's LCP.
+		// The hero's LCP entry is queued only once its paint's presentation time
+		// comes back from the compositor, which on a busy machine is later than
+		// its decode and a frame or two: reading the entries then saw the H1's
+		// alone (CI, 1280 px, four times in sixty runs; the hero's area there is
+		// ~4.5× the H1's, so the page's LCP was never the H1). The img carries
+		// `elementtiming="hero"` (Element Timing), whose entry comes from the same
+		// presentation: once it is in, so is the hero's LCP entry, if it is one.
 		const lcp = await page.evaluate(async () => {
-			if (document.readyState !== 'complete') await new Promise((r) => addEventListener('load', r, { once: true }));
-			await document.querySelector<HTMLImageElement>('.hero .scene img')!.decode();
-			for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
-			return new Promise<string>((resolve) => {
-				new PerformanceObserver((list) => {
-					const last = list.getEntries().at(-1) as PerformanceEntry & { element?: Element | null; url?: string };
-					resolve(`${last.element?.tagName ?? '?'} ${new URL(last.url || location.href).pathname}`);
-				}).observe({ type: 'largest-contentful-paint', buffered: true });
+			const observe = <T,>(type: string, pick: (entries: PerformanceEntry[]) => T | undefined) =>
+				new Promise<T>((resolve) => {
+					const o = new PerformanceObserver((list) => {
+						const v = pick(list.getEntries());
+						if (v !== undefined) (o.disconnect(), resolve(v));
+					});
+					o.observe({ type, buffered: true });
+				});
+			await observe('element', (es) => es.find((e) => (e as PerformanceEntry & { identifier?: string }).identifier === 'hero'));
+			return observe('largest-contentful-paint', (es) => {
+				const last = es.at(-1) as (PerformanceEntry & { element?: Element | null; url?: string }) | undefined;
+				return last && `${last.element?.tagName ?? '?'} ${new URL(last.url || location.href).pathname}`;
 			});
 		});
 		expect(lcp, `${size.width} px`).toMatch(/^IMG \/landing\/hero-(day|dusk)-\d+\.(avif|webp)$/);

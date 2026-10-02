@@ -195,7 +195,7 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 		expect(get(out, null, 'natural_flow')).toEqual([200, 0, 1601]);
 		// B has no dam but takes upstream inflow to it: it irrigates from the river with no limit, and the run says so (issue #54).
 		expect(out.summary.warnings).toEqual([
-			'farm "B": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity',
+			'unit "B": it has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit; to cap it, set the supply rule to run of river with a pump capacity',
 			'no observed flow series: calibration statistics not computed'
 		]);
 	});
@@ -506,7 +506,17 @@ describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', (
 		expect(end(1, { damAreaExponent: 1 })).toBe(0);
 	});
 
-	it('estimates an unknown area as capacity ÷ 3 m and says how many dams used the estimate (W6)', () => {
+	it('engine 1.63.0: runs an older document\'s b > 1 as entered, and says a save now needs b ≤ 1 (issue #90)', () => {
+		const warn = (over: Partial<NetworkNode>) => dam(over).summary.warnings.filter((w) => w.includes('dam area exponent'));
+		expect(warn({ damAreaExponent: 1.5 })).toEqual([
+			'unit "D": dam area exponent 1.5 is above 1, which no real basin has (the surface would grow faster than the volume); it runs as entered, with the b > 1 limiter, but a save now needs 0 < b ≤ 1. Use 0.7, or enter the dam\'s survey curve'
+		]);
+		// Positive control: b = 1 and the default say nothing.
+		expect(warn({ damAreaExponent: 1 })).toEqual([]);
+		expect(warn({})).toEqual([]);
+	});
+
+	it('estimates an unknown area as 7.2 × capacity^0.77 (Maaren & Moolman 1985) and says how many dams used the estimate (W6)', () => {
 		const out = run({
 			nodes: [
 				node('D', { areaKm2: 0, damCapacityM3: 90_000, damInitialPct: 1, damAreaFullM2: null, downstreamNodeId: 'G' }),
@@ -518,10 +528,14 @@ describe('runModel — dam evaporation and seepage (audit N2, engine 0.16.0)', (
 			natural: [0],
 			startDate: '2020-10-01'
 		});
-		expect(get(out, 'D', 'dam_area')).toEqual([30_000]);
+		// 7.2 × 90 000^0.77 ≈ 47 000 m², a mean depth of about 1.9 m (engine ≥ 1.63.0; capacity ÷ 3 m gave 30 000 before).
+		expect(get(out, 'D', 'dam_area')[0]).toBeCloseTo(7.2 * 90_000 ** 0.77, 6);
+		expect(get(out, 'D', 'dam_area')[0]).toBeCloseTo(47_000.15, 1);
 		expect(get(out, 'E', 'dam_area')).toEqual([20_000]);
 		const w6 = out.summary.warnings.filter((w) => w.includes('no full-supply area'));
-		expect(w6).toEqual(['1 dam has no full-supply area, so dam evaporation uses an estimate: capacity ÷ 3 m mean depth (Mantel & Hughes 2023). Enter the area for (D)']);
+		expect(w6).toEqual([
+			'1 dam has no full-supply area, so dam evaporation uses an estimate: 7.2 × capacity^0.77 (Maaren & Moolman 1985) m², a regional relation that can be far out for any one dam. Enter the area for (D)'
+		]);
 	});
 
 	it('leaves a farm without a dam alone', () => {
@@ -922,7 +936,7 @@ describe('runModel — transfers', () => {
 			natural: [0],
 			startDate: '2021-01-01'
 		});
-		expect(out.summary.warnings.some((w) => w.includes('transfers must be between farms'))).toBe(true);
+		expect(out.summary.warnings.some((w) => w.includes('transfers must be between units'))).toBe(true);
 	});
 });
 

@@ -216,7 +216,9 @@ bottom:
    basic-needs floor (*"…, serves 2 000 people"*), and from engine 1.56.0
    where its number comes from (*"…, from meter records"*; not recorded says
    nothing, and absent and null are the same), so a change of people or of
-   source is listed like any other field.
+   source is listed like any other field. From engine 1.64.0 a ranked
+   object's priority reads with its rank (*"…, priority first rank 2"*);
+   absent and null are both no rank.
    **The EWR sites** (engine ≥ 1.5.0, audit Q17 follow-on): when the list
    of EWR sites differs (a gauge added or removed, turned into a unit, or
    ticked or unticked as an EWR site), one network line names both runs'
@@ -634,7 +636,7 @@ is what that run used; the same rule reads a snapshot without a runoff model
 as legacy (a run from before the setting, so it did run the legacy model), and one without a dam evaporation factor (engine < 0.16.0) as 0,
 no dam evaporation. A dam's area when full, area exponent and seepage have
 their own network lines (*"Rooikloof: dam area when full 0 m² → estimated
-(capacity ÷ 3 m)"*). Month
+(7.2 × capacity^0.77)"*). Month
 lists (transfer months, summer months) compare as sets, so re-ordering them is
 not a change. A series that became empty says so rather than showing a
 one-day range. A registered volume's line (engine ≥ 1.35.0, issue #73)

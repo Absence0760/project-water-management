@@ -99,6 +99,163 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   route inventory, with each credential's own slot as the positive control;
   its source sweep fails when a new place starts reading a credential.
 
+## Two-step sign-in
+
+TOTP (RFC 6238) with recovery codes, issue #282, `150_mfa.sql`. One phished
+password could otherwise publish a restriction to a catchment's farmers or
+decide a licence application.
+
+- **What it is.** An account can add an authenticator app (Account page,
+  `POST /auth/mfa/totp/enrol` then `…/confirm`). From then on a right
+  password at `POST /auth/login` buys no session: it answers
+  `{ mfaRequired: true }` and sets a **5-minute challenge** cookie
+  (`wm_mfa`, `HttpOnly`, `SameSite=Strict`), and `POST /auth/mfa/verify`
+  trades the challenge and a code (six digits from the app, or a recovery
+  code) for the session and the trusted-device cookie. The challenge is a
+  JWT under the session key with **its own issuer**, so it never passes as
+  a session nor a session as it; it is good once (its `jti` goes into
+  `revoked_session`), and a password reset voids it like a session (the
+  watermark). `auth/token-confusion.security.db.test.ts` presents it in the
+  session's slot and as a bearer key (refused) and at the code step with a
+  code (accepted).
+- **The session says how it signed in.** The JWT carries `amr` (RFC 8176):
+  `["pwd"]`, or `["pwd", "otp"]` after a code (from verify, or from
+  confirming an enrolment on this browser). A token without `amr` (from
+  before) is password-only; an unknown value makes the token invalid.
+  Changing the password keeps the session's `amr`; turning two-step sign-in
+  off moves the session watermark (every other session is signed out, so
+  none signed in with a code outlives it and counts again after a later
+  re-enrolment) and reissues this browser's session as `["pwd"]`.
+- **The code.** `auth/totp.ts`, on `node:crypto` (an HMAC-SHA1, the
+  dynamic truncation and a modulus, RFC 4226 § 5.3), 6 digits, 30-second
+  steps, one step either side of now. A step at or before the last one
+  accepted is refused (`user_totp.last_used_step`), so a code can't be
+  replayed. Tests: the RFC 4226 and RFC 6238 Appendix B vectors (SHA-1,
+  SHA-256, SHA-512), the window and replay (`auth/totp.test.ts`).
+- **The secret, at rest.** 20 random bytes, sealed by the backend before it
+  reaches the database: AES-256-GCM under a key derived (HKDF-SHA256) from
+  `APP_ENCRYPTION_KEY`, with the account id as authenticated data, so a
+  sealed secret copied onto another account's row doesn't open
+  (`auth/secretBox.ts`). `APP_ENCRYPTION_KEY` is an API runtime secret (the
+  sops key `app_encryption_key`, § Runtime secrets); the committed dev value
+  is a `dev-only-` placeholder `check:env` pins and the API refuses in
+  production. Rotating it voids every authenticator: clear `user_totp` and
+  `user_recovery_code` as the schema owner and have each person set theirs
+  up again (deployment.md § Runbooks).
+- **Recovery codes.** Ten, shown once when the authenticator is confirmed
+  or when a new set is made (`POST /auth/mfa/recovery-codes`, which needs a
+  code from the app): 10 characters from a 30-letter alphabet without
+  look-alikes (about 49 bits each), stored as SHA-256, each deleted when
+  used. Only while an authenticator is confirmed.
+- **Enrolment needs the password.** `…/enrol` checks the current password
+  through the sign-in lockout, as changing the password does, so a stolen
+  session can't put its own authenticator on the account and lock its owner
+  out. Turning it off needs a code from the app or a recovery code.
+- **Code throttle.** Every code check (sign-in, confirm, turn off, new
+  codes) counts on the account's `mfa_throttle` row first, in its own
+  transaction under a row lock, like `login_throttle`: the 5th wrong code in
+  a row locks the account's code checks for a minute, doubling to 15; a right
+  code clears it; a day forgets it. Only `app_mfa_attempt` and
+  `app_mfa_succeeded` (SECURITY DEFINER, the current user only) touch it, so
+  nobody can clear their own count. Each wrong code logs `login_failed`
+  with reason `bad_code`, counted by the login-failed alarm. The WAF's
+  per-IP limit on `/api/auth/*` covers `/api/auth/mfa/verify` too.
+- **Who must use it.** Project owners, team admins and assessors
+  (`auth/stepUp.ts`). `requireRole(…, 'owner')` and
+  `requireTeamRole(…, 'admin')` call `requireStepUp` after the role check
+  passes (so an outsider still gets 404 and learns nothing), and so do the
+  editor-level actions those roles exist for: publishing to farmers (`POST`
+  and `PATCH …/publication`, publishing and withdrawing an outlook),
+  recording the authority's decision on an application (`…/decide`),
+  endorsing a published baseline (`…/publication/:pubId/endorse`), issuing
+  or withdrawing an evidence pack, and signing a run or a pack (`POST …/runs/:runId/signoffs`,
+  `POST …/packs/:packId/signoffs`). Any editor may sign, so every signer
+  needs an authenticator: a sign-off is the professional record an
+  authority relies on, and without it is only as strong as the signer's
+  password (operator decision, 2026-10-01). The owner and admin checks a route makes by hand are
+  stepped up too: removing someone else from a project or a team (leaving
+  isn't), and an owner making or revoking a share link of any kind. A guard
+  (`auth/stepUp.test.ts`) finds every hand-rolled `'owner'` / `'admin'` /
+  `rank.owner` comparison in the backend and fails unless its file calls
+  `requireStepUp` or is listed with why it gates no action. Without an authenticator the answer is
+  `403 mfa_required` ("set one up on your Account page"); with one but a
+  password-only session, `403 mfa_step_up` ("sign in again"). The check
+  reads the session's `amr` from the request's `requestAuth`
+  (AsyncLocalStorage, set by `requireUser`) and the account's confirmed
+  factor, so a factor turned off since sign-in no longer counts. Work
+  outside a request (the job runner) isn't stepped up: no job kind needs
+  more than editor, and the request that queued it was checked. Everyone
+  else may turn it on, and is asked for a code at sign-in once they have.
+  `GET /auth/mfa` says whether the person's roles need it (`required`,
+  false while the switch below is off, so the prompts say what the routes
+  do).
+- **A fresh code for signing, issuing and withdrawing** (licensing
+  positions item 9; provisional position, pre-counsel research,
+  2026-10-01). A sign-off (of a run or an evidence pack, the applicant's
+  specialist's included), issuing a pack and withdrawing one also need a
+  code from the authenticator **within the last 10 minutes**, not only at
+  sign-in: a sign-off publishes a professional statement under a real name
+  on the public verify page, and a session left open on a shared computer
+  mustn't make one (a false one would be a GN R267 reg 20 offence by whoever
+  made it, and a POPIA s19 failure by us). The session JWT carries `otp_at`
+  (epoch ms), set only where a code was just checked (`…/mfa/verify`,
+  `…/totp/confirm`, `POST /auth/mfa/step-up`) and never carried over by a
+  re-issue (changing the password keeps `amr`, not `otp_at`); a token whose
+  `otp_at` isn't a number or comes without `otp` is invalid.
+  `requireFreshCode` (`auth/stepUp.ts`) answers `401 mfa_fresh_code` when
+  it is older than 10 minutes (or more than a minute ahead), after
+  `requireStepUp`, so enrolment still comes first (`403 mfa_required` before
+  a first sign-off). The workspace asks for a code in a dialog
+  (`layout/FreshCodeDialog.svelte`, its own chunk; `lib/auth/freshCode.svelte.ts`),
+  POSTs it to `/auth/mfa/step-up` (same throttle as every code check; a
+  recovery code works and is recorded) and sends the action again, once
+  (`lib/api/client.ts`). The step-up also turns a password-only session into
+  a two-step one. Off with the switch below. Tests:
+  `auth/stepUp.db.test.ts` (each action at 11 minutes, the step-up and the
+  control), `lib/api/client.test.ts` (the retry).
+- **The prompt.** A person whose role needs it learns so before an action
+  is refused, on every workspace page: a banner (`layout/MfaBanner.svelte`,
+  its own chunk, mounted by `routes/+layout.svelte`; the state is
+  `lib/auth/mfaPrompt.svelte.ts`) from `GET /auth/mfa`, read once per
+  account and again when the tab comes back into view. `required &&
+  !enrolled`: **Set up two-step sign-in**, a link to the Account page's
+  panel (`/account#two-step`). `required && enrolled && !sessionVerified`:
+  **Sign in again**, which signs out and returns to the page after the
+  password and the code. A `403 mfa_required` or `mfa_step_up` from any
+  request shows the same two (the API client's `onError`), for an editor
+  publishing to farmers or signing a run too, whose role alone doesn't need it; the action's
+  own error message stays where the page shows it. The banner is English
+  and stays off the translated pages (the Account page has its own warning,
+  the farm view's roles never need it). Dismissable until the next refusal
+  (kept so by the operator's decision, 2026-10-01: every refused action
+  brings it back, so a person who needs it can't miss it for long), and
+  for the rest of the tab (`sessionStorage`, so a reload doesn't bring it
+  back; the operator's call, 2026-10-01). While the need stands the account
+  menu keeps a badge and leads with **Set up two-step sign-in** or **Sign in
+  again with a code**, dismissed or not, so it never drops out of sight;
+  signing out forgets the dismissal. Tests: `lib/auth/mfaPrompt.test.ts`,
+  `e2e/tests/mfa-prompt.spec.ts` (the e2e server has the requirement off,
+  so the spec plays the production answers with `page.route`).
+  Tests: `auth/stepUp.db.test.ts` (each gated action refused without, with
+  the same person signed in with a code as the positive control; outsiders
+  and viewers still get their 404 and 403).
+- **The switch.** `MFA_REQUIRED=false` turns the requirement off for the
+  backend's DB tests and the e2e API server, whose hundreds of owner
+  fixtures sign in with a password; `stepUp.db.test.ts` turns it back on.
+  Lambda refuses `false` at startup (`config/production.ts`) and so does the
+  check itself (`mfaRequired`). Local dev requires it unless
+  `.env.development.local` says otherwise (run-locally.md).
+- **RLS.** `user_totp` and `user_recovery_code` are the account's own rows
+  for every command; `account_security_event` (enrolled, turned off, a
+  recovery code used, new codes) is the account's own and append-only
+  (no update or delete, even for its owner, so a thief can't erase that they
+  turned it off); `mfa_throttle` is deny-all. `auth/mfa.db.test.ts` proves
+  each, with the owner's own rows as the positive control.
+- **Lost phone and codes.** The operator, after verifying who is asking,
+  deletes the account's `user_totp` and `user_recovery_code` rows as the
+  schema owner (deployment.md § Runbooks); the person then signs in with the
+  password and sets up again.
+
 ## Password reset, email verification and invites
 
 - **Tokens** are 32 bytes from `crypto.randomBytes`, mailed as base64url. The
@@ -162,6 +319,27 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   Tests: `auth/account-tokens.security.db.test.ts` "adding someone by
   email doesn't reveal whether the address has an account",
   `invites/invites.db.test.ts`.
+- **An invite is good only while its sender may still send it**
+  (`155_invite_sender_role.sql`). RLS checks the sender only when the
+  invite is written, so every function that lists, describes or accepts one
+  (`app_my_invites`, `app_accept_invite`, `app_invite_for_token`,
+  `app_accept_invites`: the invitations page, a sign-up through the link, a
+  confirmation or password-reset link) takes it only while its `invited_by`
+  still owns the project (directly, or as an admin of the team that owns it)
+  or administers the team (`app_invite_sender_holds`). An owner removed or
+  demoted, or a team admin demoted, leaves invites nobody can accept, at
+  any role; a lapsed invite's link is invalid like an expired one. Checked
+  where the invite is used rather than by deleting invites when a role
+  changes, because a role can be lost in more ways than a trigger list
+  keeps up with: the check fails closed on all of them. The remaining
+  owners see such an invite flagged (`senderLapsed`) and re-send it (which
+  makes them its sender) or revoke it; a deleted sender's invites cascade
+  away with the account. A lapsed invite **revives** if its sender regains
+  the role (owner, or team admin): accepted by the operator (2026-10-01),
+  since they could re-send it anyway, so keeping it dead would protect
+  nothing. Tests: `invites/invites.db.test.ts` "an invite is
+  good only while its sender may still send it", `farms/invites.db.test.ts`
+  (a lapsed farmer invite links no farms).
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -331,7 +509,8 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
 [deployment.md § Runbooks](./deployment.md#runbooks), Credential stuffing).
 
 - *Reasons:* `unknown_account` and `bad_password` (sign-in; change-password's
-  current password is `bad_password` on `/auth/change-password`), `locked`
+  current password is `bad_password` on `/auth/change-password`, and "Delete
+  my account"'s password on `/auth/me`, issue #112), `locked`
   (refused by the lockout before the password is checked), and `invalid_link`
   (a malformed, used, expired or unknown reset or verification token).
 - *No personal data:* the line holds the route's pattern and the reason only,
@@ -446,8 +625,15 @@ buys a **render session** that can read one report and nothing else.
   (`pack_id`) and no run: the trigger checks that the issuer reads that pack
   (RLS, as themselves) and that it was issued (`issued_at`: never a draft,
   nor a draft withdrawn before its issue), and a CHECK keeps exactly one
-  target per purpose. It is issued by the `report_render` job (or the
-  `pack_render` job, as the editor who issued the pack or asked again),
+  target per purpose. An applicant's copy's token (purpose
+  `applicant_pack`, 165_applicant_copy; provisional position, pre-counsel
+  research, 2026-10-01) names one issued pack too, but its issuer is a
+  party of the pack's application (`app_applicant_pack_meta`: the
+  application's owner or someone they shared it with, and the pack was
+  issued), not a viewer: the trigger and `render_token_insert` say so, and a
+  pack token asked for by anyone else stays a `pack` token. It is issued by the `report_render` job (or the
+  `pack_render` job, as the editor who issued the pack or asked again, or
+  the `applicant_pack_render` job, as the party who asked for their copy),
   which runs as the requester under RLS, and never leaves the server side:
   it goes to the local Chromium in memory, or in production over the
   SSE-encrypted `render-requests` queue to the renderer Lambda. It is never
@@ -460,7 +646,9 @@ buys a **render session** that can read one report and nothing else.
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes** (a pack's carries `scope: { p, k }`, the project and
-  the pack). A used, expired, unknown or malformed token gets one
+  the pack; an applicant's copy's `scope: { p, k, s }`, with the pack's
+  application, after the exchange checks the requester is still its
+  party). A used, expired, unknown or malformed token gets one
   answer, `400`. Both refusals carry the machine-only code
   `render_token_refused`: the renderer fails a report for good only on that
   code, so a WAF or CloudFront `403` in front of the API (no code) is
@@ -473,7 +661,11 @@ buys a **render session** that can read one report and nothing else.
   `/projects/<p>`, `/projects/<p>/series`, `/projects/<p>/runs/<r>` and its
   `/series`, `/day`, `/signoffs` and `/publication` (the run's place in the
   publications, issue #70): exactly the reads the report route
-  makes. An impact report's session may also `GET /compare/runs` with
+  makes. A pack's session reads only `/projects/<p>/packs/<k>` and its
+  `/signoffs`; an applicant's copy's only
+  `/projects/<p>/scenarios/<s>/packs/<k>` (the party's D2 projection), never
+  the editor's pack route, the application or its download
+  (`evidence/applicant-copy.db.test.ts` sweeps every signed-in route). An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
   parameters, once each: the impact section's one read), and the
   baseline run's `/series` with exactly `key=natural_flow` or
@@ -675,11 +867,26 @@ result without signing in, until it expires or its owner revokes it.
 - **The k rule on series.** `app_share_series` returns only the catchment
   allowlist (`natural_flow`, `simulated_outflow`, `observed_flow`, `ewr`,
   `ewr_shortfall`) of the current published run, monthly means plus the last
-  365 days, and **only when the catchment has at least `FARMER_K` = 5 farm
-  holders** (counted from nobody's point of view: one user's farms once, an
+  365 days. The rule is **split** (164; provisional position, pre-counsel
+  research, 2026-10-01): **the river** (`natural_flow`, and `ewr`, the
+  requirement made from it) is returned at any holder count, since it
+  describes the river and no holder's use (it is close to the public WR2012
+  quaternary record); **the use** (`simulated_outflow`, `observed_flow`,
+  `ewr_shortfall`) only when the catchment has at least `FARMER_K` = 5 farm
+  holders (counted from nobody's point of view: one user's farms once, an
   unlinked farm on its own). In a smaller catchment natural flow minus
   outflow is the farms' use, and with one farm it is that farm's
-  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)).
+  (design [farmer-view.md §10.3](./design/farmer-view.md#103-decisions-this-design-takes-for-the-client-to-confirm)),
+  so it stays linkable to a person "by a reasonably foreseeable method"
+  (POPIA s1, de-identify). The volume rows of the scenario and pack links
+  (`app_share_run_projection`, `app_share_pack_projection`) keep k as they
+  were. An applicant reads the same split (`run_series_select_contributor`,
+  `app_contributor_published_runs`; `scenarios/applicantResults.ts`
+  `naturalShown` / `impactedShown`). Five is a judgement in line with
+  statistical-disclosure practice, not a number in any statute; k alone
+  doesn't protect a catchment where one holder does almost all the
+  abstraction (a dominance rule is a follow-up,
+  [followups.md § Applicants](./followups.md#applicants-wp-33)).
   Farm keys are refused in the API and again in the function. The literal 5
   in the SQL is pinned to the engine's `FARMER_K` by `share.db.test.ts`.
 - **Rate limiting.** Nothing app-level: the WAF's per-IP rule on `/api/*`
@@ -691,7 +898,8 @@ result without signing in, until it expires or its owner revokes it.
 - **Tests:** `share/share.db.test.ts` (owner-only CRUD with a positive
   control, the dead-link cases against a live one, the response scan for the
   note and every farm name and id, the `last_used_at` throttle, farm keys,
-  and the k boundary at 4 and 5 holders), `share/share.security.db.test.ts`
+  and the k boundary at 1, 4 and 5 holders, the river's series shown at 1
+  as the positive control), `share/share.security.db.test.ts`
   (a link made under one publication reads only the current one, view and
   series; a sweep over every key the published run stores, catchment and
   node level, answers exactly the allowlisted catchment series, one row
@@ -818,11 +1026,38 @@ differences:
 - **Comments** need an account (step-3 D5 (a)): a member of the project
   posts a `public_participation` note, allowed only while the scenario is
   open for comment (a live scenario link, or decided after it was ever
-  shared). **Known gap:** the roadmap has an NGO join as a `viewer`, which
-  reads far more than commenting needs (every farm's figures, team notes,
-  decided applications); a comment-only role is a follow-up
-  ([followups.md](./followups.md#applicants-wp-33)). A linkless
-  contributor can comment and reads almost nothing.
+  shared).
+- **Link participants** (`166_public_participation`; licensing positions
+  item 7, provisional position, pre-counsel research, 2026-10-01). Anyone
+  signed in comments through a live link to a submitted or decided
+  application, or to an issued pack, with **no project role**: an NGO is
+  never made a `viewer` to comment, since a viewer reads every farm's
+  figures (POPIA s10). `POST /share/comment` (a session and the token)
+  calls `SECURITY DEFINER app_share_comment`, which writes one
+  `public_participation` note on the link's own target as the signed-in
+  person, stamped with `note.share_link_id`; `note_insert` refuses a
+  `share_link_id` from water_app, so nothing else can claim a link. No
+  grant or policy reaches the project for them: they read what the link
+  shows and their own data export, nothing else. 10 such comments an hour
+  per account, counted under a lock on the account's row (`429
+  comment_throttled`), on top of the WAF's per-address limit. Every dead,
+  revoked, baseline or closed link is the same `404`. The project's members
+  see the author's name as the link does (`app_link_comment_author`, since
+  `app_user_visible` hides non-members). Tests:
+  `share/participation.db.test.ts`.
+- **The objection warning.** Every public-participation comment box says
+  that a comment in the app is not a written objection (only a timeous
+  written objection keeps a right to appeal, NWA s148(1)(f)), and prints
+  the notice's address and closing date when the applicant gave them
+  (`app_share_objection`).
+- **The register opt-in and the reg 19 record.** `note.register_consent`
+  (the commenter's tick, fixed at insert, public comments only) is the only
+  way a commenter's email reaches the applicant: `app_participation_export`
+  (`SECURITY DEFINER`, since a contributor reads no other account's email)
+  answers the application's owner and the editors who read it, and puts the
+  email in only where the tick is; a withdrawn or removed comment's words
+  go to the editors only. Every download is audited
+  (`scenario.participation_exported`, with the number of emails).
 - **Only the run the backend stored, and its labels.** The function returns
   the newest five runs of the current ops; the API shows the newest whose
   stamp verifies, and takes each change's proposal / baseline class from
@@ -919,7 +1154,22 @@ and nothing else.
   - a plausible wrong value, inside the series' usual range, isn't caught;
   - the outlier rule needs 100 non-zero days in the series, so a short
     series is checked for negatives only (a new one a key creates is held
-    whatever its days, below);
+    whatever its days, below). Such a push **pauses automatic publishing**
+    (operator decision, 2026-10-01, #93: option (b) for auto-publish, (a)
+    for automatic runs): when no outlier limit could be taken at all, the
+    merge records `series.unchecked` as the key and answers
+    `autoPublishHeld: true`; the automatic run still runs, so a new
+    logger's figures stay current in the workspace, but
+    `publish/autoPublish.ts` publishes no automatic run while such an event
+    is newer than the project's latest manual run
+    (`uncheckedSinceLastRun`). So a leaked key's absurd value in a short
+    series can reach an automatic run, which only staff see, and never
+    farmers until a person has run the model on it. Holding the runs too
+    was rejected: a new logger's automatic runs would wait for a manual run
+    every day, for months on a dry rain record. A ceiling per kind was
+    rejected: it works for rain, but flow has none. Editors seed a series
+    with its record so far, not one day (the `409` below says so), which
+    shortens the paused stretch;
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -975,7 +1225,9 @@ and nothing else.
   key pushing in batches held by the limit without its own days, another
   key's and a person's days counting, the guard's directions; a key that
   alone fills a series held by the accepted values, a genuine value passing,
-  the `own` bootstrap before a manual run), `series/hold.test.ts`.
+  the `own` bootstrap before a manual run; a push into a short series
+  running automatically but not published until a person runs the model,
+  with a long-enough record as the positive control), `series/hold.test.ts`.
 - **Scopes.** `series:write` only (a `CHECK` allows nothing else). The route
   checks it (`403`), and so does the database.
 - **Allowed series.** Optional, 1–50 `{ kind, name }`. Checked in the route
@@ -1124,6 +1376,37 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     narrow (the same form post to any other route is refused).
   - *Rate limiting.* The WAF's per-IP rule on `/api/*`; a 256-bit token
     can't be guessed.
+- **"Was this useful?" (issue #74, `151_alert_feedback`).**
+  - *No tracking.* Every alert email and digest carries two plain links,
+    Yes and No, to `/alerts/feedback#t=<token>&a=yes|no`. No email carries
+    an image, a pixel or a tracked link, SES open and click tracking is not
+    switched on, and opening the mail or a link records nothing: the page
+    preselects the link's answer and stores it only when the reader presses
+    **Send**, so a mail scanner that opens links answers nothing (Privacy
+    §3: "We do not use analytics, advertising or tracking tools"). Open
+    tracking was considered and dropped: it is tracking, and some mail apps
+    fetch images on their own, so it is unreliable too.
+  - *The token.* Single-purpose: HMAC-SHA256(`ALERTS_TOKEN_SECRET`,
+    `"wm-alert-feedback/v1/"` + a per-mail nonce), its own label beside the
+    unsubscribe token's, so neither works at the other's route
+    (`token-confusion.security.db.test.ts`). The worker makes the row as the
+    recipient, only for a delivery of theirs being sent
+    (`app_alert_answer_slot`); the row stores the nonce and the token's
+    SHA-256, and the API, which holds no secret, looks the token up by its
+    hash (`app_alert_answer`). It answers only its own email, without
+    signing in, for 30 days after the mail, and only while its person can
+    still open the catchment; a second answer replaces the first. Its worst
+    use, leaked: someone answers one email's question for that person.
+  - *Who reads it.* The person (their own rows, and in their data export)
+    and the project's editors and owners (RLS). The editors' route,
+    `GET …/alert-feedback`, sends counts per kind and comments, never who
+    gave them; a comment is shown as text, never as HTML. water_app has
+    SELECT only; every write is a SECURITY DEFINER function.
+  - *Retention.* Unanswered rows 30 days after the mail, answers 365 days
+    after they were given (`app_purge_alert_answers`, each tick); deleted
+    with the account (cascade).
+  - *CSRF.* The page posts it same-origin as JSON, so the `csrf()` check
+    applies (the unsubscribe stays the only exemption).
 - **Headers.** `List-Unsubscribe`, `List-Unsubscribe-Post:
   List-Unsubscribe=One-Click` and `Auto-Submitted: auto-generated` go out on
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
@@ -1433,7 +1716,20 @@ In short:
   `node_id`; `human-impacts.db.test.ts` checks a member sees its patches, a
   non-member none, and a patch can't be attached to another project's farm.
 - A **last-owner guard** means a project can't be orphaned (and a
-  last-admin guard, a team).
+  last-admin guard, a team): the deferred `project_member_keep_owner` and
+  `team_member_keep_admin` triggers refuse, at commit, a change that leaves
+  none, and the member routes answer `409` first. Both hold **when two
+  owners (admins) give it up at the same moment** (149_last_owner_lock):
+  the routes lock the project's owner rows (the team's admin rows) `FOR
+  UPDATE` before their check, and each trigger takes a per-project
+  (per-team) advisory lock before counting, so the second change waits for the first, re-reads, and
+  is refused. Without the locks each read the other as still there (its
+  change not yet committed), both passed, and the project was left with no
+  owner. The trigger lock is the backstop for every other path, the
+  operator deleting `app_user` rows among them; its re-read needs READ
+  COMMITTED, the level every write runs at. Tests:
+  `projects/last-owner-race.db.test.ts` (forced interleavings through the
+  routes and straight at the triggers).
 - **Runs are immutable by privilege.** `water_app` may `UPDATE` only
   `model_run.notes` (a column-level grant, 007_run_notes), so no API bug can
   rewrite a run's inputs, outputs or label after the fact; who last changed
@@ -1527,9 +1823,10 @@ In short:
   there, even for someone who edits both (the handler scopes every read by
   the job's project; `app_begin_feed_fetch` and the `yield_result` guard
   check it again in the database). The per-user caps on queued
-  sweeps, outlooks and yield calculations (2 each) are counted under a
-  per-user advisory lock, so a concurrent burst can't pass them, and the
-  database refuses a sweep member or outlook level past the API's cap
+  sweeps, outlooks, yield calculations and cumulative assessments (2 each)
+  are counted under a per-user advisory lock, so a concurrent burst can't
+  pass them, and the database refuses a sweep member, assessment member or
+  outlook level past the API's cap
   (`jobs/costCaps.security.db.test.ts`).
   **Automatic re-runs** (042_auto_rerun, [architecture.md § Automatic
   runs](./architecture.md#automatic-runs)) are queued and pushed back by
@@ -1674,7 +1971,8 @@ In short:
     server an application run's summary and model and its base's summary for
     `GET …/scenarios/:sid/results`; both are projected before anything
     leaves (`scenarios/applicant.ts`, `scenarios/applicantResults.ts`: the
-    EWR sites, the catchment under the k rule, their own units, other units
+    EWR sites, the catchment under the split k rule (the river always, the
+    use at 5 or more holders), their own units, other units
     downstream only as "Farm 3" and a whole percentage, and nothing but the
     EWR when an op was a baseline assumption). The DB test
     (`scenarios/results.db.test.ts`) scans the answer for every other farm's
@@ -1703,6 +2001,44 @@ In short:
     passed.
   - **No one decides their own application**: the trigger refuses a decision
     by the owner, whatever their role by then.
+  - **Only a member acting for the responsible authority records its
+    decision** (163_licensing_authority; provisional position, pre-counsel
+    research, 2026-10-01: under the National Water Act only the responsible
+    authority decides a licence, s27, s41, s42). `project_member.acts_for_authority`
+    is set by an owner only (`project_member_authority` refuses anyone else,
+    and an insert, an invite or a new project, always starts it false;
+    water_app's `UPDATE` on `project_member` is the columns `role`, `party`
+    and `acts_for_authority` only). `scenario_guard` refuses the move to
+    `decided` unless `app_acts_for_authority` (editor or above **and**
+    marked), and the route says so first (`403`). The same right, checked
+    by `run_publication_endorse`, endorses a published baseline; an
+    endorsement is set once and never changes (`run_publication_final`),
+    except that the endorser's account going clears `endorsed_by`.
+    `projects/authority.db.test.ts` tries each through the route and past
+    it, with a marked editor as the positive control.
+  - **No editor is also an applicant** (the conflict guard, D1 (c), 163).
+    Someone who edits the project (editor or owner, directly or through its
+    team, `app_member_role`) can't be in an applying party, own an
+    application or be shared one there: `AFTER` triggers on
+    `project_member`, `team_member`, `project` (moving into a team),
+    `scenario` and `scenario_member` raise `role_conflict`, which the API
+    answers as `409 role_conflict` with fixed words (never the database's
+    text). Otherwise an editor of a consultancy-hosted project could read
+    every submitted application and decide with their own client's in view.
+    Rows that conflicted before 163 aren't rewritten; their next change is
+    refused until it resolves the conflict.
+  - **Cumulative assessments are the editors' alone** (145_assessment,
+    WP-3.11): an assessment names every application in it and shows what
+    each does, so `assessment` and `assessment_member` are read and written
+    by editors only (RLS and the routes, `403` below editor); a contributor
+    never learns another application exists from one, and a viewer, who
+    reads an application only once decided, doesn't read a submitted one
+    through it. A member's ops are copied from its scenario by the database
+    (`assessment_member_guard`, as the caller, so RLS hides a draft
+    application: it can't be named), never taken from the request.
+    `assessments/assessments.db.test.ts` checks each with a positive control;
+    `db/cross-project-refs.security.db.test.ts` and
+    `jobs/trust.security.db.test.ts` cover its references and its job.
   - **An application's own farms are its owner's farm links, now**
     (071_application_own_nodes). The `scenario_owned_nodes` trigger refuses
     an application whose `owned_node_ids` name a farm its owner isn't linked
@@ -1987,7 +2323,12 @@ In short:
   that guard. The same guard checks the chart library: the uPlot build the
   app bundles writes series labels (typed names) and its legend read-out
   through `textContent`, never markup. Also banned there: `setHTMLUnsafe`,
-  `parseHTMLUnsafe`, `DOMParser.parseFromString`. Mail templates escape
+  `parseHTMLUnsafe`, `DOMParser.parseFromString`. The one exception is the
+  map's attribution control: MapLibre sets a source's `attribution` as
+  innerHTML (behind its own weak sanitiser), so every value put into one
+  (`mapStyle.ts` `terrainSource`, `riversCredit`) goes through
+  `escapeAttribution` (round-4 hardening; `mapStyle.test.ts`). Today they
+  are all build-time constants. Mail templates escape
   every interpolated value (`mail/templates.ts` `escapeHtml`,
   `templates.test.ts`).
 - **No script URLs.** Svelte escapes attribute text, not what it means:
@@ -2120,10 +2461,34 @@ database:
   slip in as a name.
 - The registered user's **name** is the only personal field kept, in
   `allocation_holder`, readable by editors and owners and by the linked farmer
-  for their own farm; **viewers never read it** (RLS, decision D3 (b) pending
-  legal advice). The history records registration numbers, file names and
-  counts, never names. The export's `holder` column is only in an editor's
-  file.
+  for their own farm; **viewers never read it** (RLS, decision D3). The
+  history records registration numbers, file names and counts, never names.
+  The export's `holder` column is only in an editor's file.
+- **Decision D3** (provisional position, pre-counsel research, 2026-10-01).
+  A per-farm volume beside a farm's name identifies its holder in a rural
+  catchment, and over/under-use flags beside a neighbour suggest unlawful
+  use. WARMS is not public (s12(2)(a) doesn't apply); comparing registered
+  with modelled use is compatible further processing (s15(2)(a)), but
+  republishing names or per-farm volumes isn't: NWA s142 releases WARMS only
+  "subject to any limitations imposed by law", and PAIA s34(1) would have
+  DWS refuse a stranger this. So, by reader:
+
+  | Reader | Names | Per-unit volumes |
+  | --- | --- | --- |
+  | Owners and editors (the client's staff, its consultants, an authority's assessors on its project) | yes | yes |
+  | Farmer or applicant linked to the farm | their own farm's holder | their own units |
+  | Viewer | never | only when an owner switches `project.allocations_viewer_units` on (162); otherwise totals per water source at ≥ 5 registered users (`app_allocation_volumes`) |
+  | Share links, pack links, the public verify page | never | never per unit (none shown today; any later total at ≥ 5 holders) |
+  | An issued evidence pack (§ 5) | never | the applicant's own units; every other unit as one total per water source at ≥ 5 units (`evidence-15`) |
+
+  With the switch off, a viewer's routes carry no copy of the volumes: the
+  run's model and summary per unit, the compare route, the summary CSV, the
+  run's model input (refused for a cap or full-allocation run) and the farm
+  view's registered water ([api.md § Allocations](./api.md#allocations)).
+  Left: a capped run's per-unit daily series still bound use by the volume
+  ([followups.md § Allocations](./followups.md#allocations-wp-310)). A WARMS
+  extract must say how it was obtained (`allocation_source.reference`,
+  operator agreement 3A.1(d)); stricter terms from DWS or the CMA win.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does. A licence condition in words
   (103) is checked like the holder: a 13-digit number there is a row problem.
@@ -2132,15 +2497,16 @@ database:
   engine reads (id, unit, source, volume, storage, validity, months, maximum
   rate, and `waterUse: '21b'` on a storage-only row, issue #72), never the holder's name, the registration number or the property
   (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
-  appears). A viewer reads a run's input and could read the volumes anyway;
+  appears). A viewer reads a run's input only with the switch on (above);
   an applicant's projection of a published base keeps only the allocations on
   their own units (`scenarios/applicant.ts`), and a contributor never reads a
   run's summary, whose comparison names every unit.
 - The **evidence report's § 5** (issue #71) compares each run's *stored*
-  allocations, so it carries volumes by unit and never a holder's name or
-  registration number, for every reader (viewers and up) and in an issued
-  pack an applicant later holds (`evidence/report.db.test.ts` fails if either
-  appears).
+  allocations, so it never carries a holder's name or registration number,
+  for every reader (viewers and up) and in an issued pack an applicant later
+  holds; since `evidence-15` it lists only the applicant's own units, the
+  rest as totals (`evidence/report.db.test.ts` fails if a name, a number or
+  another unit appears).
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to
@@ -2155,6 +2521,162 @@ database:
   property, and a farm they aren't linked to answers `404`
   (`allocations/water-use.db.test.ts`, the WUA's preview as positive
   control).
+
+### Map uploads (152_catchment_map.sql)
+
+The Map tab (issue #288, [maps.md](./maps.md)) takes GeoJSON files and
+placed points. The server never trusts the browser with geometry:
+
+- Every geometry is parsed and checked in `backend/src/geo/geojson.ts`
+  before it is stored, whatever the client sent: WGS84 ranges (a projected
+  file is refused, never reprojected by guess), 2D, the five supported
+  types, closed rings with an area that don't cross themselves, holes
+  inside, not across the antimeridian. Limits: 5 MB of text, 500 features,
+  50 000 positions per feature; the self-crossing sweep stops at 5 million
+  comparisons and refuses the ring, so a crafted file can't cost quadratic
+  time. Summing a polygon over a grid (land cover, evaporation, the CHIRPS
+  cells) clips its rings into rows and then cells by halving the range
+  (`geo/clip.ts eachBand`), so the work grows with the vertices times
+  log(cells), not vertices × cells: before, clipping the whole row piece to
+  every cell let a 48 000-position comb (1.3 MB, valid) cost about 92 s of
+  CPU in one viewer GET of `evaporation-proposals` (`geo/clip.test.ts` bounds
+  the work). The import route has its own body limit (7 MB of JSON, `app.ts`
+  exempts that one path from the general 4 MB), and the parse is
+  `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
+  there is no archive to bomb), no external references.
+- Every **area is computed on the server** (`geo/area.ts`); a client's figure
+  is never accepted. An area reaches the model only through
+  `area-from-map`, an editor's explicit action recorded as a model revision;
+  a dam's capacity and full-supply area only through `dam-capacity-from-register`
+  and `dam-area-from-map` (issue #326 B-dams), which take a register number or
+  a feature id, never a value: the server re-derives the value (the register
+  entry must be within 1 km of the unit's own dam on the map; the polygon must
+  be a dam linked to that unit). A planted area from land cover only through
+  `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
+  dataset and optionally a parcel, never a value: the server sums the
+  cropland in the unit's own linked parcels as they are now. Evaporation
+  only through `evaporation-from-map` (issue #326 B-evap), which takes a
+  dataset label, never a value: the server averages the grid over the
+  project's own boundary as it is now.
+- **Properties are allowlisted** (`name`, `description`, `ref`; capped):
+  a GIS attribute table can carry owners' names, ID numbers or phone numbers,
+  and anything else is dropped before storage (POPIA minimisation, as the
+  allocations import refuses such columns). The file's name and SHA-256 are
+  kept for provenance; its text is not.
+- Feature names and descriptions render through Svelte's escaping, and map
+  markers are DOM buttons built with `createElement`, labelled with
+  `setAttribute` and `textContent`-free SVG (no `innerHTML`;
+  `rawHtml.test.ts`).
+- RLS: viewers read, editors write; a farmer or applicant reads only the
+  boundary, gauges, rivers and their own farm's features. The one route that
+  serves them to a farmer is the farm view's map,
+  `GET /projects/:id/farm/:nodeId/map` (issue #326 A3): `requireFarm` first
+  (another farm answers 404), then a query that names the farm, so it
+  answers that farm's own parcels and dams plus the boundary, rivers and
+  gauges even for a viewer previewing it, with no node id, properties or
+  author; RLS is the second layer. No status comes with it: the page colours
+  the land from the farm view's own published band. Guarded by
+  `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
+  as the positive control) and the farmer-privacy sweep, which now seeds a
+  neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
+  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180) and `river_reference` (171) are public reference data, readable by any
+  signed-in user and written by no app role (the operator loads it as the
+  schema owner).
+- No third-party origin: MapLibre is bundled, its worker is same-origin
+  (`worker-src 'self'`, no `blob:`), the basemap is a self-hosted PMTiles file
+  with no glyphs or sprites; the CSP is unchanged ([maps.md § CSP and
+  bundle](./maps.md#csp-and-bundle)).
+- Account deletion: `geo_source.imported_by` and `map_feature.created_by`
+  are `SET NULL` (the features are the project's; catalogue guard). A map
+  feature holds no personal information about its creator, so the
+  data-subject export doesn't list them. `delineation_proposal.created_by`
+  and `decided_by` (175), and `start_proposal`'s (178), are `SET NULL` the
+  same way.
+- **Delineation** (#326 B-delineate, [maps.md §
+  Delineation](./maps.md#delineation)): the DEM is read from `DEM_URL`,
+  operator configuration, never a URL a user gives, so a click can't point
+  the API anywhere (no SSRF surface); a user supplies only a longitude and
+  latitude. Each delineation is seconds of CPU and up to about 0.5 GB on the
+  API, so it is editor-only, capped at 30 stored proposals a project an
+  hour (429), bounded by a window cap and a 20 s budget under the Lambda's
+  timeout, and run outside any database transaction. On top of that every
+  account has its own cap on elevation-model work (184_dem_attempt,
+  `delineation/attempt.ts`), shared by delineate, start and divide and
+  counted before the work in the transaction that checks the role: at most
+  2 attempts running at once and 60 started an hour, across every project,
+  refused and failed attempts included (429). It is per account because the
+  per-project count missed the attempts that store nothing (a `too_large`
+  refusal still reads and routes the windows), passed parallel requests
+  (counted in one transaction, stored in another) and reset with a new
+  project, so one account could keep every API Lambda slot busy. An attempt
+  whose Lambda died frees its running slot after a 2-minute lease. The row
+  names only the account and the kind, goes with the account (cascade) and
+  after a day, so it isn't exported (as `account_mail_quota`). The decoders (WebP, PNG, PMTiles) read
+  only the operator's file and fail closed on anything malformed, within
+  fixed bounds (§ Map data files below). The proposal's polygon passes the same
+  `checkGeometry` as every map polygon before it is stored.
+- **Map data files** (round-4 hardening): the hand-written readers bound
+  what a file can make them do, so a corrupt or hostile archive (a
+  compromised upstream, a wrong upload) is refused with the reader's own
+  error and a 503, never an out-of-memory crash. Tiles are at most 1024 px
+  a side, checked before any pixel is allocated (`MAX_TILE_SIDE`; a WebP of
+  single-symbol codes decodes any size from a few bytes), and at least
+  64 px (`MIN_TILE_SIDE`, else a window is millions of reads); PNG image
+  data inflates to its rows at most; a WebP keeps only the prefix-code
+  groups its meta image names (at most 4096). PMTiles caps every length the
+  archive gives before reading it (directories 4 MiB, metadata 1 MiB,
+  tiles 2 MiB) and every gzip inflation (`PMTILES_LIMITS`), and refuses a
+  directory claiming more entries than its bytes hold. Over HTTP the DEM
+  reader follows no redirect and refuses a server that ignores Range or
+  sends more than asked. `delineation/hostile.test.ts` feeds the decoders
+  seeded mutations of the fixtures (truncations, bit flips, random splices,
+  huge fields) plus the specific bombs. The land-cover import's GeoTIFF
+  blocks inflate to their pixels at most (operator-run). The CHIRPS
+  reader's GDAL metadata scan is linear (`gdalItems`; the regex it replaced
+  backtracked quadratically on a crafted megabyte).
+- **Geometry cost** (round-4 hardening): `checkGeometry`'s crossing sweep
+  counts every comparison against `GEO_MAX_PAIR_CHECKS` (a 50 000-vertex
+  sawtooth whose edges all overlap in longitude took ~9 s of blocked event
+  loop before; now refused in under 0.1 s) and checks a polygon's rings
+  against each other, so a hole can't cross its outer ring or another hole.
+  Placing a dam's outline on the DEM (`rasterize`, start from the map and
+  divide) adds each edge only to the rows it spans, rather than testing
+  every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.
+- **Tracing a dam** (#326 C2, [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
+  configuration, read with the same fail-closed decoders; a user supplies a
+  longitude, latitude and one of four shares. A trace reads at most a
+  512-cell window (a handful of tiles, cached per process), takes
+  milliseconds and stores nothing; it is editor-only and capped at 300 a
+  project and 600 a user an hour, every attempt counted before the work
+  under a row lock (so parallel requests can't all pass), the re-trace when
+  a traced outline is saved included (`186_map_compute_throttle.sql`,
+  `delineation/throttle.ts`, 429 with Retry-After; `throttle.db.test.ts`).
+  It had no cap before (round-4 hardening). A traced outline saved names its method on the server's word,
+  not the client's: the server traces the click again, and an outline sent
+  as unadjusted must equal that trace. Splitting checks each part with
+  `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
+  and each part within the shape: every edge of a part that isn't one of
+  the shape's own has its ends and middle inside or on the outline and
+  crosses none of its edges, at most 500 such edges, `geo/splitCheck.ts`;
+  before, only the bounding box was checked, so an L cut into two
+  rectangles, one outside the L, passed), in one transaction, so a split
+  can't smuggle in an unrelated shape labelled as a split.
+- **Start from the map** (#326 C3, [maps.md § Start from the
+  map](./maps.md#start-from-the-map)): the same DEM and the same bounds
+  (editor-only, its own 30 stored an hour, the account's attempt cap, the window cap and budget, outside any
+  transaction). A user names only feature ids of their own project's map
+  (read under RLS, so another project's are "not on this map") and roles.
+  Apply writes only into an empty model, re-checks the ticks against the
+  stored plan (a value can't be ticked that wasn't proposed) and runs the
+  model's own validation before saving; the plan is immutable and the
+  decision final (178 `start_proposal_final`). Since 185 a proposal of either kind is kept as proposed in the database too, not only by the routes: every column but the decision's is fixed (the polygon, area, dataset, method, project), the maker is the signed-in user on insert and only its account's deletion clears it, an accepted or applied proposal can't be deleted but with its project, and the triggers' "is that account gone?" check runs as SECURITY DEFINER, so app_user's RLS can't hide a live decider (`final-columns.security.db.test.ts`). **Dividing** a model that has
+  nodes (182) is the same surface: feature and node ids of the project's own
+  map and model only (another project's are "not on this map" / "not in the
+  model", `cross-project-refs.security.db.test.ts`), the shared cap, and an
+  apply that takes only ticked values and refuses one whose current value
+  changed since the proposal, so it never overwrites typed data unseen; the
+  mode is as final as the plan (182).
 
 ## Personal information (POPIA)
 
@@ -2174,11 +2696,18 @@ s20–21 and needs a written agreement with it: the template is
 review), and a breach follows [legal/incident-procedure.md](./legal/incident-procedure.md). Farmers are invited
 by the WUA; nobody is added to a project without an owner acting.
 
-**Lawful basis and consent, today.**
-- Accounts, memberships and farm links: to provide the service the member
-  signed up for, and for farmers the WUA's function of managing its members'
-  water use (legitimate interest or a legal duty under its constitution)
-  *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
+**Lawful basis and consent, today.** Provisional positions (pre-counsel
+research, 2026-10-01; not legal advice), each with the objection right
+built in. None rests on consent.
+- Accounts: the operator's contract with the person, the Terms of use
+  (POPIA s11(1)(b)); the operator is the responsible party. Memberships and
+  farm links: the client organisation's legitimate interest in managing its
+  water scheme and telling members about their own water (s11(1)(f)), the
+  client as responsible party. Not consent: a member depends on the WUA for
+  water, so consent's voluntariness is open to attack, and it could be
+  withdrawn mid-season. The s11(3) objection is exercised by leaving the
+  project, which deletes the membership and the farm link (Privacy §4,
+  §10). The **privacy notice** is at `/privacy` and the terms at
   `/terms` (research-based, not counsel-reviewed, [legal-status.md](./legal-status.md));
   the sign-up form, invitations included, shows the Terms' main points and
   a required checkbox accepting both, and sends the version it showed: the
@@ -2190,14 +2719,28 @@ by the WUA; nobody is added to a project without an owner acting.
   sees a notice before any app page until it accepts
   (`POST /auth/me/accept-terms`, which refuses a stale version the same
   way).
-- Notes, the audit log, publications and sign-offs: the project's record,
-  kept for the regulator's audit trail (roadmap §7).
+- Notes, the audit log, publications and sign-offs: the organisation's
+  legitimate interest in a reproducible record of its decisions
+  (s11(1)(f)), kept for the life of the project under s14(1)(b) (the
+  organisation reasonably requires it for its functions). No statute
+  imposing a duty to keep this record has been identified, so the notice
+  claims none (s11(1)(c) is not relied on).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
   each person choosing right away, daily or off, with a one-click
-  unsubscribe in every mail ([§ Alerts](#alerts)) *(confirm the basis)*.
-- Cookies: the session cookie (`wm_session`) and the sign-in lockout's
-  trusted-device cookie (`wm_device`, [§ Authentication](#authentication)),
-  both strictly necessary. No
+  unsubscribe in every mail ([§ Alerts](#alerts)), which is the s11(3)
+  objection. Basis: the organisation's legitimate interest in warning its
+  staff and members about their water supply (s11(1)(f)). Alerts are not
+  direct marketing (POPIA s1, s69): no promotional content in any alert or
+  digest, so default-on delivery needs no opt-in. `mail/alerts.content.test.ts`
+  holds every link in every alert and digest (both languages, farmer and
+  staff) to an allowlist: the unsubscribe page, "Was this useful?", the
+  farm page or workspace, the alert settings, the account page and
+  `/privacy`. SES open and click tracking stays off (§ Alerts, "Was this
+  useful?").
+- Cookies: the session cookie (`wm_session`), the sign-in lockout's
+  trusted-device cookie (`wm_device`, [§ Authentication](#authentication))
+  and two-step sign-in's 5-minute challenge (`wm_mfa`,
+  [§ Two-step sign-in](#two-step-sign-in)), all strictly necessary. No
   analytics, no third-party scripts or fonts (the CSP allows none), so no
   cookie banner.
 - Sub-processors: AWS only (hosting, RDS, S3, SES mail, CloudWatch logs),
@@ -2214,7 +2757,8 @@ file), so a new column can't ship without a decision.
 behind every cascade and set-null key is deleted, then every text, json,
 uuid and array column of every table is scanned for its email, name and
 id, which may survive only where this table keeps them (the audit log's
-random id, the typed sign-off name, the sign-in lockout's address). It
+random id and the 40-day erasure log's, the typed sign-off name, the
+sign-in lockout's address). It
 found three guards that fought the deletion, fixed in 066: a sweep's or
 outlook's guard refused the key's SET NULL (so the account couldn't be
 deleted), `alert_rule_check` put the creator back (a dangling id), and a
@@ -2226,32 +2770,43 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
-| Ids of sessions the person signed out (102) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Elevation-model requests per account, for the hourly and running caps (184) | `dem_attempt` | 1 day | Deleted | – |
+| Ids of sessions the person signed out (102), and used two-step sign-in challenges (150) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Two-step sign-in (150): the authenticator's secret (sealed, AES-256-GCM), the recovery codes (SHA-256), wrong-code counts; own rows only under RLS | `user_totp`, `user_recovery_code`, `mfa_throttle` | Until turned off (a used code at once); counts a day without attempts | Deleted | – |
+| The account's own security log: two-step sign-in turned on or off, a recovery code used, new codes (150); append-only | `account_security_event` | Until the account is deleted | Deleted | – |
 | Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
+| Dam traces, counted for the hourly cap: the user's id and the project's (186) | `map_compute_throttle` | One hour from the window's first attempt | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | A farm's season figures in each publication, and the notice as announced (the season decision log, issue #119): staff-only, never a farmer's or applicant's to read | `audit_event` (`publication.published` `perFarm`, `publication.notice_changed`) | For the life of the project, as the rest of the audit log | Stay (the farm's, not the person's; no account is named in them); left out of the publisher's data export | Deleted |
-| Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
-| A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
+| Notes: body, author | `note` | For the life of the project. A deleted note's text: 90 days, then erased by the tick (`app_purge_deleted_notes`, 158; the `note.deleted` event stays); on a submitted application or an issued pack, kept hidden with the licence record (s14(6)(b)) | Author cleared; body stays | Deleted |
+| Public comments through a share link (166): the author, the link it came through, whether they agreed to give their name and email to the applicant for the I&AP register (GN R267 reg 18); the applicant's download of them (the reg 19 record, with the emails agreed to) | `note` (`share_link_id`, `register_consent`); the applicant's own copy once downloaded | As notes; the applicant keeps their copy for their register (reg 18: while the application is considered and two years after a licence is granted), as its responsible party | Author cleared; body stays (as notes); a copy already downloaded is the applicant's | Deleted |
+| A scenario or pack note's earlier texts, and who edited (115, 128; WP-3.15): a participation record | `note_revision` | With its note: erased with a deleted note after 90 days (cascade), kept with a licence record's note | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A team's privacy contact (168): the name (or office), email and optional postal address the team gives for questions about its projects' information (POPIA s18(1)(b)), shown to its projects' members and farmers and in invitation emails | `team` (`privacy_contact_*`) | Until an admin changes or removes it, or the team is deleted | Unaffected (it is the organisation's contact, not the account's; an admin removes it) | Unaffected (deleted with the team) |
+| Erasure log: the internal id of each deleted account, project and team (159), for a restore to delete them again | `erasure_log` (owner-only, no grant to `water_app`) | 40 days, above the 35-day backup maximum (`app_purge_erasure_log`, the tick) | The account's id, 40 days | The project's id, 40 days |
 | A public comment's author's display name, shown on the scenario's or pack's share link (115, 128) | `note` (`public_participation`), read by `app_share_scenario` and `app_share_pack` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
-| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
+| Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail; POPIA s14(1)(b)) | Pseudonymised: "Deleted user" as actor and subject (D12, 048), and the masked address in invitation entries blanked to `•••` (160). The entries stay and are **still treated as personal information** (owners and editors read them; deleted with the project), not as de-identified. Provisional position (pre-counsel research, 2026-10-01): s24(1)(b) reaches only what s14 no longer authorises, and s14(1)(b) authorises the audit trail. A team that keeps public records (`team.public_records`, 161) keeps the name in its projects' entries | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |
 | Jobs, reports, render tokens: who asked | `job`, `report`, `report_schedule_recipient`, `render_token` | Jobs 30 days after finishing; report rows 8 days, PDFs 7; tokens single use, 5 minutes | Deleted | Deleted |
 | Alerts: a person's choices and the mails sent to them; the rules and events | `alert_subscription`, `alert_delivery`; `alert_rule`, `alert_event` | Choices while a member; deliveries 180 days; events 180 days after clearing | Choices and deliveries deleted; a rule's creator cleared | Deleted |
 | Evidence pack emails: that a person (an editor, or the applicant) was emailed about a pack's issue or withdrawal, and whether it went; the email itself goes to their account address | `pack_notice` (133) | 30 days after it is sent, skipped or failed (`app_purge_pack_notices`, the tick) | Deleted | Deleted |
+| Known engine bug emails: that a project owner was emailed about an erratum that may affect the project's runs, and whether it went | `erratum_notice` (153) | 30 days after it is sent, skipped or failed (`app_purge_erratum_notices`, the tick) | Deleted | Deleted |
 | Feeds and report schedules: acting user | `data_feed`, `report_schedule` | While configured | Cleared; the feed or schedule is skipped until someone saves it again | Deleted |
-| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql)) | Not linked to an account | Deleted |
+| Registered water users' names (WARMS) | `allocation_holder` | For the life of the project ([§ Allocations](#allocations-popia-minimisation-038_allocationssql); D3: editors, owners and the linked farmer only) | Not linked to an account | Deleted |
 | An application's decision: the assessor who made it | `scenario.decided_by` | Kept (the decision on the application) | Who cleared; the outcome and note stay (052) | Deleted |
-| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), for the life of that record: the licence or decision it supports and any appeal or review of it, after which the operator removes the project on the client's confirmation (§ Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b)) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
-| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, for the life of the licence record (as sign-offs) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
+| Sign-offs: typed name and registration | `signoff` | With the run or pack it signs: for the life of the project, and where the project is kept as a licence record (a nomination or a pack past draft), until the record's closing date the project holds (161): the licence's expiry, or the refusal or withdrawal, + 3 years, with a 5-yearly review while no outcome is recorded; the tick tells the owners and the operator, and the operator removes the project on the client's written confirmation (deployment.md § Runbooks, item 16; § Authorization, "Tamper evidence"; POPIA s14(1)(b), s14(6)(b); provisional position, pre-counsel research, 2026-10-01) | Account cleared; name stays ([§ Liability](#liability)) | Refused while a nomination or an issued pack holds the project |
+| Registration checks (167): the name and number the host found on the public SACNASP or ECSA register, the outcome, who checked (the organisation) and when, who recorded it | `registration_check`, `signoff_registration_check` | A check no issued pack rests on: until the account is deleted; one bound to an issued pack's sign-off: as the sign-off (the licence record) | Account cleared; an unbound check deleted (`registration_check_forget`), a bound one stays without the account, as the sign-off's typed name does | Deleted with the project |
+| Evidence packs: who drafted and issued them; the signers' names and registrations, printed and returned by the public verify lookup; the frozen evidence report in the manifest, which prints the display names of who made its runs, ensembles and nominations and of the application's applicant; the reproduction bundle (the manifest and both runs' inputs: the model's farm and node names, as the manifest already holds them; no account or email) | `evidence_pack` (`created_by`, `issued_by`, `manifest`), `signoff`; the bundle in the packs bucket (`packs/<project>/<pack>/<sha256>.zip`, 122) | Once issued, until the licence record's closing date (as sign-offs, 161) | Who drafted and issued cleared (SET NULL, allowed past the pack's guard only when the account is gone); a signer's typed name stays, as on any sign-off; the names printed in the manifest and the bundle stay, because they are hashed (the verify lookup and the signatures rest on the hash) | Refused while a pack is past draft (`project_pack_guard`, 112) |
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario or licence application, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | With the project (runs are pruned as above) | Kept, maker cleared (SET NULL, 138): the API shows no name, the History "Deleted user". Never reassigned (that would make the record false, s16). Removed with the account: an ensemble they started and never completed, and their **draft** applications with those drafts' runs (unless the project keeps the draft: public comments, a pack, or a pinned, nominated or cited run). A submitted, withdrawn or decided application stays, applicant cleared *(confirm the rule, #90)* | Deleted, unless nominated (`project_evidence_guard`) |
+| The Map's records of who made them: a map import, a feature, a delineation proposed or decided (175) | `geo_source.imported_by`, `map_feature.created_by`, `delineation_proposal.created_by` and `decided_by` | With the project (superseded and rejected proposals past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); a proposal's polygon, dataset and method hold nothing about the person; its decision stays final (175 `delineation_proposal_final`, only the foreign key clears `decided_by`) | Deleted |
+| A model proposed from the map (178): who proposed and decided it | `start_proposal.created_by` and `decided_by` | With the project (superseded and discarded ones past the newest 50 a project are pruned) | Kept, maker cleared (SET NULL); the plan (units, areas, outlines from the project's map) and the decision hold nothing about the person; the decision stays final (178 `start_proposal_final`) | Deleted |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
-| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
-| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down; a manual snapshot, kept until the operator deletes it (the privacy notice says so and promises the period with the shutdown notice) | Stays in it | Stays in it |
+| Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out, never restored into use without re-applying erasures: a restore re-reads `erasure_log` and the audit log's revocations on the old instance and deletes them again before traffic is back ([deployment.md § Restoring the database](./deployment.md#restoring-the-database), step 6a). The old instance's final snapshot, which never expires, is taken only if needed and deleted within 30 days | Same |
+| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down: 90 days after the shutdown notice, so an organisation can ask for its projects back, then deleted (Privacy §7, operator agreement 10.2) | Stays in it | Stays in it |
 
 **Data-subject requests.**
 - **Access / export: self-service.** Account → Your data → **Download my
@@ -2260,7 +2815,7 @@ PDF someone else asked for kept the person as a recipient
   those farms' current published figures (as the farm page shows them) and
   the registered volumes and holder names matched to them, notes written,
   sign-offs, invites to their verified address, alert and report choices,
-  alert mails sent, evidence pack emails sent (`packNotices`, 133), their display preferences (the sections they hid), and every audit event they made or that names them.
+  alert mails sent, their "Was this useful?" answers and comments on alert emails (`alertFeedback`, 151), evidence pack emails sent (`packNotices`, 133), known engine bug emails sent (`erratumNotices`, 153), their display preferences (the sections they hid), and every audit event they made or that names them.
   The rows RLS hides from the person (the audit log for a farmer, invites,
   anything in a project they've left) come through `app_subject_export()`
   (052), a `SECURITY DEFINER` reader with no user argument that reads only
@@ -2274,19 +2829,54 @@ PDF someone else asked for kept the person as a recipient
   audit events. The project exports (`export.json`, CSV, the farm CSV)
   remain project data, not a data-subject export
   ([deployment.md § Runbooks](./deployment.md#runbooks), item 8).
-- **Deletion: an operator act.** There is no self-service deletion yet
-  (issue #112). On an emailed request (POPIA s24 and Regulation 3's Form 2,
-  which may come in any expedient way) the operator deletes the `app_user`
-  row as the schema owner ([deployment.md § Runbooks](./deployment.md#runbooks),
-  item 7), as soon as reasonably practicable, and tells the person what was
-  done (s24(4)): the table above is what happens. The rule for evidence
+- **Deletion: self-service, or on request.** Account → **Delete my
+  account** (`DELETE /auth/me`, issue #112, [api.md § Auth](./api.md#auth))
+  says what goes, what stays without the name and what keeps it, asks for
+  the password again (through the sign-in lockout, as a password change
+  does), and deletes the account straight away. It runs as the person under
+  RLS: the up-front refusal reads their own memberships, the audit events
+  (one per project and team they belonged to, `accountDeleted: true`) are
+  written as them while they are still a member, and the row goes through
+  `app_delete_my_account()` (143), a `SECURITY DEFINER` function with **no
+  user argument** that deletes only `app_current_user_id()`'s row and
+  refuses a transaction with no user; water_app still has no `DELETE` on
+  `app_user` (068). The keys and triggers that act on the deletion are the
+  same as the operator's, so the table above holds for both paths
+  (`personal-data.security.db.test.ts` sweeps the schema after a deletion
+  through this route; `account-deletion.db.test.ts` checks the operator's).
+  The person gets an email of what was done (s24(4)): what was deleted,
+  the projects and teams they left, what stays without the name and what
+  keeps it. A request may also come by email or any other expedient way
+  (POPIA s24 and Regulation 3's Form 2): the operator then deletes the
+  `app_user` row as the schema owner ([deployment.md §
+  Runbooks](./deployment.md#runbooks), item 7), as soon as reasonably
+  practicable, and tells the person what was done. The rule for evidence
   (138): **keep the evidence, remove the name**. The one refusal is an
-  account that is the only owner of a project or the only admin of a team
-  (checked at commit): ownership is handed to someone else first, by the
-  person or the project's other members. A responsible party that is DWS or
-  a CMA may need the name kept under the National Archives Act; that waits
-  on counsel and on D1 (#50), and would be a per-team setting in its own
-  migration ([followups.md § POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
+  account that is the only owner of a project or the only admin of a team:
+  ownership is handed to someone else first, by the person or the project's
+  other members. Self-service answers `409 account_sole_holder` naming them:
+  read up front with the project's owner rows and the team's admin rows
+  locked (`FOR UPDATE`, since the deferred checks take no lock and two
+  co-owners deleting at once would otherwise each see the other and both
+  pass), and fired again inside the request by `SET CONSTRAINTS ALL
+  IMMEDIATE` (`delete-me.db.test.ts` runs two at once). The operator's path
+  is refused at commit. A responsible party
+  that is DWS or a CMA keeps the name in its own record: the National
+  Archives and Records Service of South Africa Act 43 of 1996 s13(2)(a)
+  forbids erasing a governmental body's public record without the National
+  Archivist's authorisation, which is a law requiring retention (POPIA
+  s14(1)(a)). The operator sets `team.public_records` (161; the app can't)
+  only on the client's written confirmation (operator agreement 3A.2): then
+  account deletion still deletes the account, but the audit log of that
+  team's projects keeps the person's name, and the team and its projects
+  can't be deleted until the client confirms it holds its records or has a
+  disposal authority (`team.records_disposal_confirmed_on`; the delete
+  routes answer `409`). Off for every team; a WUA is not treated as a
+  governmental body unless it says it is (counsel question). Provisional
+  position (pre-counsel research, 2026-10-01). Privacy §7's sentence for
+  such a team, and its `LEGAL_VERSION` bump, wait until such a client signs
+  ([followups.md §
+  POPIA](./followups.md#popia-and-the-step-2-release-wp-216)).
 - **Correction:** a person edits their own name (Account); an owner fixes
   anything else in the project.
 
@@ -2377,7 +2967,7 @@ key there would let any read-only principal forge any user's session.
 
   | Lambda | Keys |
   | --- | --- |
-  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports) |
+  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports), `APP_ENCRYPTION_KEY` (seals two-step sign-in's secrets, § Two-step sign-in) |
   | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
   | migrate | `WATER_APP_PASSWORD` |
   | fetcher, renderer | none: no database, no session |
@@ -2509,7 +3099,7 @@ key there would let any read-only principal forge any user's session.
   The reports bucket keeps `GetObject` only.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome` and `/welcome/af`, issues #57 and #137), the legal pages (`/privacy`, `/terms`,
-  [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
+  [legal-status.md](./legal-status.md)), the methods page (`/methods`) and the data sources' credits (`/data-sources`) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
@@ -2556,12 +3146,15 @@ key there would let any read-only principal forge any user's session.
   classify, checks each Lambda's Terraform environment block (or, for a secret,
   its runtime secret, [§ Runtime secrets](#runtime-secrets)) sets every
   required setting, sweeps every `backend/.env.development` value, and starts
-  each entry point with a production-shaped env (the positive control).
+  each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+- **WAF:** four per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
-  default 1000 per 5 minutes) scoped to `/api/*`, and a site-wide backstop
+  default 1000 per 5 minutes) scoped to `/api/*`, the map's tiles
+  (`waf_tiles_rate_limit_per_ip`, default 1000, scoped to `/tiles/*`: each
+  may be a 2 MiB range, so this is the egress bound per address, with the
+  `cloudfront-bytes` alarm across addresses), and a site-wide backstop
   on every path (`waf_site_rate_limit_per_ip`, default 5000). The API's
   limit doesn't count the SPA's cached files, so a cold visit (~150 of
   them) or the report renderer, which loads the SPA in a fresh Chromium for
@@ -2643,6 +3236,57 @@ key there would let any read-only principal forge any user's session.
   paged, not just shown as a warning on the one run.
 
 
+### The map's data in production
+
+`infra/map_data.tf` ([deployment.md § The Map tab](./deployment.md#the-map-tab)):
+
+- **Tiles are public by design.** The basemap, relief and glyphs are served
+  to every viewer at `/tiles/*` (no session: the browser's range reads
+  can't carry one through CloudFront to S3), same-origin, so the CSP stays
+  `connect-src 'self'` and no third-party tile host sees a user's map view.
+  The bucket policy lets only this distribution read `tiles/`; nothing
+  else is granted. The `tiles_range` function refuses whole-file and
+  open-ended reads of an archive (a 2 MiB cap per request) and answers 404
+  for every other path, so a public 2 GB file can't be pulled in one
+  request; the WAF's `RateLimitTilesPerIP` (1 000 per 5 minutes) bounds one
+  address at ~2 GB per 5 minutes, and the `cloudfront-bytes` alarm watches
+  egress across addresses (the cost side: deployment.md § Map tiles). The
+  bucket is versioned, so an archive overwritten or deleted by mistake
+  (the DEM the API reads among them) can be restored for 14 days.
+- **Delineation's DEM read** (`delineation_dem`): the API role may
+  GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
+  allows the same; off by default.
+- **Tracing a dam's water read** (`dam_trace_water`, #326 C2): the same
+  for one other key, `tiles/water.pmtiles` (`api_water`); off by default.
+  The file sits under `tiles/`, so `/tiles/*` serves it by bounded ranges
+  like the other archives; GSW's terms allow redistribution.
+- **Reference loads run as the schema owner**, so they are gated like a
+  deploy: `load-reference.yml` reaches AWS only in the `production`
+  environment (a required reviewer, then OIDC), from `main` only, after a
+  `preflight` job (no environment, no AWS) has confirmed that environment
+  exists with its reviewer and branch policy, since naming a missing one
+  would create it unprotected (`preflight.mjs environment`; the workflow
+  guard's `preflight` rule makes every production-gated job need it). The
+  job's session is narrowed by an inline session policy to
+  `lambda:InvokeFunction` on the migrate function, so none of the deploy
+  role's other grants (the frontend bucket, the Lambdas' code, ECR) reach
+  it. The migrate Lambda reads one object from the private reference
+  bucket (GetObject on `reference/*`, nothing else), refuses it unless it
+  hashes to the SHA-256 in the approved run (so the approver approves those
+  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
+  evaporation grid 32 MiB and 64 MiB), and
+  parses it with the same code as the local loaders (JSON only, no archive
+  formats, no external references). The kinds whose licence isn't
+  confirmed are refused in the workflow and again in the Lambda, by name,
+  and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
+  Its answer and its failure summary carry counts, codes and fixed text
+  only, since the Actions log is public; the file's problems go to
+  CloudWatch.
+- **No role can write either bucket** but the operator's own SSO session;
+  the deploy role touches neither, and a guardrail test (`guardrails.tftest.hcl`) fails if any other role policy names either bucket. Uploading to the tiles bucket is itself
+  publishing (the behaviour serves what is there), so the licence steps come
+  before the upload (deployment.md § Map tiles).
+
 ### Accepted IaC findings
 
 CI's Trivy config scan (`terraform.yml`, Terraform and
@@ -2653,10 +3297,21 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf) | All are SSE-S3 encrypted. `frontend` is the public static site. `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf), `.tiles` and `.reference` (map_data.tf) | All are SSE-S3 encrypted. `frontend` is the public static site, and `tiles` the map's public tiles (served to every viewer through CloudFront). `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. `reference` is private, read only by the migrate role and written only by the operator's SSO session; its files are the operator's downloads of openly licensed data. |
 
 Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
 customer-held keys or key-level audit of report or pack reads.
+
+Below CI's HIGH/CRITICAL threshold, so it carries no ignore, but accepted on
+purpose: **AWS-0089, no S3 server access logging**, on every bucket. The
+tiles are public map data served through CloudFront (whose WAF metrics and
+sampled requests show who pulls them), the reference files are openly
+licensed data with one reader (the migrate role, whose loads are logged in
+CloudWatch and gated by the `production` approval), and the reports and
+packs buckets are read through signed URLs the API mints and logs. A log
+bucket would add storage and a lifecycle to run for no question it would
+answer. If key-level audit is ever needed, CloudTrail data events on the
+prefix in question (e.g. `reference/*`) cost almost nothing at this volume.
 
 ## Liability
 
@@ -2715,12 +3370,13 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     ECSA or SACNASP register, and printed "self-declared"; the report prints
     the chosen register's address beside each signature); dam
     safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
-    finding on lawfulness and doesn't verify the app's software; there is no MFA on
-    signing yet (Step 4), so a sign-off is as strong as the signer's
-    password. The typed name and registration are personal data: the
+    finding on lawfulness and doesn't verify the app's software; signing
+    doesn't require two-step sign-in (it is the signer's choice, § Two-step
+    sign-in; requiring it for every signer waits on a decision,
+    followups.md), so a sign-off is as strong as the signer's sign-in. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row
-    with the account cleared, for the life of the licence record it supports
-    ([§ Personal information](#personal-information-popia)).
+    with the account cleared, until the closing date of the licence record it
+    supports (161; [§ Personal information](#personal-information-popia)).
 
 ## Evidence packs
 
@@ -2747,6 +3403,12 @@ nothing else.
   transaction, never a route's), under the key it derives itself
   (`packs/<project>/<pack>/<sha256>.pdf`, never one a caller names), and
   only once: a second recording changes nothing and returns false.
+  The server's re-run outcome isn't a pack column: it is
+  `pack_reproduction` (154_pack_reproduce), which `water_app` only reads,
+  written by `app_record_pack_reproduction` from a *running*
+  `pack_reproduce` job of that pack as its acting user, for the bundle the
+  pack records, once per engine, so no member can mark a pack reproduced.
+  It is never on verify: the app's own claim, not something the hash covers.
   The bundle's is `app_record_pack_bundle` (122_pack_bundle): the caller
   must be an editor of the project and the pack issued by the caller *in
   the same transaction* (`issued_at = now()`), so only the issue route
@@ -2853,7 +3515,9 @@ nothing else.
   maps the answer field by field again (`evidence/applicantPacks.ts`),
   answers `404` alike for a pack not theirs, not issued or of another
   application, and never offers the PDF, manifest or bundle, which carry
-  the whole report (the assessors' copy). Tests:
+  the whole report (the assessors' copy). Their printable copy (165) is
+  this same projection printed as them in a render session scoped to that
+  one page ([§ Render tokens](#render-tokens)), stored with its own hash. Tests:
   `evidence/applicant-packs.db.test.ts` (each "cannot" with its control:
   another applicant, a non-party editor, a draft, a pack never issued, the
   baseline's; the string scan for every other unit's name and id; the
@@ -2883,6 +3547,17 @@ nothing else.
   (an editor gets the pack's page; the applicant the public verify page and
   their own copy, 131's projection, never the editors' pack page).
   `evidence/notices.db.test.ts` checks each refusal beside its control.
+- **Who is emailed about a known engine bug** (153_erratum_notices,
+  [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Only the worker's own context sweeps (`app_erratum_sweep`, refused under a
+  user or an API key), and the errata it sweeps come from the engine's
+  generated list, never a request. Recipients are the affected project's
+  owners (project owner or team admin) with a confirmed, unsuppressed
+  address; `water_app` holds only `SELECT` on `erratum_notice` and there is
+  no write policy. Each email is built as its recipient under RLS, the role
+  and address checked again at send, and carries the erratum's published
+  text, the project's name and a count of runs: never a figure.
+  `errata/notices.db.test.ts` checks each refusal beside its control.
 - **The public verify lookup** (`GET /verify/:code`, one of the few
   `withoutUser` callers besides pre-sign-in auth, the share links and the
   job queue: it reads nothing but through `app_verify_pack`; in the route
@@ -2967,8 +3642,9 @@ nothing else.
   should be invite-only (plan question 11).
 - Any editor may sign off the calibration rules; restricting it to a role
   waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
-- POPIA: no self-service account deletion yet (the operator deletes on an
-  emailed request, issue #112); what exists today and the open items are in
+- POPIA: self-service deletion keeps the evidence and removes the name
+  (issue #112); the rule, a deleted note's body, backups after an erasure,
+  D12 and the lawful bases wait on the information officer's answers (#90),
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook

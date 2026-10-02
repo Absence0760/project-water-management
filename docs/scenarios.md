@@ -12,7 +12,8 @@ Status: built end to end: the **engine part** (`packages/engine/src/scenario/`),
 the **backend and data model** (`backend/src/scenarios/`, migration 024), the
 frontend's API client, and the **UI** (the Scenarios tab, its override
 editor and scenario-vs-base comparison, and the compare page's Scenario
-overrides section; § UI below).
+overrides section; § UI below). Several scenarios assessed together
+(cumulative impact, WP-3.11) are § Cumulative impact.
 
 ## Engine: `applyScenario`
 
@@ -116,7 +117,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `borehole.add` | `borehole` | Adds an individual borehole on a farm or other user (WP-3.9), e.g. an applicant's new borehole with its tested yield and annual volume. |
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `demandObject.add` | `demandObject` | Adds a demand object on a unit (engine ≥ 1.45.0, [model.md §2.7f](./model.md)): a town, households, livestock or water piped out, supplied from the unit's own dam, river pump and boreholes with its crops. Every field as the model document has it (`schedule` and `note` may be left out: none, empty); only a farm node (a unit) takes one. The save rules apply as the op is applied: a monthly object needs 12 values, a per-unit one a count and litres, nothing returns from one piped out, and each schedule window must be one the run can read. |
-| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.45.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null), `population` (the people it serves for the basic-needs floor, engine ≥ 1.44.0; ≥ 0, or null for a per-person object's count), `source` (where its number comes from, engine ≥ 1.56.0: `meter`, `aadd`, `perCapita`, `other`, or null = not recorded; its sizing must fit, so switch both in one edit group) or `note` (at most 1000 characters). A name, a note and a window's label are trimmed as a save trims them. Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got, or a population or source it hasn't got, changes nothing. |
+| `demandObject.set` | `demandObjectId, field, value` | Changes one field of a demand object in place (engine ≥ 1.45.0): `name` (1–200 characters), `category`, `sizing`, `monthlyM3Day` (12 values ≥ 0 or null), `count`, `litresPerUnitDay` (≥ 0 or null), `lossPct` (0 to below 1), `monthlyFactor` (12 values ≥ 0 or null), `returnPct` (0–1), `priority`, `rank` (its place within `first` or `last`, engine ≥ 1.64.0: a whole number 1–99, or null = 1), `destination`, `enabled`, `schedule` (up to 24 windows, each with all eight fields, or null), `population` (the people it serves for the basic-needs floor, engine ≥ 1.44.0; ≥ 0, or null for a per-person object's count), `source` (where its number comes from, engine ≥ 1.56.0: `meter`, `aadd`, `perCapita`, `other`, or null = not recorded; its sizing must fit, so switch both in one edit group), `waterSource` (engine ≥ 1.65.0, [model.md §2.7j](./model.md): `dam`, `river`, or null = the dam), `riverPumpM3Day` (≥ 0, or null = no limit), `riverPoolM3` (≥ 0, or null = none) or `note` (at most 1000 characters). A name, a note and a window's label are trimmed as a save trims them. Not `nodeId`: an object on another unit is `demandObject.remove` and `demandObject.add`. Consecutive ones on one object are one edit group (§ Edit groups above). Clearing a schedule an object hasn't got, or a population, source or rank it hasn't got, changes nothing. |
 | `demandObject.remove` | `demandObjectId` | Removes a demand object (engine ≥ 1.45.0). `node.remove` drops the node's objects too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
@@ -132,7 +133,8 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 
 - farm: `name`; land `areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`;
   dam and irrigation `pctUpstreamToDam`, `pctRunoffToDam`, `damCapacityM3`,
-  `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent`,
+  `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
+  from engine 1.63.0),
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
   `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
@@ -165,16 +167,25 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   null = the one `divertCapacityM3Day`); farms only (a save rule), each the
   applicant's proposal on their own farm. "Pump only above 300 m³/day" is
   `handsOffM3Day` → twelve 300s.
+  Where the farm's crops take their water (engine ≥ 1.65.0, [model.md
+  §2.7j](./model.md)): `cropWaterSource` (`dam` | `river`),
+  `cropRiverPumpM3Day` (≥ 0, null = no limit) and `cropRiverPoolM3` (≥ 0,
+  null = none); farms only (a save rule). "What if the crops pumped from the
+  river beside the dam at 1,500 m³/day" is two ops: `cropWaterSource` →
+  `river` and `cropRiverPumpM3Day` → 1500.
 
-  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md), pending
-  the hydrologist). A `damCapacityM3` op that resizes an existing dam (from
+  **Dam capacity** (engine ≥ 1.10.0, [model.md §2.13](./model.md);
+  provisional decision 2026-10-01, to be confirmed by the client's
+  hydrologist, issue #90). A `damCapacityM3` op that resizes an existing dam (from
   and to a capacity above 0) resizes its geometry along the dam's own
   area–volume relation, as the storage–yield curve does: a power-law dam's
-  `damAreaFullM2` (as entered, or the capacity ÷ 3 m estimate) becomes
+  `damAreaFullM2` (as entered, or the 7.2 × capacity^0.77 estimate, engine
+  ≥ 1.63.0; capacity ÷ 3 m before) becomes
   A_full × (new ÷ old)^b with its own `damAreaExponent`; a survey curve is
   cut at its top × the ratio, or extrapolated beyond the survey to it
   (a power law through its top two rows). The op's note says what changed
-  (`dam area when full 33333 → 54150 m² …`, or that the curve was
+  (`dam area when full 50972 → 82804 m² …` for an unknown-area
+  100 000 m³ dam doubled, or that the curve was
   extrapolated); it is left out for a node the caller can't see. A later
   `damAreaFullM2` op on the node sets the enlarged dam's own area; one before
   the capacity op describes the dam at its old size and is resized with it.
@@ -740,6 +751,122 @@ API: `POST|GET /projects/:id/sweeps`, `GET /projects/:id/sweeps/:sweepId`
 (the body) and `sweeps.db.test.ts` (the job end to end, problems per member,
 RLS with a positive control, write-once outcomes, limits, cascade).
 
+## Cumulative impact (WP-3.11)
+
+Several scenarios (in practice the submitted applications) on one base run,
+**each on its own and all together**, so an assessor sees what they do
+together that one application at a time hides (NWA s27(1): the cumulative
+effect on the resource and the Reserve). Build plan:
+[roadmap WP-3.11](./roadmap/step-3-licensing.md#wp-311-cumulative-impact-assessment),
+issue #287.
+
+### Engine: `combineScenarios` and `cumulativeImpact`
+
+`packages/engine/src/scenario/combine.ts`, `cumulative.ts`. Pure; neither
+runs the model, and `runModel` is unchanged, so `ENGINE_VERSION` is too (a
+combination is new input, as a scenario is).
+
+```ts
+combineScenarios(base, [{ id, name?, ops, mask? }]): { input | null, conflicts, problems, renamed, reIds }
+scenarioConflicts(base, scenarios): ScenarioConflict[]
+cumulativeImpact(baseline, singles, combined): CumulativeReport
+```
+
+- **Conflicts are refused, never merged.** Each op says what it *writes*
+  (an element's field, or the whole element for an add), *removes* and
+  *uses* (a node a new farm drains into, a crop a crop area plants, a
+  transfer's ends). Two scenarios conflict when they write the same field of
+  the same element (`same_target`, also both removing one thing) or one
+  removes what the other writes or uses (`removed_in_use`). Read against the
+  base: a `node.remove` re-links the nodes draining into it, so it writes
+  their downstream link too; an op on a transfer, patch, borehole, demand
+  object or registered volume uses its node(s); a `demand.scale` without
+  `nodeIds` writes every farm's (or user's) demand; a `series.scale` writes
+  the series (two scalings stack, and whose climate assumption it is isn't
+  for either to settle). Conservative by design: what can't be told apart is
+  a conflict the assessor sees. One conflict per pair of scenarios and
+  target, with a readable message naming both ops (`"App A" op 1 (node.set)
+  and "App B" op 1 (node.set) both change node "Upper farm":
+  damCapacityM3`). Ops within one scenario never conflict: they apply in
+  their own order, as alone.
+- **Then in order.** Without conflicts each scenario's ops apply to the
+  result of the ones before (`applyScenario`, an application under its
+  applicant's mask, as its own runs are). An op that applies alone but not
+  on top of the others (two new dams given one name, flow shares past 100 %
+  together) is a `problem` naming its scenario, and also refuses the
+  combination: a result with an op skipped would not be the scenarios it
+  names.
+- **Invariants** (`combine.invariants.test.ts`, random networks): disjoint
+  scenarios combined in either order give the same run (every daily series
+  to the bit, the summary within float noise, `orderFreeDifference`, the
+  order-invariance check's comparison); one scenario combined is that
+  scenario alone, to the bit; a scenario with a copy of itself always
+  conflicts; the conflicts found don't depend on the order the scenarios
+  are given. `combine.test.ts` has the crafted pairs (each conflict kind,
+  two fields of one node not a conflict, apply-alone-not-together, the base
+  never mutated). Soak: `SCENARIO_FUZZ_CASES=1500` (passes).
+- **The report.** Per EWR site (the outlet first, then gauges by id): days
+  the EWR is not met and the mean EWR shortfall over the reporting window
+  (`curtailment.ewrSites`); per Reserve rule-table site: months met and the
+  deficit (`ewrAssurance.overall`); for the catchment: mean flow at the
+  outlet, supplied to existing users (the baseline's farms and other
+  users, summed in id order; a unit a scenario adds is its own proposal and
+  left out of every column) and their share of demand met. Each row holds
+  the baseline, each scenario alone, all together, each change from the
+  baseline, their sum, the combined change and the **interaction** =
+  combined change − Σ single changes (0 when the effects simply add).
+  `warnings` names a run over another window than the baseline's.
+  `cumulative.test.ts` checks the arithmetic on real runs, an empty scenario
+  changing nothing, existing users excluding an added farm, and the
+  Reserve rows.
+
+### Backend
+
+`backend/src/assessments/` and the `assessment` job
+(`jobs/handlers/assessment.ts`); migration `145_assessment.sql`
+([data-model.md § Assessments](./data-model.md#assessments-145_assessmentsql),
+[api.md § Assessments](./api.md#assessments)).
+
+- `POST /projects/:id/assessments { name, scenarioIds }` loads each
+  scenario as the caller reads it (a draft application is invisible),
+  requires one base run, rebuilds it (`loadBaseInput`), checks each alone
+  and all together (`checkCombination`) and **refuses with `422 { conflicts,
+  problems }`** before anything is written. `dryRun` stops there. Otherwise
+  it writes the assessment, one member per scenario (the database copies
+  each scenario's ops; the request never supplies them) and the job.
+- The job (as the editor who asked, under RLS) runs the baseline, each
+  member alone and all together on **the current engine**, so every column
+  is one engine's (the published run's stored summary may be an older
+  engine's), then stores `cumulativeImpact`'s report. It checks the
+  combination again and marks the assessment `refused` if it no longer
+  holds. No `model_run` rows: like a sweep, an assessment never counts
+  against the 20-run cap. Editors only (RLS and the routes).
+- Tests: `assessments.db.test.ts` (two applications end to end, the single
+  equal to the application's own run and the baseline to the published
+  run, the interaction, a conflicting pair refused with nothing written,
+  the dry run, drafts and other bases refused, RLS with a positive control,
+  copied ops, write-once, a deleted team scenario).
+
+### The evidence report reads it
+
+Page 1's row over the other applications (C26, report format
+`evidence-11`) reads a completed assessment of exactly the report's
+application and every other submitted or approved one on its baseline, with
+their current ops, made on the baseline run's engine (so its baseline
+figure is the report's own; one on another engine is named with why it
+isn't read): the combined change and the interaction at the outlet.
+Without one the report checks the combination itself (`checkCombination`,
+no model run) and names any conflict, or says the applications haven't been
+assessed together ([evidence-pack.md § The other applications
+together](./evidence-pack.md#the-other-applications-together)). Tests:
+`evidence/report-combined.db.test.ts`.
+
+### Not yet
+
+- **Yield and reliability per dam** together (WP-3.6's yield on the combined
+  input), and a **full-allocation background** (WP-3.10) as the baseline
+  column, are not in the report yet ([followups.md](./followups.md)).
+
 ## UI
 
 The workspace's **Scenarios** tab (`?tab=scenarios&scenario=<id>`,
@@ -1000,7 +1127,13 @@ scenario is `'team'`, and behaves exactly as above).
   farm links) and every gauge in full; every other node by its kind and
   place in the network under an anonymous name ("Farm 3", "Water user 1"),
   its values blanked; crops, crop areas, transfers, land cover and
-  boreholes on their own farms only. This is D2's recommended default
+  boreholes on their own farms only. Of a hidden node's text fields only
+  those an explicit list keeps survive (`TEXT_KEPT`: its place, kind and
+  the categorical rules: dam release, dates in service, user priority,
+  borehole and supply rules); how a neighbour waters its crops
+  (`cropWaterSource`, river or dam) is dropped with its pump and pool, and
+  a new text field on a node fails the build until the list decides it.
+  This is D2's recommended default
   ([step-3 § 11](./roadmap/step-3-licensing.md#11-open-decisions)),
   **pending the client**.
 - **The applicant's namespace** (049, `applicationMask` in `applicant.ts`,
@@ -1030,10 +1163,32 @@ scenario is `'team'`, and behaves exactly as above).
     its hidden dam or levels), and, while any farm is
     hidden, flow shares over 100 % or no catchment area left, which an op's
     own range-checked value can't break alone) reads only `op N (…):
-    doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
-    wording is the recommended default, **pending the client**
-    ([issue #90](https://github.com/Absence0760/project-water-management/issues/90));
-    rules about the network's shape and names keep their words.
+    doesn't apply to the catchment as modelled` (`MASKED_RULE`). For the
+    catchment-wide rules (flow shares, area) the applicant reads the
+    catchment's value and the hidden units' aggregate instead
+    (`MASKED_RULE_AGGREGATE`: "flow shares would total 120.0 %, more than
+    100 %; the units you can't see hold 90.0 % of them between them") when
+    the hidden farms have `FARMER_K` = 5 or more holders, the applicant
+    left out (`app_application_hidden_holders`, counted as the k rule counts
+    them, 164): an aggregate over that many holders relates to no one of
+    them. Below that the generic words stay, since the aggregate would be a
+    holder's own figure. Provisional position (pre-counsel research,
+    2026-10-01); rules about the network's shape and names keep their
+    words.
+  - the check says which lines a hidden rule broke (`maskedRules`: the
+    line, its ops and the rules' kinds, never an id, a name or a value),
+    and gives editors and up every line in its real words
+    (`assessorProblems`), which no contributor receives. The assessors'
+    cumulative assessment records the real words too (they alone read it).
+  - **Ask the assessors why** (164). Such an application can't be
+    submitted, and the assessors never read a draft, so a note on it would
+    reach no one. Its parties ask instead (`POST …/questions`): the
+    question carries the line as they read it, the ops it names, the rules'
+    kinds and the application's name, plus the line in its real words,
+    which the server computed and only the editors read
+    (`application_question`). The editors answer once, on the Applications
+    tab; the authority decides what an answer discloses of other users'
+    figures. The draft stays the applicant's.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
   where an op took it (`Kalkoenkrans` → `Kalkoenkrans (2)` in that application's
@@ -1050,16 +1205,57 @@ scenario is `'team'`, and behaves exactly as above).
   nodes are the stored ones still linked to the owner
   (`app_application_own_nodes`): a farm the owner unlinks is anonymised in
   the base and its series hidden, even in an application made before; the
-  assessors keep the stored list.
+  assessors keep the stored list. An issued evidence pack is the exception:
+  its applicant's copy keeps the units it was issued about
+  ([evidence-pack.md § Applicants](./evidence-pack.md#applicants), 164).
 - **Workflow.** The owner submits (`POST …/submit`: only when every op
   applies; the ops, their hash, the base and the own nodes freeze), may
   withdraw a submitted one (`…/withdraw`) and reopen a withdrawn one as a
-  draft (`…/reopen`). An **assessor**, an editor who isn't the owner, decides
-  a submitted one (`…/decide { outcome, note }`, outcome `approved`,
-  `approved_with_conditions` or `refused`, the words pending the licensing
-  authority); a decision is final. `submitted_at`, `decided_at` and
+  draft (`…/reopen`). An **assessor** is an editor who isn't the owner: they
+  read a submitted application, comment on it and share it by link. The
+  app **records the responsible authority's decision; it never makes one**
+  (163_licensing_authority; provisional position, pre-counsel research,
+  2026-10-01, D14 in [step-3-licensing.md § 11](./roadmap/step-3-licensing.md)):
+  only an assessor the project's owner marks as acting for the authority
+  (below) records it, with **Record the authority's decision** (`…/decide
+  { outcome, authority?, decisionDate, reference?, reasonsReceived, note }`).
+  The outcome is in the National Water Act's and GN R267's words:
+  `licence_issued` (*Licence issued (see its conditions)*: every licence
+  carries conditions, s28(1)(d)), `licence_refused` (s42),
+  `application_rejected` (formal requirements, R267 regs 9(1)(b), 11(2),
+  12(2)(b)) or `not_considered` (the use is already authorised, s40(4)).
+  The record holds the authority's name (the project's
+  `settings.responsibleAuthority` when the form leaves it empty), the date on
+  its decision letter (separate from `decided_at`, the app's stamp), its
+  licence or file reference and whether written reasons were received
+  (s42(b)). A decision is final: the trigger sets it once and never changes
+  it. Decisions recorded before 163 were mapped (`approved` and
+  `approved_with_conditions` → `licence_issued`, `refused` →
+  `licence_refused`), with the authority "Not recorded (before 163)" and no
+  date. A team scenario an editor only marks decided (no outcome) is the
+  team's own what-if and records none of this. The panel says any appeal runs from the authority's decision letter
+  (s148, s41(6)) and works out no deadline. `submitted_at`, `decided_at` and
   `decided_by` are stamped by the trigger. The roadmap's "under review" is
   not a status of its own: a submitted application is the assessors' queue.
+- **Who decides: the responsible authority** (163, D1 in step-3 § 11). The
+  project names it in `settings.responsibleAuthority { name, kind: 'dws' |
+  'cma', office }` (the Project page's *Responsible authority* card; no model
+  input). The owner ticks *Acts for the responsible authority* on the
+  members who act for it (`project_member.acts_for_authority`); as editors or
+  owners they record its decisions and endorse a published baseline for it
+  (`POST …/publication/:pubId/endorse`, once per publication, audit event
+  `publication.endorsed`), and an evidence report on a baseline nobody
+  endorsed says so on page 1. This makes the host matter less: a CMA host, a
+  WUA host with CMA or DWS staff as marked editors (the pilot default), or a
+  consultancy host all work, because the decision and the endorsement are
+  the authority's whoever hosts.
+- **The conflict guard** (163, D1 (c)). Nobody who edits the project
+  (editor or owner, directly or through its team) may be in an applying
+  party, own an application or be shared one there: the database refuses
+  the change (`409 role_conflict`), whichever side of it comes second (a
+  role, a party, a team role, a project moving team, a new application, a
+  share). An applicant's consultant stays a contributor; to make a party
+  member an editor, take them out of the party in the same change.
 - **Who reads it.** Its owner and whoever they share it with
   (`POST|DELETE …/members`, `scenario_member`); the editors once it is submitted (drafts
   stay the applicant's alone, from the assessors too); viewers once it is
@@ -1120,10 +1316,13 @@ scenario is `'team'`, and behaves exactly as above).
   - every **EWR site**'s months met, rate and longest run not met, base
     beside application (the outlet unnamed, a gauge by name), and the
     outlet's EWR days not met;
-  - the **catchment**'s mean natural and outlet flow and the outlet's daily
-    flow and EWR series, base beside application, only at five or more farm
-    holders (the k rule of the share links and the contributor's series),
-    read under the caller's own RLS; the EWR deficit volumes likewise;
+  - the **catchment**, base beside application: its mean natural flow and
+    the outlet's daily EWR requirement (the river) at any holder count; its
+    mean outlet flow and daily outflow series, and the EWR deficit volumes
+    (the use: natural minus outflow is the farms' take), only at five or
+    more farm holders (the k rule of the share links and the contributor's
+    series, split in 164; provisional position, pre-counsel research,
+    2026-10-01); read under the caller's own RLS;
   - their **own units** (their farm links as they read them now) and the
     units their `node.add` ops add, in full: demand, supply, share met, EWR
     charge, the dam;
@@ -1168,14 +1367,41 @@ links](./security.md#share-links).
   The link is dead while the application is withdrawn or back to draft.
 - **Comments.** A scenario's notes have three audiences beside `team`:
   `assessors`, `parties` (the assessors and the applicant's party) and
-  `public_participation`, which any member contributor or above (an NGO
-  joins as a viewer) may post while the application is **open for
-  comment**: a live link, or decided after it was ever shared. Public comments show on
+  `public_participation`, which any member contributor or above may post
+  while the application is **open for comment**: a live link, or decided
+  after it was ever shared. Anyone else signed in comments **through the
+  link itself**, with no role in the project (a *link participant*, an NGO
+  say; `166_public_participation`, `POST /share/comment`): they read only
+  what the link shows, 10 comments an hour per account. An NGO is never
+  made a `viewer` to comment: a viewer reads every farm's figures (POPIA
+  s10; licensing positions item 7, provisional position, pre-counsel
+  research, 2026-10-01). Public comments show on
   the link with their authors' names; editors moderate by soft delete. Every
   edit of a scenario note keeps the text it replaced (`note_revision`,
   `GET …/notes/:noteId/revisions`): a participation record must be complete,
   and an application that drew public comments can't be deleted (`409`).
   The full read/write matrix is in [data-model.md § Notes](./data-model.md#notes-037_notessql).
+- **A comment is not an objection.** Every public-participation comment
+  box (the share pages, the workspace's notes with that audience) says that
+  a comment in the app is not a written objection: only a written objection
+  sent to the address in the application's notice before its closing date
+  keeps a right to appeal (NWA s148(1)(f)). The applicant enters that
+  address and date on the Application panel while it is a draft
+  (`scenario.objection_address`, `objection_closing_date`, GN R267 reg
+  17(4)(b)(vi)–(vii); frozen once submitted, `scenario_objection_frozen`),
+  and the share pages print them.
+- **The register and the reg 19 record.** A commenter may tick "Give my
+  name and email to the applicant for the register of interested and
+  affected parties (GN R267 reg 18)" (`note.register_consent`, fixed at
+  insert). The application's owner and the editors download its public
+  participation record (`GET …/scenarios/:sid/participation-export`, JSON or
+  CSV; the print page `/projects/:id/scenarios/:sid/participation`): every
+  public comment on it and its packs, with the author's display name,
+  dates, earlier texts and moderation state (a removed comment's words go
+  to the editors only), the email only where the commenter agreed, the
+  links it was shared by, laid out under the GN R267 Annexure D item 8
+  headings the app holds material for. Each download is audited
+  (`scenario.participation_exported`, with how many emails it carried).
 - **Not yet:** evidence packs as a second target (`target_kind 'pack'`, a
   `note.pack_id`) wait for `evidence_pack` (WP-3.14;
   [followups.md § Applicants](./followups.md#applicants-wp-33)).
@@ -1193,8 +1419,13 @@ names" and "mask: ids, counts and value rules"),
 `history/write-routes.db.test.ts` (each new route records its event),
 `share/scenario-share.db.test.ts` (WP-3.15: scenario links, their RLS and
 redaction, the note matrix and revisions), e2e
-`e2e/tests/scenario-share.spec.ts` (an NGO opens a link, signs in and
-comments; the assessor sees it; axe),
+`share/participation.db.test.ts` (166: link participants with their
+controls, the objection details, the throttle, the reg 19 export's
+audience and emails), e2e
+`e2e/tests/scenario-share.spec.ts` (an NGO with no role opens a link,
+signs in, reads the objection warning and the notice's address, comments
+and joins the register; the assessor sees it; the applicant's record lists
+it with the email; axe),
 the applicant's `ewrRule.set` in `applications.db.test.ts` (accepted,
 applied, classed baseline beside their own farm's proposal), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow and their view of

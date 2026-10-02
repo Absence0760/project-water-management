@@ -5,6 +5,7 @@
 // A route whose validation refuses an empty body needs a SAMPLE here; both
 // sweeps fail until it has one.
 import { expect } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { asOwner, monthly, node, plantCalibration, plantCompleteOutlook, retirePendingJobs, signUp } from './helpers.js';
 
 export type User = Awaited<ReturnType<typeof signUp>>;
@@ -24,6 +25,15 @@ export interface LadderCtx {
 	ids: Record<string, string>;
 }
 
+/** A square (west, south, side in degrees) cut in two down its middle: the two parts POST …/map/features/:fid/split takes. */
+export function splitHalves(w: number, s: number, d: number) {
+	const m = Math.round((w + d / 2) * 1e7) / 1e7;
+	const e = Math.round((w + d) * 1e7) / 1e7;
+	const n = Math.round((s + d) * 1e7) / 1e7;
+	const box = (x0: number, x1: number) => ({ type: 'Polygon', coordinates: [[[x0, s], [x1, s], [x1, n], [x0, n], [x0, s]]] });
+	return [box(w, m), box(m, e)];
+}
+
 export type Sample = { body?: unknown; query?: Record<string, string>; params?: Record<string, string> };
 const levels = (key: 'name' | 'label') => [1, 0.85].map((f) => ({ [key]: `${f * 100} %`, ops: [{ op: 'demand.scale', factor: f }] }));
 const csv = 'registration_no,farm,authorisation,water_source,volume_m3_year\nL-1,Farm A,licence,surface,500\n';
@@ -33,6 +43,18 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/copy': () => ({ body: { name: 'Ladder copy' } }),
 	'POST /projects/:id/members': () => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, role: 'viewer' } }),
 	'PATCH /projects/:id/members/:userId': () => ({ body: { role: 'editor' } }),
+	'POST /projects/:id/members/:userId/registration-checks': () => ({
+		body: {
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationNo: '400999/20',
+			registerName: 'Ladder Signer',
+			outcome: 'registered',
+			checkedByOrg: 'Ladder WUA',
+			checkedAt: '2026-01-01'
+		}
+	}),
+	'PUT /projects/:id/registration-check-required': () => ({ body: { required: true } }),
 	'PUT /projects/:id/model': (c) => ({ body: c.model }),
 	'PUT /projects/:id/series': () => ({ body: { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2022-01-01', values: [1, 2] } }),
 	'PATCH /projects/:id/series/:seriesId': () => ({ body: { product: 'Ladder gauge', productVersion: '1' } }),
@@ -49,8 +71,10 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios': (c) => ({ body: { name: `Ladder ${crypto.randomUUID()}`, baseRunId: c.runId, ops: [] } }),
 	'PATCH /projects/:id/scenarios/:sid': () => ({ body: { description: 'ladder' } }),
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),
-	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'approved' } }),
+	'POST /projects/:id/scenarios/:sid/decide': () => ({ body: { outcome: 'licence_issued', authority: 'Ladder CMA', decisionDate: '2026-09-30', reasonsReceived: true } }),
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
+	'POST /projects/:id/scenarios/:sid/questions': () => ({ body: { problem: 0, line: 'op 1 (node.set): ladder' } }),
+	'POST /projects/:id/application-questions/:qid/answer': () => ({ body: { answer: 'Ladder answer' } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
 		body: {
@@ -83,26 +107,72 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'GET /projects/:id/yield': (c) => ({ query: { runId: c.runId } }),
 	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
+	'POST /projects/:id/assessments': (c) => ({ body: { name: `Ladder assessment ${crypto.randomUUID()}`, scenarioIds: [c.ids.sid!, c.ids.sid2!] } }),
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
 	'POST /projects/:id/outlooks/:outlookId/publish': () => ({ body: { levelId: '0' } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
+	// A body of the right shape; with no boundary on the ladder's map the owner gets 409, past the role check.
+	'POST /projects/:id/feeds/chirps/from-boundary': () => ({ body: { featureId: crypto.randomUUID(), updatedAt: '2026-10-01T00:00:00.000Z' } }),
 	'POST /projects/:id/report-schedules': (c) => ({ body: { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [c.owner.id] } }),
 	'POST /projects/:id/farmers': (c) => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, nodeIds: [c.farmId] } }),
 	'POST /projects/:id/farmers/bulk': () => ({ body: { rows: [{ email: `ladder-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }] } }),
 	'PUT /projects/:id/farmers/:userId': (c) => ({ body: { nodeIds: [c.otherFarmId] }, params: { userId: c.farmer.id } }),
 	'POST /projects/:id/publication': (c) => ({ body: { runId: c.runId } }),
 	'PATCH /projects/:id/publication/:pubId': () => ({ body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } } }),
+	'POST /projects/:id/publication/:pubId/endorse': () => ({ body: { note: 'ladder' } }),
 	'POST /projects/:id/share-links': () => ({ body: { label: 'Ladder link', expiresInDays: 7 } }),
 	'POST /projects/:id/allocations': (c) => ({ body: { nodeId: c.farmId, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 } }),
 	// A PATCH changes only what it sends (issue #72), so an empty one is refused before the role check.
 	'PATCH /projects/:id/allocations/:aid': () => ({ body: { reference: 'ladder' } }),
+	'POST /projects/:id/map/features': () => ({ body: { kind: 'gauge', name: 'Ladder gauge', lon: 21.3, lat: -33.6 } }),
+	'PATCH /projects/:id/map/features/:fid': () => ({ body: { name: 'Ladder feature' } }),
+	'POST /projects/:id/map/import': () => ({
+		body: {
+			fileName: `ladder-${crypto.randomUUID()}.geojson`,
+			kind: 'other',
+			text: JSON.stringify({ type: 'Feature', properties: { name: crypto.randomUUID() }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+		}
+	}),
+	'POST /projects/:id/map/import/preview': () => ({
+		body: {
+			fileName: 'ladder.geojson',
+			text: JSON.stringify({ type: 'Feature', properties: { name: 'Ladder' }, geometry: { type: 'Point', coordinates: [21.3, -33.6] } })
+		}
+	}),
+	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
+	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
+	'GET /projects/:id/map/quaternaries': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	// The river network (issue #345, geo/rivers.ts): a bbox round the synthetic network, and one of its reaches.
+	'GET /projects/:id/map/rivers': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),
+	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
+	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.
+	'POST /projects/:id/map/delineation': () => ({ body: { lon: 20.7428741, lat: -33.5396777, from: 'outlet' } }),
+	'POST /projects/:id/map/delineation/:pid/accept': () => ({ body: { as: 'other' } }),
+	// Tracing a dam (issue #326 C2): the ladder turns WATER_URL on with the committed synthetic raster, and this is inside its dam.
+	'POST /projects/:id/map/dam-trace': () => ({ body: { lon: 21.3191414, lat: -33.6724971 } }),
+	// Splitting the ladder's parcel (21.30–21.32° E) down its middle; once it is split, a second call is refused past the role check (the halves no longer add up to it).
+	'POST /projects/:id/map/features/:fid/split': () => ({ body: { parts: splitHalves(21.3, -33.7, 0.02) } }),
+	// Start from the map (178): the ladder's model has nodes, so a proposal is refused (409) after the role check; apply takes ticks for the planted proposal's no units.
+	'POST /projects/:id/map/start': () => ({ body: { points: [] } }),
+	'POST /projects/:id/map/start/:spid/apply': () => ({ body: { outletName: 'Ladder outlet', units: [], rest: { include: false, name: 'Rest', area: false } } }),
+	// Dividing the model from the map (182): the ladder's parcel as a new gauge point, refused (400) after the role check (a parcel is no gauge point); apply's planted proposal is a start, so 409 after it.
+	'POST /projects/:id/map/divide': (c) => ({ body: { points: [{ featureId: c.ids.fid, nodeId: null }] } }),
+	'POST /projects/:id/map/divide/:spid/apply': () => ({ body: { units: [], rest: { to: 'none' } } }),
+	// Needs the synthetic land-cover grid loaded (scripts/import-land-cover.ts); the ladder's parcel lies in its 0.5 block.
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
+	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
+	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),
 	'PATCH /projects/:id/notes/:noteId': () => ({ body: { body: 'Edited' } }),
 	'POST /projects/:id/api-keys': () => ({ body: { name: 'Ladder key' } }),
 	'PUT /projects/:id/alert-rules': (c) => ({ body: { rules: [{ kind: 'dam_below', nodeId: c.farmId, threshold: 0.25, enabled: false }] } }),
-	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } })
+	'PUT /me/alerts/:projectId': () => ({ body: { items: [{ kind: 'all', mode: 'immediate' }] } }),
+	'PUT /projects/:id/licence-record': () => ({ body: { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', reason: 'ladder' } }),
+	'PUT /projects/:id/allocations/viewer-units': () => ({ body: { on: true } })
 };
 
 /**
@@ -153,8 +223,11 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	};
 	const pubId = await made('/publication', { runId }, (b) => b.publication.id);
 	const sid = await made('/scenarios', { name: 'Team scenario', baseRunId: runId, ops: [] }, (b) => b.scenario.id);
+	// A second, for an assessment of two (WP-3.11).
+	const sid2 = await made('/scenarios', { name: 'Second team scenario', baseRunId: runId, ops: [] }, (b) => b.scenario.id);
 	const feedId = await made('/feeds', { source: 'dws', config: { station: 'X0H000' } }, (b) => b.feed.id);
 	const scheduleId = await made('/report-schedules', { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [owner!.id] }, (b) => b.schedule.id);
+	const fid = await made('/map/features', { kind: 'farm_parcel', name: 'Ladder parcel', nodeId: a.id, geometry: { type: 'Polygon', coordinates: [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]] } }, (b) => b.feature.id);
 	const aid = await made('/allocations', { nodeId: a.id, authorisation: 'licence', waterSource: 'surface', volumeM3PerYear: 1000 }, (b) => b.allocation.id);
 	const linkId = await made('/share-links', { label: 'Ladder link', expiresInDays: 7 }, (b) => b.link.id);
 	const keyId = await made('/api-keys', { name: 'Ladder key' }, (b) => b.key.id);
@@ -164,6 +237,13 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const outlookId = await plantCompleteOutlook(owner!.id, projectId, runId, [{ nodeId: a.id }, { nodeId: b.id }]);
 	const cid = await plantCalibration(owner!.id, projectId);
 	const [rev] = await asOwner('SELECT id FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
+	const qid = await plantQuestion(projectId, sid);
+	// Delineation's routes read the committed synthetic DEM (off by default), and decide an open proposal planted here.
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	// Tracing a dam (issue #326 C2) reads the committed synthetic water occurrence raster (off by default).
+	process.env.WATER_URL = fileURLToPath(new URL('../../fixtures/water/synthetic-water.pmtiles', import.meta.url));
+	const pid = await plantDelineationProposal(projectId);
+	const spid = await plantStartProposal(projectId);
 	return {
 		owner: owner!,
 		editor: editor!,
@@ -182,12 +262,15 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			runId,
 			seriesId: series.body.id,
 			nodeId: a.id,
+			cropId: crop.id,
 			userId: owner!.id,
 			sid,
+			sid2,
 			pubId,
 			feedId,
 			scheduleId,
 			aid,
+			fid,
 			linkId,
 			keyId,
 			inviteId,
@@ -195,9 +278,28 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			jobId,
 			outlookId,
 			cid,
+			qid,
+			pid,
+			spid,
 			revId: String(rev!.id)
 		}
 	};
+}
+
+/**
+ * An unanswered "Ask the assessors why" question on scenario `sid`, planted as
+ * the schema owner (164_applicant_visibility): asking one through the API
+ * needs an application whose rule turns on hidden farms
+ * (scenarios/questions.db.test.ts asks one).
+ */
+export async function plantQuestion(projectId: string, sid: string): Promise<string> {
+	const [q] = await asOwner(
+		`INSERT INTO application_question (project_id, scenario_id, scenario_name, problem, op_indexes, ops, rules, assessor_text)
+		 VALUES ($1, $2, 'Ladder application', 'op 1 (node.set): doesn''t apply to the catchment as modelled', '{0}', '[]', '{shares}', 'op 1 (node.set): ladder')
+		 RETURNING id`,
+		[projectId, sid]
+	);
+	return q!.id as string;
 }
 
 /**
@@ -207,3 +309,47 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
  * later file's tick would claim them (src/__tests__/db-setup.ts).
  */
 export const clearLadderJobs = (c: Pick<LadderCtx, 'projectId'> | undefined) => retirePendingJobs(c?.projectId);
+
+/**
+ * An open start-from-the-map proposal on `projectId` (178_start_proposal),
+ * planted as the schema owner so no DEM is read: no units, the rest of the
+ * catchment without an area. The project's open one, if any, is superseded
+ * first (one open a project). Returns its id.
+ */
+export async function plantStartProposal(projectId: string): Promise<string> {
+	await asOwner(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
+	const plan = {
+		fromDem: false,
+		outlet: { featureId: null, name: 'Outflow gauge', point: null, snapDistanceM: null, foundIn: null },
+		catchment: { areaM2: null, boundaryAreaM2: null },
+		units: [],
+		rest: { name: 'Rest of the catchment', areaM2: null, geometry: null },
+		dropped: [],
+		warnings: [],
+		cellSizeM: null,
+		zoom: null,
+		windowCells: null
+	};
+	const [row] = await asOwner(
+		`INSERT INTO start_proposal (project_id, plan, from_dem, method, method_version) VALUES ($1, $2, false, 'planted', 'start-1') RETURNING id`,
+		[projectId, JSON.stringify(plan)]
+	);
+	return row!.id as string;
+}
+
+/**
+ * An open delineation proposal on `projectId` (175_delineation), planted as
+ * the schema owner so no DEM is read: the project's open one, if any, is
+ * superseded first (one open a project). Returns its id.
+ */
+export async function plantDelineationProposal(projectId: string): Promise<string> {
+	await asOwner(`UPDATE delineation_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [projectId]);
+	const square = { type: 'Polygon', coordinates: [[[21.3, -33.7], [21.32, -33.7], [21.32, -33.68], [21.3, -33.68], [21.3, -33.7]]] };
+	const [row] = await asOwner(
+		`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry, area_m2, cells,
+			cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version)
+		 VALUES ($1, 'outlet', 21.31, -33.7, 21.31, -33.7, 0, $2, 4000000, 250, 128, 10, 1024, 'Planted', '0000000000000000', 'planted', 'delineate-1') RETURNING id`,
+		[projectId, JSON.stringify(square)]
+	);
+	return row!.id as string;
+}

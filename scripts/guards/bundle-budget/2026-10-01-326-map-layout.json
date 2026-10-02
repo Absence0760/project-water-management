@@ -1,0 +1,4 @@
+{
+	"addKb": 5,
+	"why": "Map tab as a workspace (#326 E3-E6): the picked feature's card, the grouped list, the Every feature grid, the key, the upload and place sheets. Measured 1449 KB on feat/326-map-round-1, 1454 KB with this change (sheets kept in the tab chunk: split out they cost 1456)."
+}

@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The farm view's small map (issue #326 A3): FarmMapCard and farmMap.ts in the farm page, the lazy FarmMapCanvas chunk and 33 Afrikaans messages; measured 1459 -> 1463 KB gzipped against origin/feat/326-map-round-2"
+}

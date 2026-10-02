@@ -44,8 +44,8 @@ export function shareNotice(view: ShareView): NoticeVm | null {
 		label: title ? label : null,
 		heading: title ?? label,
 		body,
-		// As the farm view: the percentage alone only when the WUA gave no text to carry it.
-		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
+		// As the farm view and the alert email: the WUA's percentage beside its own words, or alone when it wrote none.
+		pctLine: r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
 		byline: `${publishedBy ?? t('A former member')}, ${fmtStampDay(publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,

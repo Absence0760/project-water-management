@@ -8,6 +8,7 @@ import type {
 	AllocationMode,
 	DailySeries,
 	DayBoundary,
+	EvidenceAuthorisedImpact,
 	EvidenceReport,
 	PackManifest,
 	InputChange,
@@ -23,6 +24,8 @@ import type {
 	SeriesMeta
 } from '@water-management/engine';
 import type {
+	MfaChallenge,
+	MfaStatus,
 	AddMemberResult,
 	AlertChoiceChange,
 	AlertEvent,
@@ -30,11 +33,16 @@ import type {
 	AlertRuleChange,
 	ProjectAlerts,
 	Unsubscribed,
+	FeedbackAnswered,
+	AlertFeedbackSummary,
 	Allocation,
 	AllocationCapYears,
+	AllocationComparisonTotals,
 	AllocationImportRequest,
 	AllocationInput,
 	AllocationList,
+	LicenceOutcomeInput,
+	LicenceRecord,
 	AllocationPreview,
 	AllocationSource,
 	ApiKey,
@@ -47,6 +55,8 @@ import type {
 	EnsembleDetail,
 	EnsembleStart,
 	FarmAccessPerson,
+	ProjectPrivacyContact,
+	FarmMap,
 	AddFarmerResult,
 	FarmRole,
 	BulkFarmerResult,
@@ -62,6 +72,7 @@ import type {
 	RestoreResult,
 	SeriesRevisionMeta,
 	PackPdfState,
+	PackReproductionState,
 	Signoff,
 	SignoffList,
 	Pack,
@@ -99,8 +110,11 @@ import type {
 	ScenarioCheck,
 	ScenarioBase,
 	ApplicantResults,
+	ApplicationQuestion,
+	ApplicantCopyState,
+	AssessorQuestion,
 	ApplicantResultsRun,
-	ScenarioOutcome,
+	DecideRequest,
 	ScenarioStatus,
 	ScenarioWithCheck,
 	ShareLink,
@@ -109,6 +123,11 @@ import type {
 	ShareView,
 	ShareScenario,
 	SharePack,
+	SharedComment,
+	SpecialistDraft,
+	ParticipationExport,
+	RegistrationCheck,
+	RegistrationCheckRequest,
 	NoteRevision,
 	Team,
 	TeamMember,
@@ -118,13 +137,43 @@ import type {
 	JobMeta,
 	Sweep,
 	SweepRequest,
+	Assessment,
+	AssessmentCheck,
+	AssessmentRequest,
 	Outlook,
 	OutlookPublication,
 	OutlookRequest,
 	YieldJob,
 	YieldRequest,
 	YieldResult,
-	AutoCalibration
+	AutoCalibration,
+	MapFeature,
+	MapFeatureInput,
+	MapFeatureKind,
+	MapFeatureList,
+	MapImportPreview,
+	MapImportReviewed,
+	MapLinkedNodes,
+	QuaternaryLookup,
+	QuaternaryLayer,
+	RiverLayer,
+	GaugeStationLookup,
+	DamProposals,
+	DelineationProposal,
+	DelineationState,
+	DamTraceProposal,
+	DamTraceState,
+	MinOccurrence,
+	MapGeometry,
+	StartProposal,
+	StartRole,
+	StartState,
+	StartTicks,
+	DivideProposal,
+	DivideTicks,
+	CroplandProposals,
+	EvaporationProposals,
+	EvaporationTarget
 } from './types';
 
 export class ApiError extends Error {
@@ -150,6 +199,9 @@ export class ApiError extends Error {
 }
 
 type FetchFn = typeof fetch;
+
+/** The 401's code when an action needs a code from the authenticator from the last 10 minutes (backend auth/stepUp.ts requireFreshCode). */
+export const FRESH_CODE = 'mfa_fresh_code';
 
 /** ApiError.code for the WAF's CAPTCHA answer (set here; the API never sends it). */
 export const CAPTCHA_REQUIRED = 'captcha_required';
@@ -202,8 +254,39 @@ function describeDetails(details: unknown): string {
 
 export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(...a)) {
 	const base = baseUrl.replace(/\/+$/, '');
+	/** Told of every error answer before it is thrown (onError below). */
+	const errorListeners = new Set<(err: ApiError) => void>();
+	function failed(err: ApiError): ApiError {
+		for (const fn of errorListeners) {
+			try {
+				fn(err);
+			} catch {
+				// A listener's bug never changes what the caller sees.
+			}
+		}
+		return err;
+	}
+
+	/**
+	 * Asked for a code from the authenticator when an action answers 401
+	 * `mfa_fresh_code` (a sign-off, issuing or withdrawing an evidence pack
+	 * need one from the last 10 minutes; backend auth/stepUp.ts). True once
+	 * the code was accepted (POST /auth/mfa/step-up): the action is sent again,
+	 * once. Set by routes/+layout.svelte (lib/auth/freshCode.svelte.ts).
+	 */
+	let freshCodeHandler: (() => Promise<boolean>) | null = null;
 
 	async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+		try {
+			return await send<T>(method, path, body, extraHeaders);
+		} catch (e) {
+			if (!(e instanceof ApiError) || e.status !== 401 || e.code !== FRESH_CODE || !freshCodeHandler) throw e;
+			if (!(await freshCodeHandler())) throw e;
+			return send<T>(method, path, body, extraHeaders);
+		}
+	}
+
+	async function send<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
 		const headers = { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders };
 		try {
@@ -235,7 +318,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			const msg = typeof obj.error === 'string' && obj.error ? obj.error : statusText(res.status);
 			const code = typeof obj.code === 'string' && obj.code ? obj.code : null;
 			const params = obj.params && typeof obj.params === 'object' && !Array.isArray(obj.params) ? (obj.params as Record<string, string | number>) : {};
-			throw new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params);
+			throw failed(new ApiError(res.status, msg + describeDetails(obj.details), obj.details, code, params));
 		}
 		return data as T;
 	}
@@ -246,6 +329,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 
 	return {
 		request,
+		/**
+		 * Be told of every error the API answers (not network failures), before
+		 * the caller sees it: the app-wide two-step sign-in prompt notes its
+		 * 403s this way ($lib/auth/mfaPrompt.svelte). Returns the unsubscribe.
+		 */
+		onError(fn: (err: ApiError) => void): () => void {
+			errorListeners.add(fn);
+			return () => errorListeners.delete(fn);
+		},
+		/** Who asks for a code on a 401 mfa_fresh_code (see freshCodeHandler); returns the unset. */
+		onFreshCode(fn: () => Promise<boolean>): () => void {
+			freshCodeHandler = fn;
+			return () => {
+				if (freshCodeHandler === fn) freshCodeHandler = null;
+			};
+		},
 		auth: {
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
 			/**
@@ -253,10 +352,31 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * after a CAPTCHA_REQUIRED ApiError ($lib/auth/wafCaptcha), sent
 			 * in the header the WAF reads.
 			 */
-			login: (email: string, password: string, wafToken?: string) =>
-				request<{ user: User }>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
-					(r) => r.user
+			login: (email: string, password: string, wafToken?: string): Promise<User | MfaChallenge> =>
+				request<{ user: User } | MfaChallenge>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
+					(r) => ('mfaRequired' in r ? { mfaRequired: true as const } : r.user)
 				),
+			/**
+			 * Two-step sign-in (issue #282, docs/api.md § Two-step sign-in).
+			 * `code` is six digits from the authenticator app, or a recovery code
+			 * where one is accepted (verify, disable). ApiError 400 mfa_code_wrong,
+			 * 429 mfa_locked (5 wrong codes in a row).
+			 */
+			mfa: {
+				status: () => request<MfaStatus>('GET', '/auth/mfa'),
+				/** Start adding an authenticator: the current password (403 wrong_current_password), then the secret and its otpauth URI, shown once. */
+				enrol: (password: string) => request<{ secret: string; uri: string }>('POST', '/auth/mfa/totp/enrol', { password }),
+				/** The first code from the app: turns it on, and returns the ten recovery codes (shown once). */
+				confirm: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/totp/confirm', { code }).then((r) => r.recoveryCodes),
+				/** Turn it off (a code from the app or a recovery code). */
+				disable: (code: string) => request<void>('DELETE', '/auth/mfa/totp', { code }),
+				/** A new set of recovery codes, the old ones void (a code from the app). */
+				regenerate: (code: string) => request<{ recoveryCodes: string[] }>('POST', '/auth/mfa/recovery-codes', { code }).then((r) => r.recoveryCodes),
+				/** The sign-in's second step, after login answered MfaChallenge. 401 mfa_challenge_expired: sign in again. */
+				verify: (code: string) => request<{ user: User; usedRecoveryCode?: true }>('POST', '/auth/mfa/verify', { code }),
+				/** A code again inside the session, for the actions that need one from the last 10 minutes (401 mfa_fresh_code). */
+				stepUp: (code: string) => request<{ ok: true; usedRecoveryCode?: true }>('POST', '/auth/mfa/step-up', { code })
+			},
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
 			 * confirmation link and answers `{ confirm, email }` (the same for a
@@ -302,7 +422,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			changePassword: (currentPassword: string, newPassword: string) =>
 				request<{ user: User }>('POST', '/auth/change-password', { currentPassword, newPassword }).then(
 					(r) => r.user
-				)
+				),
+			/**
+			 * "Delete my account" (issue #112): the password, typed again. Resolves
+			 * once the account is gone and this browser's cookies are cleared.
+			 * ApiError 403 = wrong password, 429 = locked (the sign-in lockout),
+			 * 409 `account_sole_holder` = the only owner or admin of what `details`
+			 * names (SoleHoldings; account/deleteAccount.ts soleHoldingsOf reads it).
+			 */
+			deleteMe: (password: string) => request<void>('DELETE', '/auth/me', { password })
 		},
 		projects: {
 			list: () => request<{ projects: ProjectSummary[] }>('GET', '/projects').then((r) => r.projects),
@@ -384,6 +512,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Put an applicant in an applying party, or take them out (null); owners only. */
 			setParty: (id: string, userId: string, party: string | null) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { party }).then((r) => r.member),
+			/** Appoint a party member its specialist, who signs its applications' packs, or end it (167); owners only, 409 without a party. */
+			setSpecialist: (id: string, userId: string, specialist: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { specialist }).then((r) => r.member),
+			/** Mark or unmark a member as acting for the responsible authority (owner; 163). */
+			setActsForAuthority: (id: string, userId: string, actsForAuthority: boolean) =>
+				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { actsForAuthority }).then((r) => r.member),
 			remove: (id: string, userId: string) =>
 				request<void>('DELETE', `${p(id)}/members/${enc(userId)}`)
 		},
@@ -419,6 +553,10 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			view: (id: string, nodeId: string) => request<FarmView>('GET', `${p(id)}/farm/${enc(nodeId)}`),
 			/** The farm's own daily figures from the published run, as a CSV download (a plain link: the cookie goes with it). */
 			exportUrl: (id: string, nodeId: string) => `${base}${p(id)}/farm/${enc(nodeId)}/export.csv`,
+			/** The farm's map (issue #326 A3): its own parcels and dams, with the boundary, rivers and gauges; empty without a parcel or dam. */
+			map: (id: string, nodeId: string) => request<FarmMap>('GET', `${p(id)}/farm/${enc(nodeId)}/map`),
+			/** "Who decides about your farm's information": the project's team and its privacy contact (168), any member. */
+			privacyContact: (id: string) => request<ProjectPrivacyContact>('GET', `${p(id)}/privacy-contact`),
 			/** "Who can see my farm": the people who can read it, by name and role (never emails). */
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
@@ -441,6 +579,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The portfolio's traffic-light cut-offs (team admin, D11); null goes back to the defaults. */
 			setThresholds: (id: string, thresholds: { green: number; amber: number } | null) =>
 				request<{ team: Team }>('PATCH', t(id), { settings: { portfolio: { thresholds } } }).then((r) => r.team),
+			/** Whom to ask about the team's projects' personal information (team admin, 168); null removes it. */
+			setPrivacyContact: (id: string, privacyContact: { name: string; email: string; postal: string | null } | null) =>
+				request<{ team: Team }>('PATCH', t(id), { privacyContact }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
 			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			addMember: (id: string, email: string, role: TeamRole) =>
@@ -568,7 +709,21 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** The licensing evidence report of a run (issue #71, docs/api.md § Evidence report): an application run on its base, or a baseline alone. */
 		evidence: {
 			report: (id: string, runId: string) =>
-				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report)
+				request<{ report: EvidenceReport }>('GET', `${p(id)}/runs/${enc(runId)}/evidence-report`).then((r) => r.report),
+			/** Run an application run's full-allocation pair and keep page 1's board against full authorised use (editor; licensing build item 8). */
+			authorisedImpact: (id: string, runId: string) =>
+				request<{ authorised: EvidenceAuthorisedImpact }>('POST', `${p(id)}/runs/${enc(runId)}/authorised-impact`, {}).then((r) => r.authorised)
+		},
+		/** The host's checks of members' registrations against the public register (167, docs/api.md § Sign-offs). */
+		registrationChecks: {
+			/** The project's checks, newest first, and whether issuing waits for them (editor). */
+			list: (id: string) => request<{ checks: RegistrationCheck[]; required: boolean }>('GET', `${p(id)}/registration-checks`),
+			/** Record a check of a member's registration (owner). */
+			record: (id: string, userId: string, body: RegistrationCheckRequest) =>
+				request<{ check: RegistrationCheck }>('POST', `${p(id)}/members/${enc(userId)}/registration-checks`, body).then((r) => r.check),
+			/** Whether issuing a pack waits for each specialist signer's check (owner). */
+			setRequired: (id: string, required: boolean) =>
+				request<{ required: boolean }>('PUT', `${p(id)}/registration-check-required`, { required }).then((r) => r.required)
 		},
 		signoffs: {
 			/** A run's sign-off statement (with its hash), whether the caller may sign, and its sign-offs, oldest first (viewer). */
@@ -604,11 +759,23 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
 			sign: (id: string, packId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff),
+			/**
+			 * Send the issued pack to the members acting for the responsible authority (editor; licensing build item 13):
+			 * all of them but the sender, or `userIds`. They get a link to the pack's page, never a file.
+			 */
+			send: (id: string, packId: string, body: { userIds?: string[]; note?: string }) =>
+				request<{ recipients: { userId: string; displayName: string }[]; sent: number; failed: number }>('POST', `${p(id)}/packs/${enc(packId)}/send`, body),
 			/** The issued pack's PDF: a link to follow (the API answers 302 to a short-lived signed URL, or 409 until it is ready; viewer). */
 			pdfUrl: (id: string, packId: string) => `${base}${p(id)}/packs/${enc(packId)}/pdf`,
 			/** Ask again for the PDF of an issued pack whose render failed (editor): 409 once one is recorded. */
 			renderPdf: (id: string, packId: string) =>
-				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf)
+				request<{ jobId: string; pdf: PackPdfState }>('POST', `${p(id)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.pdf),
+			/**
+			 * Re-run an issued pack on the server again (editor): after the last re-run gave up, or on a newer engine.
+			 * The pending re-run comes back while one is queued; 409 once this engine's outcome is recorded.
+			 */
+			reproduce: (id: string, packId: string) =>
+				request<{ jobId: string; reproduction: PackReproductionState }>('POST', `${p(id)}/packs/${enc(packId)}/reproduce`, {}).then((r) => r.reproduction)
 		},
 		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
 		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),
@@ -620,6 +787,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Change the current publication's notice, note or next date without re-publishing (editor). */
 			update: (id: string, pubId: string, body: PublicationPatch) =>
 				request<{ publication: Publication }>('PATCH', `${p(id)}/publication/${enc(pubId)}`, body).then((r) => r.publication),
+			/** Endorse a published baseline for the responsible authority, once (an editor acting for it; 163). */
+			endorse: (id: string, pubId: string, note: string) =>
+				request<{ publication: PublicationMeta }>('POST', `${p(id)}/publication/${enc(pubId)}/endorse`, { note }).then((r) => r.publication),
 			/** One run's publication and the changes since the one before (viewer; the printable report). */
 			ofRun: (id: string, runId: string) => request<RunPublication>('GET', `${p(id)}/runs/${enc(runId)}/publication`)
 		},
@@ -699,7 +869,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Turn alert emails back on after SES suppressed your address (429 when it bounced again within a day). */
 			resume: () => request<{ mailSuppressed: null }>('POST', '/me/alerts/resume'),
 			/** Turn off the subscription a mailed token names (signed out; 404 for a dead link). */
-			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token })
+			unsubscribe: (token: string) => request<Unsubscribed>('POST', '/alerts/unsubscribe', { token }),
+			/** Answer "Was this useful?" for the mail a token names (signed out; 404 for a dead link). */
+			feedback: (token: string, useful: boolean, comment: string | null) =>
+				request<FeedbackAnswered>('POST', '/alerts/feedback', { token, useful, ...(comment ? { comment } : {}) }),
+			/** The catchment's "Was this useful?" answers, counted, and their comments (editor). */
+			feedbackSummary: (id: string) => request<AlertFeedbackSummary>('GET', `${p(id)}/alert-feedback`)
 		},
 		share: {
 			/** What a share link shows, signed out; 404 for any dead link. */
@@ -709,7 +884,13 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** A scenario link (WP-3.15), signed out; 404 for any dead link. */
 			scenario: (token: string) => request<ShareScenario>('POST', '/share/scenario', { token }),
 			/** An evidence pack link (128): its figures while issued, else its standing; 404 for any dead link. */
-			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token })
+			pack: (token: string) => request<SharePack>('POST', '/share/pack', { token }),
+			/**
+			 * A public comment through an application's or a pack's link, signed in, with no project role (166). 401 signed
+			 * out, 404 for a dead or closed link, 429 comment_throttled past 10 an hour.
+			 */
+			comment: (token: string, body: string, registerConsent: boolean) =>
+				request<{ comment: SharedComment }>('POST', '/share/comment', { token, body, registerConsent }).then((r) => r.comment)
 		},
 		uncertainty: {
 			/** A run's own input: its stored series (runs since migration 021), or for an older run its snapshot with the project's series, 409 when the data changed since. */
@@ -734,8 +915,22 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			list: (id: string) => request<{ scenarios: Scenario[] }>('GET', `${p(id)}/scenarios`).then((r) => r.scenarios),
 			/** An application's issued packs, newest first, for its parties (131; an applicant reads no pack row). */
 			packs: (id: string, sid: string) => request<{ packs: ApplicantPackMeta[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => r.packs),
+			/** The same, with the drafts the caller may sign as the application's appointed specialist (167; empty for anyone else). */
+			packsAndDrafts: (id: string, sid: string) =>
+				request<{ packs: ApplicantPackMeta[]; toSign?: SpecialistDraft[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/packs`).then((r) => ({ packs: r.packs, toSign: r.toSign ?? [] })),
+			/**
+			 * The application's public comments for the applicant's reg 19 report (166): its owner and the editors; 404 for
+			 * anyone else. `csvUrl` is the same as a CSV download, one row per text.
+			 */
+			participationExport: (id: string, sid: string) => request<ParticipationExport>('GET', `${p(id)}/scenarios/${enc(sid)}/participation-export`),
+			participationCsvUrl: (id: string, sid: string) => `${base}${p(id)}/scenarios/${enc(sid)}/participation-export?format=csv`,
 			/** One of them, D2-anonymised: verify's fields, a pack link's figures and the units. */
 			pack: (id: string, sid: string, packId: string) => request<ApplicantPack>('GET', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}`),
+			/** Ask for the applicant's printable copy of an issued pack (165): 202 while it prints, 200 once recorded. */
+			packCopy: (id: string, sid: string, packId: string) =>
+				request<{ copy: ApplicantCopyState }>('POST', `${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`, {}).then((r) => r.copy),
+			/** The copy's download (the API redirects to a short-lived signed GET). */
+			packCopyUrl: (id: string, sid: string, packId: string) => `${base}${p(id)}/scenarios/${enc(sid)}/packs/${enc(packId)}/pdf`,
 			get: (id: string, sid: string) => request<ScenarioWithCheck>('GET', `${p(id)}/scenarios/${enc(sid)}`),
 			create: (id: string, body: { name: string; baseRunId: string; description?: string; ops?: ScenarioOp[]; ownedNodeIds?: string[] }) =>
 				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios`, body),
@@ -750,6 +945,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					purposeAndNeed?: string;
 					mitigation?: string;
 					monitoring?: string;
+					/** Where written objections go and by when, as the notice gives them (166): a draft application's only; null clears. */
+					objectionAddress?: string | null;
+					objectionClosingDate?: string | null;
 					ops?: ScenarioOp[];
 					ownedNodeIds?: string[];
 					status?: ScenarioStatus;
@@ -778,9 +976,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),
 			reopen: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/reopen`),
-			/** The assessor's decision: an editor who didn't make the application. */
-			decide: (id: string, sid: string, outcome: ScenarioOutcome, note: string) =>
-				request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, { outcome, note }),
+			/**
+			 * Record the responsible authority's decision (163): an editor the owner marks as acting for
+			 * the authority, who didn't make the application. `authority` defaults to settings.responsibleAuthority.
+			 */
+			decide: (id: string, sid: string, body: DecideRequest) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/decide`, body),
 			/** Whom its owner may share an application with: an applicant's own party, as the project owner set it (049). */
 			shareCandidates: (id: string, sid: string) =>
 				request<{ candidates: Scenario['members'] }>('GET', `${p(id)}/scenarios/${enc(sid)}/share-candidates`).then((r) => r.candidates),
@@ -789,13 +989,30 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ members: Scenario['members'] }>('POST', `${p(id)}/scenarios/${enc(sid)}/members`, { userId }).then((r) => r.members),
 			unshare: (id: string, sid: string, userId: string) => request<void>('DELETE', `${p(id)}/scenarios/${enc(sid)}/members/${enc(userId)}`),
 			/** The assessors' list: every submitted, withdrawn or decided application, newest first. Editors only. */
-			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications)
+			applications: (id: string) => request<{ applications: Scenario[] }>('GET', `${p(id)}/applications`).then((r) => r.applications),
+			/** "Ask the assessors why" (164): a party asks about problem line `problem` of the check, quoting it as read (409 if the check changed). */
+			ask: (id: string, sid: string, problem: number, line: string) =>
+				request<{ question: ApplicationQuestion }>('POST', `${p(id)}/scenarios/${enc(sid)}/questions`, { problem, line }).then((r) => r.question),
+			/** An application's questions: its parties' view, or the assessors' (with the real words) for an editor. */
+			questions: (id: string, sid: string) =>
+				request<{ questions: (ApplicationQuestion & Partial<AssessorQuestion>)[] }>('GET', `${p(id)}/scenarios/${enc(sid)}/questions`).then((r) => r.questions),
+			/** The assessors' queue of questions, unanswered first. Editors only. */
+			assessorQuestions: (id: string) => request<{ questions: AssessorQuestion[] }>('GET', `${p(id)}/application-questions`).then((r) => r.questions),
+			/** Answer a question, once. Editors only. */
+			answerQuestion: (id: string, qid: string, answer: string) =>
+				request<{ question: AssessorQuestion }>('POST', `${p(id)}/application-questions/${enc(qid)}/answer`, { answer }).then((r) => r.question)
 		},
 		/**
 		 * Registered and licensed volumes per farm or water user, and a run's
 		 * modelled use against them (docs/api.md § Allocations). Modelled, not
 		 * metered; the app never decides whether a use is lawful.
 		 */
+		/** The licence record (161): editors read it, owners record the outcome or confirm a review. */
+		licenceRecord: {
+			get: (id: string) => request<{ licenceRecord: LicenceRecord }>('GET', `${p(id)}/licence-record`).then((r) => r.licenceRecord),
+			set: (id: string, body: LicenceOutcomeInput) => request<{ licenceRecord: LicenceRecord }>('PUT', `${p(id)}/licence-record`, body).then((r) => r.licenceRecord),
+			confirm: (id: string) => request<{ licenceRecord: LicenceRecord }>('POST', `${p(id)}/licence-record/confirm`, {}).then((r) => r.licenceRecord)
+		},
 		allocations: {
 			list: (id: string) => request<AllocationList>('GET', `${p(id)}/allocations`),
 			create: (id: string, body: AllocationInput) =>
@@ -810,14 +1027,143 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ source: AllocationSource; imported: number; skipped: number; unmatched: number }>('POST', `${p(id)}/allocations/import/commit`, body),
 			/** Undo an import: the file's record and every allocation it brought. */
 			removeSource: (id: string, sourceId: string) => request<void>('DELETE', `${p(id)}/allocations/sources/${enc(sourceId)}`),
+			/** Whether viewers read each registered volume (162, D3): owners only. */
+			setViewerUnits: (id: string, on: boolean) => request<{ viewerUnits: boolean }>('PUT', `${p(id)}/allocations/viewer-units`, { on }),
 			/** The allocations as CSV (a plain link: the cookie goes with it). */
 			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
 			/** A run's modelled use against the registered volumes, per water year. */
 			compare: (id: string, runId: string, tolerance?: number) =>
-				request<{ run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode }; comparison: AllocationComparison; capYears: AllocationCapYears[] }>(
+				request<{
+					run: { id: string; label: string; startDate: string; endDate: string; forecastFrom: string | null; allocationMode: AllocationMode };
+					/** null for a viewer who can't read each volume (162, D3): `totals` instead. */
+					comparison: AllocationComparison | null;
+					capYears: AllocationCapYears[];
+					totals: AllocationComparisonTotals | null;
+				}>(
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)
+		},
+		/**
+		 * The catchment map (docs/api.md § Catchment map, issue #288): features,
+		 * GeoJSON imports (checked and measured on the server), an area accepted
+		 * into a farm, and the quaternary lookup, which only proposes.
+		 */
+		map: {
+			list: (id: string) => request<MapFeatureList>('GET', `${p(id)}/map/features`),
+			/** Which nodes have a linked feature, ids only: the "Show on map" links (issue #326). */
+			linkedNodes: (id: string) => request<MapLinkedNodes>('GET', `${p(id)}/map/linked-nodes`),
+			create: (id: string, body: MapFeatureInput & { kind: MapFeatureKind }) =>
+				request<{ feature: MapFeature }>('POST', `${p(id)}/map/features`, body).then((r) => r.feature),
+			update: (id: string, fid: string, body: MapFeatureInput) =>
+				request<{ feature: MapFeature }>('PATCH', `${p(id)}/map/features/${enc(fid)}`, body).then((r) => r.feature),
+			remove: (id: string, fid: string) => request<void>('DELETE', `${p(id)}/map/features/${enc(fid)}`),
+			/** Cut a polygon in two along a drawn line (issue #326 C2): both parts saved together; the boundary stays whole and its parts become `as`. */
+			split: (id: string, fid: string, body: { parts: [MapGeometry, MapGeometry]; names?: [string, string]; as?: 'farm_parcel' | 'other' }) =>
+				request<{ features: [MapFeature, MapFeature] }>('POST', `${p(id)}/map/features/${enc(fid)}/split`, body).then((r) => r.features),
+			/** Whether tracing a dam is on (issue #326 C2). */
+			damTraceState: (id: string) => request<DamTraceState>('GET', `${p(id)}/map/dam-trace`),
+			/** The outline of the water round a point, proposed; nothing saved. 422: refused, `details.reason` says why. */
+			traceDam: (id: string, body: { lon: number; lat: number; minOccurrence?: MinOccurrence }) =>
+				request<{ trace: DamTraceProposal }>('POST', `${p(id)}/map/dam-trace`, body).then((r) => r.trace),
+			/** The review before an import (issue #326 D2): the file read and checked on the server, each feature's kind proposed; saves nothing. */
+			importPreview: (id: string, body: { fileName: string; text: string }) => request<MapImportPreview>('POST', `${p(id)}/map/import/preview`, body),
+			/**
+			 * Import a file, every feature one `kind` or each its own (`features`, from the review).
+			 * 422: the file isn't taken; the error's `details` lists MapImportProblem per feature. 409: imported already, or a
+			 * reviewed boundary row would replace the current boundary without `replaceBoundary: true`.
+			 */
+			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[]; replaceBoundary?: boolean })) =>
+				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
+			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; areaKm2: number; areaSource: 'map'; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/area-from-map`,
+					{ featureId }
+				),
+			quaternary: (id: string, lon: number, lat: number) =>
+				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),
+			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
+			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** The river network's reaches whose box meets `bbox` (at most 2° a side), biggest first, for the map's layer (issue #345). */
+			rivers: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<RiverLayer>('GET', `${p(id)}/map/rivers?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** Add one reach of the network as the project's river feature (editor; 409 when it is on the map already). */
+			addRiver: (id: string, dataset: string, reachId: number) =>
+				request<{ feature: MapFeature }>('POST', `${p(id)}/map/rivers/add`, { dataset, reachId }).then((r) => r.feature),
+			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
+			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+				return request<GaugeStationLookup>('GET', `${p(id)}/map/stations${qs.size ? `?${qs}` : ''}`);
+			}
+		},
+		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
+		delineation: {
+			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
+			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from'] }) =>
+				request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation`, body),
+			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
+			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
+				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
+			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+		},
+		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
+		start: {
+			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; role: StartRole }[] }) =>
+				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
+			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
+			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
+		},
+		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
+		divide: {
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; nodeId: string | null }[] }) =>
+				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
+			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
+		},
+		/**
+		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
+		 * docs/api.md § Catchment map). Each accept is one value, saved to the model as a revision naming the source.
+		 */
+		damProposals: {
+			get: (id: string, nodeId: string) => request<DamProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/dam-proposals`),
+			capacityFromRegister: (id: string, nodeId: string, registerNo: string) =>
+				request<{ nodeId: string; damCapacityM3: number; registerNo: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-capacity-from-register`,
+					{ registerNo }
+				),
+			areaFromMap: (id: string, nodeId: string, featureId: string) =>
+				request<{ nodeId: string; damAreaFullM2: number; areaFeatureId: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/dam-area-from-map`,
+					{ featureId }
+				)
+		},
+		/**
+		 * A unit's cultivated area from land cover (issue #326 B-landcover, docs/api.md § Catchment map), proposed as
+		 * the planted area of a crop the modeller picks. Each accept is one value, saved to the model as a revision citing the dataset.
+		 */
+		cropland: {
+			get: (id: string, nodeId: string, dataset?: string) =>
+				request<CroplandProposals>('GET', `${p(id)}/nodes/${enc(nodeId)}/cropland-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
+			cropAreaFromLandCover: (id: string, nodeId: string, body: { cropId: string; dataset: string; featureId?: string }) =>
+				request<{ nodeId: string; cropId: string; areaM2: number; dataset: string; revisionId: string | null }>(
+					'POST',
+					`${p(id)}/nodes/${enc(nodeId)}/crop-area-from-land-cover`,
+					body
+				)
+		},
+		/**
+		 * The catchment boundary's evaporation from a grid (issue #326 B-evap, docs/api.md § Catchment map): reference ET proposed as
+		 * GR4J's monthly PE, or A-pan as the A-pan row, never converted. An accept saves the 12 values as one settings revision citing the dataset.
+		 */
+		evaporation: {
+			get: (id: string, dataset?: string) => request<EvaporationProposals>('GET', `${p(id)}/evaporation-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
+			fromMap: (id: string, dataset: string) =>
+				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {
@@ -855,6 +1201,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One sweep, each member with its summary; `series: true` adds each done member's outcome series. */
 			get: (id: string, sweepId: string, q: { series?: boolean } = {}) =>
 				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
+		},
+		/**
+		 * Cumulative impact assessments (docs/api.md § Assessments, roadmap
+		 * WP-3.11): several scenarios on one base run, each alone and all
+		 * together, run by one background job. Editors only. check() is the dry
+		 * run (conflicts and problems, nothing written); create() refuses with a
+		 * 422 whose details are the same (assessmentCheckOf).
+		 */
+		assessments: {
+			check: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) =>
+				request<{ check: AssessmentCheck }>('POST', `${p(id)}/assessments`, { ...body, dryRun: true }).then((r) => r.check),
+			create: (id: string, body: Omit<AssessmentRequest, 'dryRun'>) => request<{ assessment: Assessment; jobId: string; job: JobMeta }>('POST', `${p(id)}/assessments`, body),
+			list: (id: string) => request<{ assessments: Assessment[] }>('GET', `${p(id)}/assessments`).then((r) => r.assessments),
+			get: (id: string, assessmentId: string) => request<{ assessment: Assessment }>('GET', `${p(id)}/assessments/${enc(assessmentId)}`).then((r) => r.assessment)
 		},
 		/**
 		 * Automated calibration run by the server (docs/api.md § Automated
@@ -900,6 +1260,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 export type Api = ReturnType<typeof createApi>;
 
 /** The ops a scenario run refused over (422 from api.scenarios.run), or [] for any other error. */
+/** The conflicts and problems of a refused assessment (POST …/assessments' 422), or null for any other error. */
+export function assessmentCheckOf(err: unknown): AssessmentCheck | null {
+	if (!(err instanceof ApiError) || err.status !== 422) return null;
+	const d = err.details as { conflicts?: unknown; problems?: unknown } | null | undefined;
+	if (!d || (!Array.isArray(d.conflicts) && !Array.isArray(d.problems))) return null;
+	return {
+		ok: false,
+		conflicts: Array.isArray(d.conflicts) ? (d.conflicts as AssessmentCheck['conflicts']) : [],
+		problems: Array.isArray(d.problems) ? d.problems.filter((x): x is string => typeof x === 'string') : []
+	};
+}
+
 export function scenarioProblems(err: unknown): string[] {
 	if (!(err instanceof ApiError) || err.status !== 422) return [];
 	const p = (err.details as { problems?: unknown } | null | undefined)?.problems;

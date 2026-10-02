@@ -188,6 +188,9 @@ resource "aws_lambda_function" "worker" {
       MAIL_FROM                 = "${var.mail_from_display_name} <${local.mail_from_address}>"
       SITE_URL                  = local.site_origin
       SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
+      # The operator's copy of the licence-record notices (161_licence_record,
+      # backend/src/licence/record.ts): the mailbox that gets the alarms.
+      OPERATOR_EMAIL = var.budget_alert_email
       # Alert emails (WP-2.13, docs/deployment.md § Alerts). Only the worker
       # signs unsubscribe links (ALERTS_TOKEN_SECRET, in its runtime secret);
       # the API checks a link by its hash alone. ALERTS_ENABLED is the kill

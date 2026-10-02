@@ -121,7 +121,13 @@ describe('modelRuleIssues', () => {
 				o('meterPerUnit', 'f', { source: 'meter', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
 				o('aaddPerUnit', 'f', { source: 'aadd', sizing: 'perUnit', monthlyM3Day: null, count: 10, litresPerUnitDay: 25 }),
 				o('normMonthly', 'f', { source: 'perCapita' }),
-				o('badSource', 'f', { source: 'guess' })
+				o('badSource', 'f', { source: 'guess' }),
+				// Its rank within its class (engine 1.64.0): a whole number 1–99, or none.
+				o('ranked', 'f', { priority: 'first', rank: 3 }),
+				o('unranked', 'f', { rank: null }),
+				o('rank0', 'f', { rank: 0 }),
+				o('rankHalf', 'f', { rank: 1.5 }),
+				o('rank100', 'f', { rank: 100 })
 			]
 		} as unknown as ProjectModel;
 		expect([...modelRuleIssues(m).keys()].sort()).toEqual([
@@ -132,6 +138,9 @@ describe('modelRuleIssues', () => {
 			'doNode:lost',
 			'doPerUnit:noCount',
 			'doPopulation:noPeople',
+			'doRank:rank0',
+			'doRank:rank100',
+			'doRank:rankHalf',
 			'doSchedule:sched:1',
 			'doScheduleCount:many',
 			'doSource:badSource',

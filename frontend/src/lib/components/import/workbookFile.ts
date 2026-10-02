@@ -2,7 +2,7 @@
 // Project list, "Import a b023 workbook"). The workbook is read in a worker
 // ($lib/spreadsheet/import/runner.ts, loaded on demand); this module is the
 // dialog's view logic around it: which files are workbooks, what each
-// failure says, the gauge option, and the review's notes and unmapped
+// failure says, the gauge and run-of-river options, and the review's notes and unmapped
 // report. Type-only imports from the parser, so no SheetJS here.
 import { B023_CHIRPS_DEFAULT, provenanceKey } from '@water-management/engine';
 import type { ProjectFile } from '$lib/api';
@@ -31,6 +31,12 @@ export interface WorkbookReport {
 	hasGauge: boolean;
 	/** The workbook has a CHIRPS column (so the review asks which product and version it is). */
 	hasChirps: boolean;
+	/**
+	 * The units the importer flags as probable run-of-river, in network order
+	 * (so the run-of-river option applies when there are any). The flag is the
+	 * same whether the option is on or off.
+	 */
+	runOfRiverUnits: string[];
 }
 
 /**
@@ -62,7 +68,8 @@ export function fromResult(r: ImportResult): { parsed: ParsedImport; report: Wor
 			notes: r.notes,
 			unmapped: r.unmapped,
 			hasGauge: r.project.series.some((s) => GAUGE_KINDS.has(s.kind)),
-			hasChirps: r.project.series.some((s) => s.kind === 'rain_chirps_mm')
+			hasChirps: r.project.series.some((s) => s.kind === 'rain_chirps_mm'),
+			runOfRiverUnits: r.notes.flatMap((n) => (n.code === 'probable-run-of-river' && n.element ? [n.element] : []))
 		}
 	};
 }
@@ -86,6 +93,22 @@ export function gaugeOptions(asReference: boolean, scalingFrom: string, scaleFac
 	const n = Number(factor.replace(',', '.'));
 	if (!Number.isFinite(n) || n <= 0) return { error: 'The scale factor must be a positive number.' };
 	return { options: { gaugeAsReference: { scalingFrom: from, scaleFactor: n } } };
+}
+
+/**
+ * The importer's options from the review: the gauge options (gaugeOptions)
+ * and, when `runOfRiver` is on, the run-of-river option (issue #54, 2c/2d;
+ * the Python importer's --run-of-river).
+ */
+export function workbookOptions(
+	asReference: boolean,
+	scalingFrom: string,
+	scaleFactor: string,
+	runOfRiver: boolean
+): { options: WorkbookImportOptions } | { error: string } {
+	const gauge = gaugeOptions(asReference, scalingFrom, scaleFactor);
+	if ('error' in gauge || !runOfRiver) return gauge;
+	return { options: { ...gauge.options, runOfRiver: true } };
 }
 
 /** How the dialog shows a failure: a headline, the detail, and a list (the missing named ranges) when there is one. */

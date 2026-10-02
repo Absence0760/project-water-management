@@ -176,13 +176,18 @@ resource "aws_cloudfront_origin_access_control" "packs" {
 # hash (reports/storage.ts headPackPdf, jobs/handlers/pack-render.ts): a buggy
 # or compromised renderer can't fix a hash of bytes the bucket doesn't hold.
 # HeadObject needs s3:GetObject; the worker gets it on packs/* only (it never
-# reads a PDF's bytes: the code only HEADs).
+# reads a PDF's bytes: the code only HEADs). The same grant lets the
+# pack_reproduce job read an issued pack's reproduction bundle back
+# (packs/*.zip) to re-run its runs (reports/storage.ts getPackBundle,
+# jobs/handlers/pack-reproduce.ts, 154_pack_reproduce).
 #
 # The worker is in the private VPC with no internet, so it reaches S3 through
 # an S3 interface endpoint (network.tf: "add that service's VPC endpoint"),
 # like SQS, SES and Secrets Manager: security-group rules reference groups
-# only, and the endpoint policy allows only this read of this bucket's
-# packs/ by the worker. One AZ (~$7.30/month): both subnets still reach it.
+# only, and the endpoint policy (s3_endpoint below) allows each Lambda only
+# its own reads, statement by statement, so it is the only S3 path from the
+# VPC. One AZ (~$7.30/month, plus $0.01/GB processed and cross-AZ transfer
+# for the API's DEM and water reads): both subnets still reach it.
 # A free S3 gateway endpoint would need a prefix-list egress rule, which the
 # network guardrails refuse (tests/guardrails.tftest.hcl, run "network").
 
@@ -202,7 +207,7 @@ resource "aws_iam_role_policy" "worker_packs" {
 
 resource "aws_security_group" "vpce_s3" {
   name        = "${local.project}-vpce-s3"
-  description = "S3 interface endpoint: 443 from the API and worker Lambdas only."
+  description = "S3 interface endpoint: 443 from the API, worker and migrate Lambdas only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-vpce-s3" }
 }
@@ -241,8 +246,9 @@ resource "aws_vpc_endpoint" "s3" {
     private_dns_only_for_inbound_resolver_endpoint = false
   }
 
-  # Only the worker's read of packs/, and the API's put of a bundle
-  # (pack_bundles.tf), in the packs bucket.
+  # Only the worker's read of packs/ (PDF checks, bundle re-runs) and the API's put of a bundle
+  # (pack_bundles.tf), in the packs bucket; the API's read of the delineation DEM and the migrate
+  # Lambda's read of a reference file (map_data.tf).
   policy = data.aws_iam_policy_document.s3_endpoint.json
 
   tags = { Name = "${local.project}-s3" }
@@ -266,6 +272,40 @@ data "aws_iam_policy_document" "s3_endpoint" {
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
+  # Delineation's ranged reads of the DEM (map_data.tf). Listed whether or not
+  # delineation_dem is on: the endpoint policy only narrows, and without the
+  # role's own grant (api_dem, created only when it is on) nothing passes.
+  statement {
+    sid       = "ApiReadsDelineationDem"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tiles.arn}/${local.dem_key}"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
+  # Tracing a dam's reads of the water occurrence (map_data.tf), the same way:
+  # nothing passes without the role's own grant (api_water, only when
+  # dam_trace_water is on).
+  statement {
+    sid       = "ApiReadsDamTraceWater"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tiles.arn}/${local.water_key}"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
+  # A reference-dataset load reads its one file (map_data.tf, lambda-migrate.ts).
+  statement {
+    sid       = "MigrateReadsReferenceFiles"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.reference.arn}/reference/*"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.migrate_lambda.arn]
     }
   }
 }

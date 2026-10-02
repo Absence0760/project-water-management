@@ -7,19 +7,17 @@
 	// (routes/+layout.svelte). The card styles every farm page shares live here.
 	// The language switch (EN | AF, WP-2.5) sits in the header, as the design's
 	// board 1 has it.
-	import { tick, type Snippet } from 'svelte';
-	import { goto } from '$app/navigation';
+	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
-	import { api } from '$lib/api';
-	import { session } from '$lib/auth/session.svelte';
+	import { signOutTo } from '$lib/auth/signOut';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
-	import { clearNoteCounts } from '$lib/components/notes/counts.svelte';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { clearFarmMemo } from './farmState.svelte';
-	import { clearAllSaved, keepsCopy, setKeepsCopy } from './savedCopy';
+	import { keepsCopy, setKeepsCopy } from './savedCopy';
 
 	let {
+		projectId = null,
 		title = null,
 		back = null,
 		accountPage = false,
@@ -30,6 +28,8 @@
 		busy = false,
 		children
 	}: {
+		/** The catchment the page is in: the menu then offers "Who decides about your farm's information" (168). */
+		projectId?: string | null;
 		/** The header's title; "My farm" when not given. */
 		title?: string | null;
 		/** A back link instead of the title (the "Why?" and dam pages). */
@@ -65,17 +65,8 @@
 
 	async function signOut() {
 		menuOpen = false;
-		try {
-			await api.auth.logout();
-		} catch {
-			// Signed out locally whatever the server said.
-		}
-		clearAllSaved();
 		clearFarmMemo();
-		clearNoteCounts();
-		session.user = null;
-		await tick();
-		await goto(`${base}/login`);
+		await signOutTo();
 	}
 
 	function onKeydown(e: KeyboardEvent) {
@@ -136,6 +127,10 @@
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
 				<li><a href="{base}/privacy">{t('Privacy notice')}</a></li>
+				<!-- The catchment's organisation decides about the farm's information (POPIA s18(1)(b)): whom to ask. -->
+				{#if projectId}
+					<li><a href="{base}/farm/{encodeURIComponent(projectId)}/who-decides">{t('Who decides about your farm’s information')}</a></li>
+				{/if}
 				<li>
 					<button type="button" aria-pressed={!keep} onclick={toggleKeep}>{t('Don’t keep a copy on this phone')}</button>
 				</li>

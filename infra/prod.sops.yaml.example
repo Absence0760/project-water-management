@@ -45,3 +45,10 @@ alerts_token_secret: "REPLACE_ME"
 # § Rotating a secret.
 cloudfront_private_key: |
   REPLACE_ME
+
+# Seals two-step sign-in's TOTP secrets at rest (the API only;
+# backend/src/auth/secretBox.ts). 32+ ALPHANUMERIC chars. `openssl rand -hex 32`
+# Rotating it voids every enrolled authenticator: each person must set theirs
+# up again (the operator clears user_totp first; docs/security.md § Two-step
+# sign-in), so rotate only if it leaked.
+app_encryption_key: "REPLACE_ME"

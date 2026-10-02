@@ -7,7 +7,7 @@ import { isRiverOfftake } from '../network/offtake';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { runModel, runModelWith } from '../run';
 import { randomInput } from '../testing/fuzz';
-import { analyseSeason, catchmentView, farmProjection, seasonStart, windowSummary, yearBefore, type ProjectionRun } from './farmProjection';
+import { analyseSeason, catchmentView, damDraw, farmProjection, seasonStart, windowSummary, yearBefore, type ProjectionRun } from './farmProjection';
 
 const flat = (v: number) => new Array(12).fill(v) as unknown as Monthly;
 
@@ -309,6 +309,77 @@ describe('farmProjection', () => {
 		const p = farmProjection(run, 'dam', a);
 		const text = JSON.stringify(p);
 		for (const other of ['hill', 'Hill farm', 'flats', 'Flats farm']) expect(text).not.toContain(other);
+	});
+});
+
+describe('the dam’s days left follow what the dam itself gave (persona-farmer, round 4)', () => {
+	it('leaves the crops’ river abstraction (engine 1.65.0, §2.7j) out of the dam’s use', () => {
+		const { input } = scenario();
+		const river = structuredClone(input);
+		Object.assign(river.model.nodes.find((n) => n.id === 'dam')!, { cropWaterSource: 'river', cropRiverPumpM3Day: null });
+		const d0 = Date.parse(`${input.series.rain_catchment_mm!.startDate}T00:00:00Z`);
+		const natural = Array.from({ length: 822 }, (_, t) => ([1, 2].includes(new Date(d0 + t * 86_400_000).getUTCMonth() + 1) ? 40_000 : 3_000));
+		const out = runModelWith(river, () => ({ naturalFlowM3Day: natural }));
+		const p = farmProjection(asRun(river, out), 'dam');
+		const supplied = out.series.find((s) => s.nodeId === 'dam' && s.key === 'supplied')!.values;
+		// The crops pumped from the river all the last 14 days, so the old mean of supplied was well above 0 …
+		expect(supplied.slice(-14).reduce((a, b) => a + b, 0) / 14).toBeGreaterThan(100);
+		// … but nothing came out of the dam: no use, so no days left to divide out.
+		expect(p.dam!.use14M3Day).toBe(0);
+		expect(p.dam!.usableDays).toBeNull();
+		// Every demand draws on the river, so no short day is put down to the dam, though it sits at its stop level.
+		expect(p.season.onlyRiver).toBe(true);
+		expect(p.season.shortDays).toBeGreaterThan(0);
+		expect(p.season.shortDaysAtStopLevel).toBe(0);
+		// The scenario's dam farm itself is all on the dam.
+		expect(farmProjection(scenario().run, 'dam').season.onlyRiver).toBeUndefined();
+	});
+
+	it('takes the boreholes and each river abstraction off supplied, keeps the supply rule’s pump and off-take water (the dam carries them with nothing flowing in), never below 0', () => {
+		const node = farm('u', 'out', { damCapacityM3: 1000, cropWaterSource: 'river' });
+		const stored: Record<string, number[]> = {
+			river_abstraction: [1, 0, 0, 0],
+			groundwater_used: [2, 0, 0, 0],
+			offtake_used: [3, 0, 0, 0],
+			'river_take@crops': [4, 5, 0, 0],
+			'river_take@town': [0, 1, 0, 0],
+			'river_take@shut': [0, 0, 9, 0]
+		};
+		const run = {
+			startDate: '2024-01-01',
+			endDate: '2024-01-04',
+			nodes: [node],
+			transfers: [],
+			demandObjects: [
+				{ id: 'town', nodeId: 'u', enabled: true, waterSource: 'river' as const },
+				// A disabled object takes nothing.
+				{ id: 'shut', nodeId: 'u', enabled: false, waterSource: 'river' as const }
+			],
+			series: (id: string | null, key: string) => (id === 'u' ? stored[key] : undefined)
+		} satisfies ProjectionRun;
+		expect(Array.from(damDraw(run, node, Float64Array.from([20, 6, 7, 0.5])))).toEqual([14, 0, 7, 0.5]);
+	});
+
+	it('is supplied less groundwater_used and every river_take@ on random networks, within 0 and supplied', () => {
+		for (let seed = 1; seed <= 40; seed++) {
+			const input = randomInput(seed);
+			const out = runModel(input);
+			const run = asRun(input, out);
+			for (const node of input.model.nodes) {
+				if (node.kind !== 'farm') continue;
+				const get = (k: string) => out.series.find((s) => s.nodeId === node.id && s.key === k)?.values;
+				const supplied = get('supplied')!;
+				const takes = out.series.filter((s) => s.nodeId === node.id && s.key.startsWith('river_take@'));
+				const gw = get('groundwater_used');
+				const d = damDraw(run, node, Float64Array.from(supplied));
+				d.forEach((v, t) => {
+					const want = supplied[t]! - (gw?.[t] ?? 0) - takes.reduce((a, s) => a + s.values[t]!, 0);
+					expect(v, `seed ${seed} ${node.id} day ${t}`).toBeCloseTo(want > 1e-6 ? want : 0, 6);
+					expect(v).toBeGreaterThanOrEqual(0);
+					expect(v).toBeLessThanOrEqual(supplied[t]! + 1e-9);
+				});
+			}
+		}
 	});
 });
 

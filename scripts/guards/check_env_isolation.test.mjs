@@ -72,6 +72,9 @@ test('placeholders must stay placeholders', () => {
 	// The alert unsubscribe-token key (WP-2.13): the same rule (positive control first).
 	assert.deepEqual(checkEnvFile('backend/.env.development', 'ALERTS_TOKEN_SECRET=dev-only-alerts-token-secret-000000000\n'), []);
 	assert.match(checkEnvFile('backend/.env.development', 'ALERTS_TOKEN_SECRET=9d1e...real').map((f) => f.rule).join(), /ALERTS_TOKEN_SECRET is no longer the dev-only-/);
+	// The TOTP sealing key (two-step sign-in, issue #282).
+	assert.deepEqual(checkEnvFile('backend/.env.development', 'APP_ENCRYPTION_KEY=dev-only-app-encryption-key-0000000000000000\n'), []);
+	assert.match(checkEnvFile('backend/.env.development', 'APP_ENCRYPTION_KEY=0a1b...real').map((f) => f.rule).join(), /APP_ENCRYPTION_KEY is no longer the dev-only-/);
 	assert.match(checkEnvFile('backend/.env.development', 'CLOUDFRONT_SHARED_SECRET=abc').map((f) => f.rule).join(), /empty/);
 	// Object storage: MinIO's local default login passes (positive control); anything else fails.
 	assert.deepEqual(checkEnvFile('backend/.env.development', 'STORAGE=local\nS3_ACCESS_KEY_ID=minioadmin\nS3_SECRET_ACCESS_KEY=minioadmin\n'), []);

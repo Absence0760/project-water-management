@@ -8,7 +8,7 @@
 	import { PUBLIC_WAF_CAPTCHA_API_KEY, PUBLIC_WAF_CAPTCHA_SCRIPT_URL } from '$env/static/public';
 	import { captchaConfig } from '$lib/auth/wafCaptcha';
 	import SignInCaptcha from '$lib/components/auth-extras/SignInCaptcha.svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -30,6 +30,8 @@
 	// link, so this page says where the link went and has the address ready.
 	const emailAuth = emailAuthApi(api);
 	const justSignedUp = page.url.searchParams.get('confirm') === 'sent';
+	// After "Delete my account" (issue #112, components/account/DeleteAccount.svelte).
+	const justDeleted = page.url.searchParams.get('deleted') === '1';
 	let sentTo = $state<string | null>(null);
 	onMount(() => {
 		if (!justSignedUp) return;
@@ -74,6 +76,56 @@
 		await signIn();
 	}
 
+	// Two-step sign-in (issue #282): with an authenticator on the account, a
+	// right password asks for a code next (POST /auth/mfa/verify), from the
+	// app or, if the phone is lost, one of the recovery codes.
+	let step = $state<'password' | 'code'>('password');
+	let code = $state('');
+	let useRecovery = $state(false);
+	let codeInput: HTMLInputElement | undefined = $state();
+
+	async function finish() {
+		try {
+			sessionStorage.removeItem(CONFIRM_EMAIL_KEY);
+		} catch {
+			// Nothing kept.
+		}
+		await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+	}
+
+	async function submitCode(e: SubmitEvent) {
+		e.preventDefault();
+		if (!code.trim()) {
+			error = useRecovery ? t('Enter one of your recovery codes.') : t('Enter the 6-digit code from your authenticator app.');
+			return;
+		}
+		busy = true;
+		error = null;
+		try {
+			const r = await api.auth.mfa.verify(code.trim());
+			session.user = r.user;
+			await finish();
+		} catch (err) {
+			// The 5 minutes ran out, or the password was reset meanwhile: back to the first step.
+			if (err instanceof ApiError && err.code === 'mfa_challenge_expired') {
+				step = 'password';
+				password = '';
+				code = '';
+			}
+			error = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function toggleRecovery() {
+		useRecovery = !useRecovery;
+		code = '';
+		error = null;
+		await tick();
+		codeInput?.focus();
+	}
+
 	/** `wafToken`: the retry after a solved puzzle. */
 	async function signIn(wafToken?: string) {
 		busy = true;
@@ -81,13 +133,18 @@
 		unconfirmed = null;
 		resent = null;
 		try {
-			session.user = await api.auth.login(email.trim(), password, wafToken);
-			try {
-				sessionStorage.removeItem(CONFIRM_EMAIL_KEY);
-			} catch {
-				// Nothing kept.
+			const result = await api.auth.login(email.trim(), password, wafToken);
+			if ('mfaRequired' in result) {
+				step = 'code';
+				code = '';
+				useRecovery = false;
+				password = '';
+				await tick();
+				codeInput?.focus();
+				return;
 			}
-			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
+			session.user = result;
+			await finish();
 		} catch (err) {
 			// Too many sign-ins from this network: show the puzzle, once. A
 			// retry that gets the answer again (the token was refused) says to wait.
@@ -122,6 +179,12 @@
 					password = DEMO.password;
 				}}>Use demo account</button
 			>
+		</div>
+	{/if}
+	{#if justDeleted}
+		<div class="notice" role="status" data-account-deleted>
+			<p class="notice-title">{t('Your account has been deleted')}</p>
+			<p>{t('We emailed you what was deleted and what was kept.')}</p>
 		</div>
 	{/if}
 	{#if justSignedUp && !unconfirmed}
@@ -162,6 +225,26 @@
 			}}
 		/>
 	{/if}
+	{#if step === 'code'}
+		<form onsubmit={submitCode} novalidate aria-labelledby="code-h">
+			<h2 id="code-h" class="step-title">{t('Two-step sign-in')}</h2>
+			<div class="field">
+				{#if useRecovery}
+					<label for="mfa-code">{t('Recovery code')}</label>
+					<input id="mfa-code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
+					<span class="hint" id="mfa-code-hint">{t('One of the codes you saved when you set up two-step sign-in. Each works once.')}</span>
+				{:else}
+					<label for="mfa-code">{t('Code from your authenticator app')}</label>
+					<input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" required bind:this={codeInput} bind:value={code} aria-describedby="mfa-code-hint" />
+					<span class="hint" id="mfa-code-hint">{t('Open the app on your phone and enter the 6-digit code it shows for Water Management.')}</span>
+				{/if}
+			</div>
+			<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Checking…') : t('Sign in')}</button>
+			<button type="button" class="linkish" onclick={toggleRecovery}>
+				{useRecovery ? t('Use a code from the app instead') : t('Lost your phone? Use a recovery code')}
+			</button>
+		</form>
+	{:else}
 	<form onsubmit={submit}>
 		<div class="field">
 			<label for="email">{t('Email')}</label>
@@ -174,6 +257,7 @@
 		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy}>{busy ? t('Signing in…') : t('Sign in')}</button>
 	</form>
+	{/if}
 	{#snippet footer()}
 		{t('No account?')} <a href="{base}/register{page.url.search}">{t('Create one')}</a>
 	{/snippet}
@@ -212,6 +296,26 @@
 		text-decoration: underline;
 		/* Comfortable tap target without growing the visible text. */
 		padding: 0.35rem 0;
+	}
+	.step-title {
+		margin: 0 0 0.25rem;
+		font-size: 1.1rem;
+	}
+	.hint {
+		font-size: 1rem;
+		color: var(--text-2);
+	}
+	.linkish {
+		align-self: flex-start;
+		margin-top: 0.5rem;
+		padding: 0.35rem 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-size: 1rem;
+		text-decoration: underline;
+		cursor: pointer;
 	}
 	.demo {
 		display: flex;

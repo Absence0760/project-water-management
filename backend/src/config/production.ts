@@ -124,6 +124,21 @@ const pemPublicKey: Check = (v) =>
 
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
+/** The delineation DEM (delineation/dem.ts): empty (off) or an S3 object; never a local file or host, which a Lambda doesn't have. */
+const demUrl: Check = (v) => {
+	if (!set(v)) return null;
+	const t = v.trim();
+	if (/^s3:\/\/[^/]+\/.+/.test(t)) return null;
+	if (/^https:\/\//.test(t)) {
+		try {
+			return isLocalHost(new URL(t).hostname) ? 'points at a local host' : null;
+		} catch {
+			return 'is not a URL';
+		}
+	}
+	return 'must be empty (off) or s3://<bucket>/<key> (or https://)';
+};
+
 const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
 
 export const SETTINGS: Record<string, Setting> = {
@@ -135,6 +150,18 @@ export const SETTINGS: Record<string, Setting> = {
 	AUTH_JWT_SECRET: {
 		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
 		checks: { api: secret(32), worker: secret(32) }
+	},
+	APP_ENCRYPTION_KEY: {
+		why: 'Seals the TOTP secrets of two-step sign-in at rest (auth/secretBox.ts, 150_mfa): the API only, which enrols and checks codes.',
+		checks: { api: secret(32) }
+	},
+	MFA_REQUIRED: {
+		why: 'false turns off the second-factor requirement for owners, team admins and assessors (auth/stepUp.ts) for the DB tests and the e2e server only; mfaRequired refuses it on Lambda too.',
+		checks: { api: optional(oneOf('true')), worker: optional(oneOf('true')) }
+	},
+	REGISTRATION_CHECK_REQUIRED: {
+		why: 'false lets every project issue a pack without a recorded check of its specialist signers\' registrations, whatever the project\'s own setting (signoffs/registrationCheck.ts, 167_signers), for the DB tests and the e2e server only; registrationCheckRequired refuses it on Lambda too.',
+		checks: { api: optional(oneOf('true')) }
 	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
@@ -170,11 +197,15 @@ export const SETTINGS: Record<string, Setting> = {
 	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
 	DB_NAME: { why: 'The database to migrate.', checks: { migrate: required } },
 	MASTER_SECRET_ARN: { why: 'The RDS-managed owner credentials in Secrets Manager.', checks: { migrate: arn } },
+	NODE_OPTIONS: { why: 'Read by Node itself: the migrate Lambda’s V8 heap size (infra/lambda.tf), sized for a reference load. Flags, never a credential.' },
+	REFERENCE_BUCKET: {
+		why: 'The private bucket a reference-dataset load reads its one file from (infra/map_data.tf, geo/referenceLoad.ts, docs/deployment.md § Reference datasets).',
+		checks: { migrate: required }
+	},
 	WATER_APP_PASSWORD: {
 		why: 'The runtime role password the migrate Lambda sets (sops db_app_password), from its runtime secret.',
 		checks: { migrate: appPassword }
 	},
-	MIGRATION_DATABASE_URL: { why: 'Read only by scripts/migrate.ts run as a CLI; the migrate Lambda passes its own URL.' },
 
 	// --- Email -----------------------------------------------------------------------------
 	MAIL_TRANSPORT: { why: 'log (the default) sends nothing; smtp is Mailpit.', checks: { api: oneOf('ses'), worker: oneOf('ses') } },
@@ -191,9 +222,12 @@ export const SETTINGS: Record<string, Setting> = {
 	SMTP_USER: { why: 'SMTP transport only.' },
 	SMTP_PASSWORD: { why: 'SMTP transport only.' },
 	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
+	OPERATOR_EMAIL: {
+		why: 'The operator’s copy of the licence-record notices (licence/record.ts, 161); unset sends none and the owners still get theirs. Terraform sets it to budget_alert_email on the worker (infra/jobs.tf).'
+	},
 
 	// --- Alerts ----------------------------------------------------------------------------
-	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
+	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe and “Was this useful?” links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
 	ALERTS_ENABLED: { why: 'The alert-email kill switch: the worker must be told explicitly (Terraform var.alerts_enabled).', checks: { worker: decision } },
 	ALERTS_DAILY_CAP: { why: 'Per-person immediate mails a day; the code default (5) is safe.' },
 	API_PUBLIC_URL: {
@@ -253,6 +287,16 @@ export const SETTINGS: Record<string, Setting> = {
 		why: 'Signs report downloads (its public half is in the distribution’s key group). From the API’s runtime secret.',
 		checks: { api: pemPrivateKey }
 	},
+	DEM_URL: {
+		why: 'The DEM catchment delineation reads (delineation/dem.ts, issue #326 B-delineate): empty turns it off. Only the API delineates; the other Lambdas never call configuredDem.',
+		checks: { api: demUrl }
+	},
+	DEM_LABEL: { why: 'The DEM’s name on each proposal; empty takes the archive’s own. A label, never a credential or a switch.' },
+	WATER_URL: {
+		why: 'The water occurrence raster tracing a dam reads (delineation/damTrace.ts, issue #326 C2): empty turns it off. The same forms and checks as DEM_URL; only the API traces.',
+		checks: { api: demUrl }
+	},
+	WATER_LABEL: { why: 'The water occurrence dataset’s name on each traced outline; empty takes the archive’s own. A label, never a credential or a switch.' },
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	PACKS_BUCKET: {
 		why: 'The evidence packs bucket (Object Lock; infra/packs.tf). The renderer stores a pack PDF; the worker HEADs it before recording the hash the renderer answered with (jobs/handlers/pack-render.ts); the API stores a pack’s reproduction bundle when it issues the pack (evidence/bundle.ts) and signs both downloads as CloudFront URLs on /packs/*.',

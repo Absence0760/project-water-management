@@ -170,6 +170,28 @@ describe('diffModel', () => {
 		]);
 	});
 
+	it('turns a water source edit into node.set and demandObject.set (engine 1.65.0): the crops and a mill on river abstractions', () => {
+		const b = base();
+		let e = editing(b);
+		const mill = e.addDemandObject(UP, 'industrial');
+		mill.monthlyM3Day = new Array(12).fill(40);
+		const withMill = applyScenario(b, roundTrips(b, e.snapshot())).input;
+		e = editing(withMill);
+		node(e, UP).cropWaterSource = 'river';
+		node(e, UP).cropRiverPumpM3Day = 1500;
+		const m = e.model.demandObjects!.find((o) => o.id === mill.id)!;
+		m.waterSource = 'river';
+		m.riverPumpM3Day = 480;
+		m.riverPoolM3 = 3000;
+		expect(roundTrips(withMill, e.snapshot())).toEqual([
+			{ op: 'node.set', nodeId: UP, field: 'cropWaterSource', value: 'river' },
+			{ op: 'node.set', nodeId: UP, field: 'cropRiverPumpM3Day', value: 1500 },
+			{ op: 'demandObject.set', demandObjectId: mill.id, field: 'waterSource', value: 'river' },
+			{ op: 'demandObject.set', demandObjectId: mill.id, field: 'riverPumpM3Day', value: 480 },
+			{ op: 'demandObject.set', demandObjectId: mill.id, field: 'riverPoolM3', value: 3000 }
+		]);
+	});
+
 	it('records a node\'s supply edit as one edit group, whatever the save rules tie together (docs/scenarios.md § Edit groups)', () => {
 		const fields = (ops: readonly ScenarioOp[]) => ops.map((o) => (o.op === 'node.set' ? o.field : o.op));
 		// Upper farm on the trigger rule (it has a dam): straight to run of river with its dam emptied, no riverFirst detour.
@@ -259,7 +281,7 @@ describe('diffModel', () => {
 		e.removeNode(UP);
 		const ops = roundTrips(b, e.snapshot());
 		expect(ops.map((o) => o.op)).toEqual(['node.remove', 'node.add', 'node.add']);
-		expect(ops[1]).toMatchObject({ op: 'node.add', node: { id: added.id, name: 'Farm 3', downstreamNodeId: G, damCapacityM3: 40_000 } });
+		expect(ops[1]).toMatchObject({ op: 'node.add', node: { id: added.id, name: 'Unit 3', downstreamNodeId: G, damCapacityM3: 40_000 } });
 		expect(ops[2]).toMatchObject({ op: 'node.add', node: { id: user.id, kind: 'user', userDemandM3Day: new Array(12).fill(250) } });
 	});
 

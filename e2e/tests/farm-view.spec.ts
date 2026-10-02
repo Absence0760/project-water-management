@@ -448,6 +448,9 @@ test('many farms in one catchment fold the switcher; the notice stays on the fir
 	await fp.goto(`/farm/${project.id}?node=${farms[0]!.id}`);
 	await expect(fp.getByRole('heading', { level: 1, name: 'Farm 1 with a longer name' })).toBeInViewport();
 	await expect(fp.locator('#notice')).toBeInViewport();
+	// The WUA's words and its percentage, both, as the alert email says them (operator, 2026-10-01).
+	await expect(fp.locator('#notice')).toContainText('Pump at night only.');
+	await expect(fp.locator('#notice')).toContainText(/Set by the WUA: a 20\s%\scut in registered water use\./);
 	const switcher = fp.getByRole('navigation', { name: 'Your hydrological units in this catchment' });
 	await expect(switcher).toBeHidden();
 	await fp.getByText('Your hydrological units in this catchment (14 hydrological units)', { exact: true }).click();

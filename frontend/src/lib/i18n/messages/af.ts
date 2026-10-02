@@ -37,6 +37,124 @@ export const af: Catalogue = {
 	'bb72711c': 'Gebruik hoogstens 200 karakters.',
 	// The two passwords don’t match.
 	'd62a92b9': 'Die twee wagwoorde stem nie ooreen nie.',
+	// Enter your password.
+	'fed4dc29': 'Tik jou wagwoord in.',
+	// Delete my account
+	'0498d7af': 'Vee my rekening uit',
+	// Deleting your account removes your name and email address. What you made for a project stays, without your name.
+	'81dfce88': 'As jy jou rekening uitvee, word jou naam en e-posadres verwyder. Wat jy vir ’n projek gemaak het, bly, sonder jou naam.',
+	// Delete your account?
+	'82917cc3': 'Vee jou rekening uit?',
+	// Deleting your account can’t be undone. This is what happens:
+	'39fc4c15': 'As jy jou rekening uitvee, kan dit nie ongedaan gemaak word nie. Dit is wat gebeur:',
+	// Deleted
+	'f225740a': 'Uitgevee',
+	// Your name, email address and password
+	'272a8ad7': 'Jou naam, e-posadres en wagwoord',
+	// Your memberships of projects and teams, and your links to hydrological units
+	'91155f4d': 'Jou lidmaatskappe van projekte en spanne, en jou koppelings aan hidrologiese eenhede',
+	// Your alert choices, and the alert emails sent to you
+	'f794ef91': 'Jou waarskuwingskeuses, en die waarskuwings-e-posse wat aan jou gestuur is',
+	// Your settings
+	'7249c56b': 'Jou instellings',
+	// An uncertainty result you started and never finished, and a licence application still in draft
+	'9ba21fef': '’n Onsekerheidsresultaat wat jy begin en nooit voltooi het nie, en ’n lisensieaansoek wat nog ’n konsep is',
+	// Kept, without your name
+	'79b111b9': 'Behou, sonder jou naam',
+	// What you made for a project: the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes
+	'3ca58f90': 'Wat jy vir ’n projek gemaak het: die projek of span self, modellopies, invoere, scenario’s, ’n lisensieaansoek wat jy ingedien het, notas',
+	// The project’s history of what you did
+	'52c6bbde': 'Die projek se geskiedenis van wat jy gedoen het',
+	// They will read “Deleted user” or “a former member”, and are never put in someone else’s name.
+	'f210a141': 'Hulle sal “Deleted user” of “’n voormalige lid” wys, en word nooit op iemand anders se naam gesit nie.',
+	// Kept, with your name
+	'20f65773': 'Behou, met jou naam',
+	// A sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.
+	'44e58ddf': '’n Aftekening behou die naam en registrasie wat jy ingetik het, en ’n bewyspakket behou die name wat dit gedruk het, so lank as wat die lisensierekord wat hulle ondersteun, gehou word.',
+	// If you are the only owner of a project or the only admin of a team, hand it to someone else first. We email you what was deleted and what was kept. Copies in our backups are deleted as the backups expire, within 35 days.
+	'862bf4f0': 'As jy die enigste eienaar van ’n projek of die enigste administrateur van ’n span is, gee dit eers aan iemand anders oor. Ons sal vir jou e-pos wat uitgevee is en wat behou is. Kopieë in ons rugsteun word uitgevee soos die rugsteun verval, binne 35 dae.',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Your account wasn’t deleted: someone else needs to take over these first.
+	'f098ea6b': 'Jou rekening is nie uitgevee nie: iemand anders moet hierdie eers oorneem.',
+	// You are the only owner of these projects. Make someone else an owner, or delete the project:
+	'000e0749': 'Jy is die enigste eienaar van hierdie projekte. Maak iemand anders ’n eienaar, of vee die projek uit:',
+	// You are the only admin of these teams. Make someone else an admin, or delete the team:
+	'186d4da1': 'Jy is die enigste administrateur van hierdie spanne. Maak iemand anders ’n administrateur, of vee die span uit:',
+	// Your password
+	'15253243': 'Jou wagwoord',
+	// Type your password again to confirm.
+	'b03f97c0': 'Tik jou wagwoord weer in om te bevestig.',
+	// Cancel
+	'35afca3b': 'Kanselleer',
+	// Deleting…
+	'6476ae31': 'Vee tans uit…',
+	// {n} recovery code left. / {n} recovery codes left.
+	'4aaaac52': { one: '{n} herstelkode oor.', other: '{n} herstelkodes oor.' },
+	// Enter your current password.
+	'f555922c': 'Tik jou huidige wagwoord in.',
+	// Your current password is wrong.
+	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
+	// Enter the 6-digit code from your authenticator app.
+	'7feb1b8c': 'Tik die 6-syferkode van jou verifikasie-app in.',
+	// Two-step sign-in is off.
+	'7aa9d2cc': 'Tweestap-intekening is af.',
+	// Water Management recovery codes for {email}
+	'e65b3921': 'Water Management-herstelkodes vir {email}',
+	// Each code works once, in place of a code from your authenticator app.
+	'16b901ba': 'Elke kode werk een keer, in plaas van ’n kode van jou verifikasie-app.',
+	// Two-step sign-in
+	'67ca1ae1': 'Tweestap-intekening',
+	// You’re a project owner, team admin or assessor, so publishing, deciding applications and managing members need two-step sign-in. Set it up here.
+	'174d5a26': 'Omdat jy ’n projekeienaar, spanadministrateur of beoordelaar is, het jy tweestap-intekening nodig om te publiseer, oor aansoeke te besluit en lede te bestuur. Stel dit hier op.',
+	// Your recovery codes
+	'950aa263': 'Jou herstelkodes',
+	// Keep these somewhere safe, away from your phone. If you lose your phone, each code signs you in once. They won’t be shown again.
+	'083eca42': 'Hou hulle op ’n veilige plek, weg van jou foon af. As jy jou foon verloor, teken elke kode jou een keer in. Hulle sal nie weer gewys word nie.',
+	// The download could not be loaded. Copy the codes from the list below instead.
+	'ac2f42d0': 'Die aflaai kon nie gelaai word nie. Kopieer eerder die kodes uit die lys hieronder.',
+	// Download the codes
+	'61a0db4c': 'Laai die kodes af',
+	// I’ve saved them
+	'f7156f45': 'Ek het hulle gestoor',
+	// On
+	'60e47df0': 'Aan',
+	// Signing in asks for a code from your authenticator app after your password.
+	'fdc7e615': 'Wanneer jy inteken, word ná jou wagwoord ’n kode van jou verifikasie-app gevra.',
+	// This browser signed in before two-step sign-in was set up. Sign out and in again before an action that needs it.
+	'c08216a1': 'Hierdie blaaier het ingeteken voordat tweestap-intekening opgestel is. Teken uit en weer in voordat jy iets doen wat dit nodig het.',
+	// Code from your authenticator app
+	'8dcd2213': 'Kode van jou verifikasie-app',
+	// Code from your authenticator app, or a recovery code
+	'a0fb5ebd': 'Kode van jou verifikasie-app, of ’n herstelkode',
+	// Make new recovery codes
+	'2cd1bc62': 'Skep nuwe herstelkodes',
+	// Turn off two-step sign-in
+	'ecddfcbd': 'Skakel tweestap-intekening af',
+	// New recovery codes
+	'3695d1ea': 'Nuwe herstelkodes',
+	// Turn off
+	'cd03e04b': 'Skakel af',
+	// Add a second step to signing in: after your password, a 6-digit code from an authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Aegis). Someone who learns your password still can’t get in.
+	'c11c725f': 'Voeg ’n tweede stap by wanneer jy inteken: ná jou wagwoord, ’n 6-syferkode van ’n verifikasie-app op jou foon (soos Google Authenticator, Microsoft Authenticator of Aegis). Iemand wat jou wagwoord uitvind, kan dan steeds nie inkom nie.',
+	// Set up two-step sign-in
+	'6580af84': 'Stel tweestap-intekening op',
+	// Current password
+	'8eedf1f3': 'Huidige wagwoord',
+	// Checking…
+	'732bdad5': 'Kontroleer tans…',
+	// Continue
+	'ab43d664': 'Gaan voort',
+	// Scan this code with your authenticator app.
+	'79170ef4': 'Skandeer hierdie kode met jou verifikasie-app.',
+	// QR code for your authenticator app
+	'97fe04db': 'QR-kode vir jou verifikasie-app',
+	// Can’t scan it? Type this key into the app instead:
+	'3e40e69a': 'Kan jy dit nie skandeer nie? Tik eerder hierdie sleutel in die app in:',
+	// Enter the code the app shows
+	'96778761': 'Tik die kode in wat die app wys',
+	// Turn on two-step sign-in
+	'd9156f01': 'Skakel tweestap-intekening aan',
 	// Right away
 	'52eea1c1': 'Dadelik',
 	// Once a day (06:00)
@@ -79,6 +197,8 @@ export const af: Catalogue = {
 	'd14653a3': 'Jy sal nie meer waarskuwings-e-posse vir {project} kry nie.',
 	// You won’t get {kind} emails for {project} any more.
 	'fa614c6b': 'Jy sal nie meer e-posse oor {kind} vir {project} kry nie.',
+	// Thank you. Your answer goes to the people who run alerts for {project}, without your name.
+	'6bfb93ee': 'Dankie. Jou antwoord gaan sonder jou naam na die mense wat die waarskuwings vir {project} bestuur.',
 	// Your alert emails are paused. An email we sent to {email} was marked as spam, so we stopped sending.
 	'554605ea': 'Jou waarskuwings-e-posse is onderbreek. ’n E-pos wat ons na {email} gestuur het, is as gemorspos gemerk, daarom het ons opgehou om te stuur.',
 	// Your alert emails are paused. Our emails to {email} bounced back: the address may be wrong, or the mailbox full or closed.
@@ -103,12 +223,22 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
-	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
-	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
-	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit in geheel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
-	// The Terms now start with a short version of the main points.
-	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
+	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
+	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
+	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
+	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
+	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
+	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
+	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
+	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
+	// Licence records, and the names they keep, are kept until a set date and then deleted.
+	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
+	// Outside the organisation, registered water use is shown only as totals, never with a name.
+	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
+	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
+	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
+	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
+	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -119,8 +249,6 @@ export const af: Catalogue = {
 	'e8345543': 'Wat verander het',
 	// Terms of use
 	'953dc886': 'Gebruiksvoorwaardes',
-	// Privacy notice
-	'016ac231': 'Privaatheidskennisgewing',
 	// Saving…
 	'74119e7f': 'Stoor tans…',
 	// Accept the new terms
@@ -171,6 +299,16 @@ export const af: Catalogue = {
 	'18996e5e': 'Waarskuwings',
 	// Choose your alert emails
 	'ebbd21ba': 'Kies jou waarskuwings-e-posse',
+	// The map of your hydrological unit could not be loaded. Check your connection, then reload the page.
+	'f3211cec': 'Die kaart van jou hidrologiese eenheid kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
+	// There is no background map here, so only these are drawn.
+	'e165ec6f': 'Daar is hier geen agtergrondkaart nie, so net hierdie word geteken.',
+	// Key
+	'cd1ac90c': 'Legende',
+	// The map could not be loaded. Check your connection, then reload the page.
+	'e9dad5bd': 'Die kaart kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
+	// Reload page
+	'4abb303f': 'Herlaai bladsy',
 	// Notes about your hydrological unit
 	'7541e733': 'Notas oor jou hidrologiese eenheid',
 	// Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this hydrological unit.
@@ -191,6 +329,8 @@ export const af: Catalogue = {
 	'874e0640': 'Wat beteken hierdie woorde?',
 	// Account
 	'59f8a2fc': 'Rekening',
+	// Who decides about your farm’s information
+	'c084b088': 'Wie besluit oor jou hidrologiese eenheid se inligting',
 	// Don’t keep a copy on this phone
 	'adfda47f': 'Moenie ’n kopie op hierdie foon hou nie',
 	// Back to the workspace
@@ -303,10 +443,10 @@ export const af: Catalogue = {
 	'100c3cb5': '{points} hoër in 30 dae (was {was})',
 	// Down {points} in 30 days (was {was})
 	'ef59dc0c': '{points} laer in 30 dae (was {was})',
-	// At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
-	'1cc72e56': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
-	// At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
-	'00f9df75': 'Teen jou gebruik oor die afgelope 14 dae (ongeveer {use} per dag) hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
+	// At the use your dam carries over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.
+	'3a3d3a40': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou dit **{lasts}** as niks instroom nie. ’n Rowwe riglyn: reën en rivierwater wat in die dam instroom, laat dit langer hou.',
+	// At the use your dam carries over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.
+	'226e7cd7': 'Teen die gebruik wat jou dam oor die afgelope 14 dae moes dek (ongeveer {use} per dag), hou die water bo die stopvlak **{lasts}** as niks instroom nie. ’n Rowwe riglyn.',
 	// irrigation stops at {pct}
 	'e54e8052': 'besproeiing stop by {pct}',
 	// {storage} of {capacity}
@@ -551,6 +691,64 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
+	// Your land
+	'61a5a97f': 'Jou grond',
+	// Gauge
+	'e70f7a10': 'Meetstasie',
+	// River
+	'ee96b1b1': 'Rivier',
+	// Catchment boundary
+	'bb1336f6': 'Grens van die opvanggebied',
+	// Drawing the map…
+	'02cfe82a': 'Teken tans die kaart…',
+	// The map can’t be drawn in this browser. Everything on it is written above.
+	'f6ccc2da': 'Die kaart kan nie in hierdie blaaier geteken word nie. Alles wat daarop is, staan hierbo geskryf.',
+	// The background map couldn’t be loaded, so the map is drawn on a plain background.
+	'b2446bd7': 'Die agtergrondkaart kon nie gelaai word nie, so die kaart word op ’n gewone agtergrond geteken.',
+	// use the arrow keys to move the map, + and − to zoom
+	'12e34785': 'gebruik die pyltjiesleutels om die kaart te skuif, + en − om in en uit te zoem',
+	// Zoom in
+	'a3583899': 'Zoem in',
+	// Zoom out
+	'8570fe3a': 'Zoem uit',
+	// {deg}° S
+	'1044c926': '{deg}° S',
+	// {deg}° N
+	'2d44f6cd': '{deg}° N',
+	// {deg}° W
+	'1444cf72': '{deg}° W',
+	// {deg}° E
+	'2244e57c': '{deg}° O',
+	// {n} ha
+	'1d026b76': '{n} ha',
+	// Your land: {names} ({area})
+	'fbd73469': 'Jou grond: {names} ({area})',
+	// Your land: {area}
+	'50f1344e': 'Jou grond: {area}',
+	// Your dam: {names}
+	'63b51164': 'Jou dam: {names}',
+	// Rivers: {names}
+	'da9c7f56': 'Riviere: {names}',
+	// A river
+	'65386656': '’n Rivier',
+	// Gauges: {names}
+	'c1821a57': 'Meetstasies: {names}',
+	// A gauge
+	'8960dcff': '’n Meetstasie',
+	// The catchment boundary
+	'e15a5fef': 'Die grens van die opvanggebied',
+	// Your land · {band}
+	'4d65bf5b': 'Jou grond · {band}',
+	// Your hydrological unit on the map
+	'20e93559': 'Jou hidrologiese eenheid op die kaart',
+	// The map shows your own land and dam, with the catchment boundary, the rivers and the gauges to find your way. It shows no other hydrological unit.
+	'02a5b058': 'Die kaart wys jou eie grond en dam, met die grens van die opvanggebied, die riviere en die meetstasies om jou pad te vind. Dit wys geen ander hidrologiese eenheid nie.',
+	// Your land is coloured by the model’s look back: **{band}**.
+	'0b672772': 'Jou grond is ingekleur volgens die model se terugblik: **{band}**.',
+	// Where: about {place}.
+	'357474ee': 'Waar: ongeveer {place}.',
+	// Map of your hydrological unit
+	'a38186d8': 'Kaart van jou hidrologiese eenheid',
 	// Before you look at your farm
 	'72542aec': 'Voordat jy na jou plaas kyk',
 	// The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
@@ -611,8 +809,6 @@ export const af: Catalogue = {
 	'395e6e23': 'Wysig nota',
 	// Save
 	'4d2d5d68': 'Stoor',
-	// Cancel
-	'35afca3b': 'Kanselleer',
 	// edited
 	'6df599e8': 'gewysig',
 	// Edited {date}
@@ -825,6 +1021,8 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
+	// Data sources
+	'51f21a4b': 'Databronne',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
@@ -1005,14 +1203,10 @@ export const af: Catalogue = {
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
 	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
 	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
+	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
+	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
 	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
-	// Your comment is posted.
-	'8883bbbe': 'Jou kommentaar is geplaas.',
-	// Sign in to comment.
-	'eb271459': 'Teken in om kommentaar te lewer.',
-	// Only members of this project can comment. Ask its owner to invite you.
-	'6ffb150a': 'Net lede van hierdie projek kan kommentaar lewer. Vra sy eienaar om jou uit te nooi.',
 	// Licensing evidence pack, version {version}, shared read-only
 	'119a99c5': 'Bewyspakket vir ’n lisensieaansoek, weergawe {version}, leesalleen gedeel',
 	// This pack was withdrawn
@@ -1063,26 +1257,8 @@ export const af: Catalogue = {
 	'845a3b23': 'Reproduksiebundel se SHA-256',
 	// Signed by:
 	'ac41cdb0': 'Onderteken deur:',
-	// Public comments
-	'd7603e02': 'Openbare kommentaar',
-	// a former member
-	'51eae74d': '’n voormalige lid',
-	// No comments yet.
-	'ea48a91c': 'Nog geen kommentaar nie.',
 	// Commenting is closed: this pack no longer stands.
 	'6cbfca10': 'Kommentaar is gesluit: hierdie pakket staan nie meer nie.',
-	// Add a comment
-	'b34ab8fe': 'Lewer kommentaar',
-	// Shown with your name to everyone this pack is shared with. Plain text; every edit is kept.
-	'bcad8655': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie pakket gedeel is. Gewone teks; elke wysiging word bewaar.',
-	// Posting…
-	'44539655': 'Plaas tans…',
-	// Post comment
-	'11065b5e': 'Plaas kommentaar',
-	// Sign in to comment
-	'954cf5cd': 'Teken in om kommentaar te lewer',
-	// Commenting needs an account in this project, so every comment has a name.
-	'e87f8a59': 'Om kommentaar te lewer, het jy ’n rekening in hierdie projek nodig, sodat elke kommentaar ’n naam het.',
 	// About this page
 	'254af6c5': 'Oor hierdie bladsy',
 	// A licensing evidence pack: the model results an applicant attaches to a water-use licence application, signed by a registered professional and fixed once issued. This page shows part of it, read-only, and names no hydrological unit.
@@ -1103,20 +1279,56 @@ export const af: Catalogue = {
 	'479ef2ba': 'Die besluit',
 	// The catchment’s totals
 	'd14cdcfe': 'Die opvanggebied se totale',
-	// Shown with your name to everyone this application is shared with. Plain text; every edit is kept.
-	'c476d7ee': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie aansoek gedeel is. Gewone teks; elke wysiging word bewaar.',
 	// An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.
 	'243c85d3': '’n Aansoek om water in hierdie opvanggebied te gebruik, gemodelleer op grond van die opvanggebied se gepubliseerde basislyn. Dit is leesalleen, en dit noem geen ander hidrologiese eenheid nie.',
 	// This link works until it expires or is withdrawn, while the application is submitted or decided.
 	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
+	// Your comment is posted.
+	'8883bbbe': 'Jou kommentaar is geplaas.',
+	// Sign in to comment.
+	'eb271459': 'Teken in om kommentaar te lewer.',
+	// This link no longer takes comments.
+	'8f3489cb': 'Hierdie skakel aanvaar nie meer kommentaar nie.',
+	// Public comments
+	'd7603e02': 'Openbare kommentaar',
+	// A comment here is not a written objection.
+	'ebaaeca5': 'Kommentaar hier is nie ’n skriftelike beswaar nie.',
+	// To object, and to keep the right to appeal (National Water Act s148(1)(f)), write to the address in the application’s notice before its closing date.
+	'09aa1077': 'Om beswaar te maak, en jou reg op appèl te behou (Nasionale Waterwet s148(1)(f)), skryf voor die sluitingsdatum aan die adres in die aansoek se kennisgewing.',
+	// Written objections go to:
+	'6204d35f': 'Skriftelike besware gaan na:',
+	// Closing date for objections: {date}
+	'ccf63ea7': 'Sluitingsdatum vir besware: {date}',
+	// a former member
+	'51eae74d': '’n voormalige lid',
+	// No comments yet.
+	'ea48a91c': 'Nog geen kommentaar nie.',
+	// Add a comment
+	'b34ab8fe': 'Lewer kommentaar',
+	// Shown with your name to everyone this page is shared with. Plain text.
+	'9abf2b4d': 'Word met jou naam gewys aan almal met wie hierdie bladsy gedeel is. Gewone teks.',
+	// The applicant, the responsible authority that decides the application, and the public participation report the applicant gives it (GN R267 reg 19) receive your comment and your name.
+	'51d2288c': 'Die aansoeker, die verantwoordelike owerheid wat oor die aansoek besluit, en die verslag oor openbare deelname wat die aansoeker aan die owerheid gee (GN R267 reg 19), kry jou kommentaar en jou naam.',
+	// Give my name and email to the applicant for the register of interested and affected parties (GN R267 reg 18)
+	'333a2d46': 'Gee my naam en e-posadres aan die aansoeker vir die register van belanghebbende en geaffekteerde partye (GN R267 reg 18)',
+	// The applicant keeps that register while the application is considered and for two years after a licence is granted. Without the tick, the applicant gets your name and comment, not your email.
+	'5c2fec15': 'Die aansoeker hou daardie register solank die aansoek oorweeg word en vir twee jaar nadat ’n lisensie toegestaan is. Sonder die regmerkie kry die aansoeker jou naam en kommentaar, maar nie jou e-posadres nie.',
+	// Posting…
+	'44539655': 'Plaas tans…',
+	// Post comment
+	'11065b5e': 'Plaas kommentaar',
+	// Sign in to comment
+	'954cf5cd': 'Teken in om kommentaar te lewer',
+	// Commenting needs an account, so every comment has a name. You don’t need to be a member of the project: the account reads only what this link shows.
+	'9ee9f497': 'Jy het ’n rekening nodig om kommentaar te lewer, sodat elke kommentaar ’n naam het. Jy hoef nie ’n lid van die projek te wees nie: die rekening lees net wat hierdie skakel wys.',
 	// Print a summary for members
 	'ff85468b': 'Druk ’n opsomming vir lede',
-	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
-	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// Period
 	'87248424': 'Tydperk',
 	// Print or save as PDF
 	'80a077b4': 'Druk of stoor as PDF',
+	// One or two pages of this result over the period you choose, to print or save as a PDF and send to members. The link itself isn’t printed.
+	'0a1b225b': 'Een of twee bladsye van hierdie uitslag oor die tydperk wat jy kies, om te druk of as PDF te stoor en aan lede te stuur. Die skakel self word nie gedruk nie.',
 	// The mean flow was above the reserve in every month.
 	'bb92196c': 'Die gemiddelde vloei was elke maand bo die reserwe.',
 	// The mean flow was below the reserve in every month.
@@ -1249,12 +1461,14 @@ export const af: Catalogue = {
 	'caff1997': 'Gemiddelde lewering aan die hidrologiese eenhede',
 	// Hydrological units short of 95 % of their demand
 	'f0f6ca6b': 'Hidrologiese eenhede wat minder as 95 % van hul waterbehoefte kry',
-	// Approved
-	'c699109a': 'Goedgekeur',
-	// Approved with conditions
-	'8451eca8': 'Goedgekeur met voorwaardes',
-	// Refused
-	'9155ad83': 'Geweier',
+	// Licence issued
+	'c1ae57b1': 'Lisensie uitgereik',
+	// Licence refused
+	'6fa8b764': 'Lisensie geweier',
+	// Application rejected
+	'06bc1d4d': 'Aansoek afgekeur',
+	// Not considered: use already authorised
+	'978fe1a5': 'Nie oorweeg nie: gebruik reeds gemagtig',
 	// Decided
 	'99f42a3f': 'Besluit',
 	// {outcome} on {date}.
@@ -1321,8 +1535,6 @@ export const af: Catalogue = {
 	'b7c3703c': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy en lees hulle weer.',
 	// This notice changed since the page opened. Reload the page and read it again.
 	'e8f9dfe9': 'Hierdie kennisgewing het verander sedert die bladsy oopgemaak is. Herlaai die bladsy en lees dit weer.',
-	// Your current password is wrong.
-	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
 	'c5d6716a': 'Jou wagwoord is ’n oomblik gelede elders verander. Teken weer in.',
 	// This link is invalid or has expired. Ask for a new one.
@@ -1357,6 +1569,24 @@ export const af: Catalogue = {
 	'f3414d07': 'Iets in wat jy gestuur het, kan nie gestoor word nie (’n verborge beheerkarakter, of ’n getal wat heeltemal te groot is). Kyk na wat jy ingevul het en probeer weer.',
 	// This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.
 	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
+	// You are the only owner of a project or the only admin of a team. Hand it to someone else first.
+	'72b3c72f': 'Jy is die enigste eienaar van ’n projek of die enigste administrateur van ’n span. Gee dit eers aan iemand anders oor.',
+	// That code isn’t right. Enter the newest code from your authenticator app, or one of your recovery codes.
+	'adb80c07': 'Daardie kode is nie reg nie. Tik die nuutste kode van jou verifikasie-app in, of een van jou herstelkodes.',
+	// Too many wrong codes. Try again in {wait}.
+	'c7ae688e': 'Te veel verkeerde kodes. Probeer weer oor {wait}.',
+	// Your sign-in timed out. Enter your email and password again.
+	'af1c1fed': 'Jou intekening het verval. Tik weer jou e-posadres en wagwoord in.',
+	// Two-step sign-in is already on. Turn it off first to set up another authenticator app.
+	'0343cbd2': 'Tweestap-intekening is reeds aan. Skakel dit eers af om ’n ander verifikasie-app op te stel.',
+	// Start setting up two-step sign-in again.
+	'362ea51a': 'Begin weer om tweestap-intekening op te stel.',
+	// This needs two-step sign-in. Set up an authenticator app on your Account page first.
+	'32d75bec': 'Hiervoor is tweestap-intekening nodig. Stel eers op jou rekeningbladsy ’n verifikasie-app op.',
+	// This needs two-step sign-in. Sign out, then sign in again with a code from your authenticator app.
+	'380b94ff': 'Hiervoor is tweestap-intekening nodig. Teken uit, en teken dan weer in met ’n kode van jou verifikasie-app.',
+	// You have posted 10 comments in the last hour. Wait a while, then try again.
+	'2ae5aea1': 'Jy het die afgelope uur 10 kommentare geplaas. Wag ’n rukkie en probeer dan weer.',
 	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
 	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
@@ -1381,14 +1611,10 @@ export const af: Catalogue = {
 	'9df7013d': 'Iets het verkeerd geloop. Probeer weer.',
 	// The reminder to confirm your email address could not be loaded. Check your connection, then reload the page.
 	'25601c1d': 'Die herinnering om jou e-posadres te bevestig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
-	// Reload page
-	'4abb303f': 'Herlaai bladsy',
 	// Enter a display name.
 	'a7f2031b': 'Tik ’n vertoonnaam in.',
 	// Use at most 100 characters.
 	'c5951029': 'Gebruik hoogstens 100 karakters.',
-	// Enter your current password.
-	'f555922c': 'Tik jou huidige wagwoord in.',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -1413,8 +1639,6 @@ export const af: Catalogue = {
 	'2cc30838': 'Wagwoord',
 	// Changing your password signs you out on every other device. This browser stays signed in.
 	'a7a7cd70': 'As jy jou wagwoord verander, word jy op elke ander toestel uitgeteken. Hierdie blaaier bly ingeteken.',
-	// Current password
-	'8eedf1f3': 'Huidige wagwoord',
 	// New password
 	'6a3aaab2': 'Nuwe wagwoord',
 	// At least 8 characters.
@@ -1517,20 +1741,40 @@ export const af: Catalogue = {
 	'50b26149': 'Aanvaar',
 	// Decline
 	'58eaef39': 'Wys af',
+	// Was this alert useful?
+	'406db233': 'Was hierdie waarskuwing nuttig?',
+	// Your answer
+	'212940e8': 'Jou antwoord',
+	// Yes, it was useful
+	'c7f43ae2': 'Ja, dit was nuttig',
+	// No, it wasn’t useful
+	'a92856c1': 'Nee, dit was nie nuttig nie',
+	// Choose Yes or No.
+	'6bfca88b': 'Kies Ja of Nee.',
+	// Anything to add? (optional)
+	'0e4aecaf': 'Iets om by te voeg? (opsioneel)',
+	// Your WUA reads your answer and comment without your name. Nothing is kept until you press Send.
+	'50a68d80': 'Jou WGV lees jou antwoord en kommentaar sonder jou naam. Niks word gehou voordat jy op Stuur druk nie.',
+	// Keep it to {max} characters.
+	'0c931d1c': 'Gebruik hoogstens {max} karakters.',
+	// One moment…
+	'cf936b69': 'Net ’n oomblik…',
+	// Send
+	'f28e14cf': 'Stuur',
+	// Manage alerts
+	'5ac110b9': 'Bestuur waarskuwings',
+	// This link doesn’t work any more: it lasts 30 days, and only while you are a member of the catchment.
+	'2c2ee394': 'Hierdie skakel werk nie meer nie: dit bly 30 dae geldig, en net solank jy ’n lid van die opvanggebied is.',
+	// This link is incomplete. Open it again from the email, or copy the whole link.
+	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// Stop alert emails
 	'ac585d38': 'Stop waarskuwings-e-posse',
 	// Stop getting these alert emails? You can turn them back on from your account at any time.
 	'72528562': 'Wil jy ophou om hierdie waarskuwings-e-posse te kry? Jy kan dit enige tyd weer vanaf jou rekening aanskakel.',
-	// One moment…
-	'cf936b69': 'Net ’n oomblik…',
 	// Stop these emails
 	'c156b4db': 'Stop hierdie e-posse',
-	// Manage alerts
-	'5ac110b9': 'Bestuur waarskuwings',
 	// This link doesn’t work any more: a newer email may have replaced it, or you may no longer be a member of the catchment.
 	'd526c5e1': 'Hierdie skakel werk nie meer nie: ’n nuwer e-pos het dit dalk vervang, of jy is dalk nie meer ’n lid van die opvanggebied nie.',
-	// This link is incomplete. Open it again from the email, or copy the whole link.
-	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
 	// {page} · My hydrological unit
 	'c1fd658c': '{page} · My hidrologiese eenheid',
 	// My hydrological units
@@ -1567,6 +1811,14 @@ export const af: Catalogue = {
 	'78baf9da': 'Waar hierdie syfers vandaan kom',
 	// What is “modelled”?
 	'b7c8226b': 'Wat beteken “deur die model bereken”?',
+	// {organisation} decides what is done with your farm’s information in this catchment. Ask them first about it, or to see, correct or delete it:
+	'3f5aed22': '{organisation} besluit wat in hierdie opvanggebied met jou hidrologiese eenheid se inligting gedoen word. Vra hulle eerste daaroor, of om dit te sien, reg te stel of uit te vee:',
+	// Your WUA
+	'2940b781': 'Jou WGV',
+	// The organisation that runs this catchment decides what is done with your farm’s information. It hasn’t added a contact here yet: ask the person who invited you, or your WUA.
+	'd82dcb91': 'Die organisasie wat hierdie opvanggebied bestuur, besluit wat met jou hidrologiese eenheid se inligting gedoen word. Dit het nog nie ’n kontakpersoon hier bygevoeg nie: vra die persoon wat jou uitgenooi het, of jou WGV.',
+	// We run the app for them. How we handle your information, and how to ask us:
+	'3bb1e71b': 'Ons bedryf die app vir hulle. Hoe ons jou inligting hanteer, en hoe om ons te vra:',
 	// Why?
 	'50d99212': 'Hoekom?',
 	// 1. Was water shared fairly?
@@ -1599,8 +1851,14 @@ export const af: Catalogue = {
 	'3bf754b9': 'Onthou jy dit?',
 	// If {email} still needs confirming, a new link is on its way. Check your inbox and spam folder.
 	'9a0aaea5': 'As {email} nog bevestig moet word, is ’n nuwe skakel op pad. Kyk in jou inkassie en gemorspos.',
+	// Enter one of your recovery codes.
+	'5457b62c': 'Tik een van jou herstelkodes in.',
 	// Welcome back. Sign in to your catchment projects.
 	'0650eb3f': 'Welkom terug. Teken in by jou opvanggebiedprojekte.',
+	// Your account has been deleted
+	'57d933f4': 'Jou rekening is uitgevee',
+	// We emailed you what was deleted and what was kept.
+	'7b0e2947': 'Ons het vir jou ge-e-pos wat uitgevee is en wat behou is.',
 	// Check your email to finish signing up
 	'6460f76e': 'Kyk in jou e-pos om klaar te registreer',
 	// We sent a confirmation link to **{email}**. Open it to confirm your address, then sign in here.
@@ -1613,6 +1871,16 @@ export const af: Catalogue = {
 	'1ed87a58': 'Stuur die skakel weer',
 	// **Your email address isn’t confirmed yet.** Open the link we emailed to {email}, then sign in again.
 	'5b10b774': '**Jou e-posadres is nog nie bevestig nie.** Maak die skakel oop wat ons na {email} ge-e-pos het, en teken dan weer in.',
+	// Recovery code
+	'd01c975f': 'Herstelkode',
+	// One of the codes you saved when you set up two-step sign-in. Each works once.
+	'ea77aa7b': 'Een van die kodes wat jy gestoor het toe jy tweestap-intekening opgestel het. Elkeen werk een keer.',
+	// Open the app on your phone and enter the 6-digit code it shows for Water Management.
+	'fa62aa3c': 'Maak die app op jou foon oop en tik die 6-syferkode in wat dit vir Water Management wys.',
+	// Use a code from the app instead
+	'a43288ae': 'Gebruik eerder ’n kode van die app',
+	// Lost your phone? Use a recovery code
+	'3023ae8f': 'Foon verloor? Gebruik ’n herstelkode',
 	// Forgot password?
 	'e2619568': 'Wagwoord vergeet?',
 	// Signing in…
@@ -1743,8 +2011,6 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
-	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.
 	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// We’ve sent a new link to {email}.

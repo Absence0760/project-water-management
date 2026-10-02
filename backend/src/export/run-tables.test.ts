@@ -5,6 +5,7 @@ import {
 	chirpsFactorLines,
 	curtailmentLines,
 	demandObjectLines,
+	riverTakeLines,
 	droughtRestrictionLines,
 	ewrAssuranceLines,
 	otherUserLines,
@@ -537,6 +538,23 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect([...summaryCsvLines(meta, summary)]).not.toContain('Demand objects (whole run)');
 	});
 
+	it('engine 1.66.0: lists the river abstractions with what each pump left unmet', () => {
+		const town = { key: 'town', name: 'Town', avgTakeM3Day: 400, pumpM3Day: 500, avgPumpLimitedM3Day: 33.5, daysPumpLimited: 4 };
+		const crops = { key: 'crops', name: 'Farm: crops', avgTakeM3Day: 900, pumpM3Day: null, poolM3: 1000, avgPoolStorageM3: 750 };
+		const lines = [...riverTakeLines({ ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [crops, town] }] })];
+		expect(lines[0]).toBe('River abstractions (whole run)');
+		expect(lines[1]).toBe(
+			'Hydrological unit,River abstraction,Pump capacity (m³/day),Average pumped (m³/day),Average demand the pump capacity left unmet (m³/day),Days the pump capacity left demand unmet,Pool capacity (m³),Average pool storage (m³)'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Crops,no limit,900,,,1000,750');
+		expect(lines[3]).toBe('"Farm, upper",Town,500,400,33.5,4,,');
+		// No pump capacity anywhere (or a run before 1.66.0): no pump-limited columns; no abstractions: no block.
+		expect([...riverTakeLines({ ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [crops] }] })][1]).not.toMatch(/unmet/);
+		expect([...riverTakeLines(summary)]).toEqual([]);
+		expect([...summaryCsvLines(meta, { ...summary, farms: [{ ...summary.farms[0]!, riverTakes: [town] }] })]).toContain('River abstractions (whole run)');
+		expect([...summaryCsvLines(meta, summary)]).not.toContain('River abstractions (whole run)');
+	});
+
 	it('engine 1.56.0: a Source column when an object records one, "not recorded" for the rest', () => {
 		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
 		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [{ ...object, source: 'meter' as const }, { ...object, id: 't', name: 'Town' }] }] })];
@@ -547,6 +565,18 @@ describe('curtailment and EWR site blocks (Q17, engine 0.17.0)', () => {
 		expect(lines[3]).toBe('"Farm, upper",Town,domestic,not recorded,first,internal,25,20,5,80,0,1');
 		// No object records one (every run before engine 1.56.0): no column.
 		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Source/);
+	});
+
+	it('engine 1.64.0: a Rank column when an object has a rank within its priority, blank for the rest', () => {
+		const object = { id: 'v', name: 'Village', category: 'domestic' as const, priority: 'first' as const, destination: 'internal' as const, avgDemandM3Day: 25, avgSuppliedM3Day: 20, avgDeficitM3Day: 5, fractionSupplied: 0.8, avgReturnedM3Day: 0, daysShort: 1 };
+		const lines = [...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [{ ...object, rank: 2 }, { ...object, id: 't', name: 'Town' }] }] })];
+		expect(lines[1]).toBe(
+			'Hydrological unit,Demand object,Category,Priority,Rank within priority,Destination,Average demand (m³/day),Average supplied (m³/day),Average deficit (m³/day),Demand supplied (%),Average returned (m³/day),Days short'
+		);
+		expect(lines[2]).toBe('"Farm, upper",Village,domestic,first,2,internal,25,20,5,80,0,1');
+		expect(lines[3]).toBe('"Farm, upper",Town,domestic,first,,internal,25,20,5,80,0,1');
+		// No object has one (every run before engine 1.64.0): no column.
+		expect([...demandObjectLines({ ...summary, farms: [{ ...summary.farms[0]!, demandObjects: [object] }] })][1]).not.toMatch(/Rank/);
 	});
 
 	it('Q11: labels the equitable share as a fairness benchmark, never a gain, and carries the fixed footnote', () => {

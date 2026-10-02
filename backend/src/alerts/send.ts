@@ -25,12 +25,12 @@ import { pickNotice } from '@water-management/engine';
 import { hashToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { safeError } from '../logging/safeError.js';
-import { alertMail, digestMail, type AlertFacts, type MailProject, type Recipient } from '../mail/alerts.js';
+import { alertMail, digestMail, type AlertFacts, type Feedback, type MailProject, type Recipient } from '../mail/alerts.js';
 import { sendMail, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
-import { alertsEnabled } from './evaluate.js';
+import { alertsEnabled, newestForecast } from './evaluate.js';
 import type { AlertKind, AlertMode } from './rules.js';
-import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
+import { alertsTokenSecret, feedbackPageUrl, feedbackToken, newNonce, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
 import { logEvent } from '../logging/logEvent.js';
 
 export interface Claimed {
@@ -112,6 +112,26 @@ async function subscriptionToken(db: Db, projectId: string, kind: AlertKind | 'a
 	return unsubscribeToken(nonce, secret);
 }
 
+/**
+ * The mail's "Was this useful?" links (151_alert_feedback): the recipient's
+ * feedback row for this event (a digest: its first line), made now, or the
+ * one a failed attempt made, so a retried mail carries the same link. As the
+ * recipient, and only for a delivery of theirs being sent
+ * (app_alert_answer_slot). The links record nothing on their own: the
+ * page asks before it sends an answer.
+ */
+async function feedbackLinks(db: Db, eventId: string, digest: boolean, secret: string): Promise<Feedback> {
+	const nonce = newNonce();
+	const { rows } = await db.query<{ nonce: Buffer }>('SELECT app_alert_answer_slot($1, $2, $3, $4) AS nonce', [
+		eventId,
+		digest,
+		nonce,
+		hashToken(feedbackToken(nonce, secret))
+	]);
+	const token = feedbackToken(rows[0]!.nonce, secret);
+	return { yesUrl: feedbackPageUrl(token, true), noUrl: feedbackPageUrl(token, false) };
+}
+
 interface Context {
 	recipient: Recipient;
 	role: string;
@@ -160,8 +180,21 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 			if (!n[0]) return 'cannot see this farm';
 			return { kind: 'dam_below', farm: n[0].name, pct: Number(d.pct), threshold: e.threshold, source: d.source === 'forecast' ? 'forecast' : 'latest', date: String(d.date), madeOn: d.madeOn ?? null };
 		}
-		case 'ewr_forecast_fail':
-			return { kind: 'ewr_forecast_fail', days: Number(d.days), of: Number(d.of), from: String(d.from), to: String(d.to), madeOn: String(d.madeOn), threshold: e.threshold };
+		case 'ewr_forecast_fail': {
+			// A digest line sent after rain was recorded past the forecast, with no newer one made, says so
+			// (the event is left as it is meanwhile: evaluate.ts newestForecast). Calendar days only, so no time zone.
+			const outOfDate = e.state === 'firing' ? ((await newestForecast(db, c.project_id, DEFAULT_TIME_ZONE))?.outOfDate ?? null) : null;
+			return {
+				kind: 'ewr_forecast_fail',
+				days: Number(d.days),
+				of: Number(d.of),
+				from: String(d.from),
+				to: String(d.to),
+				madeOn: String(d.madeOn),
+				threshold: e.threshold,
+				outOfDate: outOfDate && { observedTo: outOfDate.observedTo, rainUntil: outOfDate.rainUntil }
+			};
+		}
 		case 'data_stale':
 			return { kind: 'data_stale', threshold: e.threshold, feeds: Array.isArray(d.feeds) ? d.feeds : [], series: d.series === true };
 		case 'feed_failing':
@@ -202,7 +235,8 @@ async function prepareOne(db: Db, c: Claimed, secret: string): Promise<Prepared>
 	const { rows: mode } = await db.query<{ mode: AlertMode }>('SELECT app_alert_my_mode($1, $2, $3) AS mode', [c.project_id, c.kind, c.node_id]);
 	const nodeForRow = c.kind === 'dam_below' && ctx.role === 'farmer' ? c.node_id : null;
 	const token = await subscriptionToken(db, c.project_id, c.kind, nodeForRow, mode[0]!.mode, secret);
-	return { mail: alertMail(ctx.recipient, ctx.project, f, { pageUrl: unsubscribePageUrl(token), oneClickUrl: oneClickUrl(token) }) };
+	const feedback = await feedbackLinks(db, c.event_id, false, secret);
+	return { mail: alertMail(ctx.recipient, ctx.project, f, { pageUrl: unsubscribePageUrl(token), oneClickUrl: oneClickUrl(token) }, feedback) };
 }
 
 const finish = (c: Pick<Claimed, 'event_id' | 'user_id'>, status: 'sent' | 'skipped' | 'failed' | 'retry', reason: string | null = null) =>
@@ -281,7 +315,8 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 				items,
 				{ pageUrl: unsubscribePageUrl(token), oneClickUrl: oneClickUrl(token) },
 				dailyCap(),
-				rest.counted.length
+				rest.counted.length,
+				await feedbackLinks(db, used[0]!.event_id, true, secret)
 			);
 			return { mail, used, skipped };
 		});

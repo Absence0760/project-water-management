@@ -1146,12 +1146,15 @@ export interface NetworkNode {
 	lossReturnFraction: number;
 	/**
 	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
-	 * known: the run estimates capacity ÷ 3 m (ESTIMATED_DAM_DEPTH_M) and warns.
+	 * known: the run estimates it from the capacity (estimatedDamAreaM2, engine
+	 * ≥ 1.63.0; capacity ÷ 3 m before) and warns.
 	 */
 	damAreaFullM2: number | null;
 	/**
-	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b
-	 * (0 < b ≤ 3). Default 0.7 (Liebe et al. 2005, small reservoirs).
+	 * Exponent b of the dam's area–storage relation A = A_full × (S / capacity)^b.
+	 * Default 0.7 (Liebe et al. 2005, small reservoirs). A save takes 0 < b ≤ 1
+	 * (DAM_AREA_EXPONENT_MAX, engine ≥ 1.63.0: no basin has b ≥ 1); a run still
+	 * takes an older document's b up to 3, with a warning.
 	 */
 	damAreaExponent: number;
 	/** Seepage per day, as a fraction of the dam's storage (0–1); it joins the outflow. Default 0. */
@@ -1264,6 +1267,18 @@ export interface NetworkNode {
 	 * default, no warning), 0 = it takes nothing from the river. A gauge has none.
 	 */
 	pumpCapacityM3Day?: number | null;
+	/**
+	 * Farms only (engine ≥ 1.65.0, issue #344, docs/model.md §2.7j): where the
+	 * unit's crops take their water. 'dam' (default, absent): from the dam
+	 * side under the unit's supply rule, every engine before 1.65.0. 'river':
+	 * a river abstraction of their own beside the dam, its pump
+	 * `cropRiverPumpM3Day` and an optional pool `cropRiverPoolM3`.
+	 */
+	cropWaterSource?: WaterSource;
+	/** The crops' river pump capacity, m³/day, under `cropWaterSource` 'river'; null / absent = no limit (the run warns); 0 = no pump. */
+	cropRiverPumpM3Day?: number | null;
+	/** A pool at the crops' river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	cropRiverPoolM3?: number | null;
 	/** 'trigger' only: switch to the river when the dam holds less than this fraction of its capacity (start of the day). Default 0.4. */
 	supplyTriggerPct?: number;
 	/** 'trigger' only: switch back to the dam once it holds at least this fraction (≥ the trigger). Default 0.6. */
@@ -1348,6 +1363,28 @@ export const SUPPLY_DEFAULTS = {
 } as const;
 
 /**
+ * Where a demand takes its water (engine ≥ 1.65.0, issue #344, docs/model.md
+ * §2.7j): 'dam' — the unit's dam side under its supply rule, as every engine
+ * before 1.65.0 (the default); 'river' — a river abstraction of its own
+ * beside the dam, with its own pump and an optional pool.
+ */
+export const WATER_SOURCES = ['dam', 'river'] as const;
+export type WaterSource = (typeof WATER_SOURCES)[number];
+
+/** Each water source in plain words, as the node form, the scenario form and run comparison show it. */
+export const WATER_SOURCE_LABEL: Record<WaterSource, string> = {
+	dam: 'the unit’s supply (dam side)',
+	river: 'its own river abstraction'
+};
+
+/** What a node without the crop water source fields (engine ≥ 1.65.0) runs as: the crops on the dam. */
+export const WATER_SOURCE_DEFAULTS = {
+	cropWaterSource: 'dam',
+	cropRiverPumpM3Day: null,
+	cropRiverPoolM3: null
+} as const;
+
+/**
  * What a node without the operating-rule fields (engine ≥ 1.32.0, issue #204,
  * docs/model.md §2.7h) runs as: no hands-off flow, the EWR not kept, and the
  * one `divertCapacityM3Day` all year.
@@ -1421,11 +1458,56 @@ export const DAM_CURVE_MAX_ROWS = 200;
 export const DAM_AREA_EXPONENT = 0.7;
 
 /**
- * Mean depth used to estimate a dam's full-supply area when none is entered:
- * area = capacity ÷ 3 m, about the median mean depth of South African minor
- * dams (Mantel & Hughes 2023). A run that uses it says so (warning W6).
+ * The largest dam area exponent a save takes (engine ≥ 1.63.0, issue #90;
+ * provisional decision 2026-10-01, to be confirmed by the client's
+ * hydrologist). Any area–stage power law V ∝ h^m gives b = (m − 1)/m < 1, so
+ * b > 1 is no real basin shape; 1 (a vertical-sided pond) is the bound. The
+ * engine still runs an older document's b up to 3 (the b > 1 limiter, model.md
+ * §2.7a) and warns.
  */
-export const ESTIMATED_DAM_DEPTH_M = 3;
+export const DAM_AREA_EXPONENT_MAX = 1;
+
+/**
+ * A dam's full-supply area when none is entered (engine ≥ 1.63.0, issue #90,
+ * N2; provisional decision 2026-10-01, to be confirmed by the client's
+ * hydrologist): A = 7.2 · C^0.77 m² for a capacity C in m³, the generalised
+ * relation for South African farm dams of all shapes of Maaren & Moolman
+ * (1985, ACRU Report 22, pp. 428–441), as quoted by Sawunyama (2013, IAHS Publ. 362,
+ * p. 59), who warns it is a poor guide to any one dam (enter the area where known). It replaces
+ * capacity ÷ 3 m (a 3 m mean depth whose source could not be verified): a
+ * small dam is shallower than a large one (mean depth C ÷ A: about 1.2 m at
+ * 10 000 m³, 2.0 m at 100 000 m³, 3.3 m at 1 000 000 m³). A run that uses it
+ * says so (warning W6).
+ */
+export const ESTIMATED_DAM_AREA = { coefficient: 7.2, exponent: 0.77 } as const;
+
+/** The estimated full-supply area of a dam of `capacityM3` (m²); 0 for no dam. See ESTIMATED_DAM_AREA. */
+export function estimatedDamAreaM2(capacityM3: number): number {
+	return capacityM3 > 0 ? ESTIMATED_DAM_AREA.coefficient * capacityM3 ** ESTIMATED_DAM_AREA.exponent : 0;
+}
+
+/** The engine that moved the estimate from capacity ÷ 3 m to ESTIMATED_DAM_AREA. */
+export const ESTIMATED_DAM_AREA_SINCE = '1.63.0';
+
+/**
+ * The estimated area an unknown dam ran on in a run saved by `engineVersion`:
+ * capacity ÷ 3 m before ESTIMATED_DAM_AREA_SINCE, estimatedDamAreaM2 from it
+ * (and when the version is absent or not x.y.z), so a stored run's audit
+ * workbook recomputes the area its own engine used.
+ */
+export function estimatedDamAreaForEngine(capacityM3: number, engineVersion?: string): number {
+	const parse = (v: string | undefined) => (v && /^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : null);
+	const run = parse(engineVersion);
+	const since = parse(ESTIMATED_DAM_AREA_SINCE)!;
+	if (run && capacityM3 > 0) {
+		const d = run[0]! - since[0]! || run[1]! - since[1]! || run[2]! - since[2]!;
+		if (d < 0) return capacityM3 / 3;
+	}
+	return estimatedDamAreaM2(capacityM3);
+}
+
+/** How the estimate is written in labels and warnings. */
+export const ESTIMATED_DAM_AREA_LABEL = '7.2 × capacity^0.77 (Maaren & Moolman 1985)';
 
 /** An irrigation system with its SABI 2021 efficiency range and the value the app offers for it. */
 export interface IrrigationSystem {
@@ -1472,6 +1554,54 @@ export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
  * not a model change.
  */
 export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, lossReturnFraction: 0.5 } as const;
+
+/**
+ * A new network node with every default a newly created node takes: a gauge
+ * when it drains nowhere (the outflow), else a hydrological unit. Shared by
+ * the Network's Add (frontend model/editor.svelte.ts newNode) and the server's
+ * "start from the map" (backend delineation/start.ts), so both make the same
+ * node. Only creation reads it; a run never does, so it is not a model change.
+ */
+export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: string | null): NetworkNode {
+	return {
+		id,
+		name: '',
+		kind: downstreamNodeId === null ? 'gauge' : 'farm',
+		downstreamNodeId,
+		sortOrder,
+		areaKm2: 0,
+		areaHiKm2: 0,
+		areaLoKm2: 0,
+		flowShareManual: null,
+		pctUpstreamToDam: 1,
+		pctRunoffToDam: 0,
+		damCapacityM3: 0,
+		damInitialPct: 0,
+		damMinPct: 0,
+		divertCapacityM3Day: 0,
+		// Drip (0.90, the client's default, issue #90) with half its losses returning (audit N1).
+		...NEW_FARM_IRRIGATION,
+		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
+		damAreaFullM2: null,
+		damAreaExponent: DAM_AREA_EXPONENT,
+		damSeepagePerDay: 0,
+		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
+		...USER_DEFAULTS,
+		...BOREHOLE_DEFAULTS,
+		// No survey curve, no release, all seepage returning (WP-3.5).
+		...DAM_STORAGE_DEFAULTS,
+		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.30.0).
+		...DEVELOPMENT_DEFAULTS,
+		// The dam only, no river pump (WP-3.8).
+		...SUPPLY_DEFAULTS,
+		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
+		...OPERATING_DEFAULTS,
+		// The crops on the dam (engine 1.65.0).
+		...WATER_SOURCE_DEFAULTS,
+		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
+		ewrSite: true
+	};
+}
 
 /**
  * The efficiency and loss return that replace an engine < 0.16.0 node's
@@ -1535,6 +1665,10 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;
 				n.supplyTriggerPct ??= SUPPLY_DEFAULTS.supplyTriggerPct;
 				n.supplyStopPct ??= SUPPLY_DEFAULTS.supplyStopPct;
+				// The crops' water source (engine ≥ 1.65.0): the dam unless set.
+				n.cropWaterSource ??= WATER_SOURCE_DEFAULTS.cropWaterSource;
+				if (n.cropRiverPumpM3Day === undefined) n.cropRiverPumpM3Day = WATER_SOURCE_DEFAULTS.cropRiverPumpM3Day;
+				if (n.cropRiverPoolM3 === undefined) n.cropRiverPoolM3 = WATER_SOURCE_DEFAULTS.cropRiverPoolM3;
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0): off unless set.
 				if (n.handsOffM3Day === undefined) n.handsOffM3Day = OPERATING_DEFAULTS.handsOffM3Day;
 				n.handsOffEwr ??= OPERATING_DEFAULTS.handsOffEwr;
@@ -1831,10 +1965,13 @@ export const DEMAND_OBJECT_SOURCE_SIZING: Record<DemandObjectSource, DemandObjec
 /**
  * When a demand object is supplied against the unit's crops on a short day
  * (docs/model.md §2.7f): 'first' before them, 'shared' pro rata with them,
- * 'last' after them. Within one class, objects share pro rata.
+ * 'last' after them. Within one class, objects go by their rank (engine ≥
+ * 1.64.0, DemandObject.rank), and objects of one rank share pro rata.
  */
 export const DEMAND_OBJECT_PRIORITIES = ['first', 'shared', 'last'] as const;
 export type DemandObjectPriority = (typeof DEMAND_OBJECT_PRIORITIES)[number];
+/** The highest rank a demand object takes within its priority class (engine ≥ 1.64.0, DemandObject.rank). */
+export const DEMAND_OBJECT_MAX_RANK = 99;
 
 /**
  * Where a demand object's water ends up: 'internal' — used in the catchment,
@@ -1897,6 +2034,16 @@ export interface DemandObject {
 	/** Share (0–1) of what it is supplied that returns to the river below the unit the same day (treated wastewater). 0 when external. */
 	returnPct: number;
 	priority: DemandObjectPriority;
+	/**
+	 * Its place within its priority class (engine ≥ 1.64.0, issue #343,
+	 * docs/model.md §2.7f): of a unit's 'first' objects, rank 1 is supplied
+	 * before rank 2, and so on; likewise its 'last' objects, after the crops.
+	 * Equal ranks share pro rata. A whole number ≥ 1; null or absent = 1,
+	 * so every object saved before it runs as it did. Ignored on a 'shared'
+	 * object, which always shares with the crops. Together the classes and
+	 * ranks give the unit's numbered supply order (supplyOrder).
+	 */
+	rank?: number | null;
 	destination: DemandObjectDestination;
 	/** false = kept on record but not modelled (no demand, no results). */
 	enabled: boolean;
@@ -1921,6 +2068,18 @@ export interface DemandObject {
 	 * not recorded (every object saved before it); the run is the same.
 	 */
 	source?: DemandObjectSource | null;
+	/**
+	 * Where its water comes from (engine ≥ 1.65.0, issue #344, docs/model.md
+	 * §2.7j): 'dam' (null or absent, every object saved before it) — the
+	 * unit's dam side under its supply rule; 'river' — a river abstraction of
+	 * its own beside the dam, with the pump `riverPumpM3Day` and the pool
+	 * `riverPoolM3`.
+	 */
+	waterSource?: WaterSource | null;
+	/** Its river pump capacity, m³/day, under 'river'; null / absent = no limit (the run warns); 0 = no pump. */
+	riverPumpM3Day?: number | null;
+	/** A pool at its river pump, m³ (starts full, area estimated); null / absent / 0 = none. Read only under 'river'. */
+	riverPoolM3?: number | null;
 	/** The detail of where the number comes from (which meter, which strategy and year, which norm), for the report. */
 	note: string;
 }
@@ -2234,6 +2393,34 @@ export interface FarmSummary {
 	 * Absent for a unit without any, and on older runs.
 	 */
 	demandObjects?: DemandObjectSummary[];
+	/**
+	 * The unit's river abstractions (engine ≥ 1.65.0, issue #344,
+	 * docs/model.md §2.7j), crops first then objects in id order: each one's
+	 * mean take (part of avgSuppliedM3Day) and, with a pool, its capacity and
+	 * mean storage. Absent for a unit without a river-sourced demand.
+	 */
+	riverTakes?: RiverTakeSummary[];
+}
+
+/** One river abstraction over the whole run (engine ≥ 1.65.0): `key` is 'crops' or the demand object's id. */
+export interface RiverTakeSummary {
+	key: string;
+	name: string;
+	avgTakeM3Day: number;
+	/** Its pump's capacity, m³/day; null = no limit. */
+	pumpM3Day: number | null;
+	/** With a pool: its capacity (m³) and mean storage at the end of the day. */
+	poolM3?: number;
+	avgPoolStorageM3?: number;
+	/**
+	 * Mean demand its pump capacity left unmet although the river (or its
+	 * pool) had the water, within its supply level and the allocation room
+	 * (engine ≥ 1.66.0, docs/model.md §2.7j), part of the unit's deficit; only
+	 * with a pump capacity, absent on older runs.
+	 */
+	avgPumpLimitedM3Day?: number;
+	/** Days the pump capacity left demand unmet (engine ≥ 1.66.0); only with a pump capacity. */
+	daysPumpLimited?: number;
 }
 
 /** One demand object over the whole run (engine ≥ 1.7.0), m³/day means like FarmSummary. */
@@ -2244,6 +2431,8 @@ export interface DemandObjectSummary {
 	/** Where its number comes from (engine ≥ 1.56.0); absent = not recorded, and on older runs. */
 	source?: DemandObjectSource;
 	priority: DemandObjectPriority;
+	/** Its rank within its priority class (engine ≥ 1.64.0); absent when it has none (it runs as 1), and on older runs. */
+	rank?: number;
 	destination: DemandObjectDestination;
 	avgDemandM3Day: number;
 	avgSuppliedM3Day: number;
@@ -3139,6 +3328,8 @@ export interface WaterBalanceRow {
 	rainOnDamsM3?: number;
 	/** Open-water evaporation from the dams (engine ≥ 0.16.0); absent on older runs. Seepage is in the outflow. */
 	damEvaporationM3?: number;
+	/** Evaporation from the river abstractions' pools (engine ≥ 1.65.0, docs/model.md §2.7j); their storage is in the opening and closing storage. Absent without a pool. */
+	poolEvaporationM3?: number;
 	/** Other water users' consumptive use: taken − returned (engine ≥ 0.22.0, WP-1.33); absent without users. */
 	otherUseM3?: number;
 	/** Groundwater pumped into supply and (engine ≥ 0.36.0, WP-3.9) into the dams, a gain to the surface balance (engine ≥ 0.23.0, WP-1.34); absent without boreholes. */
@@ -3158,7 +3349,7 @@ export interface WaterBalanceRow {
 	spillM3: number;
 	outflowM3: number;
 	closingStorageM3: number;
-	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − other use − stream depletion − seepage lost − conveyance losses − outflow − closing. */
+	/** opening + runoff + transfers + rain on dams + groundwater (+ storage set) − consumptive use − dam evaporation − pool evaporation − other use − stream depletion − seepage lost − conveyance losses − outflow − closing. */
 	residualM3: number;
 }
 

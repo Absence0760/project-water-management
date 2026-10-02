@@ -41,7 +41,9 @@ describe('the catalogue stays off untranslated routes', () => {
 		// The notes list the workspace shares with the farm card: it takes the farm card's words as a prop (WP-2.5).
 		'lib/components/notes/NotesList.svelte',
 		'lib/components/notes/notes.ts',
-		'lib/components/notes/words.ts'
+		'lib/components/notes/words.ts',
+		// The shared map: the farm view's map passes its words in (issue #326 A3, farm/farmMap.ts mapWords).
+		'lib/components/map/CatchmentMap.svelte'
 	]) {
 		it(`${file} imports no catalogue module`, () => {
 			expect(staticCatalogueImports(src(file))).toEqual([]);
@@ -68,6 +70,7 @@ describe('/share stays off the workspace’s code', () => {
 		'lib/components/share/SummaryControls.svelte',
 		'lib/components/share/scenario.ts',
 		'lib/components/share/ScenarioView.svelte',
+		'lib/components/share/ShareComments.svelte',
 		'lib/components/farm/format.ts',
 		'lib/components/farm/notice.ts',
 		'lib/components/farm/NoticeCard.svelte'

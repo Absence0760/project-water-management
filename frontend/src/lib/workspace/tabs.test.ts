@@ -5,6 +5,7 @@ import {
 	canOpenTab,
 	NAV_SECTIONS,
 	navSections,
+	LINKED_ONLY,
 	hasModelInputsToggle,
 	DEFAULT_HIDDEN_TABS,
 	hiddenChoice,
@@ -22,9 +23,9 @@ const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'c
 const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'allocations', 'history'];
 
 describe('visibleTabs', () => {
-	it('shows owners and editors every tab, in order', () => {
+	it('shows owners and editors every tab but the linked-only ones, in order', () => {
 		for (const role of ['owner', 'editor'] as const) {
-			expect(visibleTabs(role)).toEqual(ALL_TABS);
+			expect(visibleTabs(role)).toEqual(ALL_TABS.filter((id) => !LINKED_ONLY.includes(id)));
 			expect(visibleTabs(role, {}, PAGE)).toEqual(PAGE);
 			// The viewer toggle doesn't take anything away from them.
 			expect(visibleTabs(role, { showModelInputs: false }, PAGE)).toEqual(PAGE);
@@ -34,13 +35,13 @@ describe('visibleTabs', () => {
 	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
 		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
 		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
-		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer')).toEqual(['overview', 'map', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
 		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
 		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
 	});
 
 	it('gives a viewer every tab once "Show model inputs" is on', () => {
-		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications'));
+		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications' && !LINKED_ONLY.includes(id)));
 		expect(visibleTabs('viewer', { showModelInputs: true }, PAGE)).toEqual(PAGE);
 	});
 
@@ -199,7 +200,7 @@ describe('navSections', () => {
 	it('puts the outcomes first (the Summary a project opens on at the top), then the model, then review', () => {
 		expect(navSections(ALL_TABS)).toEqual([
 			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'map', 'crops', 'transfers', 'series', 'settings'] },
 			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
 		]);
 	});
@@ -259,3 +260,21 @@ describe('canOpenTab', () => {
 		expect(canOpenTab('viewer', 'overview')).toBe(true);
 	});
 });
+
+describe('the Map (issue #288; a sidebar row since #326 D3)', () => {
+	it('is listed for every member, after the Network, and nothing is linked-only now', () => {
+		expect(LINKED_ONLY).toEqual([]);
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			const shown = visibleTabs(role, { hidden: [] });
+			expect(shown).toContain('map');
+			expect(canOpenTab(role, 'map')).toBe(true);
+		}
+		const model = navSections(visibleTabs('owner', { hidden: [] })).find((s) => s.id === 'model')!;
+		expect(model.tabs.indexOf('map')).toBe(model.tabs.indexOf('network') + 1);
+		// A viewer sees it without "Show model inputs" (it shows results too), but not the Network.
+		const viewer = navSections(visibleTabs('viewer', { hidden: [] }));
+		expect(viewer.find((s) => s.id === 'model')?.tabs).toEqual(['map', 'series']);
+		expect(TAB_GROUP.map).toBe('core');
+	});
+});
+

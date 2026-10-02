@@ -64,12 +64,12 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). In Lambda, the API, worker and migrate entry points first read their secrets (session key, `DATABASE_URL`, …) from their own Secrets Manager secret, once per cold start, never from environment variables (`src/config/runtimeSecrets.ts`, [security.md § Runtime secrets](./security.md#runtime-secrets)); locally they come from `.env.development`. |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner, and loads the map's allowed reference datasets from the private reference bucket (`geo/referenceLoad.ts`, `load-reference.yml`, [deployment.md § Reference datasets](./deployment.md#reference-datasets)). `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). In Lambda, the API, worker and migrate entry points first read their secrets (session key, `DATABASE_URL`, …) from their own Secrets Manager secret, once per cold start, never from environment variables (`src/config/runtimeSecrets.ts`, [security.md § Runtime secrets](./security.md#runtime-secrets)); locally they come from `.env.development`. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront serves `index.html` for extension-less paths so deep links work (`spa_rewrite`; a missing file gets a 404 page, infra/README.md). A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
 | `scripts/wbt-import` | none (Python 3.14 + openpyxl) | Reads a b023 `.xlsm` into `project.json` and regression fixtures, written under `data/` (gitignored). |
-| `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
+| `infra` | none | Terraform: S3, CloudFront, WAF, security headers, the API Lambda + Function URL, the migrate Lambda and the job worker Lambda (all in a VPC; the worker's SQS queue, DLQ and 5-minute schedule in `jobs.tf`), RDS PostgreSQL 17 in private subnets, SES, ACM, Route 53, the map's tiles bucket (served at `/tiles/*`) and private reference bucket (`map_data.tf`), budget and alarms. Written and tested plan-only; not applied yet ([deployment.md](./deployment.md)). |
 
 ## Why one engine in two places
 
@@ -117,13 +117,13 @@ SvelteKit already gives every route its own chunk. The catchment workspace
 (`routes/projects/[id]`) is split further, because it carries most of the app:
 only the Overview tab (the default view) ships in the route's chunk, and each
 other tab (Network, Crops & demand, Transfers, Data, Settings & calibration,
-River & reserve, Hydrological units, Runs & results, Scenarios, History) is a dynamic `import()` of its component, as are the two
+River & reserve, Hydrological units, Runs & results, Scenarios, History, Map) is a dynamic `import()` of its component, as are the two
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and River & reserve's compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). Inside the Overview, the flow chart,
+water users). The Map tab loads its map component as one more chunk, and that loads MapLibre (and the PMTiles reader, with a basemap) only when the map is drawn, measured against a ceiling of their own (issue #288, [maps.md § CSP and bundle](./maps.md#csp-and-bundle)). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
 room for the section header, issue #17). The compare page loads its daily overlay and, only when a side
@@ -451,8 +451,8 @@ The app is a static SPA (`ssr = false`, `prerender = false` in
 `routes/+layout.ts`): every route renders in the browser from the fallback
 `index.html`. The public landing page (issue #57) is the exception.
 `routes/welcome/[[lang=locale]]/+page.ts` sets `ssr = true` and `prerender = true` (as do the
-legal pages, `routes/privacy` and `routes/terms`, and the methods page,
-`routes/methods`: `STATIC_PATHS` in
+legal pages, `routes/privacy` and `routes/terms`, the methods page,
+`routes/methods`, and the data sources' credits, `routes/data-sources`: `STATIC_PATHS` in
 `lib/auth/session.svelte.ts`), so the
 build writes `welcome.html` with the page's HTML and its meta and Open Graph
 tags in it: crawlers and link previews read it without running the app, and a
@@ -466,7 +466,7 @@ prerender and the hydration are in the address's language; `hooks.server.ts`
 alone, since the i18n state is module-wide and the fallback `index.html`
 must not inherit the last page's language. CloudFront's `spa_rewrite` function serves
 `/welcome` from `welcome.html`, `/welcome/af` from `welcome/af.html` (its
-`PRERENDERED` list), and `/privacy`, `/terms` and `/methods` from theirs (`infra/s3_cloudfront.tf`, guarded in
+`PRERENDERED` list), and `/privacy`, `/terms`, `/methods` and `/data-sources` from theirs (`infra/s3_cloudfront.tf`, guarded in
 `guardrails.tftest.hcl`, and `infra/scripts/cloudfront-functions.test.mjs`
 checks `PRERENDERED` against the routes and the language table, so a new
 language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in
@@ -708,8 +708,12 @@ alerts plug in as a further kind.
   functions that never return a payload. After the jobs and the alert
   mails, each tick sends the evidence pack notices the issue and withdraw
   routes queued (`evidence/notices.ts`, as each recipient;
-  [evidence-pack.md § Notices](./evidence-pack.md#notices)). Each tick also purges finished jobs
-  after 30 days, settled pack notices after 30, report rows after 8, and invites 90 days past their expiry
+  [evidence-pack.md § Notices](./evidence-pack.md#notices)). Then it sweeps any erratum
+  it hasn't swept with its current range (`app_erratum_sweep`, queuing one email per erratum,
+  project and owner whose project holds a run it may affect) and sends the queued known-bug
+  emails (`errata/notices.ts`, 153; [legal/known-defect-procedure.md](./legal/known-defect-procedure.md)).
+  Each tick also purges finished jobs
+  after 30 days, settled pack notices and erratum notices after 30, report rows after 8, and invites 90 days past their expiry
   (`app_purge_invites`, 048).
 - **Failure**: the transaction rolls back, and the failure is recorded in a new
   one. Retries back off `2^attempts` minutes; after `max_attempts` (default
@@ -750,6 +754,16 @@ alerts plug in as a further kind.
   catchment). The sweep row and its members are written by the request in
   the same transaction as the job, and completed by the job. At most 2
   pending per user.
+- **`assessment`** (roadmap WP-3.11, `jobs/handlers/assessment.ts`,
+  [api.md § Assessments](./api.md#assessments),
+  [scenarios.md § Cumulative impact](./scenarios.md#cumulative-impact-wp-311)):
+  the baseline, each of up to 8 scenarios alone and all of them together,
+  as the editor who asked, all on the current engine so every column is one
+  engine's. The members' ops were copied from their scenarios when the
+  assessment was written; the job checks again that they combine
+  (`combineScenarios`) and stores each member's summary and the cumulative
+  report (`cumulativeImpact`), or why it was refused. `progress` after each
+  run; no cancel. At most 2 pending per user.
 - **`auto_calibration`** (issue #153, `jobs/handlers/auto-calibration.ts`,
   [api.md § Automated calibration](./api.md#automated-calibration),
   [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
@@ -869,7 +883,10 @@ Settings → Automatic runs.
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
   replaces the current publication, never the first one, when none of its
   self-checks failed and it raises no warning the published run didn't (the
-  same sentence with other numbers or dates is the same warning), carrying
+  same sentence with other numbers or dates is the same warning), and no
+  API key has pushed into a series too short for the outlier limit since
+  the latest run a person made (`series.unchecked`, security.md § API keys),
+  carrying
   the WUA's notice and next-update date over; the audit event says `auto:
   true`, and so does the publication (`run_publication.auto`, 141), which
   is what the `farms_short` alert watches: a publication no person made
@@ -913,7 +930,8 @@ flowchart LR
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
    is held, and while that run is behind the recorded rain: its
-   `lastObserved` before the rain's last recorded day), the data feeds (staleness per feed, each at its own level) and
+   `lastObserved` before the rain's last recorded day; Active alerts and
+   the mails then say the firing event's forecast is out of date), the data feeds (staleness per feed, each at its own level) and
    the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly
@@ -930,11 +948,16 @@ flowchart LR
    transaction **as its recipient** (`withUser`): `app_alert_my_mode`
    re-checks their access and choice, and RLS limits what the mail can say
    (a farmer's names only their farm). The unsubscribe token is derived
-   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`).
+   there (`alerts/tokens.ts`; only the worker holds `ALERTS_TOKEN_SECRET`),
+   and so is the "Was this useful?" token, whose row the recipient's
+   transaction makes (`app_alert_answer_slot`, 151); the answer comes back
+   through the public `POST /alerts/feedback`, never by tracking.
    The mail goes out after that transaction, and `app_alert_finish` records
    `sent`, `skipped` (why) or a retry.
 4. **Purge.** The tick deletes deliveries after 180 days and events 180 days
-   after they cleared (`app_purge_alerts`).
+   after they cleared (`app_purge_alerts`), and "Was this useful?" rows 30
+   days after the mail if unanswered, an answer a year after it was given
+   (`app_purge_alert_answers`).
 
 The worker Lambda's metric line carries `AlertMailsSent` and
 `AlertMailsFailed`; `infra/jobs.tf` alarms on an alert storm and on
@@ -958,7 +981,7 @@ merges into:
 
 | Source | Reads | Writes | Format (checked against the live sources, 2026-09) |
 | --- | --- | --- | --- |
-| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–25 cells, or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
+| `chirps` | CHIRPS v3 daily rainfall, 0.05° grid: the weighted mean of 1–100 listed cells in at most 25 rows (the catchment boundary's, area weighted, from Settings → Data feeds → Use the catchment boundary: [maps.md § Rain from the boundary](./maps.md#rain-from-the-boundary)), or the area-weighted mean of every cell a bounding box overlaps (`config.bbox`, at most 100 cells in 25 rows), from one of v3's two daily products (`config.product`): `sat` (the default, from 1998) or `rnl` (from 1981) | `rain_chirps_mm` (or `rain_catchment_mm`, which makes CHIRPS the catchment rain itself, used raw: [model.md §2.4b](./model.md#24b-chirps-fallback-bias-correction), issue #51), mm, labelled `CHIRPS sat` / `CHIRPS rnl` v3.0 | A GeoTIFF per day on data.chc.ucsb.edu. `sat`: `daily/final/sat/` once the month is final (about three weeks after it ends), else `daily/prelim/sat/` (two days after each pentad). `rnl`: `daily/final/rnl/` only, 5–6 days behind, no preliminary product. Float32, LZW, one row per strip, the image directory at the end, -9999 over the sea |
 | `chirps_gefs` | The CHIRPS-GEFS v3 16-day forecast, same grid and cells (or box) | `rain_forecast_mm`, mm | One directory per issue date (~08:30 UTC) holding 16 GeoTIFFs, written one after another over about a minute; today's issue, else yesterday's, and only a complete one |
 | `dws` | A DWS gauge's verified daily mean flow | `flow_observed_m3s` (or reference / logger), m³/s | `HyData.aspx?Station=<code>100.00&DataType=Daily&…`: a `<pre>` holding a fixed-width `DATE     D AVG F/R  QUAL` table (date, flow in m³/s, quality code; a gap row leaves the flow blank and keeps the code); at most 20 years per request. Only river gauges (third letter `H`, sent as `SiteType=RIV`): DWS's station catalogue lists only H codes as River and only R codes as Reservoir, archived pages ask for R stations with `SiteType=RES` and E with `MET`, and a reservoir's daily table (variable 100.00) is its spillway discharge derived from the dam level, not the river's flow, so `R`, `E` and every other letter are refused by the config schema (`DWS_RIVER_GAUGE`). Our network gets HTTP 403 from the site, so the request follows two open-source clients and the layout an archived page (web.archive.org, 2024) (see [followups.md](./followups.md)) |
 
@@ -1421,6 +1444,14 @@ What differs from a report:
   (`evidence/packPdf.ts`); an editor asks again after a failure with
   `POST …/packs/:packId/pdf`. The download is a report's: a 60-second
   signed URL on `/packs/*` (`GET …/packs/:packId/pdf`).
+
+The issue also queues a `pack_reproduce` job (`jobs/handlers/pack-reproduce.ts`,
+154_pack_reproduce; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+the worker reads the pack's reproduction bundle back from the packs bucket
+(the same `s3:GetObject` on `packs/*` it HEADs PDFs with), checks it is the
+recorded bytes, runs the engine's `checkPackBundle` with the re-run, and
+records the outcome through `app_record_pack_reproduction`. The pack's page
+shows it (`reproduction` on `GET …/packs/:packId`); verify doesn't.
 
 ## Key choices
 

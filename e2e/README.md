@@ -188,7 +188,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 
 | Path | What |
 | --- | --- |
-| `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`) |
+| `playwright.config.ts` | Web servers (backend + built frontend; `E2E_DEV_SERVER=1` for `vite dev`, `E2E_PREBUILT=1` to serve an existing build), `timezoneId: 'UTC'`, no retries, blob reports for CI shards (`E2E_BLOB=1`). The backend keeps an idle connection 65 s, not Node's 5 s (`backend/src/http/keepAlive.ts`), so a spec's `page.request` reusing one after a long step isn't reset with `ECONNRESET` |
 | `support/env.ts` | The checkout's slot, and from it the ports and database URLs (dev-only docker credentials); `env.test.ts` tests the slot (`pnpm test`) |
 | `support/build-site.ts` | Builds the site under test with the checkout's API URL baked in (`pnpm -C e2e build:site`) |
 | `support/shards.ts`, `shard-list.ts`, `shard-timings.ts`, `../shard-timings.json` | CI's time-balanced shards: the packing (tested by `shards.test.ts`), one shard's `--test-list`, the report job's check and timings, and `pnpm gen:e2e:timings` (§ CI) |
@@ -197,6 +197,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make |
 | `support/static-server.ts`, `support/site.ts` | Serves the e2e frontend build on the site port, routed by CloudFront's `spa_rewrite` function itself (run from `infra/s3_cloudfront.tf` through `infra/scripts/cloudfront-functions.mjs`, so the two can't drift): `index.html` for an extension-less path (the SPA fallback), `/welcome` and the other prerendered pages from their HTML, the build's files as they are, the function's 404 page for a path with an extension outside the build's file locations (`/nope.pdf`), and a plain 404, as S3 answers, for a missing file inside them. `support/site.test.ts` (`pnpm -C e2e test`) pins each case. No dependencies |
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
+| `support/referenceData.ts` | Which panels' test ids need which reference-data loader, and the check (`referenceData.test.ts`, `pnpm test`) that every test reading one calls it itself (§ Rules for writing specs) |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
 | `tests/golden-path.spec.ts` | The new-user journey, in four tests ([The golden path](#the-golden-path)): register, create "Catchment D", build the network, upload two years of rain, flow and daily A-pan, run the model and read the results, all through the UI; then, on that catchment arranged through the API, crops and a transfer into a run and each unit's results; monthly A-pan and EWR into the run's summary, and a reload; two more catchments beside one with a run |
@@ -226,6 +227,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/share-links.spec.ts` | Read-only share links (WP-2.3 phase 2): an owner makes a link on the Overview's Share links panel and copies it; opened signed out in a fresh phone context it shows the reserve status and the WUA's notice in under 2 s, the token gone from the address bar, no farm name or note, and the flow chart (five farm holders); the list records the visit; withdrawing it gives the dead-link state (the same tab, only the fragment changed); a two-farm catchment gets no chart; a link without its token; axe on the panel and on `/share` in light and dark |
 | `tests/runoff-model.spec.ts` | GR4J is the only runoff model (engine 1.0.0): Settings has no model picker and no legacy parameters, GR4J's parameters save and a new run reports the runoff balance with no legacy badge; an old legacy run (planted in the database with `support/db.ts` `plantLegacyRun`, as the API can't make one) opens badged Workbook comparison, with no runoff model panel, and can't be nominated, published or signed off; run comparison shows it against a GR4J run; GR4J without A-pan evaporation is refused with the reason, after Settings warns |
 | `tests/gr4j-pe.spec.ts` | GR4J's PE input (issue #39): switching to a monthly PE row starts it from pan coefficient × A-pan and hides the pan coefficient; Save waits for a source; a lower monthly row saves, reloads, lowers the run's PET and raises natural flow, and leaves irrigation demand the same on every farm and day; the FAO-56 Table 5 helper waits for every month and a source, then fills the pan-coefficient row without saving |
+| `tests/evaporation-proposal.spec.ts` | Settings › Evaporation from the map (issue #326 B-evap): the boundary averaged over the synthetic reference-ET grid (`support/evaporation.ts` loads it) is proposed as GR4J's monthly PE beside the saved settings, with ET₀ ÷ A-pan flagged outside 0.6–0.85; Use asks, saves one settings revision the form reloads, History cites the dataset; Use waits for unsaved settings; no boundary says so; a viewer has no Use, and a phone doesn't scroll sideways |
 | `tests/chirps-bias.spec.ts` | A run lists the CHIRPS bias-correction factors it applied, and Settings can turn the correction off |
 | `tests/self-checks.spec.ts` | A run shows its self-checks, its water balance and a traced day that closes |
 | `tests/wr2012.spec.ts` | Entering WR2012 reference data is checked for plausibility, saved, and every run reports against it; run comparison lists the WR2012 inputs that changed and compares the ratios |
@@ -244,6 +246,17 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
 - **Every test makes its own users** through the API (`owner`, `signIn`,
   `register`). Tests share nothing and run fully in parallel against the one
   database. Don't depend on another test's data or on the order tests run in.
+- **A test that reads reference data loads it itself.** The proposal panels
+  and map layers read operator-loaded tables (land cover, the register of
+  dams, evaporation, quaternaries, the river network, gauging stations). Call
+  the loader (`loadSyntheticLandCover()`, `loadSyntheticDamRegister()`,
+  `loadSyntheticEvaporation()`, `loadSyntheticQuaternaries()`,
+  `loadSyntheticRivers()`, `loadSyntheticStations()`; idempotent, under a
+  setup lock) in the test, its describe's `beforeAll` or a file-wide one,
+  never rely on another spec in the shard having run it (PR #362).
+  `support/referenceData.test.ts` (`pnpm test`) fails on a block that reads a
+  panel's test id without its loader; add a panel's ids to
+  `REFERENCE_FAMILIES` in `support/referenceData.ts` when you add one.
 - **Arrange through the API, act through the UI.** Only drive the UI a test is
   actually about. Everything else goes through `support/api.ts`.
 - **Wait on real UI signals**: a heading, a status message, a table row, an

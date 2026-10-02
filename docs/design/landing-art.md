@@ -142,7 +142,10 @@ that contradicts itself.
   filled box, and a masked box counts as an image: the page-sized texture was
   the page's Largest Contentful Paint, requested only once the styles had
   resolved; drawn as vector it isn't a candidate, and the hero render is.
-  landing.spec.ts checks the LCP element (phone and desktop). The `href`
+  landing.spec.ts checks the LCP element (phone and desktop), reading the
+  entries only after the hero's Element Timing entry (`elementtiming="hero"`
+  on its img) is in, since the hero's LCP entry is queued with that paint's
+  presentation time, which can come after its decode on a busy machine. The `href`
   resolves against the page, so the prerendered page's relative base (`./`)
   finds the file before hydration (a `url()` through a custom property once
   asked for `/_app/immutable/assets/landing/contours.svg`, a 404);

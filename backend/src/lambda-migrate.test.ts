@@ -1,6 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MigrateError } from '../scripts/migrate.js';
-import { failureSummary, handler } from './lambda-migrate.js';
+import { failureSummary, handler, isMissingObject } from './lambda-migrate.js';
 
 // The deploy workflow prints a failed run's summary to a public Actions log,
 // so it must carry codes and names only, never the error's text.
@@ -50,5 +51,53 @@ describe('handler', () => {
 		expect(message).not.toContain('MASTER_SECRET_ARN');
 		expect(stack).not.toContain('MASTER_SECRET_ARN');
 		expect(String(logged.mock.calls[0]?.[1])).toContain('MASTER_SECRET_ARN is not set');
+	});
+});
+
+describe('a reference load (docs/deployment.md § Reference datasets)', () => {
+	it('a blocked kind is refused before anything is read, with a fixed reason in the summary', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', '');
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const err = await handler({ load: { kind: 'dam-register', key: 'reference/dam-register/x.json', sha256: 'a'.repeat(64), dataset: 'DSO' } }, context).catch((e: Error) => e);
+		const summary = JSON.parse((err as Error).message);
+		expect(summary).toMatchObject({ code: 'refused', logStream: context.logStreamName });
+		expect(summary.reason).toMatch(/dam-register is blocked in production/);
+	});
+
+	it('a load event never migrates: a well-formed load fails on its own path (here the file read), not on the migrations', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { loadReference } = await import('./lambda-migrate.js');
+		const err = await loadReference({ kind: 'rivers', key: 'reference/rivers/r.geojson', sha256: 'a'.repeat(64), dataset: 'HydroRIVERS-v10', source: 's' }, context, async () => null).catch((e: Error) => e);
+		expect(JSON.parse((err as Error).message)).toMatchObject({ code: 'not_found', reason: 'no object at that key in the reference bucket' });
+	});
+
+	it('the bundle carries the reference loaders but no raster or HDF5 code (geo/loadCropland.ts, the feeds’ GeoTIFF reader, geo/loadEvaporation.ts and h5wasm)', async () => {
+		const { build } = await import('esbuild');
+		const out = await build({
+			entryPoints: [fileURLToPath(new URL('./lambda-migrate.ts', import.meta.url))],
+			bundle: true,
+			platform: 'node',
+			format: 'esm',
+			external: ['@aws-sdk/*'],
+			write: false,
+			metafile: true,
+			logLevel: 'silent'
+		});
+		const inputs = Object.keys(out.metafile.inputs);
+		expect(inputs.some((f) => f.endsWith('src/geo/referenceLoad.ts'))).toBe(true);
+		expect(inputs.some((f) => f.endsWith('src/geo/croplandGrid.ts'))).toBe(true);
+		expect(inputs.some((f) => f.endsWith('src/geo/evaporationGrid.ts'))).toBe(true);
+		expect(inputs.filter((f) => /geo\/loadCropland\.ts$|feeds\/sources\/tiff\.ts$|geo\/loadEvaporation\.ts$|h5wasm/.test(f))).toEqual([]);
+	}, 60_000);
+});
+
+describe('isMissingObject: S3 answers a GetObject-only role 403 for a missing key', () => {
+	it('NoSuchKey and AccessDenied (and their status codes) are a missing object; anything else is an error', () => {
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'NoSuchKey' }))).toBe(true);
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }))).toBe(true);
+		expect(isMissingObject({ $metadata: { httpStatusCode: 404 } })).toBe(true);
+		expect(isMissingObject(Object.assign(new Error('x'), { name: 'SlowDown', $metadata: { httpStatusCode: 503 } }))).toBe(false);
+		expect(isMissingObject(new Error('socket hang up'))).toBe(false);
+		expect(isMissingObject(undefined)).toBe(false);
 	});
 });

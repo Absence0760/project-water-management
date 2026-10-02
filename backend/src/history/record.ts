@@ -166,6 +166,9 @@ export type AuditKind =
 	| 'member.removed'
 	| 'member.role'
 	| 'member.party'
+	| 'member.specialist'
+	// An owner marked or unmarked a member as acting for the responsible authority (163).
+	| 'member.authority'
 	| 'farmer.linked'
 	| 'farmer.unlinked'
 	| 'invite.sent'
@@ -175,6 +178,8 @@ export type AuditKind =
 	// The season decision log (issue #119, publish/decision.ts): the notice, window, run and per-farm figures.
 	| 'publication.published'
 	| 'publication.notice_changed'
+	// A member acting for the responsible authority endorsed a published baseline (163).
+	| 'publication.endorsed'
 	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
 	| 'outlook.published'
 	| 'outlook.unpublished'
@@ -189,6 +194,8 @@ export type AuditKind =
 	| 'series.labelled'
 	| 'series.site_changed'
 	| 'series.held'
+	// A key's push into a series too short for the outlier limit: its auto run isn't published by itself until a person runs the model.
+	| 'series.unchecked'
 	| 'run.created'
 	| 'run.changed'
 	| 'run.deleted'
@@ -197,15 +204,20 @@ export type AuditKind =
 	| 'report_schedule.configured'
 	| 'scenario.created'
 	| 'scenario.changed'
+	| 'scenario.participation_exported'
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	| 'registration.checked'
+	| 'registration.requirement'
 	// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): ids, version, short code and hash; a withdrawal its reason.
 	| 'pack.drafted'
 	| 'pack.deleted'
 	| 'pack.issued'
 	| 'pack.superseded'
 	| 'pack.withdrawn'
+	// The issued pack sent to the members acting for the responsible authority (licensing build item 13): ids, the authority's name, whether a note went.
+	| 'pack.sent'
 	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
 	| 'calibration_rules.signed_off'
 	| 'calibration_rules.sign_off_withdrawn'
@@ -214,6 +226,30 @@ export type AuditKind =
 	| 'allocation.deleted'
 	| 'allocation.imported'
 	| 'allocation.import_deleted'
+	// Whether viewers read each registered volume (162, D3): { on }.
+	| 'allocation.viewer_units'
+	// The licence record (161_licence_record): the outcome an owner recorded (with its dates and reason), or a review confirmed.
+	| 'licence.outcome'
+	| 'licence.confirmed'
+	// The catchment map (152, issue #288): a file imported, a feature placed, changed or deleted. Ids, kind and name; never the geometry.
+	| 'map.imported'
+	| 'map.feature_created'
+	| 'map.feature_changed'
+	| 'map.feature_deleted'
+	// A polygon split in two along a drawn line (issue #326 C2): the shape, what its parts are, their ids and areas; never the geometry.
+	| 'map.feature_split'
+	// A catchment delineated from a click (175, issue #326 B-delineate): proposed, accepted (as which feature) or rejected. Ids, the click's kind, the area and the dataset; never the polygon.
+	| 'map.delineation_proposed'
+	| 'map.delineation_accepted'
+	| 'map.delineation_rejected'
+	// A model started from the map (178, issue #326 C3): proposed, applied (counts of nodes, areas and orders taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.start_proposed'
+	| 'map.start_applied'
+	| 'map.start_discarded'
+	// A model divided into sub-catchments from the map (182, #326 C3's follow-up): proposed, applied (counts of areas, orders, runoff and gauges taken, the revision) or discarded. Ids and counts; never a polygon.
+	| 'map.divide_proposed'
+	| 'map.divide_applied'
+	| 'map.divide_discarded'
 	// The application workflow (WP-3.3, 045_contributor_scope). An application's
 	// events carry `application: true` and no name until it is decided.
 	| 'scenario.submitted'
@@ -222,6 +258,10 @@ export type AuditKind =
 	| 'scenario.decided'
 	| 'scenario.shared'
 	| 'scenario.unshared'
+	// "Ask the assessors why" (164_applicant_visibility): a party asked about a check line a hidden rule broke, an editor answered.
+	// Ids, op indexes and the rules' kinds; never the line, the real words or the answer.
+	| 'application.question_asked'
+	| 'application.question_answered'
 	// An editor switched alert kinds on or off or changed a threshold (WP-2.13, 051_alerts).
 	| 'alert_rules.changed'
 	// A team admin changed the team's portfolio traffic-light thresholds (WP-2.14

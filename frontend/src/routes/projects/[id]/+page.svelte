@@ -6,6 +6,7 @@
 	// identity stable, which is what lazy.ts memoises on.
 	const LOAD = {
 		network: () => import('$lib/components/network/NetworkTab.svelte'),
+		map: () => import('$lib/components/map/MapTab.svelte'),
 		crops: () => import('$lib/components/crops/CropsTab.svelte'),
 		transfers: () => import('$lib/components/transfers/TransfersTab.svelte'),
 		series: () => import('$lib/components/series/SeriesTab.svelte'),
@@ -68,7 +69,7 @@
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { GRID_TAB, isGridId, isTabGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -98,6 +99,8 @@
 		units: 'supply',
 		farms: 'supply',
 		changes: 'history',
+		gis: 'map',
+		'catchment-map': 'map',
 		details: 'project',
 		members: 'project',
 		sharing: 'project'
@@ -441,6 +444,7 @@
 	});
 
 	// --- the grid modal: open while the URL names a grid, closed the same way --
+	// A tab's own grid (TAB_GRIDS: the Map's `grid=map-features`) is the tab's to open and close.
 	// Not over the grid's own tab, where the grid is already on the page.
 	const gridParam = $derived(modelOverlays ? page.url.searchParams.get('grid') : null);
 	const openGrid = $derived(isGridId(gridParam) && GRID_TAB[gridParam] !== tab ? gridParam : null);
@@ -449,7 +453,7 @@
 		gridOpen = !!openGrid;
 	});
 	$effect(() => {
-		if (!gridOpen && untrack(() => gridParam) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!gridOpen && untrack(() => gridParam) && !isTabGridId(untrack(() => gridParam)) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
 	});
 	// A grid that left the modal: its old link goes where the grid is now (grid=demand → Crops & demand's table, issue #174).
 	$effect(() => {
@@ -739,6 +743,10 @@
 					<Lazy load={LOAD.network}>
 						{#snippet children(NetworkTab)}<NetworkTab {editor} settings={project!.settings} readonly={!canEdit} {projectId} {runs} onsave={saveModel} bind:reason={saveReason} />{/snippet}
 					</Lazy>
+				{:else if tab === 'map'}
+					<Lazy load={LOAD.map}>
+						{#snippet children(MapTab)}<MapTab {projectId} {editor} {canEdit} {runs} role={project!.role} projectName={project!.name} onModelChanged={reloadInputs} />{/snippet}
+					</Lazy>
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
 					<Lazy load={LOAD.crops}>
@@ -808,7 +816,7 @@
 					</Lazy>
 				{:else if tab === 'dams'}
 					<Lazy load={LOAD.dams}>
-						{#snippet children(DamsTab)}<DamsTab {projectId} {editor} {runs} readonly={!canEdit} />{/snippet}
+						{#snippet children(DamsTab)}<DamsTab {projectId} {editor} {runs} readonly={!canEdit} onModelChanged={reloadInputs} />{/snippet}
 					</Lazy>
 				{:else if tab === 'compare'}
 					<Lazy load={LOAD.compare}>
@@ -824,11 +832,11 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} actsForAuthority={project?.actsForAuthority ?? false} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>
-						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} />{/snippet}
+						{#snippet children(AllocationsTab)}<AllocationsTab {projectId} {runs} {canEdit} {isOwner} />{/snippet}
 					</Lazy>
 				{:else if tab === 'project'}
 					<Lazy load={LOAD.project}>
@@ -871,6 +879,8 @@
 							readonly={!canEdit}
 							onsave={saveModel}
 							bind:reason={saveReason}
+							{projectId}
+							onModelChanged={reloadInputs}
 						/>
 					{/snippet}
 				</Lazy>
@@ -1124,14 +1134,17 @@
 		line-height: 1.3;
 		overflow-wrap: anywhere;
 	}
+	/* Budgeted to fit every section an owner can show (17 with the Map's row, #326 D3) and the account
+	   block in 1440×960 with a row to spare: 32 px rows (still past the 24 px target size) and 0.5rem
+	   between the groups (app-sidebar.spec.ts). */
 	.project-side .tabs {
-		gap: 0.75rem;
+		gap: 0.5rem;
 	}
 	.project-side .section-label {
 		padding-bottom: 0.1rem;
 	}
 	.project-side .tabs a {
-		min-height: 34px;
+		min-height: 32px;
 	}
 	/* Phones: the catchment's name and your role, above the Sections button. */
 	.phone-project {

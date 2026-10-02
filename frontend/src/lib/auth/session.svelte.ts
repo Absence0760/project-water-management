@@ -12,11 +12,12 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  * another account, maybe on another device) must still be able to use a reset
  * or confirmation link instead of being bounced to the project list. A
  * share link (/share, WP-2.3) is the same: its token is the credential, and so
- * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13). An
+ * is an alert email's unsubscribe link (/alerts/unsubscribe, WP-2.13) and its
+ * "Was this useful?" link (/alerts/feedback, 151_alert_feedback). An
  * evidence pack's verify page (/verify/<code>, WP-3.14) answers anyone holding
  * the code printed on the pack, signed in or not.
  */
-export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe', '/verify'];
+export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe', '/alerts/feedback', '/verify'];
 
 /**
  * The public landing page's own address (issue #57): prerendered static HTML
@@ -38,14 +39,14 @@ export const LANDING_ROUTE = '/welcome/[[lang=locale]]';
 
 /**
  * The prerendered static pages: the landing page, the legal pages
- * (/privacy, /terms) and the methods page (/methods, the engine audit's
- * public summary). Reachable either way, rendered at once (their HTML is
+ * (/privacy, /terms), the methods page (/methods, the engine audit's
+ * public summary) and the data sources' credits (/data-sources). Reachable either way, rendered at once (their HTML is
  * written at build time), and served from their .html by CloudFront.
  */
-export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods'];
+export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods', '/data-sources'];
 
 /** The same pages by route id (the root layout matches by route: while prerendering, `base` is relative). */
-export const STATIC_ROUTES = [LANDING_ROUTE, '/privacy', '/terms', '/methods'];
+export const STATIC_ROUTES = [LANDING_ROUTE, '/privacy', '/terms', '/methods', '/data-sources'];
 
 /** Routes reachable without signing in. */
 export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS, ...STATIC_PATHS];

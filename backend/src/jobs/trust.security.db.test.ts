@@ -110,6 +110,10 @@ const ALSO_ROLE: Partial<Record<JobKind, { role: Role; why: string }>> = {
 	yield: {
 		role: 'contributor',
 		why: "an applicant's yield of a dam of their own application; yieldInputFor refuses any other target (yield/contributor.db.test.ts, 096_contributor_yield)"
+	},
+	applicant_pack_render: {
+		role: 'contributor',
+		why: "an applicant's copy of an issued pack of their own application; the handler refuses anyone app_applicant_pack_meta doesn't answer (evidence/applicant-copy.db.test.ts)"
 	}
 };
 
@@ -219,7 +223,55 @@ async function issuedPack(projectId: string, runId: string, userId: string): Pro
 	}
 }
 
+/**
+ * An issued pack of an application the project's owner made themselves
+ * (so they are its party, app_applicant_pack_meta), planted as issuedPack
+ * plants one: the applicant's copy (165_applicant_copy) needs a party.
+ */
+async function issuedApplicationPack(projectId: string, runId: string, userId: string): Promise<string> {
+	kept.add(projectId);
+	const client = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+	await client.connect();
+	try {
+		await client.query('BEGIN');
+		await client.query('SET LOCAL session_replication_role = replica');
+		const { rows: s } = await client.query<{ id: string }>(
+			`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin, status, submitted_at)
+			 VALUES ($1, 'Own application', $2, repeat('a', 64), $3, 'applicant', 'submitted', now()) RETURNING id::text`,
+			[projectId, runId, userId]
+		);
+		const { rows: r } = await client.query<{ id: string }>(
+			`INSERT INTO model_run (project_id, created_by, engine_version, start_date, end_date, inputs, scenario_id) VALUES ($1, $2, 'x', '2000-01-01', '2000-01-02', '{}', $3) RETURNING id::text`,
+			[projectId, userId, s[0]!.id]
+		);
+		const { rows } = await client.query<{ id: string }>(
+			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, scenario_id, scenario_run_id, status, manifest, manifest_sha256, report_version, engine_version, created_by, issued_at, issued_by)
+			 VALUES (gen_random_uuid(), $1, $2, 1, $4, $5, 'issued', '{}', md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $3, now(), $3) RETURNING id::text`,
+			[projectId, runId, userId, s[0]!.id, r[0]!.id]
+		);
+		await client.query('COMMIT');
+		return rows[0]!.id;
+	} catch (err) {
+		await client.query('ROLLBACK');
+		throw err;
+	} finally {
+		await client.end();
+	}
+}
+
 const CROSS: Partial<Record<JobKind, CrossCase>> = {
+	applicant_pack_render: {
+		// B's issued pack of an application its owner made, and that party's copy of it: with REPORT_RENDERER=sqs a render token and a render_pack message.
+		async queue(owner, b) {
+			const packId = await issuedApplicationPack(b.projectId, b.runId, owner.id);
+			const { job } = await enqueue(owner, b.projectId, 'applicant_pack_render', { packId });
+			return { jobId: job.id, ref: packId };
+		},
+		effect: async (id) => ({
+			tokens: (await asOwner(`SELECT count(*)::int AS n FROM render_token WHERE pack_id = $1 AND purpose = 'applicant_pack'`, [id]))[0].n,
+			sent: sentFor('packId', id)
+		})
+	},
 	feed_fetch: {
 		async queue(owner, b) {
 			const feedId = await feedOf(owner, b.projectId);
@@ -261,6 +313,15 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			sent: sentFor('packId', id)
 		})
 	},
+	pack_reproduce: {
+		// B's issued pack (planted without a bundle), and B's re-run of it: it records no_bundle (154_pack_reproduce).
+		async queue(owner, b) {
+			const packId = await issuedPack(b.projectId, b.runId, owner.id);
+			const { job } = await enqueue(owner, b.projectId, 'pack_reproduce', { packId });
+			return { jobId: job.id, ref: packId };
+		},
+		effect: async (id) => (await asOwner('SELECT outcome FROM pack_reproduction WHERE pack_id = $1', [id])).map((r) => r.outcome)
+	},
 	sweep: {
 		async queue(owner, b) {
 			const res = await owner.call('POST', `/projects/${b.projectId}/sweeps`, { name: 's', baseRunId: b.runId, members: [{ name: 'm', ops: [{ op: 'demand.scale', factor: 0.9 }] }] });
@@ -268,6 +329,22 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: res.body.jobId, ref: res.body.sweep.id };
 		},
 		effect: async (id) => (await asOwner('SELECT status FROM scenario_sweep WHERE id = $1', [id]))[0].status
+	},
+	assessment: {
+		// Two team scenarios on B's run that combine (two fields of one farm), and B's assessment of them.
+		async queue(owner, b) {
+			const scenario = async (name: string, ops: unknown[]) => {
+				const res = await owner.call('POST', `/projects/${b.projectId}/scenarios`, { name, baseRunId: b.runId, ops });
+				expect(res.status, JSON.stringify(res.body)).toBe(201);
+				return res.body.scenario.id as string;
+			};
+			const s1 = await scenario('Bigger pump', [{ op: 'node.set', nodeId: b.farmId, field: 'divertCapacityM3Day', value: 9000 }]);
+			const s2 = await scenario('Less demand', [{ op: 'demand.scale', factor: 0.9, nodeIds: [b.farmId] }]);
+			const res = await owner.call('POST', `/projects/${b.projectId}/assessments`, { name: 'a', scenarioIds: [s1, s2] });
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			return { jobId: res.body.jobId, ref: res.body.assessment.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status FROM assessment WHERE id = $1', [id]))[0].status
 	},
 	auto_calibration: {
 		// A run of B's calibration rules: a quick search, so B's own job fits its one case.

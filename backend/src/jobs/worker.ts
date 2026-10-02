@@ -22,8 +22,8 @@
 //
 // A local Node entry, like server.ts: it loads the dev env files. The
 // production worker is lambda-worker.ts, which must never import this file.
-import { config } from 'dotenv';
-config({ path: ['.env.development.local', '.env.development'] });
+import { loadDevEnv } from '../config/devEnv.js';
+loadDevEnv();
 
 import pg from 'pg';
 import { closePool } from '../db/pool.js';
@@ -36,6 +36,9 @@ const summary = (r: TickResult) =>
 	(r.alerts?.sent || r.alerts?.skipped || r.alerts?.failed ? `alerts: ${r.alerts.sent} sent, ${r.alerts.skipped} skipped, ${r.alerts.failed} failed; ` : '') +
 	(r.packNotices?.sent || r.packNotices?.skipped || r.packNotices?.failed
 		? `pack notices: ${r.packNotices.sent} sent, ${r.packNotices.skipped} skipped, ${r.packNotices.failed} failed; `
+		: '') +
+	(r.erratumNotices?.queued || r.erratumNotices?.sent || r.erratumNotices?.skipped || r.erratumNotices?.failed
+		? `erratum notices: ${r.erratumNotices.queued} queued, ${r.erratumNotices.sent} sent, ${r.erratumNotices.skipped} skipped, ${r.erratumNotices.failed} failed; `
 		: '') +
 	`claimed ${r.claimed}: ${r.done} done, ${r.failed} failed, ${r.dead} dead, ${r.lost} lost; purged ${r.purged}; ` +
 	`${r.stats.due} due, ${r.stats.running} running`;

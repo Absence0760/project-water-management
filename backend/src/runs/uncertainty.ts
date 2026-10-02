@@ -39,6 +39,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
+import { allocationUnitsHidden } from '../allocations/viewerUnits.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, loadRunInput, RunInputError, seriesHash } from './execute.js';
 
@@ -238,8 +239,17 @@ export const uncertaintyRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs/:runId/model-input', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
-			return c.json({ input: await runModelInput(db, id, runId) });
+			const role = await requireRole(db, id, 'viewer');
+			const input = await runModelInput(db, id, runId);
+			// A viewer who can't read each registered volume (162, D3): a run whose numbers rest on them (a cap or
+			// full-allocation run) can't be reproduced without them, so it is refused, not handed over altered;
+			// a compare-only run's volumes change none of its numbers, so they are left out.
+			if (input.model.allocations?.length && (await allocationUnitsHidden(db, id, role))) {
+				if ((input.settings.allocationMode ?? 'none') !== 'none')
+					throw new ApiError(403, 'this run’s numbers rest on each farm’s registered volume, which this project shows to its editors and owners only');
+				return c.json({ input: { ...input, model: { ...input.model, allocations: [] } } });
+			}
+			return c.json({ input });
 		});
 	})
 	.get('/:id/runs/:runId/uncertainty', async (c) => {

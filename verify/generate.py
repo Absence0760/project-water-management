@@ -389,6 +389,11 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                     "returnPct": round(rng.random(), 2), "priority": rng.choice(["first", "shared", "last"]),
                     "destination": "internal", "enabled": rng.random() > 0.1, "note": "",
                 }
+                # Its rank within its class (engine >= 1.64.0): sometimes none, sometimes 1-3,
+                # from its own stream so the rest of every seed's network stays as it was.
+                own = random.Random(ob["id"])
+                if own.random() < 0.5:
+                    ob["rank"] = own.choice([1, 2, 3])
                 if rng.random() < 0.2:
                     ob["destination"] = "external"
                     ob["returnPct"] = 0
@@ -484,6 +489,22 @@ def add_phase_two(rng: random.Random, doc: dict, start: dt.date, days: int, dens
                     "storageM3": round(rng.uniform(10000, 500000)), "validFrom": None, "validTo": None, "months": [], "maxRateM3s": None,
                 })
         m["allocations"] = allocs
+
+    # River abstractions beside a unit's dam (§2.7j): the crops or a demand object on a pump of their own,
+    # now and then with a pool; drawn last, so every other feature of a seed is unchanged.
+    if rng.random() < gate(0.3):
+        pump = lambda: rng.choice([None, 0, round(rng.uniform(50, 3000)), round(rng.uniform(1000, 50000))])
+        pool = lambda: rng.choice([None, None, 0, round(rng.uniform(20, 500)), round(rng.uniform(500, 50000))])
+        for f in farms:
+            if rng.random() < 0.4:
+                f["cropWaterSource"] = "river"
+                f["cropRiverPumpM3Day"] = pump()
+                f["cropRiverPoolM3"] = pool()
+        for ob in m.get("demandObjects") or []:
+            if rng.random() < 0.5:
+                ob["waterSource"] = rng.choice(["river", "river", "dam"])
+                ob["riverPumpM3Day"] = pump()
+                ob["riverPoolM3"] = pool()
 
 
 def _window(rng, start: dt.date, days: int) -> dict:

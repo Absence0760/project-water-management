@@ -20,6 +20,7 @@ import {
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
+import { requireFreshCode, stepUpRefusal } from '../auth/stepUp.js';
 import { type Db, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -43,6 +44,10 @@ const BODIES = REGISTRATION_BODIES.map((b) => b.code) as [RegistrationBodyCode, 
 /** A category or field code; which ones a body has is checked by the engine's registrationCheck. */
 const code = z.string().regex(/^[a-z_]{1,40}$/, 'must be a registration code');
 
+/** Who a sign-off is from (167_signers): the evidence's professional statement, or an authority-side reviewer's second one. */
+export const SIGNOFF_KINDS = ['specialist', 'review'] as const;
+export type SignoffKind = (typeof SIGNOFF_KINDS)[number];
+
 export const SignoffBody = z.object({
 	fullName: text(200),
 	/** The body, category and field as fixed choices (engine liability/registration.ts, issue #47). */
@@ -54,7 +59,9 @@ export const SignoffBody = z.object({
 	/** The ids of the confirmations ticked: all of the statement's must be. */
 	confirmed: z.array(z.string().max(40)).max(20),
 	/** SHA-256 of the statement the dialog showed (GET …/signoffs `statementSha256`). */
-	statementSha256: z.string().regex(/^[0-9a-f]{64}$/, 'must be a lowercase SHA-256 hex digest')
+	statementSha256: z.string().regex(/^[0-9a-f]{64}$/, 'must be a lowercase SHA-256 hex digest'),
+	/** `review` only on a pack, by an editor (167_signers); a run's sign-off and the applicant's specialist's are `specialist`. */
+	kind: z.enum(SIGNOFF_KINDS).default('specialist')
 });
 
 export interface SignoffRow {
@@ -77,12 +84,19 @@ export interface SignoffRow {
 	signedAt: string;
 	/** The signer is the caller. */
 	mine: boolean;
+	/** `specialist` or `review` (167_signers). */
+	kind: SignoffKind;
+	/**
+	 * The registration's check against the public register (167_signers): the one bound when the pack was issued
+	 * (`bound`), else the signer's current one; null: self-declared, never shown as checked.
+	 */
+	registrationCheck: { checkedAt: string; checkedByOrg: string; bound: boolean } | null;
 }
 
 export const SIGNOFF_SELECT = `SELECT id, run_id AS "runId", pack_id AS "packId", full_name AS "fullName", registration_body AS "registrationBody",
 	registration_category AS "registrationCategory", registration_field AS "registrationField", registration_no AS "registrationNo", scope, statement_version AS "statementVersion",
 	statement_sha256 AS "statementSha256", disclaimer_version AS "disclaimerVersion", signed_at AS "signedAt",
-	user_id IS NOT DISTINCT FROM app_current_user_id() AS mine
+	user_id IS NOT DISTINCT FROM app_current_user_id() AS mine, kind, app_signoff_registration_check(id) AS "registrationCheck"
 	FROM signoff`;
 
 export const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex');
@@ -161,10 +175,12 @@ export async function insertSignoff(
 	checkSignoff(body, statement, expected);
 	const runId = 'runId' in target ? target.runId : null;
 	const packId = 'packId' in target ? target.packId : null;
+	// A review is a second sign-off of a pack (the signoff_review_pack CHECK holds the same).
+	if (body.kind === 'review' && !packId) throw new ApiError(400, 'a review sign-off is of an evidence pack, not a run');
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO signoff (project_id, run_id, pack_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope,
-			statement_version, statement_sha256, disclaimer_version)
-		 VALUES ($1, $2, $3, app_current_user_id(), $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+			statement_version, statement_sha256, disclaimer_version, kind)
+		 VALUES ($1, $2, $3, app_current_user_id(), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
 		[
 			projectId,
 			runId,
@@ -177,7 +193,8 @@ export async function insertSignoff(
 			body.scope,
 			statement.version,
 			expected,
-			statement.disclaimerVersion
+			statement.disclaimerVersion,
+			body.kind
 		]
 	);
 	const signoffId = rows[0]!.id;
@@ -190,7 +207,8 @@ export async function insertSignoff(
 		registrationField: body.registrationField,
 		registrationNo: body.registrationNo,
 		statementVersion: statement.version,
-		statementSha256: expected
+		statementSha256: expected,
+		kind: body.kind
 	});
 	const { rows: out } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE id = $1`, [signoffId]);
 	return out[0]!;
@@ -212,7 +230,16 @@ export const signoffRoutes = new Hono<AuthEnv>()
 				statementSha256,
 				disclaimer: { version: DISCLAIMER.version, status: DISCLAIMER.status },
 				// Why the caller can't sign, or null when they can.
-				cannotSign: rank[role] < rank.editor ? 'requires editor role' : legacy ? LEGACY : forecast ? FORECAST_NOT_SIGNABLE : !verified ? RUN_UNVERIFIED : null,
+				cannotSign:
+					rank[role] < rank.editor
+						? 'requires editor role'
+						: legacy
+							? LEGACY
+							: forecast
+								? FORECAST_NOT_SIGNABLE
+								: !verified
+									? RUN_UNVERIFIED
+									: ((await stepUpRefusal(db))?.message ?? null),
 				signoffs: rows
 			});
 		});
@@ -222,6 +249,8 @@ export const signoffRoutes = new Hono<AuthEnv>()
 		const body = SignoffBody.parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// A sign-off is the professional record an authority relies on: it needs two-step sign-in and a code from the last 10 minutes (auth/stepUp.ts).
+			await requireFreshCode(db);
 			// Citing a run: not while a trim or delete of this project's runs is under way.
 			await lockProjectRuns(db, id);
 			const { statement, sha256: expected, legacy, forecast, verified } = await statementFor(db, id, runId);

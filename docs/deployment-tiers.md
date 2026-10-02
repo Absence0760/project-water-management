@@ -16,15 +16,15 @@ commit, especially for af-south-1.
 
 | | Minimal | Full |
 | --- | --- | --- |
-| **us-east-1** | **≈ $51 / month** | **≈ $111–116 / month** |
-| **af-south-1** (recommended region) | **≈ $59–64 / month** | **≈ $136–151 / month** |
+| **us-east-1** | **≈ $62 / month** | **≈ $122–127 / month** |
+| **af-south-1** (recommended region) | **≈ $68–75 / month** | **≈ $146–161 / month** |
 | Features | All of them | All of them |
 | Database | 1 instance, 1 AZ, `db.t4g.micro` | Multi-AZ standby, `db.t4g.small` |
 | VPC endpoints | 1 AZ each | 2 AZs each |
 | Backups / PITR | 7 days | 14 days |
 | Database failure | ~10 min recovery, by AWS, on a new host | ~1–2 min automatic failover |
 | AZ outage | API down until the AZ recovers | API keeps serving |
-| Suggested `budget_monthly_usd` (daily budget derived: `ceil(× 2.25 / 30)`) | 60 (us-east-1) / 90 (af-south-1, the default): $5 / $7 a day | 130 (us-east-1) / 170 (af-south-1): $10 / $13 a day |
+| Suggested `budget_monthly_usd` (daily budget derived: `ceil(× 2.25 / 30)`) | 70 (us-east-1) / 100 (af-south-1, the default): $6 / $8 a day | 160 (us-east-1) / 200 (af-south-1): $12 / $15 a day |
 
 **Recommendation:** start on **minimal** in af-south-1. It is a complete,
 secure production deployment, not a demo: every feature, WAF, private
@@ -37,7 +37,7 @@ change a few minutes' reboot (do it in a quiet window).
 Why the tiers don't differ in features: the optional parts are cheap. The
 data feeds add ≈ $0.70 a month and server-side PDF reports ≈ $1.00–1.20
 ([deployment.md § Reports](./deployment.md#reports)). Almost the whole bill
-is the database and the three VPC endpoints, which is where the tiers
+is the database and the four VPC endpoints, which is where the tiers
 differ.
 
 ## Minimal deployment
@@ -51,7 +51,7 @@ Terraform defaults.
   7-day backups with point-in-time recovery, deletion protection.
 - Worker, fetcher and report-renderer Lambdas, SQS queues, the 5-minute tick.
 - SES for account, alert and report email.
-- One ENI each for the Secrets Manager, SES and SQS interface endpoints.
+- One ENI each for the Secrets Manager, SES, SQS and S3 interface endpoints.
 - Monthly and daily budgets, Cost Anomaly Detection (off until turned on
   after the first apply) and the CloudWatch alarms, mailed to `budget_alert_email` ([deployment.md § Budget
   alerts](./deployment.md#budget-alerts)).
@@ -61,7 +61,7 @@ Terraform defaults.
 
 ```hcl
 aws_region         = "af-south-1"
-budget_monthly_usd = 90   # the default; 60 in us-east-1
+budget_monthly_usd = 100  # the default; 70 in us-east-1
 # Everything else on defaults. Set renderer_image_tag after the first
 # backend deploy (deployment.md § Reports).
 ```
@@ -72,15 +72,15 @@ Cost, us-east-1:
 | --- | --- |
 | RDS `db.t4g.micro` single-AZ | 11.70 |
 | RDS gp3 storage, 20 GiB | 2.30 |
-| 3 interface endpoints × 1 AZ | 21.90 |
-| WAF (ACL + 4 rules) | 9.00 |
-| CloudWatch alarms, logs, RDS log export | ~3.40 |
+| 4 interface endpoints × 1 AZ (Secrets Manager, SES, SQS, S3; S3's also $0.01/GB processed for the API's DEM and water reads) | 29.20 |
+| WAF (ACL + 5 rules) | 10.00 |
+| CloudWatch alarms, logs, RDS log export | ~3.50 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
-| SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $54** |
+| SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.50 |
+| **Total** | **≈ $62** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
-**≈ $60–65**.
+**≈ $68–75**.
 
 What you accept:
 
@@ -102,7 +102,7 @@ Same stack, with the single points of failure removed and more headroom.
 
 ```hcl
 aws_region         = "af-south-1"
-budget_monthly_usd = 170  # 130 in us-east-1
+budget_monthly_usd = 200  # 160 in us-east-1
 
 db_instance_class        = "db.t4g.small"  # 2 GiB RAM
 db_multi_az              = true            # synchronous standby in the 2nd AZ
@@ -120,14 +120,14 @@ Cost, us-east-1:
 | RDS `db.t4g.small` Multi-AZ (2 × 730 h × $0.032) | 46.70 |
 | RDS gp3 storage, 20 GiB, Multi-AZ | 4.60 |
 | Backups beyond the free allowance (14 days) | ~1.00 |
-| 3 interface endpoints × 2 AZs | 43.80 |
-| WAF (ACL + 4 rules + requests) | ~9.60 |
-| CloudWatch alarms, logs, RDS log export | ~3.60 |
+| 3 interface endpoints × 2 AZs, and the S3 endpoint in 1 | 51.10 |
+| WAF (ACL + 5 rules + requests) | ~10.60 |
+| CloudWatch alarms, logs, RDS log export | ~3.70 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
-| SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $114–119** |
+| SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda, CloudFront | ~2.50 |
+| **Total** | **≈ $122–127** |
 
-af-south-1: **≈ $136–151**.
+af-south-1: **≈ $146–161**.
 
 What it buys:
 

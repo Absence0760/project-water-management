@@ -23,10 +23,16 @@ import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@wat
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
-import { buildLadder, clearLadderJobs, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
-import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
+import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
+import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
+import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, plantStartProposal, SAMPLE, splitHalves, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
+import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
 import { issueRenderToken } from '../reports/tokens.js';
+import { base32Decode, hotp, totpStep } from '../auth/totp.js';
 
 const ORIGIN = 'http://localhost:7777';
 const ZERO = '00000000-0000-4000-8000-000000000000';
@@ -83,6 +89,13 @@ function deep(b: unknown, depth = 0): unknown {
 }
 
 const freshUser = (n: string, verified = true) => signUp(n, { verified });
+/** A fresh account with an authenticator confirmed (two-step sign-in), and its TOTP key. */
+async function enrolledUser(n: string) {
+	const u = await freshUser(n);
+	const key = base32Decode((await ok(u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' }))).secret)!;
+	await ok(u.call('POST', '/auth/mfa/totp/confirm', { code: hotp(key, totpStep(Date.now())) }));
+	return { u, key };
+}
 const at = () => `/projects/${ctx.projectId}`;
 const ok = async (r: Promise<{ status: number; body: any }>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
 	const res = await r;
@@ -150,7 +163,42 @@ async function plantedIssuedPack() {
  * ones inside it; every other project route takes its role-ladder SAMPLE, as
  * the owner. Each is called afresh per request, so a token is new each time.
  */
+let damFid: string | null = null;
+/** The ladder farm's dam on the map, made once. */
+async function ladderDam(): Promise<string> {
+	const square = [[[21.3237, -33.679], [21.3257, -33.679], [21.3257, -33.677], [21.3237, -33.677], [21.3237, -33.679]]];
+	damFid ??= (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'dam', name: 'Mass dam', nodeId: ctx.farmId, geometry: { type: 'Polygon', coordinates: square } }))).feature.id as string;
+	return damFid;
+}
+
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	// A fresh parcel each time: a split one is half the shape it was (issue #326 C2).
+	'POST /projects/:id/map/features/:fid/split': async () => {
+		const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
+		const fid = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'farm_parcel', name: 'Mass split', geometry: { type: 'Polygon', coordinates: square } }))).feature.id as string;
+		return { params: { fid }, body: { parts: splitHalves(21.36, -33.66, 0.01) } };
+	},
+	// A fresh open proposal each time: one is decided once (175).
+	'POST /projects/:id/map/delineation/:pid/accept': async () => ({
+		params: { pid: await plantDelineationProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/delineation/:pid/accept']!(ctx)
+	}),
+	'POST /projects/:id/map/delineation/:pid/reject': async () => ({ params: { pid: await plantDelineationProposal(ctx.projectId) } }),
+	// A fresh open proposal each time: one is decided once (178).
+	'POST /projects/:id/map/start/:spid/apply': async () => ({
+		params: { spid: await plantStartProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/start/:spid/apply']!(ctx)
+	}),
+	'POST /projects/:id/map/start/:spid/discard': async () => ({ params: { spid: await plantStartProposal(ctx.projectId) } }),
+	'POST /projects/:id/map/divide/:spid/apply': async () => ({
+		params: { spid: await plantStartProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/divide/:spid/apply']!(ctx)
+	}),
+	// A fresh unanswered question each time: an answer is given once (164).
+	'POST /projects/:id/application-questions/:qid/answer': async () => ({
+		params: { qid: await plantQuestion(ctx.projectId, ctx.ids.sid!) },
+		...SAMPLE['POST /projects/:id/application-questions/:qid/answer']!(ctx)
+	}),
 	'POST /auth/register': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com`, password: 'correct horse', displayName: 'Mass Register', acceptTerms: LEGAL_VERSION } }),
 	'POST /auth/resend-confirmation': () => ({ as: null, body: { email: `mass-${crypto.randomUUID()}@example.com` } }),
 	'POST /auth/login': () => ({ as: null, body: { email: ctx.owner.email, password: 'correct horse' } }),
@@ -181,6 +229,32 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		await ctx.owner.call('POST', `/projects/${ctx.projectId}/members`, { email, role: 'viewer' });
 		return { as: null, body: { token: tokenIn(lastMailTo(email)) } };
 	},
+	// Two-step sign-in (issue #282): a fresh account each time, its codes made from the secret the enrolment hands out.
+	'POST /auth/mfa/totp/enrol': async () => ({ as: await freshUser('Menrol'), body: { password: 'correct horse' } }),
+	'POST /auth/mfa/totp/confirm': async () => {
+		const u = await freshUser('Mconfirm');
+		const key = base32Decode((await ok(u.call('POST', '/auth/mfa/totp/enrol', { password: 'correct horse' }))).secret)!;
+		return { as: u, body: { code: hotp(key, totpStep(Date.now())) } };
+	},
+	'POST /auth/mfa/recovery-codes': async () => {
+		const { u, key } = await enrolledUser('Mregen');
+		// The next step's code: confirming used this one, and a step is accepted once.
+		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
+	'POST /auth/mfa/step-up': async () => {
+		const { u, key } = await enrolledUser('Mstepup');
+		return { as: u, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
+	'POST /auth/mfa/verify': async () => {
+		const { u, key } = await enrolledUser('Mverify');
+		const login = await app.request('/auth/login', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', origin: ORIGIN },
+			body: JSON.stringify({ email: u.email, password: 'correct horse' })
+		});
+		const challenge = login.headers.getSetCookie().find((c) => c.startsWith('wm_mfa='))!.split(';')[0]!;
+		return { as: null, headers: { cookie: challenge }, body: { code: hotp(key, totpStep(Date.now()) + 1) } };
+	},
 	'POST /auth/render-session': async () => ({ as: null, body: { token: await withUser(ctx.owner.id, (d) => issueRenderToken(d, ctx.projectId, ctx.runId)) } }),
 	'POST /alerts/unsubscribe': async () => {
 		// A subscription's token, as its alert email would carry it (alerts/tokens.ts).
@@ -192,12 +266,26 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		);
 		return { as: null, body: { token: unsubscribeToken(nonce) } };
 	},
+	'POST /alerts/feedback': async () => {
+		// A "Was this useful?" row's token, as its alert email would carry it (151_alert_feedback).
+		const nonce = newNonce();
+		const token = feedbackToken(nonce);
+		await db.query(`INSERT INTO alert_feedback (project_id, user_id, kind, nonce, token_hash) VALUES ($1, $2, 'data_stale', $3, $4)`, [
+			ctx.projectId,
+			ctx.owner.id,
+			nonce,
+			hashToken(token)
+		]);
+		return { as: null, body: { token, useful: true } };
+	},
 	'POST /share/view': () => ({ as: null, body: { token: ctx.shareToken } }),
 	'POST /share/series': () => ({ as: null, body: { token: ctx.shareToken, key: 'simulated_outflow' } }),
 	// A baseline link's token: the scenario read answers it 404 (a link opens only its own target).
 	'POST /share/scenario': () => ({ as: null, body: { token: ctx.shareToken } }),
 	// The same baseline token: the pack read answers it 404 too (128_pack_share_notes).
 	'POST /share/pack': () => ({ as: null, body: { token: ctx.shareToken } }),
+	// The same baseline token, signed in: a comment goes only through a live application or pack link (166).
+	'POST /share/comment': () => ({ as: ctx.owner, body: { token: ctx.shareToken, body: 'A comment', registerConsent: false } }),
 	'POST /ingest/v1/series/merge': () => ({
 		as: null,
 		headers: { authorization: `Bearer ${ctx.apiKey}` },
@@ -221,6 +309,30 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'PATCH /teams/:id/members/:userId': () => ({ params: { id: ctx.teamId, userId: ctx.viewer.id }, body: { role: 'member' } }),
 	// A run with the observed record in its inputs (the SAMPLE of PUT …/series replaces it with two days).
 	// One queued run of the rules per user (calibration/schema.ts AUTO_CALIBRATION_JOBS_PER_USER): clear the last one's job first.
+	// A dam polygon linked to the ladder's farm, round the synthetic register's Z100/07 (issue #326 B-dams, geo/damRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': async () => {
+		await ladderDam();
+		await loadSyntheticDamRegister(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/nodes/:nodeId/dam-capacity-from-register']!(ctx);
+	},
+	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': async () => ({ body: { featureId: await ladderDam() } }),
+	// The ladder's parcel (Farm A's) lies in the synthetic land-cover grid's 0.5 block (issue #326 B-landcover, geo/croplandRoutes.ts).
+	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': async () => {
+		await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover']!(ctx);
+	},
+	// A boundary inside the synthetic evaporation grid (issue #326 B-evap, geo/evaporationRoutes.ts), the grid loaded first.
+	'POST /projects/:id/evaporation-from-map': async () => {
+		await loadSyntheticEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }));
+		return SAMPLE['POST /projects/:id/evaporation-from-map']!(ctx);
+	},
+	// A reach of the synthetic river network (issue #345, geo/rivers.ts), loaded first so the add has one to copy.
+	'POST /projects/:id/map/rivers/add': async () => {
+		await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/map/rivers/add']!(ctx);
+	},
 	'POST /projects/:id/auto-calibrations': async () => {
 		await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
 		return {};
@@ -276,6 +388,8 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/packs/:packId/withdraw': async () => ({ params: { packId: await plantedPack() }, body: { reason: 'mass withdrawal' } }),
 	// An empty body only (strict); a pack that was issued, with no PDF yet, so the legit call queues its render (202).
 	'POST /projects/:id/packs/:packId/pdf': async () => ({ params: { packId: await plantedIssuedPack() } }),
+	// The same: an issued pack never re-run, so the legit call queues its re-run (202).
+	'POST /projects/:id/packs/:packId/reproduce': async () => ({ params: { packId: await plantedIssuedPack() } }),
 	'POST /projects/:id/series/:seriesId/revisions/:revId/restore': async () => {
 		const rain = Array.from({ length: 400 }, (_, i) => (i % 5 === 0 ? 10 + Math.random() : 0));
 		await ok(ctx.owner.call('PUT', `${at()}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain }));
@@ -287,7 +401,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/scenarios/:sid/submit': () => scenario([]),
 	'POST /projects/:id/scenarios/:sid/withdraw': () => scenario(['submit']),
 	'POST /projects/:id/scenarios/:sid/reopen': () => scenario(['submit', 'withdraw']),
-	'POST /projects/:id/scenarios/:sid/decide': async () => ({ ...(await scenario(['submit'])), body: { outcome: 'approved' } }),
+	// The owner acts for the responsible authority (163), as the decision needs.
+	'POST /projects/:id/scenarios/:sid/decide': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		return { ...(await scenario(['submit'])), body: { outcome: 'licence_issued', authority: 'Mass CMA', decisionDate: '2026-09-30', reasonsReceived: true } };
+	},
 	// An applicant shares their own application with someone of their party (049).
 	'POST /projects/:id/scenarios/:sid/members': async () => {
 		const app = await ok(ctx.contributor.call('POST', `${at()}/scenarios`, { name: `Mass application ${crypto.randomUUID()}`, baseRunId: ctx.runId, ops: [] }));
@@ -299,6 +417,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		return { body: { source: 'dws', config: { station: 'X0H001' } } };
 	},
 	'PATCH /projects/:id/feeds/:feedId': async () => ({ params: { feedId: await currentFeed() }, body: { enabled: false } }),
+	// The rain feed from the boundary (#326 B-rain): a boundary on the map, and no feed in the way of a new one.
+	'POST /projects/:id/feeds/chirps/from-boundary': async () => {
+		for (const f of (await ok(ctx.owner.call('GET', `${at()}/feeds`))).feeds as { id: string }[]) await ok(ctx.owner.call('DELETE', `${at()}/feeds/${f.id}`));
+		const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+		const b = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'catchment_boundary', name: 'Mass boundary', geometry: { type: 'Polygon', coordinates: [square] } }))).feature;
+		return { body: { featureId: b.id, updatedAt: b.updatedAt } };
+	},
 	'POST /projects/:id/feeds/:feedId/run-now': async () => {
 		const feedId = await currentFeed();
 		await ok(ctx.owner.call('PATCH', `${at()}/feeds/${feedId}`, { enabled: true }));
@@ -308,6 +433,12 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		params: { pubId: (await ok(ctx.owner.call('GET', `${at()}/publication`))).current.id },
 		body: { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } }
 	}),
+	// A fresh publication (an endorsement is once), endorsed by the owner acting for the authority (163).
+	'POST /projects/:id/publication/:pubId/endorse': async () => {
+		await ok(ctx.owner.call('PATCH', `${at()}/members/${ctx.owner.id}`, { actsForAuthority: true }));
+		const pub = await ok(ctx.owner.call('POST', `${at()}/publication`, { runId: ctx.runId }));
+		return { params: { pubId: pub.publication.id }, body: { note: 'Accepted' } };
+	},
 	// The owner can't demote themselves as the last owner; change the viewer instead.
 	'PATCH /projects/:id/members/:userId': () => ({ params: { userId: ctx.viewer.id }, body: { role: 'editor' } })
 };
@@ -325,8 +456,13 @@ const NO_WRITE = new Map<string, string>([
 
 /** Routes the owner's sample can't reach past a business rule, and why (their body never gets that far). */
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
+	[
+		'POST /projects/:id/licence-record/confirm',
+		{ why: 'takes an empty body only (strict); the sweep records the licence outcome first (PUT), and a recorded outcome leaves no review to confirm (licence/licence-record.db.test.ts confirms one)', legit: 409 }
+	],
 	['POST /share/scenario', { why: 'a read (app_share_scenario); the ladder link is a baseline link, which opens no scenario', legit: 404 }],
 	['POST /share/pack', { why: 'a read (app_share_pack); the ladder link is a baseline link, which opens no pack', legit: 404 }],
+	['POST /share/comment', { why: 'app_share_comment writes only through a live application or pack link; the ladder link is a baseline link', legit: 404 }],
 	[
 		'POST /projects/:id/packs',
 		{
@@ -337,6 +473,38 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 	[
 		'POST /projects/:id/packs/:packId/issue',
 		{ why: 'takes an empty body only (strict); a pack is issued only from an issuable report, which the ladder has none of (evidence/packs.db.test.ts)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/runs/:runId/authorised-impact',
+		{ why: 'an empty body only (strict); the ladder’s run is the model’s own, not an application run, so a legit call is 409 (evidence/authorised-impact.db.test.ts runs a pair)', legit: 409 }
+	],
+	[
+		'POST /projects/:id/packs/:packId/send',
+		{ why: 'a strict body; the ladder has no pack, so a legit send is 404 (evidence/pack-send.db.test.ts sends an issued one)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+		{ why: 'an empty body only (strict); the owner is no party of an application with an issued pack in the ladder, so a legit call is 404 (evidence/applicant-copy.db.test.ts asks for one)', legit: 404 }
+	],
+	[
+		'POST /projects/:id/scenarios/:sid/questions',
+		{
+			why: 'a strict body; the ladder has no application whose rule turns on farms hidden from its applicant, so a legit ask is 409 on its team scenario (scenarios/questions.db.test.ts asks one)',
+			legit: 409
+		}
+	],
+	['POST /projects/:id/map/start', { why: 'a strict body; the ladder’s model has nodes, and starting from the map only fills an empty model, so a legit call is 409 (delineation/start.db.test.ts proposes on an empty one)', legit: 409 }],
+	[
+		'POST /projects/:id/map/start/:spid/apply',
+		{ why: 'a strict body; the ladder’s model has nodes, so applying a proposal is 409 (delineation/start.db.test.ts applies one to an empty model)', legit: 409 }
+	],
+	[
+		'POST /projects/:id/map/divide',
+		{ why: 'a strict body; the ladder’s only feature is a parcel, which is no gauge point to add as a gauge, so a legit call is 400 (delineation/divide.db.test.ts divides a valley)', legit: 400 }
+	],
+	[
+		'POST /projects/:id/map/divide/:spid/apply',
+		{ why: 'a strict body; the planted proposal starts a model, which a division’s apply refuses, so a legit call is 409 (delineation/divide.db.test.ts applies one)', legit: 409 }
 	],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[

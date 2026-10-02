@@ -167,7 +167,7 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
     per unit supplied is the workbook's, and the crop is now fully supplied.
 
     N2: the workbook has no dam surface areas, so damAreaFullM2 is None (the
-    run estimates capacity / 3 m and warns), with the default area exponent
+    run estimates 7.2 x capacity^0.77 m2 and warns), with the default area exponent
     0.7 and no seepage; the caller notes the dams once.
     """
     wb_min = num(spec.get("damMinPct"))
@@ -200,8 +200,8 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
 #   the runoff condition rules out a real on-channel dam, which catches the
 #   runoff draining into it as well as the river.
 #
-# The importer still imports it as a farm dam and only warns: the modeller
-# confirms it, and run-of-river supply waits for pump capacity (#54, 2c).
+# By default the importer still imports it as a farm dam and only warns, for
+# the modeller to confirm; --run-of-river converts it (as_run_of_river).
 RUN_OF_RIVER_PCT_UPSTREAM = 0.9999  # 100 %, allowing for float rounding
 RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION = 0.01
 RUN_OF_RIVER_POOL_MAX_M3 = 1.0
@@ -238,6 +238,32 @@ def run_of_river_note(name: str, pct_upstream: float, capacity: float, divert: f
         f"WARNING: farm {name}: probable run-of-river, for the modeller to confirm: its dam takes 100 % of the upstream "
         f"inflow and {why}. b023 has no river abstraction, so a unit that pumps from the river is entered as a dummy dam; "
         "the app imports it as a farm dam, so its dam results (storage, spill, level) mean nothing (issue #54, 2d)"
+    )
+
+
+# A probable placeholder pool (issue #90 Q18; provisional decision 2026-10-01,
+# to be confirmed by the client's hydrologist). A farm dam that takes less than
+# 100 % of the upstream inflow (so run_of_river_note never flags it) but holds
+# less than a day of one hectare's peak irrigation (about 6-8 mm, 60-80 m³; under
+# 100 m³), or under 1 % of a day of its diversion capacity, stores nothing across
+# the model's daily step: it is a pool, not a dam. b023 workbooks carry such
+# pools where a unit has no dam, and the app can't tell a placeholder from a
+# real (tiny) dam, so it imports the value and asks: a placeholder becomes a
+# dam-less unit (capacity 0), a unit pumping from the river becomes run of river.
+PLACEHOLDER_POOL_MAX_M3 = 100.0
+
+
+def placeholder_pool_note(name: str, pct_upstream: float, capacity: float, divert: float) -> str | None:
+    """A WARNING for a near-empty dam that run_of_river_note leaves alone (it takes less than 100 % of the upstream inflow)."""
+    if capacity <= 0 or pct_upstream >= RUN_OF_RIVER_PCT_UPSTREAM:
+        return None
+    if not (capacity < PLACEHOLDER_POOL_MAX_M3 or capacity < RUN_OF_RIVER_POOL_SHARE_OF_DIVERSION * divert):
+        return None
+    return (
+        f"WARNING: farm {name}: probable placeholder pool, for the modeller to confirm: its dam holds {capacity:g} m³, "
+        f"less than a day's peak irrigation of one hectare, and takes {pct_upstream * 100:g} % of the upstream inflow, "
+        "so it stores nothing from one day to the next. If it is a placeholder, set the dam capacity to 0; if the unit "
+        "pumps from the river, set its supply rule to run of river with a pump capacity (issue #90 Q18)"
     )
 
 
@@ -1106,10 +1132,13 @@ def extract(
                 if note:
                     wb.notes.append(note)
                     flagged.append(n)
+                pool = placeholder_pool_note(n["name"], n["pctUpstreamToDam"], n["damCapacityM3"], n["divertCapacityM3Day"])
+                if pool:
+                    wb.notes.append(pool)
         dams = [n["name"] for n in nodes if n["kind"] == "farm" and n["damCapacityM3"] > 0]
         if dams:
             wb.notes.append(
-                f"{len(dams)} dam(s) have no surface area in the workbook; runs estimate it as capacity / 3 m for dam "
+                f"{len(dams)} dam(s) have no surface area in the workbook; runs estimate it as 7.2 x capacity^0.77 m2 for dam "
                 "evaporation (docs/engine-audit.md N2). Enter the areas in the app for a better figure"
             )
 

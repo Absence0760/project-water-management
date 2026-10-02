@@ -52,6 +52,8 @@ export interface ModelNodeState {
 	depletionDeficitM3?: number;
 	/** The river pump was on the day before (a trigger-rule farm). */
 	onRiver: boolean;
+	/** Each river abstraction's pool storage the day before (m³, engine ≥ 1.65.0), in the plan's order; absent without a pool. */
+	poolStorageM3?: number[];
 	/** Each pumping unit's volume so far this water year (m³), in the plan's unit order; null without boreholes. */
 	boreholeUsedM3: number[] | null;
 	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */
@@ -276,8 +278,8 @@ export function withDamStorage(snapshot: ModelStateSnapshot, input: ModelInput, 
 	for (const [id, v] of Object.entries(storageM3)) {
 		const i = input.model.nodes.findIndex((n) => n.id === id);
 		const n = input.model.nodes[i];
-		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) throw new Error(`withDamStorage: "${id}" is not a farm with a dam`);
-		if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`withDamStorage: farm "${n.name}" storage ${String(v)} is not a number`);
+		if (!n || n.kind !== 'farm' || !(n.damCapacityM3 > 0)) throw new Error(`withDamStorage: "${id}" is not a unit with a dam`);
+		if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`withDamStorage: unit "${n.name}" storage ${String(v)} is not a number`);
 		const node = state.nodes[i]!;
 		node.setFromM3 ??= node.storageM3;
 		// Within the capacity on the snapshot's day (engine ≥ 1.30.0: it can change over the run).

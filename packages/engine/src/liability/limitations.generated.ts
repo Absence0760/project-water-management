@@ -8,35 +8,35 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium",
 		"title": "Irrigation efficiency and return flow don't add up",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N2",
 		"source": "finding",
 		"severity": "High (dam-dominated farms)",
 		"title": "Dam evaporation and seepage are ignored",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N3",
 		"source": "finding",
 		"severity": "Medium",
 		"title": "Effective rain is applied day by day with no carry-over",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.14.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90), engine 0.14.0"
 	},
 	{
 		"id": "N5",
 		"source": "finding",
 		"severity": "Medium (where boreholes pump near the river)",
 		"title": "Groundwater was not modelled",
-		"status": "Built (engine 0.23.0, roadmap WP-1.34, migration 012), off by default; pending the hydrologist"
+		"status": "Built (engine 0.23.0, roadmap WP-1.34, migration 012), off by default; the method provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90); its values need client data"
 	},
 	{
 		"id": "N4",
 		"source": "finding",
 		"severity": "Low",
 		"title": "Transfers ignore the receiving dam's free space, and the source's irrigation comes second",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "N6",
@@ -50,7 +50,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "High (catchments whose rain record has gaps exported as zeros)",
 		"title": "Missing catchment rain recorded as 0 runs the catchment dry",
-		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24, pending the hydrologist's confirmation of the flagged runs)"
+		"status": "Fixed, engine 0.15.0 (CR-20, issue #2; operator decision 2026-09-24; provisional decision 2026-10-01 keeps the default; which runs are real is pending the client's station records)"
 	},
 	{
 		"id": "B3",
@@ -64,63 +64,70 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
 		"title": "A dam's capacity and a unit's abstraction now change over a run, on judgement calls the hydrologist hasn't made",
-		"status": "Built, pending the hydrologist (issue #90)"
+		"status": "Built; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist (issue #90): linear, run back to the in-service date (engine 1.63.0 asks for it), dead storage and the triggers scaled, the full-supply area kept"
 	},
 	{
 		"id": "C2",
 		"source": "finding",
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",
 		"title": "Automatic calibration scored every observed day as recorded",
-		"status": "Fixed, engine 1.22.0 (pending the hydrologist, issue #66)"
+		"status": "Fixed, engine 1.22.0 (issue #66; provisional decision 2026-10-01 keeps the defaults, the hydrologist's confirmation pending; zero-flow stretches changed in engine 1.62.0, C3)"
+	},
+	{
+		"id": "C3",
+		"source": "finding",
+		"severity": "Medium (fits on records of rivers that stop for 90 days or more)",
+		"title": "A long stretch of zero flow was suspect, so the fit never saw the river dry",
+		"status": "Fixed, engine 1.62.0 (provisional decision 2026-10-01, the client's hydrologist's confirmation pending; calibration-research.md § Provisional decisions)"
 	},
 	{
 		"id": "A1",
 		"source": "finding",
 		"severity": "Medium (Reserve rule-table sites whose natural flow falls below the table's driest point: (100 − P_last) % of months with the percentile from the run, 1 % at the DRM's 99 % point; more with the gazette's curve when the model runs drier)",
 		"title": "Below a rule table's driest point the requirement is scaled down with the flow, not held at the drought flow",
-		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A2",
 		"source": "finding",
 		"severity": "Low",
 		"title": "A rule table is interpolated linearly between its % points; Sawunyama & Hughes (2010) interpolate on a log scale",
-		"status": "Decided (from the literature, engine 0.21.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.21.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A3",
 		"source": "finding",
 		"severity": "Medium (sites whose modelled natural flow differs from the determination's)",
 		"title": "By default a month's natural percentile comes from the run's own natural flow, not the gazette's natural curve",
-		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; pending the hydrologist)"
+		"status": "Decided (from the literature and the persona drafts, engines 0.21.0 and 1.11.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A4",
 		"source": "finding",
 		"severity": "Medium (sites with a Reserve rule table)",
 		"title": "The daily EWR charge, curtailment and the water account follow the pragmatic EWR by default, while the Reserve compliance report follows the rule table",
-		"status": "Built (engine 1.3.0, issue #64), off by default; pending the hydrologist and the assessor"
+		"status": "Built (engine 1.3.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's or the assessor's confirmation pending"
 	},
 	{
 		"id": "A5",
 		"source": "finding",
 		"severity": "Medium (sites with a low-flow requirement and floods in dry months)",
 		"title": "By default a low-flow requirement is judged on the month's total volume, so a flood month can pass its low flows while its base flow was short",
-		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; pending the hydrologist"
+		"status": "Built (engines 1.3.0 and 1.6.0, issue #64), off by default; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending"
 	},
 	{
 		"id": "A6",
 		"source": "finding",
 		"severity": "Medium (rule tables with high-flow components)",
 		"title": "A high-flow event is found in daily flow by the engine's own rule: at least half the duration at or above half the peak",
-		"status": "Decided (engine 1.9.0, licensing-authority persona review of issue #46; pending the hydrologist)"
+		"status": "Decided (engine 1.9.0, licensing-authority persona review of issue #46; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "A7",
 		"source": "finding",
 		"severity": "Medium (rule tables with high-flow components)",
 		"title": "A year is asked for no more high-flow events than its natural flow had, counted per water year, and the DRM's high-flow volumes are not checked",
-		"status": "Decided (from the literature, engine 0.33.0; pending the hydrologist)"
+		"status": "Decided (from the literature, engine 0.33.0; provisional decision 2026-10-01 keeps it; the hydrologist's confirmation pending)"
 	},
 	{
 		"id": "L1",
@@ -144,18 +151,25 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Needs hydrologist (engine 1.44.0, issue #123)"
 	},
 	{
+		"id": "R2",
+		"source": "finding",
+		"severity": "Low (units with a demand on a river abstraction of its own, engine 1.65.0)",
+		"title": "A demand's own river abstraction beside a unit's dam runs on choices the hydrologist hasn't confirmed",
+		"status": "Needs hydrologist (engine 1.65.0, issue #344)"
+	},
+	{
 		"id": "Q3",
 		"source": "quirk",
 		"severity": null,
 		"title": "Transfer order / spill at the receiver",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	},
 	{
 		"id": "Q5",
 		"source": "quirk",
 		"severity": null,
 		"title": "Irrigation may empty the dam",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90; which dams keep a reserve is client data) — engine 0.16.0"
 	},
 	{
 		"id": "Q6",
@@ -190,6 +204,6 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "quirk",
 		"severity": null,
 		"title": "Several transfers from one dam",
-		"status": "Decided (persona recommendation, 2026-09-24; pending the hydrologist) — engine 0.16.0"
+		"status": "Decided (persona recommendation, 2026-09-24; provisionally decided 2026-10-01 from the published practice, pending the client's hydrologist, issue #90) — engine 0.16.0"
 	}
 ];

@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Issue #326 B-landcover: the farm drawer's From land cover section (CroplandProposalsBox.svelte + croplandProposals.ts, in the lazily loaded drawer chunk, now 5.9 KB gzipped) and the api.cropland client. Measured 1555 KB locally on feat/326-landcover off main @ ae2f3e14, 4 KB over the 1551 KB ceiling; +6 leaves ~2 KB headroom."
+}

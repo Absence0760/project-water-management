@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
 import { NAV_SECTIONS, TAB_LABELS } from '$lib/workspace/tabs';
-import { DIAGRAM_IDS, GUIDES, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline, plainText } from './guides';
+import { DIAGRAM_IDS, GUIDES, OPTIONAL_MODEL_TABS, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline, plainText } from './guides';
 import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, type ShotId } from './pictures';
 import { TOUR } from './tour';
 
@@ -82,7 +82,9 @@ describe('setup path', () => {
 
 	it("follows the workspace's Build the model section, whose order the help describes", () => {
 		const model = NAV_SECTIONS.find((sec) => sec.id === 'model')!.tabs as readonly string[];
-		expect(SETUP_TABS.filter((id) => model.includes(id))).toEqual([...model]);
+		expect(SETUP_TABS.filter((id) => model.includes(id))).toEqual(model.filter((id) => !OPTIONAL_MODEL_TABS.includes(id)));
+		// The optional tabs are real model tabs, not a way to drop one quietly.
+		for (const id of OPTIONAL_MODEL_TABS) expect(model).toContain(id);
 	});
 
 	it('"Getting around a project" names the sidebar’s sections, and their tabs, in the sidebar’s order', () => {

@@ -32,6 +32,18 @@ describe('modelProblems', () => {
 	});
 });
 
+describe('dam area exponent (engine ≥ 1.63.0, issue #90)', () => {
+	it('takes 0 < b ≤ 1 and refuses b > 1, which no basin has (the DB column still holds an older row)', () => {
+		const out = node('Gauge', null);
+		const parse = (b: number) => ModelBody.safeParse({ nodes: [out, node('A', out.id, { damAreaExponent: b })], crops: [], cropAreas: [], transfers: [] }).success;
+		expect(parse(0.7)).toBe(true);
+		expect(parse(1)).toBe(true);
+		expect(parse(1.01)).toBe(false);
+		expect(parse(3)).toBe(false);
+		expect(parse(0)).toBe(false);
+	});
+});
+
 describe('other water users (WP-1.33)', () => {
 	it('accepts a user node and fills the inert defaults on a farm; refuses crops and transfers on a user', () => {
 		const out = node('Gauge', null);
@@ -127,7 +139,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, { ...farm, damCapacityM3: 0, supplyRule: 'trigger' } as never])).join()).toMatch(/"A": the trigger supply rule needs a farm dam/);
 		expect(modelProblems(model([out, { ...trigger, supplyStopPct: 0.2 } as never])).join()).toMatch(/stop level must be at least its trigger level/);
 		const onGauge = node('Gauge', null, { pumpCapacityM3Day: 10 });
-		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a farm has a supply rule/);
+		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": only a unit has a supply rule/);
 	});
 
 	it('a pump capacity on an other water user (engine 1.58.0): accepted, null by default, refused negative; a supply rule on it is refused', () => {
@@ -140,7 +152,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 1200 } as never]))).toEqual([]);
 		expect(modelProblems(model([out, { ...user, pumpCapacityM3Day: 0 } as never]))).toEqual([]);
 		expect(parse({ pumpCapacityM3Day: -1 }).success).toBe(false);
-		expect(modelProblems(model([out, { ...user, supplyRule: 'riverFirst' } as never])).join()).toMatch(/"Town": only a farm has a supply rule; an other water user always takes from the river/);
+		expect(modelProblems(model([out, { ...user, supplyRule: 'riverFirst' } as never])).join()).toMatch(/"Town": only a unit has a supply rule; an other water user always takes from the river/);
 	});
 
 	it('hands-off flow and River to dam by month (engine 1.32.0, issue #204): off by default, twelve finite values ≥ 0, farms only', () => {
@@ -170,7 +182,7 @@ describe('dam storage (WP-3.5)', () => {
 		// Farms only is a model rule.
 		for (const over of [{ handsOffM3Day: Array(12).fill(10) }, { handsOffEwr: true }, { divertMonthlyM3Day: Array(12).fill(10) }]) {
 			const gauge = node('Gauge', null, over);
-			expect(modelProblems(model([gauge, node('B', gauge.id)])).join(), JSON.stringify(over)).toMatch(/"Gauge": only a farm has a hands-off flow/);
+			expect(modelProblems(model([gauge, node('B', gauge.id)])).join(), JSON.stringify(over)).toMatch(/"Gauge": only a unit has a hands-off flow/);
 		}
 	});
 
@@ -221,7 +233,7 @@ describe('dam storage (WP-3.5)', () => {
 			expect(ModelBody.safeParse(body({ ...t, ...bad })).success, JSON.stringify(bad)).toBe(false);
 		// The canal and the gauge aren't below Up on the river as farms: refused.
 		for (const at of [canal.id, out.id, crypto.randomUUID()])
-			expect(modelProblems(ModelBody.parse(body({ ...t, lossReturnPct: 0.5, lossReturnNodeId: at })) as never).join()).toMatch(/its seepage can rejoin the river only below "Up" or a farm downstream of it/);
+			expect(modelProblems(ModelBody.parse(body({ ...t, lossReturnPct: 0.5, lossReturnNodeId: at })) as never).join()).toMatch(/its seepage can rejoin the river only below "Up" or a unit downstream of it/);
 	});
 
 	it('refuses bad fields, and a curve that is not monotone or sits on a gauge', () => {
@@ -242,7 +254,7 @@ describe('dam storage (WP-3.5)', () => {
 		const falling = { ...farm, damCurve: [curve[0], curve[2], { ...curve[1], volumeM3: 30_000 }] };
 		expect(modelProblems(model([out, falling as never])).join()).toMatch(/"A": dam survey curve: the survey area falls/);
 		const onGauge = node('Gauge', null, { damCurve: curve });
-		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": dam survey curve: only a farm has a dam/);
+		expect(modelProblems(model([onGauge, node('B', onGauge.id)])).join()).toMatch(/"Gauge": dam survey curve: only a unit has a dam/);
 	});
 });
 
@@ -269,7 +281,7 @@ describe('development over the run (engine 1.30.0, issue #67)', () => {
 		const problems = (...nodes: object[]) => modelProblems(parse(...nodes) as never).join();
 		expect(problems(out, { ...farm, damSurveyDate: '2021-02-30' })).toMatch(/"A": the survey date must be a date/);
 		expect(problems(out, { ...farm, damSedimentPctPerYear: 0.01 })).toMatch(/"A": a sediment rate needs the date the capacity was surveyed/);
-		expect(problems(out, farm, { ...town, damInServiceFrom: '2001-01-01' })).toMatch(/"Town": only a farm has a dam/);
+		expect(problems(out, farm, { ...town, damInServiceFrom: '2001-01-01' })).toMatch(/"Town": only a unit has a dam/);
 		expect(problems({ ...out, abstractionFrom: '2001-01-01' }, farm)).toMatch(/"Gauge": a gauge takes no water/);
 	});
 });
@@ -282,7 +294,7 @@ describe('land cover (WP-1.35)', () => {
 		const patch = { id: crypto.randomUUID(), nodeId: farm.id, coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
 		const m = { ...model([out, farm]), landCover: [patch] };
 		expect(modelProblems(m)).toEqual([]);
-		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: out.id }] }).join()).toMatch(/land cover lies on a farm/);
+		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: out.id }] }).join()).toMatch(/land cover lies on a unit/);
 		expect(modelProblems({ ...m, landCover: [{ ...patch, nodeId: crypto.randomUUID() }] }).join()).toMatch(/unknown node/);
 		expect(modelProblems({ ...m, landCover: [patch, patch] }).join()).toMatch(/duplicate land-cover id/);
 		for (const bad of [{ coverClass: 'bamboo' }, { densityPct: 2 }, { areaKm2: -1 }, { factors: { mar: 1.2, lowFlow: 0 } }]) {
@@ -366,6 +378,13 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		for (const population of [-1, Number.POSITIVE_INFINITY, 'many']) expect(ModelBody.safeParse(body({ ...monthly, population })).success, String(population)).toBe(false);
 	});
 
+	it('takes an object’s rank within its class (engine 1.64.0): none by default, a whole number 1–99', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10), priority: 'first' };
+		expect(ModelBody.parse(body(monthly)).demandObjects![0]!.rank).toBeNull();
+		for (const rank of [1, 2, 99]) expect(ModelBody.parse(body({ ...monthly, rank })).demandObjects![0]!.rank).toBe(rank);
+		for (const rank of [0, 100, 1.5, -1, '2']) expect(ModelBody.safeParse(body({ ...monthly, rank })).success, String(rank)).toBe(false);
+	});
+
 	it('takes where an object’s number comes from (engine 1.56.0): not recorded by default, one of the four, sized as it says', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10), category: 'municipal' };
 		const perUnit = { sizing: 'perUnit', count: 300, litresPerUnitDay: 230, category: 'domestic' };
@@ -380,6 +399,24 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'meter' }))).join()).toMatch(/a meter record is a volume, so size it by month/);
 		expect(modelProblems(ModelBody.parse(body({ ...perUnit, source: 'aadd' }))).join()).toMatch(/an AADD is a volume/);
 		expect(modelProblems(ModelBody.parse(body({ ...monthly, source: 'perCapita' }))).join()).toMatch(/population × litres a day is sized per unit/);
+	});
+
+	it('takes where an object and a unit’s crops take their water (engine 1.65.0, issue #344): the dam by default, or a river abstraction with a pump and pool', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		const parsed = ModelBody.parse(body(monthly));
+		expect(parsed.demandObjects![0]).toMatchObject({ waterSource: null, riverPumpM3Day: null, riverPoolM3: null });
+		expect(parsed.nodes[1]).toMatchObject({ cropWaterSource: 'dam', cropRiverPumpM3Day: null, cropRiverPoolM3: null });
+		const river = ModelBody.parse(body({ ...monthly, waterSource: 'river', riverPumpM3Day: 864, riverPoolM3: 5000 }));
+		expect(river.demandObjects![0]).toMatchObject({ waterSource: 'river', riverPumpM3Day: 864, riverPoolM3: 5000 });
+		expect(modelProblems(river)).toEqual([]);
+		for (const bad of [{ waterSource: 'borehole' }, { riverPumpM3Day: -1 }, { riverPoolM3: -5 }, { riverPoolM3: Number.POSITIVE_INFINITY }])
+			expect(ModelBody.safeParse(body({ ...monthly, ...bad })).success, JSON.stringify(bad)).toBe(false);
+		const crops = ModelBody.parse({ ...body(monthly), nodes: [gauge, { ...unit, cropWaterSource: 'river', cropRiverPumpM3Day: null, cropRiverPoolM3: 1200 }] });
+		expect(crops.nodes[1]).toMatchObject({ cropWaterSource: 'river', cropRiverPoolM3: 1200 });
+		expect(modelProblems(crops)).toEqual([]);
+		for (const bad of [{ cropWaterSource: 'well' }, { cropRiverPumpM3Day: -1 }]) expect(ModelBody.safeParse({ ...body(monthly), nodes: [gauge, { ...unit, ...bad }] }).success, JSON.stringify(bad)).toBe(false);
+		// Only a unit's crops have a water source (a model rule).
+		expect(modelProblems(ModelBody.parse({ ...body(monthly), nodes: [{ ...gauge, cropWaterSource: 'river' }, unit] })).join()).toMatch(/only a unit's crops have a water source/);
 	});
 
 	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {

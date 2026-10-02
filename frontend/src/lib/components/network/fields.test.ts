@@ -60,7 +60,7 @@ describe('damHints', () => {
 
 	it('says when evaporation uses an estimated surface area (N2)', () => {
 		expect(damHints({ kind: 'farm', damCapacityM3: 90_000, damMinPct: 0.1, damAreaFullM2: null })).toEqual([
-			"No surface area: evaporation uses capacity ÷ 3 m, about 3.0 ha. Enter the dam's area when full for a better figure."
+			"No surface area: evaporation uses 7.2 × capacity^0.77 m², about 4.7 ha. Enter the dam's area when full for a better figure."
 		]);
 		expect(damHints({ kind: 'farm', damCapacityM3: 40_000, damMinPct: 0.1, damAreaFullM2: 15_000 })).toEqual([]);
 	});

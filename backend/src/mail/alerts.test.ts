@@ -96,6 +96,12 @@ describe('alertMail', () => {
 		expect(alertMail(wua, project, { kind: 'ewr_forecast_fail', days: 5, of: 14, from: '2026-09-27', to: '2026-10-10', madeOn: '2026-09-26', threshold: 3 }, unsub).text).toContain(
 			'missed on 5 of the 14 forecast days (27 Sept 2026 to 10 Oct 2026)'
 		);
+		// A forecast behind the recorded rain, with no newer one made, says so (positive control: the current one above doesn't).
+		const ewr = ONE_OF_EACH.ewr_forecast_fail as Extract<AlertFacts, { kind: 'ewr_forecast_fail' }>;
+		expect(alertMail(wua, project, ewr, unsub).text).not.toContain('out of date');
+		expect(alertMail(wua, project, { ...ewr, outOfDate: { observedTo: '2026-09-25', rainUntil: '2026-09-28' } }, unsub).text).toContain(
+			'This forecast is out of date: it used the rain recorded to 25 Sept 2026, rain has since been recorded to 28 Sept 2026, and no newer forecast has been made yet. Check the forecast data feed.'
+		);
 		expect(alertMail(wua, project, { kind: 'data_stale', threshold: 3, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 10 }] }, unsub).text).toContain(
 			'DWS gauge flow: newest day 2 Jan 2026, 10 days late'
 		);
@@ -224,6 +230,33 @@ describe('digestMail', () => {
 		const m = digestMail(farmer, project, [dam], unsub, 5, 80);
 		expect(m.text).toContain('…and 80 more alerts. Open the catchment to see them all.');
 		expect(m.text).toContain('Open your hydrological unit: http://localhost:7777/farm/p1');
+	});
+});
+
+describe('"Was this useful?" (151_alert_feedback)', () => {
+	const fb = { yesUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=yes', noUrl: 'http://localhost:7777/alerts/feedback#t=FB&a=no' };
+
+	it('asks under the action with two plain links, in text and HTML, and never an image', () => {
+		const m = alertMail(farmer, project, dam, unsub, fb);
+		expect(m.text).toContain('Was this alert useful?\nYes: http://localhost:7777/alerts/feedback#t=FB&a=yes\nNo: http://localhost:7777/alerts/feedback#t=FB&a=no');
+		expect(m.html).toContain('Was this alert useful? <a href="http://localhost:7777/alerts/feedback#t=FB&amp;a=yes"');
+		expect(m.html).toContain('<a href="http://localhost:7777/alerts/feedback#t=FB&amp;a=no"');
+		expect(m.html).not.toMatch(/<img\b/i);
+		// After the action, before "why you got this".
+		expect(m.text.indexOf('Was this alert useful?')).toBeGreaterThan(m.text.indexOf('Open your hydrological unit'));
+		expect(m.text.indexOf('Was this alert useful?')).toBeLessThan(m.text.indexOf('You get this email because'));
+	});
+
+	it('asks about the summary in a digest, and in Afrikaans for an Afrikaans reader', () => {
+		expect(digestMail(staff, project, [dam], unsub, 5, 0, fb).text).toContain('Was this summary useful?');
+		const af = alertMail({ ...farmer, locale: 'af' }, project, dam, unsub, fb);
+		expect(af.text).not.toContain('Was this alert useful?');
+		expect(af.text).toContain('Was hierdie waarskuwing nuttig?\nJa: ');
+		expect(af.text).toContain('#t=FB&a=yes');
+	});
+
+	it('asks nothing without links', () => {
+		expect(alertMail(farmer, project, dam, unsub).text).not.toContain('useful');
 	});
 });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { accountDeletedMail, erratumNoticeMail, escapeHtml, farmerInviteMail, inviteMail, listText, packNoticeMail, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -94,6 +94,37 @@ describe('email templates', () => {
 
 	it('escapeHtml covers the five HTML metacharacters', () => {
 		expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe('&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;');
+	});
+});
+
+describe('the organisation’s privacy contact in invitations (POPIA s18(1)(b), 168)', () => {
+	const url = siteLink('/register', TOKEN, 'invite');
+	const contact = { organisation: 'Kloof WUA', name: 'Info Officer', email: 'io@kloof.example', postal: 'PO Box 1 <b>' };
+
+	it('names the organisation and whom to ask in a farmer invite, escaped, with the postal address when there is one', () => {
+		const mail = farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'], contact });
+		expect(mail.text).toContain('Kloof WUA decides about your information in this catchment. Questions about it: Info Officer, io@kloof.example.');
+		expect(mail.text).toContain('Or write to Info Officer at: PO Box 1 <b>');
+		expect(mail.html).toContain('PO Box 1 &lt;b&gt;');
+		const noPost = farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'], contact: { ...contact, postal: null } });
+		expect(noPost.text).toContain('Questions about it: Info Officer');
+		expect(noPost.text).not.toContain('Or write to');
+	});
+
+	it('names it in a project or team invite too', () => {
+		const mail = inviteMail('x@example.com', url, 'Ann', { kind: 'project', name: 'Kloof', role: 'viewer' }, 'sign-up', contact);
+		expect(mail.text).toContain('Kloof WUA decides about your information in its projects. Questions about it: Info Officer, io@kloof.example.');
+		expect(mail.text).toContain('Or write to Info Officer at: PO Box 1 <b>');
+	});
+
+	it('says nothing of a contact when none is set (positive control: the privacy notice line stays)', () => {
+		for (const mail of [
+			farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'] }),
+			inviteMail('x@example.com', url, 'Ann', { kind: 'team', name: 'T', role: 'member' })
+		]) {
+			expect(mail.text).not.toContain('decides about your information');
+			expect(mail.text).toContain('How we handle your information');
+		}
 	});
 });
 
@@ -235,5 +266,55 @@ describe('packNoticeMail (issue #71)', () => {
 		expect(m.html).toMatch(/<html lang="af">/);
 		expect(m.subject).toBe('Bewyspakket uitgereik: Upper dam — Kloof');
 		expect(m.text).toContain('http://localhost:7777/verify/ab12-cd34-ef56');
+	});
+});
+
+describe('accountDeletedMail (issue #112, POPIA s24(4))', () => {
+	it('says what was deleted, what stays without the name and what keeps it, and names what the person left', () => {
+		const m = accountDeletedMail('a@example.com', { projects: ['Kloof', 'Vaal'], teams: ['Hydro team'] });
+		expect(m).toMatchObject({ kind: 'account_deleted', to: 'a@example.com', subject: 'Your account has been deleted — Water Management' });
+		expect(m.text).toContain('As you asked, we deleted the Water Management account for a@example.com.');
+		expect(m.text).toContain('Deleted with it: your name, email address and password');
+		expect(m.text).toContain('You are no longer a member of Kloof, Vaal and Hydro team.');
+		expect(m.text).toContain('Kept without your name:');
+		expect(m.text).toContain('Kept with your name: a sign-off keeps the name and registration you typed');
+		expect(m.text).toContain('within 35 days');
+		expect(m.text).toContain('Read the privacy notice: http://localhost:7777/privacy#retention');
+		expect(m.html).toMatch(/<html lang="en">/);
+	});
+
+	it('leaves out the "no longer a member" line for an account that belonged to nothing', () => {
+		const m = accountDeletedMail('a@example.com', { projects: [], teams: [] });
+		expect(m.text).not.toContain('no longer a member');
+		expect(m.text).toContain('Kept without your name:');
+	});
+});
+
+describe('erratumNoticeMail (issue #103, the known-defect procedure)', () => {
+	const erratum = { id: 'ER-7', keyedOn: 'run' as const, firstAffected: '0.16.0', fixedIn: '0.19.0', severity: 'Medium', appliesWhen: 'A transfer into a dam that loses water', summary: 'The dam was topped up short' };
+	const base = { projectId: 'p 1', projectName: 'Upper dam', erratum, runCount: 3 };
+
+	it('names the bug, when it changes results, the affected runs and the fix, and links the project’s runs', () => {
+		const m = erratumNoticeMail('o@example.com', base);
+		expect(m).toMatchObject({ kind: 'erratum_notice', to: 'o@example.com', subject: 'Known engine bug ER-7 may affect Upper dam — Water Management' });
+		expect(m.text).toContain('We confirmed a bug in the model engine (ER-7, severity medium): The dam was topped up short.');
+		expect(m.text).toContain('It changes results only when: A transfer into a dam that loses water.');
+		expect(m.text).toContain('3 runs in Upper dam were made by engine 0.16.0 up to (not including) 0.19.0, which had this bug.');
+		expect(m.text).toContain('It is fixed in engine 0.19.0.');
+		expect(m.text).toContain('/projects/p%201?tab=runs');
+		expect(m.text).toContain('You get this email because you own Upper dam.');
+	});
+
+	it('one run reads in the singular; an open erratum says it isn’t fixed yet', () => {
+		const m = erratumNoticeMail('o@example.com', { ...base, runCount: 1, erratum: { ...erratum, fixedIn: null } });
+		expect(m.text).toContain('1 run in Upper dam was made by engine 0.16.0 or later, which had this bug.');
+		expect(m.text).toContain('It is not fixed yet.');
+		expect(m.text).not.toContain('fixed in engine');
+	});
+
+	it('a fit erratum speaks of the calibration the parameters came from', () => {
+		const m = erratumNoticeMail('o@example.com', { ...base, erratum: { ...erratum, keyedOn: 'fit' } });
+		expect(m.text).toContain('3 runs in Upper dam use parameters from an automatic calibration made by engine 0.16.0 up to (not including) 0.19.0');
+		expect(erratumNoticeMail('o@example.com', { ...base, runCount: 1, erratum: { ...erratum, keyedOn: 'fit' } }).text).toContain('1 run in Upper dam uses parameters');
 	});
 });

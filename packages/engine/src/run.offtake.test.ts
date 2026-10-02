@@ -359,11 +359,11 @@ describe('canal seepage back to the river (engine 1.42.0)', () => {
 		// T is not below S (S drains straight to the gauge).
 		const input = model([offtake({ lossPct: 0.25, lossReturnPct: 0.5, lossReturnNodeId: 'T' })]);
 		const out = run(input);
-		expect(out.summary.warnings.some((w) => /river off-take S → C: its seepage return unit is not S or a farm below it/.test(w))).toBe(true);
+		expect(out.summary.warnings.some((w) => /river off-take S → C: its seepage return unit is not S or a unit below it/.test(w))).toBe(true);
 		expect(out.series.some((s) => s.key === 'offtake_loss_return')).toBe(false);
 		near(get(out, 'G', 'outflow'), [915, 915]);
 		passes(input, out);
-		expect(modelRuleProblems(input.model).some((p) => /its seepage can rejoin the river only below "S" or a farm downstream of it/.test(p))).toBe(true);
+		expect(modelRuleProblems(input.model).some((p) => /its seepage can rejoin the river only below "S" or a unit downstream of it/.test(p))).toBe(true);
 		expect(modelRuleProblems(model([offtake({ lossReturnPct: 1.5 })]).model).some((p) => /seeping back must be between 0 % and 100 %/.test(p))).toBe(true);
 		expect(modelRuleProblems(model([offtake({ lossPct: 0.25, lossReturnPct: 0.5, lossReturnNodeId: 'L' })], { nodes: below() }).model)).toEqual([]);
 	});

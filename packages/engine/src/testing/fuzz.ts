@@ -383,6 +383,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addDroughtRestriction(new Rng(seed ^ 0x7f4a7c15), settings, nodes);
 	// A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8), from its own stream, last of all.
 	addUserPumps(new Rng(seed ^ 0x4f1bbcdc), nodes);
+	// River abstractions beside a unit's dam (engine ≥ 1.65.0, issue #344), from their own stream, last of all.
+	addRiverSources(new Rng(seed ^ 0x2545f491), nodes, demandObjects);
 	return {
 		settings,
 		model: {
@@ -632,6 +634,44 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 }
 
 /**
+ * Every demand back on the dam (engine ≥ 1.65.0): for a seed-pinned test
+ * whose case predates river abstractions, so the generator's later draws
+ * don't move it. Changes `input` in place and returns it.
+ */
+export function withoutRiverSources(input: ModelInput): ModelInput {
+	for (const n of input.model.nodes) n.cropWaterSource = 'dam';
+	for (const o of input.model.demandObjects ?? []) o.waterSource = null;
+	return input;
+}
+
+/**
+ * River abstractions beside a unit's dam (engine ≥ 1.65.0, issue #344,
+ * docs/model.md §2.7j) in 25 % of seeds: a unit's crops a third of the time
+ * and each demand object half the time draw on the river, with a pump of none
+ * (no limit), 0, a trickle or more than any flow, and a pool now and then
+ * (a puddle to more than a dam), on units with a dam and without, under any
+ * supply rule (addSupply ran before). Now and then a demand keeps the dam
+ * but carries a pump and pool, which are inert.
+ */
+function addRiverSources(g: Rng, nodes: NetworkNode[], objects: DemandObject[]): void {
+	if (!g.bool(0.25)) return;
+	const pump = () => g.pick([null, 0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e6), g.logFloat(1, 1e8)]);
+	const pool = () => (g.bool(0.4) ? g.pick([g.logFloat(1, 1e3), g.logFloat(1e3, 1e6), g.logFloat(1e5, 1e8)]) : null);
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !g.bool(0.35)) continue;
+		n.cropWaterSource = g.bool(0.9) ? 'river' : 'dam';
+		n.cropRiverPumpM3Day = pump();
+		n.cropRiverPoolM3 = pool();
+	}
+	for (const o of objects) {
+		if (!g.bool(0.5)) continue;
+		o.waterSource = g.bool(0.9) ? 'river' : 'dam';
+		o.riverPumpM3Day = pump();
+		o.riverPoolM3 = pool();
+	}
+}
+
+/**
  * A pump capacity on other water users (engine ≥ 1.58.0, WP-3.8, docs/model.md
  * §2.7c) in 30 % of seeds, on each user half the time: 0 (no pump), a trickle,
  * or anything up to more than any flow, so the cap binds some days, every day
@@ -758,7 +798,8 @@ function addLicenceConditions(g: Rng, allocations: AllocationEntry[]): void {
  * to three on half the farms (now and then one on a gauge or user, or one
  * switched off, which the engine skips), monthly or per unit, from a trickle
  * to more than the river carries, months without any, losses, profiles, any
- * return share (0 when piped out), any priority class; half the monthly
+ * return share (0 when piped out), any priority class and ranks within one
+ * (engine ≥ 1.64.0); half the monthly
  * ones with people, so a domestic or municipal one has a basic-needs floor
  * from under to over its demand (engine ≥ 1.44.0); and every source,
  * sized as it says (engine ≥ 1.56.0).
@@ -786,6 +827,8 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				monthlyFactor: perUnit && g.bool(0.5) ? Array.from({ length: 12 }, () => g.float(0, 3)) : null,
 				returnPct: external ? 0 : g.pick([0, 1, g.frac()]),
 				priority: g.pick(['first', 'shared', 'last'] as const),
+				// Its rank within its class (engine ≥ 1.64.0), from the running count with no draw, so the rest of the seed is unchanged.
+				rank: ([null, 2, 1, null, 3, 2] as const)[out.length % 6]!,
 				destination: external ? 'external' : 'internal',
 				enabled: g.bool(0.9),
 				// The basic-needs floor (engine ≥ 1.44.0): a per-unit object's count sets it; every other
@@ -793,6 +836,10 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 				population: !perUnit && k % 2 === 0 ? Math.round(level * 40) : null,
 				// Where its number comes from (engine ≥ 1.56.0), from k with no draw, one that fits the sizing: it changes no run.
 				source: ([null, perUnit ? 'perCapita' : 'meter', perUnit ? 'other' : 'aadd'] as const)[k % 3]!,
+				// On the dam until addRiverSources says otherwise (engine ≥ 1.65.0), no draw, as a stored object reads.
+				waterSource: null,
+				riverPumpM3Day: null,
+				riverPoolM3: null,
 				note: ''
 			});
 		}

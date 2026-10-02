@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Issue #344: the engine's river abstractions (riverSource.ts, the simulate and self-check paths) that the browser run carries, the Water for … fields (WaterSourceFields, PumpCapacityField) and the help entry; measured 1562 KB against 1559 KB after merging main"
+}

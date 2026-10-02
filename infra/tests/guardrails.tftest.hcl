@@ -438,6 +438,42 @@ override_resource {
   }
 }
 
+# The map's data (map_data.tf, s3_cloudfront.tf's /tiles/*)
+override_resource {
+  target          = aws_s3_bucket.tiles
+  override_during = plan
+  values = {
+    arn                         = "arn:aws:s3:::water-management-tiles-000000000000"
+    bucket                      = "water-management-tiles-000000000000"
+    bucket_regional_domain_name = "water-management-tiles-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.tiles
+  override_during = plan
+  values = {
+    id = "tiles-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_function.tiles_range
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:function/water-management-tiles-range"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reference
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reference-000000000000"
+    bucket = "water-management-reference-000000000000"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
@@ -604,6 +640,7 @@ variables {
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
   alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  app_encryption_key  = "0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd0123abcd"
   # PEM armour around a placeholder: the shape the variable checks, not a key.
   cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
   # Report downloads (reports.tf): a public key generated for these tests (its
@@ -744,8 +781,8 @@ run "production_guardrails" {
     error_message = "No distribution-wide custom error responses — they would rewrite API 403/404 JSON into index.html. The SPA fallback is the spa_rewrite function."
   }
   assert {
-    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods'];") && strcontains(aws_cloudfront_function.spa_rewrite.code, "if (PRERENDERED.indexOf(uri) !== -1) {") && strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = uri + '.html'")
-    error_message = "The prerendered pages (/welcome, /welcome/af, /privacy, /terms, /methods) must be served from their .html, not the SPA fallback."
+    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods', '/data-sources'];") && strcontains(aws_cloudfront_function.spa_rewrite.code, "if (PRERENDERED.indexOf(uri) !== -1) {") && strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = uri + '.html'")
+    error_message = "The prerendered pages (/welcome, /welcome/af, /privacy, /terms, /methods, /data-sources) must be served from their .html, not the SPA fallback."
   }
   assert {
     condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"
@@ -782,16 +819,17 @@ run "runtime_secrets" {
   assert {
     condition = (
       toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
-      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY", "APP_ENCRYPTION_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
       toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
     )
-    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret and the download signing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret, the download signing key and the TOTP sealing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
     condition = (
       local.runtime_secrets.migrate.WATER_APP_PASSWORD == var.db_app_password &&
       local.runtime_secrets.api.AUTH_JWT_SECRET == var.auth_jwt_secret &&
+      local.runtime_secrets.api.APP_ENCRYPTION_KEY == var.app_encryption_key &&
       local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret
     )
     error_message = "The runtime secrets carry the values from their sources (the sops-fed variables)."
@@ -822,6 +860,7 @@ run "runtime_secrets" {
       ephemeralasnull(var.db_app_password) == null,
       ephemeralasnull(var.alerts_token_secret) == null,
       ephemeralasnull(var.cloudfront_private_key) == null,
+      ephemeralasnull(var.app_encryption_key) == null,
       ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY) == null,
       ephemeralasnull(local.runtime_secrets.api.DATABASE_URL) == null,
       ephemeralasnull(local.runtime_secrets.worker.DATABASE_URL) == null,
@@ -987,6 +1026,28 @@ run "rejects_short_alerts_token_secret" {
   expect_failures = [var.alerts_token_secret]
 }
 
+# The TOTP sealing key (two-step sign-in, issue #282): long, and not the
+# committed dev placeholder.
+run "rejects_short_app_encryption_key" {
+  command = plan
+
+  variables {
+    app_encryption_key = "0123456789abcdef"
+  }
+
+  expect_failures = [var.app_encryption_key]
+}
+
+run "rejects_placeholder_app_encryption_key" {
+  command = plan
+
+  variables {
+    app_encryption_key = "dev-only-app-encryption-key-0000000000000000"
+  }
+
+  expect_failures = [var.app_encryption_key]
+}
+
 run "rejects_fractional_runtime_secret_version" {
   command = plan
 
@@ -1049,8 +1110,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 4
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API and site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 5
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API, tiles and site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -1401,6 +1462,7 @@ run "alarms" {
     condition = alltrue([for a in [
       aws_cloudwatch_metric_alarm.cloudfront_5xx,
       aws_cloudwatch_metric_alarm.cloudfront_requests,
+      aws_cloudwatch_metric_alarm.cloudfront_bytes,
       aws_cloudwatch_metric_alarm.waf_blocked_requests,
     ] : a.alarm_actions == toset([aws_sns_topic.alerts_us_east_1.arn])])
     error_message = "Every us-east-1 alarm (CloudFront, WAF) must notify the us-east-1 alerts topic."
@@ -1420,6 +1482,24 @@ run "alarms" {
   assert {
     condition     = aws_cloudwatch_metric_alarm.cloudfront_requests.threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests.comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests.evaluation_periods == 1
     error_message = "By default the request-flood alarm fires on the first 5 minutes over 5,000 requests (a flood just under it costs $2.30-4.03/day)."
+  }
+  # --- Egress alarm: bytes, which the request alarm can't see (the tiles) ----
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.metric_name == "BytesDownloaded" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.cloudfront_bytes.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+    )
+    error_message = "The egress alarm must sum this distribution's BytesDownloaded (Region = Global) over 5 minutes and fire on the first period over."
+  }
+  assert {
+    # One address at the tiles rule's limit, every range the 2 MiB tiles_range allows, must trip it in one period.
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold == 536870912 && aws_cloudwatch_metric_alarm.cloudfront_bytes.threshold < var.waf_tiles_rate_limit_per_ip * 2097152
+    error_message = "By default the egress alarm fires over 0.5 GB in 5 minutes, below what one address can pull at the WAF's tiles limit."
   }
   assert {
     condition = (
@@ -1462,8 +1542,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "90" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "A $90 monthly budget exists by default (above af-south-1's ~$59–64 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "100" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $100 monthly budget exists by default (its 80% alert, $80, above af-south-1's ~$68–75 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1478,9 +1558,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "7"
+      aws_budgets_budget.daily[0].limit_amount == "8"
     )
-    error_message = "A $7/day budget (ceil(90 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $8/day budget (ceil(100 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1596,7 +1676,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "90"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "100"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1673,7 +1753,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 90
+    budget_daily_usd = 100
   }
   expect_failures = [var.budget_daily_usd]
 }
@@ -2634,15 +2714,24 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 2 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 5 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[1].actions) == toset(["s3:PutObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[1].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*.zip"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn])
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[2].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[2].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[2].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/water.pmtiles"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[4].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[4].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
     )
-    error_message = "The worker and the API reach S3 through one interface endpoint whose policy allows only the worker's read of packs/ and the API's put of a bundle (packs/*.zip) in the packs bucket."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's reads of the delineation DEM (tiles/terrain.pmtiles) and the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
   }
   assert {
     condition = (
@@ -2665,6 +2754,236 @@ run "rejects_short_pack_retention" {
   }
 
   expect_failures = [var.pack_retention_days]
+}
+
+# ---------------------------------------------------------------------------
+# The map's data (map_data.tf, s3_cloudfront.tf; docs/deployment.md § Map
+# tiles and § Reference datasets): a tiles bucket read only by CloudFront's
+# /tiles/* (and, with delineation_dem, the API's read of one key), and a
+# private reference bucket read only by the migrate Lambda's loads.
+# ---------------------------------------------------------------------------
+
+run "map_data" {
+  command = plan
+
+  # --- Both buckets: private, encrypted, TLS only, ACLs off, broken uploads cleaned up -------
+  assert {
+    condition = alltrue([for b in [aws_s3_bucket_public_access_block.tiles, aws_s3_bucket_public_access_block.reference] :
+    b.block_public_acls && b.block_public_policy && b.ignore_public_acls && b.restrict_public_buckets])
+    error_message = "The tiles and reference buckets must block every kind of public access (the tiles reach viewers only through CloudFront's OAC)."
+  }
+  assert {
+    condition = alltrue([for c in [aws_s3_bucket_server_side_encryption_configuration.tiles, aws_s3_bucket_server_side_encryption_configuration.reference] :
+    one([for r in c.rule : one(r.apply_server_side_encryption_by_default).sse_algorithm]) == "AES256"])
+    error_message = "The tiles and reference buckets must be encrypted at rest (SSE-S3)."
+  }
+  assert {
+    condition = alltrue([for c in [aws_s3_bucket_ownership_controls.tiles, aws_s3_bucket_ownership_controls.reference] :
+    one([for r in c.rule : r.object_ownership]) == "BucketOwnerEnforced"])
+    error_message = "ACLs off: the bucket owner owns every object."
+  }
+  assert {
+    condition = alltrue([for l in [aws_s3_bucket_lifecycle_configuration.tiles, aws_s3_bucket_lifecycle_configuration.reference] :
+      length([for r in l.rule : r if r.id == "abort-incomplete-uploads" && r.status == "Enabled" && one(r.abort_incomplete_multipart_upload).days_after_initiation == 7 && length(r.expiration) == 0]) == 1
+    ])
+    error_message = "Each bucket aborts multipart uploads left unfinished after 7 days (a broken 2 GB upload isn't billed for ever)."
+  }
+  # Versioned, so an overwrite or delete by the operator can be undone (the
+  # live DEM the API reads, a reference file a load came from), with the old
+  # versions expiring so each re-upload isn't billed for ever.
+  assert {
+    condition     = alltrue([for v in [aws_s3_bucket_versioning.tiles, aws_s3_bucket_versioning.reference] : one(v.versioning_configuration).status == "Enabled"])
+    error_message = "The tiles and reference buckets must be versioned."
+  }
+  assert {
+    condition = (
+      length([for r in aws_s3_bucket_lifecycle_configuration.tiles.rule : r if r.status == "Enabled" && one(r.noncurrent_version_expiration).noncurrent_days == 14 && length(r.expiration) == 1 && one(r.expiration).expired_object_delete_marker == true]) == 1 &&
+      length([for r in aws_s3_bucket_lifecycle_configuration.reference.rule : r if r.status == "Enabled" && one(r.noncurrent_version_expiration).noncurrent_days == 365 && length(r.expiration) == 1 && one(r.expiration).expired_object_delete_marker == true]) == 1
+    )
+    error_message = "Old versions expire (tiles after 14 days, ~3.5 GB a re-upload; reference files after a year, a few hundred MB), and lone delete markers are cleaned up."
+  }
+  assert {
+    condition = alltrue([for pair in [
+      [data.aws_iam_policy_document.tiles_bucket_policy, aws_s3_bucket.tiles.arn],
+      [data.aws_iam_policy_document.reference_bucket_policy, aws_s3_bucket.reference.arn],
+      ] : length([for s in pair[0].statement : s if(
+        s.sid == "DenyInsecureTransport"
+        && s.effect == "Deny"
+        && s.actions == toset(["s3:*"])
+        && s.resources == toset([pair[1], "${pair[1]}/*"])
+        && one(s.principals).type == "*"
+        && one(s.principals).identifiers == toset(["*"])
+        && length(s.condition) == 1
+        && one(s.condition).test == "Bool"
+        && one(s.condition).variable == "aws:SecureTransport"
+        && join(",", one(s.condition).values) == "false"
+    )]) == 1])
+    error_message = "The tiles and reference bucket policies must deny s3:* on the bucket and its objects to every principal when aws:SecureTransport is false."
+  }
+
+  # --- No other role names either bucket: no role can write them, and the
+  # readers are the grants pinned below (map_data.tf's header) ---------------
+  assert {
+    condition = length([for r in flatten([for d in [
+      data.aws_iam_policy_document.github_deploy,
+      data.aws_iam_policy_document.migrate_lambda,
+      data.aws_iam_policy_document.worker_lambda,
+      data.aws_iam_policy_document.fetcher_lambda,
+      data.aws_iam_policy_document.renderer_lambda,
+      data.aws_iam_policy_document.worker_packs,
+      data.aws_iam_policy_document.renderer_packs,
+      data.aws_iam_policy_document.worker_reports,
+      data.aws_iam_policy_document.worker_feeds,
+      data.aws_iam_policy_document.lambda_jobs_send,
+      data.aws_iam_policy_document.lambda_ses,
+      data.aws_iam_policy_document.lambda_ses_release,
+      data.aws_iam_policy_document.worker_mail_events,
+      data.aws_iam_policy_document.renderer_ecr_pull,
+      data.aws_iam_policy_document.api_pack_bundles,
+    ] : [for st in d.statement : coalesce(st.resources, [])]]) : r if startswith(r, aws_s3_bucket.tiles.arn) || startswith(r, aws_s3_bucket.reference.arn)]) == 0
+    error_message = "Only api_dem, api_water and migrate_reference may name the tiles or reference bucket; the deploy role and every other Lambda role touch neither."
+  }
+
+  # --- Tiles: CloudFront reads tiles/*, nothing else is granted in the bucket policy -----
+  assert {
+    condition = (
+      length([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s if s.effect != "Deny"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.sid if s.effect != "Deny"]) == "AllowCloudFrontReadTiles" &&
+      toset(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.actions if s.effect != "Deny"])) == toset(["s3:GetObject"]) &&
+      toset(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.resources if s.effect != "Deny"])) == toset(["${aws_s3_bucket.tiles.arn}/tiles/*"]) &&
+      tolist(one(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.condition if s.effect != "Deny"])).values) == tolist([aws_cloudfront_distribution.frontend.arn])
+    )
+    error_message = "The tiles bucket policy's only grant is this distribution's GetObject of tiles/* (no list, so a miss reveals nothing)."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_origin_access_control.tiles.origin_access_control_origin_type == "s3" &&
+      aws_cloudfront_origin_access_control.tiles.signing_behavior == "always" &&
+      aws_cloudfront_origin_access_control.tiles.signing_protocol == "sigv4"
+    )
+    error_message = "The tiles OAC must sign every origin request (sigv4)."
+  }
+
+  # --- Reference: the policy names no reader; migrate's own grant is a read of reference/* --
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.reference_bucket_policy.statement : s if s.effect != "Deny"]) == 0
+    error_message = "The reference bucket policy grants nothing: the migrate role's own policy is the only read, and CloudFront never serves it."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.migrate_reference.statement) == 1 &&
+      toset(data.aws_iam_policy_document.migrate_reference.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.migrate_reference.statement[0].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      aws_iam_role_policy.migrate_reference.role == aws_iam_role.migrate_lambda.id &&
+      aws_lambda_function.migrate.environment[0].variables["REFERENCE_BUCKET"] == aws_s3_bucket.reference.bucket
+    )
+    error_message = "The migrate role may only read reference files (reference/*): no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
+  }
+  assert {
+    condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1 && aws_lambda_function.migrate.environment[0].variables["NODE_OPTIONS"] == "--max-old-space-size=2556"
+    error_message = "The migrate Lambda runs a load for up to 900 s with 3008 MB by default (V8's heap at 85% of it), one at a time (reserved concurrency 1)."
+  }
+
+  # --- Delineation off by default: no DEM, no grant -----------------------------------------
+  assert {
+    condition     = !var.delineation_dem && aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
+    error_message = "Delineation is off by default: DEM_URL empty and the API role holds no read of the tiles bucket."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.api_dem.statement) == 1 &&
+      toset(data.aws_iam_policy_document.api_dem.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.api_dem.statement[0].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"])
+    )
+    error_message = "The API's DEM grant is GetObject on the one key, tiles/terrain.pmtiles."
+  }
+
+  # --- Tracing a dam off by default: no water raster, no grant (issue #326 C2) -------------
+  assert {
+    condition     = !var.dam_trace_water && aws_lambda_function.backend.environment[0].variables["WATER_URL"] == "" && length(aws_iam_role_policy.api_water) == 0
+    error_message = "Tracing a dam is off by default: WATER_URL empty and the API role holds no read of the water raster."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.api_water.statement) == 1 &&
+      toset(data.aws_iam_policy_document.api_water.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.api_water.statement[0].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/water.pmtiles"])
+    )
+    error_message = "The API's water grant is GetObject on the one key, tiles/water.pmtiles."
+  }
+}
+
+run "map_data_with_dam_trace" {
+  command = plan
+
+  variables {
+    dam_trace_water = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["WATER_URL"] == "s3://${aws_s3_bucket.tiles.bucket}/tiles/water.pmtiles"
+    error_message = "With dam_trace_water the API reads the water occurrence from the tiles bucket (s3://<bucket>/tiles/water.pmtiles)."
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.api_water) == 1 && aws_iam_role_policy.api_water[0].role == aws_iam_role.lambda.id
+    error_message = "With dam_trace_water the API role gets the water read."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
+    error_message = "Tracing a dam on leaves delineation off: each switch grants its own key only."
+  }
+}
+
+run "map_data_with_delineation" {
+  command = plan
+
+  variables {
+    delineation_dem = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "s3://${aws_s3_bucket.tiles.bucket}/tiles/terrain.pmtiles"
+    error_message = "With delineation_dem the API reads the DEM from the tiles bucket (s3://<bucket>/tiles/terrain.pmtiles)."
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.api_dem) == 1 && aws_iam_role_policy.api_dem[0].role == aws_iam_role.lambda.id
+    error_message = "With delineation_dem the API role gets the DEM read."
+  }
+}
+
+# Delineation keeps a 20 s budget and peaks near 460 MB: a smaller or shorter
+# API Lambda is refused (positive control: map_data_with_delineation).
+# A reference load's caps were measured against 3008 MB (geo/referenceLoad.ts).
+run "rejects_a_small_migrate_lambda" {
+  command = plan
+
+  variables {
+    migrate_memory_mb = 1024
+  }
+
+  expect_failures = [var.migrate_memory_mb]
+}
+
+run "rejects_delineation_on_a_small_api_lambda" {
+  command = plan
+
+  variables {
+    delineation_dem  = true
+    lambda_memory_mb = 512
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "rejects_delineation_on_a_short_api_lambda" {
+  command = plan
+
+  variables {
+    delineation_dem        = true
+    lambda_timeout_seconds = 15
+  }
+
+  expect_failures = [aws_lambda_function.backend]
 }
 
 # A rotation's overlap: two trusted keys, the API signing with the new one.
@@ -3122,9 +3441,48 @@ run "waf_rate_rules_scope" {
     error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
   }
   assert {
-    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitSitePerIP = 3 }
-    error_message = "The rate rules run tightest first: auth, API, then the site-wide backstop."
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitTilesPerIP = 3, RateLimitSitePerIP = 4 }
+    error_message = "The rate rules run tightest first: auth, API, the tiles, then the site-wide backstop."
   }
+  # The tiles' bytes bound (waf.tf): /tiles/ only, per IP, blocking, the path as CloudFront matches it.
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].limit == 1000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/tiles/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].positional_constraint == "STARTS_WITH" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].field_to_match[0].uri_path) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).action[0].block) == 1
+    )
+    error_message = "The tiles rate rule must block per IP on paths starting /tiles/ at waf_tiles_rate_limit_per_ip (the egress bound: each request may be 2 MiB)."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitTilesPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The tiles rate rule must match the decoded, normalised, lowercased path, or /%74iles/… slips past it."
+  }
+}
+
+run "rejects_tiles_rate_limit_above_the_site_limit" {
+  command = plan
+
+  variables {
+    waf_tiles_rate_limit_per_ip = 5001
+  }
+
+  expect_failures = [var.waf_tiles_rate_limit_per_ip]
+}
+
+run "rejects_bytes_alarm_too_high" {
+  command = plan
+
+  variables {
+    cloudfront_bytes_alarm_gb_per_5min = 5
+  }
+
+  expect_failures = [var.cloudfront_bytes_alarm_gb_per_5min]
 }
 
 run "rejects_site_rate_limit_below_the_api_limit" {
@@ -3149,7 +3507,7 @@ run "signin_captcha" {
   command = plan
 
   assert {
-    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitSitePerIP"])
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitTilesPerIP", "4:RateLimitSitePerIP"])
     error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
   }
   assert {
@@ -3368,8 +3726,9 @@ run "network" {
       "vpce_ses <- worker_lambda tcp/443-443",
       "vpce_s3 <- worker_lambda tcp/443-443",
       "vpce_s3 <- api_lambda tcp/443-443",
+      "vpce_s3 <- migrate_lambda tcp/443-443",
     ])
-    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf). A new edge is a deliberate change to this list."
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf), the API and migrate (reference loads, map_data.tf). A new edge is a deliberate change to this list."
   }
   assert {
     condition = aws_vpc.main.cidr_block != "" && toset(flatten([
@@ -3396,6 +3755,7 @@ run "network" {
       "worker_lambda -> vpce tcp/443-443",
       "worker_lambda -> vpce_s3 tcp/443-443",
       "api_lambda -> vpce_s3 tcp/443-443",
+      "migrate_lambda -> vpce_s3 tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -3458,13 +3818,13 @@ run "network" {
       vpce_s3        = aws_security_group.vpce_s3.description
       } == {
       api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
-      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
+      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager and S3 endpoints only."
       worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
       rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
       vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
       vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
       vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
-      vpce_s3        = "S3 interface endpoint: 443 from the API and worker Lambdas only."
+      vpce_s3        = "S3 interface endpoint: 443 from the API, worker and migrate Lambdas only."
     }
     error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
   }

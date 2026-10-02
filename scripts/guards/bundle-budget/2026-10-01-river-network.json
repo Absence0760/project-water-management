@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Map tab River network layer (issue #345): MapLayers' reach list and picked-reach panel, riverLayer.svelte.ts, the rivers API calls and types, mapStyle's network layers; measured 1553 KB against 1551 KB"
+}

@@ -17,6 +17,8 @@
 	const loadDataFeeds = () => import('$lib/components/feeds/DataFeedsPanel.svelte');
 	// Preview the unsaved settings against the last run (issue #284): its own chunk, fetched when first wanted.
 	const loadUnsavedPreview = () => import('$lib/components/preview/UnsavedPreviewDialog.svelte');
+	// Evaporation from the map (issue #326 B-evap): its own chunk, for the same reason as the panels above; it loads its proposal on mount.
+	const loadEvaporationProposal = () => import('./EvaporationProposal.svelte');
 </script>
 
 <script lang="ts">
@@ -514,7 +516,8 @@
 			</table>
 		</div>
 		<p class="hint muted">
-			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment.
+			Monthly Class-A pan evaporation for the catchment, usually from the WR90 / WR2012 tables for its quaternary catchment. When an A-pan grid is
+			loaded, <a href="#set-evaporation">Evaporation from the map</a> (under Flow calibration) proposes it from the catchment boundary.
 		</p>
 		{#if apanSource}<p class="hint" data-testid="apan-source" data-daily={apanSource.daily}>{apanSource.text}</p>{/if}
 		{#if s.lakeEvapFactorMonthly}
@@ -929,6 +932,10 @@
 				</p>
 			{/if}
 		{/if}
+		<!-- Evaporation from the map (issue #326 B-evap): saves straight to the project, then the form reloads the saved settings. -->
+		<Lazy load={loadEvaporationProposal}>
+			{#snippet children(EvaporationProposal)}<EvaporationProposal projectId={project.id} {readonly} formDirty={dirty} onApplied={reloadAfterApply} />{/snippet}
+		</Lazy>
 	</section>
 
 	<!-- How missing catchment rain is filled: CHIRPS, bias-corrected or raw, on
@@ -1081,6 +1088,7 @@
 			bind:value={s.wr2012}
 			bind:error={wr2012Error}
 			{readonly}
+			projectId={project.id}
 			modelAreaKm2={cal.catchmentAreaKm2 != null && cal.catchmentAreaKm2 > 0 ? cal.catchmentAreaKm2 : farmAreaKm2}
 		/>
 	</div>
@@ -1231,7 +1239,7 @@
 				water year within its volumes, and within its licences’ months and maximum rates; a full allocation scales each unit’s demand to its volumes, for “if every
 				registered or licensed volume were taken in full” (a registration is not an entitlement).
 			</span>
-			<span class="hint" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, pending the hydrologist.</span>
+			<span class="hint" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, a provisional default not yet confirmed by the catchment’s hydrologist.</span>
 			<FieldHistoryLine field="settings:allocationMode" />
 		</fieldset>
 	</section>

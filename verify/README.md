@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 59 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 60 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -116,7 +116,8 @@ the dense ones:
 - **Demand factors** (§2.3 item 4a) from `demandFactorFrom`.
 - **Demand objects** (§2.7f): monthly and per-unit sizing (losses, monthly
   factors), schedules (always, yearly, a date range, Easter-relative, by
-  weekday; the last window wins), the priority classes around the crop,
+  weekday; the last window wins), the priority classes around the crop and
+the ranks within one (engine ≥ 1.64.0),
   returns and external destinations, and the basic-needs floor under a
   demand factor.
 - **River off-takes** (§2.6a): network order with off-takes, demand and
@@ -134,6 +135,13 @@ the dense ones:
   for transfers.
 - **Hands-off flows** (§2.7h): a flow by month and/or the EWR at the farm,
   on farms with and without a dam; River to dam by month.
+- **River abstractions** (§2.7j, engine ≥ 1.65.0): the crops or a demand
+  object on a river pump of their own beside the dam, the dam side serving
+  the rest, the takes by supply level from the flow passing the dam above
+  what must pass, pools drawn after the flow, refilled last and evaporating.
+  Not the pump-limited measure of engine 1.66.0 (`river_pump_limited@`): the
+  model doesn't write it, so the comparison notes it as engine-only; the
+  engine's own self-checks (`checkWorkings`, `checkReportTotals`) bound it.
 
 Every daily series these produce is compared (the per-rule transfer and
 per-object columns included), and `RunSummary.allocations`' run-dependent
@@ -189,7 +197,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (59
+`test_verify.py` breaks `model.py` one documented rule at a time (60
 mutants). Phase 1's 24: the receiver's room ignored, or shared after the source's bands; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -197,12 +205,13 @@ accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's 35: a
+the return share; the exchange; no catchment area. Phase 2a's 36: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
 full allocation's sources, its tail years and no-demand rows; the floor, the
-per-unit losses, the last schedule window, the priority classes; the canal
+per-unit losses, the last schedule window, the priority classes, ranks
+within a class; the canal
 loss, its gross-up and return unit, an off-take's hands-off flow, the dam
 top-up; junior users, user returns, the seniors' pass; the trigger's stop
 level, the pump's capacity and what it must leave; the survey curve, the

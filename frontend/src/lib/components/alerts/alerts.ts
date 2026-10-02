@@ -3,7 +3,7 @@
 // the workspace. No message catalogue here: the workspace never loads it
 // (lib/i18n/boundary.test.ts). The farmer-facing pages' words are in
 // ./words.ts. Pure, so it is unit-tested apart from the pages.
-import type { AlertEvent, AlertKind, AlertRule } from '$lib/api/types';
+import type { AlertEvent, AlertFeedbackSummary, AlertKind, AlertRule } from '$lib/api/types';
 import { fmtDay, fmtNum } from '$lib/format/number';
 
 export const KIND_NAME: Record<AlertKind, string> = {
@@ -53,6 +53,17 @@ export function eventText(e: AlertEvent): string {
 			// A cut, never a bare "20 %" (which reads as an allowance; the farm page's words, farm/cards.ts).
 			return `Restriction in place: ${String(d.level ?? '')}${typeof d.pct === 'number' ? `, a ${pct(d.pct / 100)} cut in registered water use` : ''}`;
 	}
+}
+
+/**
+ * A firing EWR forecast alert whose forecast is behind the recorded rain (no
+ * newer forecast made, typically a failing forecast feed), as a sentence
+ * under it; null when the forecast is current (docs/ui.md § Alerts).
+ */
+export function outOfDateText(e: Pick<AlertEvent, 'forecastOutOfDate'>): string | null {
+	const o = e.forecastOutOfDate;
+	if (!o) return null;
+	return `Forecast out of date: made ${day(o.madeOn)} on the rain recorded to ${day(o.observedTo)}, but rain is now recorded to ${day(o.rainUntil)} and no newer forecast has been made. Check the forecast data feed.`;
 }
 
 /** How a rule's threshold is typed in the editor: a dam level in percent, everything else as stored. */
@@ -126,3 +137,19 @@ export const seriesRuleLabel = (r: Pick<AlertRule, 'seriesName' | 'seriesKeyFed'
 
 /** A data feed's staleness rule, as the editor labels it: the feed, and "(switched off)" for a disabled feed. */
 export const feedRuleLabel = (r: Pick<AlertRule, 'feedName' | 'feedEnabled'>) => `${r.feedName ?? 'Data feed'}${r.feedEnabled === false ? ' (feed switched off)' : ''}`;
+
+// ---- "Was this useful?" (151_alert_feedback) ----------------------------------
+
+/** A feedback row's kind: an alert kind, or a daily summary. */
+export const feedbackKindName = (k: AlertFeedbackSummary['kinds'][number]['kind']): string => (k === 'digest' ? 'Daily summary' : KIND_NAME[k]);
+
+/** "3 of 4 said useful" for one kind's answers. */
+export function feedbackShare(r: { yes: number; no: number }): string {
+	const total = r.yes + r.no;
+	return `${fmtNum(r.yes)} of ${fmtNum(total)} said useful`;
+}
+
+/** The summary's kinds, the most answered first, then by name. */
+export function feedbackRows(s: AlertFeedbackSummary): AlertFeedbackSummary['kinds'] {
+	return [...s.kinds].sort((a, b) => b.yes + b.no - (a.yes + a.no) || feedbackKindName(a.kind).localeCompare(feedbackKindName(b.kind)));
+}

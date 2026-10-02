@@ -78,6 +78,10 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.invite.signUpIgnore': 'As jy dit nie verwag het nie, kan jy hierdie e-pos ignoreer.',
 	// How we handle your information: {url}
 	'mail.invite.privacy': 'Hoe ons jou inligting hanteer: {url}',
+	// {organisation} decides about your information in this catchment. Questions about it: {name}, {email}.
+	'mail.invite.contact': '{organisation} besluit oor jou inligting in hierdie opvanggebied. Vrae daaroor: {name}, {email}.',
+	// Or write to {name} at: {postal}
+	'mail.invite.contactPost': 'Of skryf aan {name} by: {postal}',
 	// There is already a {product} account for {email}. Confirm that this is your email address to accept.
 	'mail.invite.confirm': 'Daar is reeds ’n {product}-rekening vir {email}. Bevestig dat dit jou e-posadres is om te aanvaar.',
 	// Confirm email and accept
@@ -110,6 +114,14 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.unsubscribe': 'Stop hierdie e-posse',
 	// Manage your alerts
 	'mail.alert.manage': 'Bestuur jou waarskuwings',
+	// Was this alert useful?
+	'mail.alert.feedback.question': 'Was hierdie waarskuwing nuttig?',
+	// Was this summary useful?
+	'mail.alert.feedback.digestQuestion': 'Was hierdie opsomming nuttig?',
+	// Yes
+	'mail.alert.feedback.yes': 'Ja',
+	// No
+	'mail.alert.feedback.no': 'Nee',
 	// Your alerts for {project} — {product}
 	'mail.alert.digest.subject': 'Jou waarskuwings vir {project} — {product}',
 	// Your alerts for {project}
@@ -148,6 +160,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.ewr.what': 'Riviervloei in gevaar volgens die voorspelling',
 	// On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.
 	'mail.alert.ewr.body': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die rivier se ekologiese reserwe (EWR) by die uitloop op {days} van die {of} voorspelde dae ({from} tot {to}) nie gehaal sal word nie. Die waarskuwing is op {threshold} dae gestel. Voorspellings verander.',
+	// This forecast is out of date: it used the rain recorded to {observedTo}, rain has since been recorded to {rainUntil}, and no newer forecast has been made yet. Check the forecast data feed.
+	'mail.alert.ewr.outOfDate': 'Hierdie voorspelling is verouderd: dit het die reën gebruik wat tot {observedTo} aangeteken is, sedertdien is reën tot {rainUntil} aangeteken, en daar is nog geen nuwer voorspelling gemaak nie. Kyk die voorspelling se datavoer na.',
 	// Data feed behind
 	'mail.alert.stale.what': 'Datavoer loop agter',
 	// These data feeds are more than {threshold} day later than usual:
@@ -158,6 +172,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.stale.line.one': '{feed}: nuutste dag {newest}, {overdue} dag laat',
 	// {feed}: newest day {newest}, {overdue} days late
 	'mail.alert.stale.line.other': '{feed}: nuutste dag {newest}, {overdue} dae laat',
+	// API data behind
+	'mail.alert.stale.seriesWhat': 'API-data loop agter',
 	// No new readings have come in through the API key for this series for more than {threshold} day:
 	'mail.alert.stale.seriesBody.one': 'Daar het al meer as {threshold} dag lank geen nuwe lesings vir hierdie datareeks deur die API-sleutel ingekom nie:',
 	// No new readings have come in through the API key for this series for more than {threshold} days:
@@ -232,4 +248,24 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.pack.why.editor': 'Jy kry hierdie e-pos omdat jy bewyspakkette in {project} kan uitreik en terugtrek.',
 	// You get this email because the application “{name}” is yours.
 	'mail.pack.why.applicant': 'Jy kry hierdie e-pos omdat die aansoek “{name}” joune is.',
+	// Your account has been deleted — {product}
+	'mail.deleted.subject': 'Jou rekening is uitgevee — {product}',
+	// Your account has been deleted
+	'mail.deleted.heading': 'Jou rekening is uitgevee',
+	// As you asked, we deleted the {product} account for {email}.
+	'mail.deleted.body': 'Soos jy gevra het, het ons die {product}-rekening vir {email} uitgevee.',
+	// Deleted with it: your name, email address and password, your memberships and hydrological unit links, your alert choices and the alert emails sent to you, your settings, and any uncertainty result you started and never finished or licence application still in draft.
+	'mail.deleted.gone': 'Saam daarmee uitgevee: jou naam, e-posadres en wagwoord, jou lidmaatskappe en koppelings aan hidrologiese eenhede, jou waarskuwingskeuses en die waarskuwings-e-posse wat aan jou gestuur is, jou instellings, en enige onsekerheidsresultaat wat jy begin en nooit voltooi het nie, of enige lisensieaansoek wat nog ’n konsep is.',
+	// You are no longer a member of {list}.
+	'mail.deleted.left': 'Jy is nie meer ’n lid van {list} nie.',
+	// Kept without your name: what you made for a project (the project or team itself, model runs, imports, scenarios, a licence application you submitted, notes) and the project’s history. It now reads “a former member” or “Deleted user”, and is never put in someone else’s name.
+	'mail.deleted.kept': 'Behou sonder jou naam: wat jy vir ’n projek gemaak het (die projek of span self, modellopies, invoere, scenario’s, ’n lisensieaansoek wat jy ingedien het, notas) en die projek se geskiedenis. Dit wys nou “’n voormalige lid” of “Deleted user”, en word nooit op iemand anders se naam gesit nie.',
+	// Kept with your name: a sign-off keeps the name and registration you typed, and an evidence pack keeps the names it printed, for as long as the licence record they support.
+	'mail.deleted.signed': 'Behou met jou naam: ’n aftekening behou die naam en registrasie wat jy ingetik het, en ’n bewyspakket behou die name wat dit gedruk het, so lank as wat die lisensierekord wat hulle ondersteun, gehou word.',
+	// Copies in our backups are deleted as the backups expire, within 35 days.
+	'mail.deleted.backups': 'Kopieë in ons rugsteun word uitgevee soos die rugsteun verval, binne 35 dae.',
+	// Read the privacy notice
+	'mail.deleted.action': 'Lees die privaatheidskennisgewing',
+	// If you didn’t delete your account, contact us straight away: the privacy notice says how.
+	'mail.deleted.notYou': 'As jy nie jou rekening uitgevee het nie, kontak ons dadelik: die privaatheidskennisgewing sê hoe.',
 };

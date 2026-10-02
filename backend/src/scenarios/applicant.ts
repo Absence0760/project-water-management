@@ -28,16 +28,44 @@ const KIND_NAME: Record<NodeKind, string> = { farm: 'Farm', gauge: 'Gauge', user
 /** Kept as they are on an anonymised node: where it sits in the network, and what it is. */
 const KEEP = new Set(['id', 'kind', 'downstreamNodeId', 'sortOrder']);
 
-/** A node with everything but its place and kind blanked, under `name`. */
+/** NetworkNode's text fields (a string, or a union of strings). */
+type TextField = { [K in keyof NetworkNode]-?: NonNullable<NetworkNode[K]> extends string ? K : never }[keyof NetworkNode];
+/**
+ * Every text field of a node, and whether an anonymised node keeps it: an
+ * explicit list, so a text field the engine gains is a compile error here
+ * until someone decides (before, every string but the name was kept, so
+ * 1.65.0's cropWaterSource told an applicant which neighbours pump from the
+ * river). Kept: the categorical rules that are not a farm's own use (as
+ * before, docs/scenarios.md § Applications). Dropped (absent, the engine's
+ * default): what says how a neighbour waters its crops.
+ */
+const TEXT_KEPT: Record<TextField, boolean> = {
+	id: true,
+	name: false,
+	kind: true,
+	downstreamNodeId: true,
+	damReleaseRule: true,
+	damSurveyDate: true,
+	damInServiceFrom: true,
+	abstractionFrom: true,
+	userPriority: true,
+	boreholeRule: true,
+	supplyRule: true,
+	cropWaterSource: false
+};
+
+/** A node with everything but its place, its kind and the kept rules blanked, under `name`. */
 function anonymise(n: NetworkNode, name: string): NetworkNode {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(n)) {
 		if (KEEP.has(k)) out[k] = v;
 		else if (typeof v === 'number') out[k] = 0;
 		else if (typeof v === 'boolean') out[k] = false;
-		// Categorical settings (a user's priority, a borehole rule) are not
-		// volumes; anything else (lists, objects, text) goes.
-		else if (typeof v === 'string' && k !== 'name') out[k] = v;
+		// Text only when the list keeps it; an unlisted one (not a NetworkNode field) goes too.
+		else if (typeof v === 'string') {
+			if (TEXT_KEPT[k as TextField] === true) out[k] = v;
+		}
+		// Anything else (lists, objects) goes.
 		else out[k] = null;
 	}
 	out.name = name;

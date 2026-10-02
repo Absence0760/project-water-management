@@ -1,0 +1,92 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { pointInRing } from '../geo/geojson.js';
+import { openDem } from './dem.js';
+import { delineate, DelineationRefused, METHOD_VERSION } from './delineate.js';
+import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_ZOOM, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+
+// Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
+// valley in an elliptical ridge whose area is known, with a dam, a pit and a
+// flat reservoir.
+const dem = openDem(fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url)));
+const at = (x: number, y: number) => fixtureLonLat(x + 0.5, y + 0.5);
+
+async function refusal(p: Promise<unknown>): Promise<DelineationRefused> {
+	const e = await p.then(
+		() => null,
+		(err: unknown) => err
+	);
+	expect(e).toBeInstanceOf(DelineationRefused);
+	return e as DelineationRefused;
+}
+
+describe('delineate (synthetic DEM)', () => {
+	it('proposes the whole valley from its outlet: the ridge’s area within 3 %, a valid polygon around the outlet', async () => {
+		const r = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		expect(Math.abs(r.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
+		// The polygon's area and the cells' agree (simplification moves it a little).
+		expect(Math.abs(r.areaM2 / (r.cells * r.cellAreaM2) - 1)).toBeLessThan(0.01);
+		expect(r.geometry.type).toBe('Polygon');
+		expect(r.geometry.coordinates).toHaveLength(1);
+		const ring = r.geometry.coordinates[0]!;
+		expect(ring[0]).toEqual(ring[ring.length - 1]);
+		// A point well inside the valley is inside the polygon; one beyond the ridge is not.
+		expect(pointInRing(at(OUTLET_CELL.x, OUTLET_CELL.y - 100), ring)).toBe(true);
+		expect(pointInRing(at(OUTLET_CELL.x + 120, OUTLET_CELL.y - 100), ring)).toBe(false);
+		expect(r.snapDistanceM).toBeLessThanOrEqual(1.5 * FIXTURE_CELL_M);
+		expect(r.zoom).toBe(FIXTURE_ZOOM);
+		expect(r.methodVersion).toBe(METHOD_VERSION);
+		expect(r.method).toMatch(/Priority-Flood\+ε/);
+		expect(r.dataset.label).toMatch(/Synthetic DEM/);
+		expect(r.dataset.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+	});
+
+	it('proposes less from the dam wall than from the outlet: the valley above the wall, not below it', async () => {
+		const outlet = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		const dam = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 1));
+		expect(dam.areaM2).toBeGreaterThan(0.4 * outlet.areaM2);
+		expect(dam.areaM2).toBeLessThan(0.8 * outlet.areaM2);
+		const vertices = dam.geometry.coordinates[0]!;
+		expect(pointInRing(at(DAM_CELL.x, DAM_CELL.y - 60), outlet.geometry.coordinates[0]!)).toBe(true);
+		expect(pointInRing(at(DAM_CELL.x, DAM_CELL.y - 60), vertices)).toBe(true);
+		// Below the dam is the outlet's, not the dam's.
+		expect(pointInRing(at(DAM_CELL.x, DAM_CELL.y + 50), vertices)).toBe(false);
+	});
+
+	it('snaps a click beside the river onto it', async () => {
+		const r = await delineate(dem, at(OUTLET_CELL.x + 1, OUTLET_CELL.y - 30));
+		expect(r.snapDistanceM).toBeGreaterThan(0);
+		expect(r.cells).toBeGreaterThan(100);
+	});
+
+	it('refuses a point outside the DEM', async () => {
+		expect((await refusal(delineate(dem, [25, -30]))).code).toBe('outside');
+	});
+
+	it('refuses a click on a slope that almost nothing drains to', async () => {
+		expect((await refusal(delineate(dem, at(OUTLET_CELL.x - 91, OUTLET_CELL.y - 120), { snapRadiusM: 10 }))).code).toBe('too_small');
+	});
+
+	it('refuses a catchment that runs past the largest window rather than cut it off', async () => {
+		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128] }));
+		expect(e.code).toBe('too_large');
+		expect(e.message).toMatch(/km the app delineates/);
+	});
+
+	it('refuses a catchment that reaches where the DEM has no data', async () => {
+		// A click on the fixture's western edge: the ground there falls west, off the data, so what lies beyond is unknown.
+		expect((await refusal(delineate(dem, at(0, 256)))).code).toBe('no_data');
+	});
+});
+
+describe('the e2e copy of the fixture’s points', () => {
+	it('matches the fixture (e2e/support/dem.ts can’t import backend source)', () => {
+		const text = readFileSync(new URL('../../../e2e/support/dem.ts', import.meta.url), 'utf8');
+		const pair = (name: string) => JSON.parse(new RegExp(`${name}: \\[number, number\\] = (\\[[^\\]]+\\])`).exec(text)![1]!);
+		expect(pair('FIXTURE_OUTLET')).toEqual(at(OUTLET_CELL.x, OUTLET_CELL.y));
+		expect(pair('FIXTURE_DAM')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 1));
+		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
+		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
+	});
+});

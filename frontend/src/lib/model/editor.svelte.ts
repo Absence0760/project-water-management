@@ -1,8 +1,9 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { newNetworkNode, OFFTAKE_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
+import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -12,42 +13,7 @@ export function emptyModel(): ProjectModel {
 }
 
 export function newNode(sortOrder: number, downstreamNodeId: string | null): NetworkNode {
-	return {
-		id: crypto.randomUUID(),
-		name: '',
-		kind: downstreamNodeId === null ? 'gauge' : 'farm',
-		downstreamNodeId,
-		sortOrder,
-		areaKm2: 0,
-		areaHiKm2: 0,
-		areaLoKm2: 0,
-		flowShareManual: null,
-		pctUpstreamToDam: 1,
-		pctRunoffToDam: 0,
-		damCapacityM3: 0,
-		damInitialPct: 0,
-		damMinPct: 0,
-		divertCapacityM3Day: 0,
-		// Drip (0.90, the client's default, issue #90) with half its losses returning (audit N1).
-		...NEW_FARM_IRRIGATION,
-		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
-		damAreaFullM2: null,
-		damAreaExponent: DAM_AREA_EXPONENT,
-		damSeepagePerDay: 0,
-		// Not an other water user until its kind says so (WP-1.33), no boreholes (WP-1.34).
-		...USER_DEFAULTS,
-		...BOREHOLE_DEFAULTS,
-		// No survey curve, no release, all seepage returning (WP-3.5).
-		...DAM_STORAGE_DEFAULTS,
-		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.30.0).
-		...DEVELOPMENT_DEFAULTS,
-		// The dam only, no river pump (WP-3.8).
-		...SUPPLY_DEFAULTS,
-		// No hands-off flow, River to dam all year at the one capacity (engine 1.32.0).
-		...OPERATING_DEFAULTS,
-		// A gauge is an EWR site until unticked (engine 1.5.0); the flag means nothing on a unit.
-		ewrSite: true
-	};
+	return newNetworkNode(crypto.randomUUID(), sortOrder, downstreamNodeId);
 }
 
 export function newCrop(): CropDef {
@@ -126,7 +92,7 @@ export class ModelEditor {
 		const outlet = nodes.find((n) => n.downstreamNodeId === null);
 		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
 		const node = newNode(sort, nodes.length === 0 ? null : (outlet?.id ?? nodes[0]!.id));
-		node.name = nodes.length === 0 ? 'Outflow gauge' : `Farm ${nodes.length}`;
+		node.name = nodes.length === 0 ? 'Outflow gauge' : `Unit ${nodes.length}`;
 		nodes.push(node);
 		return node;
 	}
@@ -188,6 +154,12 @@ export class ModelEditor {
 			schedule: null,
 			// Where its number comes from (engine ≥ 1.56.0): not recorded until the modeller says, even at a category's norm.
 			source: null,
+			// Its rank within its class (engine ≥ 1.64.0): none, so it shares with the class's rank 1 until the supply order says otherwise.
+			rank: null,
+			// Where its water comes from (engine ≥ 1.65.0): the dam until the modeller gives it a river abstraction.
+			waterSource: null,
+			riverPumpM3Day: null,
+			riverPoolM3: null,
 			note: ''
 		};
 		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.
@@ -197,7 +169,10 @@ export class ModelEditor {
 	}
 
 	removeDemandObject(id: string) {
+		const gone = (this.model.demandObjects ?? []).find((o) => o.id === id);
 		this.model.demandObjects = (this.model.demandObjects ?? []).filter((o) => o.id !== id);
+		// The unit's supply order closes up (engine ≥ 1.64.0): no rank left that nothing shows.
+		if (gone) renumberSupplyOrder(this.model.demandObjects.filter((o) => o.nodeId === gone.nodeId));
 	}
 
 	// --- individual boreholes (WP-3.9) -------------------------------------

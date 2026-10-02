@@ -53,6 +53,15 @@
 //
 // Its PDF download, the pack list, its lifecycle writes and every run read
 // answer 403, like everything else outside the list (PACK_READS).
+//
+// An applicant's copy of a pack (165_applicant_copy: the
+// applicant_pack_render job prints the application's party's own pack page,
+// frontend/src/routes/projects/[id]/scenarios/[sid]/packs/[packId], as that
+// party) reads that page's one read and nothing else, not even the editor's
+// pack route:
+//
+//   GET /auth/me                                              the layout's session check
+//   GET /projects/<project>/scenarios/<application>/packs/<pack>  the D2 projection (app_applicant_pack)
 export interface ReportScope {
 	projectId: string;
 	runId: string;
@@ -64,6 +73,12 @@ export interface ReportScope {
 export interface PackScope {
 	projectId: string;
 	packId: string;
+	/**
+	 * Set for an applicant's copy (165_applicant_copy): the pack's
+	 * application, whose party's pack page is printed. Then that page's read
+	 * is the only one, and the editor's pack route is refused.
+	 */
+	scenarioId?: string;
 }
 
 export type RenderScope = ReportScope | PackScope;
@@ -99,9 +114,21 @@ function againstSeriesAllowed(scope: ReportScope, path: string, query: URLSearch
 const PACK_READS = ['signoffs'];
 const PACK_READ = new RegExp(`^/projects/(${UUID})/packs/(${UUID})(?:/(?:${PACK_READS.join('|')}))?/?$`);
 
-/** Whether a pack render session may make this read: its own pack, and its sign-offs, with no query. */
+/** The applicant's pack page's one read (165_applicant_copy). */
+const APPLICANT_PACK_READ = new RegExp(`^/projects/(${UUID})/scenarios/(${UUID})/packs/(${UUID})/?$`);
+
+/** Whether a pack render session may make this read: its own pack, and its sign-offs, with no query; an applicant's copy, its own pack page's read. */
 function packAllows(scope: PackScope, path: string, query: URLSearchParams): boolean {
 	if ([...query.keys()].length > 0) return false;
+	if (scope.scenarioId !== undefined) {
+		const a = APPLICANT_PACK_READ.exec(path);
+		return (
+			!!a &&
+			a[1]!.toLowerCase() === scope.projectId.toLowerCase() &&
+			a[2]!.toLowerCase() === scope.scenarioId.toLowerCase() &&
+			a[3]!.toLowerCase() === scope.packId.toLowerCase()
+		);
+	}
 	const m = PACK_READ.exec(path);
 	return !!m && m[1]!.toLowerCase() === scope.projectId.toLowerCase() && m[2]!.toLowerCase() === scope.packId.toLowerCase();
 }

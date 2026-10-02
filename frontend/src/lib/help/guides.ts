@@ -26,6 +26,13 @@ export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 /** The workspace tabs the setup path walks, in the order a catchment is set up. */
 export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs'] as const;
 
+/**
+ * Tabs under *Build the model* that the setup path skips: optional, not a
+ * step every catchment needs (the Map, issue #288: a model builds and runs
+ * without one). "Getting around a project" still names them in place.
+ */
+export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
+
 /** Project workspace tabs a guide can point at (`?tab=`). */
 export type TabId = (typeof SETUP_TABS)[number] | 'compare' | 'river' | 'supply';
 
@@ -144,7 +151,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, the **Map** (the geography: boundary, parcels, dams, gauges and rivers; the Network’s header links to it too), Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
 					},
 					{
 						type: 'p',
@@ -164,7 +171,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Tables** and **+ Add node**; Crops & demand **Tables** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Map** (the geographic map: boundary, parcels, dams and gauges), **Tables** and **+ Add node**; the Map **Show everything**, **Measure**, **Download GeoJSON**, **Draw a shape**, **Place a point**, **Delineate** (when the server has an elevation model: click a river and the catchment above it is proposed, to accept or reject), **Trace a dam** (when the server has water occurrence data: click inside a dam and its outline is proposed as a drawing to adjust and save) and **Upload GeoJSON** (its list’s **Every feature** opens every feature as a table); while drawing, **Snap to features** puts a corner on a neighbour’s corner or edge (hold Alt to place one exactly), and a polygon’s card has **Split along a line**; while the model is empty **Start from the map** (the boundary, then the dams, abstraction points and gauges, and the units, their areas and their order are proposed, each value ticked to take it), and once it has nodes **Divide the model** under the map (with an elevation model: each point on the map stands for its node, and its own area and order are proposed beside its values now, each ticked to take it; each proposed piece carries its number on the map and on its card); Crops & demand **Tables** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
@@ -376,7 +383,7 @@ export const GUIDES: Guide[] = [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
 							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
 							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day. It uses the monthly A-pan means: with a daily [[apan|A-pan]] series on the **Data** tab, runs use that on the days it has a value, so their demand differs, and a line under the heading says so.',
-							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
+							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values (or use them from the map, when an A-pan grid is loaded), the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
 							'Set each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
 						]
@@ -384,7 +391,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library, a b023 workbook or a node-based workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Tables** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library, a b023 workbook or a node-based workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model. With its parcels linked on the **Map**, that panel also shows **From land cover**: the area a land-cover map shows as cropland in them. Pick the area and the crop it is planted to (the land cover doesn’t say which), and **Use** saves it with its source.'
 					},
 					{
 						type: 'note',
@@ -751,6 +758,10 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'p',
 						text: 'Under **Evidence**, give the reason and press **Nominate as evidence** to mark the run the project’s results rely on ([[evidence-run]]). A nomination can’t be edited or removed; nominating another run replaces it, and both stay in the **Nomination history**. A run of the legacy runoff model, made before engine 1.0.0 removed it (badged **Workbook comparison**), can’t be nominated.'
+					},
+					{
+						type: 'p',
+						text: 'A run made by an engine with a known bug (or with parameters from a calibration that had one) is tagged **May be affected** in the run list, and its header shows **May be affected by a known bug**. Each bug changes results only under its own conditions: press the badge to open the run’s **Validation statement**, whose errata table says when, then re-run on the current engine and compare. The project’s owners are emailed once when a new bug is confirmed.'
 					},
 					{
 						type: 'note',

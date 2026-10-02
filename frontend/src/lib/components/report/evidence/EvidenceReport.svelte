@@ -15,7 +15,8 @@
 		type Band,
 		type EvidenceReport,
 		type EwrAssuranceSite,
-		type ModelInput
+		type ModelInput,
+		type RunSummary
 	} from '@water-management/engine';
 	import type { PackSignoffList, SignoffList } from '$lib/api';
 	import type { SignoffTarget } from '$lib/components/liability/signoffForm';
@@ -38,6 +39,7 @@
 	import { capYearsText, SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
+	import LocalityMap from './LocalityMap.svelte';
 	import { fdcCaption, fdcChangeRows, fdcMonths } from './grid';
 	import { bandRange, bandText, changeText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
@@ -120,6 +122,19 @@
 			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
 		});
 	});
+	/**
+	 * Page 1's headline board against full authorised use (evidence-14, licensing build item 8): the
+	 * full-allocation pair's board, worded as the modelled-use one, both runs at full allocation.
+	 */
+	const authorisedBoard = $derived.by(() => {
+		const a = report.licenceImpactAuthorised;
+		if (!app || !id.application || !a?.board) return null;
+		const full = { allocations: { mode: 'fullAllocation' } } as unknown as RunSummary;
+		return evidenceBoard(a.board, {
+			a: { run: { label: `${id.baseline.label || 'Untitled run'}, every holder at their registered volume`, startDate: id.baseline.startDate, summary: full } },
+			b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: full } }
+		});
+	});
 	/** An older pack (before evidence-5) froze no board: page 1 says it isn't part of the pack. */
 	const boardNotFrozen = $derived(frozen && app && report.licenceImpact === undefined);
 
@@ -128,8 +143,12 @@
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
 	const cum = $derived(report.cumulative);
-	const OUTCOME: Record<string, string> = { approved: 'approved', approved_with_conditions: 'approved with conditions' };
+	// The authority's words (163_licensing_authority, evidence-13); a pack drafted before keeps its frozen approved / approved_with_conditions.
+	const OUTCOME: Record<string, string> = { licence_issued: 'licence issued', approved: 'approved', approved_with_conditions: 'approved with conditions' };
 	const statusText = (o: EvidenceReport['cumulative']['applications'][number]) => (o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome}` : 'submitted');
+	const combinedStatus = (o: NonNullable<EvidenceReport['cumulative']['combined']>['applications'][number]) =>
+		o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome ?? '–'}` : (o.status ?? '–');
+	const measureText = (v: number | null | undefined, unit: string) => (v === null || v === undefined ? '–' : `${signed(v, 0)} ${unit}`);
 	const use = $derived(useRows(al));
 	/** Page 1's row says why nothing is judged when every year is a part year. */
 	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
@@ -159,8 +178,10 @@
 			{#if verify}<p class="verify-line" data-testid="evidence-verify-line">{packVerifyLine(verify)}</p>{/if}
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} {board} {boardNotFrozen} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} {boardNotFrozen} {authorisedBoard} {frozen} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
+				<!-- evidence-12: the locality map, frozen into the report from the project's map features (issue #326 A5). -->
+				<LocalityMap {report} {frozen} />
 				{#if !report.river.length}
 					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>
 				{/if}
@@ -456,13 +477,23 @@
 					{/each}
 				{/if}
 				<h3>Other applications on this baseline</h3>
-				<p class="small">
-					Each other application that is submitted, or decided with approval, with its newest run of its ops on this baseline: its own change against
-					the baseline at the outlet, and their sum. A sum of separate runs, not one combined run: two applications drawing on the same water can
-					together take less than the sum says, or push the river further. A combined run of every application is WP-3.11. The sum counts the runs on
-					the baseline’s engine, period and runoff model; any other difference is the application’s own changes. Listed as the reader
-					can see them: a submitted application is visible to the project’s editors only. Drafts are never listed.
-				</p>
+				{#if cum.combined}
+					<p class="small">
+						Each other application that is submitted, or decided with approval, with its newest run of its ops on this baseline: its own change against
+						the baseline at the outlet. What they do together is not their sum: two applications drawing on the same water can together take less than
+						the sum says, or push the river further. That is read from one combined run below, a cumulative assessment of this application and every
+						other one on this baseline with their current ops. Listed as the reader can see them: a submitted application is visible to the project’s
+						editors only. Drafts are never listed.
+					</p>
+				{:else}
+					<p class="small">
+						Each other application that is submitted, or decided with approval, with its newest run of its ops on this baseline: its own change against
+						the baseline at the outlet, and their sum. A sum of separate runs, not one combined run: two applications drawing on the same water can
+						together take less than the sum says, or push the river further. A combined run of every application is WP-3.11. The sum counts the runs on
+						the baseline’s engine, period and runoff model; any other difference is the application’s own changes. Listed as the reader
+						can see them: a submitted application is visible to the project’s editors only. Drafts are never listed.
+					</p>
+				{/if}
 				{#if cum.applications.length}
 					{#if cum.truncated}
 						<p class="na" data-testid="evidence-cumulative-cut">
@@ -490,26 +521,86 @@
 									</tr>
 								{/each}
 							</tbody>
-							<tfoot>
-								<tr class="total">
-									<th scope="row">{cum.truncated ? 'Not summed: the list is cut' : `Sum of the ${cum.counted} counted`}</th>
-									<td></td>
-									<td class="num">{cum.total.ewrDays === null ? '–' : `${signed(cum.total.ewrDays, 0)} days`}</td>
-									<td class="num">{cum.total.reservePp === null ? '–' : `${signed(cum.total.reservePp, 1)} pp`}</td>
-								</tr>
-								{#if cum.withThis}
+							{#if !cum.combined}
+								<tfoot>
 									<tr class="total">
-										<th scope="row">With this application</th>
+										<th scope="row">{cum.truncated ? 'Not summed: the list is cut' : `Sum of the ${cum.counted} counted`}</th>
 										<td></td>
-										<td class="num">{cum.withThis.ewrDays === null ? '–' : `${signed(cum.withThis.ewrDays, 0)} days`}</td>
-										<td class="num">{cum.withThis.reservePp === null ? '–' : `${signed(cum.withThis.reservePp, 1)} pp`}</td>
+										<td class="num">{cum.total.ewrDays === null ? '–' : `${signed(cum.total.ewrDays, 0)} days`}</td>
+										<td class="num">{cum.total.reservePp === null ? '–' : `${signed(cum.total.reservePp, 1)} pp`}</td>
 									</tr>
-								{/if}
-							</tfoot>
+									{#if cum.withThis}
+										<tr class="total">
+											<th scope="row">With this application</th>
+											<td></td>
+											<td class="num">{cum.withThis.ewrDays === null ? '–' : `${signed(cum.withThis.ewrDays, 0)} days`}</td>
+											<td class="num">{cum.withThis.reservePp === null ? '–' : `${signed(cum.withThis.reservePp, 1)} pp`}</td>
+										</tr>
+									{/if}
+								</tfoot>
+							{/if}
 						</table>
 					</div>
 				{:else}
 					<p class="na" data-testid="evidence-cumulative-none">None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.</p>
+				{/if}
+				{#if cum.combined}
+					{@const cb = cum.combined}
+					<h4>All of them together</h4>
+					{#if cb.notAssessed}
+						<p class="na" data-testid="evidence-combined-na">{cb.notAssessed}</p>
+					{:else}
+						<div class="table-wrap">
+							<table class="data compact" data-testid="evidence-combined">
+								<thead>
+									<tr>
+										<th scope="col">Application</th>
+										<th scope="col">Status</th>
+										<th scope="col" class="num">Days below the pragmatic EWR, change</th>
+										<th scope="col" class="num">Reserve months met at the outlet, change</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each cb.applications as o (o.scenarioId)}
+										<tr>
+											<th scope="row">“{o.scenarioName}”{#if o.isThis}<span class="sub">this application</span>{/if}</th>
+											<td>{combinedStatus(o)}</td>
+											<td class="num">{o.ewrDays === null ? '–' : `${signed(o.ewrDays, 0)} days`}</td>
+											<td class="num">{o.reserveMonths === null ? '–' : `${signed(o.reserveMonths, 0)} months`}</td>
+										</tr>
+									{/each}
+								</tbody>
+								<tfoot>
+									<tr class="total">
+										<th scope="row">Sum of each alone</th>
+										<td></td>
+										<td class="num">{measureText(cb.ewrDays?.sumOfSingles, 'days')}</td>
+										<td class="num">{measureText(cb.reserveMonths?.sumOfSingles, 'months')}</td>
+									</tr>
+									<tr class="total">
+										<th scope="row">All together</th>
+										<td></td>
+										<td class="num">{measureText(cb.ewrDays?.change, 'days')}</td>
+										<td class="num">{measureText(cb.reserveMonths?.change, 'months')}</td>
+									</tr>
+									<tr class="total">
+										<th scope="row">Interaction<span class="sub">together, beyond the sum of each alone</span></th>
+										<td></td>
+										<td class="num">{measureText(cb.ewrDays?.interaction, 'days')}</td>
+										<td class="num">{measureText(cb.reserveMonths?.interaction, 'months')}</td>
+									</tr>
+								</tfoot>
+							</table>
+						</div>
+						{#if cb.assessment}
+							<p class="small" data-testid="evidence-combined-source">
+								From the cumulative assessment “{cb.assessment.name}”, made {fmtDate(cb.assessment.createdAt)}{cb.assessment.createdBy ? ` by ${cb.assessment.createdBy}` : ''}{cb.assessment.engineVersion
+									? `, engine ${cb.assessment.engineVersion}`
+									: ''}: the baseline, each application alone and all together, run on one engine, so these changes may differ from the stored runs’ above.
+							</p>
+						{/if}
+						{#each cb.warnings as w (w)}<p class="na">{w}</p>{/each}
+					{/if}
 				{/if}
 			{:else if s.id === 'allocations'}
 				{#if al.notAssessed}
@@ -524,6 +615,15 @@
 						Modelled use per water year against the volume registered for each unit (WARMS registrations, licences), over whole water years; a part year is listed but not counted.
 						Modelled, not metered: the comparison is arithmetic, not a finding on whether a use is lawful. The report carries volumes only, never the holders’ names.
 					</p>
+					{#if al.unitYears}
+						<!-- evidence-15 (D3): only the applicant's own units one by one; the rest as totals at 5 or more units. -->
+						<p class="small muted" data-testid="evidence-allocations-others">
+							{app ? 'Only the applicant’s own units are listed one by one.' : 'No unit is listed one by one.'} Every other unit’s volume and use is in one total per water
+							source, “Other registered users”, when at least 5 units hold that source.{#if al.othersLeftOut}
+								{' '}{al.othersLeftOut} other unit{al.othersLeftOut === 1 ? '' : 's'} with a registered volume {al.othersLeftOut === 1 ? 'is' : 'are'} left out: fewer than 5 hold one
+								from that water source. The project’s editors see each unit on the Allocations tab.{/if}
+						</p>
+					{/if}
 					{#if useJudged}<p class="na">{useJudged}</p>{/if}
 					{#if use.rows.some((r) => r.marks.length)}
 						<UsePlot

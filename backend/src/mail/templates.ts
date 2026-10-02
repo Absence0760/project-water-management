@@ -40,6 +40,12 @@ export type Body = {
 	footer: string[];
 	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
 	links?: { label: string; url: string }[];
+	/**
+	 * A question with answer links, after the action and before the footer
+	 * (an alert's "Was this useful? Yes · No", 151_alert_feedback): plain
+	 * links, never an image or a pixel, in HTML; "label: url" in text.
+	 */
+	ask?: { question: string; answers: { label: string; url: string }[] };
 };
 
 /** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
@@ -52,6 +58,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 		...b.paragraphs.flatMap((p) => [paraText(p), '']),
 		`${b.action.label}: ${b.action.url}`,
 		'',
+		...(b.ask ? [b.ask.question, ...b.ask.answers.map((a) => `${a.label}: ${a.url}`), ''] : []),
 		...b.footer.flatMap((p) => [p, '']),
 		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
@@ -67,7 +74,7 @@ export function render(kind: MailKind, to: string, subject: string, b: Body, tr:
 ${b.paragraphs.map(p).join('\n')}
 <p style="margin:24px 0"><a href="${url}" style="display:inline-block;padding:10px 18px;background:#1d4e89;color:#ffffff;border-radius:6px;text-decoration:underline;font-weight:600">${escapeHtml(b.action.label)}</a></p>
 <p style="margin:0 0 16px;font-size:14px">${escapeHtml(fallbackLine)}<br><a href="${url}" style="color:#1d4e89;word-break:break-all">${url}</a></p>
-${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
+${b.ask ? `<p style="margin:0 0 16px">${escapeHtml(b.ask.question)} ${b.ask.answers.map((a) => `<a href="${escapeHtml(a.url)}" style="color:#1d4e89;font-weight:600">${escapeHtml(a.label)}</a>`).join(' · ')}</p>\n` : ''}${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-size:14px">${links.map((l) => `<a href="${escapeHtml(l.url)}" style="color:#1d4e89">${escapeHtml(l.label)}</a>`).join(' · ')}</p>` : ''}
 <p style="margin:24px 0 0;font-size:14px;color:#4a4a4a">— ${PRODUCT}</p>
 </main>
 </body>
@@ -163,13 +170,20 @@ export function roleName(role: string): string {
 	return Object.hasOwn(ROLE_NAME, role) ? ROLE_NAME[role]! : role;
 }
 
+/**
+ * The organisation that decides about the information an invite concerns, and whom to ask (POPIA s18(1)(b);
+ * 168_team_privacy_contact): the project's team, or the team invited to. Absent when it has set no contact.
+ */
+export type InviteContact = { organisation: string; name: string; email: string; postal: string | null };
+
 /** An invite to a project or team, in one of the three modes (InviteMode). */
 export function inviteMail(
 	to: string,
 	url: string,
 	inviterName: string,
 	target: InviteTarget,
-	mode: InviteMode = 'sign-up'
+	mode: InviteMode = 'sign-up',
+	contact: InviteContact | null = null
 ): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
 	const role = roleName(target.role);
@@ -194,7 +208,16 @@ export function inviteMail(
 					`If you never created a ${PRODUCT} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.`
 				]
 			: ['This invitation expires in 7 days.', "If you weren't expecting this, you can ignore this email."]
-		).concat(`How we handle your information: ${sitePage('/privacy')}`)
+		)
+			.concat(
+				contact
+					? [
+							`${contact.organisation} decides about your information in its projects. Questions about it: ${contact.name}, ${contact.email}.`,
+							...(contact.postal ? [`Or write to ${contact.name} at: ${contact.postal}`] : [])
+						]
+					: []
+			)
+			.concat(`How we handle your information: ${sitePage('/privacy')}`)
 	});
 }
 
@@ -204,7 +227,7 @@ export function listText(items: readonly string[], and = 'and'): string {
 	return `${items.slice(0, -1).join(', ')} ${and} ${items.at(-1)}`;
 }
 
-export type FarmerInviteFacts = { catchment: string; farms: string[] };
+export type FarmerInviteFacts = { catchment: string; farms: string[]; contact?: InviteContact | null };
 
 /**
  * A farmer invite (WP-2.2): "{inviter} invited you to see {farm} in
@@ -242,6 +265,13 @@ export function farmerInviteMail(
 				...(confirm
 					? [tr.t('mail.invite.confirmExpires'), tr.t('mail.invite.confirmTakeOver', v)]
 					: [tr.t('mail.invite.signUpExpires'), tr.t('mail.invite.signUpIgnore')]),
+				// Who decides about the farmer's information, when the catchment's team has said (POPIA s18(1)(b), 168).
+				...(facts.contact
+					? [
+							tr.t('mail.invite.contact', { organisation: facts.contact.organisation, name: facts.contact.name, email: facts.contact.email }),
+							...(facts.contact.postal ? [tr.t('mail.invite.contactPost', { name: facts.contact.name, postal: facts.contact.postal })] : [])
+						]
+					: []),
 				tr.t('mail.invite.privacy', { url: sitePage('/privacy') })
 			]
 		},
@@ -354,6 +384,171 @@ export function packNoticeMail(to: string, f: PackNoticeFacts, locale?: string |
 			action: { label: tr.t('mail.pack.action'), url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) },
 			footer: [f.as === 'editor' ? tr.t('mail.pack.why.editor', v) : tr.t('mail.pack.why.applicant', { name })],
 			links: page ? [{ label: tr.t('mail.pack.open'), url: sitePage(page) }] : []
+		},
+		tr
+	);
+}
+
+export type PackSentFacts = {
+	projectId: string;
+	packId: string;
+	projectName: string;
+	/** The pack's title as its report gives it (the application's name, or the baseline's). */
+	title: string;
+	version: number;
+	/** `xxxx-xxxx-xxxx` (engine packShortCode). */
+	shortCode: string;
+	/** Who sent it (their display name). */
+	sentBy: string;
+	/** settings.responsibleAuthority's name (163), or null when the project names none. */
+	authority: string | null;
+	/** The sender's note, or null. */
+	note: string | null;
+};
+
+/**
+ * The full evidence pack sent to a member acting for the responsible
+ * authority (165, licensing build item 13; provisional position, pre-counsel
+ * research, 2026-10-01; docs/evidence-pack.md § Sending it to the authority).
+ * The pack's PDF and bundle name every water user, so the mail carries
+ * neither and no download link: it links the pack's page, which needs the
+ * reader signed in and still an editor of the project before it hands out a
+ * one-minute signed download, and the public verify page. A forwarded mail
+ * opens nothing. English, as the workspace is.
+ */
+export function packSentMail(to: string, f: PackSentFacts): Mail {
+	const authority = f.authority ?? 'the responsible authority';
+	return render('pack_sent', to, `Evidence pack v${f.version} ${f.shortCode} sent to you for ${authority} — ${PRODUCT}`, {
+		heading: 'An evidence pack was sent to you',
+		paragraphs: [
+			`${f.sentBy} sent you version ${f.version} of the evidence pack “${f.title}” in ${f.projectName}, for ${authority}.`,
+			...(f.note ? [`Their note: “${f.note}”`] : []),
+			'Sign in to download its PDF and its reproduction bundle from the pack’s page. They name every water user in the catchment, so they are for the authority’s assessment: don’t pass them on.',
+			`Anyone holding a copy checks it on the verify page, with the code ${f.shortCode}.`
+		],
+		action: { label: 'Open the pack', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}/packs/${encodeURIComponent(f.packId)}`) },
+		footer: [`You get this because the owner of ${f.projectName} marked you as acting for the responsible authority. This email grants nothing by itself: the pack opens only for you, signed in.`],
+		links: [{ label: 'Verify page', url: sitePage(`/verify/${encodeURIComponent(f.shortCode)}`) }]
+	});
+}
+
+export type ErratumNoticeFacts = {
+	projectId: string;
+	projectName: string;
+	/** The erratum (docs/engine-errata.md, the engine's ENGINE_ERRATA): its id and what the table says. */
+	erratum: { id: string; keyedOn: 'run' | 'fit'; firstAffected: string; fixedIn: string | null; severity: string; appliesWhen: string; summary: string };
+	/** How many of the project's runs were made by an affected engine (or with an affected fit) when it was swept. */
+	runCount: number;
+};
+
+/**
+ * A confirmed engine bug may affect results in a project (issue #103, the
+ * known-defect procedure; docs/legal/known-defect-procedure.md). Sent once
+ * per erratum, project and owner by the worker (errata/notices.ts), built as
+ * its recipient. It says what goes wrong, when it changes results, how many
+ * runs may be affected and what to do; it never says the results *are*
+ * wrong, since a run is affected only when the erratum's conditions hold.
+ * English, as the workspace is.
+ */
+export function erratumNoticeMail(to: string, f: ErratumNoticeFacts): Mail {
+	const e = f.erratum;
+	const runs = `${f.runCount} ${f.runCount === 1 ? 'run' : 'runs'}`;
+	const made =
+		e.keyedOn === 'fit'
+			? `${runs} in ${f.projectName} ${f.runCount === 1 ? 'uses' : 'use'} parameters from an automatic calibration made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`
+			: `${runs} in ${f.projectName} ${f.runCount === 1 ? 'was' : 'were'} made by engine ${e.firstAffected}${e.fixedIn ? ` up to (not including) ${e.fixedIn}` : ' or later'}, which had this bug.`;
+	return render('erratum_notice', to, `Known engine bug ${e.id} may affect ${f.projectName} — ${PRODUCT}`, {
+		heading: `A known engine bug may affect results in ${f.projectName}`,
+		paragraphs: [
+			`We confirmed a bug in the model engine (${e.id}, severity ${e.severity.toLowerCase()}): ${e.summary}.`,
+			`It changes results only when: ${e.appliesWhen}.`,
+			made,
+			e.fixedIn
+				? `It is fixed in engine ${e.fixedIn}. Check whether the conditions apply to your catchment; if they do, re-run on the current engine and compare the two runs. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`
+				: `It is not fixed yet. Check whether the conditions apply to your catchment; if they do, treat the affected figures with care until it is. The affected runs are marked in the app, and their validation statement, sign-off and evidence report list ${e.id}.`,
+			'If a run you published, signed or put in an evidence pack is affected, consider telling the people who rely on it. An issued pack keeps its own record, and its verify page lists the errata found since it was issued.'
+		],
+		action: { label: 'Open the runs', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=runs`) },
+		footer: [`You get this email because you own ${f.projectName}. The list of known engine bugs is published with the methodology (docs/engine-errata.md).`]
+	});
+}
+
+export type LicenceRecordFacts = {
+	projectId: string;
+	projectName: string;
+	/** review: no outcome recorded and the 5-yearly review is due; closes: the record's closing date has passed. */
+	event: 'review' | 'closes';
+	/** The review date, or the closing date (YYYY-MM-DD). */
+	dueOn: string;
+	/** The operator's copy: no "you own" footer, and the project's id for the runbook. */
+	operator?: boolean;
+};
+
+/**
+ * The licence record needs a decision (161_licence_record, licence/record.ts):
+ * the review is due with no outcome recorded, or the record's closing date
+ * passed (it can now be deleted). Sent to the project's owners and the
+ * operator. Nothing is deleted by the app: the operator deletes on the
+ * client's written confirmation (docs/deployment.md § Runbooks). English, as
+ * the workspace is.
+ */
+export function licenceRecordMail(to: string, f: LicenceRecordFacts): Mail {
+	const review = f.event === 'review';
+	const subject = review ? `Record the licence outcome for ${f.projectName} — ${PRODUCT}` : `The licence record of ${f.projectName} can now be deleted — ${PRODUCT}`;
+	const paragraphs = review
+		? [
+				`${f.projectName} holds a licence record: an issued evidence pack or a nominated evidence run, with the names of the people who made and signed it. Its review was due on ${f.dueOn}, and no licence outcome is recorded.`,
+				'Record the licence outcome (granted, with its expiry date, refused or withdrawn), or confirm that the record is still needed. The record is then kept until three years after the licence expires, or three years after the application is refused or withdrawn; a confirmation sets the next review five years on.',
+				'Nothing is deleted until the organisation asks for it.'
+			]
+		: [
+				`The licence record of ${f.projectName} reached its closing date on ${f.dueOn}: three years after the licence expired, or after the application was refused or withdrawn.`,
+				'It can now be deleted, with its evidence packs and the names they keep. Nothing is deleted automatically: ask the operator to delete the project, in writing, or record a later outcome if the licence was renewed.'
+			];
+	return render('licence_record', to, subject, {
+		heading: review ? `Record the licence outcome for ${f.projectName}` : `The licence record of ${f.projectName} can now be deleted`,
+		paragraphs,
+		action: { label: 'Open the licence record', url: sitePage(`/projects/${encodeURIComponent(f.projectId)}?tab=project#licence-record`) },
+		footer: [
+			f.operator
+				? `You get this email as the operator of ${PRODUCT} (project ${f.projectId}). The deletion runbook is docs/deployment.md § Runbooks.`
+				: `You get this email because you own ${f.projectName}.`
+		]
+	});
+}
+
+/** What a deletion did, for its confirmation: the catchments and teams the person left (their names, as they stood). */
+export type AccountDeletedFacts = { projects: string[]; teams: string[] };
+
+/**
+ * The account was deleted (issue #112, DELETE /auth/me): what was done, as
+ * POPIA s24(4) asks. Sent to the address the account had, after the row is
+ * gone, in the language it had chosen. It says what went, what stays
+ * without the name and what keeps it, and names the catchments and teams
+ * the person left (docs/security.md § Personal information (POPIA)). The
+ * button opens the privacy notice, which says how to reach the operator if
+ * the person didn't do it.
+ */
+export function accountDeletedMail(to: string, f: AccountDeletedFacts, locale?: string | null): Mail {
+	const tr = mailT(locale);
+	const v = { email: to, product: PRODUCT };
+	const left = [...f.projects, ...f.teams];
+	return render(
+		'account_deleted',
+		to,
+		tr.t('mail.deleted.subject', v),
+		{
+			heading: tr.t('mail.deleted.heading'),
+			paragraphs: [
+				tr.t('mail.deleted.body', v),
+				tr.t('mail.deleted.gone'),
+				...(left.length ? [tr.t('mail.deleted.left', { list: listText(left, tr.t('mail.farmer.and')) })] : []),
+				tr.t('mail.deleted.kept'),
+				tr.t('mail.deleted.signed'),
+				tr.t('mail.deleted.backups')
+			],
+			action: { label: tr.t('mail.deleted.action'), url: sitePage('/privacy#retention') },
+			footer: [tr.t('mail.deleted.notYou')]
 		},
 		tr
 	);

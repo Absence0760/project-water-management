@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -38,7 +38,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				lossReturnFraction: frac,
 				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
 				damAreaFullM2: nonNeg.nullable(),
-				damAreaExponent: z.number().gt(0).max(3),
+				// At most 1 (engine ≥ 1.63.0, issue #90): no basin's surface grows faster than its volume; the
+				// DB column still allows 3, so an older row loads and runs (with a warning) until it is next saved.
+				damAreaExponent: z.number().gt(0).max(DAM_AREA_EXPONENT_MAX),
 				damSeepagePerDay: frac,
 				// Other water users (WP-1.33): monthly demand (water-year months), return share, priority.
 				userDemandM3Day: z.array(nonNeg).length(12).nullable().default(null),
@@ -75,6 +77,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				pumpCapacityM3Day: nonNeg.nullable().default(null),
 				supplyTriggerPct: frac.default(0.4),
 				supplyStopPct: frac.default(0.6),
+				// Where the crops take their water (engine ≥ 1.65.0, issue #344): the dam, or a river abstraction
+				// with its own pump (null = no limit) and pool (null = none). A unit's only is a model rule (cropSourceKind).
+				cropWaterSource: z.enum(WATER_SOURCES).default('dam'),
+				cropRiverPumpM3Day: nonNeg.nullable().default(null),
+				cropRiverPoolM3: nonNeg.nullable().default(null),
 				// Hands-off flow and River to dam by month (engine ≥ 1.32.0, issue #204), m³/day by water-year
 				// month; null = none / the one divertCapacityM3Day. Farms only is a model rule (operatingKind).
 				handsOffM3Day: z.array(nonNeg).length(12).nullable().default(null),
@@ -183,6 +190,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				monthlyFactor: z.array(nonNeg).length(12).nullable().default(null),
 				returnPct: frac.default(0),
 				priority: z.enum(DEMAND_OBJECT_PRIORITIES).default('shared'),
+				// Its rank within its class (engine 1.64.0, issue #343): 1 before 2, equal ranks pro rata. Null = 1.
+				rank: z.number().int().min(1).max(DEMAND_OBJECT_MAX_RANK).nullable().default(null),
 				destination: z.enum(DEMAND_OBJECT_DESTINATIONS).default('internal'),
 				enabled: z.boolean().default(true),
 				// Date windows with a factor (engine 1.17.0, issue #90 Q4): the shape here, the meaning
@@ -208,6 +217,11 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				// Where its number comes from (engine 1.56.0, issue #54 Q11). Null = not recorded; its fit with
 				// the sizing is a model rule (the engine's modelRuleIssues).
 				source: z.enum(DEMAND_OBJECT_SOURCES).nullable().default(null),
+				// Where its water comes from (engine 1.65.0, issue #344): null = the dam; a river abstraction's pump
+				// (null = no limit) and pool (null = none).
+				waterSource: z.enum(WATER_SOURCES).nullable().default(null),
+				riverPumpM3Day: nonNeg.nullable().default(null),
+				riverPoolM3: nonNeg.nullable().default(null),
 				note: z.string().max(1000).default('')
 			})
 		)

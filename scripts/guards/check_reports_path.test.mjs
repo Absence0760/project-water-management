@@ -61,6 +61,18 @@ describe('findProblems', () => {
 	});
 });
 
+describe('/tiles (the map tiles bucket, infra/map_data.tf)', () => {
+	it('is reserved like /reports and /packs: a top-level route, through groups and escapes, and static files', () => {
+		assert.match(routeProblem(['tiles']), /top-level route "\/tiles"/);
+		assert.match(routeProblem(['(app)', '[x+74]iles']), /top-level route "\/tiles"/);
+		assert.match(routeProblem(['[slug]']), /\/tiles\/…/);
+		// Positive control: a name that only starts with "tiles" is fine.
+		assert.equal(routeProblem(['tiles-help']), null);
+		assert.deepEqual(findProblems({ routeDirs: [], staticFiles: ['tiles/south-africa.pmtiles', 'tiles.txt'] }), ['frontend/static/tiles/south-africa.pmtiles: a static file served at /tiles/south-africa.pmtiles']);
+		assert.match(WHY, /\/tiles\/\* to the map tiles bucket/);
+	});
+});
+
 describe('scan', () => {
 	it('finds a route and a static file in a tree on disk', () => {
 		const root = mkdtempSync(join(tmpdir(), 'reports-path-'));

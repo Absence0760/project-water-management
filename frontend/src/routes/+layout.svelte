@@ -8,6 +8,8 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
+	import { loadMfaPrompt, mfaPrompt, noteMfaRefusal, promptKind, resetMfaPrompt } from '$lib/auth/mfaPrompt.svelte';
+	import { askForCode, freshCode } from '$lib/auth/freshCode.svelte';
 	import { isLandingRoot, isPublicPath, LANDING_ROUTE, landingPath, routeAccess, session, STATIC_ROUTES, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
@@ -189,7 +191,46 @@
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
-	// The static pages (/welcome, /privacy, /terms, /methods) render at once (and
+
+	// Two-step sign-in (issue #282; lib/auth/mfaPrompt.svelte.ts): a role that
+	// needs it without an authenticator, or a password-only session, gets a
+	// banner on the workspace's pages (English, so not on the translated ones:
+	// the Account page says it in its own panel). GET /auth/mfa is read once per
+	// account there, and again when the tab comes back into view (a role can
+	// change meanwhile); a 403 mfa_required / mfa_step_up from any request shows
+	// it too. The banner is its own chunk, loaded only while it has something to say.
+	const workspaceUser = $derived(
+		session.user && !session.user.renderSession && !authScreen && !farmScreen && !translated ? session.user.id : null
+	);
+	onMount(() => api.onError((err) => noteMfaRefusal(session.user?.id ?? null, err)));
+	// A code again (licensing positions item 9; lib/auth/freshCode.svelte.ts): a sign-off, issuing or withdrawing an
+	// evidence pack answered 401 mfa_fresh_code. The dialog is its own chunk, loaded only while it asks.
+	onMount(() =>
+		api.onFreshCode(async () => {
+			// Loaded before it opens, so a failed load answers "no code" instead of leaving the action waiting.
+			try {
+				await import('$lib/components/layout/FreshCodeDialog.svelte');
+			} catch {
+				return false;
+			}
+			return askForCode();
+		})
+	);
+	$effect(() => {
+		if (session.checked && !session.user) untrack(resetMfaPrompt);
+	});
+	$effect(() => {
+		const user = workspaceUser;
+		if (!user) return;
+		untrack(() => loadMfaPrompt(user, api.auth.mfa.status));
+		const onVisible = () => {
+			if (document.visibilityState === 'visible') void loadMfaPrompt(user, api.auth.mfa.status, true);
+		};
+		document.addEventListener('visibilitychange', onVisible);
+		return () => document.removeEventListener('visibilitychange', onVisible);
+	});
+	const mfaKind = $derived(ready ? promptKind(mfaPrompt, workspaceUser) : null);
+	// The static pages (/welcome, /privacy, /terms, /methods, /data-sources) render at once (and
 	// prerender), so crawlers and a slow API still get them (even with the API
 	// down: they need none). The landing page is prerendered once per language
 	// (/welcome, /welcome/af; issue #137); the legal and methods pages are English only.
@@ -211,6 +252,20 @@
 		<!-- Invitations waiting to be accepted (issue #136); its own chunk, it draws nothing when there are none. -->
 		{#await import('$lib/components/auth-extras/InvitesBanner.svelte') then banner}
 			<banner.default />
+		{/await}
+	{/if}
+	{#if mfaKind}
+		{#await import('$lib/components/layout/MfaBanner.svelte') then banner}
+			<banner.default kind={mfaKind} />
+		{:catch}
+			<div class="verify-failed">
+				<ChunkFailed text="The reminder to set up two-step sign-in could not be loaded. Check your connection, then reload the page." />
+			</div>
+		{/await}
+	{/if}
+	{#if freshCode.open}
+		{#await import('$lib/components/layout/FreshCodeDialog.svelte') then dialog}
+			<dialog.default />
 		{/await}
 	{/if}
 	{#if bootError && !staticPage}
@@ -261,7 +316,7 @@
 <ConfirmHost />
 
 <style>
-	/* In the verify-email banner's place, under the header. */
+	/* In the verify-email (or two-step sign-in) banner's place, under the header. */
 	.verify-failed {
 		padding: 0.5rem var(--gutter) 0;
 	}

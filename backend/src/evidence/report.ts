@@ -12,33 +12,46 @@ import {
 	DISCLAIMER,
 	diffInputs,
 	ENGINE_ERRATA,
+	ENGINE_VERSION,
 	evidenceReport,
 	KNOWN_LIMITATIONS,
 	METHODOLOGY,
 	summarisePaired,
+	withLocalitySvgHash,
 	type EnsembleHeader,
 	type EnsembleSummary,
+	type CumulativeReport,
+	type EvidenceCombinedInput,
 	type EvidenceEnsembleInput,
 	type EvidenceImpactInput,
 	type EvidenceInput,
+	type EvidenceMapFeatureInput,
 	type EvidenceReport,
 	type EvidenceRunInput,
 	type MemberResult,
+	type ModelInput,
 	type PairedMember,
 	type ResolvedEnsembleOptions,
 	type RunInputsSnapshot,
-	type RunSummary
+	type RunSummary,
+	type ScenarioOp
 } from '@water-management/engine';
 import { Hono } from 'hono';
+import { createHash } from 'node:crypto';
 import { runAllocationComparison } from '../allocations/runUse.js';
+import { checkCombination } from '../assessments/store.js';
+import { ASSESSMENT_SCENARIOS_MAX } from '../assessments/schema.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { differingKinds, storedValues } from '../compare/routes.js';
 import { type Db, withUser } from '../db/tx.js';
 import { revisionsBetween } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { projectAuthority } from '../projects/authoritySettings.js';
 import { resolveOutcomes } from '../projects/outcomeSettings.js';
 import type { RunScenarioSnapshot } from '../runs/execute.js';
+import { loadBaseInput, type ScenarioOrigin } from '../scenarios/execute.js';
+import { loadAuthorisedImpact } from './authorisedImpact.js';
 import { listNominations } from '../runs/evidence.js';
 
 /** Most other application runs the ledger lists (newest first). */
@@ -192,6 +205,18 @@ async function loadEnsembles(
 	return { baseline, paired };
 }
 
+/** The newest endorsement of any publication of the baseline run by the responsible authority (163; evidence-13), or null. */
+async function loadEndorsement(db: Db, projectId: string, runId: string): Promise<EvidenceInput['baselineEndorsement']> {
+	const { rows } = await db.query<{ endorsedAt: Date; endorsedBy: string | null; note: string }>(
+		`SELECT p.endorsed_at AS "endorsedAt", u.display_name AS "endorsedBy", p.endorsement_note AS note
+		 FROM run_publication p LEFT JOIN app_user u ON u.id = p.endorsed_by
+		 WHERE p.project_id = $1 AND p.run_id = $2 AND p.endorsed_at IS NOT NULL
+		 ORDER BY p.endorsed_at DESC, p.id DESC LIMIT 1`,
+		[projectId, runId]
+	);
+	return rows[0] ? { endorsedAt: iso(rows[0].endorsedAt)!, endorsedBy: rows[0].endorsedBy, note: rows[0].note } : null;
+}
+
 async function loadPublications(db: Db, projectId: string, baseline: RunRow): Promise<Pick<EvidenceInput, 'publication' | 'history'>> {
 	const { rows } = await db.query<{ runId: string; publishedAt: Date; publishedBy: string | null; current: boolean; runCreatedAt: Date }>(
 		`SELECT p.run_id AS "runId", p.published_at AS "publishedAt", u.display_name AS "publishedBy", p.superseded_at IS NULL AS current,
@@ -225,7 +250,7 @@ async function loadPublications(db: Db, projectId: string, baseline: RunRow): Pr
 
 /**
  * § 4's cumulative table: every other scenario on the baseline that is
- * submitted, or decided with approval, with its newest run of its current
+ * submitted, or decided with a licence issued, with its newest run of its current
  * ops (the ops' hash the run recorded equals the scenario's) on this
  * baseline. Under the reader's RLS: the scenario and run policies decide
  * which applications appear (a submitted application to the project's
@@ -258,7 +283,7 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 		 JOIN model_run r ON r.scenario_id = s.id AND r.project_id = s.project_id
 		 WHERE s.project_id = $1
 			AND ($3::uuid IS NULL OR s.id <> $3::uuid)
-			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome IN ('approved', 'approved_with_conditions')))
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
 			AND r.inputs->'scenario'->>'baseRunId' = $2
 			AND r.inputs->'scenario'->>'opsSha256' = s.ops_sha256
 		 ORDER BY s.id, r.created_at DESC, r.id) newest
@@ -274,6 +299,117 @@ async function loadOtherApplications(db: Db, projectId: string, baselineRunId: s
 		reserveOutlet: r.reserveOutlet ? { months: r.reserveOutlet.months, met: r.reserveOutlet.met, rate: r.reserveOutlet.rate } : null
 	}));
 	return { otherApplications, otherApplicationsTruncated: truncated };
+}
+
+/** This report's own application, as the combination takes it: the ops its run recorded. */
+interface OwnApplication {
+	id: string;
+	name: string;
+	origin: ScenarioOrigin;
+	/** The scenario's status now; null once it is deleted. */
+	status: string | null;
+	ops: ScenarioOp[];
+	opsSha256: string;
+	ownedNodeIds: string[];
+}
+
+/**
+ * Page 1's combined row (evidence-11, finding C26, WP-3.11): every other
+ * application the reader can see that is submitted, or decided with a licence
+ * issued, and based on this baseline, put together with this one.
+ *
+ * The figure is read from a completed cumulative assessment of exactly these
+ * applications with these ops on this baseline (assessments/, which ran the
+ * baseline, each alone and all together on one engine), not run here: a
+ * combination is up to ASSESSMENT_SCENARIOS_MAX + 2 model runs, which a
+ * report request (a viewer's GET, a pack draft) must not carry. With no such
+ * assessment the combination is still checked here (checkCombination, pure,
+ * no model run), so a conflict is named whether or not anyone asked for an
+ * assessment; a matching complete assessment already passed that check on
+ * the same base and ops. Under the reader's RLS: an assessment is an
+ * editor's, so a viewer's report finds none.
+ *
+ * Only an assessment made on the baseline run's engine counts (operator
+ * decision, 2026-10-01), so the row's baseline figure is the report's own
+ * baseline. One made on another engine is named with why it isn't read
+ * (`staleAssessment`); and when this server runs another engine than the
+ * baseline's, no new assessment can match either, so the row says to run the
+ * baseline again.
+ */
+export function staleAssessment(assessedOn: string | null, baselineEngine: string, serverEngine: string = ENGINE_VERSION): string | null {
+	const was = assessedOn ? `they were assessed together on engine ${assessedOn}, but the baseline ran on engine ${baselineEngine}` : null;
+	if (baselineEngine !== serverEngine)
+		return `${was ? `${was}, and` : `the baseline ran on engine ${baselineEngine}, and`} an assessment now runs on engine ${serverEngine}, so none made now would match the report’s baseline: run the baseline again on engine ${serverEngine} and assess the applications on that run.`;
+	return was ? `${was}, so its baseline figure isn’t this report’s: assess them together again.` : null;
+}
+
+async function loadCombined(
+	db: Db,
+	projectId: string,
+	baselineRunId: string,
+	baselineEngine: string,
+	own: OwnApplication | null
+): Promise<EvidenceCombinedInput> {
+	const none: EvidenceCombinedInput = { others: [], unavailable: null, conflicts: [], problems: [], assessment: null, pending: false };
+	const { rows: others } = await db.query<{ scenarioId: string; scenarioName: string; status: 'submitted' | 'decided'; outcome: string | null; opsSha256: string }>(
+		`SELECT s.id AS "scenarioId", s.name AS "scenarioName", s.status, s.outcome, s.ops_sha256 AS "opsSha256"
+		 FROM scenario s
+		 WHERE s.project_id = $1 AND s.base_run_id = $2 AND ($3::uuid IS NULL OR s.id <> $3::uuid)
+			AND (s.status = 'submitted' OR (s.status = 'decided' AND s.outcome = 'licence_issued'))
+		 ORDER BY s.name, s.id
+		 LIMIT $4`,
+		[projectId, baselineRunId, own?.id ?? null, APPLICATION_RUNS_MAX + 1]
+	);
+	const listed = others.slice(0, APPLICATION_RUNS_MAX).map((o) => ({ scenarioId: o.scenarioId, scenarioName: o.scenarioName, status: o.status, outcome: o.outcome }));
+	const total = others.length + (own ? 1 : 0);
+	if (total < 2) return { ...none, others: listed };
+	if (others.length > APPLICATION_RUNS_MAX)
+		return { ...none, others: listed, unavailable: `more than ${APPLICATION_RUNS_MAX} other applications are based on this baseline; an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
+	if (own && own.origin === 'applicant' && own.status !== 'submitted' && own.status !== 'decided')
+		return { ...none, others: listed, unavailable: 'this application isn’t submitted, and an application is assessed with the others once it is.' };
+	if (total > ASSESSMENT_SCENARIOS_MAX)
+		return { ...none, others: listed, unavailable: `${total} applications are based on this baseline, and an assessment takes at most ${ASSESSMENT_SCENARIOS_MAX} together.` };
+
+	const members = [...(own ? [`${own.id}:${own.opsSha256}`] : []), ...others.map((o) => `${o.scenarioId}:${o.opsSha256}`)];
+	const { rows: found } = await db.query<{ id: string; name: string; createdAt: Date; createdBy: string | null; engineVersion: string | null; status: 'complete' | 'pending'; report: CumulativeReport | null }>(
+		`SELECT a.id, a.name, a.created_at AS "createdAt", u.display_name AS "createdBy", a.engine_version AS "engineVersion", a.status, a.report
+		 FROM assessment a LEFT JOIN app_user u ON u.id = a.created_by
+		 WHERE a.project_id = $1 AND a.base_run_id = $2 AND a.status IN ('complete', 'pending')
+			AND (SELECT count(*) FROM assessment_member m WHERE m.assessment_id = a.id) = $4
+			AND NOT EXISTS (SELECT 1 FROM assessment_member m WHERE m.assessment_id = a.id
+				AND (m.scenario_id IS NULL OR NOT (m.scenario_id::text || ':' || m.ops_sha256) = ANY($3::text[])))
+		 ORDER BY a.status = 'complete' AND a.engine_version = $5 DESC, a.status = 'pending' DESC, a.created_at DESC, a.id DESC
+		 LIMIT 1`,
+		[projectId, baselineRunId, members, members.length, baselineEngine]
+	);
+	const hit = found[0];
+	if (hit?.status === 'complete' && hit.report && hit.engineVersion === baselineEngine)
+		return {
+			...none,
+			others: listed,
+			assessment: { id: hit.id, name: hit.name, createdAt: iso(hit.createdAt)!, createdBy: hit.createdBy, engineVersion: hit.engineVersion, report: hit.report }
+		};
+	// None on the baseline's engine (a pending one comes next, then one on another engine): one on another engine
+	// isn't read, and says why; nor can one be made now while the server runs another engine than the baseline's.
+	const stale = staleAssessment(hit?.status === 'complete' ? hit.engineVersion : null, baselineEngine);
+	if (stale) return { ...none, others: listed, unavailable: stale };
+
+	// No assessment of exactly these: check that they combine at all, so a conflict is named now.
+	const { rows: full } = await db.query<{ id: string; name: string; origin: ScenarioOrigin; ops: ScenarioOp[]; ownedNodeIds: string[] }>(
+		`SELECT s.id, s.name, s.origin, s.ops, s.owned_node_ids::text[] AS "ownedNodeIds" FROM scenario s WHERE s.project_id = $1 AND s.id = ANY($2::uuid[])`,
+		[projectId, others.map((o) => o.scenarioId)]
+	);
+	const byId = new Map(full.map((r) => [r.id, r]));
+	const scenarios = [...(own ? [own] : []), ...others.map((o) => byId.get(o.scenarioId)).filter((x): x is NonNullable<typeof x> => !!x)];
+	let base: Awaited<ReturnType<typeof loadBaseInput>>;
+	try {
+		base = await loadBaseInput(db, projectId, baselineRunId);
+	} catch (err) {
+		if (err instanceof ApiError) return { ...none, others: listed, unavailable: `the baseline can’t be rebuilt to put them together (${err.message}).` };
+		throw err;
+	}
+	const check = checkCombination(base, scenarios);
+	return { ...none, others: listed, conflicts: check.conflicts.map((c) => c.message), problems: check.problems, pending: hit?.status === 'pending' };
 }
 
 /**
@@ -304,6 +440,42 @@ async function loadImpactInput(db: Db, projectId: string, baselineRunId: string,
 	};
 }
 
+/**
+ * § 1's locality map (evidence-12, issue #326 A5): the project's map features
+ * as they are now (no run records them, so the report, and a pack's manifest,
+ * freezes them as drafted), under the reader's RLS, with the file each came
+ * from. `other` features aren't drawn, so they aren't read. Ordered by kind
+ * and id, so the same features give the same report.
+ */
+async function loadMapFeatures(db: Db, projectId: string): Promise<EvidenceMapFeatureInput[]> {
+	const { rows } = await db.query<{
+		kind: EvidenceMapFeatureInput['kind'];
+		name: string;
+		nodeId: string | null;
+		geometry: EvidenceMapFeatureInput['geometry'];
+		updatedAt: Date;
+		fileName: string | null;
+		sha256: string | null;
+		importedAt: Date | null;
+	}>(
+		`SELECT f.kind, f.name, f.node_id AS "nodeId", f.geometry, f.updated_at AS "updatedAt",
+			s.file_name AS "fileName", s.sha256, s.imported_at AS "importedAt"
+		 FROM map_feature f
+		 LEFT JOIN geo_source s ON s.id = f.source_id AND s.project_id = f.project_id
+		 WHERE f.project_id = $1 AND f.kind <> 'other'
+		 ORDER BY f.kind, f.id`,
+		[projectId]
+	);
+	return rows.map((r) => ({
+		kind: r.kind,
+		name: r.name,
+		nodeId: r.nodeId,
+		geometry: r.geometry,
+		updatedAt: iso(r.updatedAt)!,
+		source: r.sha256 && r.fileName && r.importedAt ? { fileName: r.fileName, sha256: r.sha256, importedAt: iso(r.importedAt)! } : null
+	}));
+}
+
 /** Everything evidenceReport() reads, for the report named by `runId`. 404 when the reader can't see the run or its base. */
 export async function loadEvidenceInput(db: Db, projectId: string, runId: string): Promise<EvidenceInput> {
 	const named = await loadRun(db, projectId, runId);
@@ -317,6 +489,7 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	let application: EvidenceInput['application'] = null;
 	let changes: EvidenceInput['changes'] = [];
 	let applicationRuns: EvidenceInput['applicationRuns'] = [];
+	let ownOrigin: ScenarioOrigin | null = null;
 	if (recorded) {
 		const { rows: sc } = await db.query<{
 			name: string;
@@ -325,14 +498,16 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 			mitigation: string;
 			monitoring: string;
 			status: string;
+			origin: ScenarioOrigin;
 			ownerName: string | null;
 		}>(
-			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, u.display_name AS "ownerName"
+			`SELECT s.name, s.description, s.purpose_need AS "purposeAndNeed", s.mitigation, s.monitoring, s.status, s.origin, u.display_name AS "ownerName"
 			 FROM scenario s LEFT JOIN app_user u ON u.id = s.owner_user_id
 			 WHERE s.project_id = $1 AND s.id = $2`,
 			[projectId, recorded.id]
 		);
 		const meta = sc[0];
+		ownOrigin = meta?.origin ?? null;
 		application = {
 			...(await withAllocations(db, runInput(named))),
 			scenario: {
@@ -368,6 +543,23 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 	}
 
 	const others = await loadOtherApplications(db, projectId, baseline.id, recorded?.id ?? null);
+	const combined = await loadCombined(
+		db,
+		projectId,
+		baseline.id,
+		baseline.engineVersion,
+		recorded && application
+			? {
+					id: recorded.id,
+					name: application.scenario.name,
+					origin: ownOrigin ?? 'applicant',
+					status: application.scenario.status,
+					ops: recorded.ops,
+					opsSha256: recorded.opsSha256,
+					ownedNodeIds: recorded.ownedNodeIds
+				}
+			: null
+	);
 
 	const nominations = (await listNominations(db, projectId)).map((n) => ({
 		withdrawn: n.withdrawn,
@@ -379,24 +571,41 @@ export async function loadEvidenceInput(db: Db, projectId: string, runId: string
 		nominatedAt: iso(n.nominatedAt)!,
 		nominatedBy: n.nominatedBy
 	}));
+	const impact = application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null;
 	return {
 		project: { id: project[0]!.id, name: project[0]!.name },
 		baseline,
 		application,
 		nominations,
 		...(await loadPublications(db, projectId, baseRow)),
+		authority: await projectAuthority(db, projectId),
+		baselineEndorsement: await loadEndorsement(db, projectId, baseline.id),
 		ensembles: await loadEnsembles(db, projectId, baseline.id, application?.id ?? null, application?.scenario.ownedNodeIds ?? []),
 		changes,
 		applicationRuns,
 		...others,
+		combined,
 		liability: { methodology: METHODOLOGY, limitations: KNOWN_LIMITATIONS, errata: ENGINE_ERRATA, disclaimerVersion: DISCLAIMER.version },
-		impact: application ? await loadImpactInput(db, projectId, baseline.id, application.id) : null
+		impact,
+		// Page 1's headline board against full authorised use (evidence-14, licensing build item 8): stored by an editor's run of the pair.
+		authorisedImpact:
+			application && impact
+				? await loadAuthorisedImpact(db, projectId, application.id, {
+						baselineEngine: baseline.engineVersion,
+						yearClassMethod: impact.yearClassMethod,
+						siteNodeId: impact.siteNodeId,
+						baselineInput: baseline.inputs as unknown as ModelInput
+					})
+				: null,
+		mapFeatures: await loadMapFeatures(db, projectId)
 	};
 }
 
-/** The report for one run, as the engine builds it. */
+const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
+
+/** The report for one run, as the engine builds it, with § 1's locality map's SVG hashed (the engine has no hash of its own). */
 export async function buildEvidenceReport(db: Db, projectId: string, runId: string): Promise<EvidenceReport> {
-	return evidenceReport(await loadEvidenceInput(db, projectId, runId));
+	return withLocalitySvgHash(evidenceReport(await loadEvidenceInput(db, projectId, runId)), sha256);
 }
 
 export const evidenceReportRoutes = new Hono<AuthEnv>().get('/:id/runs/:runId/evidence-report', async (c) => {

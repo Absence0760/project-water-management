@@ -57,7 +57,7 @@ export type LicenceImpactVerdict = 'noChange' | 'moreBelow' | 'fewerBelow' | 'no
 
 /** What makes up `otherM3`, mean m³ a year; Σ = otherM3 up to float noise. */
 export interface LicenceImpactOtherParts {
-	/** Dam evaporation + dam seepage lost from the catchment + off-takes' conveyance losses − rain on the dams. */
+	/** Dam evaporation + the river abstractions' pools' evaporation (engine ≥ 1.65.0) + dam seepage lost from the catchment + off-takes' conveyance losses − rain on the dams. */
 	damLossesM3: number;
 	/** Dam storage at the end − at the start of the year, less storage set by a reset. */
 	storageChangeM3: number;
@@ -186,7 +186,7 @@ export function licenceImpactByYearClass(input: LicenceImpactInput): LicenceImpa
 		const otherParts: LicenceImpactOtherParts = {
 			damLossesM3: mean((wy) => {
 				const r = app(wy);
-				return r.damEvaporationM3 + (r.damSeepageLostM3 ?? 0) + (r.conveyanceLossM3 ?? 0) - r.rainOnDamsM3;
+				return r.damEvaporationM3 + (r.poolEvaporationM3 ?? 0) + (r.damSeepageLostM3 ?? 0) + (r.conveyanceLossM3 ?? 0) - r.rainOnDamsM3;
 			}),
 			storageChangeM3: mean((wy) => app(wy).storageChangeM3 - (app(wy).storageSetM3 ?? 0)),
 			landCoverM3: mean((wy) => app(wy).landCoverM3 + app(wy).unallocatedM3),

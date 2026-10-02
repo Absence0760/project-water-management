@@ -8,16 +8,19 @@
 // ensemble and recomputes the paired Reserve share, lists every start, and
 // refuses what isn't evidence.
 import {
+	COMBINED_CONFLICT,
 	declaredRuleRequest,
 	licenceImpactSection,
+	localityMapSvg,
 	runEnsemble,
 	runPairedEnsemble,
 	type DeclaredUncertaintyRule,
 	type EvidenceReport,
 	type ModelInput
 } from '@water-management/engine';
+import { createHash } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -209,7 +212,7 @@ describe('settings.evidenceUncertaintyRule', () => {
 });
 
 describe('§ 5 registered water use (WP-3.10)', () => {
-	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares by unit, never with the holder or registration', async () => {
+	it('reads each run’s own allocations: a run from before them is "Not assessed", a run after compares, never naming another unit, the holder or the registration (evidence-15, D3)', async () => {
 		// The nominated baseline ran without allocations.
 		expect(((await report(viewer, baseRun)).body.report as EvidenceReport).allocations.notAssessed).toMatch(/^Not assessed: the runs carry no registered volumes/);
 		const created = await owner.call('POST', `/projects/${projectId}/allocations`, {
@@ -228,14 +231,14 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		const res = await report(viewer, withVolume);
 		expect(res.status).toBe(200);
 		const r = res.body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-15');
 		expect(r.allocations.notAssessed).toBeNull();
-		expect(r.allocations.units.map((u) => u.name)).toEqual(['Upper']);
-		const s = r.allocations.units[0]!.sources[0]!;
-		expect(s.waterSource).toBe('surface');
-		// Three years from 1 October 2018: two whole water years, and part of a third.
-		expect(s.countsA?.wholeYears).toBe(2);
-		expect(s.years.filter((y) => !y.partialA).every((y) => Math.abs(y.registeredA! - 100_000) < 1e-6)).toBe(true);
+		// Baseline evidence has no applicant: Upper isn't the applicant's, and one unit is too few for a total, so § 5 names no unit.
+		expect(r.allocations.units).toEqual([]);
+		expect(r.allocations.othersLeftOut).toBe(1);
+		expect(JSON.stringify(r.allocations)).not.toContain('Upper');
+		// Three years from 1 October 2018: two whole water years, and part of a third; page 1's row still counts them.
+		expect(r.allocations.unitYears?.judgedA).toBe(2);
 		expect(r.rows.find((x) => x.id === 'registeredUse')?.notAssessed).toBeNull();
 		// Volumes, never the holder's name or registration number (D3), even though the viewer's project has them.
 		const text = JSON.stringify(res.body);
@@ -243,10 +246,12 @@ describe('§ 5 registered water use (WP-3.10)', () => {
 		expect(text).not.toContain('REG-EVIDENCE-7');
 		// Positive control for that: the owner's allocation list carries the holder.
 		expect(JSON.stringify((await owner.call('GET', `/projects/${projectId}/allocations`)).body)).toContain('Evidence Holder Person');
-		// The same numbers as the Allocations tab for the run (G14).
-		const tab = (await viewer.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison;
-		const tabYears = tab.nodes.find((n: { nodeId: string }) => n.nodeId === farmId).surface.years as { modelledM3: number; registeredM3: number }[];
-		expect(s.years.map((y) => [y.modelledA, y.registeredA])).toEqual(tabYears.map((y) => [y.modelledM3, y.registeredM3]));
+		// The same judgement as the Allocations tab for the run (G14), read by the owner: the viewer's tab has totals only (162).
+		const tab = (await owner.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison;
+		const tabYears = tab.nodes.find((n: { nodeId: string }) => n.nodeId === farmId).surface.years as { partial: boolean; status: string }[];
+		const whole = tabYears.filter((y) => !y.partial);
+		expect(r.allocations.unitYears).toMatchObject({ judgedA: whole.length, overA: whole.filter((y) => y.status === 'over').length });
+		expect((await viewer.call('GET', `${runPath(withVolume)}/allocations`)).body.comparison).toBeNull();
 		expect((await owner.call('DELETE', `/projects/${projectId}/allocations/${created.body.allocation.id}`)).status).toBe(204);
 	});
 });
@@ -277,6 +282,7 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 	beforeAll(async () => {
 		assessor = await signUp('EvAssessor');
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: assessor.email, role: 'editor' })).status).toBe(201);
+		await actForAuthority(owner, projectId, assessor.id);
 		// An application's base must be published; the contributor applies for the farm they are linked to.
 		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: baseRun })).status).toBe(201);
 		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${contributor.id}`, { nodeIds: [farmId] })).status).toBe(200);
@@ -285,13 +291,13 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		teamSubmitted = await scenarioRunOf(owner, 'Second dam', 250_000, true);
 		await submit(owner, teamSubmitted.sid);
 		teamDraft = await scenarioRunOf(owner, 'Draft idea', 300_000, true);
-		// Decided: an approval is still proposed use on this baseline (listed), a refusal isn't (never listed).
+		// Decided: an issued licence is still proposed use on this baseline (listed), a refusal isn't (never listed).
 		approved = await scenarioRunOf(owner, 'Approved weir', 120_000, true);
 		await submit(owner, approved.sid);
-		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${approved.sid}/decide`, { outcome: 'approved_with_conditions' })).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${approved.sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		refused = await scenarioRunOf(owner, 'Refused weir', 130_000, true);
 		await submit(owner, refused.sid);
-		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${refused.sid}/decide`, { outcome: 'refused' })).status).toBe(200);
+		expect((await assessor.call('POST', `/projects/${projectId}/scenarios/${refused.sid}/decide`, { ...DECISION, outcome: 'licence_refused' })).status).toBe(200);
 		// A second run of the submitted team scenario: its newest is the one read.
 		const again = await owner.call('POST', `/projects/${projectId}/scenarios/${teamSubmitted.sid}/runs`, {});
 		expect(again.status, JSON.stringify(again.body)).toBe(201);
@@ -310,7 +316,7 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect(c.applications.map((x) => x.scenarioName)).toEqual(['Applicant dam', 'Approved weir', 'Second dam']);
 		expect(c.applications.map((x) => [x.status, x.outcome])).toEqual([
 			['submitted', null],
-			['decided', 'approved_with_conditions'],
+			['decided', 'licence_issued'],
 			['submitted', null]
 		]);
 		expect(c.applications.every((x) => x.comparable)).toBe(true);
@@ -326,8 +332,12 @@ describe('§ 4 other applications on the baseline (the cumulative table, evidenc
 		expect(second.ewrDays).toBe((await days(teamSubmittedNewest)) - base);
 		expect(c.total.ewrDays).toBe(c.applications.reduce((t, x) => t + x.ewrDays!, 0));
 		expect(c.withThis?.ewrDays).toBe(c.total.ewrDays! + (await days(appRun)) - base);
+		// Page 1's row reads one combined run, not this sum (evidence-11): these all set Upper's dam, so they conflict and it isn't assessed, naming each conflict.
 		const r = (await report(owner, appRun)).body.report as EvidenceReport;
-		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: null, change: { run: c.total.ewrDays, band: null } });
+		expect(r.cumulative.combined!.applications.map((x) => x.scenarioName)).toEqual(['Upper dam', 'Applicant dam', 'Approved weir', 'Second dam']);
+		expect(r.cumulative.combined!.conflicts.length).toBeGreaterThan(0);
+		expect(r.cumulative.combined!.conflicts[0]).toMatch(/both change node "Upper": damCapacityM3$/);
+		expect(r.rows.at(-1)).toMatchObject({ id: 'otherApplications', notAssessed: COMBINED_CONFLICT(r.cumulative.combined!.conflicts), change: null });
 	});
 
 	it('hides from a viewer the submitted application only editors may read, and lists no draft (RLS)', async () => {
@@ -424,7 +434,7 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		const runId = ran.body.run.id as string;
 
 		const r = (await report(viewer, runId)).body.report as EvidenceReport;
-		expect(r.version).toBe('evidence-9');
+		expect(r.version).toBe('evidence-15');
 		const d = r.demandObjects!;
 		expect(d.notAssessed).toBeNull();
 		expect(d.objects.map((o) => [o.name, o.unit, o.change, o.source, o.note])).toEqual([
@@ -441,5 +451,61 @@ describe('§ 6 the applicant’s demand objects and their sources (evidence-9)',
 		expect(d.bySource[0]!.share).toBeCloseTo(30 / 99, 6);
 		expect(r.flags.find((f) => f.id === 'demandSource')?.text).toBe('Most of the applicant’s demand objects’ demand isn’t from meter records: 30 % is, and 70 % has no source recorded (§ 6).');
 		expect(r.questions.some((q) => q.startsWith('1 of the applicant’s demand objects has no source recorded (§ 6)'))).toBe(true);
+	});
+});
+
+describe('§ 1’s locality map (evidence-12, issue #326 A5)', () => {
+	const sq = (lon: number, lat: number, d: number) => [
+		[lon, lat],
+		[lon + d, lat],
+		[lon + d, lat + d],
+		[lon, lat + d],
+		[lon, lat]
+	];
+	const add = async (body: Record<string, unknown>) => {
+		const res = await owner.call('POST', `/projects/${projectId}/map/features`, body);
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		return res.body.feature.id as string;
+	};
+
+	it('is null with no map features; with them, it draws the applicant’s unit by name, another parcel unnamed, and names the SVG’s SHA-256', async () => {
+		// No map features: the report says there is no locality map (null), and still builds.
+		expect(((await report(viewer, appRun)).body.report as EvidenceReport).localityMap).toBeNull();
+
+		const ids = [
+			await add({ kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [sq(21.3, -33.7, 0.1)] } }),
+			await add({ kind: 'farm_parcel', name: 'Upper block', nodeId: farmId, geometry: { type: 'Polygon', coordinates: [sq(21.31, -33.69, 0.03)] } }),
+			await add({ kind: 'farm_parcel', name: 'Neighbour block', geometry: { type: 'Polygon', coordinates: [sq(21.36, -33.66, 0.02)] } }),
+			await add({ kind: 'river', name: 'Sand River', geometry: { type: 'LineString', coordinates: [[21.3, -33.6], [21.4, -33.7]] } }),
+			await add({ kind: 'gauge', name: 'Weir G1', geometry: { type: 'Point', coordinates: [21.39, -33.69] } }),
+			await add({ kind: 'other', name: 'Pump house', geometry: { type: 'Point', coordinates: [21.35, -33.65] } })
+		];
+		try {
+			const r = (await report(viewer, appRun)).body.report as EvidenceReport;
+			const loc = r.localityMap!;
+			expect(loc.applicant).toBe(true);
+			expect(loc.features.map((f) => [f.layer, f.label])).toEqual([
+				['boundary', null],
+				['parcel', null],
+				['applicantParcel', 'Upper'],
+				['river', null],
+				['gauge', 'Weir G1']
+			]);
+			// Another unit's parcel and an "other" feature leave nothing that names them.
+			for (const hidden of ['Neighbour block', 'Pump house', 'Upper block', 'Sand River']) expect(JSON.stringify(loc)).not.toContain(hidden);
+			// Drawn in the app counts what may be named: the boundary, the applicant's parcel, the river and the gauge, not the neighbour's parcel.
+			expect(loc.drawnInApp).toBe(4);
+			expect(loc.sources).toEqual([]);
+			expect(loc.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+			// The SHA-256 is the figure's, drawn from the report as served.
+			expect(loc.svgSha256).toBe(createHash('sha256').update(localityMapSvg(loc).svg, 'utf8').digest('hex'));
+			// Baseline evidence: no applicant, every parcel drawn alike.
+			const b = ((await report(viewer, baseRun)).body.report as EvidenceReport).localityMap!;
+			expect(b.applicant).toBe(false);
+			expect(b.features.filter((f) => f.layer === 'parcel')).toHaveLength(2);
+			expect(b.features.some((f) => f.label === 'Upper')).toBe(false);
+		} finally {
+			for (const id of ids) expect((await owner.call('DELETE', `/projects/${projectId}/map/features/${id}`)).status).toBe(204);
+		}
 	});
 });

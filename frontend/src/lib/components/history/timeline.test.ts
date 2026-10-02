@@ -63,8 +63,22 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Raise the dam', outcome: 'approved_with_conditions' }))).toBe(
 			'Decided the application “Raise the dam”: approved with conditions'
 		);
+		// 163_licensing_authority: the authority's decision, recorded (an event before it keeps "Decided", above).
+		expect(
+			eventLine(ev('scenario.decided', { scenarioId: 's', name: 'Raise the dam', outcome: 'licence_refused', authority: 'Breede-Olifants CMA', decisionDate: '2026-09-30' }))
+		).toBe('Recorded Breede-Olifants CMA’s decision on the scenario “Raise the dam”: licence refused');
+		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
+			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
+		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
+		// "Ask the assessors why" (164): never the question's words.
+		expect(eventLine(ev('application.question_asked', { scenarioId: 's', application: true, questionId: 'q', ops: [0], rules: ['shares'] }))).toBe(
+			'An applicant asked the assessors why a change doesn’t apply'
+		);
+		expect(eventLine(ev('application.question_answered', { scenarioId: 's', application: true, questionId: 'q' }))).toBe(
+			'Answered an applicant’s question about a change that doesn’t apply'
+		);
 		// A team scenario keeps its name, as before.
 		expect(eventLine(ev('scenario.submitted', { scenarioId: 's', name: 'Upper dam' }))).toBe('Submitted the scenario “Upper dam”');
 	});
@@ -73,11 +87,31 @@ describe('what an item says', () => {
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer' }))).toBe('Added Ben as viewer');
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer', via: 'invite' }))).toBe('Ben joined as viewer (accepted an invite)');
 		expect(eventLine(ev('member.removed', { displayName: 'Ben', role: 'farmer', self: true }))).toBe('Ben left the project');
+		expect(eventLine(ev('member.removed', { displayName: 'Deleted user', role: 'owner', self: true, accountDeleted: true }))).toBe(
+			'Deleted user deleted their account and left the project (owner)'
+		);
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'editor' }))).toBe('Changed Ben’s role from viewer to editor');
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'contributor' }))).toBe('Changed Ben’s role from viewer to applicant');
 		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: null, to: 'Rooikloof Trust' }))).toBe('Put Ben in the applying party Rooikloof Trust');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: 'Rooikloof Trust', to: null }))).toBe('Took Ben out of the applying party Rooikloof Trust');
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: true, party: 'Rooikloof Trust' }))).toBe(
+			'Appointed Ben specialist for the applying party Rooikloof Trust'
+		);
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: false, party: null }))).toBe('Ben is no longer the specialist for their applying party');
+		expect(eventLine(ev('scenario.participation_exported', { application: true, comments: 3, emails: 1 }))).toBe(
+			'Downloaded the public comments on an application (3 comments, 1 emails given for the register)'
+		);
+		expect(eventLine(ev('signoff.created', { packId: 'p1', kind: 'review', fullName: 'Dr R', registrationBody: 'SACNASP', registrationNo: '1' }))).toMatch(
+			/^Signed off an evidence pack as the authority’s reviewer as Dr R/
+		);
+		expect(
+			eventLine(ev('registration.checked', { displayName: 'Ben', registrationBody: 'sacnasp', registrationNo: '400999/20', outcome: 'registered', checkedByOrg: 'Pack WUA' }))
+		).toBe('Recorded Ben’s SACNASP registration 400999/20 as on the register, checked by Pack WUA');
+		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
+		expect(eventLine(ev('publication.endorsed', { publicationId: 'p', runId: 'r', note: '' }))).toBe('Endorsed a published baseline for the responsible authority');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');
@@ -109,6 +143,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('pack.withdrawn', { version: 2, shortCode: 'ffff-0000-1111', reason: 'the application lapsed' }))).toBe(
 			'Withdrew evidence pack version 2 (ffff-0000-1111): the application lapsed'
 		);
+		expect(eventLine(ev('pack.sent', { version: 1, shortCode: 'a1b2-c3d4-e5f6', recipients: ['u1', 'u2'], authority: 'Breede-Olifants CMA' }))).toBe(
+			'Sent evidence pack version 1 (a1b2-c3d4-e5f6) to 2 members acting for Breede-Olifants CMA'
+		);
+		expect(eventLine(ev('pack.sent', { version: 1, recipients: ['u1'], authority: null }))).toBe('Sent evidence pack version 1 to 1 member acting for the responsible authority');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the hydrological unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the hydrological unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(
@@ -140,6 +178,14 @@ describe('what an item says', () => {
 		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', replaceSeries: 'CHIRPS/2.0' }))).toBe(
 			'Confirmed that the CHIRPS feed replaces the Rainfall — CHIRPS series at its next fetch'
 		);
+		// Set from the map's catchment boundary (issue #326 B-rain).
+		const boundary = { featureId: 'b', name: 'Sandspruit catchment' };
+		expect(eventLine(ev('feed.configured', { action: 'created', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 14 }))).toBe(
+			'Set up the CHIRPS feed into the Rainfall — CHIRPS series from the catchment boundary “Sandspruit catchment” (14 cells)'
+		);
+		expect(eventLine(ev('feed.configured', { action: 'changed', source: 'chirps', targetKind: 'rain_chirps_mm', targetName: '', boundary, cells: 1 }))).toBe(
+			'Gave the CHIRPS feed the cells of the catchment boundary “Sandspruit catchment” (1 cell)'
+		);
 		expect(eventLine(ev('series.merged', { kind: 'rain_chirps_mm', name: 'grid', daysChanged: 1, feedId: 'f', source: 'chirps' }))).toBe(
 			'The CHIRPS feed added days to the Rainfall — CHIRPS “grid” series: 1 day changed'
 		);
@@ -156,6 +202,10 @@ describe('what an item says', () => {
 			'Held automatic runs: an API key added the Flow — logger “weir” series, which runs will read. Check the data, then run the model'
 		);
 		expect(eventLine(ev('series.held', { kind: 'flow_logger_m3s', name: 'weir', negative: 1, newSeries: true }))).toContain('Some of its days look wrong (1 negative day).');
+		// A key's push into a series too short for the outlier limit: runs go on, publishing waits for a person.
+		expect(eventLine(ev('series.unchecked', { kind: 'flow_logger_m3s', name: 'weir', daysChanged: 3 }))).toMatch(
+			/^Paused automatic publishing: an API key added 3 days to .*weir.*Automatic runs go on; run the model to publish automatically again$/
+		);
 		expect(eventLine(ev('publication.published', { restriction: { level: 'restricted', pct: 20 }, farms: 6 }))).toBe('Published a run, restricted (20 %) to 6 farms');
 		expect(eventLine(ev('publication.notice_changed', { fields: ['restriction', 'nextExpectedOn'] }))).toBe(
 			'Changed the publication’s restriction notice and next publication date'
@@ -186,6 +236,44 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.deleted', { registrationNo: 'R-2' }))).toBe('Deleted a registered volume (R-2)');
 		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
+		expect(eventLine(ev('licence.outcome', { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'DWS letter' }))).toBe(
+			'Recorded the licence outcome: granted on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
+		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
+		expect(eventLine(ev('allocation.viewer_units', { on: true }))).toBe('Let viewers see each farm’s registered volumes');
+		expect(eventLine(ev('allocation.viewer_units', { on: false }))).toBe('Showed viewers registered volumes as totals only');
+		expect(eventLine(ev('map.imported', { fileName: 'parcels.geojson', features: 2, kind: 'farm_parcel' }))).toBe('Imported 2 map features from parcels.geojson');
+		expect(eventLine(ev('map.feature_created', { kind: 'gauge', name: 'Weir' }))).toBe('Placed a gauge “Weir” on the map');
+		expect(eventLine(ev('map.feature_created', { kind: 'river', name: 'Reach 90000003', from: 'river_network', dataset: 'synthetic', reachId: 90000003 }))).toBe(
+			'Added a river “Reach 90000003” from the river network (synthetic, reach 90000003)'
+		);
+		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');
+		expect(eventLine(ev('map.feature_changed', { kind: 'catchment_boundary', name: 'Upper', moved: false }))).toBe('Changed the catchment boundary “Upper” on the map');
+		expect(eventLine(ev('map.feature_deleted', { kind: 'river', name: 'Spruit' }))).toBe('Deleted a river “Spruit” from the map');
+		expect(eventLine(ev('map.feature_split', { kind: 'farm_parcel', name: 'Hill farm', into: 'farm_parcel' }))).toBe('Split a farm parcel “Hill farm” in two');
+		expect(eventLine(ev('map.feature_split', { kind: 'catchment_boundary', name: 'Valley', into: 'other' }))).toBe(
+			'Split the catchment boundary “Valley” into two areas'
+		);
+		expect(eventLine(ev('map.feature_created', { kind: 'dam', name: 'Bosrand', from: 'dam_trace', dataset: 'Synthetic water', minOccurrence: 25, edited: true }))).toBe(
+			'Traced a dam “Bosrand” from Synthetic water (water in at least 25 % of the observations, then adjusted)'
+		);
+		expect(eventLine(ev('map.delineation_proposed', { from: 'dam_wall', areaKm2: 340.7, dataset: 'Synthetic DEM 1' }))).toBe('Delineated a catchment of 340.7 km² from a dam wall (Synthetic DEM 1)');
+		expect(eventLine(ev('map.delineation_accepted', { as: 'catchment_boundary', name: 'Valley' }))).toBe('Accepted a delineated catchment as the catchment boundary “Valley”');
+		expect(eventLine(ev('map.delineation_rejected', {}))).toBe('Rejected a delineated catchment');
+		expect(eventLine(ev('map.start_proposed', { units: 2, fromDem: true, dataset: 'Synthetic DEM 1' }))).toBe('Proposed a model from the map: 2 units (Synthetic DEM 1)');
+		expect(eventLine(ev('map.start_proposed', { units: 1, fromDem: false }))).toBe('Proposed a model from the map: 1 unit, without an elevation model');
+		expect(eventLine(ev('map.start_applied', { nodes: 4, areas: 2, orders: 1 }))).toBe('Started the model from the map: 4 nodes, 2 areas and 1 drains-into taken');
+		expect(eventLine(ev('map.start_discarded', {}))).toBe('Discarded a model proposed from the map');
+		expect(eventLine(ev('map.divide_proposed', { units: 3, dataset: 'Synthetic DEM 1' }))).toBe('Proposed dividing the model from the map: 3 points (Synthetic DEM 1)');
+		expect(eventLine(ev('map.divide_applied', { areas: 2, orders: 3, runoff: 1, gauges: 1 }))).toBe(
+			'Divided the model from the map: 2 areas, 3 drains-into and 1 runoff to the dam taken, 1 gauge added'
+		);
+		expect(eventLine(ev('map.divide_applied', { areas: 1, orders: 0, runoff: 0, gauges: 0 }))).toBe('Divided the model from the map: 1 area, 0 drains-into and 0 runoffs to the dam taken');
+		expect(eventLine(ev('map.divide_discarded', {}))).toBe('Discarded a division of the model proposed from the map');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
@@ -210,6 +298,7 @@ describe('what an item says', () => {
 		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from editor to owner');
 		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (owner) from the team “Upper WUA”');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
+		expect(eventLine(ev('team_member.removed', { ...who, self: true, accountDeleted: true }))).toBe('Ben deleted their account and left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
 	});
 

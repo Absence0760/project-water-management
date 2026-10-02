@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, createApi, scenarioProblems } from './client';
+import { ApiError, assessmentCheckOf, createApi, scenarioProblems } from './client';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 function mockFetch(status: number, body?: unknown, raw?: string) {
@@ -16,12 +16,102 @@ describe('createApi', () => {
 		const f = mockFetch(200, { user: { id: '1', email: 'a@b.c', displayName: 'A' } });
 		const api = createApi('http://x/', f);
 		const user = await api.auth.login('a@b.c', 'pw');
-		expect(user.displayName).toBe('A');
+		expect(user).toEqual({ id: '1', email: 'a@b.c', displayName: 'A' });
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('http://x/auth/login');
 		expect(init.method).toBe('POST');
 		expect(init.credentials).toBe('include');
 		expect(JSON.parse(init.body as string)).toEqual({ email: 'a@b.c', password: 'pw' });
+	});
+
+	// Two-step sign-in (issue #282): a right password for an account with an authenticator buys no session yet.
+	it('login answers a challenge when the account has two-step sign-in, and verify sends the code', async () => {
+		const f = mockFetch(200, { mfaRequired: true });
+		const api = createApi('http://x', f);
+		await expect(api.auth.login('a@b.c', 'pw')).resolves.toEqual({ mfaRequired: true });
+		const user = { id: '1', email: 'a@b.c', displayName: 'A' };
+		const g = mockFetch(200, { user });
+		await expect(createApi('http://x', g).auth.mfa.verify('123456')).resolves.toEqual({ user });
+		const [url, init] = g.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/mfa/verify');
+		expect(JSON.parse(init.body as string)).toEqual({ code: '123456' });
+	});
+
+	it.each([
+		['enrol', (a: ReturnType<typeof createApi>) => a.auth.mfa.enrol('pw'), 'POST', '/auth/mfa/totp/enrol', { password: 'pw' }],
+		['confirm', (a: ReturnType<typeof createApi>) => a.auth.mfa.confirm('123456'), 'POST', '/auth/mfa/totp/confirm', { code: '123456' }],
+		['disable', (a: ReturnType<typeof createApi>) => a.auth.mfa.disable('123456'), 'DELETE', '/auth/mfa/totp', { code: '123456' }],
+		['regenerate', (a: ReturnType<typeof createApi>) => a.auth.mfa.regenerate('123456'), 'POST', '/auth/mfa/recovery-codes', { code: '123456' }],
+		['stepUp', (a: ReturnType<typeof createApi>) => a.auth.mfa.stepUp('123456'), 'POST', '/auth/mfa/step-up', { code: '123456' }]
+	] as const)('mfa.%s calls %s %s with its body', async (_name, call, method, path, body) => {
+		const f = mockFetch(200, { secret: 'S', uri: 'otpauth://x', recoveryCodes: ['A'] });
+		await call(createApi('http://x', f));
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect([init.method, url, JSON.parse(init.body as string)]).toEqual([method, `http://x${path}`, body]);
+	});
+
+	// The app-wide two-step sign-in prompt hears of a 403 mfa_* from any request this way (lib/auth/mfaPrompt.svelte.ts).
+	it('onError hears every error answer before the caller does, and stops after unsubscribing', async () => {
+		const api = createApi('http://x', mockFetch(403, { error: 'sign in again', code: 'mfa_step_up' }));
+		const heard: (string | null)[] = [];
+		const stop = api.onError((e) => heard.push(e.code));
+		const thrower = api.onError(() => {
+			throw new Error('a listener bug');
+		});
+		await expect(api.request('POST', '/x')).rejects.toMatchObject({ status: 403, code: 'mfa_step_up', message: 'sign in again' });
+		expect(heard).toEqual(['mfa_step_up']);
+		stop();
+		thrower();
+		await expect(api.request('POST', '/x')).rejects.toBeInstanceOf(ApiError);
+		expect(heard).toEqual(['mfa_step_up']);
+	});
+
+	// A sign-off, issuing or withdrawing a pack need a code from the last 10 minutes (licensing positions item 9).
+	describe('401 mfa_fresh_code', () => {
+		const fresh = () => new Response(JSON.stringify({ error: 'needs a code', code: 'mfa_fresh_code' }), { status: 401 });
+		const ok = () => new Response(JSON.stringify({ done: true }), { status: 200 });
+
+		it('asks for a code and, once it was accepted, sends the action again, once', async () => {
+			const f = vi.fn().mockResolvedValueOnce(fresh()).mockResolvedValueOnce(ok());
+			const api = createApi('http://x', f);
+			const ask = vi.fn(async () => true);
+			api.onFreshCode(ask);
+			await expect(api.request('POST', '/projects/p/packs/k/issue', {})).resolves.toEqual({ done: true });
+			expect(ask).toHaveBeenCalledTimes(1);
+			expect(f).toHaveBeenCalledTimes(2);
+			expect((f.mock.calls[1] as unknown as [string, RequestInit])[1].body).toBe('{}');
+		});
+
+		it('a cancelled question, a second refusal or no handler: the caller gets the 401', async () => {
+			const cancelled = createApi('http://x', vi.fn().mockResolvedValue(fresh()));
+			cancelled.onFreshCode(async () => false);
+			await expect(cancelled.request('POST', '/x')).rejects.toMatchObject({ status: 401, code: 'mfa_fresh_code' });
+			const again = vi.fn().mockImplementation(async () => fresh());
+			const twice = createApi('http://x', again);
+			twice.onFreshCode(async () => true);
+			await expect(twice.request('POST', '/x')).rejects.toMatchObject({ status: 401, code: 'mfa_fresh_code' });
+			expect(again).toHaveBeenCalledTimes(2);
+			const none = createApi('http://x', vi.fn().mockResolvedValue(fresh()));
+			const unset = none.onFreshCode(async () => true);
+			unset();
+			await expect(none.request('POST', '/x')).rejects.toMatchObject({ status: 401 });
+		});
+
+		it('any other 401 is not a question for a code', async () => {
+			const api = createApi('http://x', mockFetch(401, { error: 'not signed in', code: 'not_signed_in' }));
+			const ask = vi.fn(async () => true);
+			api.onFreshCode(ask);
+			await expect(api.request('GET', '/x')).rejects.toMatchObject({ status: 401 });
+			expect(ask).not.toHaveBeenCalled();
+		});
+	});
+
+	it('onError is not told of a success', async () => {
+		const api = createApi('http://x', mockFetch(200, { ok: true }));
+		const fn = vi.fn();
+		api.onError(fn);
+		await api.request('GET', '/x');
+		expect(fn).not.toHaveBeenCalled();
 	});
 
 	it('posts to /auth/logout-everywhere and returns undefined (204)', async () => {
@@ -31,6 +121,18 @@ describe('createApi', () => {
 		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('http://x/auth/logout-everywhere');
 		expect(init.method).toBe('POST');
+	});
+
+	it('DELETEs /auth/me with the password (204), and keeps a refusal’s code and details', async () => {
+		const f = mockFetch(204);
+		await expect(createApi('http://x', f).auth.deleteMe('pw')).resolves.toBeUndefined();
+		const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+		expect(url).toBe('http://x/auth/me');
+		expect(init.method).toBe('DELETE');
+		expect(JSON.parse(init.body as string)).toEqual({ password: 'pw' });
+		const details = { projects: [{ id: 'p1', name: 'Kloof' }], teams: [] };
+		const refused = mockFetch(409, { error: 'x', code: 'account_sole_holder', details });
+		await expect(createApi('http://x', refused).auth.deleteMe('pw')).rejects.toMatchObject({ status: 409, code: 'account_sole_holder', details });
 	});
 
 	it('PATCHes /auth/me with the display name and returns the user', async () => {
@@ -389,6 +491,19 @@ describe('teams client', () => {
 		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: null } } } });
 	});
 
+	it('sets or removes a team’s privacy contact, and reads a project’s (168)', async () => {
+		const contact = { name: 'IO', email: 'io@example.org', postal: null };
+		const f = mockFetch(200, { team: { id: 't/1', privacyContact: contact } });
+		const api = createApi('', f);
+		expect((await api.teams.setPrivacyContact('t/1', contact)).privacyContact).toEqual(contact);
+		await api.teams.setPrivacyContact('t/1', null);
+		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: contact } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: null } });
+		const g = mockFetch(200, { wuaName: null, contact: null });
+		expect(await createApi('', g).farm.privacyContact('p/1')).toEqual({ wuaName: null, contact: null });
+		expect(call(g, 0)).toEqual({ url: '/projects/p%2F1/privacy-contact', method: 'GET' });
+	});
+
 	it('farmers.* call the farmer routes and unwrap the farmer', async () => {
 		const farmer = { status: 'active', userId: 'u', email: 'f@example.com', displayName: 'F', nodeIds: ['n1'] };
 		const add = mockFetch(201, { farmer });
@@ -638,6 +753,38 @@ describe('sweeps client', () => {
 		const withSeries = mockFetch(200, { sweep: { id: 's' } });
 		await createApi('', withSeries).sweeps.get('p', 's', { series: true });
 		expect(call(withSeries).url).toBe('/projects/p/sweeps/s?series=true');
+	});
+});
+
+describe('assessments client', () => {
+	const call = (f: ReturnType<typeof mockFetch>, i = 0) => {
+		const [url, init] = f.mock.calls[i] as unknown as [string, RequestInit];
+		return { url, method: init.method, body: init.body ? JSON.parse(init.body as string) : undefined };
+	};
+
+	it('checks (a dry run), creates, lists and reads one', async () => {
+		const body = { name: 'Two', scenarioIds: ['a', 'b'] };
+		const check = mockFetch(200, { check: { ok: true, conflicts: [], problems: [] } });
+		expect(await createApi('', check).assessments.check('p', body)).toEqual({ ok: true, conflicts: [], problems: [] });
+		expect(call(check)).toEqual({ url: '/projects/p/assessments', method: 'POST', body: { ...body, dryRun: true } });
+		const create = mockFetch(202, { assessment: { id: 'x' }, jobId: 'j', job: { id: 'j' } });
+		expect((await createApi('', create).assessments.create('p', body)).assessment.id).toBe('x');
+		expect(call(create)).toEqual({ url: '/projects/p/assessments', method: 'POST', body });
+		const list = mockFetch(200, { assessments: [{ id: 'x' }] });
+		expect(await createApi('', list).assessments.list('p')).toEqual([{ id: 'x' }]);
+		expect(call(list).url).toBe('/projects/p/assessments');
+		const get = mockFetch(200, { assessment: { id: 'x' } });
+		expect(await createApi('', get).assessments.get('p', 'x/1')).toEqual({ id: 'x' });
+		expect(call(get).url).toBe('/projects/p/assessments/x%2F1');
+	});
+
+	it('reads a refusal’s conflicts and problems, and nothing from any other error', () => {
+		const conflicts = [{ reason: 'same_target', target: 'settings: gr4j.x1', message: 'm' }];
+		expect(assessmentCheckOf(new ApiError(422, 'x', { conflicts, problems: ['p'] }))).toEqual({ ok: false, conflicts, problems: ['p'] });
+		expect(assessmentCheckOf(new ApiError(422, 'x', { problems: ['p', 3] }))).toEqual({ ok: false, conflicts: [], problems: ['p'] });
+		expect(assessmentCheckOf(new ApiError(422, 'x', [{ path: ['name'] }]))).toBeNull();
+		expect(assessmentCheckOf(new ApiError(404, 'x', { conflicts }))).toBeNull();
+		expect(assessmentCheckOf(new Error('x'))).toBeNull();
 	});
 });
 

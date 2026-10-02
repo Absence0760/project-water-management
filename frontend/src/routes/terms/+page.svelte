@@ -82,8 +82,12 @@
 			the qualified professionals advising you. Check the results against your own knowledge and data before relying on them.
 		</li>
 		<li>
-			A sign-off in the service records who reviewed a run; it is that person’s professional statement, not ours. The professional
-			registration shown with it is typed in by the person signing: we don’t check it against the professional body’s register.
+			A sign-off in the service records who reviewed a run or an evidence pack; it is that person’s professional statement, not ours.
+			It is an electronic professional statement in this app, not the signer’s signature on any form or report the authority
+			requires: sign those as the authority asks. The professional registration shown with it is typed in by the person signing: we
+			don’t check it against the professional body’s register. A project’s host may record that it checked one, and the pack’s verify
+			page then says by whom and when; that check is the host’s, not ours. Signing off, and issuing or withdrawing an evidence pack,
+			need a code from your authenticator app from the last 10 minutes.
 		</li>
 	</ul>
 	<p>
@@ -144,7 +148,19 @@
 	<p>
 		The service can read public data sources, such as CHIRPS satellite rainfall and the Department of Water and Sanitation’s
 		gauging records. They are provided by others, as they are; we don’t control their accuracy, availability or terms, and your use
-		of them is also subject to their own terms. The service is hosted on Amazon Web Services.
+		of them is also subject to their own terms. The service is hosted on Amazon Web Services. The data sources it uses, and the
+		credit each one’s licence asks for, are listed on the <a href="{base}/data-sources">data sources</a> page.
+	</p>
+	<!-- Map data licensed to us (HydroRIVERS first, docs/maps.md § Sources): the end-user terms the HydroSHEDS licence
+	     asks for (§ 2.1.2, terms at least as protective as its own; § 2.1.3, no reverse engineering), written for any
+	     licensed source. Pre-counsel wording (docs/legal-status.md § Change log, 2026-10-03); a material change (LEGAL_VERSION 2026-10-03). -->
+	<p>
+		<strong>Map data licensed to us.</strong> Some of the map data the service shows is licensed to us by others, such as the
+		HydroRIVERS river network from WWF’s HydroSHEDS database. You may use it within the service, and as part of your projects and
+		the results, reports and maps you make with it. You may not copy, extract or distribute that data on its own, as a stand-alone
+		dataset, and you may not decompile, reverse engineer or disassemble it. It remains the property of its licensors, who provide it
+		as it is, without any warranty, and are not liable for your use of it. The <a href="{base}/data-sources">data sources</a> page
+		lists each source and its licence.
 	</p>
 
 	<h2 id="ours">10. Our software</h2>
@@ -159,7 +175,7 @@
 		You may stop using the service at any time and ask us to delete your account. We may suspend or end your access if you break
 		these terms, if the law requires it, or to protect the service or other people, and we will tell you why unless we can’t. We
 		may also stop offering the service; if we do, we will give at least 30 days’ notice where we can, so you can download your
-		data. Sections 3, 6, 12–15 and 17 survive the end of this agreement.
+		data. Sections 3, 6, 9, 12–15 and 17 survive the end of this agreement.
 	</p>
 
 	<h2 id="warranties">12. Disclaimer of warranties</h2>

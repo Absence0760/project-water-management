@@ -161,7 +161,8 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   rewrite the API's own 403/404 JSON responses into index.html. The
 #   prerendered pages (PRERENDERED), the landing page in each language
 #   (issues #57, #137), the legal pages and the methods page, are served from
-#   their own HTML: /welcome, /welcome/af, /privacy, /terms, /methods →
+#   their own HTML: /welcome, /welcome/af, /privacy, /terms, /methods,
+#   /data-sources →
 #   <path>.html (static HTML for crawlers and link previews). A language
 #   added to the table (packages/engine/src/languages.ts) adds its
 #   /welcome/<code> here; the test below fails until it does.
@@ -183,6 +184,27 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   one client address the API trusts, and only on a request that carries the
 #   shared secret (backend/src/http/clientAddress.ts; the sign-up throttle).
 #
+# tiles_range — /tiles/* behaviour (map_data.tf). The map's self-hosted
+#   basemap, relief and label glyphs are public objects the browser reads
+#   same-origin, the archives with HTTP Range (docs/maps.md § Basemap). The
+#   PMTiles archives are large (the basemap about 1 GB, the relief about
+#   2 GB), so a whole-file GET would make one request cost gigabytes of
+#   CloudFront egress, and the WAF's per-IP rate limits, which count
+#   requests, would bound nothing. This function lets through only what the
+#   map asks for:
+#     - a .pmtiles archive by one closed byte range (`bytes=a-b`) of at most
+#       MAX_RANGE bytes (2 MiB; PMTiles reads a 16 KiB header, then
+#       directories and tiles, each far smaller). No Range, an open or
+#       multi-part range, or a longer one gets 416 from the function itself.
+#       HEAD passes (no body);
+#     - a glyph range, /tiles/fonts/<font stack>/<n>-<n+255>.pbf (KBs each),
+#       and the font licence, /tiles/fonts/OFL.txt;
+#     - anything else under /tiles/ gets 404 without reaching S3.
+#   So one request moves at most 2 MiB, and the site-wide per-IP limit
+#   (waf_site_rate_limit_per_ip) bounds what one address can pull
+#   (docs/deployment.md § Map tiles, the cost bound).
+#   infra/scripts/cloudfront-functions.test.mjs runs it.
+#
 # Cost: $0.10 per million invocations.
 # ----------------------------------------------------------------------------
 
@@ -192,10 +214,10 @@ resource "aws_cloudfront_function" "spa_rewrite" {
   comment = "Serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
   publish = true
   code    = <<-EOT
-    var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods'];
+    var PRERENDERED = ['/welcome', '/welcome/af', '/privacy', '/terms', '/methods', '/data-sources'];
     var STATIC_DIRS = ['_app', 'fonts', 'help', 'landing'];
     var STATIC_FILES = [
-      'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html',
+      'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html', 'data-sources.html',
       'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
       'icon-maskable-512.png', 'robots.txt', 'site.webmanifest'
     ];
@@ -257,6 +279,54 @@ resource "aws_cloudfront_function" "api_strip_prefix" {
   EOT
 }
 
+resource "aws_cloudfront_function" "tiles_range" {
+  name    = "${local.project}-tiles-range"
+  runtime = "cloudfront-js-2.0"
+  comment = "Map tiles: PMTiles by one bounded byte range, glyph ranges and the font licence; 404 for anything else"
+  publish = true
+  code    = <<-EOT
+    var MAX_RANGE = 2097152;
+    var ARCHIVE = /^\/tiles\/[a-z0-9-]+\.pmtiles$/;
+    var GLYPHS = /^\/tiles\/fonts\/[A-Za-z0-9%_,.-]+\/([0-9]+)-([0-9]+)\.pbf$/;
+    var LICENCE = '/tiles/fonts/OFL.txt';
+    var RANGE = /^bytes=([0-9]{1,15})-([0-9]{1,15})$/;
+
+    function refuse(code, description) {
+      return {
+        statusCode: code,
+        statusDescription: description,
+        headers: {
+          'content-type': { value: 'text/plain; charset=utf-8' },
+          'cache-control': { value: 'no-store' },
+          'x-content-type-options': { value: 'nosniff' }
+        },
+        body: { encoding: 'text', data: description }
+      };
+    }
+
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+      if (uri.indexOf('..') !== -1) return refuse(404, 'Not Found');
+      if (uri === LICENCE) return request;
+      var g = GLYPHS.exec(uri);
+      if (g) {
+        var start = parseInt(g[1], 10);
+        var end = parseInt(g[2], 10);
+        return start % 256 === 0 && end === start + 255 && end <= 65535 ? request : refuse(404, 'Not Found');
+      }
+      if (!ARCHIVE.test(uri)) return refuse(404, 'Not Found');
+      if (request.method === 'HEAD') return request;
+      var r = RANGE.exec(request.headers.range ? request.headers.range.value : '');
+      if (!r) return refuse(416, 'Range Not Satisfiable');
+      var first = parseInt(r[1], 10);
+      var last = parseInt(r[2], 10);
+      if (last < first || last - first + 1 > MAX_RANGE) return refuse(416, 'Range Not Satisfiable');
+      return request;
+    }
+  EOT
+}
+
 # ----------------------------------------------------------------------------
 # CloudFront Origin Access Control + distribution
 #
@@ -267,6 +337,8 @@ resource "aws_cloudfront_function" "api_strip_prefix" {
 #                  only (reports.tf)
 #   - /packs/*   → S3 packs bucket (issued evidence packs' PDFs) via its own
 #                  OAC, the same signed URLs only (packs.tf)
+#   - /tiles/*   → S3 tiles bucket (the map's basemap, relief and glyphs) via
+#                  its own OAC, public, bounded byte ranges only (map_data.tf)
 #
 # The browser never calls the Function URL. CloudFront stamps every /api/*
 # request with X-CloudFront-Shared-Secret (random_password below, also in
@@ -329,6 +401,14 @@ resource "aws_cloudfront_distribution" "frontend" {
     domain_name              = aws_s3_bucket.packs.bucket_regional_domain_name
     origin_id                = "s3-packs"
     origin_access_control_id = aws_cloudfront_origin_access_control.packs.id
+  }
+
+  # The map's tiles, relief and glyphs (map_data.tf): the tiles bucket, read
+  # only through its own OAC, public to every viewer (no signed URLs).
+  origin {
+    domain_name              = aws_s3_bucket.tiles.bucket_regional_domain_name
+    origin_id                = "s3-tiles"
+    origin_access_control_id = aws_cloudfront_origin_access_control.tiles.id
   }
 
   origin {
@@ -431,6 +511,34 @@ resource "aws_cloudfront_distribution" "frontend" {
     origin_request_policy_id   = aws_cloudfront_origin_request_policy.report_downloads.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
     trusted_key_groups         = [aws_cloudfront_key_group.report_downloads.id]
+  }
+
+  # /tiles/* -> the tiles bucket (map_data.tf): the basemap and relief
+  # PMTiles, the label glyphs and their licence. The keys are tiles/…, so no
+  # rewrite; tiles_range (above) lets through only bounded byte ranges of an
+  # archive, glyph ranges and the licence. CachingOptimized: the objects are
+  # public and the same for every viewer, and CloudFront caches byte ranges
+  # (Range is forwarded on its own, ETag comes back from S3, which the PMTiles
+  # reader uses to notice a replaced archive). A replaced object is served
+  # stale until an invalidation (docs/deployment.md § Map tiles). No
+  # compression: the archives are compressed inside, and compressing a range
+  # would break it. The API's header policy (default-src 'none', nosniff)
+  # suits data files. The SPA must never own a URL under /tiles
+  # (scripts/guards/check_reports_path.mjs reserves it).
+  ordered_cache_behavior {
+    path_pattern               = "/tiles/*"
+    target_origin_id           = "s3-tiles"
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = false
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.tiles_range.arn
+    }
   }
 
   viewer_certificate {
