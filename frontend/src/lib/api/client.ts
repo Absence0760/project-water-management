@@ -156,6 +156,7 @@ import type {
 	MapLinkedNodes,
 	QuaternaryLookup,
 	QuaternaryLayer,
+	RiverLayer,
 	GaugeStationLookup,
 	DamProposals,
 	CroplandProposals
@@ -1064,6 +1065,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** The quaternary outlines whose box meets `bbox` (west, south, east, north; at most 5° a side), for the map's layer (issue #326 A6). */
 			quaternaries: (id: string, bbox: readonly [number, number, number, number]) =>
 				request<QuaternaryLayer>('GET', `${p(id)}/map/quaternaries?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** The river network's reaches whose box meets `bbox` (at most 2° a side), biggest first, for the map's layer (issue #345). */
+			rivers: (id: string, bbox: readonly [number, number, number, number]) =>
+				request<RiverLayer>('GET', `${p(id)}/map/rivers?${new URLSearchParams({ bbox: bbox.join(',') })}`),
+			/** Add one reach of the network as the project's river feature (editor; 409 when it is on the map already). */
+			addRiver: (id: string, dataset: string, reachId: number) =>
+				request<{ feature: MapFeature }>('POST', `${p(id)}/map/rivers/add`, { dataset, reachId }).then((r) => r.feature),
 			/** The river gauges nearest a point, or the catchment's outlet without one (issue #326 B-gauge); only proposes. */
 			stations: (id: string, q: { lon?: number; lat?: number; within?: number } = {}) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));

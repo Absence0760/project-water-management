@@ -1580,6 +1580,23 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   accepted from it (or from a dam polygon's `area_m2`) is stored in
   `node.dam_capacity_m3` / `node.dam_area_full_m2` like a typed one; its
   provenance is the model revision's reason (no column on `node`).
+- **`river_reference`** (`171_river_network.sql`, issue #345,
+  [maps.md § River network](./maps.md#river-network)): the river network
+  the Map tab's River network layer draws and proposes rivers from. Primary
+  key `(dataset, reach_id)` (the load's label, `synthetic` for the committed
+  fixture; the source's own reach id, HydroRIVERS' `HYRIV_ID`), `name` (''
+  when the source names none), `strahler` (1–15), `upstream_km2`,
+  `length_km`, `discharge_m3s` (each NULL when not given), `geometry`
+  (LineString or MultiLineString), its bounding box (`min_lon`, `min_lat`,
+  `max_lon`, `max_lat`, indexed for the layer's bbox query), `source`
+  (1–500, copied into every reach added to a project), `loaded_at`. Global,
+  loaded by the operator as the schema owner (`pnpm import:rivers`),
+  readable by anyone signed in, written by no app role (the catalogue
+  guard's `READ_ONLY`). A reach added to a project is an ordinary
+  `map_feature` of kind `river`, its source in `properties.description` and
+  `river-network:<dataset>:<reach_id>` in `properties.ref` (how the layer
+  knows it is on the map, and how the add refuses a second copy); no new
+  column.
 - **`cropland_dataset`** and **`cropland_cell_reference`**
   (`173_cropland_reference.sql`, issue #326 B-landcover,
   [maps.md § Cultivated area from land cover](./maps.md#cultivated-area-from-land-cover)):

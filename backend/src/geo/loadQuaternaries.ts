@@ -38,7 +38,8 @@ const num = (v: unknown): number | null => {
 	return Number.isFinite(n) ? n : null;
 };
 
-function bboxOf(g: Geometry): [number, number, number, number] {
+/** A geometry's bounding box: west, south, east, north. */
+export function bboxOf(g: Geometry): [number, number, number, number] {
 	let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
 	const walk = (c: unknown): void => {
 		if (Array.isArray(c) && typeof c[0] === 'number') {

@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
+import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -470,6 +471,15 @@ const WRITE_ROUTES: Entry[] = [
 		route: `PATCH ${P}/map/features/:fid`,
 		records: ['map.feature_changed'],
 		call: (c) => c.owner.call('PATCH', `${at(c)}/map/features/${c.mapPointId}`, { name: 'Guard weir' })
+	},
+	{
+		// A reach of the river network added as a river feature (issue #345): recorded as a feature placed, from the network.
+		route: `POST ${P}/map/rivers/add`,
+		records: ['map.feature_created'],
+		call: async (c) => {
+			await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
+			return c.owner.call('POST', `${at(c)}/map/rivers/add`, { dataset: 'synthetic', reachId: 90000001 });
+		}
 	},
 	{
 		route: `DELETE ${P}/map/features/:fid`,

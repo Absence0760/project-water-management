@@ -195,6 +195,7 @@ const READ_ONLY = new Set([
 	'pack_reproduction',
 	'gauge_station_reference',
 	'dam_register_reference',
+	'river_reference',
 	'cropland_dataset',
 	'cropland_cell_reference',
 	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,

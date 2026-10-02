@@ -3623,6 +3623,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       the synthetic list. On a yes: record it in the sources table, load the
       catalogue with `pnpm import:gauge-stations`, and add it to the
       production loading path above (same gap as the quaternaries).
+- [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
+      § Sources). The licence allows commercial use (checked 2026-10-01),
+      on two conditions to meet before a deployment serves it: the
+      HydroSHEDS Exhibit B statement in the app's legal notice (or its
+      documentation), and the terms of service carrying the end-user
+      protections the agreement asks for (§ 2.1.2: no stand-alone
+      redistribution of the data, no reverse engineering). Then load it
+      through the production loading path above (the same gap as the
+      quaternaries). Trigger: the first deployment that wants the River
+      network layer.
+- [ ] **Decision: DWS 1:500 000 rivers' licence** (operator; maps.md §
+      Sources, issue #345, D-B). Its page answers 403 outside South Africa
+      and DWS's published wording is non-commercial, so HydroRIVERS is used.
+      Ask DWS in writing only if hydrologists want the national 1:500 000
+      set itself (#90 Q23 asks the client whether OSM's rivers already do).
 - [ ] **Contributor-owned features** (WP-3.3 × WP-3.12): `map_feature.scenario_id`
       so an applicant places their own scenario's features, with the RLS
       the WP describes. Today only editors write; farmers and applicants

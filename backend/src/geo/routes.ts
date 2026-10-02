@@ -158,7 +158,7 @@ export const QuaternaryQuery = z
 	})
 	.strict();
 
-interface FeatureRow {
+export interface FeatureRow {
 	id: string;
 	kind: MapFeatureKind;
 	name: string;
@@ -191,7 +191,7 @@ export interface MapFeature {
 	updatedAt: string;
 }
 
-const toFeature = (r: FeatureRow): MapFeature => ({
+export const toFeature = (r: FeatureRow): MapFeature => ({
 	id: r.id,
 	kind: r.kind,
 	name: r.name,
@@ -215,7 +215,7 @@ const SELECT_FEATURES = `
 	LEFT JOIN app_user u ON u.id = f.created_by
 	WHERE f.project_id = $1`;
 
-async function loadFeature(db: Db, projectId: string, fid: string): Promise<FeatureRow> {
+export async function loadFeature(db: Db, projectId: string, fid: string): Promise<FeatureRow> {
 	if (!UUID.test(fid)) throw notFound();
 	const { rows } = await db.query<FeatureRow>(`${SELECT_FEATURES} AND f.id = $2`, [projectId, fid]);
 	if (!rows[0]) throw notFound();
