@@ -89,6 +89,8 @@ test('an editor uses the map’s area, then the register’s capacity, one at a 
 	await answerConfirm(page, true, /Set Upper farm’s full-supply area from the map\?\s*Upper farm’s dam has no area when full set/);
 	await expect(panel(page).getByTestId('dam-proposals-notice')).toHaveText(/^Upper farm’s full-supply area is now [\d\s,.]+ m² \([\d,.]+ ha\), from the map\. Run the model to see its effect\.$/);
 	await expect(area.getByRole('cell').last()).toHaveText('Saved');
+	// The Use button is gone: the keyboard lands on what happened (ProposalPanel's notice), not the top of the page.
+	await expect(panel(page).getByTestId('dam-proposals-notice')).toBeFocused();
 	// Only that value changed.
 	const model = async () => ((await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { id: string; damAreaFullM2: number | null; damCapacityM3: number }[] }).nodes.find((n) => n.id === upper.id)!;
 	expect((await model()).damAreaFullM2).toBeCloseTo(areaM2, 6);
