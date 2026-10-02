@@ -144,5 +144,53 @@ export function divideSummary(t: DivideTicks): string {
 	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
 }
 
+/** How far over the catchment the units may add up before the sheet says so: the pieces' own rounding stays under it. */
+export const DIVIDE_OVERLAP_TOLERANCE = 0.01;
+
+/**
+ * The hydrological units' total area (km²) once the ticks are applied: each
+ * point's own piece where its area is ticked (else its area now), every unit
+ * no point stands for at its typed area (or the rest of the catchment when it
+ * takes it), and a new unit for the rest. The pieces split the whole
+ * catchment above the outlet, so a total past it is land counted twice
+ * (persona-hydrologist, round 4).
+ */
+export function divideAreaAfterKm2(p: DividePlan, t: DivideTicks): number {
+	const ticked = new Map(t.units.map((x) => [x.key, x]));
+	let total = 0;
+	for (const u of p.units) {
+		if (u.areaM2 === null) continue;
+		total += ticked.get(u.key)?.area ? u.areaM2 / 1e6 : (u.current?.areaKm2 ?? 0);
+	}
+	const rest = (p.rest.areaM2 ?? 0) / 1e6;
+	for (const u of p.untouched) total += t.rest.to === 'node' && t.rest.nodeId === u.nodeId ? rest : u.areaKm2;
+	if (t.rest.to === 'new') total += rest;
+	return total;
+}
+
+/**
+ * The sentence when the units would add up to more than the catchment above
+ * the outlet, or null: what Apply would leave, or, with nothing taken yet,
+ * what the model's typed areas already are. It names who keeps a typed area
+ * bigger than the land the elevation model gives it: a point whose own area
+ * isn't ticked, and a unit no point stands for (unless it takes the rest).
+ */
+export function divideOverlap(p: DividePlan, t: DivideTicks): string | null {
+	const total = divideAreaAfterKm2(p, t);
+	const catchment = p.catchment.areaM2 / 1e6;
+	if (!(catchment > 0) || total <= catchment * (1 + DIVIDE_OVERLAP_TOLERANCE)) return null;
+	const ticked = new Map(t.units.map((x) => [x.key, x]));
+	const nothingTaken = t.rest.to === 'none' && !t.units.some((x) => x.area);
+	const head = nothingTaken
+		? `The model’s areas already add up to ${km2Now(total)}, more than the ${km2Now(catchment)} above the outlet, so some land counts twice and its runoff with it.`
+		: `After Apply the units would add up to ${km2Now(total)}, more than the ${km2Now(catchment)} above the outlet, so some land would count twice and its runoff with it.`;
+	const parts: string[] = [];
+	const bigger = p.units.filter((u) => u.areaM2 !== null && !ticked.get(u.key)?.area && u.current && u.current.areaKm2 > (u.areaM2 / 1e6) * (1 + DIVIDE_OVERLAP_TOLERANCE));
+	if (bigger.length) parts.push(`${bigger.map((u) => `${u.name} keeps its typed ${km2Now(u.current!.areaKm2)}`).join(', ')}: tick ${bigger.length === 1 ? 'its' : 'their'} area to take ${bigger.length === 1 ? 'its piece' : 'their pieces'}.`);
+	const kept = p.untouched.filter((u) => u.areaKm2 > 0 && !(t.rest.to === 'node' && t.rest.nodeId === u.nodeId));
+	if (kept.length) parts.push(`${kept.map((u) => u.name).join(', ')} ${kept.length === 1 ? 'keeps its' : 'keep their'} typed area: give ${kept.length === 1 ? 'it' : 'one'} the rest of the catchment or a point of its own, or check ${kept.length === 1 ? 'it' : 'them'}.`);
+	return [head, ...parts].join(' ');
+}
+
 export const km2 = (m2: number | null): string => (m2 === null ? '–' : `${fmtNum(m2 / 1e6, 2)} km²`);
 export const km2Now = (k: number): string => `${fmtNum(k, 2)} km²`;

@@ -23,6 +23,7 @@ import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings, patchSettings } from '../projects/settings.js';
+import { lastValueDaySql } from '../series/lastDay.js';
 import {
 	citeEvaporation,
 	evaporationDatasets,
@@ -100,6 +101,14 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 			const summary = dataset && boundary ? await summariseEvaporation(db, dataset, boundary.geometry) : null;
 			const { merged } = await settingsOf(db, id);
 			const now = currentRows(merged);
+			// A daily A-pan record (evap_apan_mm) replaces the monthly row on every day it covers, and a monthly PE row
+			// replaces it for GR4J: the panel says so before an accept (persona-hydrologist, round 4).
+			const { rows: daily } = await db.query<{ from: string | null; to: string | null }>(
+				`SELECT to_char(min(ts.start_date), 'YYYY-MM-DD') AS "from", to_char(max(${lastValueDaySql('ts')}), 'YYYY-MM-DD') AS "to"
+				 FROM time_series ts WHERE ts.project_id = $1 AND ts.kind = 'evap_apan_mm'`,
+				[id]
+			);
+			const dailyApan = daily[0]?.from && daily[0].to ? { from: daily[0].from, to: daily[0].to } : null;
 			const { rows: accepted } = await db.query<{
 				target: EvaporationTarget;
 				monthly_mm: number[];
@@ -121,7 +130,7 @@ export const evaporationRoutes = new Hono<AuthEnv>()
 				boundary: boundary ? { featureId: boundary.id, name: boundary.name } : null,
 				target: dataset ? TARGET_OF[dataset.kind] : null,
 				proposal: summary,
-				settings: { apanMm: now.apan, peKind: merged.pe?.kind ?? 'pan', peMm: now.pe },
+				settings: { apanMm: now.apan, peKind: merged.pe?.kind ?? 'pan', peMm: now.pe, dailyApan },
 				accepted: accepted.map((r) => ({
 					target: r.target,
 					monthlyMm: r.monthly_mm,

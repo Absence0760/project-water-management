@@ -14,6 +14,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
 import { centerOf, type Geometry, type Position } from '../geo/geojson.js';
+import { isUnnamedReach } from '../geo/reachName.js';
 import { csvDownload } from '../export/download.js';
 import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
@@ -201,7 +202,8 @@ export async function farmMap(db: Db, projectId: string, nodeId: string): Promis
 		.map((r) => ({
 			id: r.id,
 			kind: r.kind,
-			name: r.name,
+			// A reach added without a name of its own ("Reach 11234567"): no name, so the card says "A river" (persona-farmer, round 4).
+			name: r.kind === 'river' && isUnnamedReach(r.name, r.ref) ? '' : r.name,
 			geometry: r.geometry,
 			areaM2: r.area_m2,
 			center: centerOf(r.geometry),

@@ -4,7 +4,7 @@
 // already, the implied pan coefficient cross-check, and the provenance line.
 import { describe, expect, it } from 'vitest';
 import type { EvaporationAccepted, EvaporationProposals } from '$lib/api';
-import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow } from './evaporationProposal';
+import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow, useMessage } from './evaporationProposal';
 
 const BASE = [120, 150, 175, 180, 150, 130, 90, 65, 50, 55, 75, 95];
 const dataset = {
@@ -85,4 +85,20 @@ it('coverageText and acceptedText say where the values came from', () => {
 	};
 	expect(acceptedText(a)).toMatch(/^GR4J’s monthly PE came from the map \(synthetic, synthetic 1\) on /);
 	expect(acceptedText({ ...a, target: 'apan', current: false })).toMatch(/^Typed over since: the A-pan evaporation row came from the map/);
+});
+
+describe('the confirmation before an accept (persona-hydrologist, round 4)', () => {
+	const settings = { apanMm: Array(12).fill(150), peKind: 'pan' as const, peMm: null };
+	const daily = { ...settings, dailyApan: { from: '2010-01-01', to: '2020-12-31' } };
+
+	it('says a daily A-pan record still replaces an accepted A-pan row on the days it covers', () => {
+		expect(useMessage('apan', 2000, settings)).not.toMatch(/daily A-pan record/);
+		expect(useMessage('apan', 2000, daily)).toMatch(/The daily A-pan record \(1 Jan 2010 to 31 Dec 2020\) still replaces them on every day it covers, so only the days outside it change\.$/);
+	});
+
+	it('says GR4J stops reading the daily record when a monthly PE row takes over, and not when one already had', () => {
+		expect(useMessage('pe', 1500, daily)).toMatch(/Irrigation demand and dam evaporation keep reading the A-pan row and the daily A-pan record \(1 Jan 2010 to 31 Dec 2020\); GR4J stops reading both\. A GR4J fit/);
+		expect(useMessage('pe', 1500, { ...daily, peKind: 'monthly', peMm: Array(12).fill(100) })).not.toMatch(/daily A-pan record/);
+		expect(useMessage('pe', 1500, settings)).not.toMatch(/daily A-pan record/);
+	});
 });

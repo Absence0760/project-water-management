@@ -124,11 +124,16 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	// 4. Data and the first run.
 	await expect(page.getByTestId('start-sheet')).toHaveAttribute('data-step', 'data');
 	await expect(startSheet(page).getByRole('link', { name: 'Rain from the boundary' })).toBeVisible();
+	// Evaporation is a step of its own: with no A-pan the dams would lose nothing (round 4, persona-hydrologist).
+	await expect(startSheet(page).getByRole('link', { name: 'Evaporation' })).toHaveAttribute('href', '?tab=settings#set-demand');
 	await expect(startSheet(page).getByTestId('start-run')).toBeVisible();
 	await expect(page.getByTestId('map-notice')).toContainText('Started the model from the map.');
 
+	// The evaporation link lands on Settings' Demand group, where the A-pan row is, with its heading focused.
+	await startSheet(page).getByRole('link', { name: 'Evaporation' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeFocused();
+
 	// The model: the weir, the dam's unit draining into it with its area from the map, and the rest.
-	await startSheet(page).getByRole('button', { name: 'Close', exact: true }).click();
 	await page.goto(`/projects/${project.id}?tab=network`);
 	for (const name of ['Valley weir', 'Valley dam', 'Rest of the catchment']) await expect(page.getByRole('main').getByText(name, { exact: true }).first()).toBeVisible();
 	// The map: the dam's unit has its parcel, from the map.

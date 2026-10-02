@@ -20,7 +20,7 @@
 	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL } from './evaporationProposal';
+	import { acceptedText, coverageText, impliedPanCoefficient, outsidePanRange, proposalState, sameAsSaved, savedRow, TARGET_LABEL, useMessage } from './evaporationProposal';
 
 	let {
 		projectId,
@@ -85,10 +85,7 @@
 		const what = TARGET_LABEL[ready.target];
 		const ok = await confirmDialog({
 			title: `Use these values as ${what}?`,
-			message:
-				ready.target === 'pe'
-					? `GR4J will run on these 12 monthly values (${fmtNum(ready.annualMm)} mm a year of reference evapotranspiration) instead of ${data.settings.peKind === 'monthly' ? 'the monthly PE row it holds now' : 'pan coefficient × A-pan'}. Irrigation demand and dam evaporation keep reading the A-pan row. A GR4J fit made before is then marked “Forcing changed since fit”.`
-					: `Irrigation demand, dam evaporation and, under pan coefficient × A-pan, GR4J will read these 12 monthly values (${fmtNum(ready.annualMm)} mm a year) instead of the A-pan row it holds now.`,
+			message: useMessage(ready.target, ready.annualMm, data.settings),
 			confirmLabel: 'Use these values'
 		});
 		if (!ok) return;

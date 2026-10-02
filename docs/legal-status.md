@@ -545,7 +545,11 @@ cl. 3). The licensing ones are rows in
   Appendix A, 2026-10-02). New duties on users, so a material change:
   `LEGAL_VERSION` 2026-10-03 (a new date, since 2026-10-02's version was
   already set; every account accepts again, and nothing is in production
-  yet). The re-acceptance notice's "what changed" list is rewritten for
-  it (one line, translated). The rivers load gate
+  yet). The re-acceptance notice's "what changed" list gains its line (one
+  line, translated); since round 4 (2026-10-02) the list keeps every
+  version's lines and shows those after the version the account accepted
+  (`termsVersion` on `/auth/me`; all of them for an account that accepted
+  none), so the 2026-10-02 lines are still shown to anyone who accepted
+  before them. The rivers load gate
   (`scripts/release/map-data-gates.mjs`) now checks for the clause as well
   as the Exhibit B statement.

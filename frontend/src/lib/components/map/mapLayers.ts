@@ -82,13 +82,14 @@ export const creditedFeature = (f: Pick<MapFeature, 'kind' | 'properties'>) => {
 /** A reach as the list names it: its own name, else its id. */
 export const reachLabel = (r: { name: string; reachId: number }) => r.name || `Reach ${r.reachId}`;
 
-/** A reach's facts in words, each only when the source gives it: order, upstream area, length, mean flow. */
+/** A reach's facts in words, each only when the source gives it: order, upstream area, length, modelled mean flow. */
 export function reachFacts(r: { strahler: number | null; upstreamKm2: number | null; lengthKm: number | null; dischargeM3s: number | null }): string[] {
 	const out: string[] = [];
 	if (r.strahler !== null) out.push(`Strahler order ${r.strahler}`);
 	if (r.upstreamKm2 !== null) out.push(`${fmtNum(r.upstreamKm2, r.upstreamKm2 < 100 ? 1 : 0, true)} km² upstream`);
 	if (r.lengthKm !== null) out.push(`${fmtNum(r.lengthKm, 1, true)} km long`);
-	if (r.dischargeM3s !== null) out.push(`mean flow ${fmtNum(r.dischargeM3s, 2, true)} m³/s`);
+	// HydroRIVERS' DIS_AV_CMS is a modelled long-term mean (WaterGAP), never a gauged one: said so (persona-hydrologist, round 4).
+	if (r.dischargeM3s !== null) out.push(`modelled mean flow ${fmtNum(r.dischargeM3s, 2, true)} m³/s`);
 	return out;
 }
 

@@ -42,7 +42,7 @@
 	// curtailment table lists the users (it has no pump columns), so Units & supply shows the pump's limit.
 	const pumpUsers = $derived((summary.users ?? []).filter((u) => u.avgPumpLimitedM3Day !== undefined));
 	// Each unit's river abstractions beside its dam (engine ≥ 1.65.0, docs/model.md §2.7j), with what each pump
-	// left unmet while the river had it (engine ≥ 1.66.0: columns only when one has a pump capacity) and, with a
+	// left unmet while the river or its pool had it (engine ≥ 1.66.0: columns only when one has a pump capacity) and, with a
 	// pool, the pool's mean storage.
 	const takes = $derived((summary.farms ?? []).flatMap((f) => (f.riverTakes ?? []).map((k) => ({ unit: f.name, nodeId: f.nodeId, k }))));
 	const takesLimited = $derived(takes.some(({ k }) => k.avgPumpLimitedM3Day !== undefined));
@@ -52,7 +52,7 @@
 {#if objects.length}
 	<h3>Demand objects</h3>
 	<p class="muted small">
-		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops (daily averages over the run).
+		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops, or from a river abstraction of their own when their water source is the river (daily averages over the run).
 		Their demand is part of the hydrological unit’s.
 		{#if anyFloor}
 			A domestic or municipal object’s basic-needs floor is {DEMAND_NORMS.basicLitresPerPersonDay} litres a person a day for the people it
@@ -120,7 +120,7 @@
 {#if takes.length}
 	<h3 id="river-takes-h">River abstractions</h3>
 	<p class="muted small">
-		Demands on the hydrological units that pump from the river beside the dam, each with its own pump (daily averages over the run).
+		Demands on the hydrological units that pump from the river at the unit (below its dam, when it has one), each with its own pump (daily averages over the run).
 		{#if takesLimited}The demand a pump left unmet counts only days the river or its pool had the water; on other days the river is what ran short.{/if}
 	</p>
 	<div class="table-wrap">

@@ -25,6 +25,7 @@
 		divideDrainsIntoName,
 		divideOffers,
 		dividePoints,
+		divideOverlap,
 		divideProblem,
 		divideSummary,
 		doubleNode,
@@ -130,6 +131,8 @@
 	});
 	const ticks = $derived<DivideTicks | null>(pending ? (draft.ticks[pending.id] ?? null) : null);
 	const problem = $derived(pending && ticks ? divideProblem(pending.plan, ticks, nodes.map((n) => n.name)) : null);
+	/** The units would add up to more than the catchment (land counted twice), as the ticks and the rest's choice stand. */
+	const overlap = $derived(pending && ticks ? divideOverlap(pending.plan, ticks) : null);
 	/** Units that may take the rest of the catchment: those no point stands for, with their area when proposed (apply checks it). */
 	const restTargets = $derived(pending ? pending.plan.untouched.map((u) => ({ id: u.nodeId, name: u.name, areaKm2: u.areaKm2 })) : []);
 	const restChoice = $derived(ticks ? (ticks.rest.to === 'node' ? ticks.rest.nodeId : ticks.rest.to) : 'none');
@@ -141,7 +144,7 @@
 
 	async function apply(p: DivideProposal) {
 		if (!ticks || problem) return;
-		const ok = await confirmDialog({ title: 'Apply the ticked values?', message: `${divideSummary(ticks)} It is saved now as one change in History.`, confirmLabel: 'Apply' });
+		const ok = await confirmDialog({ title: 'Apply the ticked values?', message: `${divideSummary(ticks)}${overlap ? ` ${overlap}` : ''} It is saved now as one change in History.`, confirmLabel: 'Apply' });
 		if (!ok) return;
 		busy = 'apply';
 		error = null;
@@ -247,10 +250,11 @@
 				<p class="lead">
 					Tick each value to take it; anything unticked stays as it is in the model. The catchment above the outlet: <strong>{km2(p.catchment.areaM2)}</strong>.
 				</p>
-				{#if p.warnings.length || p.dropped.length || p.untouched.length}
+				{#if p.warnings.length || p.dropped.length || p.untouched.length || overlap}
 					<ul class="warnings" data-testid="divide-warnings">
 						{#each p.warnings as w (w)}<li>{w}</li>{/each}
 						{#each p.dropped as d (d.featureId)}<li>{d.name || 'A point'} isn’t in the division: it {d.reason}.</li>{/each}
+						{#if overlap}<li data-testid="divide-overlap">{overlap}</li>{/if}
 						{#if p.untouched.length}<li>No point stands for {p.untouched.map((u) => u.name).join(', ')}: {p.untouched.length === 1 ? 'it keeps its' : 'they keep their'} values.</li>{/if}
 					</ul>
 				{/if}
@@ -345,6 +349,8 @@
 						{:else}
 							<p class="hint">Its outline couldn’t be made a polygon, so it has no parcel to save; type its area on the Network.</p>
 						{/if}
+						<!-- The overlap again where the choice that clears it is made, announced as it changes (the list above is far up). -->
+						<p class="hint" aria-live="polite" data-testid="divide-overlap-rest">{overlap ?? ''}</p>
 					</li>
 				</ul>
 				<details class="how">

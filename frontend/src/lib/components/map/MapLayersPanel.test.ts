@@ -112,7 +112,7 @@ describe('the Layers box’s River network', () => {
 	it('shows the picked reach’s facts and source, and Add for an editor', () => {
 		const r = reach(90000002, 3);
 		const b = riverHtml(riversOn([r], r), true);
-		expect(b).toContain('Reach 90000002</strong>: Strahler order 3, 655 km² upstream, 8.9 km long, mean flow 1.84 m³/s.');
+		expect(b).toContain('Reach 90000002</strong>: Strahler order 3, 655 km² upstream, 8.9 km long, modelled mean flow 1.84 m³/s.');
 		expect(b).toContain('Source: SYNTHETIC test data');
 		expect(b).toContain('data-testid="map-reach-add"');
 	});

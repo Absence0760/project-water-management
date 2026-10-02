@@ -537,8 +537,12 @@ the list the tab already loaded, **no route**. WGS84 longitude/latitude as
 stored, no `crs` member. Each feature's properties are `name`, `kind` (the
 API's: `catchment_boundary`, `farm_parcel`, `dam`, `gauge`, `river`,
 `other`), `node` (the node it stands for, by name, or null) and `areaKm2` /
-`areaHa` (the server's area of a polygon, null for points and lines);
-nothing else (no ids, files, users or imported properties). The file is
+`areaHa` (the server's area of a polygon, null for points and lines), and
+`credit` only on a feature drawn from licensed data: a river added from
+HydroRIVERS carries its map attribution, a dam traced from JRC Global
+Surface Water "Source: EC JRC/Google" (`featureCredit`), so the credit
+leaves with the data; nothing else (no ids, files, users, descriptions or
+imported properties). The file is
 `<project>-map-<day>.geojson` (`application/geo+json`). Uploaded again, the
 review reads each row's kind from its `kind` property and its node from its
 name.
@@ -1027,7 +1031,7 @@ the earliest when there are several):
   the area–volume curve", first half): the polygon's geodesic area
   (`map_feature.area_m2`, [§ Areas](#areas)) as the dam's area when full
   (`damAreaFullM2`), which the run uses for evaporation instead of the
-  capacity ÷ 3 m estimate. A point has no area to propose.
+  7.2 · C^0.77 m² estimate (engine ≥ 1.63.0, model.md §2.7a). A point has no area to propose.
 
 **Use** asks first, then saves that one value to the model straight away
 (`POST …/dam-capacity-from-register` with the register number, or
@@ -1223,8 +1227,9 @@ the app can analyse; this layer is.
   buttons (`Reach 90000002 · order 3 · 655 km²`: the order and area upstream
   the list is sorted by; the first twelve, then **Show all**). A reach
   picked there, or clicked on the map where no feature is, is drawn again on
-  top, solid in the map's selection colour on a casing, and its facts show: Strahler order, area upstream, length, mean
-  flow (each only when the source gives it) and its source line.
+  top, solid in the map's selection colour on a casing, and its facts show: Strahler order, area upstream, length, the
+  modelled mean flow (HydroRIVERS' `DIS_AV_CMS`, a WaterGAP long-term mean, never a gauged one; "modelled mean flow
+  … m³/s") (each only when the source gives it) and its source line.
 - **Adding a reach** (editor): **Add to the map as a river**
   (`POST /projects/:id/map/rivers/add`, `{ dataset, reachId }`) copies that
   one reach's line into a `river` feature named after the reach ("Reach
@@ -1460,7 +1465,11 @@ grid's kind, and **nothing is converted between them**:
   version, period (first and last year), method in words, attribution and
   grid; the panel shows them under **Source and method**. **Use** asks first
   (the confirmation says what reads the values and that a GR4J fit made
-  before is marked "Forcing changed since fit"), then `POST
+  before is marked "Forcing changed since fit", and, when the project has
+  a daily A-pan record, what that record still drives: it replaces an
+  accepted A-pan row on every day it covers, and GR4J stops reading it once
+  a monthly PE row takes over, while demand and the dams keep it and the A-pan row;
+  `useMessage`, round 4), then `POST
   /projects/:id/evaporation-from-map` with the dataset
   ([api.md § Catchment map](./api.md#catchment-map)): the server re-derives
   the 12 values from the boundary as it is, writes them into the settings,
