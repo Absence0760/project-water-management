@@ -2249,6 +2249,27 @@ yet; each lands with the work package named.
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
 
+- [ ] **A unit with demands on both its dam and the river: which side was
+      short** (persona-farmer, round 4, 2026-10-02). Since engine 1.65.0
+      (model.md §2.7j) a unit's crops or demand objects can each draw on a
+      river abstraction beside its dam. The farm page's "Short on N days …"
+      line still counts a short day "when your dam was down to its stop
+      level" whenever the dam sat there, whichever side was short; a unit
+      whose demands *all* draw on the river is already right
+      (`season.onlyRiver`, the river's wording), and the dam's days left
+      already divide by the dam's own draw (`damDraw`). What's missing is a
+      per-side shortfall: the run publishes each abstraction's take
+      (`river_take@`) but not what it was asked for after a drought
+      restriction (the stored `object_demand@` is before the cut), so the
+      projection can't tell a river-side shortfall from a dam-side one
+      without guessing. Durable fix: the engine publishes each river
+      abstraction's unmet demand (`river_short@<key>`, an ENGINE_VERSION
+      bump), the projection counts the dam side's and the river side's
+      short days apart, and the card gets a river reason ("… when the
+      river or your pump couldn't give enough", through the i18n agents).
+      Trigger: the client's first unit with both a dam-side and a
+      river-side demand is published to its farmer.
+
 ## Afrikaans (WP-2.5)
 
 Issue #49 (the translation turnaround) is closed: on 2026-09-26 every
@@ -3817,6 +3838,21 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       rasterised to it), load it as kind `apan`, and record it in the
       sources table. Trigger: the WR2012 decision, or a hydrologist asking
       for the A-pan row from the map.
+
+- [ ] **Divide and start: a piece's area from its cells, not its simplified
+      outline** (persona-hydrologist, round 4, 2026-10-02). The DEM
+      partition is exact in cells, but each piece's `areaM2`
+      (`backend/src/delineation/subcatchments.ts` `piece()`) is its
+      Douglas–Peucker-simplified outline's geodesic area, so the pieces and
+      the rest add up to −0.51 % of the catchment on the synthetic DEM, more
+      on small, jagged pieces. The cell area is already summed (`cellArea`,
+      used only when the outline fails). Durable fix: take each piece's area
+      from its cells and keep the outline for display, *and* decide what the
+      saved parcel's `area_m2` is (today the unit's area equals its parcel's
+      outline area, which "area from the map" relies on): either store the
+      cell area on the parcel too, with the outline marked simplified, or
+      simplify less. Trigger: a divide whose pieces fall more than 1 % short
+      of the catchment, or the first real DEM catchment with many small units.
 
 ## Crop factors (issue #54 item 1)
 
