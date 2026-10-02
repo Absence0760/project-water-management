@@ -5,7 +5,7 @@ import { openDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 import { OUT } from './flow.js';
-import { delineateUnits, mostDrained, partition, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
+import { delineateUnits, mostDrained, ownsLand, partition, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -53,6 +53,18 @@ describe('partition', () => {
 		expect(owned(p.owner, 1)).toBe(0);
 		expect(owned(p.owner, 0)).toBe(10);
 		expect(owned(p.owner, 2)).toBe(20);
+	});
+
+	it('puts a gauge in the network without land, as a water user', () => {
+		const g = riverGrid();
+		const p = partition(g.nx, g.ny, g.dir, g.outlet, [
+			{ cell: g.at(2, 1), owns: ownsLand('dam') },
+			{ cell: g.at(2, 3), owns: ownsLand('gauge') }
+		]);
+		expect(p.down).toEqual([1, -1]);
+		expect(owned(p.owner, 1)).toBe(0);
+		expect(owned(p.owner, 2)).toBe(20);
+		expect([ownsLand('abstraction'), ownsLand('user'), ownsLand('gauge')]).toEqual([true, false, false]);
 	});
 
 	it('refuses a unit cell that doesn’t drain to the outlet (the caller filters those first)', () => {
@@ -180,6 +192,28 @@ describe('delineateUnits (synthetic DEM)', () => {
 			beyond: expect.stringMatching(/isn’t upstream of the outlet/),
 			'at-outlet': expect.stringMatching(/outlet itself/)
 		});
+	});
+
+	it('puts a gauge inside the catchment in the order without land, its whole catchment counted above it', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		const atGauge = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 60));
+		const r = await delineateUnits(dem, {
+			outlet,
+			boundary: null,
+			points: [point('dam', DAM_CELL.x, DAM_CELL.y + 1), point('weir', DAM_CELL.x, DAM_CELL.y + 60, 'gauge')]
+		});
+		const dam = r.units.find((u) => u.id === 'dam')!;
+		const weir = r.units.find((u) => u.id === 'weir')!;
+		// The dam drains into the gauge, the gauge into the outlet; the gauge owns no land, so the land between stays the rest's.
+		expect(dam.drainsInto).toBe('weir');
+		expect(weir.drainsInto).toBeNull();
+		expect(weir.areaM2).toBe(0);
+		expect(weir.geometry).toBeNull();
+		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 0.01);
+		// What the gauge measures: everything above it, the dam's piece and the land between.
+		near(weir.totalAreaM2, atGauge.areaM2, 0.03);
+		expect(weir.totalAreaM2).toBeGreaterThan(dam.areaM2);
+		expect(r.method).toMatch(/a water user or a gauge owns none/);
 	});
 
 	it('takes a dam polygon’s most-drained cell as its outflow', async () => {

@@ -562,6 +562,28 @@ const WRITE_ROUTES: Entry[] = [
 				rest: { include: true, name: 'Rest of the catchment', area: true }
 			})
 	},
+	// --- divide that model from the map (182): the dam's point stands for its unit now; the rest a new unit (a change, so a revision) ----
+	{
+		route: `POST ${P}/map/divide`,
+		records: ['map.divide_proposed'],
+		projectOf: (c) => c.startProject as string,
+		call: async (c) => {
+			const sat = `/projects/${c.startProject}`;
+			const features = (await c.owner.call('GET', `${sat}/map/features`)).body.features as { id: string; kind: string; nodeId: string | null }[];
+			const dam = features.find((f) => f.kind === 'dam')!;
+			const outlet = features.find((f) => f.kind === 'gauge')!;
+			const r = await c.owner.call('POST', `${sat}/map/divide`, { outletFeatureId: outlet.id, points: [{ featureId: dam.id, nodeId: dam.nodeId }] });
+			c.divideId = r.body.proposal?.id;
+			c.divideUnits = r.body.proposal?.plan.units.map((u: { key: string }) => ({ key: u.key, area: true, drainsInto: true, runoffToDam: false, add: false }));
+			return r;
+		}
+	},
+	{
+		route: `POST ${P}/map/divide/:spid/apply`,
+		records: ['map.divide_applied', 'revision'],
+		projectOf: (c) => c.startProject as string,
+		call: (c) => c.owner.call('POST', `/projects/${c.startProject}/map/divide/${c.divideId}/apply`, { units: c.divideUnits, rest: { to: 'new', name: 'Guard rest, divided' } })
+	},
 	// --- the submission workflow (WP-3.3) ------------------------------------------------
 	{
 		route: `POST ${P}/scenarios/:sid/submit`,

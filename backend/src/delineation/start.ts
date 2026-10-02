@@ -5,7 +5,10 @@
 //   GET  /projects/:id/map/start                    the DEM on or off, the model empty or not, the latest proposals (viewer)
 //   POST /projects/:id/map/start                    propose units, areas and the order from the map's points (editor)
 //   POST /projects/:id/map/start/:spid/apply        apply the ticked values: the nodes, parcels and links (editor)
-//   POST /projects/:id/map/start/:spid/discard      (editor)
+//   POST /projects/:id/map/start/:spid/discard      discard an open proposal, a start or a division (editor)
+//
+// Dividing a model that already has nodes (182, the mode 'divide') shares the
+// table, the GET, the cap and discard; its propose and apply are divide.ts.
 //
 // The map proposes, the editor decides, value by value: apply writes only
 // what is ticked, and only into an empty model (409 once it has nodes), so
@@ -28,6 +31,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { delineateUnits, START_METHOD_VERSION, type UnitRole } from './subcatchments.js';
+import { pointInGeometry } from '../geo/geojson.js';
 
 /** Proposals one project may ask for in an hour: each routes the DEM (seconds of CPU on the API). */
 export const START_PROPOSALS_PER_HOUR = 30;
@@ -40,9 +44,9 @@ const LISTED = 5;
 /** Over this, the catchment above the outlet and the boundary on the map disagree enough to say so. */
 export const BOUNDARY_MISMATCH = 0.1;
 /** A unit's piece under this (m², one hectare) is worth a warning: two points nearly on top of each other. */
-const TINY_PIECE_M2 = 10_000;
+export const TINY_PIECE_M2 = 10_000;
 
-export const ROLES = ['dam', 'abstraction', 'user'] as const satisfies readonly UnitRole[];
+export const ROLES = ['dam', 'abstraction', 'user', 'gauge'] as const satisfies readonly UnitRole[];
 export const ProposeBody = z
 	.object({
 		/** A gauge on the map to take as the outlet; absent or null = the boundary's own outlet. */
@@ -121,32 +125,34 @@ export interface StartDecision {
 	revisionId: string | null;
 }
 
-interface ProposalRow {
+export interface ProposalRow<Plan = StartPlan, Decision = StartDecision> {
 	id: string;
+	mode: 'start' | 'divide';
 	status: 'proposed' | 'applied' | 'discarded' | 'superseded';
-	plan: StartPlan;
+	plan: Plan;
 	from_dem: boolean;
 	dataset: string | null;
 	dataset_fingerprint: string | null;
 	method: string;
 	method_version: string;
-	decision: StartDecision | null;
+	decision: Decision | null;
 	created_by_name: string | null;
 	created_at: Date;
 	decided_by_name: string | null;
 	decided_at: Date | null;
 }
 
-const SELECT = `
-	SELECT p.id, p.status, p.plan, p.from_dem, p.dataset, p.dataset_fingerprint, p.method, p.method_version, p.decision,
+export const SELECT = `
+	SELECT p.id, p.mode, p.status, p.plan, p.from_dem, p.dataset, p.dataset_fingerprint, p.method, p.method_version, p.decision,
 		cu.display_name AS created_by_name, p.created_at, du.display_name AS decided_by_name, p.decided_at
 	FROM start_proposal p
 	LEFT JOIN app_user cu ON cu.id = p.created_by
 	LEFT JOIN app_user du ON du.id = p.decided_by
 	WHERE p.project_id = $1`;
 
-const toProposal = (r: ProposalRow) => ({
+export const toProposal = <P, D>(r: ProposalRow<P, D>) => ({
 	id: r.id,
+	mode: r.mode,
 	status: r.status,
 	plan: r.plan,
 	fromDem: r.from_dem,
@@ -160,23 +166,23 @@ const toProposal = (r: ProposalRow) => ({
 	decidedBy: r.decided_by_name,
 	decidedAt: r.decided_at?.toISOString() ?? null
 });
-export type StartProposal = ReturnType<typeof toProposal>;
+export type StartProposal = ReturnType<typeof toProposal<StartPlan, StartDecision>>;
 
-async function loadProposal(db: Db, projectId: string, spid: string): Promise<ProposalRow> {
+export async function loadProposal<P = StartPlan, D = StartDecision>(db: Db, projectId: string, spid: string): Promise<ProposalRow<P, D>> {
 	if (!UUID.test(spid)) throw notFound();
-	const { rows } = await db.query<ProposalRow>(`${SELECT} AND p.id = $2`, [projectId, spid]);
+	const { rows } = await db.query<ProposalRow<P, D>>(`${SELECT} AND p.id = $2`, [projectId, spid]);
 	if (!rows[0]) throw notFound();
 	return rows[0];
 }
 
-async function nodeCount(db: Db, projectId: string): Promise<number> {
+export async function nodeCount(db: Db, projectId: string): Promise<number> {
 	const { rows } = await db.query<{ n: number }>('SELECT count(*)::integer AS n FROM node WHERE project_id = $1', [projectId]);
 	return rows[0]!.n;
 }
 
 const NOT_EMPTY = 'The model has nodes already. Starting from the map only fills an empty model; change this one on the Network, or use the map’s per-feature tools.';
-const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
-const DEFAULT_ROLE_NAME: Record<UnitRole, string> = { dam: 'Dam unit', abstraction: 'Abstraction unit', user: 'Water user' };
+export const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
+const DEFAULT_ROLE_NAME: Record<UnitRole, string> = { dam: 'Dam unit', abstraction: 'Abstraction unit', user: 'Water user', gauge: 'Gauge' };
 const REST_NAME = 'Rest of the catchment';
 const OUTLET_NAME = 'Outflow gauge';
 const NO_DEM_METHOD =
@@ -219,7 +225,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 			? { featureId: null, name: OUTLET_NAME, point: [d[0].outlet_lon, d[0].outlet_lat], foundIn: 'delineation' }
 			: { featureId: null, name: OUTLET_NAME, point: null, foundIn: 'boundary' };
 	}
-	const counter: Record<UnitRole, number> = { dam: 0, abstraction: 0, user: 0 };
+	const counter: Record<UnitRole, number> = { dam: 0, abstraction: 0, user: 0, gauge: 0 };
 	const points = body.points.map((p) => {
 		const f = byId.get(p.featureId);
 		if (!f) throw new ApiError(400, 'A point is not on this catchment’s map (deleted since?). Reload the map and propose again.');
@@ -228,18 +234,27 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 			throw new ApiError(400, `“${f.name || 'A feature'}” is not a point or a dam: only points and dams can be units.`);
 		}
 		if (!['dam', 'gauge', 'other'].includes(f.kind)) throw new ApiError(400, `“${f.name || 'A feature'}” can’t be a unit.`);
+		// A gauge node stands for a gauge on the map (map_feature's KIND_NODES), so only a gauge point is one.
+		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge node.`);
 		return { featureId: f.id, name: f.name || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry };
 	});
 	return { boundary, outlet, points };
 }
 
-/** The plan without an elevation model: the points become units in the order given, all draining into the outflow gauge, with no area. */
+/**
+ * The plan without an elevation model: the points become units in the order
+ * given, all draining into the outflow gauge, with no area. With a boundary,
+ * a point outside it is dropped (it isn't in the catchment), as the DEM
+ * drops one that doesn't drain to the outlet.
+ */
 export function planWithoutDem(inputs: MapInputs): StartPlan {
+	const boundary = inputs.boundary?.geometry ?? null;
+	const outside = (p: MapInputs['points'][number]) => !!boundary && !pointInGeometry(pointOf(p.geometry), boundary);
 	return {
 		fromDem: false,
 		outlet: { ...inputs.outlet, point: inputs.outlet.point, snapDistanceM: null, foundIn: inputs.outlet.foundIn === 'boundary' ? null : inputs.outlet.foundIn },
 		catchment: { areaM2: null, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
-		units: inputs.points.map((p) => ({
+		units: inputs.points.filter((p) => !outside(p)).map((p) => ({
 			key: p.featureId,
 			featureName: p.name,
 			role: p.role,
@@ -253,7 +268,7 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 			drainsIntoProposed: false
 		})),
 		rest: { name: REST_NAME, areaM2: inputs.boundary?.areaM2 ?? null, geometry: inputs.boundary?.geometry ?? null },
-		dropped: [],
+		dropped: inputs.points.filter(outside).map((p) => ({ featureId: p.featureId, name: p.name, reason: 'is outside the catchment boundary' })),
 		warnings: ['The server has no elevation model, so nothing was delineated: type each unit’s area (or draw its parcel and Use it) and set the order on the Network.'],
 		cellSizeM: null,
 		zoom: null,
@@ -261,7 +276,7 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 	};
 }
 
-function pointOf(g: Geometry): Position {
+export function pointOf(g: Geometry): Position {
 	if (g.type === 'Point') return g.coordinates;
 	const ring = g.type === 'Polygon' ? g.coordinates[0]! : g.type === 'MultiPolygon' ? g.coordinates[0]![0]! : [];
 	const n = Math.max(1, ring.length - 1);
@@ -285,10 +300,11 @@ export function upstreamFirst<T extends { key: string; drainsInto: string | null
 export const startRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/start', async (c) => {
 		const id = c.req.param('id');
-		const { proposals, empty } = await withUser(c.get('userId'), async (db) => {
+		const { proposals, empty, started } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const { rows } = await db.query<ProposalRow>(`${SELECT} ORDER BY p.created_at DESC, p.id LIMIT ${LISTED}`, [id]);
-			return { proposals: rows.map(toProposal), empty: (await nodeCount(db, id)) === 0 };
+			const { rows: st } = await db.query<{ started: boolean }>(`SELECT EXISTS (SELECT 1 FROM start_proposal WHERE project_id = $1 AND mode = 'start' AND status = 'applied') AS started`, [id]);
+			return { proposals: rows.map(toProposal), empty: (await nodeCount(db, id)) === 0, started: st[0]!.started };
 		});
 		const dem = configuredDem();
 		let dataset = null;
@@ -299,7 +315,7 @@ export const startRoutes = new Hono<AuthEnv>()
 				logEvent('warn', { event: 'dem_unreadable', ...safeError(err) });
 			}
 		}
-		return c.json({ elevation: dataset !== null, dataset, modelEmpty: empty, proposals });
+		return c.json({ elevation: dataset !== null, dataset, modelEmpty: empty, startedFromMap: started, proposals });
 	})
 	.post('/:id/map/start', async (c) => {
 		const body = ProposeBody.parse(await readJson(c));
@@ -358,15 +374,16 @@ export const startRoutes = new Hono<AuthEnv>()
 				name: named.get(u.id)!.name,
 				point: u.point,
 				snapDistanceM: u.snapDistanceM,
-				areaM2: u.role === 'user' ? null : u.areaM2,
+				areaM2: u.role === 'user' || u.role === 'gauge' ? null : u.areaM2,
+				// A gauge's whole area above it is worth showing (what it measures); a user's isn't.
 				totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
 				geometry: u.geometry,
 				drainsInto: u.drainsInto,
 				drainsIntoProposed: true
 			}));
 			for (const u of units) {
-				if (u.role !== 'user' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
-				if (u.role !== 'user' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
+				if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
+				if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
 			}
 			plan = {
 				fromDem: true,
@@ -426,6 +443,7 @@ export const startRoutes = new Hono<AuthEnv>()
 			// Locked, then re-read: two applies of one proposal can't both make a model.
 			const { rows: st } = await db.query<{ status: string }>('SELECT status FROM start_proposal WHERE id = $1 AND project_id = $2 FOR UPDATE', [spid, id]);
 			if (st[0]?.status !== 'proposed') throw new ApiError(409, `That proposal is ${st[0]?.status ?? p.status}, so it can no longer be applied; propose again.`);
+			if (p.mode !== 'start') throw new ApiError(409, 'That proposal divides the model; apply it from Divide the model.');
 			const plan = p.plan;
 			// The model is locked by beginModelChange; an empty one is the only one this fills.
 			const change = await beginModelChange(db, id);
@@ -457,7 +475,7 @@ export const startRoutes = new Hono<AuthEnv>()
 			plan.units.forEach((u, i) => {
 				const t = ticks.get(u.key)!;
 				const down = t.drainsInto && u.drainsInto ? nodeOf.get(u.drainsInto)! : outlet.id;
-				const n: NetworkNode = { ...newNetworkNode(nodeOf.get(u.key)!, i + 1, down), name: t.name.trim(), kind: u.role === 'user' ? 'user' : 'farm' };
+				const n: NetworkNode = { ...newNetworkNode(nodeOf.get(u.key)!, i + 1, down), name: t.name.trim(), kind: u.role === 'user' ? 'user' : u.role === 'gauge' ? 'gauge' : 'farm' };
 				if (t.area && u.areaM2 !== null) n.areaKm2 = u.areaM2 / 1e6;
 				if (t.runoffToDam) n.pctRunoffToDam = 1;
 				nodes.push(n);
@@ -490,7 +508,8 @@ export const startRoutes = new Hono<AuthEnv>()
 				const nodeId = nodeOf.get(u.key)!;
 				const parcelId = t.area && u.geometry && u.areaM2 !== null ? await parcel(nodeId, t.name.trim(), u.geometry, u.areaM2) : null;
 				// The point the unit came from stands for it now (a link, not a model value).
-				await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind IN ('dam', 'other') AND node_id IS NULL`, [u.key, id, nodeId]);
+				// A gauge point stands for a gauge node; a dam or other point for a unit or user (map_feature's KIND_NODES).
+				await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = ANY($4::text[]) AND node_id IS NULL`, [u.key, id, nodeId, u.role === 'gauge' ? ['gauge'] : ['dam', 'other']]);
 				decisionUnits.push({ key: u.key, name: t.name.trim(), nodeId, area: t.area, drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, parcelId });
 			}
 			let restParcel: string | null = null;
@@ -525,13 +544,13 @@ export const startRoutes = new Hono<AuthEnv>()
 		const { id, spid } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
-			await loadProposal(db, id, spid);
+			const p = await loadProposal(db, id, spid);
 			const { rowCount } = await db.query(
 				`UPDATE start_proposal SET status = 'discarded', decided_by = app_current_user_id(), decided_at = now() WHERE id = $1 AND project_id = $2 AND status = 'proposed'`,
 				[spid, id]
 			);
 			if (!rowCount) throw new ApiError(409, 'That proposal is no longer open.');
-			await recordAudit(db, id, 'map.start_discarded', { proposalId: spid });
+			await recordAudit(db, id, p.mode === 'divide' ? 'map.divide_discarded' : 'map.start_discarded', { proposalId: spid });
 			return c.json({ proposal: toProposal(await loadProposal(db, id, spid)) });
 		});
 	});

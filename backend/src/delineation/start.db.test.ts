@@ -57,12 +57,15 @@ describe('without an elevation model', () => {
 		const boundary = await feature(p.at, { kind: 'catchment_boundary', name: 'Drawn', geometry: { type: 'Polygon', coordinates: SQUARE } });
 		const dam = await feature(p.at, { kind: 'dam', name: 'Upper dam', lon: 20.74, lat: -33.45 });
 		const pump = await feature(p.at, { kind: 'other', name: '', lon: 20.75, lat: -33.47 });
+		// A gauge outside the boundary isn't in the catchment: dropped, saying so.
+		const away = await feature(p.at, { kind: 'gauge', name: 'Far weir', lon: 20.9, lat: -33.47 });
 		const get = await viewer.call('GET', p.at('/map/start'));
 		expect(get.body).toMatchObject({ elevation: false, dataset: null, modelEmpty: true, proposals: [] });
-		const r = await owner.call('POST', p.at('/map/start'), { points: [{ featureId: dam, role: 'dam' }, { featureId: pump, role: 'abstraction' }] });
+		const r = await owner.call('POST', p.at('/map/start'), { points: [{ featureId: dam, role: 'dam' }, { featureId: pump, role: 'abstraction' }, { featureId: away, role: 'gauge' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-1' });
+		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-2' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -183,7 +186,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-1/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-2/);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));
@@ -235,6 +238,35 @@ describe('with the synthetic DEM', () => {
 		expect(r.body.proposal.plan.outlet.point).toEqual(d.body.proposal.outlet);
 		expect(r.body.proposal.plan.warnings).toEqual([]);
 		expect(Math.abs(r.body.proposal.plan.rest.areaM2 / d.body.proposal.areaM2 - 1)).toBeLessThan(0.02);
+	});
+
+	it('puts a gauge inside the catchment in the order as a gauge node, the dam above it draining into it', async () => {
+		const q = await newProject('Start, gauge');
+		const weir = await feature(q.at, { kind: 'gauge', name: 'Weir', lon: pos(OUTLET_CELL.x, OUTLET_CELL.y)[0], lat: pos(OUTLET_CELL.x, OUTLET_CELL.y)[1] });
+		const d = await feature(q.at, { kind: 'dam', name: 'Dam', lon: pos(DAM_CELL.x, DAM_CELL.y + 1)[0], lat: pos(DAM_CELL.x, DAM_CELL.y + 1)[1] });
+		const mid = await feature(q.at, { kind: 'gauge', name: 'Mid weir', lon: pos(DAM_CELL.x, DAM_CELL.y + 60)[0], lat: pos(DAM_CELL.x, DAM_CELL.y + 60)[1] });
+		// Only a gauge point is a gauge node.
+		const notGauge = await owner.call('POST', q.at('/map/start'), { outletFeatureId: weir, points: [{ featureId: d, role: 'gauge' }] });
+		expect(notGauge.status).toBe(400);
+		expect(notGauge.body.error).toMatch(/not a gauge point/);
+		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: weir, points: [{ featureId: d, role: 'dam' }, { featureId: mid, role: 'gauge' }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const plan = r.body.proposal.plan;
+		expect(plan.units.map((u: { name: string; role: string; drainsInto: string | null; areaM2: number | null }) => [u.name, u.role, u.drainsInto, u.areaM2 === null])).toEqual([
+			['Dam', 'dam', mid, false],
+			['Mid weir', 'gauge', null, true]
+		]);
+		// What the gauge measures is shown; it owns no land.
+		expect(plan.units[1].totalAreaM2).toBeGreaterThan(plan.units[0].areaM2);
+		const units = plan.units.map((u: { key: string; name: string }) => ({ key: u.key, name: u.name, area: false, drainsInto: true, runoffToDam: false }));
+		const ok = await owner.call('POST', q.at(`/map/start/${r.body.proposal.id}/apply`), { outletName: 'Weir', units, rest: { include: false, name: 'Rest', area: false } });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as { id: string; name: string; kind: string; downstreamNodeId: string | null }[]).map((n) => [n.name, n]));
+		expect(by['Mid weir']).toMatchObject({ kind: 'gauge', downstreamNodeId: by['Weir']!.id });
+		expect(by['Dam']).toMatchObject({ kind: 'farm', downstreamNodeId: by['Mid weir']!.id });
+		// The gauge point stands for its gauge node.
+		const [link] = await asOwner('SELECT node_id FROM map_feature WHERE id = $1', [mid]);
+		expect(link!.node_id).toBe(by['Mid weir']!.id);
 	});
 
 	it('refuses an outlet that is not a gauge point, and a point from another project', async () => {

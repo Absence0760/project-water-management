@@ -31,6 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withApiKey, withUser, type Db } from './tx.js';
+import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -897,6 +898,47 @@ async function startProposal(h: World, r: World, field: 'outletFeatureId' | 'fea
 	}
 }
 
+/**
+ * Dividing a model from the map (182) needs the DEM and a model with an
+ * outflow: each call makes a fresh project of the editor's with a typed model
+ * (the outflow, two units) and the synthetic DEM's valley points, and names a
+ * feature or node made in it (control, r = h) or in the referenced project
+ * (attack): the outlet gauge, a point, the node a point stands for, or the
+ * unit the rest of the catchment goes to.
+ */
+async function divideProposal(h: World, r: World, field: 'outletFeatureId' | 'featureId' | 'nodeId' | 'rest.nodeId'): Promise<Res> {
+	const home = (await dual.call('POST', '/projects', { name: `Divide ${randomUUID()}` })).body.project.id as string;
+	const o = node('Outflow', null);
+	const farm = node('Unit', o.id);
+	const other = node('Other unit', o.id);
+	expect((await dual.call('PUT', `/projects/${home}/model`, { nodes: [o, farm, other], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+	const at = r === h ? home : r.projectId;
+	const lonLat = (x: number, y: number) => {
+		const [lon, lat] = fixtureLonLat(x + 0.5, y + 0.5);
+		return { lon, lat };
+	};
+	const feature = async (project: string, body: Record<string, unknown>) => {
+		const f = await dual.call('POST', `/projects/${project}/map/features`, body);
+		expect(f.status, JSON.stringify(f.body)).toBe(201);
+		return f.body.feature.id as string;
+	};
+	const outlet = await feature(field === 'outletFeatureId' ? at : home, { kind: 'gauge', ...lonLat(OUTLET_CELL.x, OUTLET_CELL.y) });
+	const dam = await feature(field === 'featureId' ? at : home, { kind: 'dam', ...lonLat(DAM_CELL.x, DAM_CELL.y + 1) });
+	const nodeId = field === 'nodeId' && r !== h ? r.farmId : farm.id;
+	const prev = process.env.DEM_URL;
+	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
+	try {
+		const p = await dual.call('POST', `/projects/${home}/map/divide`, { outletFeatureId: outlet, points: [{ featureId: dam, nodeId }] });
+		if (field !== 'rest.nodeId') return p;
+		expect(p.status, JSON.stringify(p.body)).toBe(201);
+		const units = p.body.proposal.plan.units.map((u: { key: string }) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false }));
+		return await dual.call('POST', `/projects/${home}/map/divide/${p.body.proposal.id}/apply`, { units, rest: { to: 'node', nodeId: r === h ? other.id : r.farmId } });
+	} finally {
+		if (prev === undefined) delete process.env.DEM_URL;
+		else process.env.DEM_URL = prev;
+	}
+}
+
 /** Write routes whose body names another row, each sent with A's row (control) and B's (attack). */
 const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	'POST /projects/:id/scenarios baseRunId': (h, r) => dual.call('POST', `/projects/${h.projectId}/scenarios`, { name: `S ${randomUUID()}`, baseRunId: r.runId }),
@@ -966,6 +1008,10 @@ const ROUTES: Record<string, (h: World, r: World) => Promise<Res>> = {
 	},
 	'POST /projects/:id/map/start outletFeatureId': (h, r) => startProposal(h, r, 'outletFeatureId'),
 	'POST /projects/:id/map/start points.featureId': (h, r) => startProposal(h, r, 'featureId'),
+	'POST /projects/:id/map/divide outletFeatureId': (h, r) => divideProposal(h, r, 'outletFeatureId'),
+	'POST /projects/:id/map/divide points.featureId': (h, r) => divideProposal(h, r, 'featureId'),
+	'POST /projects/:id/map/divide points.nodeId': (h, r) => divideProposal(h, r, 'nodeId'),
+	'POST /projects/:id/map/divide/:spid/apply rest.nodeId': (h, r) => divideProposal(h, r, 'rest.nodeId'),
 	'PUT /projects/:id/model downstreamNodeId': (h, r) =>
 		dual.call('PUT', `/projects/${h.projectId}/model`, {
 			...modelOf(h),
@@ -1035,6 +1081,9 @@ const FIELDS: Record<string, string[] | string> = {
 	'geo/damRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/dam-area-from-map featureId'],
 	'delineation/start.ts:outletFeatureId': ['POST /projects/:id/map/start outletFeatureId'],
 	'delineation/start.ts:featureId': ['POST /projects/:id/map/start points.featureId'],
+	'delineation/divide.ts:outletFeatureId': ['POST /projects/:id/map/divide outletFeatureId'],
+	'delineation/divide.ts:featureId': ['POST /projects/:id/map/divide points.featureId'],
+	'delineation/divide.ts:nodeId': ['POST /projects/:id/map/divide points.nodeId', 'POST /projects/:id/map/divide/:spid/apply rest.nodeId'],
 	'geo/croplandRoutes.ts:cropId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover cropId'],
 	'geo/croplandRoutes.ts:featureId': ['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover featureId'],
 	'export/routes.ts:nodeId': 'a read filter within the project: another project’s node matches nothing',

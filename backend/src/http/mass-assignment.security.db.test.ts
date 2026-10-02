@@ -184,6 +184,10 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 		...SAMPLE['POST /projects/:id/map/start/:spid/apply']!(ctx)
 	}),
 	'POST /projects/:id/map/start/:spid/discard': async () => ({ params: { spid: await plantStartProposal(ctx.projectId) } }),
+	'POST /projects/:id/map/divide/:spid/apply': async () => ({
+		params: { spid: await plantStartProposal(ctx.projectId) },
+		...SAMPLE['POST /projects/:id/map/divide/:spid/apply']!(ctx)
+	}),
 	// A fresh unanswered question each time: an answer is given once (164).
 	'POST /projects/:id/application-questions/:qid/answer': async () => ({
 		params: { qid: await plantQuestion(ctx.projectId, ctx.ids.sid!) },
@@ -487,6 +491,14 @@ const NOT_REACHED = new Map<string, { why: string; legit: number }>([
 	[
 		'POST /projects/:id/map/start/:spid/apply',
 		{ why: 'a strict body; the ladder’s model has nodes, so applying a proposal is 409 (delineation/start.db.test.ts applies one to an empty model)', legit: 409 }
+	],
+	[
+		'POST /projects/:id/map/divide',
+		{ why: 'a strict body; the ladder’s only feature is a parcel, which is no gauge point to add as a gauge, so a legit call is 400 (delineation/divide.db.test.ts divides a valley)', legit: 400 }
+	],
+	[
+		'POST /projects/:id/map/divide/:spid/apply',
+		{ why: 'a strict body; the planted proposal starts a model, which a division’s apply refuses, so a legit call is 409 (delineation/divide.db.test.ts applies one)', legit: 409 }
 	],
 	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
 	[

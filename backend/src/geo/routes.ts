@@ -59,7 +59,7 @@ const KIND_TYPES: Record<MapFeatureKind, readonly Geometry['type'][]> = KIND_GEO
  */
 export const AREA_KINDS: readonly MapFeatureKind[] = ['farm_parcel', 'other'];
 /** The node kinds a feature of each kind may stand for. */
-const KIND_NODES: Record<MapFeatureKind, readonly string[]> = {
+export const KIND_NODES: Record<MapFeatureKind, readonly string[]> = {
 	catchment_boundary: [],
 	farm_parcel: ['farm', 'user'],
 	dam: ['farm', 'user'],

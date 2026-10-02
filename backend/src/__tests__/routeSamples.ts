@@ -144,6 +144,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	// Start from the map (178): the ladder's model has nodes, so a proposal is refused (409) after the role check; apply takes ticks for the planted proposal's no units.
 	'POST /projects/:id/map/start': () => ({ body: { points: [] } }),
 	'POST /projects/:id/map/start/:spid/apply': () => ({ body: { outletName: 'Ladder outlet', units: [], rest: { include: false, name: 'Rest', area: false } } }),
+	// Dividing the model from the map (182): the ladder's parcel as a new gauge point, refused (400) after the role check (a parcel is no gauge point); apply's planted proposal is a start, so 409 after it.
+	'POST /projects/:id/map/divide': (c) => ({ body: { points: [{ featureId: c.ids.fid, nodeId: null }] } }),
+	'POST /projects/:id/map/divide/:spid/apply': () => ({ body: { units: [], rest: { to: 'none' } } }),
 	// Needs the synthetic land-cover grid loaded (scripts/import-land-cover.ts); the ladder's parcel lies in its 0.5 block.
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
 	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
