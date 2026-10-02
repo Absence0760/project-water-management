@@ -1,0 +1,158 @@
+// Start a model from the map (issue #326 C3, docs/design/start-from-map.md,
+// docs/ui.md § Map): the pure parts of the Map's Start sheet. Which step the
+// sheet is at (read from the server's state, never kept in the sheet), which
+// features can be units and what each is by default, the ticks (every value
+// unticked until the editor ticks it), and the body apply sends.
+import type { MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
+import type { MapGeometry, MapPosition } from '$lib/api/types';
+import { fmtNum } from '$lib/format/number';
+
+export type StartStep = 'boundary' | 'points' | 'review' | 'data' | 'closed';
+
+/**
+ * What the editor chose and ticked in the Start sheet, kept by the Map tab
+ * (not the sheet) so closing the sheet, a reload of its data or a trip into
+ * a tool (Place a point) loses nothing: each point's choice, the outlet
+ * (null = the default), whether they went on to the points without a
+ * boundary, and the ticks per proposal id.
+ */
+export interface StartDraft {
+	picked: Record<string, PointChoice>;
+	outlet: string | null;
+	pointsAsked: boolean;
+	ticks: Record<string, StartTicks>;
+}
+
+/** A point's choice in the points step: one of the roles, or not in the model. */
+export type PointChoice = StartRole | 'none';
+
+export const ROLE_LABEL: Record<PointChoice, string> = {
+	dam: 'A unit with a dam',
+	abstraction: 'A unit at an abstraction point',
+	user: 'Another water user (no land)',
+	none: 'Not in the model'
+};
+
+export const STEP_LABEL: Record<Exclude<StartStep, 'closed'>, string> = {
+	boundary: 'The boundary',
+	points: 'The points',
+	review: 'The proposal',
+	data: 'Data and the first run'
+};
+
+/** The open proposal, if any (the GET lists the newest first). */
+export const openStart = (s: StartState | null): StartProposal | null => s?.proposals.find((p) => p.status === 'proposed') ?? null;
+
+/**
+ * Where the sheet is. A model with nodes is past the flow: at its data step
+ * when it was started from the map, else closed (the flow only starts an
+ * empty model). An open proposal is reviewed. Otherwise the points, once
+ * there is a boundary or a gauge to be the outlet (or the editor asked to go
+ * on: `pointsAsked`), else the boundary.
+ */
+export function startStep(s: StartState | null, features: readonly MapFeature[], pointsAsked = false): StartStep {
+	if (!s) return 'boundary';
+	if (!s.modelEmpty) return s.proposals.some((p) => p.status === 'applied') ? 'data' : 'closed';
+	if (openStart(s)) return 'review';
+	const hasBoundary = features.some((f) => f.kind === 'catchment_boundary');
+	return hasBoundary || pointsAsked ? 'points' : 'boundary';
+}
+
+/** Features that can be units: dams (a point or a polygon), and gauge and other points. */
+export function candidatePoints(features: readonly MapFeature[]): MapFeature[] {
+	return features.filter((f) => (f.kind === 'dam' && f.geometry.type !== 'LineString' && f.geometry.type !== 'MultiLineString') || ((f.kind === 'other' || f.kind === 'gauge') && f.geometry.type === 'Point'));
+}
+
+/** A point's default: a dam is a dam unit, an other point an abstraction point, a gauge not in the model (it may be the outlet). */
+export const defaultChoice = (f: MapFeature): PointChoice => (f.kind === 'dam' ? 'dam' : f.kind === 'other' ? 'abstraction' : 'none');
+
+/** The gauges that may be the outlet (points only). */
+export const outletGauges = (features: readonly MapFeature[]): MapFeature[] => features.filter((f) => f.kind === 'gauge' && f.geometry.type === 'Point');
+
+/** The outlet by default: the boundary's own (''), or without a boundary the only gauge. */
+export function defaultOutlet(features: readonly MapFeature[]): string {
+	if (features.some((f) => f.kind === 'catchment_boundary')) return '';
+	const g = outletGauges(features);
+	return g.length === 1 ? g[0]!.id : '';
+}
+
+/** The propose body from the choices; the outlet gauge is never also a unit. */
+export function proposeBody(choices: Record<string, PointChoice>, outlet: string): { outletFeatureId: string | null; points: { featureId: string; role: StartRole }[] } {
+	const points = Object.entries(choices)
+		.filter((e): e is [string, StartRole] => e[1] !== 'none' && e[0] !== outlet)
+		.map(([featureId, role]) => ({ featureId, role }));
+	return { outletFeatureId: outlet || null, points };
+}
+
+/** Which values of a unit were proposed (only those can be ticked). */
+export const unitOffers = (u: StartUnit) => ({ area: u.areaM2 !== null && !!u.geometry, drainsInto: u.drainsIntoProposed, runoffToDam: u.role === 'dam' && u.drainsIntoProposed });
+export const restOffersArea = (p: StartPlan) => p.rest.areaM2 !== null && !!p.rest.geometry;
+
+/** The ticks a proposal opens with: the proposed names, every value unticked (each is accepted explicitly). */
+export function initialTicks(p: StartPlan): StartTicks {
+	return {
+		outletName: p.outlet.name,
+		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false })),
+		rest: { include: false, name: p.rest.name, area: false }
+	};
+}
+
+/** Tick every value the plan proposes (Tick every value), names kept as typed. */
+export function tickAll(p: StartPlan, t: StartTicks): StartTicks {
+	const by = new Map(p.units.map((u) => [u.key, u]));
+	return {
+		outletName: t.outletName,
+		units: t.units.map((x) => {
+			const o = unitOffers(by.get(x.key)!);
+			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: o.runoffToDam };
+		}),
+		rest: { ...t.rest, include: true, area: restOffersArea(p) }
+	};
+}
+
+/** The name of what a unit drains into, by the names as typed. */
+export function drainsIntoName(p: StartPlan, t: StartTicks, u: StartUnit): string {
+	if (!u.drainsInto) return t.outletName || p.outlet.name;
+	return t.units.find((x) => x.key === u.drainsInto)?.name || p.units.find((x) => x.key === u.drainsInto)?.name || 'a unit';
+}
+
+/** A name used twice (the server refuses it), or null. */
+export function duplicateName(t: StartTicks): string | null {
+	const seen = new Set<string>();
+	for (const n of [t.outletName, ...t.units.map((u) => u.name), ...(t.rest.include ? [t.rest.name] : [])]) {
+		const k = n.trim().toLowerCase();
+		if (!k) continue;
+		if (seen.has(k)) return n.trim();
+		seen.add(k);
+	}
+	return null;
+}
+
+/** A name left empty, or null. */
+export const emptyName = (t: StartTicks): boolean => [t.outletName, ...t.units.map((u) => u.name), ...(t.rest.include ? [t.rest.name] : [])].some((n) => !n.trim());
+
+export const km2Text = (m2: number | null): string => (m2 === null ? '–' : `${fmtNum(m2 / 1e6, 2)} km²`);
+
+/** What the confirm says will happen: counts of the ticked values. */
+export function applySummary(t: StartTicks): string {
+	const nodes = 1 + t.units.length + (t.rest.include ? 1 : 0);
+	const areas = t.units.filter((u) => u.area).length + (t.rest.include && t.rest.area ? 1 : 0);
+	const orders = t.units.filter((u) => u.drainsInto).length;
+	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+	return `The empty model gets ${s(nodes, 'node')}, with ${s(areas, 'area')} (each saved as its unit’s parcel) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
+}
+
+/**
+ * The open proposal's pieces as one shape for the map's proposal layer
+ * (dashed, as a delineation's): every unit's outline and the rest's, with
+ * the outlet. Null when there is nothing to draw (no outlet, no outline).
+ */
+export function startShape(p: StartProposal | null): { id: string; geometry: Extract<MapGeometry, { type: 'MultiPolygon' }>; outlet: MapPosition } | null {
+	if (!p?.plan.outlet.point) return null;
+	const polys: MapPosition[][][] = [];
+	for (const u of p.plan.units) if (u.geometry) polys.push(u.geometry.coordinates);
+	const g = p.plan.rest.geometry;
+	if (g?.type === 'Polygon') polys.push(g.coordinates);
+	else if (g?.type === 'MultiPolygon') polys.push(...g.coordinates);
+	return polys.length ? { id: p.id, geometry: { type: 'MultiPolygon', coordinates: polys }, outlet: p.plan.outlet.point } : null;
+}

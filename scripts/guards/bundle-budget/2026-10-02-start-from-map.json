@@ -1,0 +1,4 @@
+{
+	"addKb": 6,
+	"why": "Start the model from the map (#326 C3): StartSheet.svelte + startFlow.ts in the Map tab's chunk and the Map's empty state; measured 1576 KB total against the 1571 KB ceiling before it"
+}

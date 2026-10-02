@@ -219,9 +219,7 @@ Each is audited (`map.delineation_proposed`, `…_accepted`, `…_rejected`).
 ## Not built (and why)
 
 - **Sub-catchments at every dam and abstraction point** (the stretch):
-  clicking each dam wall gives its upstream area today. Proposing all of
-  them at once, and the *incremental* area between units the model wants
-  (a unit's area is what drains to it and not to a unit upstream), needs
-  the network's order; it belongs with C3 (start a catchment from the
-  map). Tracked in docs/followups.md.
+  built with C3, start a catchment from the map
+  ([start-from-map.md](./start-from-map.md) § Sub-catchments): every unit's
+  incremental area and the order, from one routed window.
 - **Stream burning** with a river network: none passes D-B yet (#345).

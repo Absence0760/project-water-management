@@ -2959,6 +2959,72 @@ export interface DelineationProposal {
 	decidedAt: string | null;
 }
 
+/** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
+export type StartRole = 'dam' | 'abstraction' | 'user';
+
+/** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
+export interface StartUnit {
+	key: string;
+	featureName: string;
+	role: StartRole;
+	name: string;
+	point: MapPosition;
+	snapDistanceM: number | null;
+	/** Its own sub-catchment's area (m²) and outline; null without an elevation model (the outline also for a water user). */
+	areaM2: number | null;
+	totalAreaM2: number | null;
+	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
+	/** The unit it drains into (its key), or null for the outflow gauge. */
+	drainsInto: string | null;
+	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
+	drainsIntoProposed: boolean;
+}
+
+/** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
+export interface StartPlan {
+	fromDem: boolean;
+	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null };
+	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
+	units: StartUnit[];
+	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
+	dropped: { featureId: string; name: string; reason: string }[];
+	warnings: string[];
+	cellSizeM: number | null;
+	zoom: number | null;
+	windowCells: number | null;
+}
+
+/** The ticks an editor sends to apply a start proposal: every unit once, each value ticked or not. */
+export interface StartTicks {
+	outletName: string;
+	units: { key: string; name: string; area: boolean; drainsInto: boolean; runoffToDam: boolean }[];
+	rest: { include: boolean; name: string; area: boolean };
+}
+
+export interface StartProposal {
+	id: string;
+	status: 'proposed' | 'applied' | 'discarded' | 'superseded';
+	plan: StartPlan;
+	fromDem: boolean;
+	dataset: string | null;
+	datasetFingerprint: string | null;
+	method: string;
+	methodVersion: string;
+	decision: unknown;
+	createdBy: string | null;
+	createdAt: string;
+	decidedBy: string | null;
+	decidedAt: string | null;
+}
+
+/** GET …/map/start: whether the server has a DEM, whether the model is empty, and the latest proposals (newest first). */
+export interface StartState {
+	elevation: boolean;
+	dataset: DelineationState['dataset'];
+	modelEmpty: boolean;
+	proposals: StartProposal[];
+}
+
 /** GET …/map/delineation: whether the server has a DEM, which, and the latest proposals (newest first). */
 export interface DelineationState {
 	available: boolean;
