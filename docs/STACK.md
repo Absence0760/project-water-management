@@ -110,6 +110,8 @@ Node 24 (`.tool-versions`), pnpm 10 (`packageManager: pnpm@10.33.2`).
 pnpm setup                  # install, start Postgres, apply migrations, load the synthetic reference data (quaternaries, gauging stations, register of dams, land cover, evaporation), start Mailpit and MinIO (one-time)
 pnpm dev                    # frontend :7777 + backend :3001 (starts Postgres first via dev:db:up; the backend applies pending migrations)
 pnpm dev:full               # dev + the background-job worker (opt-in; JOB_TRANSPORT=inprocess, Postgres only; also starts Postgres)
+pnpm dev:all                # everything: Mailpit, MinIO + the map's basemap if cached (never fetched), then dev:full
+pnpm dev:down               # after Ctrl+C: stop every container (Postgres, Mailpit, MinIO; data stays)
 pnpm dev:run:frontend       # one side only
 pnpm dev:run:backend
 pnpm dev:run:worker         # the job worker alone: polls every 15 s and on LISTEN job_queued

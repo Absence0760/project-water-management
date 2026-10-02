@@ -84,6 +84,13 @@ pnpm dev
   opt-in (`pnpm dev:mail:up`, `pnpm dev:s3:up`). Every checkout, git worktrees
   included, drives the same containers: `docker-compose.yml` fixes the compose
   project name, so `pnpm dev:db:down` in any of them stops the shared database.
+- **Everything at once:** `pnpm dev:all` starts Mailpit, MinIO (with the
+  map's basemap when one is cached; it never fetches one, see
+  [maps.md § Basemap](./maps.md#basemap)) and then `pnpm dev:full` (Postgres,
+  frontend, backend and the job worker). Ctrl+C stops the app; `pnpm dev:down`
+  then stops every container. Their volumes stay, so the data and the uploaded
+  tiles are there next time. Like `dev:db:down`, it stops the containers every
+  checkout shares.
 - Each checkout has its **own dev database** in that Postgres: `water` in the
   main checkout, `water_w<n>` in a git worktree (n from a hash of its path,
   the same as its `water_test_w<n>`). The backend's dev entry points

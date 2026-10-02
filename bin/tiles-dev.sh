@@ -10,6 +10,11 @@
 #                             URLs in frontend/.env.development.local; the
 #                             relief's DEM only if it is cached or served
 #                             (never fetched here: run `terrain` once for it)
+#   bin/tiles-dev.sh up --cached
+#                             the same, but never fetch: with no extract
+#                             cached or served it starts MinIO, says so and
+#                             leaves the URLs alone (pnpm dev:all uses it, so
+#                             a fresh clone starts without the ~1 GB download)
 #   bin/tiles-dev.sh fetch    extract South Africa from the Protomaps daily
 #                             build into ~/.cache/water-management-tiles/ and
 #                             upload it to the local MinIO (pnpm dev:s3:up),
@@ -137,6 +142,9 @@ case "${1:-}" in
 			echo "MinIO serves $URL"
 		elif [ -f "$FILE" ]; then
 			(cd "$ROOT/backend" && pnpm exec tsx scripts/tiles-upload.ts "$FILE")
+		elif [ "${2:-}" = "--cached" ]; then
+			echo "No basemap cached, so the map draws without one (optional: pnpm dev:tiles:up fetches it, about 1 GB)."
+			exit 0
 		else
 			"$0" fetch
 		fi
@@ -266,7 +274,7 @@ case "${1:-}" in
 		echo "PUBLIC_TERRAIN_URL=$TERRAIN_URL"
 		;;
 	*)
-		echo "usage: bin/tiles-dev.sh up | fetch | fonts | terrain | water | rivers | status | env" >&2
+		echo "usage: bin/tiles-dev.sh up [--cached] | fetch | fonts | terrain | water | rivers | status | env" >&2
 		exit 2
 		;;
 esac
