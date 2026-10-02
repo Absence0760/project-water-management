@@ -11,7 +11,7 @@
 //    accepting as an area keeps the boundary; rejecting closes it;
 //  - deleting the accepted feature keeps the proposal and clears the link;
 //  - a stranger gets 404, and another project's proposal can't be decided;
-//  - the hourly cap answers 429.
+//  - the hourly cap answers 429, and counts refused and failed runs too.
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -85,6 +85,9 @@ describe('a DEM that can’t be read', () => {
 		expect(res.body.error).toMatch(/could not be read just now/);
 		expect(JSON.stringify(res.body)).not.toMatch(/PMTiles|pmtiles archive/);
 		expect(await asOwner('SELECT 1 FROM delineation_proposal WHERE project_id = $1', [projectId])).toHaveLength(0);
+		// A failed read cost the request too, so it counts toward the hourly cap.
+		const ev = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [projectId]);
+		expect(ev.map((r) => r.subject)).toEqual([{ tool: 'delineation', reason: 'unreadable' }]);
 	});
 });
 
@@ -216,5 +219,27 @@ describe('with the synthetic DEM', () => {
 		);
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status).toBe(429);
+	});
+
+	it('counts refused clicks toward the cap: each one cost the compute (attempts.ts)', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Refusals' })).body.project.id as string;
+		// An editor who isn't the owner: the count runs as them, under RLS, so it must see the owner's refusals and its own.
+		expect((await owner.call('POST', at('/members', pid), { email: editor.email, role: 'editor' })).status).toBe(201);
+		// Refused by the DEM after it was opened: recorded with the tool and the reason's code, never the click.
+		const refused = await editor.call('POST', at('/map/delineation', pid), { lon: 25, lat: -30, from: 'outlet' });
+		expect(refused.status).toBe(422);
+		const ev = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [pid]);
+		expect(ev.map((r) => r.subject)).toEqual([{ tool: 'delineation', reason: 'outside' }]);
+		// The rest of the hour's allowance as refusals too: no proposal stored, yet the next click is refused before any work.
+		await asOwner(
+			`INSERT INTO audit_event (project_id, actor_label, kind, subject)
+			 SELECT $1, 'x', 'map.elevation_refused', '{"tool":"delineation","reason":"too_large"}' FROM generate_series(1, $2)`,
+			[pid, DELINEATIONS_PER_HOUR - 1]
+		);
+		expect(await asOwner('SELECT 1 FROM delineation_proposal WHERE project_id = $1', [pid])).toHaveLength(0);
+		expect((await editor.call('POST', at('/map/delineation', pid), { ...OUTLET, from: 'outlet' })).status).toBe(429);
+		// Another tool's refusals don't spend delineation's allowance.
+		await asOwner(`UPDATE audit_event SET subject = '{"tool":"start","reason":"too_large"}' WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [pid]);
+		expect((await editor.call('POST', at('/map/delineation', pid), { ...OUTLET, from: 'outlet' })).status).toBe(201);
 	});
 });

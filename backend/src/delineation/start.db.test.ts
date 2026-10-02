@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+import { START_PROPOSALS_PER_HOUR } from './start.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -316,6 +317,29 @@ describe('bounds', () => {
 		const other = await newProject('Start, not capped');
 		await feature(other.at, { kind: 'catchment_boundary', name: 'B', geometry: { type: 'Polygon', coordinates: SQUARE } });
 		expect((await owner.call('POST', other.at('/map/start'), { points: [] })).status).toBe(201);
+	});
+
+	it('counts refused runs toward the cap, a division’s with a start’s (attempts.ts)', async () => {
+		process.env.DEM_URL = FIXTURE;
+		const q = await newProject('Start, refused');
+		const far = [[[25, -30], [25.05, -30], [25.05, -29.95], [25, -29.95], [25, -30]]];
+		await feature(q.at, { kind: 'catchment_boundary', name: 'B', geometry: { type: 'Polygon', coordinates: far } });
+		// Outside the DEM: refused after the DEM was opened, and recorded with the tool and reason, never the click.
+		const refused = await owner.call('POST', q.at('/map/start'), { points: [] });
+		expect(refused.status, JSON.stringify(refused.body)).toBe(422);
+		const ev = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [q.id]);
+		expect(ev.map((r) => r.subject)).toEqual([{ tool: 'start', reason: 'outside' }]);
+		// The rest of the allowance spent by refused divisions: nothing stored, yet the next start is refused before any work.
+		await asOwner(
+			`INSERT INTO audit_event (project_id, actor_label, kind, subject)
+			 SELECT $1, 'x', 'map.elevation_refused', '{"tool":"divide","reason":"too_large"}' FROM generate_series(1, $2)`,
+			[q.id, START_PROPOSALS_PER_HOUR - 1]
+		);
+		expect(await asOwner('SELECT 1 FROM start_proposal WHERE project_id = $1', [q.id])).toHaveLength(0);
+		expect((await owner.call('POST', q.at('/map/start'), { points: [] })).status).toBe(429);
+		// An hour later they no longer count (a positive control for the window).
+		await asOwner(`UPDATE audit_event SET created_at = now() - interval '61 minutes' WHERE project_id = $1 AND kind = 'map.elevation_refused'`, [q.id]);
+		expect((await owner.call('POST', q.at('/map/start'), { points: [] })).status).toBe(422);
 	});
 });
 

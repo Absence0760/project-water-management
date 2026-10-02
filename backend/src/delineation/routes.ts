@@ -25,6 +25,7 @@ import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
+import { recordRefused, refusedInLastHour } from './attempts.js';
 import { delineate, DelineationRefused } from './delineate.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
@@ -146,7 +147,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 				`SELECT count(*)::integer AS n FROM delineation_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`,
 				[id]
 			);
-			if (rows[0]!.n >= DELINEATIONS_PER_HOUR) {
+			// Refused and failed runs cost the same compute, so they count too (attempts.ts).
+			if (rows[0]!.n + (await refusedInLastHour(db, id, ['delineation'])) >= DELINEATIONS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${DELINEATIONS_PER_HOUR} delineations in the last hour; try again later.`);
 			}
 		});
@@ -156,6 +158,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		try {
 			result = await delineate(dem, [body.lon, body.lat]);
 		} catch (err) {
+			await withUser(userId, (db) => recordRefused(db, id, 'delineation', err instanceof DelineationRefused ? err.code : 'unreadable'));
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 			logEvent('error', { event: 'delineation_failed', ...safeError(err) });
 			throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');

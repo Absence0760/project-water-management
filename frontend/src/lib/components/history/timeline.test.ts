@@ -274,6 +274,9 @@ describe('what an item says', () => {
 		);
 		expect(eventLine(ev('map.divide_applied', { areas: 1, orders: 0, runoff: 0, gauges: 0 }))).toBe('Divided the model from the map: 1 area, 0 drains-into and 0 runoffs to the dam taken');
 		expect(eventLine(ev('map.divide_discarded', {}))).toBe('Discarded a division of the model proposed from the map');
+		expect(eventLine(ev('map.elevation_refused', { tool: 'delineation', reason: 'too_large' }))).toBe('A delineation was refused by the elevation model (too large)');
+		expect(eventLine(ev('map.elevation_refused', { tool: 'start', reason: 'unreadable' }))).toBe('A model proposed from the map was refused by the elevation model (unreadable)');
+		expect(eventLine(ev('map.elevation_refused', { tool: 'divide' }))).toBe('Dividing the model from the map was refused by the elevation model');
 	});
 
 	it('writes a team’s threshold change (D11) with both sides, saying which were the defaults', () => {
