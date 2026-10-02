@@ -25,35 +25,34 @@ export const REFERENCE_FAMILIES: readonly ReferenceFamily[] = [
 	{ what: 'gauging stations', testIds: /['"]nearest-gauges-table['"]/, loader: 'loadSyntheticStations' }
 ];
 
-/** A top-level `test(…)` or `test.describe(…)` block, with its first line (1-based). */
+/** A top-level statement that declares tests (a `test(…)`, a `test.describe(…)`, or a loop or condition around them), with its first line (1-based). */
 export interface Block {
 	line: number;
 	text: string;
 }
 
-const BLOCK_START = /^test(\.describe)?(\.(serial|parallel|only|skip|fixme))*\(/;
+/** A call that declares a test or a describe: `test(`, `test.describe(`, `test.describe.serial(`, … (never `test.beforeAll(`). */
+const DECLARES = /(^|[^\w.])test(\.(describe|serial|parallel|only|skip|fixme))*\(/m;
 
 /**
  * A spec split at its top-level statements (every line that starts in column
- * 0 and doesn't close one): the test and describe blocks, and the rest as the
- * file's own text (imports, helpers, a file-wide beforeAll).
+ * 0 and doesn't close one): those that declare tests (a test, a describe, a
+ * `for` loop making one per theme) are blocks; the rest is the file's own
+ * text (imports, helpers, a file-wide `test.beforeAll`). A loader called
+ * inside a loop covers that loop's tests only, never the file's others.
  */
 export function splitSpec(source: string): { fileLevel: string; blocks: Block[] } {
-	const lines = source.split('\n');
-	const blocks: Block[] = [];
-	const fileLevel: string[] = [];
-	let current: Block | null = null;
-	lines.forEach((l, i) => {
-		const starts = /^[^\s})\]]/.test(l);
-		if (starts) {
-			if (current) blocks.push(current);
-			current = BLOCK_START.test(l) ? { line: i + 1, text: '' } : null;
-		}
-		if (current) current.text += `${l}\n`;
-		else fileLevel.push(l);
+	const statements: Block[] = [];
+	source.split('\n').forEach((l, i) => {
+		if (/^[^\s})\]]/.test(l) || !statements.length) statements.push({ line: i + 1, text: '' });
+		statements[statements.length - 1]!.text += `${l}\n`;
 	});
-	if (current) blocks.push(current);
-	return { fileLevel: fileLevel.join('\n'), blocks };
+	const blocks = statements.filter((st) => DECLARES.test(st.text));
+	const fileLevel = statements
+		.filter((st) => !DECLARES.test(st.text))
+		.map((st) => st.text)
+		.join('');
+	return { fileLevel, blocks };
 }
 
 const calls = (text: string, loader: string) => new RegExp(`\\b${loader}\\(`).test(text);

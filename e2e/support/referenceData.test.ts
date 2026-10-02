@@ -50,6 +50,29 @@ test('a file-wide beforeAll covers every test; a test that loads in its own body
 	assert.equal(missingLoads('d.spec.ts', wrongLoader).length, 1);
 });
 
+test('a test inside a top-level loop is checked, and a loader in one loop covers that loop only', () => {
+	const spec = [
+		"for (const scheme of ['light', 'dark'] as const) {",
+		"\ttest(`rivers in ${scheme}`, async ({ page }) => {",
+		'\t\tawait loadSyntheticRivers();',
+		"\t\tpage.getByTestId('map-rivers-summary');",
+		'\t});',
+		'}',
+		"for (const w of [390, 1440]) {",
+		"\ttest(`land cover at ${w}`, async ({ page }) => {",
+		"\t\tpage.getByTestId('cropland-body');",
+		'\t});',
+		'}',
+		"test('rivers again', async ({ page }) => {",
+		"\tpage.getByTestId('map-rivers-list');",
+		'});'
+	].join('\n');
+	assert.deepEqual(
+		missingLoads('l.spec.ts', spec).map((m) => m.split(' reads')[0]),
+		['l.spec.ts:7', 'l.spec.ts:12']
+	);
+});
+
 test('the split keeps helpers and imports at file level and finds each top-level block', () => {
 	const { fileLevel, blocks } = splitSpec(["import x from 'y';", 'function helper() {', '\treturn 1;', '}', "test('one', () => {", '\tx();', '});', "test.describe.serial('two', () => {", '});'].join('\n'));
 	assert.deepEqual(
