@@ -1,8 +1,8 @@
-// The Map tab's layers (mapLayers.ts, issue #326 A6, the relief): `layers=` in the URL and
-// the bbox the quaternaries are asked for around the features.
+// The Map tab's layers (mapLayers.ts, issue #326 A6, the relief, the river network #345):
+// `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { layersOn, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, withLayer } from './mapLayers';
+import { layersOn, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, withLayer } from './mapLayers';
 
 const poly = (x: number, y: number, d: number) =>
 	({ id: 'p', kind: 'farm_parcel', geometry: { type: 'Polygon', coordinates: [[[x, y], [x + d, y], [x + d, y + d], [x, y]]] } }) as MapFeature;
@@ -26,6 +26,8 @@ describe('layers in the URL', () => {
 		expect(new URLSearchParams(both).get('layers')).toBe('quaternaries,relief');
 		expect([...layersOn(new URLSearchParams(both))]).toEqual(['quaternaries', 'relief']);
 		expect(new URLSearchParams(withLayer(both, 'quaternaries', false)).get('layers')).toBe('relief');
+		const three = withLayer(both, 'rivers', true);
+		expect(new URLSearchParams(three).get('layers')).toBe('quaternaries,rivers,relief');
 	});
 });
 
@@ -43,5 +45,24 @@ describe('quaternaryBbox', () => {
 		const [w, s, e, n] = quaternaryBbox([poly(18, -34, 6)])!;
 		expect(e - w).toBeLessThanOrEqual(QUATERNARY_BBOX_MAX_DEG);
 		expect(n - s).toBeLessThanOrEqual(QUATERNARY_BBOX_MAX_DEG);
+	});
+});
+
+describe('riverBbox', () => {
+	it('pads like the quaternaries’ but never asks for more than the river route takes (2°)', () => {
+		expect(riverBbox([])).toBeNull();
+		expect(riverBbox([poly(21.3, -33.7, 0.1)])).toEqual([21.2, -33.8, 21.5, -33.5]);
+		const [w, s, e, n] = riverBbox([poly(18, -34, 6)])!;
+		expect(e - w).toBeLessThanOrEqual(RIVER_BBOX_MAX_DEG);
+		expect(n - s).toBeLessThanOrEqual(RIVER_BBOX_MAX_DEG);
+	});
+});
+
+describe('reachLabel and reachFacts', () => {
+	it('names a reach by its name, else its id, and says only the facts the source gives', () => {
+		expect(reachLabel({ name: '', reachId: 90000002 })).toBe('Reach 90000002');
+		expect(reachLabel({ name: 'Sandspruit', reachId: 7 })).toBe('Sandspruit');
+		expect(reachFacts({ strahler: 3, upstreamKm2: 655, lengthKm: 8.94, dischargeM3s: 1.84 })).toEqual(['Strahler order 3', '655 km² upstream', '8.9 km long', 'mean flow 1.84 m³/s']);
+		expect(reachFacts({ strahler: null, upstreamKm2: 54.9, lengthKm: null, dischargeM3s: null })).toEqual(['54.9 km² upstream']);
 	});
 });

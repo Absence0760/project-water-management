@@ -325,6 +325,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Imported ${plural(n, 'map feature')} from ${str(s.fileName)}`;
 		}
 		case 'map.feature_created':
+			// A reach of the river network added as a river (issue #345): which reach of which dataset.
+			if (str(s.from) === 'river_network') return `Added ${mapFeature(s)} from the river network (${str(s.dataset)}, reach ${num(s.reachId) ?? '?'})`;
 			return `Placed ${mapFeature(s)} on the map`;
 		case 'map.feature_changed':
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;

@@ -23,6 +23,10 @@ import {
 	quaternaryColour,
 	quaternaryData,
 	quaternaryLayers,
+	RIVER_NETWORK_HIT_LAYER,
+	riverNetworkColour,
+	riverNetworkData,
+	riverNetworkLayers,
 	RELIEF_LAYER,
 	reliefBeforeId,
 	RESULT_FILL_OPACITY,
@@ -140,11 +144,12 @@ describe('overlay', () => {
 			const s = mapStyle('http://localhost:9002/tiles/x.pmtiles', dark, data);
 			expect(s.sources.features).toEqual({ type: 'geojson', data });
 			expect(s.sources.basemap).toBeDefined();
-			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
+			expect(s.layers.map((l) => l.id)).toEqual([...basemapStyle('x', dark).layers.map((l) => l.id), 'qt-fill', 'qt-line', 'rn-hit', 'rn-line', 'rn-picked-casing', 'rn-picked', ...overlayLayers(dark).map((l) => l.id), ...proposalLayers(dark).map((l) => l.id)]);
 			expect(s.layers[0]!.paint).toEqual({ 'background-color': basemapColours(dark).bg });
 		}
 		expect(mapStyle(null, false, data).sources).toEqual({
 			quaternaries: { type: 'geojson', data: quaternaryData(null) },
+			rivers: { type: 'geojson', data: riverNetworkData(null) },
 			features: { type: 'geojson', data },
 			proposal: { type: 'geojson', data: proposalData(null) }
 		});
@@ -270,6 +275,44 @@ describe('quaternary outlines (#326 A6)', () => {
 			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(q, g), `${q} on ${g}`).toBeGreaterThanOrEqual(3);
 			const c = overlayColours(dark);
 			for (const s of [c.boundary, c.parcel, c.water, c.other]) expect(deltaE(q, s), `${q} vs ${s}`).toBeGreaterThanOrEqual(40);
+		}
+	});
+});
+
+describe('the river network (#345)', () => {
+	const line = { type: 'LineString' as const, coordinates: [[21.3, -33.66], [21.36, -33.74]] as [number, number][] };
+
+	it('draws it dashed over the quaternaries and under the features, wider for a higher order, the picked reach on top in the selection colour', () => {
+		const layers = riverNetworkLayers(false);
+		expect(layers.map((l) => l.id)).toEqual([RIVER_NETWORK_HIT_LAYER, 'rn-line', 'rn-picked-casing', 'rn-picked']);
+		const paint = layers[1]!.paint as Record<string, unknown>;
+		expect(paint['line-dasharray']).toEqual([3, 1.5]);
+		expect(paint['line-width']).toEqual(['interpolate', ['linear'], ['get', 'order'], 1, 1.25, 6, 3]);
+		expect(layers[3]!.filter).toEqual(['==', ['get', 'picked'], true]);
+		expect((layers[3]!.paint as Record<string, unknown>)['line-color']).toBe(overlayColours(false).selected);
+		const ids = mapStyle(null, false, overlayData([], null)).layers.map((l) => l.id);
+		expect(ids.indexOf('qt-line')).toBeLessThan(ids.indexOf('rn-line'));
+		expect(ids.indexOf('rn-line')).toBeLessThan(ids.indexOf('ov-parcel-fill'));
+	});
+
+	it('feeds each reach with its key and order (1 when not given), marking the picked one', () => {
+		const d = riverNetworkData([{ key: 'synthetic:1', strahler: 3, geometry: line }, { key: 'synthetic:2', strahler: null, geometry: line }], 'synthetic:2');
+		expect(d.features.map((f) => f.properties)).toEqual([
+			{ key: 'synthetic:1', order: 3, picked: false },
+			{ key: 'synthetic:2', order: 1, picked: true }
+		]);
+		expect(riverNetworkData(null).features).toEqual([]);
+	});
+
+	it('keeps the line at least 3:1 on the basemap, apart from every other stroke, and a step from the project’s own river blue', () => {
+		for (const dark of [false, true]) {
+			const r = riverNetworkColour(dark);
+			const b = basemapColours(dark);
+			for (const g of [b.bg, b.earth, b.water, b.green]) expect(contrast(r, g), `${r} on ${g}`).toBeGreaterThanOrEqual(3);
+			const c = overlayColours(dark);
+			for (const s of [c.boundary, c.parcel, c.other, c.selected, quaternaryColour(dark)]) expect(deltaE(r, s), `${r} vs ${s}`).toBeGreaterThanOrEqual(40);
+			// Both are water: a different blue, told apart by the dash and width as well (WCAG 1.4.1).
+			expect(deltaE(r, c.water)).toBeGreaterThanOrEqual(25);
 		}
 	});
 });

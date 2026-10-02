@@ -8,7 +8,7 @@ self-hosted basemap, and proposes values from them that the hydrologist
 accepts one by one. Issue #288, phases 1–2 of roadmap
 [WP-3.12](./roadmap/step-3-licensing.md#wp-312-catchment-map). This page
 covers the tiles and labels, measuring, the GeoJSON download, uploads, areas, the quaternary lookup, outlines and dataset, the
-nearest gauging stations, the dam proposals from the register of dams and the map, delineating a
+nearest gauging stations, the dam proposals from the register of dams and the map, the river network, delineating a
 catchment from the DEM, the sources table and the CSP. The screen is in [ui.md § Map](./ui.md#map-tabmap),
 the API in [api.md § Catchment map](./api.md#catchment-map) and the tables in
 [data-model.md § Catchment map](./data-model.md#catchment-map-152_catchment_mapsql).
@@ -23,7 +23,9 @@ Two rules hold throughout:
   full-supply area (from its polygon) enters the model only through **Use**
   on the Dams page and a confirmation; a unit's cultivated area (from land
   cover) enters a crop's planted area only through **Use** in the unit's planted-areas drawer,
-  for a crop the modeller picks, and a confirmation;
+  for a crop the modeller picks, and a confirmation; a reach of the river
+  network becomes one of the project's rivers only through **Add to the map
+  as a river**, one reach at a time;
   a delineated catchment reaches the map only through **Accept** (and
   replaces a boundary only with a tick).
 - **The map is never the only way.** Everything it shows is in the feature
@@ -528,6 +530,10 @@ thresholds named constants there:
 - **Gauges off the rivers** (only with river lines): a gauge further than
   `GAUGE_RIVER_DISTANCE_M` (100 m) from every river line, measured to the
   nearest point of any segment (great-circle distance), with how far it is.
+  A reach added from the [river network](#river-network) is a river line
+  like a drawn one, so adding the reaches the gauges sit on is how the
+  sourced network feeds this check (the layer's own reaches, not added, are
+  not measured: the check reads the project's features only).
 
 Geometry is in metres on a local equirectangular projection around the
 features (well under 1 % off over a catchment); people read haversine
@@ -948,6 +954,107 @@ to a point on a river. The design, the method and its accuracy are in
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
+
+## River network
+
+The Map tab's **River network** layer (issue #345, the client checklist's
+"show the rivers", #342 map item 2; `layers=rivers` in the URL) draws a
+sourced river network around the project and proposes its reaches as the
+project's own `river` features. The basemap already draws OpenStreetMap's
+waterways ([§ Labels](#labels)), but OSM's coverage of small and
+non-perennial streams in rural South Africa is uneven, and it isn't data
+the app can analyse; this layer is.
+
+- **What it draws.** `GET /projects/:id/map/rivers?bbox=`
+  (`backend/src/geo/rivers.ts`, viewer; [api.md § Catchment
+  map](./api.md#catchment-map)) returns the reaches of `river_reference`
+  (171) whose bounding box meets the bbox, the highest Strahler order first
+  (then the largest area upstream), at most `RIVER_LAYER_MAX` (1000) with
+  `truncated` past it, so a cut drops the smallest streams. A bbox over
+  `RIVER_BBOX_MAX_DEG` (2°) a side is refused. The tab asks for the
+  features' bounds padded by half their size (at least 0.1°), once per bbox
+  (`mapLayers.ts` `riverBbox`), and draws nothing with no features.
+- **Style.** A dashed cyan-blue line (`riverNetworkColour`: `#006b9e`
+  light, `#3ec1f0` dark), wider for a higher order (1.25 px at order 1 to
+  3 px at 6), over the quaternary outlines and under the features. Its
+  click target is a 12 px band, so where the network is dense a click inside
+  a quaternary usually picks a reach; pick the quaternary from its code. It is a
+  different blue from the project's own rivers (solid, thicker, with a
+  casing) and told apart by the dash and width too; at least 3:1 on the
+  basemap and ΔE ≥ 40 from every other stroke (`mapStyle.test.ts`). While
+  the layer is on, the key's **Lines** gain "river network" with a dashed
+  swatch.
+- **The list beside the map.** The Layers box says how many reaches are
+  around the catchment and where they come from ("10 reaches around the
+  catchment, the biggest first, from synthetic." and, for the repo's
+  network, **Synthetic test data, never real rivers.**), and lists them as
+  buttons (`Reach 90000002 · order 3 · 655 km²`: the order and area upstream
+  the list is sorted by; the first twelve, then **Show all**). A reach
+  picked there, or clicked on the map where no feature is, is drawn again on
+  top, solid in the map's selection colour on a casing, and its facts show: Strahler order, area upstream, length, mean
+  flow (each only when the source gives it) and its source line.
+- **Adding a reach** (editor): **Add to the map as a river**
+  (`POST /projects/:id/map/rivers/add`, `{ dataset, reachId }`) copies that
+  one reach's line into a `river` feature named after the reach ("Reach
+  90000003"; HydroRIVERS names none, so rename it on the card), with its
+  source in the description ("From the river network, reach 90000003
+  (Strahler order 2, 168 km² upstream): …") and `river-network:<dataset>:<reach>`
+  in `ref`. The server reads the reach itself (nothing about it is taken
+  from the request), refuses one already on the map (409, under an advisory
+  lock so two clicks can't add it twice) and records the feature as placed,
+  from the river network (History: "Added a river “Reach 90000003” from the
+  river network (synthetic, reach 90000003)"). The list then marks it **on
+  the map**, with **Show it**; deleting the feature lets it be added again.
+  One reach at a time, by a person: the layer proposes, the modeller decides
+  (#326 D-B6's "accept value by value").
+- **What the added rivers feed.** The gauges-off-the-rivers check
+  ([§ Checks](#checks)) measures against them like any drawn river, and the
+  farm view shows them (rivers are an orientation kind). Snapping a drawn
+  point to them (#326 C2) and checking B-delineate's stream network against
+  them are for when those land: neither exists yet.
+- **Who sees it.** A viewer reads the layer; an editor adds. A farmer gets
+  403 and a non-member 404.
+
+### River network dataset
+
+`river_reference` (171) is global reference data, like the quaternary
+dataset: the **operator** loads it as the schema owner and the app only
+reads it.
+
+- **Committed: synthetic only.** `backend/fixtures/geo/rivers.synthetic.geojson`
+  is eleven invented reaches (ids `90000001`–`90000011`, Strahler orders
+  1–3, a network that flows together) round the seeded Sandspruit map and
+  the e2e tests' boundary, and one far away (22.5° E) outside every test's
+  bbox. Every source says "SYNTHETIC". `pnpm import:rivers` with no argument
+  loads it (`pnpm setup` does), as dataset `synthetic`.
+- **Real data: HydroRIVERS v1.0** (WWF HydroSHEDS; § Sources: allowed).
+  `pnpm dev:tiles:rivers` (`bin/tiles-dev.sh rivers`; operator-run, never in
+  CI) downloads the Africa shapefile (about 110 MB, cached in
+  `~/.cache/water-management-tiles/`), cuts it to `TILES_BBOX` (South Africa
+  by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
+  `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
+  `LENGTH_KM`, `DIS_AV_CMS` at five decimals, and loads it as dataset
+  `HydroRIVERS-v10` with the attribution as its source.
+  `RIVERS_MIN_ORDER` (a Strahler order; default 1, every reach) keeps a load
+  to the bigger streams. HydroRIVERS holds rivers with at least 10 km² upstream
+  or 0.1 m³/s mean flow, at 15 arc-seconds (about 500 m), so it misses the
+  smallest farm streams and its lines can sit a few hundred metres off the
+  real channel: a hydrologist checks a reach against the relief and the
+  basemap before adding it.
+- **Any other network** loads the same way:
+  `pnpm import:rivers rivers.geojson --dataset <label> --source "<product, version, attribution>" [--min-order <n>]`,
+  a FeatureCollection of LineStrings or MultiLineStrings in WGS84 with the
+  HydroRIVERS fields above or `reachId`, `strahler`, `upstreamKm2`,
+  `lengthKm`, `dischargeM3s`, `name`, `source`. A load replaces every row of
+  its dataset in one transaction; reaches it can't take are listed as
+  skipped. Only a source that passes D-B (§ Sources).
+- **Production loading** has the quaternary dataset's gap: no path yet into
+  the private database (followups.md).
+- **Does the client need it?** #90 Q23 asks whether OSM's rivers on the
+  basemap already suffice for "show the rivers". If they do, the layer is
+  still the only river data the app can analyse (the checks, and later
+  snapping and B-delineate).
+
 ## Cultivated area from land cover
 
 **From land cover**, in a hydrological unit's planted-areas drawer (issue
@@ -1066,6 +1173,8 @@ fixtures only.
 | DWS verified daily flow (the DWS feed, `feeds/sources/dws.ts`) | DWS, `HyData.aspx` | Same pages, same open question (deployment.md § Sources' terms; followups.md, Terms of use) | as above | per fetch | daily | Built before D-B; its terms are the same open decision, tracked in followups.md |
 | CHIRPS v3 daily rainfall (`sat`, `rnl`) and CHIRPS-GEFS v3 forecast: the rain feed, and the rain from the boundary | Climate Hazards Center, UC Santa Barbara | Public domain, registered with Creative Commons, and licensed CC BY 4.0 ("CHIRPS3 is in the public domain … licensed under a Creative Commons Attribution 4.0 International License"), [chc.ucsb.edu/data/chirps3](https://www.chc.ucsb.edu/data/chirps3), read 2026-10-01 | "Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025). Data was accessed on [date]." Or Funk, C. et al., *Sci Data* 13, 718 (2026) | v3.0 | Daily: preliminary two days after each pentad, final monthly (about three weeks after the month); GEFS one issue a day | Allowed (fetched live by the feeds; fixtures offline) |
 | List of Registered Dams (the register of dams) | DWS Dam Safety Office ([publications page](https://www.dws.gov.za/DSO/Publications.aspx)) | None stated on the page or in its "Explanation and Legend for List of Registered Dams" PDF (read 2026-10-01). DWS's data terms elsewhere (the NIWIS pages): copyright stays with DWS, data "may not be sold to third parties", use "restricted to use for academic, research or personal purposes" | "Department of Water and Sanitation" as the copyright proprietor (the NIWIS terms) | July 2025 (XLS, no coordinates) and October 2024 (XLS) | A few times a year, irregular | **Blocked: licence unconfirmed** (and DWS's general data terms are non-commercial). Built against the synthetic fixture; ask DWS for written permission before a client deployment loads it |
+| HydroRIVERS v1.0 (river reaches with Strahler order, upstream area, length, mean discharge): the River network layer and its proposals ([§ River network](#river-network)) | WWF (World Wildlife Fund, Inc.), HydroSHEDS; Lehner, B., Grill, G. (2013), *Hydrological Processes* 27(15): 2171–2186 ([product page](https://www.hydrosheds.org/products/hydrorivers)) | Covered by the HydroSHEDS version 1 License Agreement: "HydroRIVERS data are free for non-commercial and commercial use" ([HydroRIVERS technical documentation v1.0 § 4.1](https://data.hydrosheds.org/file/technical-documentation/HydroRIVERS_TechDoc_v10.pdf), read 2026-10-01); the agreement itself is Appendix A of the [HydroSHEDS technical documentation v1.4](https://data.hydrosheds.org/file/technical-documentation/HydroSHEDS_TechDoc_v1_4.pdf) (read 2026-10-01): a worldwide, non-exclusive, paid-up licence to use the data and to distribute it *incorporated into derivative works* to end users under terms at least as protective (§ 2.1.2), never as a stand-alone product; no decompiling the data (§ 2.1.3); attribution (§ 2.2); as-is, an indemnity to WWF (§ 5), and WWF may end it at its discretion (§ 7.1) | Exhibit B's statement, "This product [Water Management] incorporates data from the HydroSHEDS version 1 database which is © World Wildlife Fund, Inc. (2006-2022) and has been used herein under license. WWF has not evaluated the data as altered and incorporated within [Water Management], and therefore gives no warranty regarding its accuracy, completeness, currency or suitability for any particular purpose. Portions of the HydroSHEDS v1 database incorporate data which are the intellectual property rights of © USGS (2006-2008), NASA (2000-2005), ESRI (1992-1998), CIAT (2004-2006), UNEP-WCMC (1993), WWF (2004), Commonwealth of Australia (2007), and Her Royal Majesty and the British Crown and are used under license. The HydroSHEDS v1 database and more information are available at https://www.hydrosheds.org.", in the app's documentation or legal notice; the loaded source line names it on every reach and added river; cite Lehner & Grill (2013) in published material | v1.0 (`HydroRIVERS_v10_af_shp.zip`) | none announced (a static v1 product) | **Allowed (commercial use permitted), with conditions before production serves it**: the Exhibit B statement in the legal notice, and the terms of service carrying the end-user protections (no stand-alone redistribution of the data, no reverse engineering). Loaded locally from the operator's download; never committed |
+| DWS 1:500 000 rivers (`rivs500k`, Resource Quality Information Services; from the 1994 CDNGI 1:500 000 coverage) | DWS, `https://www.dws.gov.za/iwqs/gis_data/river/rivs500k.aspx` | **Unconfirmed.** Read 2026-10-01: the page and its description (`rivs500txt.html`) answer HTTP 403 outside South Africa, so no terms could be read from the publisher's own page. A web search (2026-10-01) shows the coverage offered "as is … for display or modelling", a research mirror listing it with "No License Provided", and DWS's wording on its river reports that they "may be reproduced only for non-commercial purposes and only after appropriate authorisation"; DWS's general data terms (NIWIS) are non-commercial too | "Department of Water and Sanitation" | the operator's download | none (a 1994 coverage, revised by RQIS) | **Blocked: licence unconfirmed** (and DWS's published terms are non-commercial). HydroRIVERS is used instead. To unblock: DWS's written permission for commercial reuse, recorded here with the date |
 | Google Earth Overlay for Registered Category 1, 2 and 3 Dams (the register's positions) | DWS Dam Safety Office (same page) | As above: none stated | As above | October 2024 (KMZ) | With the list, irregular | **Blocked: licence unconfirmed**, as above |
 | ESA WorldCover 10 m 2021 v200 (class 40, Cropland): the cultivated-area proposals | European Space Agency, WorldCover consortium ([esa-worldcover.org](https://esa-worldcover.org/en/data-access)) | **CC BY 4.0**: "provided free of charge, without restriction of use" (data-access page) and "Creative Commons Attribution 4.0 International" on the record ([Zenodo 10.5281/zenodo.7254221](https://zenodo.org/records/7254221)); commercial use allowed with attribution. Both read 2026-10-01 | On a map: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"; in a report, the dataset citation: Zanaga, D. et al. (2022), ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221. Stored on the dataset row and shown under the box's Source and method | 2021 v200 | None planned (2020 v100 and 2021 v200 are the releases) | **Allowed.** The operator's own download, pre-summarised into the database; never committed. Built and tested against the synthetic grid |
 | South African National Land Cover (SANLC) 2018 / 2020 | Department of Forestry, Fisheries and the Environment (DFFE), produced by GEOTERRAIMAGE ([e-GIS](https://egis.environment.gov.za/sa_national_land_cover_datasets)) | **Fails D-B.** The e-GIS pages refuse connections from outside South Africa (read 2026-10-01), so the 2018/2020 terms couldn't be read on the publisher's page; catalogues only say "an open licence agreement" ([GEE community catalogue](https://gee-community-catalog.org/projects/sa_nlc/)). The terms the earlier SANLC (2013/14) was released under, in its 2016 "Land Cover specific use" sheet (GEOTERRAIMAGE licence; a copy at [afrigis.co.za](https://www.afrigis.co.za/wp-content/uploads/2020/08/LandCover_2016.pdf), read 2026-10-01): "Creative Commons Attribution-No Derivatives … with the added constraint that no commercial resale is allowed", and third parties "may not use the data to develop new products that will compete directly with GEOTERRAIMAGE existing or 'in-progress' commercial data products". A per-parcel cultivated area is a derivative, and a commercial service could compete | "© GEOTERRAIMAGE" with the year | 2018, 2020 (2022 announced) | Every two years, irregular | **Blocked.** Not loaded. To unblock: DFFE's written terms for 2018/2020 allowing derivatives in a commercial service, recorded here with the date |

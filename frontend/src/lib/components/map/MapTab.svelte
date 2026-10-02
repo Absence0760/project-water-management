@@ -22,11 +22,12 @@
 	// through its sheet's confirm. Anyone can Measure (measure/, the drawing
 	// mode with nothing saved) and Download GeoJSON (mapExport.ts, built from
 	// the loaded list); the Layers box turns on the quaternary outlines
-	// (`layers=quaternaries`, #326 A6, A7) and, with a DEM configured, the
-	// relief (`layers=relief`, docs/maps.md § Relief). With a DEM on the
-	// server, editors can Delineate (`delineate=1`, #326 B-delineate,
-	// docs/design/delineation.md): click the river, and the catchment above
-	// it is proposed, drawn dashed, until they accept or reject it.
+	// (`layers=quaternaries`, #326 A6, A7), the river network (`layers=rivers`,
+	// #345, an editor adding its reaches as rivers one at a time) and, with a
+	// DEM configured, the relief (`layers=relief`, docs/maps.md § Relief).
+	// With a DEM on the server, editors can Delineate (`delineate=1`, #326
+	// B-delineate, docs/design/delineation.md): click the river, and the
+	// catchment above it is proposed, drawn dashed, until they accept or reject it.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -47,11 +48,12 @@
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
-	import { glyphsUrl, overlayColours } from './mapStyle';
+	import { glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { layersOn } from './mapLayers';
 	import MapLayers from './MapLayers.svelte';
 	import { QuaternaryLayer } from './quaternaryLayer.svelte';
+	import { RiverLayer } from './riverLayer.svelte';
 	import MeasureBar from './measure/MeasureBar.svelte';
 	import { MeasureDraft } from './measure/measureDraft.svelte';
 	import MapKeyRow from './MapKeyRow.svelte';
@@ -383,6 +385,24 @@
 		features: () => features
 	});
 
+	// --- the river network (#345): its reaches around the catchment, on while `layers=rivers` ---
+	const rivers = new RiverLayer({
+		projectId: () => projectId,
+		on: () => layersOn(params).has('rivers'),
+		features: () => features
+	});
+	/** A reach clicked on the map: picked, and its facts and Add brought into view (as a feature pick shows its card). */
+	async function reachFromMap(key: string) {
+		rivers.picked = key;
+		rivers.addError = null;
+		await tick();
+		document.querySelector('[data-testid="map-reach-picked"]')?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+	}
+	async function riverAdded(f: MapFeature) {
+		notice = `Added “${f.name}” to the map as a river, from the river network.`;
+		await load();
+	}
+
 	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
 	const relief = $derived(!!terrainUrl && layersOn(params).has('relief'));
 	let reliefFailed = $state(false);
@@ -458,7 +478,7 @@
 	// --- the key: the map's own colours (mapStyle.ts), in the app's theme, following it when it changes ---
 	let dark = $state(appIsDark());
 	$effect(() => watchAppTheme(() => (dark = appIsDark())));
-	const key = $derived(keyGroups(overlayColours(dark)));
+	const key = $derived(keyGroups(overlayColours(dark), { riverNetwork: layersOn(params).has('rivers') ? riverNetworkColour(dark) : null }));
 
 	// --- results on the map (#326 A1): the measure and run from the URL, each unit's and gauge's figure, the fills ---
 	const results = new MapResults({
@@ -642,6 +662,9 @@
 									quaternaries={quaternaries.outlines}
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
+									rivers={rivers.reaches}
+									pickedReach={rivers.picked}
+									onreach={reachFromMap}
 									{terrainUrl}
 									{relief}
 									onreliefError={() => (reliefFailed = true)}
@@ -719,9 +742,17 @@
 						</section>
 					{/if}
 
-					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed; the relief when a DEM is configured. -->
+					<!-- The optional layers (#326 A6): the quaternary outlines, their codes listed; the river network (#345), its reaches listed; the relief when a DEM is configured. -->
 					<div class="panel side-box layers-box">
-						<MapLayers {quaternaries} {dark} relief={terrainUrl ? { on: relief, failed: reliefFailed } : null} />
+						<MapLayers
+							{quaternaries}
+							{rivers}
+							{dark}
+							{canEdit}
+							onriveradded={riverAdded}
+							onshowfeature={(id) => void selectFromList(id)}
+							relief={terrainUrl ? { on: relief, failed: reliefFailed } : null}
+						/>
 					</div>
 
 					<!-- The map's consistency checks (#326 A4): warnings only; the count here, the warnings in a sheet. -->
@@ -970,6 +1001,13 @@
 			.list-box :global(.list-scroll) {
 				flex: 1;
 				min-height: 0;
+				overflow-y: auto;
+			}
+			/* The layers (a river network's reaches can run long) scroll in their own box and give way before the list does. */
+			.layers-box {
+				flex: 0 1 auto;
+				min-height: 2.75rem;
+				max-height: 35%;
 				overflow-y: auto;
 			}
 		}

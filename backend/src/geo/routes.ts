@@ -158,7 +158,7 @@ export const QuaternaryQuery = z
 	})
 	.strict();
 
-interface FeatureRow {
+export interface FeatureRow {
 	id: string;
 	kind: MapFeatureKind;
 	name: string;

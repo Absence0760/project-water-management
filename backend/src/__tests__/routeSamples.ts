@@ -133,6 +133,9 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/nodes/:nodeId/area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	'GET /projects/:id/map/quaternary': () => ({ query: { lon: '21.35', lat: '-33.65' } }),
 	'GET /projects/:id/map/quaternaries': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	// The river network (issue #345, geo/rivers.ts): a bbox round the synthetic network, and one of its reaches.
+	'GET /projects/:id/map/rivers': () => ({ query: { bbox: '21.2,-33.8,21.5,-33.5' } }),
+	'POST /projects/:id/map/rivers/add': () => ({ body: { dataset: 'synthetic', reachId: 90000005 } }),
 	'POST /projects/:id/nodes/:nodeId/dam-capacity-from-register': () => ({ body: { registerNo: 'Z100/07' } }),
 	'POST /projects/:id/nodes/:nodeId/dam-area-from-map': (c) => ({ body: { featureId: c.ids.fid } }),
 	// Delineation (175): the ladder turns DEM_URL on with the committed synthetic DEM, and this is its valley's outlet.

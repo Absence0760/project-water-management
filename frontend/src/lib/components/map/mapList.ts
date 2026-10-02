@@ -117,9 +117,10 @@ export interface KeyItem {
  * The map's key, grouped as the Network's is (#326 E7): Areas, Lines,
  * Points. Colours come from `overlayColours(dark)` so the key can't drift
  * from the map; the point colours follow CatchmentMap's markers (gauges and dams
- * are water, told apart by shape; other in the other colour).
+ * are water, told apart by shape; other in the other colour). With the River
+ * network layer on, its dashed line joins the Lines.
  */
-export function keyGroups(c: { boundary: string; parcel: string; water: string; other: string }): { label: string; items: KeyItem[] }[] {
+export function keyGroups(c: { boundary: string; parcel: string; water: string; other: string }, layers: { riverNetwork?: string | null } = {}): { label: string; items: KeyItem[] }[] {
 	return [
 		{
 			label: 'Areas',
@@ -130,7 +131,14 @@ export function keyGroups(c: { boundary: string; parcel: string; water: string; 
 				{ label: 'other', swatch: 'dotted', colour: c.other }
 			]
 		},
-		{ label: 'Lines', items: [{ label: 'river', swatch: 'line', colour: c.water }] },
+		{
+			label: 'Lines',
+			items: [
+				{ label: 'river', swatch: 'line', colour: c.water },
+				// The River network layer (#345), while it is on: dashed, in its own colour (mapStyle.ts riverNetworkColour).
+				...(layers.riverNetwork ? [{ label: 'river network', swatch: 'dashed' as const, colour: layers.riverNetwork }] : [])
+			]
+		},
 		{
 			label: 'Points',
 			items: [

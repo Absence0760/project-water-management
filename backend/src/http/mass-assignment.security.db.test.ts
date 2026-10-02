@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
+import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
 import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
@@ -302,6 +303,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': async () => {
 		await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
 		return SAMPLE['POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover']!(ctx);
+	},
+	// A reach of the synthetic river network (issue #345, geo/rivers.ts), loaded first so the add has one to copy.
+	'POST /projects/:id/map/rivers/add': async () => {
+		await loadSyntheticRivers(process.env.TEST_MIGRATION_DATABASE_URL!);
+		return SAMPLE['POST /projects/:id/map/rivers/add']!(ctx);
 	},
 	'POST /projects/:id/auto-calibrations': async () => {
 		await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);

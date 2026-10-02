@@ -161,6 +161,13 @@ Tracked in issue #103.
 
 ### Other open items
 
+- [ ] **HydroSHEDS attribution and end-user terms** (the River network
+  layer, issue #345; [maps.md § Sources](./maps.md#sources)). HydroRIVERS'
+  licence allows commercial use, but before a deployment serves it the
+  app's legal notice (or documentation) must carry the agreement's Exhibit B
+  statement, and the terms of service the end-user protections it asks for
+  (no stand-alone redistribution of the data, no reverse engineering).
+  Tracked in followups.md § Catchment map.
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):
