@@ -5,7 +5,7 @@
 // the conflict guard that keeps editors out of applying parties. Every "can't"
 // has its positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;

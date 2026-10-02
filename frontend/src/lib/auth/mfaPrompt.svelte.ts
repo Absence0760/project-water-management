@@ -149,10 +149,11 @@ export async function loadMfaPrompt(user: string, read: () => Promise<Seen>, aga
 			// Keep what was known.
 		}
 	})();
-	reading = { user, at };
+	const mine = { user, at };
+	reading = mine;
 	try {
 		await at;
 	} finally {
-		if (reading?.at === at) reading = null;
+		if (reading === mine) reading = null;
 	}
 }

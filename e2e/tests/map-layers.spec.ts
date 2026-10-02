@@ -200,7 +200,7 @@ test('Download GeoJSON hands over every feature with its name, kind, node and ar
 	const byName = new Map(doc.features.map((f: { properties: { name: string } }) => [f.properties.name, f]));
 	expect(byName.get('Upper farm')).toMatchObject({ type: 'Feature', properties: { kind: 'farm_parcel', node: 'Upper farm', areaKm2: expect.any(Number) }, geometry: { type: 'Polygon' } });
 	expect(byName.get('Synthetic catchment')).toMatchObject({ properties: { kind: 'catchment_boundary', node: null } });
-	await expect(page.getByTestId('map-notice')).toHaveText(new RegExp(`^Downloaded 3 features as ${download.suggestedFilename().replace(/\./g, '\\.')}\\.`));
+	await expect(page.getByTestId('map-notice')).toHaveText(new RegExp(`^Downloaded 3 features as ${download.suggestedFilename().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`));
 });
 
 test('Measure from the keyboard: points at the crosshair, the distance in words, then the closed shape’s area; Escape ends it', async ({ page, owner }) => {
