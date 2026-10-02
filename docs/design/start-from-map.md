@@ -76,7 +76,10 @@ ticked; the proposal row keeps the plan and the ticks (the decision); the
 model change is one revision whose reason names the method and dataset; the
 parcels carry "Sub-catchment delineated from … (start-2)". (`start-1` was
 the first build; `start-2` added gauges as nodes and their counted whole
-catchment, the partition of land-owning units unchanged.)
+catchment, the partition of land-owning units unchanged; `start-3`, issue
+#374, places a point with a river reach nearby on the channel matching the
+reach's upstream area and names a much larger channel beside a snapped one,
+the same rules as Delineate's, [delineation.md § Method](./delineation.md#method).)
 
 ## Sub-catchments: the method
 
