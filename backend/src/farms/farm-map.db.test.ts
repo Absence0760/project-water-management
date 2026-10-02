@@ -105,6 +105,21 @@ describe('GET /projects/:id/farm/:nodeId/map', () => {
 		}
 	});
 
+	it('leaves out the name a reach got for want of one ("Reach <id>"), keeping a reach’s own name and its credit', async () => {
+		await asOwner(`UPDATE map_feature SET name = 'Reach 1050000001', properties = '{"ref":"river-network:HydroRIVERS-v10:1050000001"}' WHERE id = $1`, [ids['Sand river']]);
+		try {
+			const unnamed = (await farmer.call('GET', mapOf(home.id))).body.features as (Feature & { credit?: string })[];
+			const river = unnamed.find((f) => f.id === ids['Sand river'])!;
+			expect([river.name, river.credit]).toEqual(['', 'hydrorivers']);
+			// A river someone named "Reach 7" by hand (no river-network ref) keeps its name.
+			await asOwner(`UPDATE map_feature SET name = 'Reach 7', properties = '{}' WHERE id = $1`, [ids['Sand river']]);
+			const named = (await farmer.call('GET', mapOf(home.id))).body.features as Feature[];
+			expect(named.find((f) => f.id === ids['Sand river'])!.name).toBe('Reach 7');
+		} finally {
+			await asOwner(`UPDATE map_feature SET name = 'Sand river', properties = '{}' WHERE id = $1`, [ids['Sand river']]);
+		}
+	});
+
 	it('positive control: the neighbour gets their own parcel and dam', async () => {
 		const r = await neighbour.call('GET', mapOf(theirs.id));
 		expect(r.status).toBe(200);

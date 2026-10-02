@@ -62,7 +62,7 @@ describe('reachLabel and reachFacts', () => {
 	it('names a reach by its name, else its id, and says only the facts the source gives', () => {
 		expect(reachLabel({ name: '', reachId: 90000002 })).toBe('Reach 90000002');
 		expect(reachLabel({ name: 'Sandspruit', reachId: 7 })).toBe('Sandspruit');
-		expect(reachFacts({ strahler: 3, upstreamKm2: 655, lengthKm: 8.94, dischargeM3s: 1.84 })).toEqual(['Strahler order 3', '655 km² upstream', '8.9 km long', 'mean flow 1.84 m³/s']);
+		expect(reachFacts({ strahler: 3, upstreamKm2: 655, lengthKm: 8.94, dischargeM3s: 1.84 })).toEqual(['Strahler order 3', '655 km² upstream', '8.9 km long', 'modelled mean flow 1.84 m³/s']);
 		expect(reachFacts({ strahler: null, upstreamKm2: 54.9, lengthKm: null, dischargeM3s: null })).toEqual(['54.9 km² upstream']);
 	});
 });

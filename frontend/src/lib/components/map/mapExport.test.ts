@@ -1,8 +1,9 @@
 // Download GeoJSON (mapExport.ts, issue #326 A7): every feature as an RFC 7946
-// Feature with its name, kind, node and area, nothing else, and a file name
+// Feature with its name, kind, node and area (and a licensed source's credit), nothing else, and a file name
 // from the project's name and the day.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
+import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 import { exportFileName, featuresGeoJson, geoJsonText } from './mapExport';
 
 const base = { nodeId: null, nodeName: null, properties: { description: 'kept out' }, center: [0, 0] as [number, number], sourceId: 'src-1', createdBy: 'user-1', createdAt: '2026-10-01', updatedAt: '2026-10-01' };
@@ -33,6 +34,18 @@ describe('featuresGeoJson', () => {
 			{ name: '', kind: 'river', node: null, areaKm2: null, areaHa: null }
 		]);
 		expect(JSON.stringify(featuresGeoJson(fs))).not.toMatch(/src-1|user-1|kept out|"id"/);
+	});
+
+	it('carries a licensed source’s credit with the data drawn from it, and on no other feature', () => {
+		const base = fs[3]!;
+		const hydro = { ...base, properties: { ref: 'river-network:HydroRIVERS-v10:1050000001' } };
+		const traced = { ...base, kind: 'dam' as const, properties: { description: 'Traced from JRC occurrence ≥ 50 %. Check it against the map. Source: EC JRC/Google.' } };
+		const own = { ...base, properties: { description: 'Drawn by hand', ref: 'river-network:synthetic:9' } };
+		const props = featuresGeoJson([hydro, traced, own]).features.map((f) => f.properties);
+		expect(props.map((p) => p.credit)).toEqual([HYDRORIVERS_MAP_ATTRIBUTION, 'Source: EC JRC/Google', undefined]);
+		expect(props[2]).not.toHaveProperty('credit');
+		// The credit is all of the source that leaves: never the ref or the description itself.
+		expect(JSON.stringify(props)).not.toMatch(/river-network|Traced from|Drawn by hand/);
 	});
 
 	it('writes compact JSON that parses back to the same collection', () => {

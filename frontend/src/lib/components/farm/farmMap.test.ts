@@ -64,6 +64,15 @@ describe('farmMapCard', () => {
 		expect(vm.legend.map((l) => l.kind)).toEqual(['dam']);
 		expect(sp(vm.place)).toBe('Where: about 26.080° S, 28.420° E.');
 	});
+
+	it('names a river once however many reaches draw it, and a river of unnamed reaches as "A river"', () => {
+		const reach = (id: string, name: string): FarmMapFeature => ({ ...FEATURES[3]!, id, name });
+		const many = farmMapCard([FEATURES[0]!, reach('r1', 'Sandspruit'), reach('r2', 'Sandspruit'), reach('r3', '')], vaalbankFixture().farm);
+		expect(many.lines.map(sp)).toContain('Rivers: Sandspruit');
+		// The server leaves out "Reach 1050000001" names (farms/view.ts), so 20 such reaches read as one river.
+		const unnamed = farmMapCard([FEATURES[0]!, ...Array.from({ length: 20 }, (_, k) => reach(`u${k}`, ''))], vaalbankFixture().farm);
+		expect(unnamed.lines).toContain('A river');
+	});
 });
 
 describe('showsMap', () => {
