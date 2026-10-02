@@ -226,7 +226,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-object',
 		term: 'Demand object',
-		short: 'A demand on a hydrological unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from its dam.',
+		short: 'A demand on a hydrological unit that isn’t a crop (a town, households, livestock, water piped out), from its dam or its own river pump.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['demandObject.category', 'demandObject.priority', 'demandObject.returnPct', 'summary.demandObjects']
@@ -234,7 +234,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-schedule',
 		term: 'Demand schedule',
-		short: 'Date windows that scale a demand object’s daily demand (weekends, a season, a shutdown, Easter); a factor of 0 switches it off.',
+		short: 'Windows that scale a demand object’s daily demand on chosen weekdays or dates (weekends off, a season, Easter); 0 switches it off.',
 		category: 'network',
 		fields: ['demandObject.schedule']
 	},

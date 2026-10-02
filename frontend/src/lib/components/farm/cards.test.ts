@@ -231,6 +231,10 @@ describe('Water you received this season', () => {
 		expect(sp(shortLine({ ...f, season: { ...f.season, shortMonths: ['2023-10', '2023-11', '2023-12'], shortDaysAtStopLevel: 4 } }))).toBe(
 			'Short on 16 days in Oct, Nov and Dec, 4 of them when your dam was down to its stop level.'
 		);
+		// A dam that serves none of the unit's demands (each on its own river abstraction, engine 1.65.0): the river's days.
+		expect(sp(shortLine({ ...f, season: { ...f.season, shortDaysAtStopLevel: 0, onlyRiver: true } }))).toBe(
+			'Short on 16 days in Nov and Dec, all when the river was too low to take from.'
+		);
 	});
 });
 
@@ -245,7 +249,7 @@ describe('Your dam', () => {
 		expect(sp(d.trend.text)).toBe('Up 9 points in 30 days (was 15 %)');
 		expect(d.trend.dir).toBe('up');
 		expect(txt(d.daysLeft)).toBe(
-			'At your use over the last 14 days (about 5.1 ML a day), the water above the stop level lasts about 6 days if nothing flows in. A rough guide.'
+			'At the use your dam carries over the last 14 days (about 5.1 ML a day), the water above the stop level lasts about 6 days if nothing flows in. A rough guide.'
 		);
 		expect(d.noStop).toBeNull();
 		expect(sp(damCard(vaalbankFixture().farm, 'm3')!.volumes)).toBe('83 640 m³ of 350 000 m³');

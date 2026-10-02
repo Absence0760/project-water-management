@@ -75,6 +75,8 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	await expect(dam).toContainText('All of its own runoff reaches the dam');
 	await expect(mid).toContainText('A new gauge');
 	await expect(review.getByTestId('divide-warnings')).toContainText('No point stands for Hillside: it keeps its values.');
+	// The typed areas (12 + 300 + 20 km²) are within the catchment: nothing counts twice yet (round 4).
+	await expect(review.getByTestId('divide-overlap')).toHaveCount(0);
 	for (const box of await review.getByRole('checkbox').all()) await expect(box).not.toBeChecked();
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
@@ -112,9 +114,16 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	await pump.getByTestId('divide-tick-drains').check();
 	await mid.getByTestId('divide-tick-drains').check();
 	await review.getByTestId('divide-rest-to').selectOption(v.hill.id);
+	// Hillside takes the rest while the dam keeps its typed 300 km², more than its 276.81 km² piece: the units would
+	// outgrow the catchment, said at the top and beside the choice, naming the dam and not Hillside.
+	await expect(review.getByTestId('divide-overlap')).toContainText('After Apply the units would add up to');
+	await expect(review.getByTestId('divide-overlap')).not.toContainText('Hillside');
+	await expect(review.getByTestId('divide-overlap-rest')).toContainText('Valley dam keeps its typed 300.00 km²: tick its area to take its piece.');
 	await sheet(page).getByTestId('divide-apply').click();
 	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
 	await expect(confirm).toContainText('The model takes 2 areas (each saved as its unit’s parcel), 3 drains-into and 0 runoffs to the dam, and 1 new gauge.');
+	// The confirmation repeats the overlap, so land counted twice is never applied unseen.
+	await expect(confirm).toContainText('more than the');
 	await confirm.getByRole('button', { name: 'Apply' }).click();
 	await expect(page.getByTestId('map-notice')).toContainText('Divided the model from the map.');
 	await expect(page.getByTestId('divide-sheet')).toHaveAttribute('data-step', 'points');

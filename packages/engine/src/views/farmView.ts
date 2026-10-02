@@ -27,8 +27,19 @@ export interface SeasonTotals extends WindowTotals {
 	shortDays: number;
 	/** The months those days fall in, 'YYYY-MM', ascending. */
 	shortMonths: string[];
-	/** Of shortDays, how many had the dam at or below its stop level (all of them for a dam farm, by the engine's rule). */
+	/**
+	 * Of shortDays, how many had the dam at or below its stop level (all of
+	 * them for a dam farm whose demands all draw on the dam, by the engine's
+	 * rule). 0 on a unit whose demands all draw on the river (onlyRiver).
+	 */
 	shortDaysAtStopLevel: number;
+	/**
+	 * Every demand of the unit draws on the river through its own abstraction
+	 * (engine ≥ 1.65.0, docs/model.md §2.7j), so its dam serves none of them
+	 * and every short day is the river's (or its pump's), as on a unit with no
+	 * dam. Absent = false, as on every view published before 2026-10-02.
+	 */
+	onlyRiver?: boolean;
 }
 
 export interface DamState {
@@ -47,7 +58,13 @@ export interface DamState {
 	storage30dAgoM3?: number;
 	/** Last day with spill > 0 within the run up to dataUntil; null if none. */
 	lastSpill: string | null;
-	/** Mean supplied over the 14 days to dataUntil (m³/day). */
+	/**
+	 * Mean the dam would have to give over the 14 days to dataUntil (m³/day)
+	 * with nothing flowing in: supplied less what the boreholes and the river
+	 * abstractions beside the dam (engine ≥ 1.65.0) gave (farmProjection.ts
+	 * damDraw). A view published before 2026-10-02 holds the mean of all of
+	 * supplied.
+	 */
 	use14M3Day: number;
 	/** usableM3 ÷ use14M3Day; null when either is null or use is 0. */
 	usableDays: number | null;

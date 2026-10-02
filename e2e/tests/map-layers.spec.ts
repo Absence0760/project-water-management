@@ -95,6 +95,8 @@ test('the river network: its reaches listed biggest first, one picked and added 
 	await page.getByTestId('map-reach-list').getByRole('button', { name: 'Reach 90000003 · order 2 · 168 km²' }).click();
 	const picked = page.getByTestId('map-reach-picked');
 	await expect(picked).toContainText('Reach 90000003: Strahler order 2, 168 km² upstream');
+	// HydroRIVERS' discharge is a model's long-term mean, not a gauged one (round 4).
+	await expect(picked).toContainText('modelled mean flow');
 	await expect(status).toHaveText('10 reaches shown. Picked Reach 90000003.');
 	await expect(picked).toContainText('Source: SYNTHETIC test data');
 	await picked.getByRole('button', { name: 'Add to the map as a river' }).click();

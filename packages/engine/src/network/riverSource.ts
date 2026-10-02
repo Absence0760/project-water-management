@@ -55,7 +55,7 @@ export const RIVER_TAKE_SERIES = {
 	pool: { prefix: 'river_pool@', label: (name: string) => `River abstraction "${name}": pool storage (end of the day)`, unit: 'm³' },
 	poolEvaporation: { prefix: 'river_pool_evaporation@', label: (name: string) => `River abstraction "${name}": evaporation from the pool`, unit: 'm³/day' },
 	/** Engine ≥ 1.66.0, only with a pump capacity: the demand its pump left unmet although the river (or its pool) had it. */
-	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river had it)`, unit: 'm³/day' }
+	pumpLimited: { prefix: 'river_pump_limited@', label: (name: string) => `River abstraction "${name}": demand the pump capacity left unmet (the river or its pool had it)`, unit: 'm³/day' }
 } as const;
 
 export const riverTakeKey = (key: string): string => `${RIVER_TAKE_SERIES.take.prefix}${key}`;

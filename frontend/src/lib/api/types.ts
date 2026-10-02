@@ -88,6 +88,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The version of the terms the account accepted (app_user.terms_version); null = none. The re-acceptance step lists the changes since. */
+	termsVersion?: string | null;
 	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
 	renderSession?: boolean;
 	/**
@@ -2923,7 +2925,13 @@ export interface EvaporationProposals {
 	/** Null without a dataset or a boundary. */
 	proposal: EvaporationSummary | null;
 	/** The saved settings: the A-pan row, the PE kind and, under 'monthly', its row. */
-	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null };
+	/**
+	 * What the settings hold now, and the project's daily A-pan record's days
+	 * (series evap_apan_mm, first day to last value), which replaces the monthly
+	 * A-pan row on every day it covers; null without one. Absent from an
+	 * older server.
+	 */
+	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null; dailyApan?: { from: string; to: string } | null };
 	accepted: EvaporationAccepted[];
 }
 

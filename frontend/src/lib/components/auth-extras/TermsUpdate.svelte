@@ -17,14 +17,15 @@
 	import AuthCard from '$lib/components/layout/AuthCard.svelte';
 	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
 	import { errorText } from '$lib/i18n/apiError';
-	import { msg, t } from '$lib/i18n/locale.svelte';
+	import { t } from '$lib/i18n/locale.svelte';
+	import { changesSince, TERMS_CHANGES } from './termsChanges';
 
-	// What changed in this version. Rewrite it whenever LEGAL_VERSION changes.
-	// Since 2026-10-02: the Terms §9 clause on map data licensed to us (HydroRIVERS' end-user terms, docs/legal-status.md,
-	// 2026-10-02).
-	const CHANGES = [
-		msg('Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.')
-	];
+	// What changed since the version the account accepted (termsChanges.ts TERMS_CHANGES).
+	// Never an empty list under "What changed": an accepted version newer than the list's (a stale build) shows the newest.
+	const shown = $derived.by(() => {
+		const since = changesSince(TERMS_CHANGES, session.user?.termsVersion ?? null);
+		return since.length ? since : (TERMS_CHANGES[0]?.items ?? []);
+	});
 
 	let busy = $state(false);
 	let signingOut = $state(false);
@@ -68,7 +69,7 @@
 	<p>{t('Read what changed, then accept the new Terms of use and Privacy notice to carry on.')}</p>
 	<h2 class="changed">{t('What changed')}</h2>
 	<ul class="changes">
-		{#each CHANGES as change (change)}<li>{t(change)}</li>{/each}
+		{#each shown as change (change)}<li>{t(change)}</li>{/each}
 	</ul>
 	<p class="links">
 		<a href="{base}/terms">{t('Terms of use')}</a>

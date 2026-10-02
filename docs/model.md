@@ -2491,6 +2491,16 @@ Sp = MIN(seepage × store[t−1],  store[t−1] + Pd + J − E)
 start of the day = store[t−1] + Pd − E − Sp       (G, P and Q follow from it; J, M, O, K add to it)
 ```
 
+**No A-pan, no open-water evaporation (engine ≥ 1.67.0 warns).** With the
+monthly A-pan 0 in every month and no daily A-pan series covering a day
+(a new project's default; an ET₀ row from the map feeds GR4J's PE only,
+[maps.md § Evaporation from the map](./maps.md)), E is 0 for every dam and
+river pool (§2.7j). The run then warns "A-pan evaporation is 0 on every day,
+so the dams and river pools lose nothing to evaporation …" whenever it has a
+dam or a pool on a river-sourced demand; before 1.67.0 only the crops'
+"irrigation demand is 0" said so, and a unit with a dam and no crops ran
+with no word (persona-hydrologist, round 4).
+
 A transfer into the dam (§2.6) counts Pd, E and Sp in the destination's
 room (engine ≥ 0.19.0), E and Sp before the MINs above: when the room
 binds, the transfer brings enough that neither MIN bites.

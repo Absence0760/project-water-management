@@ -113,7 +113,8 @@ export interface FarmMapVm {
 }
 
 const named = (features: readonly FarmMapFeature[], kind: FarmMapFeature['kind']) => features.filter((f) => f.kind === kind);
-const names = (fs: readonly FarmMapFeature[]) => fs.map((f) => f.name).filter((n) => n.trim() !== '');
+// Each name once: a river drawn as several reaches, or several pieces of one parcel, share it. A blank name (a reach the river network named none, farms/view.ts) is left out.
+const names = (fs: readonly FarmMapFeature[]) => [...new Set(fs.map((f) => f.name.trim()).filter((n) => n !== ''))];
 
 /** Everything the map card says (FarmMapCard.svelte). `features` is a non-empty answer (showsMap). */
 export function farmMapCard(features: readonly FarmMapFeature[], farm: Pick<FarmProjection, 'river'>): FarmMapVm {

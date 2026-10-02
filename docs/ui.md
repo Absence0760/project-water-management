@@ -312,8 +312,11 @@ the title and between the fields are tighter (0.5rem).
 signed-in account whose `termsCurrent` is false (it accepted an older
 version, or none) sees, on any app page, a full-page notice in the sign-in
 pages' frame instead (`auth-extras/TermsUpdate.svelte`, loaded by the root
-layout): **Our terms have changed**, what changed (a short list rewritten
-with each version), links to both pages, the same main points, **Accept the
+layout): **Our terms have changed**, what changed (every version's lines
+after the one the account accepted, `termsVersion` on `/auth/me`, all of
+them when it accepted none; kept version by version in
+`auth-extras/termsChanges.ts` `TERMS_CHANGES`, whose first entry a test
+ties to `LEGAL_VERSION`), links to both pages, the same main points, **Accept the
 new terms** (`POST /auth/me/accept-terms`) and **Sign out**. The URL stays
 the page asked for, which renders once accepted. The public pages (the legal
 pages, emailed links, share links) aren't held behind it. Translated.
@@ -2387,7 +2390,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
   covers** picker beside **+ Add window** adds one, off (factor 0), with a
-  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  starting point per span (Days of the week: every week on the ticked days, starting as weekends off, Sat and Sun ticked; Dates
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
@@ -2644,7 +2647,7 @@ map" card) stays the schematic; this is the geography.
   the reason by the names, while a name is empty or used twice),
   which asks first ("The empty model gets 3 nodes, with 2 areas … It is
   saved now as one change in History."). **Data and the first run**: links
-  to rain from the boundary, observed flow, the dams' capacities, cultivated
+  to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
   says the model isn't started from the map and points to Divide the model.
   With the sheet closed, a piece (or its number) under the pointer shows
@@ -2666,7 +2669,10 @@ map" card) stays the schematic; this is the geography.
   points stand for …" refusing a node twice, **Place a point**, the outlet,
   the count ("3 points in the division."), **Propose the division**; **the
   proposal**: the warnings (dropped points, "No point stands for …: it keeps
-  its values"), **Tick every value**, the problem the server would refuse
+  its values", and, as the ticks and the rest's choice change, "After Apply
+  the units would add up to …, more than the … above the outlet, so some
+  land would count twice …" naming the units that keep a typed area,
+  `divideOverlap`, past 1 %), **Tick every value**, the problem the server would refuse
   (`role="alert"`, Apply disabled while it stands), one card a point with
   its number badge, the node's name (or "A new gauge" with **Add it to the
   model as a gauge node** and its name), and a tick for each value with the
