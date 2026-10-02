@@ -2387,7 +2387,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
   covers** picker beside **+ Add window** adds one, off (factor 0), with a
-  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  starting point per span (Days of the week: every week on the ticked days, starting as weekends off, Sat and Sun ticked; Dates
   each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
   dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
   a label (**Window n**), **Days** (the span; changing it resets the bounds),
