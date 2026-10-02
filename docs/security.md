@@ -2600,7 +2600,13 @@ placed points. The server never trusts the browser with geometry:
   Apply writes only into an empty model, re-checks the ticks against the
   stored plan (a value can't be ticked that wasn't proposed) and runs the
   model's own validation before saving; the plan is immutable and the
-  decision final (178 `start_proposal_final`).
+  decision final (178 `start_proposal_final`). **Dividing** a model that has
+  nodes (182) is the same surface: feature and node ids of the project's own
+  map and model only (another project's are "not on this map" / "not in the
+  model", `cross-project-refs.security.db.test.ts`), the shared cap, and an
+  apply that takes only ticked values and refuses one whose current value
+  changed since the proposal, so it never overwrites typed data unseen; the
+  mode is as final as the plan (182).
 
 ## Personal information (POPIA)
 

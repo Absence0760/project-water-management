@@ -1608,7 +1608,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
-  `method_version` (`start-1`), `decision` (jsonb, set exactly when
+  `method_version` (`start-2`), `mode` (`start` | `divide`, 182: a
+  division of a model that has nodes, always `from_dem`; never changes),
+  `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
   `decided_at` (set exactly when applied or discarded). The plan never
@@ -1616,8 +1618,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   read, editors insert, update and delete (the route prunes superseded and
   discarded rows past the newest 50 a project). What apply makes is
   ordinary model data: nodes, `farm_parcel` features linked to them, and
-  `node.area_source = 'map'` for a ticked area. No node column, so farmers
-  never read it.
+  `node.area_source = 'map'` for a ticked area. A division's plan
+  (`divide.ts` `DividePlan`) also keeps each node's values when proposed
+  (`current`), which apply checks before replacing one. No node column, so
+  farmers never read it.
 - **`river_reference`** (`171_river_network.sql`, issue #345,
   [maps.md § River network](./maps.md#river-network)): the river network
   the Map tab's River network layer draws and proposes rivers from. Primary

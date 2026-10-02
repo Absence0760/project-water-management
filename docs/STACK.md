@@ -36,8 +36,9 @@ sides share.
   `DEM_URL`: empty (the default) is off; the committed synthetic DEM
   (`backend/fixtures/dem/`) or the Relief's DEM after `pnpm dev:tiles:terrain`
   ([maps.md § Delineation](./maps.md#delineation)); the same routing divides
-  a catchment into units at the map's dams and abstraction points to start
-  an empty model (`start.ts`, `subcatchments.ts`,
+  a catchment into units at the map's dams, abstraction points and gauges to
+  start an empty model, or to divide one that has nodes (`start.ts`,
+  `divide.ts`, `subcatchments.ts`,
   [maps.md § Start from the map](./maps.md#start-from-the-map)).
   Plain SQL migrations live in `backend/migrations/`, run by
   `backend/scripts/migrate.ts`. vitest has four projects: `unit` (no DB),

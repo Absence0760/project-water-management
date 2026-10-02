@@ -3698,28 +3698,25 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       (migration 178, `delineation/subcatchments.ts`,
       design/start-from-map.md). One routed window, each unit's incremental
       area with its holes, the order from the D8 tree.
-- [ ] **Sub-catchments for a model that already has nodes** (#326 C3,
-      design/start-from-map.md § Not built). Start from the map only fills
-      an empty model, so nothing typed is ever overwritten; re-dividing an
-      existing network today is one unit at a time (Delineate → Accept as an
-      area → Use this area), which gives a unit's *whole* upstream area, not
-      its own piece. Durable fix: a per-unit "propose its own area" on the
-      card, from the same partition (the units' points from their linked dam
-      or point features), each value a Use as now. Trigger: a hydrologist
-      re-dividing an imported or typed model.
-- [ ] **Each proposed unit's outline told apart on the map** (#326 C3, the
-      ui-designer review of the Start sheet): the open proposal is drawn as
-      one dashed shape, so with many units a card can't be matched to its
-      piece. Durable fix: draw each piece as its own feature, labelled with
-      its name once the self-hosted glyphs are configured, and highlight a
-      card's piece while the card has the focus or the pointer. Trigger: the
-      first catchment started from the map with more than a handful of units.
-- [ ] **Intermediate gauges in a model started from the map** (#326 C3,
-      design/start-from-map.md § Not built): a gauge on the map other than
-      the outlet is "not in the model" in the flow; it is added on the
-      Network afterwards. Durable fix: a gauge role in the points step,
-      partitioning like a water user (no land of its own). Trigger: the
-      first catchment started from the map with a gauge inside it.
+- [x] **Sub-catchments for a model that already has nodes** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups, migration 182):
+      **Divide the model** on the Map proposes each linked unit's own area,
+      drains-into and runoff to its dam from the same partition, beside its
+      current values, each taken only when ticked; a value changed since
+      the proposal is refused, never overwritten
+      (design/start-from-map.md § Dividing a model that has nodes).
+- [x] **Each proposed unit's outline told apart on the map** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups): each piece drawn on
+      its own, tinted, with its number as a badge (no glyphs needed); the
+      sheet's cards carry the same number and are the key; a card with the
+      focus or the pointer lights its piece, and a piece clicked on the map
+      opens its card (design/start-from-map.md § Each unit's piece on the
+      map).
+- [x] **Intermediate gauges in a model started from the map** (#326 C3):
+      done 2026-10-02 (PR feat/326-start-followups): a gauge other than the
+      outlet is a gauge node in the order by default, partitioning like a
+      water user; a division can add an unlinked gauge as a new gauge node
+      (design/start-from-map.md § Gauges as nodes).
 - [ ] **Delineation of catchments larger than about 100 km across**
       (design/delineation.md § Where it runs): the API refuses rather than
       cut one off, within its 30 s Lambda. Durable path: a `delineate` job

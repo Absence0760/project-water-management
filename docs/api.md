@@ -3051,14 +3051,20 @@ units at the map's dams and abstraction points, each unit's own
 sub-catchment (area and outline), who drains into whom, and the rest of the
 catchment; the editor applies the values they tick. With `DEM_URL` empty the
 proposal has the units only (no areas, everything draining into the outflow
-gauge), and the rest of the catchment is the boundary.
+gauge), and the rest of the catchment is the boundary. A model that has
+nodes is **divided** instead (`182_divide_proposal.sql`,
+`backend/src/delineation/divide.ts`): each point stands for a node, and its
+own area, drains-into and runoff to its dam are proposed beside the node's
+values now, taken only when ticked.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, proposals: StartProposal[] }`: the newest 5, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes | viewer |
-| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' }[] }` (at most 50, each once) | `201 { proposal }`, the project's one open proposal (the previous open one becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point. `400` for no boundary and no outlet, an outlet that isn't a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's); `429` past 30 a project an hour; `503` when the DEM can't be read | editor |
-| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, drainsInto, runoffToDam }[], rest: { include, name, area } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node), and the rest of the catchment if included, in one model revision ("Started from the map: …"). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method) and becomes its area with `area_source = 'map'`; an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam = 1` (dam units only). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, or a model that has nodes | editor |
-| POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+| GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[] }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied | viewer |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge' }[] }` (at most 50, each once) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's); `429` past 30 a project an hour; `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, drainsInto, runoffToDam }[], rest: { include, name, area } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …"). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method) and becomes its area with `area_source = 'map'`; an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam = 1` (dam units only). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, or a model that has nodes | editor |
+| POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }` (a start or a division; audited as `map.start_discarded` or `map.divide_discarded`); `409` for one that isn't open | editor |
+| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, points: { featureId, nodeId: uuid \| null }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's; `429` (shared with starting); `503` | editor |
+| POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, drainsInto, runoffToDam, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId } \| { to: 'new', name } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …"). Only what is ticked changes: a ticked area becomes the node's (`area_source = 'map'`, saved as its `farm_parcel`, "<name>: own sub-catchment"; a parcel an earlier start or division made for it is redrawn in place); a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` sets `pctRunoffToDam = 1` (dam units); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to a farm node that isn't one of the points, or a new unit draining into the outflow. Unlinked points are linked to their nodes. `409` for a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
 
 - `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
   'superseded', plan, fromDem, dataset, datasetFingerprint, method,
@@ -3070,9 +3076,21 @@ gauge), and the rest of the catchment is the boundary.
   `StartUnit = { key (the feature's id), featureName, role, name, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
   for the outflow gauge), drainsIntoProposed }`. `decision` (once applied):
-  the ticks, the node and parcel ids made, the revision id.
+  the ticks, the node and parcel ids made, the revision id. Every proposal
+  carries `mode: 'start' | 'divide'`.
+- `DivideProposal` = the same with `mode: 'divide'` and `plan = { mode,
+  outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn },
+  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry
+  }, untouched: { nodeId, name }[] (farm nodes no point stands for),
+  dropped, warnings, cellSizeM, zoom, windowCells }`; `DivideUnit = { key,
+  featureName, nodeId (null: a new gauge), name, role, point,
+  snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto, current: {
+  areaKm2, areaSource, downstreamNodeId, downstreamName, pctRunoffToDam } \|
+  null }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
+  land); a gauge's `totalAreaM2` is what it measures.
 - Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
-  `map.start_discarded`: ids and counts; never a polygon). A stranger gets
+  `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
+  `map.divide_discarded`: ids and counts; never a polygon). A stranger gets
   `404`.
 
 ## Notes
