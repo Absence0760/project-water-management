@@ -318,8 +318,8 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const what = o ? `${nodeName(o.nodeId)}, demand object “${o.name}”` : 'A demand object';
 			if (op.field === 'schedule') return `${what}: ${SCHEDULE_LABEL} ${o ? `${scheduleText(o.schedule)} → ` : '→ '}${scheduleText(op.value as DemandObject['schedule'])}`;
 			const f = DEMAND_OBJECT_FIELD_SPECS[op.field as DemandObjectFormField];
-			// No source has a meaning, not recorded (engine ≥ 1.56.0): show it as the "was".
-			const was = o ? ((o as unknown as Record<string, unknown>)[op.field] ?? (op.field === 'source' ? null : undefined)) : undefined;
+			// No source has a meaning, not recorded (engine ≥ 1.56.0), and no rank too, rank 1 (engine ≥ 1.64.0): show it as the "was".
+			const was = o ? ((o as unknown as Record<string, unknown>)[op.field] ?? (op.field === 'source' || op.field === 'rank' ? null : undefined)) : undefined;
 			return `${what}: ${f?.label ?? op.field} ${f ? change(f.spec, was, op.value, nodeName) : `→ ${String(op.value)}`}`;
 		}
 		case 'demandObject.remove': {

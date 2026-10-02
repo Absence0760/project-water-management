@@ -21,7 +21,7 @@ import { transferActiveMonths, transferDailyLimit } from '../network/transferRat
 import { isRiverOfftake, offtakeOf, offtakeReturnAt } from '../network/offtake';
 import { cmpStr } from '../order';
 import { divertCapacityToday, handsOffToday, operatingOf, supplyOf, type PlanSupply } from '../network/supply';
-import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
+import { BASIC_NEEDS_SERIES, basicNeedsM3Day, dayFloor, demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, supplyLevels } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { resolveDroughtRestriction, restrictionCutKey, RESTRICTION_SERIES } from '../network/restriction';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
@@ -62,14 +62,17 @@ const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
- * each one's demand and supply series, return share and priority class; null
+ * each one's demand and supply series, return share and supply level; null
  * for a unit without any, an error when a series is missing.
  */
 interface ObjectColumns {
 	demand: number[][];
 	supplied: number[][];
 	returnShare: number[];
+	/** Each object's supply level (engine ≥ 1.64.0, supplyLevels): 0 first, the crops at cropLevel, `levels` in all. */
 	tier: number[];
+	cropLevel: number;
+	levels: number;
 	monthly: Float64Array[];
 	/** Each object's schedule factor per day (engine ≥ 1.17.0), recomputed from the model; null without one. */
 	schedule: (Float64Array | null)[];
@@ -81,7 +84,8 @@ interface ObjectColumns {
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
 	const list = demandObjectsByNode(input.model, []).get(n.id);
 	if (!list) return null;
-	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [], floor: [], category: [] };
+	const order = supplyLevels(list);
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: order.level, cropLevel: order.cropLevel, levels: order.count, monthly: [], schedule: [], floor: [], category: [] };
 	for (const o of list) {
 		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
 		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
@@ -89,7 +93,6 @@ function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: P
 		out.demand.push(d);
 		out.supplied.push(g);
 		out.returnShare.push(objectReturnShare(o));
-		out.tier.push(PRIORITY_TIER[o.priority] ?? 1);
 		out.monthly.push(objectMonthlyM3Day(o, []));
 		out.schedule.push(scheduleFactors(o.schedule, toEpochDay(run.startDate), run.days, [], ''));
 		out.floor.push(basicNeedsM3Day(o));
@@ -1449,10 +1452,12 @@ function offtakeInto(input: ModelInput, nodeId: string, get: SeriesMap): { volum
  * before the unit abstracts), where a restriction (sc < 1) never takes an
  * object with a basic-needs floor below MIN(floor, its unrestricted demand),
  * nor does a full allocation's factor on a restricted day (engine ≥ 1.44.0);
- * each gets between 0 and its demand, together no more than G; classes are
- * served in order (a later class, or the crops after class 0, gets water
- * only once every earlier one is met), and within a class every member
- * (the crops, demand `crop`, in class 1) gets the same share of its demand.
+ * each gets between 0 and its demand, together no more than G; supply
+ * levels (the priority classes, then ranks within a class, engine ≥ 1.64.0)
+ * are served in order (a later level, or the crops after an earlier one,
+ * gets water only once every earlier one is met), and within a level every
+ * member (the crops, demand `crop`, at the 'shared' level) gets the same
+ * share of its demand.
  */
 function checkObjectsDay(
 	objs: ObjectColumns,
@@ -1475,9 +1480,12 @@ function checkObjectsDay(
 	let scale = Math.max(G, crop);
 	for (let k = 0; k < n; k++) scale = Math.max(scale, objs.demand[k]![t]!);
 	const eps = tol(scale);
-	const share = [NaN, NaN, NaN];
-	const want = [0, crop, 0];
-	const gotBy = [0, 0, 0];
+	const L = objs.levels;
+	const cl = objs.cropLevel;
+	const share = new Array<number>(L).fill(NaN);
+	const want = new Array<number>(L).fill(0);
+	const gotBy = new Array<number>(L).fill(0);
+	want[cl] = crop;
 	for (let k = 0; k < n; k++) {
 		// What it asks its unit for: its demand, cut by the drought restriction when the rule is on (engine ≥ 1.54.0).
 		const d = restriction ? checkedObjectDemand(objs.demand[k]![t]!, restriction.cut(objs.category[k]!), objs.floor[k]!) : objs.demand[k]![t]!;
@@ -1500,18 +1508,18 @@ function checkObjectsDay(
 		if (d > eps) {
 			const s = g / d;
 			const c = share[objs.tier[k]!]!;
-			if (c === c && Math.abs(c - s) > 1e-9) return `${where}: demand objects of one priority got different shares of their demand (${c} vs ${s})`;
+			if (c === c && Math.abs(c - s) > 1e-9) return `${where}: demand objects of one priority and rank got different shares of their demand (${c} vs ${s})`;
 			share[objs.tier[k]!] = s;
 		}
 	}
 	if (got > G + eps) return `${where}: the demand objects got ${got}, more than the ${G} the unit was supplied`;
-	// The crops' part is what the objects didn't get; in class 1 it takes the class's share.
+	// The crops' part is what the objects didn't get; at their level it takes the level's share.
 	const cropGot = G - got;
-	gotBy[1]! += cropGot;
-	if (crop > eps && share[1] === share[1] && Math.abs(cropGot / crop - share[1]!) > 1e-9 * Math.max(1, scale / crop)) return `${where}: the crops got ${cropGot} of ${crop}, not the share ${share[1]} the demand objects they share with got`;
-	for (let c = 1; c < 3; c++) {
+	gotBy[cl]! += cropGot;
+	if (crop > eps && share[cl] === share[cl] && Math.abs(cropGot / crop - share[cl]!) > 1e-9 * Math.max(1, scale / crop)) return `${where}: the crops got ${cropGot} of ${crop}, not the share ${share[cl]} the demand objects they share with got`;
+	for (let c = 1; c < L; c++) {
 		if (!(gotBy[c]! > eps)) continue;
-		for (let e = 0; e < c; e++) if (gotBy[e]! < want[e]! - eps) return `${where}: a later priority class got water while class ${e} was short (${gotBy[e]} of ${want[e]})`;
+		for (let e = 0; e < c; e++) if (gotBy[e]! < want[e]! - eps) return `${where}: a later supply level got water while level ${e} was short (${gotBy[e]} of ${want[e]})`;
 	}
 	return null;
 }

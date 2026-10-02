@@ -3,6 +3,7 @@
 // snapshot and re-validates on every edit.
 import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, DEVELOPMENT_DEFAULTS, NEW_FARM_IRRIGATION, OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
+import { renumberSupplyOrder } from '$lib/components/network/demandObjectOrder';
 import { validateModel, type ModelIssue } from './validate';
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -188,6 +189,8 @@ export class ModelEditor {
 			schedule: null,
 			// Where its number comes from (engine ≥ 1.56.0): not recorded until the modeller says, even at a category's norm.
 			source: null,
+			// Its rank within its class (engine ≥ 1.64.0): none, so it shares with the class's rank 1 until the supply order says otherwise.
+			rank: null,
 			note: ''
 		};
 		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.
@@ -197,7 +200,10 @@ export class ModelEditor {
 	}
 
 	removeDemandObject(id: string) {
+		const gone = (this.model.demandObjects ?? []).find((o) => o.id === id);
 		this.model.demandObjects = (this.model.demandObjects ?? []).filter((o) => o.id !== id);
+		// The unit's supply order closes up (engine ≥ 1.64.0): no rank left that nothing shows.
+		if (gone) renumberSupplyOrder(this.model.demandObjects.filter((o) => o.nodeId === gone.nodeId));
 	}
 
 	// --- individual boreholes (WP-3.9) -------------------------------------

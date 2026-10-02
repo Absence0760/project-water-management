@@ -187,14 +187,19 @@ describe('ModelEditor', () => {
 		const unit = ed.addNode();
 		const town = ed.addDemandObject(unit.id, 'municipal');
 		expect(ed.model.demandObjects).toHaveLength(1);
-		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, source: null });
+		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, source: null, rank: null });
 		const homes = ed.addDemandObject(unit.id, 'domestic');
 		expect(homes).toMatchObject({ name: 'Demand 2', sizing: 'perUnit', count: 0, litresPerUnitDay: 230, monthlyM3Day: null });
 		expect(ed.addDemandObject(unit.id, 'external')).toMatchObject({ destination: 'external', returnPct: 0 });
 		// A new object's model is one the API accepts.
 		expect(validateModel(ed.snapshot()).filter((i) => /demand object/i.test(i.message))).toEqual([]);
+		// The supply order closes up when one goes (engine 1.64.0): homes ranked 2 after the town becomes the lone 'first'.
+		homes.priority = 'first';
+		homes.rank = 2;
+		town.rank = 1;
 		ed.removeDemandObject(town.id);
 		expect(ed.model.demandObjects).toHaveLength(2);
+		expect(ed.model.demandObjects!.find((o) => o.id === homes.id)!.rank).toBeNull();
 		ed.removeNode(unit.id);
 		expect(ed.model.demandObjects).toEqual([]);
 	});

@@ -384,6 +384,12 @@ describe('buildOp', () => {
 		expect(describeOp((src as { op: ScenarioOp }).op, after.input)).toBe('Upper farm, demand object “Village”: Source of the number not recorded → Meter records');
 		expect(applyScenario(after.input, [(src as { op: ScenarioOp }).op]).problems).toEqual([]);
 		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'source', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
+		// Its rank within its class (engine 1.64.0): a whole number, or empty for none (1).
+		const rank = buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'rank', value: '2' }), after.input.model, id);
+		expect(rank).toEqual({ ok: true, op: { op: 'demandObject.set', demandObjectId, field: 'rank', value: 2 } });
+		expect(describeOp((rank as { op: ScenarioOp }).op, after.input)).toMatch(/^Upper farm, demand object “Village”: Rank within its priority none \(1\) → 2$/);
+		expect(applyScenario(after.input, [(rank as { op: ScenarioOp }).op]).problems).toEqual([]);
+		expect(buildOp(draft({ kind: 'demandObject.set', demandObjectId, field: 'rank', value: '' }), after.input.model, id)).toMatchObject({ ok: true, op: { value: null } });
 		const remove = buildOp(draft({ kind: 'demandObject.remove', demandObjectId }), after.input.model, id);
 		expect(remove).toEqual({ ok: true, op: { op: 'demandObject.remove', demandObjectId } });
 		expect(describeOp((remove as { op: ScenarioOp }).op, after.input)).toBe('Upper farm: remove the demand object “Village” (Municipal (town), 300 m³/day on average)');
