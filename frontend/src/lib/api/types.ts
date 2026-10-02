@@ -2868,6 +2868,63 @@ export interface CroplandProposals {
 	crops: { cropId: string; name: string; areaM2: number; accepted: CropAreaFromLandCover | null }[];
 }
 
+/** What an evaporation grid's values are: FAO-56 reference ET (proposed as GR4J's PE) or Class-A pan (the A-pan row). */
+export type EvaporationKind = 'et0' | 'apan';
+/** The settings an accepted evaporation row goes into: GR4J's monthly PE (settings.pe) or the A-pan row (settings.apanMm). */
+export type EvaporationTarget = 'pe' | 'apan';
+
+/** A loaded evaporation grid (issue #326 B-evap; docs/maps.md § Evaporation from the map). */
+export interface EvaporationDataset {
+	dataset: string;
+	kind: EvaporationKind;
+	source: string;
+	version: string;
+	/** How the cells were summarised and the boundary averaged, in words (cited in History and evidence packs). */
+	method: string;
+	attribution: string;
+	firstYear: number;
+	lastYear: number;
+	cellDeg: number;
+	originLon: number;
+	originLat: number;
+	loadedAt: string;
+	/** The repo's invented grid: never real values. */
+	synthetic: boolean;
+}
+
+/** The boundary's monthly evaporation, Oct … Sep, mm, or why it couldn't be read. */
+export type EvaporationSummary = { monthlyMm: number[]; annualMm: number; coverage: number; cells: number } | { problem: string };
+
+/** An evaporation row accepted from the map, as it was cited then. */
+export interface EvaporationAccepted {
+	target: EvaporationTarget;
+	monthlyMm: number[];
+	dataset: string;
+	kind: EvaporationKind;
+	source: string;
+	version: string;
+	method: string;
+	coverage: number;
+	acceptedAt: string;
+	/** The saved settings still hold it (not typed over since). */
+	current: boolean;
+}
+
+/** GET /projects/:id/evaporation-proposals: the boundary's evaporation from a grid, beside the saved settings. */
+export interface EvaporationProposals {
+	/** The dataset summarised (a real one before the synthetic grid); null with none loaded. */
+	dataset: EvaporationDataset | null;
+	datasets: { dataset: string; kind: EvaporationKind; version: string; synthetic: boolean }[];
+	boundary: { featureId: string; name: string } | null;
+	/** Where the dataset's values go; null without a dataset. */
+	target: EvaporationTarget | null;
+	/** Null without a dataset or a boundary. */
+	proposal: EvaporationSummary | null;
+	/** The saved settings: the A-pan row, the PE kind and, under 'monthly', its row. */
+	settings: { apanMm: number[]; peKind: 'pan' | 'monthly'; peMm: number[] | null };
+	accepted: EvaporationAccepted[];
+}
+
 /** A registered dam near a unit's dam on the map (issue #326 B-dams; docs/api.md § Catchment map). */
 export interface RegisterDamProposal {
 	registerNo: string;

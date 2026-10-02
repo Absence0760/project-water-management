@@ -433,6 +433,42 @@ override_resource {
   }
 }
 
+# The map's data (map_data.tf, s3_cloudfront.tf's /tiles/*)
+override_resource {
+  target          = aws_s3_bucket.tiles
+  override_during = plan
+  values = {
+    arn                         = "arn:aws:s3:::water-management-tiles-000000000000"
+    bucket                      = "water-management-tiles-000000000000"
+    bucket_regional_domain_name = "water-management-tiles-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.tiles
+  override_during = plan
+  values = {
+    id = "tiles-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_function.tiles_range
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:function/water-management-tiles-range"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reference
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reference-000000000000"
+    bucket = "water-management-reference-000000000000"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan

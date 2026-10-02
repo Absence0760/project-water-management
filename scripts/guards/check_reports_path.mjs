@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The site's /reports/* and /packs/* paths belong to CloudFront, not the SPA.
+// The site's /reports/*, /packs/* and /tiles/* paths belong to CloudFront, not the SPA.
 //
 // In production the distribution sends every /reports/* request to the
 // private reports bucket, and every /packs/* request to the private packs
@@ -11,7 +11,10 @@
 // in `pnpm dev` and e2e and then answer 403 (no signature) or a bucket miss
 // in production, silently. The PDF keys are reports/<project>/<report>.pdf
 // and packs/<project>/<pack>/<sha256>.pdf, which is why the paths aren't
-// renamed.
+// renamed. /tiles/* is the map's public tiles bucket (the basemap, relief and
+// glyphs, infra/map_data.tf), whose keys are tiles/…; locally the map reads
+// MinIO's tiles bucket instead, so a frontend file there would only break in
+// production too.
 //
 // This guard fails when the frontend could own a URL under either:
 //   - a top-level route segment `reports` or `packs` in frontend/src/routes,
@@ -33,13 +36,13 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** The top-level paths CloudFront owns. */
-export const RESERVED = ['reports', 'packs'];
+export const RESERVED = ['reports', 'packs', 'tiles'];
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
 export const WHY =
 	'CloudFront routes /reports/* to the private reports bucket and /packs/* to the private packs bucket, and serves them only to signed URLs the API mints ' +
-	'(infra/s3_cloudfront.tf, the /reports/* and /packs/* behaviours; docs/security.md § Reports). A frontend route or static file there ' +
-	'works locally but is unreachable in production. Put report and pack pages under /projects/:id/ instead.';
+	'(infra/s3_cloudfront.tf, the /reports/* and /packs/* behaviours; docs/security.md § Reports), and /tiles/* to the map tiles bucket (infra/map_data.tf). ' +
+	'A frontend route or static file there works locally but is unreachable in production. Put report and pack pages under /projects/:id/ instead.';
 
 /** A route group segment, `(name)`: adds nothing to the URL. */
 const isGroup = (seg) => /^\([^)]*\)$/.test(seg);

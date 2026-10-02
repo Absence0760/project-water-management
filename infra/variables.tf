@@ -374,6 +374,12 @@ variable "lambda_timeout_seconds" {
   }
 }
 
+variable "delineation_dem" {
+  description = "Catchment delineation in production (docs/design/delineation.md, docs/deployment.md § Map tiles): true sets the API's DEM_URL to s3://<tiles bucket>/tiles/terrain.pmtiles and lets its role read that one key. Turn it on only once terrain.pmtiles is uploaded and the Copernicus liability sentence (Art. 6(c)) is in the app's legal notice. false (the default): no Delineate."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_reserved_concurrency" {
   description = <<-EOT
     Max concurrent API Lambda executions. Bounds worst-case spend during an
@@ -390,6 +396,16 @@ variable "lambda_reserved_concurrency" {
   validation {
     condition     = var.lambda_reserved_concurrency >= 1
     error_message = "Must be at least 1: -1 (unreserved) removes the spend and DB-connection cap. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
+}
+
+variable "migrate_memory_mb" {
+  description = "Migrate Lambda memory. A migration needs little; a reference-dataset load (load-reference.yml) parses a country's river reaches or land-cover cells in memory before writing them, which needs a few GB. Billed only while it runs (one invocation per deploy or load). 3008 MB is the most a new account may allow before AWS raises its quota."
+  type        = number
+  default     = 3008
+  validation {
+    condition     = var.migrate_memory_mb >= 3008 && var.migrate_memory_mb <= 10240
+    error_message = "Between 3008 MB (a reference load's 200 MB file peaks near 1.8 GB, geo/referenceLoad.ts MAX_TEXT_BYTES) and 10240 MB (Lambda's maximum)."
   }
 }
 

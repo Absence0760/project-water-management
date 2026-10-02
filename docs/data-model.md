@@ -1641,6 +1641,33 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   crop. Viewers read, editors write, same-project trigger on `node_id` and
   `crop_id`, covering indexes on `project_id` and `crop_id`. Farmers don't
   read it (the catalogue guard's `FARMERS_NEVER_READ`).
+- **`evaporation_dataset`** and **`evaporation_cell_reference`**
+  (`180_evaporation_reference.sql`, issue #326 B-evap,
+  [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
+  the evaporation grid the Settings proposal reads. A dataset row: `dataset`
+  (primary key, 1–50; `synthetic` for the committed fixture), `kind` (`et0`,
+  FAO-56 reference ET, proposed as GR4J's monthly PE; `apan`, Class-A pan,
+  proposed as the A-pan row; no S-pan), `source`, `version`, `method` (the
+  summarising in words), `attribution`, `first_year` and `last_year` (the
+  years the means average), `cell_deg`, `origin_lon` and `origin_lat` (0 ≤
+  origin < cell: dPET's cells are centred on whole tenths, so their corners
+  sit 0.05° off), `loaded_at`. A cell row: `dataset` (cascades with it),
+  `row_idx`, `col_idx` (the cell with south-west corner `origin_lon + col_idx
+  × cell_deg`, `origin_lat + row_idx × cell_deg`; primary key `(dataset,
+  row_idx, col_idx)`, also a polygon's range lookup) and `monthly_mm` (12
+  mean monthly totals, mm, Oct … Sep, each 0–1000). Only cells with a value
+  are stored. Global, loaded by the operator as the schema owner (`pnpm
+  import:evaporation`), readable by anyone signed in, written by no app role.
+- **`evaporation_accepted`** (`181_evaporation_accepted.sql`): where an
+  evaporation row accepted from the map came from. Primary key
+  `(project_id, target)`, `target` `pe` (GR4J's monthly PE) or `apan` (the
+  A-pan row), matching `kind` (`et0` or `apan`; a check); `monthly_mm` (the
+  12 values written), `dataset`, `kind`, `source`, `version`, `method`
+  (copied from the dataset then), `coverage` (the share of the boundary with
+  values), `accepted_at`. Not keyed to the settings, which a save rewrites
+  whole: it is current while the settings still hold `monthly_mm`, and goes
+  with its project. Viewers read, editors write; no node column, so no
+  same-project trigger and no farmer decision.
 
 ### Import reports (017_project_import.sql)
 

@@ -22,7 +22,7 @@ pnpm setup
 This runs `pnpm install`, then `pnpm dev:db:up` (Postgres 17 on
 **127.0.0.1:5434**, waiting until it is healthy), then `pnpm dev:db:migrate`,
 then the synthetic reference data (`pnpm import:quaternaries`,
-`import:gauge-stations`, `import:dam-register`, `import:land-cover`; see
+`import:gauge-stations`, `import:dam-register`, `import:land-cover`, `import:evaporation`; see
 [Map](#map)), then `pnpm dev:mail:up` (Mailpit, see [Email](#email)), then `pnpm dev:s3:up`
 (MinIO, for report PDFs and evidence packs' reproduction bundles, see
 [Reports](#reports)).
@@ -384,6 +384,7 @@ pnpm import:dam-register    # the synthetic register of dams (pnpm setup runs it
 pnpm import:rivers          # the synthetic river network (pnpm setup runs it): what Map → Layers → River network draws and proposes as rivers
 pnpm dev:tiles:rivers       # or the real one: HydroRIVERS v1.0 (~110 MB download; needs ogr2ogr, sudo dnf install gdal), cut to South Africa and loaded as HydroRIVERS-v10
 pnpm import:land-cover      # the synthetic cropland grid (pnpm setup runs it): what a unit's planted-areas drawer (From land cover) sums its parcels from
+pnpm import:evaporation     # the synthetic evaporation grid (pnpm setup runs it): what Settings → Evaporation from the map averages over the boundary
 pnpm dev:tiles:up           # the basemap in one step, then restart pnpm dev: starts MinIO, uploads the cached tiles and fonts if MinIO
                             # lacks them (first time: downloads the SA extract, about 1 GB at maxzoom 15, needs the pmtiles CLI on PATH),
                             # and sets PUBLIC_TILES_URL and PUBLIC_TILES_GLYPHS_URL in frontend/.env.development.local (PUBLIC_TERRAIN_URL

@@ -10,7 +10,9 @@
 #   - `water-management-migrate` — applies backend/migrations as the schema
 #     owner and creates / re-passwords `water_app`
 #     (backend/src/lambda-migrate.ts). No URL; invoked by the deploy workflow
-#     (and by the operator after a password rotation).
+#     (and by the operator after a password rotation), and by
+#     load-reference.yml to load an allowed reference dataset from the
+#     reference bucket (map_data.tf).
 #
 # Terraform creates both with a stub package; real code is uploaded by
 # .github/workflows/deploy-backend.yml (built by infra/scripts/package-lambdas.sh).
@@ -185,6 +187,11 @@ resource "aws_lambda_function" "backend" {
       # Evidence packs (pack_bundles.tf): issuing a pack stores its
       # reproduction bundle here, through the S3 endpoint (packs.tf).
       PACKS_BUCKET = aws_s3_bucket.packs.bucket
+
+      # Catchment delineation (map_data.tf, docs/design/delineation.md): the
+      # DEM in the tiles bucket, read by ranged GetObject; empty turns
+      # delineation off (the default, until delineation_dem is set).
+      DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
     }
   }
 
@@ -200,6 +207,7 @@ resource "aws_lambda_function" "backend" {
     aws_vpc_endpoint.secretsmanager,
     aws_vpc_endpoint.s3,
     aws_iam_role_policy.api_pack_bundles,
+    aws_iam_role_policy.api_dem,
     # A rotation switches the API only once the key group trusts the new key.
     aws_cloudfront_key_group.report_downloads,
   ]
@@ -210,6 +218,15 @@ resource "aws_lambda_function" "backend" {
       source_code_hash,
     ]
     # The secrets' shape checks are validations on their variables (variables.tf).
+
+    # Delineation keeps a 20 s budget (delineation/delineate.ts TIME_BUDGET_MS)
+    # and peaks near 460 MB at its window cap (docs/design/delineation.md §
+    # Where it runs): a smaller or shorter API Lambda would cut it off
+    # mid-request instead of letting it refuse.
+    precondition {
+      condition     = !var.delineation_dem || (var.lambda_memory_mb >= 1024 && var.lambda_timeout_seconds >= 25)
+      error_message = "delineation_dem needs the API Lambda at lambda_memory_mb >= 1024 (a delineation peaks near 460 MB) and lambda_timeout_seconds >= 25 (it keeps a 20 s budget)."
+    }
   }
 }
 
@@ -301,8 +318,11 @@ resource "aws_lambda_function" "migrate" {
   handler       = "dist/lambda-migrate.handler"
   runtime       = "nodejs24.x"
   architectures = ["arm64"]
-  timeout       = 300 # migrate.ts DEFAULT_TIMEOUTS.statement_timeout (240s) stays under this
-  memory_size   = 512
+  # 900 s (Lambda's maximum) for a reference-dataset load, which parses and
+  # writes a country's reaches or cells in one transaction (geo/referenceLoad.ts);
+  # a migration keeps migrate.ts DEFAULT_TIMEOUTS.statement_timeout (240 s).
+  timeout     = 900
+  memory_size = var.migrate_memory_mb
 
   reserved_concurrent_executions = var.migrate_reserved_concurrency
 
@@ -331,6 +351,12 @@ resource "aws_lambda_function" "migrate" {
       RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["migrate"].arn
       RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["migrate"].version_id
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
+      # Reference-dataset loads read their file here (map_data.tf).
+      REFERENCE_BUCKET = aws_s3_bucket.reference.bucket
+      # V8's heap at 85% of the function's memory, set here rather than left
+      # to the runtime's default, so a load's parse (geo/referenceLoad.ts
+      # MAX_TEXT_BYTES) has the room the caps were measured against.
+      NODE_OPTIONS = "--max-old-space-size=${floor(var.migrate_memory_mb * 0.85)}"
     }
   }
 
@@ -339,7 +365,9 @@ resource "aws_lambda_function" "migrate" {
     aws_iam_role_policy.lambda_logs["migrate"],
     aws_iam_role_policy.lambda_vpc_eni["migrate"],
     aws_iam_role_policy.runtime_secret,
+    aws_iam_role_policy.migrate_reference,
     aws_vpc_endpoint.secretsmanager,
+    aws_vpc_endpoint.s3,
   ]
 
   lifecycle {

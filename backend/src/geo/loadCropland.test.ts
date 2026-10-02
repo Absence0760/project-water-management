@@ -2,11 +2,12 @@
 // and the operator's command (scripts/import-land-cover.ts): GeoTIFFs built
 // here byte by byte (tiled and striped, Deflate and none, predictor 2,
 // no-data), each counted into the cells by hand; the refusals; the JSON
-// form; the arguments; and the committed synthetic fixture.
+// form, written (--out, for a production load) and read back; the
+// arguments; and the committed synthetic fixture.
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { parseLandCoverArgs, readLandCoverFiles, SYNTHETIC_LAND_COVER_FILE } from '../../scripts/import-land-cover.js';
-import { croplandCellsFromTiff, croplandFromJson, gridFits, mergeCells, methodFor, readTiffInfo, WORLDCOVER_2021 } from './loadCropland.js';
+import { croplandCellsFromTiff, croplandFromJson, croplandToJson, gridFits, jsonDatasetMeta, mergeCells, methodFor, readTiffInfo, WORLDCOVER_2021 } from './loadCropland.js';
 
 interface TiffSpec {
 	width: number;
@@ -205,5 +206,39 @@ describe('the command', () => {
 		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--bbox', '1,2,0,3'])).toMatch(/--bbox/);
 		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--frobnicate'])).toMatch(/unknown option/);
 		expect(readLandCoverFiles({ ...(args as Exclude<typeof args, string>), files: ['/x/a.tif', SYNTHETIC_LAND_COVER_FILE] })).toMatch(/not both/);
+	});
+});
+
+describe('the JSON form written for a production load (--out)', () => {
+	it('reads back cell for cell, with the product it was written with', () => {
+		for (const cellDeg of [0.0025, 0.005, 1 / 12]) {
+			const at = (lat: number, lon: number) => ({ row: Math.floor(lat / cellDeg), col: Math.floor(lon / cellDeg) });
+			const cells = mergeCells([
+				{ ...at(-33.65, 21.3), fraction: 0.5 },
+				{ ...at(-33.65, 21.31), fraction: 0.123456789 },
+				{ ...at(-89.99, -179.99), fraction: 1 }
+			]);
+			const meta = { source: 'S', version: 'v', attribution: 'A', cellDeg, classes: [40, 41] };
+			const got = croplandFromJson(JSON.parse(croplandToJson(meta, cells)));
+			if (typeof got === 'string') throw new Error(got);
+			expect(got.problems).toEqual([]);
+			expect(got.cellDeg).toBe(cellDeg);
+			expect(got.cells.map((c) => [c.row, c.col])).toEqual(cells.map((c) => [c.row, c.col]));
+			expect(got.cells.map((c) => c.fraction)).toEqual(cells.map((c) => Number(c.fraction.toFixed(6))));
+			expect(jsonDatasetMeta('D', got)).toEqual({ dataset: 'D', source: 'S', version: 'v', attribution: 'A', method: methodFor(cellDeg, [40, 41]), cellDeg, classes: [40, 41] });
+		}
+	});
+
+	it('the flags win over the file’s own fields, and WorldCover fills what neither gives', () => {
+		const got = { cellDeg: 0.0025, meta: { source: 'File' } };
+		expect(jsonDatasetMeta('D', got, { source: 'Flag' }).source).toBe('Flag');
+		expect(jsonDatasetMeta('D', got).source).toBe('File');
+		expect(jsonDatasetMeta('D', { cellDeg: 0.0025, meta: {} })).toMatchObject({ version: WORLDCOVER_2021.version, attribution: WORLDCOVER_2021.attribution, classes: [40] });
+	});
+
+	it('--out takes a .json or .json.gz file, resolved from where the command was typed', () => {
+		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--out', 'grid.json.gz'], { INIT_CWD: '/data' })).toMatchObject({ files: ['/data/a.tif'], out: '/data/grid.json.gz' });
+		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x', '--out', 'grid.csv'])).toMatch(/--out/);
+		expect(parseLandCoverArgs(['a.tif', '--dataset', 'x'])).toMatchObject({ out: null });
 	});
 });

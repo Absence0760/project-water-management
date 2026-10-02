@@ -205,7 +205,7 @@ resource "aws_iam_role_policy" "worker_packs" {
 
 resource "aws_security_group" "vpce_s3" {
   name        = "${local.project}-vpce-s3"
-  description = "S3 interface endpoint: 443 from the API and worker Lambdas only."
+  description = "S3 interface endpoint: 443 from the API, worker and migrate Lambdas only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-vpce-s3" }
 }
@@ -244,8 +244,9 @@ resource "aws_vpc_endpoint" "s3" {
     private_dns_only_for_inbound_resolver_endpoint = false
   }
 
-  # Only the worker's read of packs/ (PDF checks, bundle re-runs), and the API's put of a bundle
-  # (pack_bundles.tf), in the packs bucket.
+  # Only the worker's read of packs/ (PDF checks, bundle re-runs) and the API's put of a bundle
+  # (pack_bundles.tf), in the packs bucket; the API's read of the delineation DEM and the migrate
+  # Lambda's read of a reference file (map_data.tf).
   policy = data.aws_iam_policy_document.s3_endpoint.json
 
   tags = { Name = "${local.project}-s3" }
@@ -269,6 +270,28 @@ data "aws_iam_policy_document" "s3_endpoint" {
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
+  # Delineation's ranged reads of the DEM (map_data.tf). Listed whether or not
+  # delineation_dem is on: the endpoint policy only narrows, and without the
+  # role's own grant (api_dem, created only when it is on) nothing passes.
+  statement {
+    sid       = "ApiReadsDelineationDem"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tiles.arn}/${local.dem_key}"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
+  # A reference-dataset load reads its one file (map_data.tf, lambda-migrate.ts).
+  statement {
+    sid       = "MigrateReadsReferenceFiles"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.reference.arn}/reference/*"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.migrate_lambda.arn]
     }
   }
 }

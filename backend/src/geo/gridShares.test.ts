@@ -58,6 +58,8 @@ describe('gridShares', () => {
 
 	it('refuses an extent past the limit before clipping, and a line', () => {
 		expect(gridShares(poly(rect(20, -34, 21, -33)), D, 1000)).toEqual({ problem: expect.stringMatching(/spans 160\D000 land-cover cells, more than the 1\D000/) });
+		// Another grid names itself (geo/evaporation.ts passes 'evaporation').
+		expect(gridShares(poly(rect(20, -34, 21, -33)), D, 1000, undefined, 'evaporation')).toEqual({ problem: expect.stringMatching(/spans 160\D000 evaporation cells/) });
 		expect(gridShares({ type: 'LineString', coordinates: [[21, -33], [21.1, -33.1]] }, D, 1000)).toEqual({ problem: 'not a polygon' });
 	});
 

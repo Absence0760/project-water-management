@@ -2543,7 +2543,10 @@ placed points. The server never trusts the browser with geometry:
   be a dam linked to that unit). A planted area from land cover only through
   `crop-area-from-land-cover` (issue #326 B-landcover), which takes a crop, a
   dataset and optionally a parcel, never a value: the server sums the
-  cropland in the unit's own linked parcels as they are now.
+  cropland in the unit's own linked parcels as they are now. Evaporation
+  only through `evaporation-from-map` (issue #326 B-evap), which takes a
+  dataset label, never a value: the server averages the grid over the
+  project's own boundary as it is now.
 - **Properties are allowlisted** (`name`, `description`, `ref`; capped):
   a GIS attribute table can carry owners' names, ID numbers or phone numbers,
   and anything else is dropped before storage (POPIA minimisation, as the
@@ -2565,7 +2568,7 @@ placed points. The server never trusts the browser with geometry:
   `farms/farm-map.db.test.ts` (neighbour as the negative, each farmer's own
   as the positive control) and the farmer-privacy sweep, which now seeds a
   neighbour's parcel and dam (`map_feature` in its `FARMER_MAY_READ`: the
-  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173) and `river_reference` (171) are public reference data, readable by any
+  orientation kinds only). `quaternary_reference`, `dam_register_reference` (157) the land-cover grid (`cropland_dataset`, `cropland_cell_reference`, 173), the evaporation grid (`evaporation_dataset`, `evaporation_cell_reference`, 180) and `river_reference` (171) are public reference data, readable by any
   signed-in user and written by no app role (the operator loads it as the
   schema owner).
 - No third-party origin: MapLibre is bundled, its worker is same-origin
@@ -3153,6 +3156,41 @@ key there would let any read-only principal forge any user's session.
   paged, not just shown as a warning on the one run.
 
 
+### The map's data in production
+
+`infra/map_data.tf` ([deployment.md § The Map tab](./deployment.md#the-map-tab)):
+
+- **Tiles are public by design.** The basemap, relief and glyphs are served
+  to every viewer at `/tiles/*` (no session: the browser's range reads
+  can't carry one through CloudFront to S3), same-origin, so the CSP stays
+  `connect-src 'self'` and no third-party tile host sees a user's map view.
+  The bucket policy lets only this distribution read `tiles/`; nothing
+  else is granted. The `tiles_range` function refuses whole-file and
+  open-ended reads of an archive (a 2 MiB cap per request) and answers 404
+  for every other path, so a public 2 GB file can't be pulled in one
+  request (the cost side: deployment.md § Map tiles).
+- **Delineation's DEM read** (`delineation_dem`): the API role may
+  GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
+  allows the same; off by default.
+- **Reference loads run as the schema owner**, so they are gated like a
+  deploy: `load-reference.yml` reaches AWS only in the `production`
+  environment (a required reviewer, then OIDC), and the deploy role's only
+  part is `lambda:InvokeFunction` on the migrate Lambda, which it already
+  had. The migrate Lambda reads one object from the private reference
+  bucket (GetObject on `reference/*`, nothing else), refuses it unless it
+  hashes to the SHA-256 in the approved run (so the approver approves those
+  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off), and
+  parses it with the same code as the local loaders (JSON only, no archive
+  formats, no external references). The kinds whose licence isn't
+  confirmed are refused in the workflow and again in the Lambda, by name.
+  Its answer and its failure summary carry counts, codes and fixed text
+  only, since the Actions log is public; the file's problems go to
+  CloudWatch.
+- **No role can write either bucket** but the operator's own SSO session;
+  the deploy role touches neither. Uploading to the tiles bucket is itself
+  publishing (the behaviour serves what is there), so the licence steps come
+  before the upload (deployment.md § Map tiles).
+
 ### Accepted IaC findings
 
 CI's Trivy config scan (`terraform.yml`, Terraform and
@@ -3163,7 +3201,7 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf) | All are SSE-S3 encrypted. `frontend` is the public static site. `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.packs` (packs.tf), `.frontend` (s3_cloudfront.tf), `.tiles` and `.reference` (map_data.tf) | All are SSE-S3 encrypted. `frontend` is the public static site, and `tiles` the map's public tiles (served to every viewer through CloudFront). `reports` and `packs` are private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. `reference` is private, read only by the migrate role and written only by the operator's SSO session; its files are the operator's downloads of openly licensed data. |
 
 Revisit AWS-0132 for `reports` and `packs` if a client contract asks for
 customer-held keys or key-level audit of report or pack reads.
