@@ -6,6 +6,7 @@
 //   POST   /projects/:id/map/features                   place one feature: a point from the coordinates form, or a geometry (editor)
 //   PATCH  /projects/:id/map/features/:fid              rename, re-kind, link to a node, move (editor)
 //   DELETE /projects/:id/map/features/:fid              (editor); its import goes with its last feature
+//   POST   /projects/:id/map/features/:fid/split        a polygon cut in two along a drawn line, both parts saved together (editor)
 //   POST   /projects/:id/map/import/preview             a GeoJSON file read and checked, each feature's kind proposed; saves nothing (editor)
 //   POST   /projects/:id/map/import                     a GeoJSON file, checked on the server, with the reviewed kinds (editor)
 //   POST   /projects/:id/nodes/:nodeId/area-from-map    accept a polygon's area as a farm's area (editor)
@@ -41,6 +42,9 @@ import {
 	type Position
 } from './geojson.js';
 import { quaternaryAt, quaternaryDatasets } from './quaternary.js';
+import { configuredWater, traceDam, TraceRefused, type MinOccurrence } from '../delineation/damTrace.js';
+import { logEvent } from '../logging/logEvent.js';
+import { safeError } from '../logging/safeError.js';
 
 export const MAP_FEATURE_KINDS = ['catchment_boundary', 'farm_parcel', 'dam', 'gauge', 'river', 'other'] as const;
 export type MapFeatureKind = (typeof MAP_FEATURE_KINDS)[number];
@@ -92,10 +96,43 @@ export const CreateFeature = z
 		lon: Lon.optional(),
 		lat: Lat.optional(),
 		/** … or any geometry (checked by geo/geojson.ts). */
-		geometry: z.unknown().optional()
+		geometry: z.unknown().optional(),
+		/**
+		 * The outline was traced from the water occurrence data (issue #326 C2,
+		 * POST …/map/dam-trace): where it was clicked, the share asked for, and
+		 * whether it was adjusted after. The server traces it again and refuses
+		 * an outline called unadjusted that isn't the trace; the method goes in
+		 * the feature's description and the audit event.
+		 */
+		traced: z
+			.object({
+				lon: Lon,
+				lat: Lat,
+				minOccurrence: z.union([z.literal(10), z.literal(25), z.literal(50), z.literal(75)]) satisfies z.ZodType<MinOccurrence>,
+				edited: z.boolean()
+			})
+			.strict()
+			.optional()
 	})
 	.strict()
-	.refine((b) => (b.geometry === undefined) === (b.lon !== undefined && b.lat !== undefined), 'give either a longitude and latitude, or a geometry');
+	.refine((b) => (b.geometry === undefined) === (b.lon !== undefined && b.lat !== undefined), 'give either a longitude and latitude, or a geometry')
+	.refine((b) => !b.traced || (b.geometry !== undefined && (b.kind === 'dam' || b.kind === 'other')), 'a traced outline is saved as a dam (or an other area), with its geometry');
+
+/** The kinds a polygon split in two may be (issue #326 C2): the shape's own kind, or for the boundary (which stays whole) the kind of its parts. */
+export const SPLIT_KINDS: readonly MapFeatureKind[] = ['catchment_boundary', 'farm_parcel', 'dam', 'other'];
+/** How far the parts' areas may be from the shape's: the cut's corners are rounded to 7 decimals. */
+const SPLIT_AREA_TOLERANCE = 0.001;
+
+export const SplitFeature = z
+	.object({
+		/** The two parts, each a polygon (checked by geo/geojson.ts), together the shape. */
+		parts: z.array(z.unknown()).length(2),
+		/** Each part's name; omitted: the first keeps the shape's, the second is "<name> (part 2)". */
+		names: z.array(Name).length(2).optional(),
+		/** Splitting the catchment boundary: what its parts become (it stays whole). Default "other". */
+		as: z.enum(['farm_parcel', 'other']).optional()
+	})
+	.strict();
 
 export const EditFeature = z
 	.object({
@@ -359,6 +396,48 @@ async function reviewedFeatures(db: Db, projectId: string, parsed: ParsedFeature
 	return problems.length ? { problems, rows: [] } : { problems, rows };
 }
 
+/** A polygon's one outline (a Polygon with no holes, or a MultiPolygon of one such part), or null. */
+function oneRing(g: Geometry): Position[] | null {
+	if (g.type === 'Polygon') return g.coordinates.length === 1 ? g.coordinates[0]! : null;
+	if (g.type === 'MultiPolygon') return g.coordinates.length === 1 && g.coordinates[0]!.length === 1 ? g.coordinates[0]![0]! : null;
+	return null;
+}
+
+const bboxOf = (ring: readonly Position[]): [number, number, number, number] => [
+	Math.min(...ring.map((p) => p[0])),
+	Math.min(...ring.map((p) => p[1])),
+	Math.max(...ring.map((p) => p[0])),
+	Math.max(...ring.map((p) => p[1]))
+];
+
+/**
+ * A traced dam outline's method (issue #326 C2): the server traces the click
+ * again with its own raster, so the dataset named is the one it holds, and an
+ * outline sent as unadjusted must be that trace exactly.
+ */
+async function tracedMethod(t: { lon: number; lat: number; minOccurrence: MinOccurrence; edited: boolean }, g: Geometry): Promise<{ description: string; dataset: string }> {
+	const water = configuredWater();
+	if (!water) throw new ApiError(409, 'Tracing is off: the server has no water occurrence data (WATER_URL is empty).');
+	let trace;
+	try {
+		trace = await traceDam(water, [t.lon, t.lat], t.minOccurrence);
+	} catch (err) {
+		if (err instanceof TraceRefused) throw new ApiError(422, err.message, { reason: err.code });
+		logEvent('error', { event: 'dam_trace_failed', ...safeError(err) });
+		throw new ApiError(503, 'The water occurrence data could not be read just now. Try again; if it keeps failing, the operator should check WATER_URL.');
+	}
+	if (!t.edited && JSON.stringify(trace.geometry) !== JSON.stringify(g)) {
+		throw new ApiError(400, 'That outline isn’t the one traced there. Save it as adjusted, or trace it again.');
+	}
+	const lat = `${Math.abs(t.lat).toFixed(4)}° ${t.lat < 0 ? 'S' : 'N'}`;
+	const lon = `${Math.abs(t.lon).toFixed(4)}° ${t.lon < 0 ? 'W' : 'E'}`;
+	const attribution = trace.dataset.attribution && trace.dataset.attribution !== 'synthetic' ? ` ${trace.dataset.attribution}.` : '';
+	const description =
+		`Traced from ${trace.dataset.label} (${trace.methodVersion}): water in at least ${t.minOccurrence} % of the observations, clicked at ${lat}, ${lon}` +
+		`${t.edited ? '; then adjusted by hand' : ''}. Check it against the map.${attribution}`;
+	return { description: description.slice(0, 500), dataset: trace.dataset.label };
+}
+
 const sha256Of = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');
 
 type NodeRef = { id: string; name: string; kind: string };
@@ -419,20 +498,98 @@ export const mapRoutes = new Hono<AuthEnv>()
 	.post('/:id/map/features', async (c) => {
 		const body = CreateFeature.parse(await readJson(c));
 		const id = c.req.param('id');
-		return withUser(c.get('userId'), async (db) => {
+		const userId = c.get('userId');
+		// Checked before the trace below, so a viewer can't make the server read the raster.
+		await withUser(userId, (db) => requireRole(db, id, 'editor'));
+		const g = requestGeometry(body)!;
+		assertKindFits(body.kind, g.geometry);
+		const traced = body.traced ? await tracedMethod(body.traced, g.geometry) : null;
+		return withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
-			const g = requestGeometry(body)!;
-			assertKindFits(body.kind, g.geometry);
 			await assertNodeFits(db, id, body.kind, body.nodeId);
 			if (body.kind === 'catchment_boundary') await removeBoundary(db, id);
 			const { rows } = await db.query<{ id: string }>(
-				`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, area_m2, created_by)
-				 VALUES ($1, $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-				[id, body.kind, body.name ?? '', body.nodeId ?? null, JSON.stringify(g.geometry), g.areaM2]
+				`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, created_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+				[id, body.kind, body.name ?? '', body.nodeId ?? null, JSON.stringify(g.geometry), JSON.stringify(traced ? { description: traced.description } : {}), g.areaM2]
 			);
 			const feature = toFeature(await loadFeature(db, id, rows[0]!.id));
-			await recordAudit(db, id, 'map.feature_created', { featureId: feature.id, kind: feature.kind, name: feature.name, nodeId: feature.nodeId });
+			await recordAudit(db, id, 'map.feature_created', {
+				featureId: feature.id,
+				kind: feature.kind,
+				name: feature.name,
+				nodeId: feature.nodeId,
+				...(traced ? { from: 'dam_trace', dataset: traced.dataset, minOccurrence: body.traced!.minOccurrence, edited: body.traced!.edited } : {})
+			});
 			return c.json({ feature }, 201);
+		});
+	})
+	.post('/:id/map/features/:fid/split', async (c) => {
+		// A polygon cut in two along a drawn line (issue #326 C2; the cut is made in the browser, draw/split.ts): both parts
+		// pass checkGeometry, and together they must be the shape (their areas add up, they lie within its bounds).
+		const body = SplitFeature.parse(await readJson(c));
+		const { id, fid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'editor');
+			const before = await loadFeature(db, id, fid);
+			const ring = oneRing(before.geometry);
+			if (!SPLIT_KINDS.includes(before.kind) || !ring) throw new ApiError(400, 'Only a polygon of one outline (no holes, one part) can be split.');
+			const parts = body.parts.map((p, i) => {
+				const checked = checkGeometry(p);
+				if ('problem' in checked) throw new ApiError(400, `Part ${i + 1} ${checked.problem}.`);
+				if (checked.geometry.type !== 'Polygon' || checked.areaM2 === null) throw new ApiError(400, `Part ${i + 1} must be a polygon.`);
+				return { geometry: checked.geometry, areaM2: checked.areaM2 };
+			});
+			const whole = before.area_m2 ?? 0;
+			const sum = parts[0]!.areaM2 + parts[1]!.areaM2;
+			const box = bboxOf(ring);
+			const inside = parts.every((p) => p.geometry.coordinates[0]!.every(([x, y]) => x >= box[0] - 1e-6 && x <= box[2] + 1e-6 && y >= box[1] - 1e-6 && y <= box[3] + 1e-6));
+			if (!inside || Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1) {
+				throw new ApiError(400, 'The two parts are not this shape cut in two: together they must cover it exactly. Draw the line again.');
+			}
+			const label = before.name ? `“${before.name}”` : KIND_LABEL[before.kind];
+			const description = `Split from ${label} along a drawn line.`.slice(0, 500);
+			const ids: string[] = [];
+			let into: MapFeatureKind;
+			const insert = async (kind: MapFeatureKind, name: string, p: (typeof parts)[number]) => {
+				const { rows } = await db.query<{ id: string }>(
+					`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, created_by)
+					 VALUES ($1, $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
+					[id, kind, name.slice(0, FEATURE_NAME_MAX), JSON.stringify(p.geometry), JSON.stringify({ description }), p.areaM2]
+				);
+				ids.push(rows[0]!.id);
+			};
+			if (before.kind === 'catchment_boundary') {
+				// The boundary stays whole: its parts are new areas (sub-catchments to link to units, or parcels).
+				into = body.as ?? 'other';
+				const base = before.name || 'Catchment';
+				await insert(into, body.names?.[0] || `${base} part 1`, parts[0]!);
+				await insert(into, body.names?.[1] || `${base} part 2`, parts[1]!);
+			} else {
+				if (body.as) throw new ApiError(400, 'Only the catchment boundary’s parts take another kind; a split shape keeps its own.');
+				into = before.kind;
+				mustChange(
+					await db.query(`UPDATE map_feature SET name = $3, geometry = $4, area_m2 = $5 WHERE id = $1 AND project_id = $2`, [
+						fid,
+						id,
+						(body.names?.[0] || before.name).slice(0, FEATURE_NAME_MAX),
+						JSON.stringify(parts[0]!.geometry),
+						parts[0]!.areaM2
+					])
+				);
+				ids.push(fid);
+				await insert(before.kind, body.names?.[1] || (before.name ? `${before.name} (part 2)` : ''), parts[1]!);
+			}
+			const features = await Promise.all(ids.map(async (fidN) => toFeature(await loadFeature(db, id, fidN))));
+			await recordAudit(db, id, 'map.feature_split', {
+				featureId: fid,
+				kind: before.kind,
+				name: before.name,
+				into,
+				parts: ids,
+				areasKm2: parts.map((p) => Math.round(p.areaM2 / 1e4) / 100)
+			});
+			return c.json({ features }, 201);
 		});
 	})
 	.patch('/:id/map/features/:fid', async (c) => {

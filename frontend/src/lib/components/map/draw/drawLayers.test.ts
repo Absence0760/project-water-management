@@ -31,6 +31,13 @@ describe('draftData', () => {
 		const whole = { type: 'MultiLineString' as const, coordinates: [c, c] };
 		expect(draftData({ shape: 'line', coords: [], phase: 'review', whole, cursor: null, corner: null }).features).toEqual([{ type: 'Feature', properties: { role: 'shape' }, geometry: whole }]);
 	});
+	it('draws where the pointer would snap as a ring, and a split’s two parts under the cut (#326 C2)', () => {
+		const d = draftData({ shape: 'line', coords: [c[0]!, c[1]!], phase: 'review', whole: null, cursor: null, corner: null, snap: c[2]!, parts: [[c[0]!, c[1]!, c[2]!], [c[1]!, c[2]!, c[0]!]] });
+		expect(d.features.filter((f) => f.properties.role === 'snap').map((f) => f.geometry)).toEqual([{ type: 'Point', coordinates: c[2] }]);
+		const parts = d.features.filter((f) => f.properties.role === 'part');
+		expect(parts.map((f) => f.properties.part)).toEqual([0, 1]);
+		expect(parts[0]!.geometry).toEqual({ type: 'Polygon', coordinates: [[c[0], c[1], c[2], c[0]]] });
+	});
 });
 
 describe('draftLayers', () => {

@@ -140,7 +140,19 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   case (`fuzz/shard.ts`): raise that budget before raising the release's
   count. The
   determinism check compares outputs value by value (`sameOutput`), not by
-  serialising them twice, which cost as much as a run.
+  serialising them twice, which cost as much as a run. A shard is fixed,
+  CPU-bound work, not a wait: 2026-10-02, shard 2 took 17 s alone, 34 s with
+  the four shards side by side and about 20 s at a load average near 40,
+  against its 120 s limit, and no seed passed 0.8 s.
+- **Loading the Lambda entry points** (`backend/src/config/production.security.test.ts`):
+  the test starts each Lambda's entry point to show it runs the production
+  config check at init. It imports esbuild bundles of them natively (the same
+  build its env-read inventory reads), not the source through vitest's module
+  runner, which transformed the whole backend and the engine's source on the
+  shared Vite server: ~3 s alone, and a timeout beside a full `pnpm test` on
+  a loaded machine (2026-10-02). A test that needs a whole entry point's
+  graph, fresh for each case, should do the same rather than `vi.resetModules()`
+  and re-import it.
 - **Forecast-mode prefix stability** (`packages/engine/src/forecast.invariants.test.ts`,
   WP-2.12): 40 random networks with a forecast tail in `pnpm test` (about
   6 s; three model runs a case). Soak with `FORECAST_FUZZ_CASES=20000 pnpm -C

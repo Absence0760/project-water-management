@@ -2695,7 +2695,7 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 4 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 5 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
@@ -2706,10 +2706,13 @@ run "packs" {
       toset(data.aws_iam_policy_document.s3_endpoint.statement[2].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[2].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[3].actions) == toset(["s3:GetObject"]) &&
-      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/water.pmtiles"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[4].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[4].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
     )
-    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's read of the delineation DEM (tiles/terrain.pmtiles) and migrate's read of a reference file (reference/*)."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's reads of the delineation DEM (tiles/terrain.pmtiles) and the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
   }
   assert {
     condition = (
@@ -2825,6 +2828,41 @@ run "map_data" {
       toset(data.aws_iam_policy_document.api_dem.statement[0].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"])
     )
     error_message = "The API's DEM grant is GetObject on the one key, tiles/terrain.pmtiles."
+  }
+
+  # --- Tracing a dam off by default: no water raster, no grant (issue #326 C2) -------------
+  assert {
+    condition     = !var.dam_trace_water && aws_lambda_function.backend.environment[0].variables["WATER_URL"] == "" && length(aws_iam_role_policy.api_water) == 0
+    error_message = "Tracing a dam is off by default: WATER_URL empty and the API role holds no read of the water raster."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.api_water.statement) == 1 &&
+      toset(data.aws_iam_policy_document.api_water.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.api_water.statement[0].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/water.pmtiles"])
+    )
+    error_message = "The API's water grant is GetObject on the one key, tiles/water.pmtiles."
+  }
+}
+
+run "map_data_with_dam_trace" {
+  command = plan
+
+  variables {
+    dam_trace_water = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["WATER_URL"] == "s3://${aws_s3_bucket.tiles.bucket}/tiles/water.pmtiles"
+    error_message = "With dam_trace_water the API reads the water occurrence from the tiles bucket (s3://<bucket>/tiles/water.pmtiles)."
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.api_water) == 1 && aws_iam_role_policy.api_water[0].role == aws_iam_role.lambda.id
+    error_message = "With dam_trace_water the API role gets the water read."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
+    error_message = "Tracing a dam on leaves delineation off: each switch grants its own key only."
   }
 }
 

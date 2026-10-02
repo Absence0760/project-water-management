@@ -6,6 +6,8 @@
 //                          each dPET year's calendar-month totals into <dir>/<year>.dpet-monthly.json (no database)
 //   pnpm import:evaporation <file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"]
 //                          dPET years (.nc, or the .json --reduce wrote) averaged into monthly means, or one fixture-form .json
+//   pnpm import:evaporation <file> … --dataset <label> --out <grid.json[.gz]> [same options]
+//                          the same monthly means written to a file instead of loaded (no database)
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), like import-land-cover:
 // the app role only reads evaporation_dataset and evaporation_cell_reference.
@@ -14,6 +16,12 @@
 // replaces every row of its dataset. Paths resolve from the directory the
 // command was typed in.
 //
+// With --out it loads nothing (no database needed): it writes the grid of
+// monthly means, in the fixture's JSON form, to the file (gzipped when it
+// ends in .gz). That file is what a production load reads from the private
+// reference bucket (docs/deployment.md § Reference datasets): the years are
+// read and averaged here, once, and only the means travel.
+//
 // The repo ships only invented data (backend/fixtures/geo/). dPET is CC BY 4.0
 // (docs/maps.md § Sources): the files are the operator's own download, never
 // committed.
@@ -21,6 +29,7 @@ import { config } from 'dotenv';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import pg from 'pg';
 import { SYNTHETIC_EVAPORATION_DATASET } from '../src/geo/evaporation.js';
 import {
@@ -28,6 +37,7 @@ import {
 	DPET,
 	evaporationFromJson,
 	evaporationMethodFor,
+	evaporationToJson,
 	readDpetYear,
 	replaceEvaporationDataset,
 	SOUTH_AFRICA_BBOX,
@@ -45,9 +55,9 @@ const cliPath = (p: string, env: NodeJS.ProcessEnv = process.env): string => res
 
 export type EvaporationArgs =
 	| { mode: 'reduce'; out: string; files: string[]; bbox: Bbox }
-	| { mode: 'load'; files: string[]; dataset: string; bbox: Bbox; source: string | null; version: string | null; attribution: string | null };
+	| { mode: 'load'; files: string[]; dataset: string; bbox: Bbox; source: string | null; version: string | null; attribution: string | null; out?: string | null };
 
-const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution', '--reduce'];
+const FLAGS = ['--dataset', '--bbox', '--source', '--version', '--attribution', '--reduce', '--out'];
 
 export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): EvaporationArgs | string {
 	const flag = (name: string) => {
@@ -70,7 +80,9 @@ export function parseEvaporationArgs(argv: string[], env: NodeJS.ProcessEnv = pr
 		if (!positional.length || positional.some((p) => extname(p).toLowerCase() !== '.nc')) return '--reduce takes dPET files (<year>_daily_pet.nc)';
 		return { mode: 'reduce', out: cliPath(reduce, env), files: positional.map((p) => cliPath(p, env)), bbox };
 	}
-	const base = { bbox, source: flag('--source'), version: flag('--version'), attribution: flag('--attribution') };
+	const out = flag('--out');
+	if (out !== null && !/\.json(\.gz)?$/i.test(out)) return '--out takes a .json or .json.gz file';
+	const base = { bbox, source: flag('--source'), version: flag('--version'), attribution: flag('--attribution'), out: out === null ? null : cliPath(out, env) };
 	if (positional.length === 0) return { mode: 'load', ...base, files: [SYNTHETIC_EVAPORATION_FILE], dataset: SYNTHETIC_EVAPORATION_DATASET };
 	const bad = positional.find((p) => !['.nc', '.json'].includes(extname(p).toLowerCase()));
 	if (bad) return `${bad}: give dPET files (.nc), the years --reduce wrote (.json), or one fixture-form .json`;
@@ -148,6 +160,22 @@ export async function readEvaporationFiles(
 	};
 }
 
+/**
+ * Write `args`' grid of monthly means to `args.out` in the fixture's JSON form
+ * (gzipped for .gz) instead of loading it; returns the cells written. Refuses
+ * an empty grid, as the load does.
+ */
+export async function writeEvaporationJson(
+	args: Extract<EvaporationArgs, { mode: 'load' }> & { out: string },
+	log?: (line: string) => void
+): Promise<{ written: number; problems: string[] }> {
+	const read = await readEvaporationFiles(args, log);
+	if (!read.climatology.cells.length) throw new Error('no cell has a value for every month of every year: check the files and --bbox');
+	const json = evaporationToJson(read.meta, read.climatology);
+	writeFileSync(args.out, /\.gz$/i.test(args.out) ? gzipSync(json) : json);
+	return { written: read.climatology.cells.length, problems: read.problems };
+}
+
 /** Load `args` into the database at `url`; returns the cells written and what was skipped. */
 export async function importEvaporation(url: string, args: Extract<EvaporationArgs, { mode: 'load' }>, log?: (line: string) => void): Promise<{ written: number; problems: string[] }> {
 	const read = await readEvaporationFiles(args, log);
@@ -169,7 +197,7 @@ export const loadSyntheticEvaporation = (url: string) => {
 };
 
 const USAGE =
-	'usage: pnpm import:evaporation [--reduce <dir> <year>_daily_pet.nc … [--bbox w,s,e,n]] | [<file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"]]';
+	'usage: pnpm import:evaporation [--reduce <dir> <year>_daily_pet.nc … [--bbox w,s,e,n]] | [<file> … --dataset <label> [--bbox w,s,e,n] [--source "…"] [--version "…"] [--attribution "…"] [--out <grid.json[.gz]>]]';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	config({ path: ['.env.development.local', '.env.development'] });
@@ -185,6 +213,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	if (args.mode === 'reduce') {
 		reduceDpet(args, (line) => console.log(line))
 			.then(() => process.exit(0))
+			.catch(fail);
+	} else if (args.out) {
+		const out = args.out;
+		writeEvaporationJson({ ...args, out }, (line) => console.log(line))
+			.then(({ written, problems }) => {
+				for (const p of problems) console.warn(`skipped: ${p}`);
+				console.log(`${written} cell${written === 1 ? '' : 's'} written to ${out}`);
+				process.exit(0);
+			})
 			.catch(fail);
 	} else {
 		const url = process.env.MIGRATION_DATABASE_URL;

@@ -42,12 +42,15 @@ describe('frontend: the tile variables', () => {
 
 describe('load: a reference load’s inputs', () => {
 	const landCover = { LOAD_KIND: 'land-cover', LOAD_KEY: 'reference/land-cover/worldcover-2021.json.gz', LOAD_SHA256: 'a'.repeat(64), LOAD_DATASET: 'WorldCover-2021-v200', LOAD_SOURCE: '', LOAD_MIN_ORDER: '1' };
+	const evaporation = { ...landCover, LOAD_KIND: 'evaporation', LOAD_KEY: 'reference/evaporation/dpet-1991-2020.json.gz', LOAD_DATASET: 'dPET-1991-2020' };
 	const rivers = { ...landCover, LOAD_KIND: 'rivers', LOAD_KEY: 'reference/rivers/hydrorivers-za.geojson.gz', LOAD_DATASET: 'HydroRIVERS-v10', LOAD_SOURCE: 'HydroRIVERS v1.0 © WWF' };
 
 	it('well-formed loads of the allowed kinds pass (rivers once Exhibit B is in the legal text)', () => {
 		assert.deepEqual(loadProblems(landCover, lacks), []);
 		assert.deepEqual(loadProblems(rivers, has), []);
-		assert.deepEqual(LOADABLE, ['land-cover', 'rivers']);
+		// dPET is CC BY 4.0: its attribution travels with the data (the dataset row), no legal-text sentence first.
+		assert.deepEqual(loadProblems(evaporation, lacks), []);
+		assert.deepEqual(LOADABLE, ['land-cover', 'evaporation', 'rivers']);
 	});
 
 	it('refuses the licence-blocked kinds, naming the Sources table, not the input', () => {

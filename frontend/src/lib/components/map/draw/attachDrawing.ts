@@ -16,9 +16,16 @@
 // looking; Backspace removes the
 // last corner while drawing (the picked one after), Delete the picked one,
 // Escape cancels (asking first when that would drop work: Draft.escape).
+//
+// Snapping (#326 C2, draw/snap.ts): with the draft's snapping on, every
+// corner placed, dragged or inserted, and every point placed, lands on the
+// nearest other feature's corner or edge within 12 px, by pointer or by
+// Enter; Alt held with the click (or Alt+Enter) places it exactly where it
+// is. Where it would snap shows as a ring while the pointer moves.
 import type { MapPosition } from '$lib/api/types';
 import type { Draft } from './draft.svelte';
 import { DRAFT_CORNER_LAYER, DRAFT_MID_LAYER } from './drawLayers';
+import { SNAP_PX, snapPoint, type SnapHit } from './snap';
 
 type LngLat = { lng: number; lat: number };
 type Pt = { x: number; y: number };
@@ -36,6 +43,7 @@ export interface DrawMap {
 	getCanvas(): HTMLCanvasElement;
 	getCenter(): LngLat;
 	unproject(point: [number, number]): LngLat;
+	project(lngLat: [number, number]): Pt;
 	queryRenderedFeatures(geometry: [Pt, Pt] | Pt, options: { layers: string[] }): { properties?: Record<string, unknown> }[];
 	doubleClickZoom: { enable(): void; disable(): void };
 	dragPan: { enable(): void; disable(): void };
@@ -92,9 +100,24 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 		touchedAt = performance.now();
 		aim(null);
 	};
-	const onMouseOut = () => aim(null);
+	const onMouseOut = () => {
+		aim(null);
+		draft.snapHint = null;
+	};
 	// The focus arriving (a Tab to the map, Place a point's button): the crosshair, until the mouse moves over the map.
 	const onFocus = () => aim(null);
+
+	/** Where a screen point places a corner: on another feature's corner or edge within reach (snapping on, Alt not held), else where it is. */
+	const placeAt = (pt: Pt, raw: MapPosition, exact: boolean): { p: MapPosition; hit: SnapHit | null } => {
+		if (exact || !draft.snapOn || !draft.snapTargets.length) return { p: raw, hit: null };
+		const a = map.unproject([pt.x - SNAP_PX, pt.y - SNAP_PX]);
+		const b = map.unproject([pt.x + SNAP_PX, pt.y + SNAP_PX]);
+		const box = [Math.min(a.lng, b.lng), Math.min(a.lat, b.lat), Math.max(a.lng, b.lng), Math.max(a.lat, b.lat)] as const;
+		const hit = snapPoint(pt, draft.snapTargets, (q) => map.project([q[0], q[1]]), SNAP_PX, box);
+		return hit ? { p: hit.at, hit } : { p: raw, hit: null };
+	};
+	const altOf = (e: Ev) => !!(e.originalEvent as MouseEvent | undefined)?.altKey;
+	const placed = (e: Ev) => placeAt(e.point, at(e.lngLat), altOf(e));
 
 	const onClick = (e: Ev) => {
 		if (!draft.active || dragging !== null) return;
@@ -106,13 +129,16 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 				if (draft.canFinish && ((draft.shape === 'polygon' && hit.corner === 0) || hit.corner === n - 1)) draft.finish();
 				return;
 			}
-			draft.add(at(e.lngLat));
+			const s = placed(e);
+			draft.add(s.p, s.hit);
 			return;
 		}
-		if (hit && 'mid' in hit) draft.insertCorner(hit.mid, at(e.lngLat));
+		if (hit && 'mid' in hit) draft.insertCorner(hit.mid, placed(e).p);
 		else if (hit && 'corner' in hit) draft.corner = hit.corner;
-		else if (draft.shape === 'point') draft.add(at(e.lngLat));
-		else draft.corner = null;
+		else if (draft.shape === 'point') {
+			const s = placed(e);
+			draft.add(s.p, s.hit);
+		} else draft.corner = null;
 	};
 
 	const onDblClick = (e: Ev) => {
@@ -125,14 +151,19 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 	const onMove = (e: Ev) => {
 		if (!draft.active) return;
 		if (dragging !== null) {
-			draft.moveCorner(dragging, at(e.lngLat));
+			const s = placed(e);
+			draft.snapHint = s.hit;
+			draft.moveCorner(dragging, s.p);
 			return;
 		}
 		if (draft.phase === 'drawing' && draft.shape !== 'point') {
-			draft.cursor = at(e.lngLat);
+			const s = placed(e);
+			draft.snapHint = s.hit;
+			draft.cursor = s.p;
 			canvas.style.cursor = 'crosshair';
 			return;
 		}
+		draft.snapHint = draft.shape === 'point' ? placed(e).hit : null;
 		const hit = draft.phase === 'review' ? hitAt(map, e.point) : null;
 		canvas.style.cursor = hit ? ('corner' in hit ? 'move' : 'copy') : draft.shape === 'point' ? 'crosshair' : '';
 	};
@@ -150,13 +181,15 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 	};
 	const endDrag = () => {
 		if (dragging === null) return;
+		draft.snapHint = null;
 		// The click that ends a drag isn't a click on the map.
 		setTimeout(() => (dragging = null), 0);
 		map.dragPan.enable();
 	};
 
 	const onKey = (e: KeyboardEvent) => {
-		if (!draft.active || e.target !== canvas || e.altKey || e.ctrlKey || e.metaKey) return;
+		// Alt+Enter places exactly, without snapping; any other key with Alt, Ctrl or Meta is the browser's.
+		if (!draft.active || e.target !== canvas || (e.altKey && e.key !== 'Enter') || e.ctrlKey || e.metaKey) return;
 		// The arrow keys move the map under the crosshair: from then, Enter adds there, until the mouse moves again.
 		if (e.key.startsWith('Arrow')) {
 			aim(null);
@@ -164,8 +197,11 @@ export function attachDrawing(map: DrawMap, draft: Draft, keysOn: HTMLElement, o
 		}
 		const c = pointer ? map.unproject([pointer.x, pointer.y]) : map.getCenter();
 		if (e.key === 'Enter') {
-			if (draft.shape === 'point' || draft.phase === 'drawing') draft.add(at(c));
-			else return;
+			if (draft.shape === 'point' || draft.phase === 'drawing') {
+				const pt = pointer ?? map.project([c.lng, c.lat]);
+				const s = placeAt(pt, at(c), e.altKey);
+				draft.add(s.p, s.hit);
+			} else return;
 		} else if (e.key === 'Backspace') {
 			if (draft.phase === 'drawing') draft.undo();
 			else if (draft.corner !== null) draft.removeCorner(draft.corner);

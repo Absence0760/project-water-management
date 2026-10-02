@@ -23,13 +23,23 @@ import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import type pg from 'pg';
 import { croplandFromJson, jsonDatasetMeta, replaceCroplandDataset } from './croplandGrid.js';
+import { DPET, evaporationFromJson, evaporationMethodFor, replaceEvaporationDataset } from './evaporationGrid.js';
 import { replaceRivers, riverRecords } from './loadRivers.js';
 
 /** One kind of reference dataset, and whether production may load it. */
 export type ReferenceKind = {
 	/** The docs/maps.md § Sources rows that decide it (their Dataset cell starts with one of these). */
 	sourcesRows: readonly string[];
-} & ({ status: 'allowed'; file: RegExp; what: string } | { status: 'blocked'; why: string });
+} & (
+	| {
+			status: 'allowed';
+			file: RegExp;
+			what: string;
+			/** A smaller cap than MAX_OBJECT_BYTES / MAX_TEXT_BYTES, for a kind whose real file is far smaller (a bigger one is a wrong file). */
+			limits?: { object: number; text: number };
+	  }
+	| { status: 'blocked'; why: string }
+);
 
 export const REFERENCE_KINDS = {
 	'land-cover': {
@@ -37,6 +47,16 @@ export const REFERENCE_KINDS = {
 		sourcesRows: ['ESA WorldCover'],
 		file: /\.json(\.gz)?$/,
 		what: 'the pre-summarised grid `pnpm import:land-cover … --out <file>` writes'
+	},
+	evaporation: {
+		status: 'allowed',
+		sourcesRows: ['dPET'],
+		file: /\.json(\.gz)?$/,
+		what: 'the grid of monthly means `pnpm import:evaporation … --out <file>` writes',
+		// South Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON; all
+		// of Africa about 540 000 cells, near 50 MB. Past that it is not one
+		// country's grid.
+		limits: { object: 32 * 1024 * 1024, text: 64 * 1024 * 1024 }
 	},
 	rivers: {
 		status: 'allowed',
@@ -85,7 +105,7 @@ export interface LoadRequest {
 	sha256: string;
 	/** The dataset label it loads as (a load replaces that dataset). */
 	dataset: string;
-	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover: overrides the file’s own. */
+	/** Rivers: the source and attribution stored on every reach that has none of its own (HydroRIVERS has none). Land cover and evaporation: overrides the file’s own. */
 	source: string | null;
 	/** Rivers: leave out reaches below this Strahler order. */
 	minOrder: number;
@@ -142,8 +162,14 @@ export function parseLoadRequest(raw: unknown): LoadRequest {
 /** Reads one object from the reference bucket: its size first, its bytes only when asked. */
 export type ReadObject = (key: string) => Promise<{ contentLength: number; bytes: () => Promise<Uint8Array> } | null>;
 
+/** The caps a kind's file is read under: its own, else the Lambda's. */
+export function limitsFor(kind: AllowedKind): { object: number; text: number } {
+	const spec: ReferenceKind = REFERENCE_KINDS[kind];
+	return (spec.status === 'allowed' && spec.limits) || { object: MAX_OBJECT_BYTES, text: MAX_TEXT_BYTES };
+}
+
 /** The object's text: present, under the caps, the bytes the operator hashed, gunzipped when it is .gz. */
-export async function readReferenceText(req: LoadRequest, read: ReadObject, limits = { object: MAX_OBJECT_BYTES, text: MAX_TEXT_BYTES }): Promise<string> {
+export async function readReferenceText(req: LoadRequest, read: ReadObject, limits = limitsFor(req.kind)): Promise<string> {
 	const mib = (n: number) => `${Math.round(n / 1024 / 1024)} MiB`;
 	const tooBig = (what: string, n: number) => new LoadError(`${req.key}: ${what} is ${n} bytes`, 'too_large', `the file is over ${mib(what === 'text' ? limits.text : limits.object)}${what === 'text' ? ' unzipped' : ''}`);
 	const obj = await read(req.key);
@@ -169,7 +195,7 @@ export async function readReferenceText(req: LoadRequest, read: ReadObject, limi
 export interface LoadResult {
 	kind: AllowedKind;
 	dataset: string;
-	/** Rows written (reaches, or cells with cropland). */
+	/** Rows written (reaches, cells with cropland, or evaporation cells). */
 	written: number;
 	/** Features or cells the file had that the load couldn't take (their reasons are in CloudWatch). */
 	skipped: number;
@@ -198,6 +224,35 @@ export async function loadReferenceText(client: pg.ClientBase, req: LoadRequest,
 		const meta = jsonDatasetMeta(req.dataset, got, { source: req.source });
 		try {
 			const written = await replaceCroplandDataset(client, meta, [got.cells]);
+			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0 };
+		} catch (e) {
+			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');
+		}
+	}
+	if (req.kind === 'evaporation') {
+		try {
+			doc = JSON.parse(text);
+		} catch {
+			throw new LoadError(`${req.key} is not JSON`, 'unreadable', 'the file is not JSON');
+		}
+		const got = evaporationFromJson(doc);
+		if (typeof got === 'string') throw new LoadError(`${req.key}: ${got}`, 'unreadable', 'the file is not an evaporation grid (kind, cellDeg, years and cells)');
+		for (const p of got.problems.slice(0, 50)) log(`skipped: ${p}`);
+		if (got.problems.length > 50) log(`… and ${got.problems.length - 50} more skipped`);
+		// The Sources row that allows this kind is dPET, a reference ET: an A-pan grid's source has no allowed row yet.
+		if (got.kind !== 'et0') throw new LoadError(`${req.key}: kind ${got.kind}`, 'refused', 'only a reference-ET grid (kind "et0", dPET) loads in production: an A-pan source is not allowed yet (docs/maps.md § Sources)');
+		const c = got.climatology;
+		if (!c.cells.length) throw new LoadError(`${req.key}: no cells`, 'empty', 'the file has no cell with 12 monthly values');
+		const meta = {
+			dataset: req.dataset,
+			kind: got.kind,
+			source: req.source ?? got.meta.source ?? DPET.source,
+			version: got.meta.version ?? DPET.version,
+			attribution: got.meta.attribution ?? DPET.attribution,
+			method: evaporationMethodFor(c.cellDeg, c.firstYear, c.lastYear, got.kind)
+		};
+		try {
+			const written = await replaceEvaporationDataset(client, meta, c);
 			return { kind: req.kind, dataset: req.dataset, written, skipped: got.problems.length, belowOrder: 0 };
 		} catch (e) {
 			throw new LoadError(`loading ${req.dataset}: ${(e as Error).message}`, 'load_failed');

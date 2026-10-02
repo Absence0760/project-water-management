@@ -1549,6 +1549,7 @@ behaviour with its own OAC, `infra/s3_cloudfront.tf`):
 | --- | --- | --- | --- |
 | `tiles/south-africa.pmtiles` (the basemap, ~1 GB at maxzoom 15) | `pnpm dev:tiles:fetch` | `PUBLIC_TILES_URL=/tiles/south-africa.pmtiles` | none (the OSM attribution is always on the map) |
 | `tiles/fonts/<font stack>/<range>.pbf` and `tiles/fonts/OFL.txt` (the labels' glyphs) | `pnpm dev:tiles:fonts` | `PUBLIC_TILES_GLYPHS_URL=/tiles/fonts/{fontstack}/{range}.pbf` | none (the OFL notice goes up beside them) |
+| `tiles/water.pmtiles` (tracing a dam's water occurrence, JRC Global Surface Water, tens of MB; read by the API, not the browser) | `pnpm dev:tiles:water` | none: `dam_trace_water` in the tfvars (below) | none (free of charge, without restriction of use; "Source: EC JRC/Google" goes into each traced feature's description) |
 | `tiles/terrain.pmtiles` (the relief, and delineation's DEM, ~2.2 GB) | `pnpm dev:tiles:terrain` | `PUBLIC_TERRAIN_URL=/tiles/terrain.pmtiles` | the Copernicus licence's liability sentence, "The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30" (Art. 6(c)), in the app's legal text |
 
 The local commands leave the files in `~/.cache/water-management-tiles/`.
@@ -1566,6 +1567,7 @@ the old file and the PMTiles reader notices a replaced archive by its
 aws s3 cp ~/.cache/water-management-tiles/south-africa.pmtiles s3://<tiles_bucket>/tiles/south-africa.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws s3 sync ~/.cache/water-management-tiles/fonts/ s3://<tiles_bucket>/tiles/fonts/ --cache-control "public, max-age=604800" --profile water-management
 aws s3 cp ~/.cache/water-management-tiles/terrain.pmtiles s3://<tiles_bucket>/tiles/terrain.pmtiles --cache-control "public, max-age=86400" --profile water-management
+aws s3 cp ~/.cache/water-management-tiles/water.pmtiles s3://<tiles_bucket>/tiles/water.pmtiles --cache-control "public, max-age=86400" --profile water-management
 aws cloudfront create-invalidation --distribution-id <cloudfront_distribution_id> --paths '/tiles/*' --profile water-management
 ```
 
@@ -1588,6 +1590,16 @@ refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
 delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 ([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
 which the defaults (1 024 MB, 30 s) hold with room to spare.
+
+**Tracing a dam** (#326 C2, [maps.md § Assisted
+drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API
+Lambda the same way. Set `dam_trace_water = true` in the tfvars and apply
+once the file is uploaded: Terraform sets
+`WATER_URL=s3://<tiles_bucket>/tiles/water.pmtiles` on the API and lets its
+role read that one key (`api_water`), and the Map offers **Trace a dam**. A
+trace reads a handful of small tiles in milliseconds, so it asks nothing of
+the Lambda's size. Unlike the DEM it waits for no legal sentence (GSW's
+licence is settled), and it is independent of `delineation_dem`.
 
 **The cost bound.** Every object under `/tiles/` is public (anyone can
 fetch it, as the browser does), and the archives are gigabytes. The
@@ -1631,6 +1643,7 @@ Lambda's list against the Sources table):
 | Kind | Licence (maps.md § Sources) | The file | How to make it |
 | --- | --- | --- | --- |
 | `land-cover` | ESA WorldCover, CC BY 4.0: allowed | the pre-summarised grid (JSON, gzipped), never the GeoTIFF tiles | `pnpm import:land-cover tiles/*.tif --dataset WorldCover-2021-v200 --out worldcover.json.gz` |
+| `evaporation` | dPET, CC BY 4.0: allowed (its attribution, with ERA5-Land's Copernicus line, is stored on the dataset row and shown under every proposal) | the grid of monthly means (JSON, gzipped), never the yearly NetCDF files; reference ET (`"kind": "et0"`) only, an A-pan grid is refused | `pnpm import:evaporation:fetch` or `pnpm import:evaporation --reduce` first (maps.md § Evaporation from the map), then `pnpm import:evaporation reduced/*.dpet-monthly.json --dataset dPET-1991-2020 --out dpet.json.gz` |
 | `rivers` | HydroRIVERS: allowed, once HydroSHEDS' Exhibit B statement is in the app's legal text (the gate checks `frontend/src` for it) and the Terms carry the end-user protections (§9's clause on map data licensed to us: no stand-alone redistribution, no reverse engineering; done 2026-10-03, and the gate checks for it too) | a GeoJSON FeatureCollection of reaches (gzip it) | `pnpm dev:tiles:rivers` leaves `~/.cache/water-management-tiles/rivers.geojson`; `gzip -k` it |
 | `quaternaries`, `dam-register`, `gauge-stations` | blocked: licence unconfirmed | – | refused until the decision in followups.md is made and the Sources row says allowed |
 
@@ -1640,7 +1653,9 @@ aws s3 cp worldcover.json.gz s3://<reference_bucket>/reference/land-cover/worldc
 gh workflow run load-reference.yml -f kind=land-cover -f key=reference/land-cover/worldcover-2021.json.gz -f sha256=<hex> -f dataset=WorldCover-2021-v200
 ```
 
-For rivers add `-f source="<the attribution line>"` (the one
+Evaporation is the same with `kind=evaporation` and a key under
+`reference/evaporation/`; the file carries dPET's source, version and
+attribution (`-f source=…` overrides the source). For rivers add `-f source="<the attribution line>"` (the one
 `bin/tiles-dev.sh` uses, `RIVERS_SOURCE`) and, to keep only the larger
 streams, `-f min_order=<n>`. Approve the run in the `production`
 environment. Never load the synthetic fixtures into production (the label
@@ -1653,7 +1668,10 @@ accepts, with V8's heap at 85% of it) and 900 s. Parsing 200 MB of text
 peaked at 1.8 GB resident for either kind (measured 2026-10-02 on synthetic
 files of 475 000 reaches and 6.9 million cells). A country's WorldCover
 grid at 0.0025° is a few million cells, tens of MB gzipped; South Africa's
-HydroRIVERS reaches are tens of MB. A load costs cents (3 GB × a few
+HydroRIVERS reaches are tens of MB. Evaporation has its own, smaller caps,
+32 MiB uploaded and 64 MiB unzipped (`REFERENCE_KINDS` `limits`): South
+Africa at dPET's 0.1° is about 23 000 cells, 2–3 MB of JSON, and all of
+Africa about 50 MB, so anything bigger is the wrong file. A load costs cents (3 GB × a few
 minutes of Lambda) and runs one at a time (reserved concurrency 1, the
 workflow's concurrency group). Migrations use the same memory and timeout,
 billed only while they run. Don't run a load while a backend deploy is

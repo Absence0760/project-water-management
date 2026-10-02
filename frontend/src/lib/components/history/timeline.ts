@@ -327,11 +327,18 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'map.feature_created':
 			// A reach of the river network added as a river (issue #345): which reach of which dataset.
 			if (str(s.from) === 'river_network') return `Added ${mapFeature(s)} from the river network (${str(s.dataset)}, reach ${num(s.reachId) ?? '?'})`;
+			// A dam outline traced from the water occurrence data (issue #326 C2): the dataset, the share, and whether it was adjusted.
+			if (str(s.from) === 'dam_trace')
+				return `Traced ${mapFeature(s)} from ${str(s.dataset) || 'the water occurrence data'} (water in at least ${num(s.minOccurrence) ?? '?'} % of the observations${s.edited ? ', then adjusted' : ''})`;
 			return `Placed ${mapFeature(s)} on the map`;
 		case 'map.feature_changed':
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
+		// A polygon cut in two along a drawn line (issue #326 C2): the shape and what its parts became; never the geometry.
+		case 'map.feature_split': {
+			return s.kind === 'catchment_boundary' ? `Split ${mapFeature(s)} into two ${s.into === 'farm_parcel' ? 'farm parcels' : 'areas'}` : `Split ${mapFeature(s)} in two`;
+		}
 		// A catchment delineated from a click (175, issue #326 B-delineate): its area and the dataset; never the polygon.
 		case 'map.delineation_proposed': {
 			const km2 = num(s.areaKm2);
