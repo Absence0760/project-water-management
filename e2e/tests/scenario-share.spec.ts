@@ -2,8 +2,10 @@
 // issue #71; docs/ui.md § Applications, § Share page): the assessor makes a
 // read-only link to a submitted application from its Application panel; an
 // NGO opens it signed out on a phone and reads the EWR per site first; they
-// sign in (a viewer of the project) from the page, come back to the same
-// application and comment for public participation; the assessor sees the
+// sign in from the page (no role in the project: a link participant,
+// 166_public_participation), come back to the same application, read that a
+// comment is not a written objection, and comment for public participation,
+// giving their name and email for the applicant's register; the assessor sees the
 // comment in the application's comments. axe on the Share dialog, the shared
 // view (signed out and signed in) and the comments drawer. Invented names only.
 import type { Page } from '@playwright/test';
@@ -28,6 +30,7 @@ const TABLE = {
 	scale: 1
 };
 const COMMENT = 'The wetland below the weir needs its winter flows. Please keep them.';
+const NOTICE_ADDRESS = 'The Catchment Manager, Private Bag X1, Rooikloof';
 
 /** A published baseline with an EWR rule table, an applicant linked to the Upper farm, and their run and submitted application. */
 async function seed(page: Page, applicant: Page, applicantEmail: string, applicantId: string) {
@@ -44,6 +47,9 @@ async function seed(page: Page, applicant: Page, applicantEmail: string, applica
 	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
 	const ran = await applicant.request.post(`${at}/${sid}/runs`, { data: {} });
 	expect(ran.status(), await ran.text()).toBe(201);
+	// Where written objections go, as the notice gives them (166): printed beside the warning on the share page.
+	const notice = await applicant.request.patch(`${at}/${sid}`, { data: { objectionAddress: NOTICE_ADDRESS, objectionClosingDate: '2026-12-01' } });
+	expect(notice.status(), await notice.text()).toBe(200);
 	expect((await applicant.request.post(`${at}/${sid}/submit`, { data: {} })).status()).toBe(200);
 	return { projectId: project.id, sid };
 }
@@ -53,7 +59,7 @@ test('an NGO opens an application’s link, reads the EWR per site, signs in and
 	const applicant = await signIn('Share applicant');
 	const ngo = await signIn('River Trust officer');
 	const { projectId, sid } = await seed(page, applicant.page, applicant.user.email, applicant.user.id);
-	await addMember(page.request, projectId, ngo.user.email, 'viewer');
+	// Not a member of the project: they comment through the link alone.
 
 	// The assessor (the project owner) makes a link from the Application panel.
 	await page.goto(`/projects/${projectId}?tab=scenarios&scenario=${sid}`);
@@ -94,7 +100,11 @@ test('an NGO opens an application’s link, reads the EWR per site, signs in and
 	await expect(shared).toHaveURL(/\/share$/);
 	await expect(shared.getByRole('heading', { level: 1 })).toHaveText(NAME);
 	const comments = shared.getByRole('region', { name: 'Public comments' });
+	await expect(comments.getByTestId('share-objection')).toContainText('A comment here is not a written objection.');
+	await expect(comments.getByTestId('share-objection')).toContainText(NOTICE_ADDRESS);
+	await expect(comments.getByTestId('share-objection')).toContainText('1 Dec 2026');
 	await comments.getByLabel('Add a comment').fill(COMMENT);
+	await comments.getByTestId('share-register-consent').check();
 	await comments.getByRole('button', { name: 'Post comment' }).click();
 	await expect(comments.getByRole('listitem').filter({ hasText: COMMENT })).toContainText('River Trust officer');
 	await expectNoViolations(shared);
@@ -109,4 +119,11 @@ test('an NGO opens an application’s link, reads the EWR per site, signs in and
 	await expect(note.getByTestId('note-audience-badge')).toHaveText('Public');
 	await expect(drawer.getByTestId('note-audience')).toHaveValue('assessors');
 	await expectNoViolations(page);
+
+	// The applicant's public participation record (GN R267 reg 19): the comment, and the email the commenter agreed to give.
+	await applicant.page.goto(`/projects/${projectId}/scenarios/${sid}/participation`);
+	const record = applicant.page.getByTestId('participation-record');
+	await expect(record.getByTestId('participation-comment').filter({ hasText: COMMENT })).toContainText(ngo.user.email);
+	await expect(record.getByRole('region', { name: /Register of interested and affected parties/ })).toContainText(ngo.user.email);
+	await expectNoViolations(applicant.page);
 });

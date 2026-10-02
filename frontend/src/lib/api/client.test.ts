@@ -41,7 +41,8 @@ describe('createApi', () => {
 		['enrol', (a: ReturnType<typeof createApi>) => a.auth.mfa.enrol('pw'), 'POST', '/auth/mfa/totp/enrol', { password: 'pw' }],
 		['confirm', (a: ReturnType<typeof createApi>) => a.auth.mfa.confirm('123456'), 'POST', '/auth/mfa/totp/confirm', { code: '123456' }],
 		['disable', (a: ReturnType<typeof createApi>) => a.auth.mfa.disable('123456'), 'DELETE', '/auth/mfa/totp', { code: '123456' }],
-		['regenerate', (a: ReturnType<typeof createApi>) => a.auth.mfa.regenerate('123456'), 'POST', '/auth/mfa/recovery-codes', { code: '123456' }]
+		['regenerate', (a: ReturnType<typeof createApi>) => a.auth.mfa.regenerate('123456'), 'POST', '/auth/mfa/recovery-codes', { code: '123456' }],
+		['stepUp', (a: ReturnType<typeof createApi>) => a.auth.mfa.stepUp('123456'), 'POST', '/auth/mfa/step-up', { code: '123456' }]
 	] as const)('mfa.%s calls %s %s with its body', async (_name, call, method, path, body) => {
 		const f = mockFetch(200, { secret: 'S', uri: 'otpauth://x', recoveryCodes: ['A'] });
 		await call(createApi('http://x', f));
@@ -63,6 +64,46 @@ describe('createApi', () => {
 		thrower();
 		await expect(api.request('POST', '/x')).rejects.toBeInstanceOf(ApiError);
 		expect(heard).toEqual(['mfa_step_up']);
+	});
+
+	// A sign-off, issuing or withdrawing a pack need a code from the last 10 minutes (licensing positions item 9).
+	describe('401 mfa_fresh_code', () => {
+		const fresh = () => new Response(JSON.stringify({ error: 'needs a code', code: 'mfa_fresh_code' }), { status: 401 });
+		const ok = () => new Response(JSON.stringify({ done: true }), { status: 200 });
+
+		it('asks for a code and, once it was accepted, sends the action again, once', async () => {
+			const f = vi.fn().mockResolvedValueOnce(fresh()).mockResolvedValueOnce(ok());
+			const api = createApi('http://x', f);
+			const ask = vi.fn(async () => true);
+			api.onFreshCode(ask);
+			await expect(api.request('POST', '/projects/p/packs/k/issue', {})).resolves.toEqual({ done: true });
+			expect(ask).toHaveBeenCalledTimes(1);
+			expect(f).toHaveBeenCalledTimes(2);
+			expect((f.mock.calls[1] as unknown as [string, RequestInit])[1].body).toBe('{}');
+		});
+
+		it('a cancelled question, a second refusal or no handler: the caller gets the 401', async () => {
+			const cancelled = createApi('http://x', vi.fn().mockResolvedValue(fresh()));
+			cancelled.onFreshCode(async () => false);
+			await expect(cancelled.request('POST', '/x')).rejects.toMatchObject({ status: 401, code: 'mfa_fresh_code' });
+			const again = vi.fn().mockImplementation(async () => fresh());
+			const twice = createApi('http://x', again);
+			twice.onFreshCode(async () => true);
+			await expect(twice.request('POST', '/x')).rejects.toMatchObject({ status: 401, code: 'mfa_fresh_code' });
+			expect(again).toHaveBeenCalledTimes(2);
+			const none = createApi('http://x', vi.fn().mockResolvedValue(fresh()));
+			const unset = none.onFreshCode(async () => true);
+			unset();
+			await expect(none.request('POST', '/x')).rejects.toMatchObject({ status: 401 });
+		});
+
+		it('any other 401 is not a question for a code', async () => {
+			const api = createApi('http://x', mockFetch(401, { error: 'not signed in', code: 'not_signed_in' }));
+			const ask = vi.fn(async () => true);
+			api.onFreshCode(ask);
+			await expect(api.request('GET', '/x')).rejects.toMatchObject({ status: 401 });
+			expect(ask).not.toHaveBeenCalled();
+		});
 	});
 
 	it('onError is not told of a success', async () => {
@@ -448,6 +489,19 @@ describe('teams client', () => {
 		await api.teams.setThresholds('t/1', null);
 		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: { green: 10, amber: 30 } } } } });
 		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { settings: { portfolio: { thresholds: null } } } });
+	});
+
+	it('sets or removes a team’s privacy contact, and reads a project’s (168)', async () => {
+		const contact = { name: 'IO', email: 'io@example.org', postal: null };
+		const f = mockFetch(200, { team: { id: 't/1', privacyContact: contact } });
+		const api = createApi('', f);
+		expect((await api.teams.setPrivacyContact('t/1', contact)).privacyContact).toEqual(contact);
+		await api.teams.setPrivacyContact('t/1', null);
+		expect(call(f, 0)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: contact } });
+		expect(call(f, 1)).toEqual({ url: '/teams/t%2F1', method: 'PATCH', body: { privacyContact: null } });
+		const g = mockFetch(200, { wuaName: null, contact: null });
+		expect(await createApi('', g).farm.privacyContact('p/1')).toEqual({ wuaName: null, contact: null });
+		expect(call(g, 0)).toEqual({ url: '/projects/p%2F1/privacy-contact', method: 'GET' });
 	});
 
 	it('farmers.* call the farmer routes and unwrap the farmer', async () => {

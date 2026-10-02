@@ -12,7 +12,7 @@
 	// signs the pack statement, and says first that the signer's name and
 	// registration are shown publicly on the pack's verify page.
 	import { tick, untrack } from 'svelte';
-	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffList } from '$lib/api';
+	import { api, ApiError, type PackSignoffList, type Signoff, type SignoffKind, type SignoffList } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import {
@@ -23,7 +23,7 @@
 		registrationFieldsOf,
 		type RegistrationBodyCode
 	} from '@water-management/engine';
-	import { DEFAULT_REGISTRATION_BODY, PACK_SIGNER_PUBLIC, registrationAdvice, scrolledToEnd, signoffBlockers, statementEngines, type SignoffTarget } from './signoffForm';
+	import { DEFAULT_REGISTRATION_BODY, PACK_SIGNER_PUBLIC, SIGNOFF_KIND_LABEL, SIGNOFF_NOT_A_SIGNATURE, registrationAdvice, scrolledToEnd, signoffBlockers, statementEngines, type SignoffTarget } from './signoffForm';
 
 	let {
 		open = $bindable(false),
@@ -45,6 +45,9 @@
 	const statement = $derived(list.statement);
 	const engines = $derived(statementEngines(statement));
 	const pack = $derived('packVersion' in statement ? statement : null);
+	/** The kinds the caller may sign a pack as (167): an editor both, the applicant's specialist `specialist` only. */
+	const kinds = $derived('kinds' in list ? list.kinds : []);
+	let kind = $state<SignoffKind>('specialist');
 	let ticked = $state(new Set<string>());
 	let readAll = $state(false);
 	let fullName = $state('');
@@ -124,7 +127,8 @@
 				registrationNo,
 				scope,
 				confirmed: [...ticked],
-				statementSha256: list.statementSha256
+				statementSha256: list.statementSha256,
+				...(target.kind === 'pack' && kinds.includes(kind) ? { kind } : {})
 			};
 			const s = target.kind === 'pack' ? await api.packs.sign(projectId, target.id, request) : await api.signoffs.create(projectId, target.id, request);
 			onsigned(s);
@@ -147,12 +151,23 @@
 				withdrawn, only followed by another.
 			</p>
 			<p class="alert alert-warning" data-testid="signoff-public">{PACK_SIGNER_PUBLIC}</p>
+			{#if kinds.length > 1}
+				<fieldset class="kind">
+					<legend>You sign as</legend>
+					{#each kinds as k (k)}
+						<label class="check"><input type="radio" name="{uid}-kind" value={k} bind:group={kind} data-testid="signoff-kind-{k}" /> <span>{SIGNOFF_KIND_LABEL[k]}{k === 'review' ? ': a second sign-off; issuing still needs the specialist’s' : ': the professional responsible for the evidence'}</span></label>
+					{/each}
+				</fieldset>
+			{:else if kinds.length === 1}
+				<p class="small">You sign as: <strong>{SIGNOFF_KIND_LABEL[kinds[0]!]}</strong>.</p>
+			{/if}
 		{:else}
 			<p>
 				You sign as a registered professional, for this run as it was made (engine {engines}). A sign-off is permanent: it can’t be
 				changed or withdrawn, only followed by another.
 			</p>
 		{/if}
+		<p class="small" data-testid="signoff-not-a-signature">{SIGNOFF_NOT_A_SIGNATURE}</p>
 		<!-- Before the confirmations: the first refers to "the person named above". -->
 		<div class="grid">
 			<label>Full name <input bind:value={fullName} maxlength="200" autocomplete="name" required /></label>

@@ -2,7 +2,7 @@
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal, targetPath } from './render.js';
-import { packFileName, packPdfKey, packsBucket, reportFileName, reportKey, storageKind } from './storage.js';
+import { applicantPackFileName, applicantPackPdfKey, packFileName, packPdfKey, packsBucket, reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
 afterEach(() => vi.unstubAllEnvs());
@@ -65,6 +65,21 @@ describe('targetPath', () => {
 		expect(targetPath({ projectId: P, runId: R })).toBe(`/projects/${P}/report?run=${R}`);
 		expect(targetPath({ projectId: P, packId: K })).toBe(`/projects/${P}/packs/${K}`);
 		expect(targetPath({ projectId: P, packId: '../../admin' })).toBe(`/projects/${P}/packs/..%2F..%2Fadmin`);
+		// An applicant's copy (165): the party's own page of the pack.
+		expect(targetPath({ projectId: P, packId: K, scenarioId: R })).toBe(`/projects/${P}/scenarios/${R}/packs/${K}`);
+		expect(targetPath({ projectId: P, packId: K, scenarioId: '../x' })).toBe(`/projects/${P}/scenarios/..%2Fx/packs/${K}`);
+	});
+});
+
+describe("an applicant's copy's key and file name (165_applicant_copy)", () => {
+	it('sits beside the pack’s PDF under applicant/, by its own hash, and is named as a copy', () => {
+		const K = '33333333-3333-4333-8333-333333333333';
+		const sha = 'ab'.repeat(32);
+		expect(applicantPackPdfKey(P, K, sha)).toBe(`packs/${P}/${K}/applicant/${sha}.pdf`);
+		expect(() => applicantPackPdfKey(P, '../x', sha)).toThrow('UUID');
+		expect(() => applicantPackPdfKey(P, K, sha.toUpperCase())).toThrow('SHA-256');
+		expect(applicantPackFileName(2, 'abcd-ef01-2345')).toBe('evidence-pack-v2-abcd-ef01-2345-applicant-copy.pdf');
+		expect(applicantPackFileName(1, 'ab/../cd')).toBe('evidence-pack-v1-abcd-applicant-copy.pdf');
 	});
 });
 

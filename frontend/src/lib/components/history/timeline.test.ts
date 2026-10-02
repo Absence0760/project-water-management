@@ -63,8 +63,22 @@ describe('what an item says', () => {
 		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Raise the dam', outcome: 'approved_with_conditions' }))).toBe(
 			'Decided the application “Raise the dam”: approved with conditions'
 		);
+		// 163_licensing_authority: the authority's decision, recorded (an event before it keeps "Decided", above).
+		expect(
+			eventLine(ev('scenario.decided', { scenarioId: 's', name: 'Raise the dam', outcome: 'licence_refused', authority: 'Breede-Olifants CMA', decisionDate: '2026-09-30' }))
+		).toBe('Recorded Breede-Olifants CMA’s decision on the scenario “Raise the dam”: licence refused');
+		expect(eventLine(ev('scenario.decided', { scenarioId: 's', application: true, name: 'Weir', outcome: 'not_considered' }))).toBe(
+			'Recorded the responsible authority’s decision on the application “Weir”: not considered (use already authorised)'
+		);
 		expect(eventLine(ev('scenario.shared', { scenarioId: 's', application: true, userId: 'u' }))).toBe('Shared an application with another applicant');
 		expect(eventLine(ev('scenario.unshared', { scenarioId: 's', application: true, userId: 'u', self: true }))).toBe('Stopped reading a shared application');
+		// "Ask the assessors why" (164): never the question's words.
+		expect(eventLine(ev('application.question_asked', { scenarioId: 's', application: true, questionId: 'q', ops: [0], rules: ['shares'] }))).toBe(
+			'An applicant asked the assessors why a change doesn’t apply'
+		);
+		expect(eventLine(ev('application.question_answered', { scenarioId: 's', application: true, questionId: 'q' }))).toBe(
+			'Answered an applicant’s question about a change that doesn’t apply'
+		);
 		// A team scenario keeps its name, as before.
 		expect(eventLine(ev('scenario.submitted', { scenarioId: 's', name: 'Upper dam' }))).toBe('Submitted the scenario “Upper dam”');
 	});
@@ -81,6 +95,23 @@ describe('what an item says', () => {
 		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: null, to: 'Rooikloof Trust' }))).toBe('Put Ben in the applying party Rooikloof Trust');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: 'Rooikloof Trust', to: null }))).toBe('Took Ben out of the applying party Rooikloof Trust');
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: true, party: 'Rooikloof Trust' }))).toBe(
+			'Appointed Ben specialist for the applying party Rooikloof Trust'
+		);
+		expect(eventLine(ev('member.specialist', { displayName: 'Ben', specialist: false, party: null }))).toBe('Ben is no longer the specialist for their applying party');
+		expect(eventLine(ev('scenario.participation_exported', { application: true, comments: 3, emails: 1 }))).toBe(
+			'Downloaded the public comments on an application (3 comments, 1 emails given for the register)'
+		);
+		expect(eventLine(ev('signoff.created', { packId: 'p1', kind: 'review', fullName: 'Dr R', registrationBody: 'SACNASP', registrationNo: '1' }))).toMatch(
+			/^Signed off an evidence pack as the authority’s reviewer as Dr R/
+		);
+		expect(
+			eventLine(ev('registration.checked', { displayName: 'Ben', registrationBody: 'sacnasp', registrationNo: '400999/20', outcome: 'registered', checkedByOrg: 'Pack WUA' }))
+		).toBe('Recorded Ben’s SACNASP registration 400999/20 as on the register, checked by Pack WUA');
+		expect(eventLine(ev('registration.requirement', { required: false }))).toBe('Issuing an evidence pack no longer waits for a registration check');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: true }))).toBe('Marked Ben as acting for the responsible authority');
+		expect(eventLine(ev('member.authority', { displayName: 'Ben', actsForAuthority: false }))).toBe('Ben no longer acts for the responsible authority');
+		expect(eventLine(ev('publication.endorsed', { publicationId: 'p', runId: 'r', note: '' }))).toBe('Endorsed a published baseline for the responsible authority');
 		// The calibration rules' sign-off and its withdrawal (issue #153).
 		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
 		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');
@@ -112,6 +143,10 @@ describe('what an item says', () => {
 		expect(eventLine(ev('pack.withdrawn', { version: 2, shortCode: 'ffff-0000-1111', reason: 'the application lapsed' }))).toBe(
 			'Withdrew evidence pack version 2 (ffff-0000-1111): the application lapsed'
 		);
+		expect(eventLine(ev('pack.sent', { version: 1, shortCode: 'a1b2-c3d4-e5f6', recipients: ['u1', 'u2'], authority: 'Breede-Olifants CMA' }))).toBe(
+			'Sent evidence pack version 1 (a1b2-c3d4-e5f6) to 2 members acting for Breede-Olifants CMA'
+		);
+		expect(eventLine(ev('pack.sent', { version: 1, recipients: ['u1'], authority: null }))).toBe('Sent evidence pack version 1 to 1 member acting for the responsible authority');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the hydrological unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the hydrological unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(
@@ -201,6 +236,16 @@ describe('what an item says', () => {
 		expect(eventLine(ev('allocation.deleted', { registrationNo: 'R-2' }))).toBe('Deleted a registered volume (R-2)');
 		expect(eventLine(ev('allocation.imported', { fileName: 'extract.csv', rows: 12 }))).toBe('Imported 12 registered volumes from extract.csv');
 		expect(eventLine(ev('allocation.import_deleted', { fileName: 'extract.csv', rows: 1 }))).toBe('Removed the import of extract.csv and its 1 registered volume');
+		expect(eventLine(ev('licence.outcome', { outcome: 'granted', outcomeOn: '2026-03-01', expiresOn: '2046-02-28', closesOn: '2049-02-28', reason: 'DWS letter' }))).toBe(
+			'Recorded the licence outcome: granted on 2026-03-01, expiring 2046-02-28; the record may be deleted from 2049-02-28'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: 'refused', outcomeOn: '2026-03-01', closesOn: '2029-03-01' }))).toBe(
+			'Recorded the licence outcome: refused on 2026-03-01; the record may be deleted from 2029-03-01'
+		);
+		expect(eventLine(ev('licence.outcome', { outcome: null, reason: 'entered on the wrong project' }))).toBe('Cleared the licence outcome: entered on the wrong project');
+		expect(eventLine(ev('licence.confirmed', { reviewDueOn: '2031-10-01' }))).toBe('Confirmed the licence record is still needed; next review 2031-10-01');
+		expect(eventLine(ev('allocation.viewer_units', { on: true }))).toBe('Let viewers see each farm’s registered volumes');
+		expect(eventLine(ev('allocation.viewer_units', { on: false }))).toBe('Showed viewers registered volumes as totals only');
 		expect(eventLine(ev('map.imported', { fileName: 'parcels.geojson', features: 2, kind: 'farm_parcel' }))).toBe('Imported 2 map features from parcels.geojson');
 		expect(eventLine(ev('map.feature_created', { kind: 'gauge', name: 'Weir' }))).toBe('Placed a gauge “Weir” on the map');
 		expect(eventLine(ev('map.feature_changed', { kind: 'dam', name: '', moved: true }))).toBe('Moved a dam on the map');

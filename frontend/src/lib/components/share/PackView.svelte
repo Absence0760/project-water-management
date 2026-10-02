@@ -7,20 +7,14 @@
 	// each EWR site, the river's rows of its change table and the paired
 	// change by month, all from the pack's own frozen report. Once withdrawn
 	// or superseded it says so, and why or which version replaced it, and
-	// shows no figure. Public comments as on an application's link: a member
-	// of the project who is signed in comments while the pack stands (POST
-	// …/notes with the pack, `public_participation`); anyone else is offered
-	// the sign-in, the token waiting in this tab's sessionStorage. Every word
-	// is in ./pack.ts or t() here.
-	import { onMount } from 'svelte';
+	// shows no figure. Public comments as on an application's link
+	// (./ShareComments.svelte), while the pack stands. Every word is in
+	// ./pack.ts, ./ShareComments.svelte or t() here.
 	import { base } from '$app/paths';
-	import { api, ApiError } from '$lib/api';
 	import type { SharePack } from '$lib/api/types';
-	import { fmtStampDay } from '$lib/components/farm/format';
-	import { errorText } from '$lib/i18n/apiError';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { bandLine, monthRows, packSiteRows, packStatusLine, rowChange, rowLabel, rowValue, signerLine, standingNote, successorCode } from './pack';
-	import { SHARE_RETURN_KEY, SHARE_RETURN_MS } from './scenario';
+	import ShareComments from './ShareComments.svelte';
 	import { shareCaveat } from './share';
 
 	let { view, token }: { view: SharePack; token: string } = $props();
@@ -35,60 +29,6 @@
 	/** Comments are open only while the pack stands (the server holds the rule: issued, with a live link). */
 	const open = $derived(v.status === 'issued');
 
-	/** Comments, oldest first; one posted here is added at the end. */
-	let comments = $state<SharePack['comments']>([]);
-	$effect(() => {
-		comments = [...view.comments];
-	});
-
-	let signedIn = $state<boolean | null>(null);
-	let draft = $state('');
-	let busy = $state(false);
-	let error = $state<string | null>(null);
-	let posted = $state('');
-
-	onMount(() => {
-		api.auth.me().then(
-			() => (signedIn = true),
-			() => (signedIn = false)
-		);
-	});
-
-	/** Keep the link for this tab while its reader signs in (never in the address: it would reach the logs). */
-	function keepForSignIn() {
-		try {
-			sessionStorage.setItem(SHARE_RETURN_KEY, JSON.stringify({ t: token, k: 'pack', exp: Date.now() + SHARE_RETURN_MS }));
-		} catch {
-			// Storage refused (a private window): they open the link again after signing in.
-		}
-	}
-
-	async function comment(e: SubmitEvent) {
-		e.preventDefault();
-		const body = draft.replace(/\r\n?/g, '\n').trim();
-		if (!body) return;
-		busy = true;
-		error = null;
-		posted = '';
-		try {
-			const n = await api.notes.create(view.project.id, { body, packId: view.pack.id, visibility: 'public_participation' });
-			comments = [...comments, { body: n.body, author: n.author, createdAt: n.createdAt, editedAt: n.editedAt }];
-			draft = '';
-			posted = t('Your comment is posted.');
-		} catch (err) {
-			const status = err instanceof ApiError ? err.status : 0;
-			// A 404 is the server's "not a member, or not one you can comment on"; everything else by its code.
-			error =
-				status === 401
-					? t('Sign in to comment.')
-					: status === 404
-						? t('Only members of this project can comment. Ask its owner to invite you.')
-						: errorText(err);
-			if (status === 401) signedIn = false;
-		} finally {
-			busy = false;
-		}
-	}
 </script>
 
 <div class="head">
@@ -213,39 +153,7 @@
 	</div>
 
 	<div class="col">
-		<section class="card" aria-labelledby="pk-comments-h" data-testid="share-comments">
-			<h2 id="pk-comments-h">{t('Public comments')}</h2>
-			{#if comments.length}
-				<ul class="comments">
-					{#each comments as c, i (i)}
-						<li>
-							<p class="body">{c.body}</p>
-							<p class="fine">
-								{c.author ?? t('a former member')} · <time datetime={c.createdAt}>{fmtStampDay(c.createdAt)}</time>{#if c.editedAt}
-									· {t('edited')}{/if}
-							</p>
-						</li>
-					{/each}
-				</ul>
-			{:else}
-				<p class="fine">{t('No comments yet.')}</p>
-			{/if}
-			{#if !open}
-				<p class="fine">{t('Commenting is closed: this pack no longer stands.')}</p>
-			{:else if signedIn}
-				<form class="comment" onsubmit={comment}>
-					<label for="share-pack-comment">{t('Add a comment')}</label>
-					<textarea id="share-pack-comment" rows="3" maxlength="4000" bind:value={draft} aria-describedby="share-pack-comment-help"></textarea>
-					<p id="share-pack-comment-help" class="fine">{t('Shown with your name to everyone this pack is shared with. Plain text; every edit is kept.')}</p>
-					<button type="submit" class="btn btn-primary" disabled={busy || !draft.trim()}>{busy ? t('Posting…') : t('Post comment')}</button>
-				</form>
-			{:else if signedIn === false}
-				<p><a href="{base}/login?next={encodeURIComponent(`${base}/share`)}" onclick={keepForSignIn} data-testid="share-sign-in">{t('Sign in to comment')}</a></p>
-				<p class="fine">{t('Commenting needs an account in this project, so every comment has a name.')}</p>
-			{/if}
-			{#if error}<p class="alert alert-error" role="alert">{error}</p>{/if}
-			<p class="visually-hidden" role="status">{posted}</p>
-		</section>
+		<ShareComments {token} kind="pack" initial={view.comments} objection={view.objection} {open} closed={t('Commenting is closed: this pack no longer stands.')} />
 
 		<section class="card" aria-labelledby="about-pk-h">
 			<h2 id="about-pk-h">{t('About this page')}</h2>
@@ -276,7 +184,6 @@
 		border-left: 4px solid var(--danger);
 	}
 	.ewr,
-	.comments,
 	.signers {
 		list-style: none;
 		margin: 0;
@@ -333,26 +240,6 @@
 	.body {
 		white-space: pre-line;
 		overflow-wrap: anywhere;
-	}
-	.comments li {
-		border-left: 3px solid var(--border-strong);
-		padding-left: 10px;
-	}
-	.comment {
-		display: grid;
-		gap: 6px;
-		margin-top: 12px;
-	}
-	.comment label {
-		font-weight: 500;
-	}
-	textarea {
-		width: 100%;
-		font: inherit;
-	}
-	.comment button {
-		justify-self: start;
-		min-height: 44px;
 	}
 	.table-scroll {
 		overflow-x: auto;

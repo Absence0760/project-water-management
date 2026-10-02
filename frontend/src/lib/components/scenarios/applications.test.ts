@@ -81,9 +81,10 @@ describe('waiting and the header line', () => {
 describe('statusPill', () => {
 	it('puts the outcome in words, with a tone for each', () => {
 		expect(statusPill({ status: 'submitted', outcome: null })).toEqual({ text: 'Awaiting a decision', tone: 'awaiting' });
-		expect(statusPill({ status: 'decided', outcome: 'approved' })).toEqual({ text: 'Approved', tone: 'good' });
-		expect(statusPill({ status: 'decided', outcome: 'approved_with_conditions' })).toEqual({ text: 'Approved with conditions', tone: 'mixed' });
-		expect(statusPill({ status: 'decided', outcome: 'refused' })).toEqual({ text: 'Refused', tone: 'bad' });
+		expect(statusPill({ status: 'decided', outcome: 'licence_issued' })).toEqual({ text: 'Licence issued (see its conditions)', tone: 'good' });
+		expect(statusPill({ status: 'decided', outcome: 'licence_refused' })).toEqual({ text: 'Licence refused', tone: 'bad' });
+		expect(statusPill({ status: 'decided', outcome: 'application_rejected' })).toEqual({ text: 'Application rejected (formal requirements)', tone: 'bad' });
+		expect(statusPill({ status: 'decided', outcome: 'not_considered' })).toEqual({ text: 'Not considered: use already authorised', tone: 'mixed' });
 		expect(statusPill({ status: 'withdrawn', outcome: null })).toEqual({ text: 'Withdrawn', tone: 'neutral' });
 	});
 });

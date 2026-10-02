@@ -13,6 +13,14 @@ const APP_URL = process.env.DATABASE_URL!;
  */
 const NO_RLS = new Set(['schema_migrations']);
 /**
+ * Owner-only tables: RLS on, no policy, and no grant of any kind to
+ * water_app. The erasure log holds the ids of deleted accounts, projects and
+ * teams for a restore to re-apply (159_erasure_log.sql); its triggers and its
+ * purge write it as SECURITY DEFINER functions, and only the operator, as the
+ * schema owner, reads it (deployment.md § Restoring the database).
+ */
+const OWNER_ONLY = new Set(['erasure_log']);
+/**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
  * never applies to it: whoever can select from the view sees every row.
@@ -35,14 +43,20 @@ const OWNER_RIGHTS_VIEWS_SQL = `SELECT c.relname FROM pg_class c JOIN pg_namespa
  */
 const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	model_run: ['notes', 'pinned'],
+	// A membership's project, user and join date are fixed; an owner changes its role, party, authority flag (163_licensing_authority.sql) and specialist flag (167_signers.sql).
+	project_member: ['acts_for_authority', 'party', 'role', 'specialist'],
 	// A note's author, target and visibility are fixed; its author edits the body, and it is soft-deleted (037_notes.sql).
 	note: ['body', 'deleted_at', 'deleted_by', 'edited_at'],
 	// An ensemble is completed once with its result; its seed and options never change (014_run_uncertainty.sql).
 	run_uncertainty: ['accepted', 'completed_at', 'result', 'status', 'summary'],
 	// A report's project, run, job, requester and recipients are fixed at insert; only its outcome changes (023_reports.sql).
 	report: ['bytes', 'error', 'finished_at', 'pages', 'status'],
-	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql).
+	// A publication's run, projection and publisher never change; the notice, the note, the next date and the supersession do (022_publication.sql),
+	// and the responsible authority's endorsement, once (163_licensing_authority.sql).
 	run_publication: [
+		'endorsed_at',
+		'endorsed_by',
+		'endorsement_note',
 		'next_expected_on',
 		'note',
 		'notice',
@@ -116,8 +130,10 @@ const APPEND_ONLY = new Set([
  * can't be cherry-picked (014_run_uncertainty.sql). A share link is revoked,
  * not deleted: the row is the record of who made and withdrew it until the
  * audit log (WP-2.4) has events for both (025_share_links.sql). A note is
- * soft-deleted: the body stays for the audit trail, hidden from all but
- * editors (037_notes.sql). An API key too: audit events name it
+ * soft-deleted and hidden (037_notes.sql); 90 days later the tick erases it
+ * through app_purge_deleted_notes, a SECURITY DEFINER function, the only path
+ * that removes a note row (158_note_purge.sql), so water_app still has no
+ * DELETE on it. An API key too: audit events name it
  * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
  * only by the operator, as the schema owner, on a POPIA request
  * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
@@ -136,7 +152,8 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * recovery code is issued, then used or replaced (deleted), and an account's
  * security event never changes (150_mfa.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event']);
+// Page 1's board against full authorised use is replaced, never changed: the newest wins, the older go (165).
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session', 'user_recovery_code', 'account_security_event', 'authorised_impact']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -160,8 +177,30 @@ const NO_INSERT = new Set(['series_blob', 'note_revision']);
  * `pnpm import:quaternaries`); the app only proposes from it. So is the
  * gauging-station list (156_gauge_stations.sql, `pnpm import:gauge-stations`)
  * and the register of dams (157_dam_register.sql, `pnpm import:dam-register`).
+ * An applicant's "Ask the assessors why" question is filed and answered only
+ * through 164_applicant_visibility's app_ask_assessors (the project and the
+ * name from the application) and app_answer_assessors_question (an editor,
+ * once). An applicant's printable copy of a pack is recorded only by
+ * 165_applicant_copy's app_record_applicant_pack_pdf, from the party's own
+ * running render job.
  */
-const READ_ONLY = new Set(['language', 'pack_notice', 'alert_feedback', 'erratum_notice', 'erratum_sweep', 'quaternary_reference', 'pack_reproduction', 'gauge_station_reference', 'dam_register_reference']);
+const READ_ONLY = new Set([
+	'language',
+	'pack_notice',
+	'alert_feedback',
+	'erratum_notice',
+	'erratum_sweep',
+	'quaternary_reference',
+	'pack_reproduction',
+	'gauge_station_reference',
+	'dam_register_reference',
+	// A signer's registration check is recorded only through app_record_registration_check (the project's owner,
+	// 167_signers), insert-only, and bound to a sign-off only by app_pack_bind_registration_checks at issue.
+	'registration_check',
+	'signoff_registration_check',
+	'application_question',
+	'evidence_pack_applicant_copy'
+]);
 /**
  * Tables with a node column that farmers never read (020_farm_scope.sql).
  * invite_node is a pending farmer invite's farms, owners only like invite
@@ -239,6 +278,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// What the WUA published to farmers stays with who published or ended it cleared (106).
 	'outlook_publication.ended_by': 'set null',
 	'outlook_publication.published_by': 'set null',
+	'run_publication.endorsed_by': 'set null',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
 	'run_uncertainty.created_by': 'set null',
@@ -259,6 +299,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'share_link.created_by': 'set null',
 	'share_link.revoked_by': 'set null',
 	'signoff.user_id': 'set null',
+	// A registration check stays as the record of what verify showed when a pack was issued, without the account (167_signers).
+	'registration_check.user_id': 'set null',
+	'registration_check.recorded_by': 'set null',
 	'team.created_by': 'set null',
 	'team_member.user_id': 'cascade',
 	// A person's own display preferences go with them (083_user_preferences.sql).
@@ -334,14 +377,30 @@ describe('schema catalogue', () => {
 			 WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity
 			   AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)`
 		);
-		expect(rows.map((r) => r.relname)).toEqual([]);
+		expect(rows.map((r) => r.relname).filter((t) => !OWNER_ONLY.has(t))).toEqual([]);
+	});
+
+	it('keeps owner-only tables closed to water_app: RLS on, no policy, no privilege (erasure_log)', async () => {
+		for (const table of OWNER_ONLY) {
+			const { rows: rls } = await db.query<{ on: boolean }>('SELECT relrowsecurity AS on FROM pg_class WHERE oid = $1::regclass', [`public.${table}`]);
+			expect(rls[0]?.on, `${table} RLS`).toBe(true);
+			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) {
+				const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', $1, $2) AS ok`, [`public.${table}`, priv]);
+				expect(rows[0]!.ok, `${table} ${priv}`).toBe(false);
+			}
+			const { rows: policies } = await db.query('SELECT polname FROM pg_policy WHERE polrelid = $1::regclass', [`public.${table}`]);
+			expect(policies, `${table} policies`).toEqual([]);
+		}
+		// Positive control: the same check sees water_app's SELECT on an ordinary table.
+		const { rows } = await db.query<{ ok: boolean }>(`SELECT has_table_privilege('water_app', 'public.note', 'SELECT') AS ok`);
+		expect(rows[0]!.ok).toBe(true);
 	});
 
 	it('grants every app table to water_app, which owns nothing and cannot bypass RLS', async () => {
 		// Each privilege on its own: has_table_privilege with a list is true if *any* is held.
 		const missing = [];
 		for (const t of await tables()) {
-			if (t.relname === 'schema_migrations') continue;
+			if (t.relname === 'schema_migrations' || OWNER_ONLY.has(t.relname)) continue;
 			for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
 				if (COLUMN_ONLY_UPDATE[t.relname] && priv === 'UPDATE') continue;
 				if (APPEND_ONLY.has(t.relname) && (priv === 'UPDATE' || priv === 'DELETE')) continue;

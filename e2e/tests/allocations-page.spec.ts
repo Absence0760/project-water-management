@@ -3,8 +3,9 @@
 // `import=1`, `volume=new|<id>`) and the run picker (`run=`); a list of each unit and source, the ones to look into
 // first, beside the picked unit's water years (`unit=`); below, the registered volumes and every unit's water years.
 // The page flows in the window's one scroll (it fitted the window until 2026-09-29): every long list shows its first
-// few with a "Show all" that opens the rest in place, and nothing scrolls inside a card. A viewer sees volumes
-// without names and nothing to change. On a phone it stacks. Synthetic data only.
+// few with a "Show all" that opens the rest in place, and nothing scrolls inside a card. A viewer sees totals per
+// water source until the owner lets viewers see each farm (162, D3), then volumes without names and nothing to change.
+// On a phone it stacks. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { compareCard, openAllocations, seedManyAllocations, volumesCard } from '../support/allocations.ts';
@@ -203,11 +204,32 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expectNoSidewaysScroll(page);
 	await expectNoViolations(page);
 
-	// A viewer: the volumes and the comparison, no names anywhere and nothing to change.
+	// A viewer: by default totals per water source only (162, D3), no unit, no number, no name, no CSV.
 	const viewer = await signIn('Allocations page viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	const v = viewer.page;
 	await v.setViewportSize({ width: 1440, height: 960 });
+	await openAllocations(v, project.id, `&unit=${farm1.id}`);
+	const totals = v.getByTestId('allocation-totals');
+	// 30 units and 4 unmatched rows on surface water, every fifth unit on groundwater too, each its own holder.
+	await expect(totals.getByTestId('allocation-total-surface')).toContainText('Surface water: 34 registered users');
+	await expect(totals.getByTestId('allocation-total-groundwater')).toContainText('Groundwater: 6 registered users');
+	await expect(totals.getByTestId('allocation-totals-years-surface')).toBeVisible();
+	await expect(totals).not.toContainText('SYN-G1000');
+	await expect(totals).not.toContainText('farm 1');
+	await expect(detail(v)).toHaveCount(0);
+	await expect(header(v).getByRole('link', { name: 'Download CSV', exact: true })).toHaveCount(0);
+	await expect(v.getByTestId('allocation-viewer-units')).toHaveCount(0);
+	await expectNoViolations(v);
+
+	// The owner lets viewers see each farm (the switch is the owner's alone).
+	await openAllocations(page, project.id);
+	const sw = page.getByTestId('allocation-viewer-units');
+	await expect(sw).toContainText('works for, or was appointed by, your organisation');
+	await sw.getByRole('checkbox', { name: 'Viewers see each farm’s registered volumes' }).check();
+	await expect(page.getByRole('status').filter({ hasText: 'Viewers now see each farm’s registered volumes.' })).toBeVisible();
+
+	// Now the viewer reads the volumes and the comparison, no names anywhere and nothing to change.
 	await openAllocations(v, project.id, `&unit=${farm1.id}`);
 	await expect(header(v).getByRole('link', { name: 'Download CSV', exact: true })).toBeVisible();
 	await expect(header(v).getByRole('link', { name: 'Import', exact: true })).toHaveCount(0);

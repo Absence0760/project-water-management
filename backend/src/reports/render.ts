@@ -47,10 +47,12 @@ export interface ReportTarget {
 	token: string;
 }
 
-/** An issued evidence pack: its own page, /projects/:id/packs/:packId (119_pack_render). */
+/** An issued evidence pack: its own page, /projects/:id/packs/:packId (119_pack_render); an applicant's copy, their party's page (165). */
 export interface PackTarget {
 	projectId: string;
 	packId: string;
+	/** An applicant's copy (165_applicant_copy): the pack's application, whose party's page /projects/:id/scenarios/:sid/packs/:packId is printed. */
+	scenarioId?: string;
 	/** The raw render token (reports/tokens.ts issuePackRenderToken). */
 	token: string;
 }
@@ -116,6 +118,7 @@ export function reportQuery(t: Pick<ReportTarget, 'runId' | 'against'>): string 
 /** The page a target prints, under the site: the report route, or the pack's page. */
 export function targetPath(t: Omit<ReportTarget, 'token'> | Omit<PackTarget, 'token'>): string {
 	const project = `/projects/${encodeURIComponent(t.projectId)}`;
+	if ('packId' in t && t.scenarioId) return `${project}/scenarios/${encodeURIComponent(t.scenarioId)}/packs/${encodeURIComponent(t.packId)}`;
 	return 'packId' in t ? `${project}/packs/${encodeURIComponent(t.packId)}` : `${project}/report?${reportQuery(t)}`;
 }
 

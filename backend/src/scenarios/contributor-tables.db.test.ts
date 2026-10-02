@@ -8,7 +8,7 @@
 // tables say about an application hidden from them (a note on its run, a
 // sign-off of it, a yield of it). Every "cannot see" has a positive control.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -150,8 +150,9 @@ describe('a contributor and the tables added alongside WP-3.3', () => {
 		const names = await rowsAs<{ user_display: string }>(applicant, 'SELECT user_display FROM allocation_holder WHERE project_id = $1', [projectId]);
 		expect(names.map((r) => r.user_display)).toEqual(['R. Holder']);
 		expect(await idsAs(applicant, 'allocation_source')).toEqual([]);
-		// Positive controls: a viewer reads every volume and the import, an editor every name.
-		expect((await idsAs(viewer, 'allocation')).length).toBe(3);
+		// Positive controls: an editor reads every volume and every name, a viewer the import. (A viewer
+		// reads each volume only once an owner allows it, D3, 162: allocations/allocations.db.test.ts.)
+		expect((await idsAs(editor, 'allocation')).length).toBe(3);
 		expect((await idsAs(viewer, 'allocation_source')).length).toBe(1);
 		expect((await rowsAs(editor, 'SELECT 1 FROM allocation_holder WHERE project_id = $1', [projectId])).length).toBe(2);
 		// The API refuses them the Allocations tab's routes, as it does a farmer.
@@ -238,7 +239,8 @@ describe('what these tables say about an application hidden from a viewer (045)'
 		expect(await idsAs(viewer, 'note')).not.toContain(note);
 		expect(await idsAs(viewer, 'signoff')).not.toContain(signoff);
 		expect(await idsAs(viewer, 'yield_result')).not.toContain(yieldOnScenario);
-		expect((await editor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(200);
+		await actForAuthority(owner, projectId, editor.id);
+		expect((await editor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(200);
 		expect(await idsAs(viewer, 'note')).toContain(note);
 		expect(await idsAs(viewer, 'signoff')).toContain(signoff);
 		expect(await idsAs(viewer, 'yield_result')).toEqual(expect.arrayContaining([yieldOnScenario, yieldOnRun]));

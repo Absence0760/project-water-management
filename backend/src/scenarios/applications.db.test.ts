@@ -6,7 +6,7 @@
 // "cannot see" has its positive control.
 import { blankEwrRuleTable } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { actForAuthority, asOwner, DECISION, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -89,6 +89,8 @@ beforeAll(async () => {
 		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role })).status, u.email).toBe(201);
 	}
 	expect((await owner.call('POST', `${P()}/farmers`, { email: farmer.email, nodeIds: [kalkoenkrans.id] })).status).toBe(201);
+	// The assessor acts for the responsible authority (163): only such a member records its decision.
+	await actForAuthority(owner, projectId, assessor.id);
 	// A contributor keeps farm links (045 widened farm_link_check and /farmers/:userId).
 	const linked = await owner.call('PUT', `${P()}/farmers/${applicantA.id}`, { nodeIds: [rooikloof.id] });
 	expect(linked.status, JSON.stringify(linked.body)).toBe(200);
@@ -291,12 +293,18 @@ describe('an application', () => {
 
 	it('is submitted by its owner, frozen, then seen by the assessors (not viewers) with its runs', async () => {
 		expect((await consultant.call('POST', `${P()}/scenarios/${sid}/submit`)).status).toBe(403);
+		// Where written objections go, as the notice gives them (166_public_participation): set while a draft…
+		const notice = await asA('PATCH', `${P()}/scenarios/${sid}`, { objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
+		expect(notice.status, JSON.stringify(notice.body)).toBe(200);
+		expect(notice.body.scenario).toMatchObject({ objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
 		const res = await asA('POST', `${P()}/scenarios/${sid}/submit`);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
 		expect(res.body.scenario.status).toBe('submitted');
 		expect(res.body.scenario.submittedAt).not.toBeNull();
-		// Frozen: the ops can't change, through the API or the table.
+		// Frozen: the ops can't change, through the API or the table; nor the notice's details (166).
 		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { ops: [] })).status).toBe(409);
+		expect((await asA('PATCH', `${P()}/scenarios/${sid}`, { objectionAddress: 'Elsewhere' })).status).toBe(409);
+		expect(res.body.scenario).toMatchObject({ objectionAddress: 'The EAP, PO Box 1', objectionClosingDate: '2026-11-30' });
 		await expect(withUser(applicantA.id, (db) => db.query(`UPDATE scenario SET ops = '[]' WHERE id = $1`, [sid]))).rejects.toMatchObject({ code: '23514' });
 		// The assessors see it, and its run.
 		const list = await assessor.call('GET', `${P()}/applications`);
@@ -314,13 +322,29 @@ describe('an application', () => {
 	});
 
 	it('is decided by an assessor, never by its applicant, and viewers then read it', async () => {
-		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(403);
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'maybe' })).status).toBe(400);
-		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved_with_conditions', note: 'Releases of 5 % in dry months.' });
+		expect((await asA('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'maybe' })).status).toBe(400);
+		// The old words are gone from the API (163).
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'approved' })).status).toBe(400);
+		// The authority's date and the reasons flag are part of the record.
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'licence_issued', authority: 'X' })).status).toBe(400);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', decisionDate: '2999-01-01' })).status).toBe(400);
+		// An owner who doesn't act for the authority can't (163; the assessor, marked, can: below).
+		expect((await owner.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(403);
+		const res = await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued', note: 'Releases of 5 % in dry months.' });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.scenario).toMatchObject({ status: 'decided', outcome: 'approved_with_conditions', decisionNote: 'Releases of 5 % in dry months.', decidedBy: 'Assessor' });
+		expect(res.body.scenario).toMatchObject({
+			status: 'decided',
+			outcome: 'licence_issued',
+			decisionNote: 'Releases of 5 % in dry months.',
+			decidedBy: 'Assessor',
+			decisionAuthority: DECISION.authority,
+			decisionDate: DECISION.decisionDate,
+			decisionReference: DECISION.reference,
+			reasonsReceived: true
+		});
 		// Final: no second decision, no withdrawal, no delete.
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'refused' })).status).toBe(409);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_refused' })).status).toBe(409);
 		expect((await asA('POST', `${P()}/scenarios/${sid}/withdraw`)).status).toBe(409);
 		expect((await asA('DELETE', `${P()}/scenarios/${sid}`)).status).toBe(409);
 		// Viewers read a decided application (control above: not before).
@@ -334,6 +358,8 @@ describe('an application', () => {
 			['scenario.unshared', null],
 			['scenario.shared', null],
 			['scenario.changed', null],
+			['scenario.changed', null],
+			// The notice's objection details (166).
 			['scenario.changed', null],
 			['scenario.submitted', null],
 			['scenario.decided', 'Raise Rooikloof']
@@ -350,9 +376,9 @@ describe('withdraw, reopen and delete', () => {
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/withdraw`)).body.scenario.status).toBe('withdrawn');
 		// A decision racing the withdrawal: RLS filters the assessor's UPDATE to no
 		// row, silently (why the route's move() checks the count and answers 409).
-		const raced = await withUser(assessor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'approved' WHERE id = $1`, [sid]));
+		const raced = await withUser(assessor.id, (db) => db.query(`UPDATE scenario SET status = 'decided', outcome = 'licence_issued' WHERE id = $1`, [sid]));
 		expect(raced.rowCount).toBe(0);
-		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { outcome: 'approved' })).status).toBe(409);
+		expect((await assessor.call('POST', `${P()}/scenarios/${sid}/decide`, { ...DECISION, outcome: 'licence_issued' })).status).toBe(409);
 		expect((await asOwner('SELECT status FROM scenario WHERE id = $1', [sid]))[0].status).toBe('withdrawn');
 		expect((await applicantB.call('POST', `${P()}/scenarios/${sid}/reopen`)).body.scenario).toMatchObject({ status: 'draft', submittedAt: null });
 		// Hidden again from the assessor once a draft.

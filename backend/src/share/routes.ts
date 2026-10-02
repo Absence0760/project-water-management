@@ -18,7 +18,7 @@
 // pack's standing: once it is superseded or withdrawn it answers that, not
 // the figures.
 import { Hono } from 'hono';
-import type { AuthEnv } from '../auth/middleware.js';
+import { requireUser, type AuthEnv } from '../auth/middleware.js';
 import { newToken, parseToken } from '../auth/tokens.js';
 import { withoutUser, withUser, type Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
@@ -34,7 +34,9 @@ async function ownerHere(db: Db, projectId: string): Promise<boolean> {
 }
 import { stampMatches } from '../runs/stamp.js';
 import {
+	CommentBody,
 	CreateBody,
+	toShareObjection,
 	ListQuery,
 	toSharePack,
 	toShareScenario,
@@ -204,7 +206,10 @@ export const shareLinkRoutes = new Hono<AuthEnv>()
 		})
 	);
 
-/** POST /share/view, /share/series, /share/scenario and /share/pack: public, the token is the credential. */
+/**
+ * POST /share/view, /share/series, /share/scenario and /share/pack: public, the token is the credential.
+ * POST /share/comment: the token and a session (a comment has a named author).
+ */
 export const sharePublicRoutes = new Hono<AuthEnv>()
 	.post('/view', async (c) => {
 		const body = ViewBody.parse(await readJson(c));
@@ -234,7 +239,7 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		// Unknown, revoked, expired, a baseline link, or a scenario no longer submitted or decided.
 		if (!row) throw deadLink();
 		c.header('Cache-Control', 'no-store');
-		return c.json(toShareScenario(row, stampMatches));
+		return c.json({ ...toShareScenario(row, stampMatches), objection: await shareObjection(hash) });
 	})
 	.post('/pack', async (c) => {
 		const body = ViewBody.parse(await readJson(c));
@@ -244,5 +249,42 @@ export const sharePublicRoutes = new Hono<AuthEnv>()
 		// Unknown, revoked, expired, another kind of link, or a pack that was never issued.
 		if (!row) throw deadLink();
 		c.header('Cache-Control', 'no-store');
-		return c.json(toSharePack(row));
+		return c.json({ ...toSharePack(row), objection: await shareObjection(hash) });
+	})
+	// A public-participation comment through the link, by any signed-in account, with no project role (166_public_participation,
+	// docs/security.md § Share links → Link participants). The session is the author; the token is the only reach: the
+	// SECURITY DEFINER app_share_comment writes one note on the link's own target, while the link is live and the target open,
+	// 10 an hour per account. Plain text, never rendered as markup. Every dead or closed link is the same 404.
+	.post('/comment', requireUser, async (c) => {
+		const body = CommentBody.parse(await readJson(c));
+		const hash = parseToken(body.token);
+		if (!hash) throw deadLink();
+		const out = await withUser(c.get('userId'), async (db) =>
+			(await db.query<{ r: { outcome: string; seconds?: number; note?: Record<string, unknown> } | null }>('SELECT app_share_comment($1, $2, $3) AS r', [hash, body.body, body.registerConsent])).rows[0]?.r
+		);
+		if (!out) throw deadLink();
+		if (out.outcome === 'throttled') {
+			const seconds = Math.max(1, Math.ceil(out.seconds ?? 3600));
+			c.header('Retry-After', String(seconds));
+			throw ApiError.coded(429, 'comment_throttled', 'you have posted 10 comments through share links in the last hour; try again later', { seconds });
+		}
+		const n = out.note ?? {};
+		c.header('Cache-Control', 'no-store');
+		return c.json(
+			{
+				comment: {
+					body: typeof n.body === 'string' ? n.body : '',
+					author: typeof n.author === 'string' ? n.author : null,
+					createdAt: typeof n.createdAt === 'string' ? n.createdAt : '',
+					editedAt: typeof n.editedAt === 'string' ? n.editedAt : null
+				}
+			},
+			201
+		);
 	});
+
+/** The notice's objection address and closing date for a live link's application (app_share_objection, 166), or null. */
+async function shareObjection(hash: Buffer): Promise<ReturnType<typeof toShareObjection>> {
+	const v = await withoutUser(async (db) => (await db.query<{ v: unknown }>('SELECT app_share_objection($1) AS v', [hash])).rows[0]?.v);
+	return toShareObjection(v);
+}

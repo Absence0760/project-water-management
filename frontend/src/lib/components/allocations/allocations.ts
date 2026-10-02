@@ -5,7 +5,7 @@
 // app compares modelled use with a registered volume and leaves the finding to
 // the authority (docs/allocations.md § What the comparison is not).
 import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
-import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '$lib/api/types';
+import type { Allocation, AllocationAuthorisation, AllocationCapYears, AllocationPreviewRow, AllocationTotal, AllocationPurpose, AllocationWaterSourceKind, AllocationWaterUse } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
@@ -288,6 +288,19 @@ export function allocationsContext(volumes: number, unmatched: number, rows: rea
 	}
 	return parts.join(' · ');
 }
+
+/**
+ * A water source's total for a viewer (162, D3): "Surface water: 12 registered
+ * users, 1 250 000 m³ a year registered today, 300 000 m³ of storage."
+ */
+export function totalsSentence(t: AllocationTotal): string {
+	const storage = t.storageM3 !== null ? `, ${fmtNum(t.storageM3)} m³ of storage` : '';
+	return `${SOURCE_LABEL[t.waterSource]}: ${fmtNum(t.holders)} registered users, ${fmtNum(t.registeredM3PerYear)} m³ a year registered today${storage}.`;
+}
+
+/** The note an owner reads before letting viewers see each farm's registered volumes (162, D3). */
+export const VIEWER_UNITS_NOTE =
+	'Only switch this on if every viewer of this catchment works for, or was appointed by, your organisation. Otherwise viewers see totals per water source, at 5 or more registered users.';
 
 /** Preview rows in the order a person fixes them: rows with problems, then unmatched, then matched; file order within each. */
 export function previewOrder(rows: readonly AllocationPreviewRow[]): AllocationPreviewRow[] {

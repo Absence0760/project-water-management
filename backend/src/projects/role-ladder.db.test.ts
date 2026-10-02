@@ -78,6 +78,10 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	// (assertCanChange, the viewer checks in POST and …/runs).
 	['POST /projects/:id/scenarios', { why: 'a contributor makes an application; a viewer makes nothing', viewer: 403 }],
 	['PATCH /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
+	// The applicant's printable copy (165): a party of the application asks for it; anyone else gets the same 404.
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { why: "a party of the application asks for their copy of its issued pack (app_applicant_pack_meta); anyone else 404s", viewer: 404 }],
+	// "Ask the assessors why" (164): a party of the application asks; a team scenario has nothing hidden to ask about.
+	['POST /projects/:id/scenarios/:sid/questions', { why: "an application's parties ask about a rule hidden from them; a team scenario hides none", viewer: 409 }],
 	['DELETE /projects/:id/scenarios/:sid', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/runs', { why: "an application by its readers (not a viewer), a team scenario by an editor", viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/rebase', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
@@ -86,7 +90,9 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	['POST /projects/:id/scenarios/:sid/reopen', { why: 'an application by its applicant, a team scenario by an editor', viewer: 403 }],
 	['POST /projects/:id/scenarios/:sid/members', { why: 'an applicant shares their own application; a team scenario has nothing to share', viewer: 409 }],
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { why: 'an applicant unshares their own application; only they remove someone else', viewer: 403 }],
-	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }]
+	['DELETE /projects/:id/share-links/:linkId', { why: 'RLS: a baseline link is the owner’s to revoke; an assessor revokes a scenario link, an applicant their own (WP-3.15)', viewer: 403 }],
+	// The applicant's appointed specialist signs their party's application's draft pack (167_signers); a viewer still can't.
+	['POST /projects/:id/packs/:packId/signoffs', { why: 'an editor, or the application’s appointed specialist (app_pack_specialist, 167); a viewer signs nothing', viewer: 403 }]
 ]);
 
 /** Routes only an owner may call, and why. */
@@ -107,7 +113,11 @@ const OWNER_ONLY = new Map<string, string>([
 	['POST /projects/:id/share-links', 'a share link gives anyone holding it the catchment page'],
 	['GET /projects/:id/api-keys', 'an API key writes series without a person signed in'],
 	['POST /projects/:id/api-keys', 'an API key writes series without a person signed in'],
-	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in']
+	['DELETE /projects/:id/api-keys/:keyId', 'an API key writes series without a person signed in'],
+	['PUT /projects/:id/registration-check-required', 'whether issuing a pack waits for the signers’ registration checks (167)'],
+	['PUT /projects/:id/licence-record', 'the licence outcome sets how long the evidence and the names it keeps are kept (161)'],
+	['POST /projects/:id/licence-record/confirm', 'confirming the licence record is still needed keeps it, with its names, five more years (161)'],
+	['PUT /projects/:id/allocations/viewer-units', 'whether viewers, who may be outside the organisation, read each farm’s registered volumes (162, D3)']
 ]);
 
 /**
@@ -125,6 +135,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/farm/:nodeId', { min: 'farmer', why: 'the farm view of a linked farm; any other node 404s alike' }],
 	['GET /projects/:id/farm/:nodeId/export.csv', { min: 'farmer', why: "the farm view's CSV, the same figures and the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/access', { min: 'farmer', why: 'who can see this farm, so a farmer knows who reads their figures' }],
+	['GET /projects/:id/privacy-contact', { min: 'farmer', why: 'who decides about the project’s information and whom to ask (POPIA s18(1)(b), 168): the team’s name and contact only' }],
 	['GET /projects/:id/farm/:nodeId/series', { min: 'farmer', why: "one of the farm view's own allowlisted series, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/history', { min: 'farmer', why: "the farm's own figures across publications, the same 404s" }],
 	['GET /projects/:id/farm/:nodeId/map', { min: 'farmer', why: "the farm's own parcels and dams plus the boundary, rivers and gauges, never a neighbour's (#326 A3; farm-map.db.test.ts), the same 404s" }],
@@ -147,6 +158,11 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/scenarios', { min: 'contributor', why: 'a contributor lists their own applications and those shared with them (RLS)' }],
 	['POST /projects/:id/scenarios', { min: 'contributor', why: 'a contributor makes an application on the published run' }],
 	['GET /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application its applicant or a sharer reads; any other 404s' }],
+	['POST /projects/:id/scenarios/:sid/questions', { min: 'contributor', why: 'a party of the application asks the assessors about a rule hidden from them (164)' }],
+	[
+		'GET /projects/:id/scenarios/:sid/questions',
+		{ min: 'contributor', why: "an application's questions: its parties through app_application_questions (never the real words), editors the rows; any other 404s" }
+	],
 	['GET /projects/:id/scenarios/:sid/base', { min: 'contributor', why: "the published base run's inputs, through app_published_run_input" }],
 	['GET /projects/:id/scenarios/:sid/results', { min: 'contributor', why: "an application run's results as its applicant sees them, through app_application_run_results (118)" }],
 	['PATCH /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
@@ -161,6 +177,8 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }],
 	// An applicant's packs (131_applicant_packs): the definer functions answer only the application's parties, for packs that were issued.
 	['GET /projects/:id/scenarios/:sid/packs', { min: 'contributor', why: "an application's issued packs, for its parties only (app_applicant_packs)" }],
+	['POST /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party asks for their printable copy of an issued pack of the application (165); any other 404s" }],
+	['GET /projects/:id/scenarios/:sid/packs/:packId/pdf', { min: 'contributor', why: "a party downloads their printable copy (165), other water users' figures withheld; any other 404s" }],
 	[
 		'GET /projects/:id/scenarios/:sid/packs/:packId',
 		{ min: 'contributor', why: "one issued pack of an application, D2-anonymised, for its parties only (app_applicant_pack); any other 404s" }
@@ -170,17 +188,25 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],
 	['GET /projects/:id/jobs', { min: 'contributor', why: 'the job status list RLS lets the caller read (a contributor: their own yield jobs, 096), so the Yield panel follows one' }],
 	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],
-	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }]
+	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }],
+	// The applicant's appointed specialist (167_signers): a draft pack of their party's application, through app_specialist_pack.
+	['GET /projects/:id/packs/:packId/signoffs', { min: 'contributor', why: 'the sign-off statement of a draft pack the caller may sign as the application’s appointed specialist; any other contributor 403' }],
+	['POST /projects/:id/packs/:packId/signoffs', { min: 'contributor', why: 'the application’s appointed specialist signs their party’s draft pack, as the specialist only (signoff_insert_specialist)' }],
+	// The reg 19 record (166_public_participation): the application's owner, through app_participation_export; anyone else 404.
+	['GET /projects/:id/scenarios/:sid/participation-export', { min: 'contributor', why: 'an application’s public comments for its owner’s reg 19 report, and its editors; any other contributor 404 (app_participation_export)' }]
 ]);
 
 /** Reads that need editor, and why. */
 const EDITOR_READS = new Map<string, string>([
+	['GET /projects/:id/licence-record', 'the licence outcome and the record’s review and closing dates, for those who manage the evidence (161)'],
 	['GET /projects/:id/applications', 'the assessors’ queue of submitted applications (WP-3.3)'],
+	['GET /projects/:id/application-questions', 'applicants’ questions with each rule’s real words, which name farms only editors read in an application’s check (164)'],
 	['GET /projects/:id/assessments', 'cumulative assessments name submitted applications, which viewers read only once decided (WP-3.11, 145)'],
 	['GET /projects/:id/assessments/:aid', 'one cumulative assessment with its report; editors only like the list (WP-3.11, 145)'],
 	['GET /projects/:id/alert-rules', 'the alert thresholds editors set; viewers get the alerts, not the rules'],
 	['GET /projects/:id/alert-feedback', 'the "Was this useful?" answers on the alert emails editors set up, counted, with unnamed comments (151)'],
-	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)']
+	['GET /projects/:id/feeds/chirps/from-boundary', 'a proposal to change a feed, for the people who set the model up; viewers read the feeds themselves (#326 B-rain)'],
+	['GET /projects/:id/registration-checks', 'the host’s checks of members’ professional registrations, for the people who issue packs (167)']
 ]);
 
 type Ctx = LadderCtx;

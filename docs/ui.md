@@ -1382,7 +1382,33 @@ it scrolls, and isn't fitted to the window.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
-  consultant or client in the same one. Others see the party as text.
+  consultant or client in the same one. Others see the party as text. Each
+  editor and owner row has an **Acts for the responsible authority** tick
+  box for owners (163_licensing_authority; others see it as text when set):
+  those members record the authority's decisions and endorse a published
+  baseline. A change that would make an editor also part of an applying
+  party is refused with the server's `role_conflict` words. A member with a
+  party has a **Specialist for this party** tick box for owners (167_signers;
+  others see "Specialist for <party>"): the registered professional the
+  applicant appointed, who signs the evidence packs of the party's
+  applications.
+- **Registration checks** (`project/RegistrationChecksPanel.svelte`, 167;
+  editors and owners): the host's checks of members' registrations against
+  the public SACNASP or ECSA register, newest first (member, registration
+  and the name on the register, found or not, checked when and by whom).
+  An owner, or an editor acting for the responsible authority, gets
+  **Record a check** (member, register, category, number, name on the
+  register, found, the checking organisation, the date, a note; the
+  register's address to look it up), and the owner the tick box "Issuing an
+  evidence pack waits until each specialist signer has a check from the
+  last year" (on by default). `registration-checks.spec.ts` pins it with
+  axe.
+- **Responsible authority** (`project/AuthorityPanel.svelte`, 163): who
+  decides the project's licence applications, its name, kind (a catchment
+  management agency or the Department of Water and Sanitation) and office,
+  saved at once by an editor (`settings.responsibleAuthority`; empty clears
+  it); read-only text for a viewer. The decision form and the evidence
+  report's *For* row read it.
 - **Farmers** (WP-2.1, `project/FarmersPanel.svelte`): each farmer with the
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
@@ -1431,6 +1457,17 @@ it scrolls, and isn't fitted to the window.
   hour), live links first (`e2e/tests/share-link-inventory.spec.ts`). **Withdraw** asks first, then the link shows the
   dead-link state to whoever holds it. With nothing published, a note says
   a link opens only once a run is published.
+- **Licence record** (161, `project/LicenceRecordPanel.svelte`, words in
+  `project/licenceRecord.ts`), editors and owners, under Share links
+  (heading id `licence-record`, the target of the licence-record emails):
+  how long the issued packs, nominated runs and the names they keep are kept
+  ([evidence-pack.md § Retention](./evidence-pack.md#retention)). One line
+  says where it stands (nothing to keep yet; the next review; the review is
+  due; granted and expiring, kept until; past its closing date, ask the
+  operator), as a warning when due. Owners record the outcome (Not recorded,
+  Granted with its expiry, Refused, Withdrawn), the date and why, and, while
+  no outcome is recorded and a review is set, **The record is still
+  needed** (the next review five years on).
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
@@ -1789,7 +1826,11 @@ personal copy (the Copy dialog says so).
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
-(below), and **Leave or delete** (*Leave team* for everyone, the only admin
+(below), **Privacy contact** (whom people ask about the personal information
+in the team's projects, POPIA s18(1)(b), 168: admins edit *Name or office*,
+*Email address* and *Postal address (optional)*, *Save contact* and
+*Remove*; members read it, "Only owners can change it."; farmers see it from
+the farm menu and invitations name it), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the project list's
 team note, "Change them on the team page", links there), and closing it drops the
@@ -2551,6 +2592,13 @@ map" card) stays the schematic; this is the geography.
   the map only when glyphs are configured. No features: "Nothing on the map
   yet to show the quaternaries around."; none near: "No quaternary catchment
   in the loaded dataset is near this catchment." (or that none is loaded).
+  With a DEM configured (`PUBLIC_TERRAIN_URL`, [maps.md §
+  Relief](./maps.md#relief)) a **Relief** checkbox follows, with a
+  light-to-dark swatch (`layers=relief`): on, the land is shaded from the
+  Copernicus 30 m elevation model ("Hills shaded from the Copernicus 30 m
+  elevation model."), or "The relief couldn’t be loaded, so the map is
+  drawn without it." when the DEM can't be read. Without a DEM there is no
+  checkbox.
 - **Features** (under the card): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
@@ -4827,7 +4875,13 @@ read it before.
   removed and the run is a workbook comparison only. In the runs list the current published run carries a
   **Published** tag, and no run a publication holds has a delete button (the
   server refuses with `409`); the run header repeats the badge as a link to
-  the section. Viewers see the status and the notice, no actions. The farm
+  the section. A run that was published says whether the responsible
+  authority endorsed it as a baseline ("Endorsed for the responsible
+  authority <date> by <name>", its note; or **Not endorsed by the
+  responsible authority**, which evidence reports on it say on page 1;
+  163_licensing_authority), and a member acting for the authority gets
+  **Endorse as the responsible authority** with an optional note, once
+  (it can't be changed or withdrawn). Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
 - **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
@@ -6047,6 +6101,20 @@ WP-3.10 first slice (`lib/components/allocations/`, a lazy tab;
 #17). A core tab: owners, editors and viewers see it; farmers never reach the
 workspace.
 
+**What a viewer sees** (decision D3, 162). Until an owner switches viewers
+on, a viewer gets one card instead of the page below, *Registered water use
+in this catchment* (`AllocationTotals.svelte`): per water source held by 5
+or more registered users, the holders, the volume registered today and the
+storage (`totalsSentence`), and the run's modelled use against the
+registered volumes summed per water year; "No total is shown" when no
+source has 5 holders. No unit, number, name or Download CSV. Owners get a
+**What viewers see** card at the foot of the page, a checkbox *Viewers see
+each farm's registered volumes* with the note to switch it on only if every
+viewer works for, or was appointed by, the organisation (`VIEWER_UNITS_NOTE`).
+The import sheet asks a WARMS extract **How you obtained this extract (the
+DWS or CMA letter or terms)**, required, and refuses the file until it is
+filled; a CSV's reference stays optional.
+
 **Section header.** The context counts the registered volumes, the ones not
 matched to a unit, and the units above registered in the run shown ("40
 registered volumes · 4 not matched · 6 units above registered";
@@ -6257,8 +6325,9 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   run" when they have); the **Ecological Reserve** (the outlet's days not
   met, and a table of each EWR site's months met, rate and longest run not
   met, baseline beside theirs); **The catchment** (mean natural and outlet
-  flow and a chart of the outlet's flow and EWR, baseline against theirs, or
-  why not: fewer than five farm holders); **Your hydrological units**
+  flow and a chart of the outlet's flow and EWR, baseline against theirs;
+  below five farm holders natural flow and the EWR only, and why the outlet
+  flow isn't shown); **Your hydrological units**
   (demand, supply, share met, the dam on the last day, baseline → theirs,
   and what ran: crops with their areas and boreholes; a unit their changes
   add is "(new)"); and **Downstream of your units** ("Farm 1 downstream:
@@ -6284,7 +6353,41 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   ("… in this application's runs Kalkoenkrans is called “Kalkoenkrans (2)”",
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
-  applicant never does.
+  applicant never does. An assessor also reads, in an info box, each rule
+  the applicant reads without the other units' figures in its own words
+  (`check.assessorProblems`, 164).
+- **Written objections** (166_public_participation): the warning that a
+  comment in the app is not a written objection, and the notice's
+  **Address** and **Closing date** ("Not given" until set). The owner edits
+  them while it is a draft (**Edit the notice details**: a text box and a
+  date); once submitted they are fixed. Every public comment box and share
+  page prints them.
+- **Public participation record** (the owner and the assessors, once
+  submitted): a link to `/projects/:id/scenarios/:sid/participation`
+  (`routes/projects/[id]/scenarios/[sid]/participation/+page.svelte`), the
+  application's public comments for the reg 19 report, laid out under the
+  GN R267 Annexure D item 8 headings the app holds material for: the
+  application and its notice, access and opportunity to comment (its
+  links), the written comments (author, the email only where they ticked
+  the register box, where and how posted, moderation state, earlier texts),
+  the register of interested and affected parties from the app, and
+  notifying them of the decision. **Print or save as PDF** and **Download
+  the comments (CSV)**. `scenario-share.spec.ts` checks the record.
+- **To sign as the applicant's specialist** (167_signers), in the
+  applicant's Evidence packs list: the drafts the caller may sign as the
+  party's appointed specialist, each with **Sign…** (the sign-off section
+  in a side sheet, signing as "Specialist for the applicant").
+- **Rules you can't see** (`AskAssessors.svelte`, 164; for the
+  application's parties, between the problems note and the changes): each
+  problem line a rule hidden from them broke (`check.maskedRules`), the
+  changes it names and what the rule is about ("change 1: flow shares"), and
+  **Ask the assessors why**, which sends the line, those changes and the
+  rule's kind (never anything hidden) to the assessors. The panel says what
+  the assessors see (the question, the changes it names and the
+  application's name, not the rest of the draft). Once asked: "Asked
+  <date>; waiting for the assessors' answer", then the answer and **Ask
+  again**. Questions about lines the check no longer shows sit under
+  **Earlier questions**.
 - **Comments and share links** (WP-3.15), at the top of the panel: the
   application's **Notes** button (the notes drawer on the scenario, titled
   "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
@@ -6328,7 +6431,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   a decision first, the longest-waiting on top).
 - **The table:** name (a link to it in the Scenarios tab), applicant ("shared
   with N" under it), status as a pill in words (Awaiting a decision;
-  Approved, Approved with conditions or Refused in the band colours, with
+  the authority's outcome in the band colours: *Licence issued (see its
+  conditions)* good, *Licence refused* and *Application rejected (formal
+  requirements)* bad, *Not considered: use already authorised* mixed, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
   "waiting N days" while it awaits a decision), changes and runs, and the
   the application's evidence packs (WP-3.14: each a status badge, newest
@@ -6340,6 +6445,15 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs", its
   packs, its comments) and the page scrolls.
+- **Applicants' questions** (`AssessorQuestions.svelte`, 164), under the
+  card and only when there are any: each "Ask the assessors why" question,
+  unanswered first ("N waiting for an answer"), with the application's
+  name, when it was asked, the changes and the rule's kind, the line as the
+  applicant read it and the rule in its own words, and **Your answer** /
+  **Send the answer** (once; an answer goes to the application's parties,
+  so the note above the list says to write only what they may know of
+  other water users). A question may be about a draft, which stays the
+  applicant's.
 - **States:** loading, error ("Retry"), empty ("No applications submitted.",
   with where they come from: applicants on the Project page, the baseline
   published in Runs & results) and a filter with none ("Nothing is awaiting a
@@ -6384,15 +6498,31 @@ dark).
 
 In the Scenarios tab an
 application shows an "Application" tag and "… application by <name>" in the
-list; only its owner edits it, and an editor who isn't its owner gets the
-**Decide** form (outcome radios, reasons and conditions, **Record the
-decision**; final).
+list; only its owner edits it. An editor who isn't its owner and whom the
+owner marks as acting for the responsible authority gets **Record the
+authority's decision** (163_licensing_authority; provisional position,
+pre-counsel research, 2026-10-01): the outcome in the Act's words with its
+basis beside each (*Licence issued (see its conditions)*, *Licence refused*,
+*Application rejected (formal requirements)*, *Not considered: use already
+authorised*), the authority (empty: the project's), the date of the decision
+letter, the licence or file reference, *Written reasons received?* yes or no,
+and a note for the authority's reasons and conditions; the button waits for
+the outcome, the date and the reasons answer; final. Another editor reads
+that only a member acting for the authority records it. A decided
+application shows the outcome, whose decision it was and its date, the
+reference and the reasons answer, who recorded it and when, the note, and
+that any appeal runs from the decision letter (s148, s41(6); no deadline
+worked out).
 
 e2e: `e2e/tests/applications.spec.ts` (the applicant's flow to submission,
 the assessor's decision, the empty list, axe in light and dark) and
 `e2e/tests/applications-page.spec.ts` (the assessors' page: header, window
 fit and a 30-application queue, the status filter's URL and Back, empty
-states, a viewer, the phone cards, axe at desktop light and dark and phone).
+states, a viewer, the phone cards, axe at desktop light and dark and phone)
+and `e2e/tests/ask-assessors.spec.ts` (an applicant asks why a rule
+depending on a farm they can't see refuses their change, the assessor
+answers it on the Applications tab, the applicant reads the answer; axe in
+light and dark).
 
 ## History (`?tab=history`)
 
@@ -6748,7 +6878,10 @@ baseline card links to the published run's report (**Report**, beside
     (decision D10)* line stands above it.
 
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): full name, the registration as three selects (body, SACNASP by
+  opened): first the line "This sign-off is an electronic professional
+  statement in this app. It is not your signature on any form or report the
+  authority requires; sign those as the authority asks." (`signoffForm.ts`
+  `SIGNOFF_NOT_A_SIGNATURE`, 167; Terms §3 says the same); then full name, the registration as three selects (body, SACNASP by
   default or ECSA; category; SACNASP's field of practice or ECSA's
   discipline, whose list follows the body, and choosing another body clears
   both; engine `liability/registration.ts`), registration number (its
@@ -6916,8 +7049,23 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     interaction in its note; no band; *Not assessed* naming each conflict
     when they conflict, or saying none of exactly them is assessed yet;
     *None* when there are none the reader can see; an older pack prints its
-    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then **Impact by year
-    class** (the impact report's `LicenceImpactBoard`, the baseline as the
+    frozen *Other applications on this baseline, summed*)), with the paired band and "worse in k of n"; then, on an
+    application report, **Against full authorised use** (`evidence-14`,
+    licensing build item 8; `report/evidence/authorised.ts`): the same
+    board over the baseline and the application both run with every holder
+    at their registered volume, worded by `evidenceBoard` from the report's
+    `licenceImpactAuthorised`, and under it the authorised volumes' mix
+    (held as licence, verified existing lawful use, registration, claimed
+    existing lawful use, general authorisation or Schedule 1, the volume,
+    whether it is an entitlement, and the totals) and when and on which
+    engine it was run; without one, a fixed *Not assessed* row says why
+    (not run for this application run, no registered volumes, or out of
+    date); a pack drafted before `evidence-14` says it isn't part of it.
+    Above the report, on screen only, an editor gets **Run at full
+    authorised use** (or **Run it again** when out of date), which runs
+    the pair (`POST …/authorised-impact`) and reads the report again. Then
+    **Against modelled current use**, the **Impact by year
+    class** board (the impact report's `LicenceImpactBoard`, the baseline as the
     background, the application beside it, worded by `evidenceBoard` from
     the report's `licenceImpact`, which the engine builds on the server from
     the runs' stored series and the project's `settings.outcomes` (the
@@ -7003,7 +7151,10 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     caps, the days the licence limit held use back by limit and the years
     the volume was used up, in the Allocations page's words (`capYearsText`),
     "Not capped" for the run that doesn't cap it. Units by their unit name,
-    never the holder's. *Not assessed* when the runs carry no volumes, or
+    never the holder's, and only the applicant's own (`evidence-15`, D3):
+    every other unit is one *Other registered users (n units)* row per water
+    source, left out below 5 units, and a note says which
+    (`evidence-allocations-others`). *Not assessed* when the runs carry no volumes, or
     none on a unit of theirs.
   - **6 The applicant's demand objects** (application only, report format
     `evidence-9`, issue #259): every demand object on the applicant's units
@@ -7099,7 +7250,13 @@ their own application's in [their own view](#the-applicants-pack-view).
   redirect to a signed GET, `pack-<code>.zip`;
   [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)),
   **Verify page** once issued, **Share link…** (an editor, once it was
-  issued) and **Notes**, and the version, code, manifest hash, PDF hash
+  issued), **Send to the authority…** (an editor, while it is issued:
+  `PackSendDialog.svelte`, a side sheet saying why the full pack goes to
+  the authority and not through the applicant, the members acting for the
+  responsible authority as ticked checkboxes, an optional note and
+  **Send**, then "Sent to …"; with none, it says the owner marks them in
+  Members; [evidence-pack.md § Sending it to the authority](./evidence-pack.md#sending-it-to-the-authority))
+  and **Notes**, and the version, code, manifest hash, PDF hash
   (or that none is recorded) and the bundle's hash. When an erratum found
   since the manifest was frozen applies to either run's engine or its fit's
   (`errataFoundSince`, 132), a warning lists it: *Errata found since issue*,
@@ -7154,7 +7311,24 @@ their own application's in [their own view](#the-applicants-pack-view).
   evidence pack…** opens the run's sign-off dialog with the pack's version,
   manifest hash and engines, the eleventh confirmation, and first a warning
   that the signer's name, registration and date are shown publicly on the
-  verify page, for as long as the pack exists.
+  verify page, even if the pack is withdrawn, for as long as the licence
+  record it supports is kept (three years after the licence expires, or
+  after the application is refused or withdrawn; [evidence-pack.md §
+  Retention](./evidence-pack.md#retention)). An editor chooses **You sign
+  as**: "Specialist for the applicant" (the professional responsible for
+  the evidence; what issue needs) or "Reviewed for the responsible
+  authority" (a second sign-off); the applicant's appointed specialist
+  signs as the specialist only (167_signers). The sign-off list prints
+  **Signed as** and, once the host recorded a check, "Registration (checked
+  against the register by <org>, <date>)" instead of "(self-declared)"; the
+  verify page does the same. The issue checklist adds "Each specialist
+  signer's registration has a current check" while the project requires it.
+- **A fresh code** (`layout/FreshCodeDialog.svelte`, its own chunk, mounted
+  by `routes/+layout.svelte`): when a sign-off, an issue or a withdrawal
+  answers `401 mfa_fresh_code`, a dialog asks for a code from the
+  authenticator app (or a recovery code), sends it to `POST
+  /auth/mfa/step-up`, and the action goes through without being started
+  again; Cancel leaves it undone.
 - Tested by `e2e/tests/evidence-pack.spec.ts` (create from the report, sign
   in the dialog, issue, the stamps, verify line and footer, the manifest
   download, withdraw; an application's packs in the Applications tab and
@@ -7179,6 +7353,18 @@ Part of the workspace, so English, like the rest of the Applicant view
   note that this is their copy: their own units by name, the others
   downstream under the names the rest of the application gives them; the assessors' copy, its PDF
   and bundle name them; issuing and withdrawing are the assessors'.
+- **Their printable copy** (165_applicant_copy): **Make a printable copy**
+  in the head's bar asks the server to print this view as them; *Printing
+  your copy…* while it does (the page reads it again every 2 s for about a
+  minute), then **Download your printable copy** and a line with the
+  copy's own SHA-256, page count and when it was printed, saying it is a
+  copy of this page, not the pack. A failure says why, and the button
+  comes back. Printed (the server's PDF, or the browser's print), the page
+  drops the bar, the notes and the Back link, opens with a boxed
+  "Applicant's copy: other water users' figures withheld. Not the pack.
+  Check the pack at <verify address>" with the pack's code and manifest
+  hash, and repeats that in the footer of every page. The page sets
+  `data-report-ready` once loaded, for the renderer.
 - **The river**: the Reserve at each EWR site (the outlet unnamed) and the
   river's rows of page 1's change table with the likely range, the volume
   rows only when the API gives them (a line says why not otherwise).
@@ -7192,16 +7378,17 @@ Part of the workspace, so English, like the rest of the Applicant view
   report changed a baseline assumption, a line says why no unit is shown.
 - **Check this pack**: the code, issue date, manifest, PDF and bundle
   hashes, the errata found since issue when verify names any (132; the
-  same note as the pack's page and verify), and the signers. No download:
-  the PDF, manifest and bundle are the assessors' copies. The "pack issued"
+  same note as the pack's page and verify), and the signers. No download
+  of the pack's PDF, manifest or bundle: those are the assessors' copies. The "pack issued"
   and "pack withdrawn" emails (133) link the applicant here.
 - 404 (not theirs, not issued, another application's) and 403 each have
   their own line; the Back link returns to the application.
 - Tested by `packs/applicantPack.test.ts` and
   `e2e/tests/applicant-pack.spec.ts` (from the Application panel to the
   view, their farm named and the neighbour beside it, not downstream, not
-  listed (as in the results view), no download, the
-  errata found since issue, a share link opened signed out, axe, the phone
+  listed (as in the results view), no download of the pack, the
+  errata found since issue, their printable copy made by a worker tick and
+  its PDF's hash checked, a share link opened signed out, axe, the phone
   layout).
 
 ## Help (`/help`)
@@ -7381,8 +7568,16 @@ published.
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
 - **Frame.** The farm pages have their own header ("My hydrological unit", the EN | AF
-  language switch, Menu: your farms, the words, Account, the privacy notice, "Don't keep a copy
+  language switch, Menu: your farms, the words, Account, the privacy notice, on a catchment's
+  pages *Who decides about your farm's information*, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
+- **Who decides about your farm's information** (`/farm/[id]/who-decides`,
+  POPIA s18(1)(b), 168): the organisation that runs the catchment (the
+  project's team) and the person or office to ask, as the team's owners set
+  it in Team settings (`GET /projects/:id/privacy-contact`): name, a
+  `mailto:` email link and the postal address when given. Without a contact
+  it says to ask the person who invited them or the WUA. Both link the
+  privacy notice's § 2.
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
   emails" link lands there): the header's **Your hydrological units** back link in
@@ -8139,15 +8334,25 @@ signed in or out, for someone outside the project, on a phone first.
   column: the decision's reasons (once decided), **The catchment's totals**
   (flow out, water supplied, units short of 95 % of demand, baseline and
   application; only at five or more units), **Public comments** (oldest
-  first, author and date, *edited*), and **About this page**. A signed-in
-  member gets **Add a comment** (posted for public participation, "Shown
-  with your name to everyone this application is shared with"); anyone else
-  gets **Sign in to comment**, which keeps the link in this tab's
-  `sessionStorage` (never the address bar) so the page opens it again after
-  the sign-in. A server `404` says only members can comment, a `403` that
-  it isn't open for comment. Same two-column layout from 860 px, one
+  first, author and date, *edited*), and **About this page**. The comments
+  card is `share/ShareComments.svelte` (the `share.comments` section; both
+  link kinds; 166_public_participation): first the warning "A comment here
+  is not a written objection. To object, and to keep the right to appeal
+  (National Water Act s148(1)(f)), write to the address in the
+  application's notice before its closing date.", then that address and
+  closing date when the applicant gave them. Anyone signed in, member of
+  the project or not, gets **Add a comment** (posted through the link,
+  `POST /share/comment`), with who receives it (the applicant, the
+  authority, the reg 19 report) and the tick box "Give my name and email to
+  the applicant for the register of interested and affected parties (GN
+  R267 reg 18)"; anyone signed out gets **Sign in to comment**, which keeps
+  the link in this tab's `sessionStorage` (never the address bar) so the
+  page opens it again after the sign-in, and the line that no membership is
+  needed. A server `404` says the link no longer takes comments, a `429`
+  the hourly limit. Same two-column layout from 860 px, one
   column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
-  sign in, comment, the assessor's view) with axe.
+  sign in with no role, the warning and the notice's address, comment with
+  the register tick, the assessor's view, the applicant's record) with axe.
 - **An evidence pack link** (WP-3.15, 128, `/share#t=…&k=pack`,
   `share/PackView.svelte`, words in `share/pack.ts`, the `share.pack`
   section): the same shell, states and comment flow as a scenario link,
@@ -8165,8 +8370,9 @@ signed in or out, for someone outside the project, on a phone first.
   application and the change, and the likely range from the model sets),
   and **Days below the EWR by month** (an application). Both states have
   **Check this pack** (the code, the verify page link, the hashes, the
-  signers) and, on the right, **Public comments** (a signed-in member posts
-  while it stands; closed once it doesn't, the comments kept) and **About
+  signers) and, on the right, **Public comments** (the same card: anyone
+  signed in posts while it stands; closed once it doesn't, the comments
+  kept) and **About
   this page**. `pack-share.spec.ts` pins it (link from the pack page, phone,
   sign in, comment, withdraw: the same link then shows the reason and no
   figure) with axe.

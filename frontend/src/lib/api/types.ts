@@ -200,14 +200,28 @@ export interface OutlookSettings {
 	review?: { month: number; day: number } | null;
 }
 
+/**
+ * settings.responsibleAuthority (163_licensing_authority, backend
+ * projects/authoritySettings.ts): who decides the project's licence
+ * applications, DWS or a CMA with the power. null = none named. Not a model input.
+ */
+export interface ResponsibleAuthority {
+	name: string;
+	kind: 'dws' | 'cma';
+	/** '' = not given. */
+	office: string;
+}
+
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
 	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
 	wuaName?: string | null;
-	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
+	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings; responsibleAuthority?: ResponsibleAuthority | null };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
+	/** The caller acts for the responsible authority (163): editor or above and marked by an owner, so they record its decisions and endorse a baseline. */
+	actsForAuthority?: boolean;
 }
 
 /** What a series merge or replace answers: the series, and when the automatic re-run it queued is due (null: none queued). */
@@ -286,6 +300,10 @@ export interface Member {
 	role: Role;
 	/** The applying party the owner put them in (049): an applicant shares applications only within their own. */
 	party: string | null;
+	/** The party's appointed specialist, who signs its applications' evidence packs (167_signers); needs a party. */
+	specialist: boolean;
+	/** The owner marked them as acting for the responsible authority (163). Absent from an older API. */
+	actsForAuthority?: boolean;
 }
 
 /** Someone who can read a farm's figures (GET /projects/:id/farm/:nodeId/access): names and roles, never emails. */
@@ -372,6 +390,25 @@ export interface Team {
 	settings: { portfolio?: { thresholds?: { green: number; amber: number } } };
 	/** The portfolio thresholds that apply: the team's, or the defaults. */
 	portfolioThresholds: PortfolioThresholds;
+	/** Whom to ask about the personal information in the team's projects (168, POPIA s18(1)(b)); null = not set. */
+	privacyContact: PrivacyContact | null;
+}
+
+/** A team's privacy contact: a name (or office) and an email address, a postal address optional (168). */
+export interface PrivacyContact {
+	name: string;
+	email: string;
+	postal: string | null;
+}
+
+/**
+ * GET /projects/:id/privacy-contact: who decides about a project's information, for every member, farmers
+ * included. contact null: the project has no team, or its team has set no contact.
+ */
+export interface ProjectPrivacyContact {
+	/** The WUA the farm pages name (095), or null. */
+	wuaName: string | null;
+	contact: (PrivacyContact & { organisation: string }) | null;
 }
 
 /**
@@ -954,6 +991,12 @@ export interface Scenario {
 	purposeAndNeed: string;
 	mitigation: string;
 	monitoring: string;
+	/**
+	 * Where written objections go and by when, as the application's notice gives them (GN R267 reg 17(4)(b)(vi)–(vii);
+	 * 166_public_participation); null: not given. Set while a draft, frozen once submitted.
+	 */
+	objectionAddress: string | null;
+	objectionClosingDate: string | null;
 	baseRunId: string;
 	/** The base run, for the "Based on run X" banner (label '' and createdAt null if you can't read it). */
 	baseRun: { id: string; label: string; createdAt: string | null };
@@ -982,6 +1025,11 @@ export interface Scenario {
 	decidedBy: string | null;
 	outcome: ScenarioOutcome | null;
 	decisionNote: string;
+	/** The authority's decision as recorded (163): its name, the date on its letter, its reference, and whether written reasons came. null/'' until decided; the date and the reasons flag are null on a decision recorded before 163. */
+	decisionAuthority?: string | null;
+	decisionDate?: string | null;
+	decisionReference?: string;
+	reasonsReceived?: boolean | null;
 	/** Who else reads an application: the applicant's consultant or client. */
 	members: { userId: string; displayName: string }[];
 	createdAt: string;
@@ -992,13 +1040,39 @@ export interface Scenario {
 }
 
 export type ScenarioOrigin = 'team' | 'applicant';
-/** An assessor's decision on an application (backend scenarios/schema.ts SCENARIO_OUTCOMES; the words pending the licensing authority). */
-export type ScenarioOutcome = 'approved' | 'approved_with_conditions' | 'refused';
-export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['approved', 'approved_with_conditions', 'refused'];
+/**
+ * The responsible authority's decision on an application, in the National
+ * Water Act's and GN R267's words (backend scenarios/schema.ts
+ * SCENARIO_OUTCOMES, 163_licensing_authority; provisional position,
+ * pre-counsel research, 2026-10-01).
+ */
+export type ScenarioOutcome = 'licence_issued' | 'licence_refused' | 'application_rejected' | 'not_considered';
+export const SCENARIO_OUTCOMES: readonly ScenarioOutcome[] = ['licence_issued', 'licence_refused', 'application_rejected', 'not_considered'];
 export const OUTCOME_LABEL: Record<ScenarioOutcome, string> = {
-	approved: 'Approved',
-	approved_with_conditions: 'Approved with conditions',
-	refused: 'Refused'
+	licence_issued: 'Licence issued (see its conditions)',
+	licence_refused: 'Licence refused',
+	application_rejected: 'Application rejected (formal requirements)',
+	not_considered: 'Not considered: use already authorised'
+};
+/** POST …/decide: "Record the authority's decision" (163). */
+export interface DecideRequest {
+	outcome: ScenarioOutcome;
+	/** The authority's name; omitted, the project's settings.responsibleAuthority. */
+	authority?: string;
+	/** The date on its decision letter, YYYY-MM-DD. */
+	decisionDate: string;
+	/** Its licence or file reference ('' = none). */
+	reference?: string;
+	reasonsReceived: boolean;
+	note?: string;
+}
+
+/** The outcome's basis in the Act or the regulations, printed beside the choice. */
+export const OUTCOME_BASIS: Record<ScenarioOutcome, string> = {
+	licence_issued: 'NWA s27, s28(1)(d): every licence carries conditions',
+	licence_refused: 'NWA s42',
+	application_rejected: 'GN R267 regs 9(1)(b), 11(2), 12(2)(b)',
+	not_considered: 'NWA s40(4)'
 };
 
 /**
@@ -1026,7 +1100,8 @@ export interface ApplicantEwrFigures {
 
 export interface ApplicantCatchmentFigures {
 	meanNaturalFlowM3Day: number;
-	meanSimulatedOutflowM3Day: number;
+	/** The use's figure: only at 5 or more farm holders (164); else null. */
+	meanSimulatedOutflowM3Day: number | null;
 	ewrDaysNotMet: number;
 	ewrFractionDaysNotMet: number;
 }
@@ -1063,7 +1138,9 @@ export interface ApplicantResults {
 		ewrDaysNotMet: { base: number; application: number };
 		ewrFractionDaysNotMet: { base: number; application: number };
 		figures: { base: ApplicantCatchmentFigures; application: ApplicantCatchmentFigures } | null;
-		series: { outflow: ApplicantSeriesPair; ewr: ApplicantSeriesPair } | null;
+		/** The EWR requirement whenever the figures show; the outflow only past the k rule (164). */
+		series: { outflow: ApplicantSeriesPair | null; ewr: ApplicantSeriesPair | null } | null;
+		/** Why the use's figures (outflow, its series, the EWR deficit) are left out. */
 		withheld: ApplicantWithheld | null;
 	};
 	units: { nodeId: string; name: string; kind: 'farm' | 'user'; added: boolean; base: ApplicantUnitFigures | null; application: ApplicantUnitFigures | null }[];
@@ -1114,6 +1191,43 @@ export interface ScenarioCheck {
 	 * the hidden one keeps its own. Viewers and up only, like `renamed`.
 	 */
 	reIds?: { kind: 'crop' | 'transfer' | 'landCover' | 'borehole'; id: string; as: string }[];
+	/**
+	 * An application's problem lines a rule hidden from its applicant broke
+	 * (164): the line's index in `problems`, the ops it names (0-based) and
+	 * the rules' kinds (`shares`, `area`, `supplyTrigger`…), never an id, a
+	 * name or a value. What "Ask the assessors why" sends. Absent on a team
+	 * scenario.
+	 */
+	maskedRules?: MaskedRuleRef[];
+	/** Every problem line in its real words (164). Editors and up only, on an application; never to its applicant. */
+	assessorProblems?: string[];
+}
+
+/** A problem line of an application's check that a hidden rule broke (ScenarioCheck.maskedRules). */
+export interface MaskedRuleRef {
+	problem: number;
+	ops: number[];
+	rules: string[];
+}
+
+/** An "Ask the assessors why" question as an application's parties read it (164): never the rule's real words. */
+export interface ApplicationQuestion {
+	id: string;
+	askedAt: string;
+	/** The problem line as the applicant read it. */
+	problem: string;
+	opIndexes: number[];
+	rules: string[];
+	answer: string | null;
+	answeredAt: string | null;
+}
+
+/** The same question as the assessors read it: the application, the ops it named and the line in its real words. */
+export interface AssessorQuestion extends ApplicationQuestion {
+	scenarioId: string;
+	scenarioName: string;
+	ops: ScenarioOp[];
+	assessorText: string;
 }
 
 /**
@@ -1170,6 +1284,16 @@ export interface PublicationMeta {
 	publishedBy: string | null;
 	restriction: { level: RestrictionLevel };
 	supersededAt: string | null;
+	/** The responsible authority's endorsement of this baseline (163): null = not endorsed. Viewers and above only (absent for a farmer, or from an older API). */
+	endorsement?: PublicationEndorsement | null;
+}
+
+/** Who endorsed a published baseline for the responsible authority, and when (163; POST …/publication/:pubId/endorse). */
+export interface PublicationEndorsement {
+	endorsedAt: string;
+	/** null once that account is gone. */
+	endorsedBy: string | null;
+	note: string;
 }
 
 /** The current publication (GET …/publication, POST, PATCH). */
@@ -1440,7 +1564,23 @@ export interface ShareScenario {
 	base: SharedRun | null;
 	run: SharedRun | null;
 	/** Comments posted for public participation, oldest first; plain text. */
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** Where written objections go, when the applicant gave it (166). */
+	objection: ShareObjection | null;
+}
+
+/** A public comment as a share page shows it. */
+export interface SharedComment {
+	body: string;
+	author: string | null;
+	createdAt: string;
+	editedAt: string | null;
+}
+
+/** The application's notice details on a share page (166_public_participation); null fields when not given. */
+export interface ShareObjection {
+	address: string | null;
+	closingDate: string | null;
 }
 
 /** A band as a pack link shows it (backend share/links.ts SharedBand). */
@@ -1500,7 +1640,19 @@ export interface SharePack {
 		byMonth: { month: number; run: number | null; band: SharedBand | null }[] | null;
 		disclaimerVersion: string | null;
 	} | null;
-	comments: { body: string; author: string | null; createdAt: string; editedAt: string | null }[];
+	comments: SharedComment[];
+	/** For an application's pack, where written objections go, when given (166). */
+	objection: ShareObjection | null;
+}
+
+/** A draft pack the caller may sign as the application's appointed specialist (167_signers). */
+export interface SpecialistDraft {
+	id: string;
+	title: string;
+	version: number;
+	manifestSha256: string;
+	createdAt: string;
+	signoffs: number;
 }
 
 /** One pack of an application as its party sees it (131_applicant_packs; backend evidence/applicantPacks.ts). */
@@ -1553,6 +1705,17 @@ export interface ApplicantPack {
 	 * published run, so those names can't be given.
 	 */
 	units: { own: ApplicantPackOwnUnit[]; others: { kind: 'farm' | 'user'; name: string; changePts: number }[] | null } | null;
+	/** Their printable copy of it (165_applicant_copy): their own page printed as them, other water users' figures withheld. */
+	copy: ApplicantCopyState;
+}
+
+/** The applicant's printable copy of a pack: ready (its own SHA-256), rendering, failed (why) or none (never asked for). */
+export interface ApplicantCopyState {
+	status: 'ready' | 'rendering' | 'failed' | 'none';
+	sha256: string | null;
+	pages: number | null;
+	renderedAt: string | null;
+	error: string | null;
 }
 
 /** The catchment view a share link shows: counts and dates only; the outlet has no name (it may be a farm). */
@@ -1647,6 +1810,8 @@ export interface NoteCreate {
 	/** An evidence pack: `team` or `public_participation` only (128). */
 	packId?: string;
 	visibility?: NoteVisibility;
+	/** A public comment only: give my name and email to the applicant for the I&AP register (GN R267 reg 18; 166). */
+	registerConsent?: boolean;
 }
 
 /** GET …/notes/:noteId/revisions: each earlier text of a scenario note, oldest first. */
@@ -1689,7 +1854,13 @@ export interface Signoff {
 	signedAt: string;
 	/** The caller signed it. */
 	mine: boolean;
+	/** `specialist`: the professional statement of whoever is responsible for the evidence; `review`: an authority-side reviewer's (167). */
+	kind: SignoffKind;
+	/** The host's check of the registration against the public register (167): bound at issue, else the current one; null: self-declared. */
+	registrationCheck: { checkedAt: string; checkedByOrg: string; bound: boolean } | null;
 }
+
+export type SignoffKind = 'specialist' | 'review';
 
 /** GET /projects/:id/runs/:runId/signoffs. */
 export interface SignoffList {
@@ -1705,6 +1876,8 @@ export interface SignoffList {
 /** GET /projects/:id/packs/:packId/signoffs: the pack statement in place of the run's (docs/api.md § Evidence packs). */
 export interface PackSignoffList extends Omit<SignoffList, 'statement'> {
 	statement: PackSignoffStatement;
+	/** The kinds the caller may sign as: an editor both, the applicant's specialist `specialist` only, anyone else none (167). */
+	kinds: SignoffKind[];
 }
 
 // --- Evidence packs (WP-3.14, issue #71, docs/evidence-pack.md, docs/api.md § Evidence packs) ---
@@ -1752,6 +1925,10 @@ export interface PackIssueChecks {
 	runsVerified: boolean;
 	/** No erratum found since the draft was made applies to its runs (errataFoundSince is empty); issue refuses otherwise (pack_errata_since_draft). */
 	errataRecorded: boolean;
+	/** The specialist signers of the current statement whose registration has no current check (167). */
+	registrationUnchecked?: string[];
+	/** Whether issue waits for those checks (the project's setting; 409 registration_not_checked otherwise). */
+	registrationCheckRequired?: boolean;
 }
 
 /** GET /projects/:id/packs/:packId. */
@@ -1835,6 +2012,10 @@ export interface PackVerification {
 		registrationField: string | null;
 		registrationNo: string;
 		signedAt: string;
+		/** Who signed as what (167); absent from an answer older than it. */
+		kind?: SignoffKind;
+		/** The check bound when the pack was issued; null or absent: the registration is self-declared (167). */
+		registrationCheck?: { checkedAt: string; checkedByOrg: string } | null;
 	}[];
 }
 
@@ -1850,6 +2031,67 @@ export interface SignoffRequest {
 	/** Every confirmation id of the statement. */
 	confirmed: string[];
 	statementSha256: string;
+	/** A pack only: `review` for an editor signing as the authority's reviewer (167); default `specialist`. */
+	kind?: SignoffKind;
+}
+
+/** The host's check of a member's registration against the public register (167; GET /projects/:id/registration-checks). */
+export interface RegistrationCheck {
+	id: string;
+	userId: string | null;
+	registrationBody: string;
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note: string;
+	/** The display name of the owner who recorded it. */
+	recordedBy: string | null;
+	recordedAt: string;
+}
+
+export interface RegistrationCheckRequest {
+	registrationBody: 'sacnasp' | 'ecsa';
+	registrationCategory: string;
+	registrationNo: string;
+	registerName: string;
+	outcome: 'registered' | 'not_registered';
+	checkedByOrg: string;
+	checkedAt: string;
+	note?: string;
+}
+
+/** GET …/scenarios/:sid/participation-export (166): the reg 19 record of one application. */
+export interface ParticipationExport {
+	application: {
+		id: string;
+		name: string;
+		status: string;
+		submittedAt: string | null;
+		decidedAt: string | null;
+		outcome: string | null;
+		objectionAddress: string | null;
+		objectionClosingDate: string | null;
+	};
+	links: { target: 'application' | 'pack'; packVersion: number | null; createdAt: string; expiresAt: string; revokedAt: string | null }[];
+	comments: {
+		id: string;
+		target: 'application' | 'pack';
+		packVersion: number | null;
+		author: string | null;
+		email: string | null;
+		registerConsent: boolean;
+		viaLink: boolean;
+		createdAt: string;
+		editedAt: string | null;
+		state: 'shown' | 'withdrawn' | 'removed';
+		deletedAt: string | null;
+		body: string | null;
+		revisions: { body: string; writtenAt: string; editedAt: string }[];
+	}[];
+	register: { name: string; email: string }[];
 }
 
 // --- Allocations (WP-3.10, docs/allocations.md, docs/api.md § Allocations) ---
@@ -1921,6 +2163,23 @@ export interface AllocationSource {
 	rows: number;
 }
 
+/** The licence decision a project's evidence supports, and how long its licence record is kept (161_licence_record, docs/api.md § Licence record). */
+export type LicenceOutcome = 'granted' | 'refused' | 'withdrawn';
+export interface LicenceRecord {
+	outcome: LicenceOutcome | null;
+	outcomeOn: string | null;
+	expiresOn: string | null;
+	reason: string;
+	/** When the record may be deleted: the expiry (granted) or the decision date, + 3 years; null without an outcome. */
+	closesOn: string | null;
+	/** While no outcome is recorded: when the owners must next confirm the record is still needed; null before the first issued pack or nomination. */
+	reviewDueOn: string | null;
+}
+export type LicenceOutcomeInput =
+	| { outcome: 'granted'; outcomeOn: string; expiresOn: string; reason: string }
+	| { outcome: 'refused' | 'withdrawn'; outcomeOn: string; reason: string }
+	| { outcome: null; reason: string };
+
 export interface AllocationList {
 	allocations: Allocation[];
 	sources: AllocationSource[];
@@ -1928,6 +2187,31 @@ export interface AllocationList {
 	nodes: { id: string; name: string }[];
 	/** Editors and owners see holder names (decision D3); viewers see volumes only. */
 	canSeeHolders: boolean;
+	/** The owners let viewers read each registered volume (162, D3). */
+	viewerUnits: boolean;
+	/** This caller is a viewer who can't (allocations is then empty): `totals` instead. */
+	unitsHidden: boolean;
+	/** Per water source held by 5 or more registered users; null unless unitsHidden. */
+	totals: AllocationTotal[] | null;
+}
+
+/** A water source's registered volumes in force today, summed (a viewer's view, 162). */
+export interface AllocationTotal {
+	waterSource: 'surface' | 'groundwater';
+	holders: number;
+	registeredM3PerYear: number;
+	storageM3: number | null;
+}
+
+/** A run's modelled use against the registered volumes, summed per water source and year (a viewer's view, 162). */
+export interface AllocationComparisonTotals {
+	tolerance: number;
+	sources: {
+		waterSource: 'surface' | 'groundwater';
+		holders: number;
+		units: number;
+		years: { waterYear: number; partial: boolean; registeredM3: number; modelledM3: number; status: import('@water-management/engine').AllocationStatus }[];
+	}[];
 }
 
 /** The fields an editor sends to create or change an allocation. */

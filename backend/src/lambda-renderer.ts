@@ -25,7 +25,10 @@
 // An evidence pack's request (type `render_pack`, 119_pack_render) prints the
 // pack's own page the same way, stores the PDF in the packs bucket under
 // packs/<project>/<pack>/<sha256>.pdf (Object Lock: kept for good) and answers
-// with the PDF's SHA-256, which the worker records on the pack once.
+// with the PDF's SHA-256, which the worker records on the pack once. With a
+// `scenarioId` it is an applicant's copy (165_applicant_copy): the party's
+// own pack page, stored under packs/<project>/<pack>/applicant/<sha256>.pdf,
+// and the answer says `copy: 'applicant'`.
 //
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
@@ -41,7 +44,7 @@ import {
 	sendToQueue
 } from './jobs/transport.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from './reports/render.js';
-import { packPdfKey, putPackPdf, putPdf, reportKey } from './reports/storage.js';
+import { applicantPackPdfKey, packPdfKey, putPackPdf, putPdf, reportKey } from './reports/storage.js';
 import { logEvent } from './logging/logEvent.js';
 import { safeError } from './logging/safeError.js';
 
@@ -107,10 +110,13 @@ async function renderPack(req: PackRenderRequestMessage): Promise<boolean> {
 	let result: PackRenderResult;
 	let reason: 'render' | 'store' = 'render';
 	try {
-		const rendered = await renderReportPdf({ projectId: req.projectId, packId: req.packId, token: req.token }, renderOptionsFromEnv());
+		// An applicant's copy (165): their party's page, stored beside the pack's PDF under applicant/.
+		const target = { projectId: req.projectId, packId: req.packId, token: req.token, ...(req.scenarioId ? { scenarioId: req.scenarioId } : {}) };
+		const rendered = await renderReportPdf(target, renderOptionsFromEnv());
 		if (rendered.pages < 1) throw new RenderError('the PDF has no pages');
 		const sha256 = createHash('sha256').update(rendered.pdf).digest('hex');
-		await putPackPdf(packPdfKey(req.projectId, req.packId, sha256), rendered.pdf, sha256);
+		const key = req.scenarioId ? applicantPackPdfKey(req.projectId, req.packId, sha256) : packPdfKey(req.projectId, req.packId, sha256);
+		await putPackPdf(key, rendered.pdf, sha256);
 		result = { ok: true, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms, sha256 };
 	} catch (err) {
 		const e = err instanceof RenderError ? err : new RenderError('the PDF could not be stored');
@@ -120,7 +126,7 @@ async function renderPack(req: PackRenderRequestMessage): Promise<boolean> {
 		}
 		result = { ok: false, error: e.message.slice(0, 300), retry: e.retry };
 	}
-	const message: PackRenderResultMessage = { v: 1, type: 'rendered_pack', packId: req.packId, result };
+	const message: PackRenderResultMessage = { v: 1, type: 'rendered_pack', packId: req.packId, ...(req.scenarioId ? { copy: 'applicant' as const } : {}), result };
 	try {
 		await sendToQueue(process.env.RENDER_RESULTS_QUEUE_URL, 'RENDER_RESULTS_QUEUE_URL', message);
 	} catch (err) {

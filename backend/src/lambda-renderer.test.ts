@@ -182,3 +182,27 @@ describe('renderer Lambda, an evidence pack', () => {
 		expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm2' }] });
 	});
 });
+
+// An applicant's copy (165_applicant_copy): the party's page, stored under applicant/, and an answer that says so.
+describe("renderer Lambda, an applicant's copy of a pack", () => {
+	const pack = { packId: '00000000-0000-4000-8000-000000000006', projectId: ids.projectId };
+	const S = '00000000-0000-4000-8000-000000000007';
+	const bytes = Buffer.from("%PDF-1.7 an applicant's copy");
+	const SHA = createHash('sha256').update(bytes).digest('hex');
+
+	it("prints the party's page, stores it under applicant/ by its own hash, and answers `copy: 'applicant'`", async () => {
+		vi.stubEnv('RENDER_RESULTS_QUEUE_URL', 'https://sqs.example/render-results');
+		vi.spyOn(console, 'info').mockImplementation(() => {});
+		renderReportPdf.mockResolvedValueOnce({ pdf: bytes, pages: 3, ms: 900 });
+		const res = await handler({ Records: [record('m1', { v: 1, type: 'render_pack', ...pack, scenarioId: S, token: TOKEN })] } as never);
+		expect(res).toEqual({ batchItemFailures: [] });
+		expect(renderReportPdf).toHaveBeenCalledWith({ projectId: pack.projectId, packId: pack.packId, scenarioId: S, token: TOKEN }, expect.objectContaining({ timeoutMs: 90_000 }));
+		expect(putPackPdf).toHaveBeenCalledWith(`packs/${pack.projectId}/${pack.packId}/applicant/${SHA}.pdf`, bytes, SHA);
+		expect(sent).toEqual([
+			{
+				url: 'https://sqs.example/render-results',
+				message: { v: 1, type: 'rendered_pack', packId: pack.packId, copy: 'applicant', result: { ok: true, pages: 3, bytes: bytes.length, ms: 900, sha256: SHA } }
+			}
+		]);
+	});
+});

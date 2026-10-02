@@ -70,6 +70,7 @@ describe('/share stays off the workspace’s code', () => {
 		'lib/components/share/SummaryControls.svelte',
 		'lib/components/share/scenario.ts',
 		'lib/components/share/ScenarioView.svelte',
+		'lib/components/share/ShareComments.svelte',
 		'lib/components/farm/format.ts',
 		'lib/components/farm/notice.ts',
 		'lib/components/farm/NoticeCard.svelte'

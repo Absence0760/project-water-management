@@ -25,6 +25,14 @@ export const KIND_FILTERS: { value: string; label: string }[] = [
 	{ value: 'restore', label: 'Restores of data' }
 ];
 
+/** The authority's outcome words (163_licensing_authority), as the history writes them. */
+const DECISION_WORDS: Record<string, string> = {
+	licence_issued: 'licence issued',
+	licence_refused: 'licence refused',
+	application_rejected: 'application rejected',
+	not_considered: 'not considered (use already authorised)'
+};
+
 const SOURCE_TITLES: Record<HistoryRevision['source'], string> = {
 	baseline: 'Starting point',
 	model_put: 'Model changed',
@@ -149,6 +157,14 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Changed ${who}’s role from ${role(s.from)} to ${role(s.to)}`;
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
+		// The party's appointed specialist, who signs its applications' evidence packs (167_signers).
+		case 'member.specialist':
+			return s.specialist
+				? `Appointed ${who} specialist for the applying party ${str(s.party)}`
+				: `${who} is no longer the specialist for ${s.party ? `the applying party ${str(s.party)}` : 'their applying party'}`;
+		case 'member.authority':
+			// 163_licensing_authority: the owner marks who acts for the responsible authority.
+			return s.actsForAuthority ? `Marked ${who} as acting for the responsible authority` : `${who} no longer acts for the responsible authority`;
 		case 'farmer.linked':
 			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
@@ -172,6 +188,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const fields = (Array.isArray(s.fields) ? (s.fields as string[]) : []).map((f) => names[f] ?? f);
 			return `Changed the publication’s ${fields.join(' and ') || 'notice'}`;
 		}
+		case 'publication.endorsed':
+			return 'Endorsed a published baseline for the responsible authority';
 		case 'series.created':
 			return `Added ${seriesName(s)}${range(s)}${s.feedId ? ` from the ${feedName(s.source)} feed` : ''}`;
 		case 'series.replaced':
@@ -254,15 +272,23 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
+		// The reg 19 record of an application's public comments (166_public_participation): how many, and how many emails.
+		case 'scenario.participation_exported':
+			return `Downloaded the public comments on an application (${Number(s.comments) || 0} comments, ${Number(s.emails) || 0} emails given for the register)`;
 		case 'signoff.created': {
 			// From signoff-3 the event names the category and field too (issue #47); a sign-off of an evidence pack names the pack (112).
 			const opt = (v: unknown) => (v ? str(v) : null);
-			const what = s.packId ? 'an evidence pack' : 'a run';
+			const what = s.packId ? (s.kind === 'review' ? 'an evidence pack as the authority’s reviewer' : 'an evidence pack') : 'a run';
 			const line = registrationLine(str(s.registrationBody), opt(s.registrationCategory), opt(s.registrationField), str(s.registrationNo));
 			return line
 				? `Signed off ${what} as ${str(s.fullName)}, ${line}`
 				: `Signed off ${what} as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
 		}
+		// The host's check of a member's registration against the public register, recorded by an owner (167_signers).
+		case 'registration.checked':
+			return `Recorded ${who}’s ${str(s.registrationBody).toUpperCase()} registration ${str(s.registrationNo)} as ${s.outcome === 'registered' ? 'on the register' : 'not on the register'}, checked by ${str(s.checkedByOrg)}`;
+		case 'registration.requirement':
+			return s.required ? 'Issuing an evidence pack now waits for each signer’s registration check' : 'Issuing an evidence pack no longer waits for a registration check';
 		// An evidence pack's lifecycle (112_evidence_pack, WP-3.14): by version and short code, never a name.
 		case 'pack.drafted':
 			return `Drafted ${packName(s)}`;
@@ -274,6 +300,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `${packName(s, true)} was superseded${num(s.byVersion) ? ` by version ${num(s.byVersion)}` : ''}`;
 		case 'pack.withdrawn':
 			return `Withdrew ${packName(s)}${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
+		// Licensing build item 13: the recipients by count only (their ids are in the subject).
+		case 'pack.sent': {
+			const n = Array.isArray(s.recipients) ? s.recipients.length : 0;
+			return `Sent ${packName(s)} to ${plural(n, 'member')} acting for ${str(s.authority) || 'the responsible authority'}`;
+		}
 		case 'calibration_rules.signed_off':
 			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
 		case 'calibration_rules.sign_off_withdrawn':
@@ -299,6 +330,19 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.moved ? `Moved ${mapFeature(s)} on the map` : `Changed ${mapFeature(s)} on the map`;
 		case 'map.feature_deleted':
 			return `Deleted ${mapFeature(s)} from the map`;
+		// The licence record (161): the outcome, the date the record may be deleted, and why.
+		case 'licence.outcome': {
+			const o = str(s.outcome);
+			const closes = str(s.closesOn) ? `; the record may be deleted from ${str(s.closesOn)}` : '';
+			if (!o) return `Cleared the licence outcome${str(s.reason) ? `: ${str(s.reason)}` : ''}`;
+			const what = o === 'granted' ? `granted on ${str(s.outcomeOn)}, expiring ${str(s.expiresOn)}` : `${o} on ${str(s.outcomeOn)}`;
+			return `Recorded the licence outcome: ${what}${closes}`;
+		}
+		case 'licence.confirmed':
+			return `Confirmed the licence record is still needed${str(s.reviewDueOn) ? `; next review ${str(s.reviewDueOn)}` : ''}`;
+		// Whether viewers read each registered volume (162, D3).
+		case 'allocation.viewer_units':
+			return s.on ? 'Let viewers see each farm’s registered volumes' : 'Showed viewers registered volumes as totals only';
 		case 'allocation.import_deleted':
 			return `Removed the import of ${str(s.fileName)} and its ${plural(num(s.rows) ?? 0, 'registered volume')}`;
 		case 'scenario.submitted':
@@ -307,12 +351,21 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.application ? 'An applicant withdrew an application' : `Withdrew the scenario “${str(s.name)}”`;
 		case 'scenario.reopened':
 			return s.application ? 'An applicant reopened an application as a draft' : `Reopened the scenario “${str(s.name)}” as a draft`;
-		case 'scenario.decided':
-			return `Decided ${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”: ${str(s.outcome).replaceAll('_', ' ')}`;
+		case 'scenario.decided': {
+			// 163_licensing_authority: the authority decides; the app records it (older events: "Decided … approved").
+			const what = `${s.application ? 'the application' : 'the scenario'} “${str(s.name)}”`;
+			const outcome = DECISION_WORDS[str(s.outcome)];
+			return outcome ? `Recorded ${str(s.authority) || 'the responsible authority'}’s decision on ${what}: ${outcome}` : `Decided ${what}: ${str(s.outcome).replaceAll('_', ' ')}`;
+		}
 		case 'scenario.shared':
 			return 'Shared an application with another applicant';
 		case 'scenario.unshared':
 			return s.self ? 'Stopped reading a shared application' : 'Stopped sharing an application';
+		// "Ask the assessors why" (164): ids and the rules' kinds only, never the question's words.
+		case 'application.question_asked':
+			return 'An applicant asked the assessors why a change doesn’t apply';
+		case 'application.question_answered':
+			return 'Answered an applicant’s question about a change that doesn’t apply';
 		case 'share_link.created':
 			return s.targetKind === 'scenario' ? 'Created a share link to a scenario' : s.targetKind === 'pack' ? 'Created a share link to an evidence pack' : 'Created a share link';
 		case 'share_link.revoked':

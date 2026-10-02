@@ -101,9 +101,16 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/packs/:packId/pdf',
 			// Re-running an issued pack on the server again (154_pack_reproduce's job).
 			'POST /projects/:id/packs/:packId/reproduce',
+			// Sending the issued pack to the members acting for the responsible authority (licensing build item 13).
+			'POST /projects/:id/packs/:packId/send',
+			// Page 1's board against full authorised use (licensing build item 8): an editor runs the full-allocation pair.
+			'POST /projects/:id/runs/:runId/authorised-impact',
 			// An applicant's own application's packs (131_applicant_packs).
 			'GET /projects/:id/scenarios/:sid/packs',
-			'GET /projects/:id/scenarios/:sid/packs/:packId'
+			'GET /projects/:id/scenarios/:sid/packs/:packId',
+			// Their printable copy of one (165_applicant_copy).
+			'POST /projects/:id/scenarios/:sid/packs/:packId/pdf',
+			'GET /projects/:id/scenarios/:sid/packs/:packId/pdf'
 		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
@@ -132,7 +139,7 @@ describe('route auth inventory', () => {
 
 	// Two-step sign-in (issue #282): everything but the sign-in step needs a session (auth/mfa.db.test.ts).
 	it('inventories the two-step sign-in routes: the sign-in step public, the rest auth-gated', () => {
-		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes']) {
+		for (const r of ['GET /auth/mfa', 'POST /auth/mfa/totp/enrol', 'POST /auth/mfa/totp/confirm', 'DELETE /auth/mfa/totp', 'POST /auth/mfa/recovery-codes', 'POST /auth/mfa/step-up']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -239,7 +246,12 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/scenarios/:sid/reopen',
 			'POST /projects/:id/scenarios/:sid/decide',
 			'POST /projects/:id/scenarios/:sid/members',
-			'DELETE /projects/:id/scenarios/:sid/members/:userId'
+			'DELETE /projects/:id/scenarios/:sid/members/:userId',
+			// "Ask the assessors why" (164_applicant_visibility).
+			'POST /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/scenarios/:sid/questions',
+			'GET /projects/:id/application-questions',
+			'POST /projects/:id/application-questions/:qid/answer'
 		];
 		for (const r of applications) {
 			expect(routes).toContain(r);
@@ -271,13 +283,17 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/publication',
 			'POST /projects/:id/publication',
 			'PATCH /projects/:id/publication/:pubId',
+			// The responsible authority's endorsement of a published baseline (163).
+			'POST /projects/:id/publication/:pubId/endorse',
 			'GET /projects/:id/runs/:runId/publication',
 			'GET /projects/:id/farm',
 			'GET /projects/:id/farm/:nodeId',
 			'GET /projects/:id/farm/:nodeId/export.csv',
 			'GET /projects/:id/farm/:nodeId/access',
 			// The farm's map (issue #326 A3).
-			'GET /projects/:id/farm/:nodeId/map'
+			'GET /projects/:id/farm/:nodeId/map',
+			// Who decides about the project's information: its team's privacy contact (168, POPIA s18(1)(b)).
+			'GET /projects/:id/privacy-contact'
 		];
 		for (const r of added) {
 			expect(routes).toContain(r);

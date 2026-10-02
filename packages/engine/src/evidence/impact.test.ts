@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import type { WaterAccountRow } from '../network/reliability';
 import type { EwrAssuranceMonth, EwrAssuranceSite } from '../reserve/assurance';
-import { licenceImpactSection } from './impact';
+import { licenceImpactBoard, licenceImpactSection } from './impact';
 import type { EvidenceImpactInput, EvidenceRunInput } from './types';
 
 // Synthetic record: nine complete water years 2000/01 … 2008/09, annual
@@ -137,5 +137,17 @@ describe('licenceImpactSection (evidence-5, issue #53 R7)', () => {
 		noShort.series.applicationEwrShortfall = null;
 		expect(licenceImpactSection(b, a, noShort)!.result).toMatchObject({ status: 'unavailable', reason: 'noEwrShortfall' });
 		expect(licenceImpactSection(b, a, input())!.result.status).toBe('ok');
+	});
+});
+
+describe('licenceImpactBoard: any background and application pair (licensing build item 8)', () => {
+	it('is the section’s board when given the same runs and series (the section is built on it)', () => {
+		const i = input({ siteNodeId: 'g1' });
+		const board = licenceImpactBoard(
+			{ startDate: START, summary: baseline.summary, natural: i.series.backgroundNatural, ewrShortfall: i.series.backgroundEwrShortfall },
+			{ startDate: START, summary: application.summary, ewrShortfall: i.series.applicationEwrShortfall },
+			{ yearClassMethod: 'terciles', siteNodeId: 'g1', nameOf: (id) => (id === 'g1' ? 'Upper gauge' : null) }
+		);
+		expect(board).toEqual(licenceImpactSection(baseline, application, i));
 	});
 });
