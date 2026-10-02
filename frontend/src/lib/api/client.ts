@@ -161,6 +161,10 @@ import type {
 	DamProposals,
 	DelineationProposal,
 	DelineationState,
+	StartProposal,
+	StartRole,
+	StartState,
+	StartTicks,
 	CroplandProposals
 } from './types';
 
@@ -1088,6 +1092,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
 			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+		},
+		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
+		start: {
+			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
+			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; role: StartRole }[] }) =>
+				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
+			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
+			discard: (id: string, spid: string) => request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
 		},
 		/**
 		 * A unit's dam values proposed from the register of dams and its dam polygon (issue #326 B-dams,
