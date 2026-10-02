@@ -3598,7 +3598,9 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       through `deploy-frontend.yml` behind a gate that takes only same-origin
       `/tiles/` paths, and delineation's DEM (`delineation_dem`: `DEM_URL` on
       the API and its role's read of `tiles/terrain.pmtiles`, refused on an
-      API Lambda under 1 024 MB or 25 s). CSP unchanged. What's left is the
+      API Lambda under 1 024 MB or 25 s). CSP unchanged. Tracing a dam's
+      water occurrence followed the same pattern (#326 C2: `dam_trace_water`,
+      `WATER_URL` and the read of `tiles/water.pmtiles`). What's left is the
       operator's (uploading, the variables, the tfvars:
       [deployment.md § Map tiles](./deployment.md#map-tiles)) and the item
       below.
@@ -3757,25 +3759,29 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       proposals read WorldCover or the synthetic grid. Trigger: a
       hydrologist asking which crop the land cover sees, or WorldCover's
       cropland class proving too coarse in a client catchment.
-- [ ] **Loading the evaporation grid in production** (issue #326 B-evap;
-      maps.md § The evaporation grid): dPET is allowed (CC BY 4.0, from
-      ERA5-Land, also CC BY 4.0), with the same missing path into the
-      private database as the land-cover grid and the quaternaries (the
-      loader writes as the schema owner from a workstation). Same durable
-      fix as the item above: one operator path for every reference dataset,
-      fed the pre-summarised `--reduce` totals. Trigger: the first client
-      deployment that should propose GR4J's PE. Show the dPET/ERA5-Land
-      attribution with any figure served.
-- [ ] **One shell for the map-proposal panels** (found in #326 B-evap's UI
-      review): `CroplandProposalsBox.svelte`, `DamProposalsBox.svelte` and
-      `settings/EvaporationProposal.svelte` repeat the same frame (heading,
-      live notice, the `aria-busy`/`data-ready` body, error with Try again,
-      no-dataset alert, synthetic-data warning, Source and method). Third
-      caller, so extract a shell taking a body snippet, after pinning each
-      panel's rendered states in its e2e spec (CLAUDE.md: pin, then fold).
-      The evaporation panel's focus-to-notice after Use is the pattern the
-      other two should take with it. Trigger: the next map proposal panel,
-      or the next fix that has to be made in all three.
+- [x] **Loading the evaporation grid in production** (issue #326 B-evap,
+      2026-10-02, PR feat/evaporation-production-load): `pnpm
+      import:evaporation <years> --dataset <label> --out <file>.json.gz`
+      averages the reduced dPET years into the grid of monthly means on the
+      operator's machine, and `load-reference.yml` (kind `evaporation`)
+      loads that file into RDS through the migrate Lambda
+      ([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
+      Only a reference-ET grid loads (an A-pan grid's source has no allowed
+      Sources row); its caps are 32 MiB uploaded, 64 MiB unzipped. The
+      dPET/ERA5-Land attribution is stored on the dataset row and shown
+      under every proposal; its credit on the /data-sources page waits for
+      that page (PR #354).
+- [x] **One shell for the map-proposal panels** (found in #326 B-evap's UI
+      review). Done: `components/proposals/ProposalPanel.svelte` draws the
+      frame (heading, intro, controls, the live notice that takes the
+      keyboard after a Use, the `aria-busy`/`data-ready` body, the failure
+      with Try again) and `ProposalNoDataset`, `ProposalSynthetic` and
+      `ProposalSource` the shared alerts and citation; land cover, the dams
+      and evaporation each keep their data, rows, Use and words. Pinned
+      first by `e2e/tests/proposal-panels.spec.ts` (each panel's failure
+      and Try again) and each panel's own spec, which now also checks the
+      focus move after a Use for land cover and the dams. A new proposal
+      panel starts from `ProposalPanel` (ui-playbook.md § 4).
 - [ ] **Decision: WR2012's evaporation, and an A-pan source** (operator;
       maps.md § Sources, issue #326 B-evap, decision D-B). The map proposes
       reference ET (dPET) as GR4J's PE, never as A-pan, so demand and dam

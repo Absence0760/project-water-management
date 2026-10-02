@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { DEM_FIXTURE } from './support/dem.ts';
+import { WATER_FIXTURE } from './support/water.ts';
 import { API_PORT, API_URL, APP_E2E_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
@@ -98,7 +99,9 @@ export default defineConfig({
 				// The pack specs sign with invented registrations nobody checked against a register (167_signers).
 				REGISTRATION_CHECK_REQUIRED: 'false',
 				// Delineation on, against the committed synthetic DEM (invented terrain; map-delineate.spec.ts).
-				DEM_URL: DEM_FIXTURE
+				DEM_URL: DEM_FIXTURE,
+				// Tracing a dam on, against the committed synthetic water occurrence raster (invented water; map-assisted.spec.ts).
+				WATER_URL: WATER_FIXTURE
 			}
 		},
 		DEV_SERVER

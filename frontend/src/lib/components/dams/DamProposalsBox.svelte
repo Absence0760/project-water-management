@@ -11,6 +11,9 @@
 	import { untrack } from 'svelte';
 	import { api, type DamProposals } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import ProposalNoDataset from '$lib/components/proposals/ProposalNoDataset.svelte';
+	import ProposalPanel from '$lib/components/proposals/ProposalPanel.svelte';
+	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { fmtNum } from '$lib/format/number';
 	import { confirmWords, damProposalRows, fmtDamArea, type DamProposalRow } from './damProposals';
@@ -25,7 +28,7 @@
 		onModelChanged
 	}: {
 		projectId: string;
-		/** The hydrological units to choose from, dams first. */
+		/** The hydrological units to choose from, dams first; never empty (DamsTab draws the panel only when there is one). */
 		units: { id: string; name: string }[];
 		/** The unit shown first (the page's picked dam). */
 		initial: string | null;
@@ -46,6 +49,7 @@
 	let rowError = $state<{ key: string; text: string } | null>(null);
 	let notice = $state<string | null>(null);
 	let seq = 0;
+	let frame = $state<ProposalPanel | null>(null);
 
 	async function load(id: string) {
 		const mine = ++seq;
@@ -91,6 +95,7 @@
 				notice = `${d.nodeName}’s full-supply area is now ${fmtDamArea(res.damAreaFullM2)}, from the map. Run the model to see its effect.`;
 			}
 			await Promise.all([load(d.nodeId), onModelChanged()]);
+			await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.key, text: msg(e) };
 		} finally {
@@ -99,120 +104,107 @@
 	}
 </script>
 
-<section class="panel proposals" aria-labelledby="{uid}-h" data-testid="dam-proposals">
-	<div class="panel-head">
-		<h3 id="{uid}-h">Proposed from the register and the map</h3>
-	</div>
-	<p class="hint muted">
-		A dam’s capacity from the register of dams (the registered dams within 1 km of its dam on the map) and its area when full from
-		the dam’s polygon on the map. Each value shows its source; nothing changes until you use it.
-	</p>
-	{#if units.length === 0}
-		<p class="muted">No hydrological units yet.</p>
-	{:else}
+<ProposalPanel
+	bind:this={frame}
+	testid="dam-proposals"
+	prefix="dam-proposals"
+	variant="page"
+	title="Proposed from the register and the map"
+	what="proposals"
+	{notice}
+	{loading}
+	loaded={data !== null}
+	{error}
+	onretry={() => load(unitId)}
+>
+	{#snippet intro()}
+		<p class="hint muted">
+			A dam’s capacity from the register of dams (the registered dams within 1 km of its dam on the map) and its area when full from
+			the dam’s polygon on the map. Each value shows its source; nothing changes until you use it.
+		</p>
+	{/snippet}
+	{#snippet controls()}
 		<div class="field">
 			<label for="{uid}-unit">Dam of</label>
 			<select id="{uid}-unit" bind:value={unitId}>
 				{#each units as u (u.id)}<option value={u.id}>{u.name || '(unnamed)'}</option>{/each}
 			</select>
 		</div>
-
-		{#if notice}<p class="alert alert-info slim" role="status" data-testid="dam-proposals-notice">{notice}</p>{/if}
-
-		<div aria-busy={loading} data-ready={!loading && (data !== null || error !== null) ? 'true' : undefined} data-testid="dam-proposals-body">
-			{#if error}
-				<p class="err" role="alert">The proposals couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={() => load(unitId)}>Try again</button></p>
-			{:else if data}
-				{#if !data.dam}
-					<p class="alert alert-info slim" data-testid="dam-proposals-no-dam">
-						No dam on the map is linked to {data.nodeName}. Draw its dam (or place it as a point) on the Map and link it to {data.nodeName}; the register is searched from there.
-						<a href="?tab=map">Open the Map</a>
-					</p>
-				{:else}
-					<p class="small">
-						Searched from {data.dam.name ? `“${data.dam.name}”` : 'the dam on the map'} ({data.dam.geometryType === 'Point' ? 'a point' : 'its polygon’s centre'},
-						{fmtNum(data.dam.point[1], 4)}, {fmtNum(data.dam.point[0], 4)}) · <a href={mapNodeHref(data.nodeId)}>Show on map</a>
-					</p>
-					{#if !data.datasets.length}
-						<p class="alert alert-info slim" data-testid="dam-proposals-no-register">
-							No register of dams is loaded, so no capacity is proposed. The operator loads one with <code>pnpm import:dam-register</code> (docs/maps.md).
-						</p>
-					{:else if capacityRows.length === 0}
-						<p class="muted small" data-testid="dam-proposals-none">No registered dam within {fmtNum(data.radiusM / 1000)} km of the dam on the map.</p>
-					{/if}
-					{#if synthetic}
-						<p class="alert alert-warning slim" data-testid="dam-proposals-synthetic">
-							<strong>Synthetic test data.</strong> The register loaded here is invented for development and tests, not the DWS list. Never use it for a real dam.
-						</p>
-					{/if}
-					{#if rows.length}
-						<div class="table-wrap">
-							<table class="data compact" data-testid="dam-proposals-rows">
-								<caption class="visually-hidden">Values proposed for {data.nodeName}’s dam, beside the saved model’s</caption>
-								<thead>
-									<tr>
-										<th scope="col">Value</th>
-										<th scope="col">Saved now</th>
-										<th scope="col">Proposed</th>
-										<th scope="col">Source</th>
-										<th scope="col"><span class="visually-hidden">Use</span></th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each rows as r (r.key)}
-										<tr data-key={r.key}>
-											<th scope="row">{r.label}<span class="detail muted">{r.detail}</span></th>
-											<td class="num">{r.now}</td>
-											<td class="num">{r.proposed}</td>
-											<td class="src small" data-testid="dam-proposal-source">{r.source}</td>
-											<td>
-												{#if r.missing}
-													<span class="muted small">Nothing to use</span>
-												{:else if r.same}
-													<span class="muted small">Saved</span>
-												{:else if !readonly}
-													<button
-														type="button"
-														class="btn btn-sm"
-														disabled={busy !== null || dirty}
-														aria-describedby={dirty ? `${uid}-dirty` : undefined}
-														aria-label="Use {r.kind === 'capacity' ? `the capacity of ${r.registerNo}` : 'the map’s area'}"
-														onclick={() => use(r)}>{busy === r.key ? 'Saving…' : 'Use'}</button
-													>
-												{/if}
-												{#if rowError?.key === r.key}<p class="err small" role="alert">{rowError.text}</p>{/if}
-											</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-					{/if}
-					{#if !readonly && dirty}
-						<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: a value used here is saved to the model straight away.</p>
-					{/if}
-					<p class="hint muted">
-						The register’s wall height and completion year are shown for reference; the model has no field for them.
-						{#if readonly}Only an editor can use a value.{/if}
-					</p>
+	{/snippet}
+		{#if data}
+			{#if !data.dam}
+				<p class="alert alert-info slim" data-testid="dam-proposals-no-dam">
+					No dam on the map is linked to {data.nodeName}. Draw its dam (or place it as a point) on the Map and link it to {data.nodeName}; the register is searched from there.
+					<a href="?tab=map">Open the Map</a>
+				</p>
+			{:else}
+				<p class="small">
+					Searched from {data.dam.name ? `“${data.dam.name}”` : 'the dam on the map'} ({data.dam.geometryType === 'Point' ? 'a point' : 'its polygon’s centre'},
+					{fmtNum(data.dam.point[1], 4)}, {fmtNum(data.dam.point[0], 4)}) · <a href={mapNodeHref(data.nodeId)}>Show on map</a>
+				</p>
+				{#if !data.datasets.length}
+					<ProposalNoDataset testid="dam-proposals-no-register" what="register of dams" consequence="no capacity is proposed" command="pnpm import:dam-register" />
+				{:else if capacityRows.length === 0}
+					<p class="muted small" data-testid="dam-proposals-none">No registered dam within {fmtNum(data.radiusM / 1000)} km of the dam on the map.</p>
 				{/if}
+				{#if synthetic}
+					<ProposalSynthetic testid="dam-proposals-synthetic" subject="The register" notWhat="the DWS list" forWhat="dam" />
+				{/if}
+				{#if rows.length}
+					<div class="table-wrap">
+						<table class="data compact" data-testid="dam-proposals-rows">
+							<caption class="visually-hidden">Values proposed for {data.nodeName}’s dam, beside the saved model’s</caption>
+							<thead>
+								<tr>
+									<th scope="col">Value</th>
+									<th scope="col">Saved now</th>
+									<th scope="col">Proposed</th>
+									<th scope="col">Source</th>
+									<th scope="col"><span class="visually-hidden">Use</span></th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each rows as r (r.key)}
+									<tr data-key={r.key}>
+										<th scope="row">{r.label}<span class="detail muted">{r.detail}</span></th>
+										<td class="num">{r.now}</td>
+										<td class="num">{r.proposed}</td>
+										<td class="src small" data-testid="dam-proposal-source">{r.source}</td>
+										<td>
+											{#if r.missing}
+												<span class="muted small">Nothing to use</span>
+											{:else if r.same}
+												<span class="muted small">Saved</span>
+											{:else if !readonly}
+												<button
+													type="button"
+													class="btn btn-sm"
+													disabled={busy !== null || dirty}
+													aria-describedby={dirty ? `${uid}-dirty` : undefined}
+													aria-label="Use {r.kind === 'capacity' ? `the capacity of ${r.registerNo}` : 'the map’s area'}"
+													onclick={() => use(r)}>{busy === r.key ? 'Saving…' : 'Use'}</button
+												>
+											{/if}
+											{#if rowError?.key === r.key}<p class="err small" role="alert">{rowError.text}</p>{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+				{#if !readonly && dirty}
+					<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: a value used here is saved to the model straight away.</p>
+				{/if}
+				<p class="hint muted">
+					The register’s wall height and completion year are shown for reference; the model has no field for them.
+					{#if readonly}Only an editor can use a value.{/if}
+				</p>
 			{/if}
-		</div>
-	{/if}
-</section>
+		{/if}
+</ProposalPanel>
 
 <style>
-	.proposals {
-		display: grid;
-		/* One column no wider than the page: the table scrolls in its own box on a phone, the page doesn't. */
-		grid-template-columns: minmax(0, 1fr);
-		gap: 0.6rem;
-		margin: 0 0 1rem;
-		min-width: 0;
-	}
-	.panel-head h3 {
-		font-size: 1.05rem;
-	}
 	.field {
 		display: grid;
 		gap: 0.25rem;

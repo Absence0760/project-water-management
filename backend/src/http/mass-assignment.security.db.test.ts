@@ -27,7 +27,7 @@ import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { loadSyntheticLandCover } from '../../scripts/import-land-cover.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
-import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, plantStartProposal, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
+import { buildLadder, clearLadderJobs, plantDelineationProposal, plantQuestion, plantStartProposal, SAMPLE, splitHalves, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { feedbackToken, newNonce, newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { hashToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
@@ -172,6 +172,12 @@ async function ladderDam(): Promise<string> {
 }
 
 const RECIPE: Record<string, () => Promise<Req> | Req> = {
+	// A fresh parcel each time: a split one is half the shape it was (issue #326 C2).
+	'POST /projects/:id/map/features/:fid/split': async () => {
+		const square = [[[21.36, -33.66], [21.37, -33.66], [21.37, -33.65], [21.36, -33.65], [21.36, -33.66]]];
+		const fid = (await ok(ctx.owner.call('POST', `${at()}/map/features`, { kind: 'farm_parcel', name: 'Mass split', geometry: { type: 'Polygon', coordinates: square } }))).feature.id as string;
+		return { params: { fid }, body: { parts: splitHalves(21.36, -33.66, 0.01) } };
+	},
 	// A fresh open proposal each time: one is decided once (175).
 	'POST /projects/:id/map/delineation/:pid/accept': async () => ({
 		params: { pid: await plantDelineationProposal(ctx.projectId) },

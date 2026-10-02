@@ -1320,8 +1320,10 @@ for every workspace tab. Its own chunk.
   asks first (`confirmWords`: the unit, the old and new value, the source;
   "Use this capacity" / "Use this area"), saves that one value on the
   server, shows a notice ("Upper farm’s dam capacity is now 140 000 m³, from
-  the register of dams (Z100/07). Run the model to see its effect.") and
-  reloads the saved model and the proposals. Use is disabled while the model
+  the register of dams (Z100/07). Run the model to see its effect.", which
+  takes the keyboard, since the Use button is gone) and reloads the saved
+  model and the proposals. The frame is shared with land cover and
+  evaporation (`proposals/ProposalPanel.svelte`). Use is disabled while the model
   has unsaved changes (a hint says why), and a viewer gets no Use ("Only an
   editor can use a value."). Other states: no dam on the map linked to the
   unit (with **Open the Map**), no register loaded (the loader's command),
@@ -2526,7 +2528,8 @@ map" card) stays the schematic; this is the geography.
   example-sandspruit-map-2026-10-01.geojson."; [maps.md §
   Download](./maps.md#download-geojson)), and for editors **Draw a shape**
   and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on), **Delineate** (with a DEM on the server; below) and
+  while it is on), **Delineate** (with a DEM on the server; below), **Trace
+  a dam** (with water occurrence data on the server; below) and
   **Upload GeoJSON** (a link that opens its sheet). Slim
   notices under it: what an upload, a placed point or a saved drawing did
   (Dismiss), the no-basemap note (owners and editors only), and "No
@@ -2592,7 +2595,9 @@ map" card) stays the schematic; this is the geography.
   while the model has unsaved edits (a line says why) and reading **In use**
   when that feature's area is the unit's. **From**: the file it came in.
   **Edit the shape** (a single line or one-ring polygon) or **Move the
-  point** (editors) puts it in the drawing mode, and **Delete** asks first.
+  point** (editors) puts it in the drawing mode, **Split along a line**
+  (editors, a polygon of one outline; #326 C2, below) draws the cut, and
+  **Delete** asks first.
   With nothing picked: "Select a feature on the map or in the list to see it
   here."; with nothing on the map, the empty state leads with delineating
   and drawing (#326 D4): with a DEM, "Nothing on the map yet. Start with the
@@ -2688,6 +2693,33 @@ map" card) stays the schematic; this is the geography.
   GeoJSON-or-WKT field, an example for the shape being drawn and the error
   in a sentence. Nothing is saved until a sheet's **Save**; a saved drawing
   is picked.
+- **Assisted drawing** (#326 C2; [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)). The draw bar has **Snap to
+  features** (on; for the rest of the tab once unticked) and, while a new
+  shape or line is drawn, **Follow edges**, with "Hold Alt to place one
+  corner exactly."; a ring on the map marks where the pointer would snap,
+  and the live region names it ("…, on “Upper farm”’s corner."; "(2
+  corners followed along it)"). The canvas's accessible name adds "(on the
+  nearest feature’s corner or edge within reach; Alt+Enter places it
+  exactly)". **Split along a line** heads the bar "Splitting “name”"
+  ("Click outside the shape (or on its edge), then across it, and finish
+  outside it …"); once the line is finished (or pasted) the two parts are
+  shaded and "Cut in two: parts of 5 and 7 corners." shows, or why it can't
+  be cut ("Draw the line right across the shape …"); **Split…** opens
+  **Split the shape** (a side sheet: what happens to the shape, for the
+  boundary "The parts are" Areas (sub-catchments to link to units) / Farm
+  parcels, each part's name with its area, **Back to the map**, **Split**),
+  and the notice says "Split Hill farm in two: “Hill farm” and “Hill farm
+  (part 2)”.". **Trace a dam** puts the map in the point-placing mode with
+  the bar headed "Tracing a dam" and "Water in at least [25 %] of the
+  observations"; **Trace the outline** (or **Enter coordinates**, which
+  opens **Trace a dam**, a side sheet with Latitude, Longitude, the share
+  and **Trace**) asks the server; a refusal shows its sentence (in the bar,
+  or the sheet). The outline becomes a Dam drawing in review, with a line
+  "Traced from …: water in at least 25 % of the observations, about 4.30
+  ha. A proposal: check it against the map before you save it." (", then
+  adjusted" once changed); **Save…** opens Save the drawing (kinds Dam and
+  Other area only), which says the method is saved with it.
 - **Measure** (#326 A7; anyone, `lib/components/map/measure/`, [maps.md §
   Measure](./maps.md#measure)): the drawing mode with nothing saved. A
   **measure bar** over the map: "Measuring", how ("Click the map to add each
@@ -3085,8 +3117,9 @@ saves the catchment's model, and override mode there edits the scenario's
   area, the dataset, and that the land cover doesn't say what grows there or
   whether it is irrigated; "Use this area"), saves that one value on the
   server, shows a notice ("Orchard’s planted area on Upper farm is now
-  51.73 ha, from land cover. Run the model to see its effect.") and reloads
-  the saved model and the summary. Use is disabled while the model has
+  51.73 ha, from land cover. Run the model to see its effect.", which takes
+  the keyboard; `proposals/ProposalPanel.svelte`'s frame) and reloads the
+  saved model and the summary. Use is disabled while the model has
   unsaved changes, the drawer's own edits included (a hint says why), and a
   viewer gets no Use ("Only an editor can use a value."). **Source and
   method** (a disclosure) gives the dataset's source, version, label,
@@ -3905,7 +3938,8 @@ which checks every catchment tab).
     attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
     A-pan evaporation row**; editors) asks first (what reads the values, and
     that an earlier GR4J fit is marked "Forcing changed since fit"), saves
-    the 12 values as one settings revision, says so in a notice, and the
+    the 12 values as one settings revision, says so in a notice (focused;
+    `proposals/ProposalPanel.svelte`'s frame), and the
     form reloads the saved settings (the PE kind switches to monthly, its
     source naming the dataset). Use waits, with the reason, while the form
     has unsaved changes. When the saved settings hold the proposal it says

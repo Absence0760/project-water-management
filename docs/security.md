@@ -2592,6 +2592,18 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed. The
   proposal's polygon passes the same `checkGeometry` as every map polygon
   before it is stored.
+- **Tracing a dam** (#326 C2, [maps.md § Assisted
+  drawing](./maps.md#assisted-drawing)): the raster is `WATER_URL`, operator
+  configuration, read with the same fail-closed decoders; a user supplies a
+  longitude, latitude and one of four shares. A trace reads at most a
+  512-cell window (a handful of tiles, cached per process), takes
+  milliseconds and stores nothing, so it is editor-only with no rate limit
+  of its own. A traced outline saved names its method on the server's word,
+  not the client's: the server traces the click again, and an outline sent
+  as unadjusted must equal that trace. Splitting checks each part with
+  `checkGeometry` and that the parts make up the shape (areas within 0.1 %,
+  within its bounds), in one transaction, so a split can't smuggle in an
+  unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds
   (editor-only, its own 30 an hour, the window cap and budget, outside any
@@ -3068,7 +3080,7 @@ key there would let any read-only principal forge any user's session.
   classify, checks each Lambda's Terraform environment block (or, for a secret,
   its runtime secret, [§ Runtime secrets](#runtime-secrets)) sets every
   required setting, sweeps every `backend/.env.development` value, and starts
-  each entry point with a production-shaped env (the positive control).
+  each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
 - **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
@@ -3171,6 +3183,10 @@ key there would let any read-only principal forge any user's session.
 - **Delineation's DEM read** (`delineation_dem`): the API role may
   GetObject one key, `tiles/terrain.pmtiles`, and the S3 endpoint's policy
   allows the same; off by default.
+- **Tracing a dam's water read** (`dam_trace_water`, #326 C2): the same
+  for one other key, `tiles/water.pmtiles` (`api_water`); off by default.
+  The file sits under `tiles/`, so `/tiles/*` serves it by bounded ranges
+  like the other archives; GSW's terms allow redistribution.
 - **Reference loads run as the schema owner**, so they are gated like a
   deploy: `load-reference.yml` reaches AWS only in the `production`
   environment (a required reviewer, then OIDC), and the deploy role's only
@@ -3178,10 +3194,12 @@ key there would let any read-only principal forge any user's session.
   had. The migrate Lambda reads one object from the private reference
   bucket (GetObject on `reference/*`, nothing else), refuses it unless it
   hashes to the SHA-256 in the approved run (so the approver approves those
-  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off), and
+  bytes), caps it (200 MiB, and 200 MiB unzipped: a gzip bomb is cut off; the
+  evaporation grid 32 MiB and 64 MiB), and
   parses it with the same code as the local loaders (JSON only, no archive
   formats, no external references). The kinds whose licence isn't
-  confirmed are refused in the workflow and again in the Lambda, by name.
+  confirmed are refused in the workflow and again in the Lambda, by name,
+  and so is an A-pan evaporation grid (only dPET's reference ET is allowed).
   Its answer and its failure summary carry counts, codes and fixed text
   only, since the Actions log is public; the file's problems go to
   CloudWatch.

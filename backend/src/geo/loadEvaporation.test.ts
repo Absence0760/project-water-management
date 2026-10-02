@@ -6,11 +6,12 @@
 // averaged into water-year means; the refusals; the fixture form; the
 // arguments; and the committed synthetic fixture.
 import h5wasm from 'h5wasm/node';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { parseEvaporationArgs, readEvaporationFiles, reduceDpet, SYNTHETIC_EVAPORATION_FILE } from '../../scripts/import-evaporation.js';
+import { parseEvaporationArgs, readEvaporationFiles, reduceDpet, SYNTHETIC_EVAPORATION_FILE, writeEvaporationJson } from '../../scripts/import-evaporation.js';
 import { climatology, dpetYear, evaporationFromJson, originOf, readDpetYear, SOUTH_AFRICA_BBOX, toWaterYear, yearTotalsFromJson, type YearTotals } from './loadEvaporation.js';
 
 const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -207,6 +208,9 @@ describe('the fixture form and the command', () => {
 		expect(parseEvaporationArgs(['--reduce', 'out', 'a.json'], env)).toMatch(/--reduce takes dPET files/);
 		expect(parseEvaporationArgs(['--bbox', '1,2', 'a.nc', '--dataset', 'x'], env)).toMatch(/--bbox takes/);
 		expect(parseEvaporationArgs(['--nope'], env)).toBe('unknown option --nope');
+		expect(parseEvaporationArgs(['a.json', '--dataset', 'x', '--out', 'grid.json.gz'], env)).toMatchObject({ mode: 'load', out: '/work/grid.json.gz' });
+		expect(parseEvaporationArgs(['a.json', '--dataset', 'x'], env)).toMatchObject({ out: null });
+		expect(parseEvaporationArgs(['a.json', '--dataset', 'x', '--out', 'grid.csv'], env)).toMatch(/--out takes a \.json or \.json\.gz file/);
 	});
 
 	it('reduces two dPET years to totals and loads them as reference ET averaged over both', async () => {
@@ -222,6 +226,28 @@ describe('the fixture form and the command', () => {
 		// The .nc files read directly give the same.
 		const direct = await readEvaporationFiles({ mode: 'load', files: [a, b], dataset: 'x', bbox: box, source: null, version: null, attribution: null });
 		expect(direct.climatology.cells).toEqual(read.climatology.cells);
+	});
+
+	it('--out writes the averaged years as the fixture form, which reads back to the same grid, source and years', async () => {
+		const a = await nc({ year: 2019, lats: LATS, lons: LONS, value: () => 2 });
+		const b = await nc({ year: 2020, lats: LATS, lons: LONS, value: () => 4 });
+		const box = { west: 21.15, south: -33.75, east: 21.45, north: -33.45 };
+		const args = { mode: 'load' as const, files: [a, b], dataset: 'dPET-2019-2020', bbox: box, source: null, version: null, attribution: null };
+		const direct = await readEvaporationFiles(args);
+		expect(direct.climatology.cells.length).toBeGreaterThan(1);
+		const out = join(dir, 'grid.json.gz');
+		expect(await writeEvaporationJson({ ...args, out })).toEqual({ written: direct.climatology.cells.length, problems: [] });
+		const doc = JSON.parse(gunzipSync(readFileSync(out)).toString('utf8'));
+		expect(doc).toMatchObject({ kind: 'et0', cellDeg: 0.1, firstYear: 2019, lastYear: 2020, source: direct.meta.source, version: direct.meta.version, attribution: direct.meta.attribution });
+		const back = evaporationFromJson(doc);
+		if (typeof back === 'string') throw new Error(back);
+		expect(back.problems).toEqual([]);
+		expect(back.climatology).toEqual(direct.climatology);
+		// A box with no cell is refused and writes no file.
+		const away = { ...args, bbox: { west: 30, south: -25, east: 30.3, north: -24.7 } };
+		await expect(writeEvaporationJson({ ...away, out: join(dir, 'none.json') })).rejects.toThrow(/no cell centre lies inside the box/);
+		expect(existsSync(join(dir, 'none.json'))).toBe(false);
+		expect(evaporationFromJson({ kind: 'et0', cellDeg: 0.1, firstYear: 1991, lastYear: 2020, cells: [null] })).toMatch(/first cell/);
 	});
 
 	it('the committed synthetic fixture loads whole: 429 cells of reference ET, the base row in the four test cells', async () => {
