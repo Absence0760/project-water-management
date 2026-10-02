@@ -12,6 +12,10 @@
 	import { untrack } from 'svelte';
 	import { api, type CroplandProposals } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import ProposalNoDataset from '$lib/components/proposals/ProposalNoDataset.svelte';
+	import ProposalPanel from '$lib/components/proposals/ProposalPanel.svelte';
+	import ProposalSource from '$lib/components/proposals/ProposalSource.svelte';
+	import ProposalSynthetic from '$lib/components/proposals/ProposalSynthetic.svelte';
 	import { mapNodeHref } from '$lib/workspace/mapLinks';
 	import { areaChoices, confirmWords, cropRows, fmtHa, type CropRow } from './croplandProposals';
 
@@ -45,6 +49,7 @@
 	let choiceKey = $state('');
 	let allCrops = $state(false);
 	let seq = 0;
+	let frame = $state<ProposalPanel | null>(null);
 
 	async function load(id: string) {
 		const mine = ++seq;
@@ -102,6 +107,7 @@
 			});
 			notice = `${r.name}’s planted area on ${d.nodeName} is now ${fmtHa(res.areaM2)}, from land cover. Run the model to see its effect.`;
 			await Promise.all([load(d.nodeId), onModelChanged()]);
+			await frame?.focusNotice();
 		} catch (e) {
 			rowError = { key: r.cropId, text: msg(e) };
 		} finally {
@@ -110,159 +116,145 @@
 	}
 </script>
 
-<section class="proposals" aria-labelledby="{uid}-h" data-testid="cropland-proposals">
-	<h3 id="{uid}-h">From land cover</h3>
-	<p class="hint muted">
+<ProposalPanel
+	bind:this={frame}
+	testid="cropland-proposals"
+	prefix="cropland"
+	variant="drawer"
+	title="From land cover"
+	what="land-cover summary"
+	{notice}
+	{loading}
+	loaded={data !== null}
+	{error}
+	onretry={() => load(nodeId)}
+>
+	{#snippet intro()}<p class="hint muted">
 		The area a land-cover map shows as cropland in this unit’s parcels on the map. It shows where land is cultivated, not what grows there
 		or whether it is irrigated, so you choose the crop. Nothing changes until you use a value.
-	</p>
+	</p>{/snippet}
 
-	{#if notice}<p class="alert alert-info slim" role="status" data-testid="cropland-notice">{notice}</p>{/if}
-
-	<div aria-busy={loading} data-ready={!loading && (data !== null || error !== null) ? 'true' : undefined} data-testid="cropland-body">
-		{#if error}
-			<p class="err" role="alert">The land-cover summary couldn’t be loaded ({error}). <button type="button" class="btn btn-sm" onclick={() => load(nodeId)}>Try again</button></p>
-		{:else if data}
-			{#if !data.dataset}
-				<p class="alert alert-info slim" data-testid="cropland-no-dataset">
-					No land-cover dataset is loaded, so no cultivated area is proposed. The operator loads one with <code>pnpm import:land-cover</code> (docs/maps.md).
+	{#if data}
+		{#if !data.dataset}
+			<ProposalNoDataset testid="cropland-no-dataset" what="land-cover dataset" consequence="no cultivated area is proposed" command="pnpm import:land-cover" />
+		{:else}
+			{#if data.dataset.synthetic}
+				<ProposalSynthetic testid="cropland-synthetic" subject="The land cover" notWhat="ESA WorldCover" forWhat="catchment" />
+			{/if}
+			{#if parcels.length === 0}
+				<p class="alert alert-info slim" data-testid="cropland-no-parcels">
+					No farm parcel on the map is linked to {data.nodeName}. Draw or import its parcel on the Map and link it to {data.nodeName}; its cultivated area is summed from there.
+					<a href="?tab=map">Open the Map</a>
 				</p>
 			{:else}
-				{#if data.dataset.synthetic}
-					<p class="alert alert-warning slim" data-testid="cropland-synthetic">
-						<strong>Synthetic test data.</strong> The land cover loaded here is invented for development and tests, not ESA WorldCover. Never use it for a real catchment.
-					</p>
+				<div class="table-wrap">
+					<table class="data compact" data-testid="cropland-parcels">
+						<caption class="visually-hidden">Cultivated area in {data.nodeName}’s parcels on the map</caption>
+						<thead>
+							<tr><th scope="col">Parcel</th><th scope="col" class="num">Cultivated</th><th scope="col" class="num">Share</th></tr>
+						</thead>
+						<tbody>
+							{#each parcels as f (f.featureId)}
+								<tr>
+									<th scope="row">{f.name || 'Unnamed parcel'}</th>
+									{#if f.problem}
+										<td colspan="2" class="small">Can’t be summarised: {f.problem}</td>
+									{:else}
+										<td class="num">{fmtHa(f.cultivatedM2 ?? 0)} <span class="muted">of {fmtHa(f.areaM2 ?? 0)}</span></td>
+										<td class="num">{pct(f.cultivatedM2 ?? 0, f.areaM2 ?? 0)}</td>
+									{/if}
+								</tr>
+							{/each}
+						</tbody>
+						{#if data.unit && parcels.length > 1}
+							<tfoot>
+								<tr>
+									<th scope="row">All parcels</th>
+									<td class="num">{fmtHa(data.unit.cultivatedM2)} <span class="muted">of {fmtHa(data.unit.areaM2)}</span></td>
+									<td class="num">{pct(data.unit.cultivatedM2, data.unit.areaM2)}</td>
+								</tr>
+							</tfoot>
+						{/if}
+					</table>
+				</div>
+			{/if}
+			<p class="small" data-testid="cropland-catchment">
+				{#if data.catchment}
+					{#if 'problem' in data.catchment}
+						The catchment boundary can’t be summarised: {data.catchment.problem}.
+					{:else}
+						The whole catchment: {fmtHa(data.catchment.cultivatedM2)} cultivated of {fmtHa(data.catchment.areaM2)}, for reference.
+					{/if}
 				{/if}
-				{#if parcels.length === 0}
-					<p class="alert alert-info slim" data-testid="cropland-no-parcels">
-						No farm parcel on the map is linked to {data.nodeName}. Draw or import its parcel on the Map and link it to {data.nodeName}; its cultivated area is summed from there.
-						<a href="?tab=map">Open the Map</a>
-					</p>
+				<a href={mapNodeHref(data.nodeId)}>Show {data.nodeName} on map</a>
+			</p>
+
+			{#if choices.length}
+				<div class="field">
+					<label for="{uid}-area">Area to use</label>
+					<!-- Shows the choice in force (the sum, until another is picked and while it's still on offer), never a blank. -->
+					<select id="{uid}-area" value={choice?.key ?? ''} onchange={(e) => (choiceKey = e.currentTarget.value)}>
+						{#each choices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+					</select>
+				</div>
+				{#if rows.length === 0}
+					<p class="muted small">Add a crop first: the area is used as one crop’s planted area.</p>
 				{:else}
 					<div class="table-wrap">
-						<table class="data compact" data-testid="cropland-parcels">
-							<caption class="visually-hidden">Cultivated area in {data.nodeName}’s parcels on the map</caption>
+						<table class="data compact" data-testid="cropland-crops">
+							<caption class="visually-hidden">{data.nodeName}’s planted area per crop, and where it came from</caption>
 							<thead>
-								<tr><th scope="col">Parcel</th><th scope="col" class="num">Cultivated</th><th scope="col" class="num">Share</th></tr>
+								<tr><th scope="col">Crop</th><th scope="col" class="num">Planted now</th><th scope="col"><span class="visually-hidden">Use</span></th></tr>
 							</thead>
 							<tbody>
-								{#each parcels as f (f.featureId)}
-									<tr>
-										<th scope="row">{f.name || 'Unnamed parcel'}</th>
-										{#if f.problem}
-											<td colspan="2" class="small">Can’t be summarised: {f.problem}</td>
-										{:else}
-											<td class="num">{fmtHa(f.cultivatedM2 ?? 0)} <span class="muted">of {fmtHa(f.areaM2 ?? 0)}</span></td>
-											<td class="num">{pct(f.cultivatedM2 ?? 0, f.areaM2 ?? 0)}</td>
-										{/if}
+								{#each shownRows as r (r.cropId)}
+									<tr data-crop={r.name}>
+										<th scope="row">{r.name}{#if r.provenance}<span class="src" data-testid="cropland-provenance">{r.provenance}</span>{/if}</th>
+										<td class="num">{r.now}</td>
+										<td>
+											{#if r.same}
+												<span class="muted small">Saved</span>
+											{:else if !readonly && choice}
+												<button
+													type="button"
+													class="btn btn-sm use"
+													disabled={busy !== null || dirty}
+													aria-describedby={dirty ? `${uid}-dirty` : undefined}
+													aria-label="Use {fmtHa(choice.areaM2)} as {r.name}’s planted area"
+													onclick={() => use(r)}>{busy === r.cropId ? 'Saving…' : 'Use'}</button
+												>
+											{/if}
+											{#if rowError?.key === r.cropId}<p class="err small" role="alert">{rowError.text}</p>{/if}
+										</td>
 									</tr>
 								{/each}
 							</tbody>
-							{#if data.unit && parcels.length > 1}
-								<tfoot>
-									<tr>
-										<th scope="row">All parcels</th>
-										<td class="num">{fmtHa(data.unit.cultivatedM2)} <span class="muted">of {fmtHa(data.unit.areaM2)}</span></td>
-										<td class="num">{pct(data.unit.cultivatedM2, data.unit.areaM2)}</td>
-									</tr>
-								</tfoot>
-							{/if}
 						</table>
 					</div>
+					{#if rows.length > CROPS_SHOWN}
+						<button type="button" class="btn btn-sm ghost" aria-expanded={allCrops} onclick={() => (allCrops = !allCrops)}
+							>{allCrops ? 'Show fewer' : `Show all ${rows.length} crops`}</button
+						>
+					{/if}
 				{/if}
-				<p class="small" data-testid="cropland-catchment">
-					{#if data.catchment}
-						{#if 'problem' in data.catchment}
-							The catchment boundary can’t be summarised: {data.catchment.problem}.
-						{:else}
-							The whole catchment: {fmtHa(data.catchment.cultivatedM2)} cultivated of {fmtHa(data.catchment.areaM2)}, for reference.
-						{/if}
-					{/if}
-					<a href={mapNodeHref(data.nodeId)}>Show {data.nodeName} on map</a>
-				</p>
-
-				{#if choices.length}
-					<div class="field">
-						<label for="{uid}-area">Area to use</label>
-						<!-- Shows the choice in force (the sum, until another is picked and while it's still on offer), never a blank. -->
-						<select id="{uid}-area" value={choice?.key ?? ''} onchange={(e) => (choiceKey = e.currentTarget.value)}>
-							{#each choices as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
-						</select>
-					</div>
-					{#if rows.length === 0}
-						<p class="muted small">Add a crop first: the area is used as one crop’s planted area.</p>
-					{:else}
-						<div class="table-wrap">
-							<table class="data compact" data-testid="cropland-crops">
-								<caption class="visually-hidden">{data.nodeName}’s planted area per crop, and where it came from</caption>
-								<thead>
-									<tr><th scope="col">Crop</th><th scope="col" class="num">Planted now</th><th scope="col"><span class="visually-hidden">Use</span></th></tr>
-								</thead>
-								<tbody>
-									{#each shownRows as r (r.cropId)}
-										<tr data-crop={r.name}>
-											<th scope="row">{r.name}{#if r.provenance}<span class="src" data-testid="cropland-provenance">{r.provenance}</span>{/if}</th>
-											<td class="num">{r.now}</td>
-											<td>
-												{#if r.same}
-													<span class="muted small">Saved</span>
-												{:else if !readonly && choice}
-													<button
-														type="button"
-														class="btn btn-sm use"
-														disabled={busy !== null || dirty}
-														aria-describedby={dirty ? `${uid}-dirty` : undefined}
-														aria-label="Use {fmtHa(choice.areaM2)} as {r.name}’s planted area"
-														onclick={() => use(r)}>{busy === r.cropId ? 'Saving…' : 'Use'}</button
-													>
-												{/if}
-												{#if rowError?.key === r.cropId}<p class="err small" role="alert">{rowError.text}</p>{/if}
-											</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						</div>
-						{#if rows.length > CROPS_SHOWN}
-							<button type="button" class="btn btn-sm ghost" aria-expanded={allCrops} onclick={() => (allCrops = !allCrops)}
-								>{allCrops ? 'Show fewer' : `Show all ${rows.length} crops`}</button
-							>
-						{/if}
-					{/if}
-					{#if !readonly && dirty}
-						<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: an area used here is saved to the model straight away.</p>
-					{/if}
-					{#if readonly}<p class="hint muted">Only an editor can use a value.</p>{/if}
-				{:else if parcels.length}
-					<p class="muted small" data-testid="cropland-none">The land cover shows no cropland in {data.nodeName}’s parcels.</p>
+				{#if !readonly && dirty}
+					<p class="hint muted" id="{uid}-dirty">Save or discard your model changes first: an area used here is saved to the model straight away.</p>
 				{/if}
-
-				<details class="method small">
-					<summary>Source and method</summary>
-					<p data-testid="cropland-source">{data.dataset.source} ({data.dataset.version}; dataset “{data.dataset.dataset}”). {data.dataset.attribution}</p>
-					<p>{data.dataset.method}</p>
-				</details>
+				{#if readonly}<p class="hint muted">Only an editor can use a value.</p>{/if}
+			{:else if parcels.length}
+				<p class="muted small" data-testid="cropland-none">The land cover shows no cropland in {data.nodeName}’s parcels.</p>
 			{/if}
+
+			<ProposalSource
+				testid="cropland-source"
+				citation="{data.dataset.source} ({data.dataset.version}; dataset “{data.dataset.dataset}”). {data.dataset.attribution}"
+				method={data.dataset.method}
+			/>
 		{/if}
-	</div>
-</section>
+	{/if}
+</ProposalPanel>
 
 <style>
-	.proposals {
-		display: grid;
-		/* One column no wider than the sheet: the tables scroll in their own box on a phone, the sheet doesn't. */
-		grid-template-columns: minmax(0, 1fr);
-		gap: 0.6rem;
-		margin: 1rem 0 0;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border);
-		min-width: 0;
-		container-type: inline-size;
-	}
-	h3 {
-		font-size: 1rem;
-		margin: 0;
-	}
 	.field {
 		display: grid;
 		gap: 0.25rem;
@@ -299,17 +291,12 @@
 		font-size: 0.85rem;
 		margin: 0;
 	}
-	.method p {
-		margin: 0.35rem 0 0;
-		overflow-wrap: anywhere;
-	}
 	.table-wrap {
 		width: 100%;
 	}
 	/* Phone: the row buttons are 44 px targets, as on the rest of the Crops page. */
 	@container (max-width: 30rem) {
-		.use,
-		.err .btn {
+		.use {
 			min-height: 44px;
 			min-width: 44px;
 		}
