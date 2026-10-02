@@ -3068,7 +3068,7 @@ key there would let any read-only principal forge any user's session.
   classify, checks each Lambda's Terraform environment block (or, for a secret,
   its runtime secret, [§ Runtime secrets](#runtime-secrets)) sets every
   required setting, sweeps every `backend/.env.development` value, and starts
-  each entry point with a production-shaped env (the positive control).
+  each entry point's bundle with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
 - **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
