@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Round-4 persona fixes: the divide overlap check and its live hint, the GeoJSON export's licensed-data credit (dataCredits), the evaporation confirmation's daily A-pan wording, the version-keyed terms changes. Measured: origin/main 5a16cd1b3 built 1603 KB, this branch merged with it 1605 KB."
+}
