@@ -255,6 +255,28 @@ the same list the sign-up form and the re-acceptance notice show translated
 (`TermsSummary.svelte`). Research-based wording the operator accepted without
 counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
 
+**Data sources and credits** (`/data-sources`, `routes/data-sources`, the
+same frame, prerendered; 2026-10-02): the third-party data the service
+serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
+DEM, HydroRIVERS, ESA WorldCover, CHIRPS, the map's label fonts), each with
+what it is used for, its publisher, its licence and the credit that licence
+asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
+Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit
+(`lib/components/legal/dataCredits.ts`; `dataCredits.test.ts` checks each
+against [maps.md § Sources](./maps.md#sources)). A notice, not part of the
+terms, so changing it bumps no `LEGAL_VERSION`. Linked from the footer of
+the legal pages ("Data sources"), from Terms §9, and from the map's
+attribution control while HydroRIVERS reaches are drawn (the River network
+layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
+Inc. (2006-2022), used under license", linking to its section, and on any
+map, the farm map included, that draws a river added from a HydroRIVERS
+reach), and from the relief's credit ("licence notice", to the Copernicus
+section). Its line under the title is the day the licences were last read
+(`LICENCES_READ`, the Sources table's date). Not linked from the landing
+page's footer: its links are translated (`t()`), and this English-only page
+is reached from the legal pages it sits with; a link there is a new farmer-facing
+string through the i18n agents if the landing page ever needs it.
+
 **Sign-up assent.** Directly above the sign-up button (invitations
 included): a bordered box, **The main things you agree to**, with the four
 points in the reader's language (and, in another language, "The Terms are
@@ -2518,7 +2540,13 @@ map" card) stays the schematic; this is the geography.
   column and a window at least 620 px high the layout is a dashboard: exactly
   the height left below its measured top, less the 1rem gutter and the save
   bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
-  and the page doesn't scroll. Without WebGL the map says it can't be drawn
+  and the page doesn't scroll. In the side column the picked feature's card
+  (at most 55 %, at least 6rem while a feature is picked) and the layers box
+  (at most 35 %) each scroll in their box and give way, in proportion to
+  their size, before the list goes below 8rem; the checks line keeps its height (`map-layers.spec.ts` pins it at
+  1440×960 and 1280×800 with a feature and a reach picked; until
+  2026-10-02 the card held its full height and the column ran past a
+  1280×800 window). Without WebGL the map says it can't be drawn
   and the list does everything; when the tiles can't be read the map drops
   them and says so.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
@@ -4747,7 +4775,7 @@ read it before.
   restrictions** (`#res-restrictions`, engine ≥ 1.54.0,
   [§ Drought restrictions](#drought-restrictions)) and, for a run that has any, **Other uses**
   (`#res-other-uses`, issue #137): the land-cover, groundwater,
-  demand-object and other-user tables, once under the run summary with no
+  demand-object, river-abstraction and other-user tables, once under the run summary with no
   menu entry, other users left out when the curtailment table lists them.
   Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
@@ -5177,6 +5205,17 @@ read it before.
   the days it did, whole-run means. Drawn on Units & supply too, beside the
   curtailment table (which has no pump columns); the run Summary's Other uses
   line names it.
+- **River abstractions** (engine ≥ 1.65.0, only when a unit has a demand on
+  the river, model.md §2.7j; drawn after Demand objects, the unit tables
+  together, in the order the Summary's Other uses line names them): per
+  abstraction its unit, its name (**Crops** for the crops' take, whose
+  engine name repeats the unit), its pump capacity
+  ("no limit" without one), the mean it pumped and, with a pool, the pool's
+  capacity and mean storage; from engine 1.66.0, when one has a pump
+  capacity, the demand its pump left unmet while the river or its pool had
+  the water (`river_pump_limited@`) and the days it did ("–" for one without
+  a capacity). The summary CSV has the same block; the run Summary's Other
+  uses line names it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the

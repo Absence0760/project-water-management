@@ -2,7 +2,7 @@
 // `layers=` in the URL and the bbox the quaternaries and rivers are asked for around the features.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature } from '$lib/api/types';
-import { layersOn, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, withLayer } from './mapLayers';
+import { creditedFeature, creditedReach, layersOn, QUATERNARY_BBOX_MAX_DEG, quaternaryBbox, reachFacts, reachLabel, RIVER_BBOX_MAX_DEG, riverBbox, withLayer } from './mapLayers';
 
 const poly = (x: number, y: number, d: number) =>
 	({ id: 'p', kind: 'farm_parcel', geometry: { type: 'Polygon', coordinates: [[[x, y], [x + d, y], [x + d, y + d], [x, y]]] } }) as MapFeature;
@@ -64,5 +64,28 @@ describe('reachLabel and reachFacts', () => {
 		expect(reachLabel({ name: 'Sandspruit', reachId: 7 })).toBe('Sandspruit');
 		expect(reachFacts({ strahler: 3, upstreamKm2: 655, lengthKm: 8.94, dischargeM3s: 1.84 })).toEqual(['Strahler order 3', '655 km² upstream', '8.9 km long', 'mean flow 1.84 m³/s']);
 		expect(reachFacts({ strahler: null, upstreamKm2: 54.9, lengthKm: null, dischargeM3s: null })).toEqual(['54.9 km² upstream']);
+	});
+});
+
+describe('creditedReach', () => {
+	it('is a reach from HydroRIVERS (by its dataset label or source line), never the synthetic network', () => {
+		expect(creditedReach({ dataset: 'HydroRIVERS-v10', source: 'HydroRIVERS v1.0', synthetic: false })).toBe(true);
+		expect(creditedReach({ dataset: 'rivers-af', source: 'HydroSHEDS HydroRIVERS v1.0, © WWF', synthetic: false })).toBe(true);
+		expect(creditedReach({ dataset: 'synthetic', source: 'synthetic river network', synthetic: true })).toBe(false);
+		// A synthetic set is never credited, whatever it is called.
+		expect(creditedReach({ dataset: 'HydroRIVERS-test', source: '', synthetic: true })).toBe(false);
+		expect(creditedReach({ dataset: 'my-rivers', source: 'surveyed by the WUA', synthetic: false })).toBe(false);
+	});
+});
+
+describe('creditedFeature', () => {
+	it('is a river feature added from a HydroRIVERS reach (its ref), nothing else', () => {
+		expect(creditedFeature({ kind: 'river', properties: { ref: 'river-network:HydroRIVERS-v10:1050012345' } })).toBe(true);
+		expect(creditedFeature({ kind: 'river', properties: { ref: 'river-network:synthetic:90000001' } })).toBe(false);
+		expect(creditedFeature({ kind: 'river', properties: {} })).toBe(false);
+		expect(creditedFeature({ kind: 'river', properties: null } as never)).toBe(false);
+		expect(creditedFeature({ kind: 'other', properties: { ref: 'river-network:HydroRIVERS-v10:1' } })).toBe(false);
+		// The farm map's flag from the server (farmMap.ts asMapFeatures).
+		expect(creditedFeature({ kind: 'river', properties: { credit: 'hydrorivers' } })).toBe(true);
 	});
 });

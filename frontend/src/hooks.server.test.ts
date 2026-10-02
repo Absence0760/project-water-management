@@ -32,6 +32,6 @@ describe('html lang', () => {
 
 	it('stays en everywhere else, the fallback page included', async () => {
 		words.lang = 'af';
-		for (const id of [null, '/privacy', '/terms', '/methods', '/login']) expect(await htmlFor(id), String(id)).toContain('<html lang="en">');
+		for (const id of [null, '/privacy', '/terms', '/methods', '/data-sources', '/login']) expect(await htmlFor(id), String(id)).toContain('<html lang="en">');
 	});
 });

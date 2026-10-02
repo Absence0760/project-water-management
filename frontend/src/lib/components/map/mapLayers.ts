@@ -58,6 +58,27 @@ export const quaternaryBbox = (features: readonly MapFeature[]) => layerBbox(fea
 /** The bbox the river network is asked for (layerBbox, at most RIVER_BBOX_MAX_DEG a side). */
 export const riverBbox = (features: readonly MapFeature[]) => layerBbox(features, RIVER_BBOX_MAX_DEG);
 
+/**
+ * Whether a reach comes from HydroRIVERS, whose licence asks for a credit
+ * wherever its data is shown (docs/maps.md § Sources): by its dataset label or
+ * source line, never the repo's synthetic network.
+ */
+export const creditedReach = (r: { dataset: string; source: string; synthetic: boolean }) => !r.synthetic && /hydro\s*(rivers|sheds)/i.test(`${r.dataset} ${r.source}`);
+
+/**
+ * Whether a project feature is a river added from a HydroRIVERS reach: its
+ * data is HydroRIVERS' wherever the map draws it, so it carries the credit
+ * too. On the Map tab its `ref` says so (POST …/map/rivers/add stores
+ * `river-network:<dataset>:<id>`); the farm map gets no properties, so the
+ * server flags it (`credit`, farms/view.ts farmMap, farmMap.ts asMapFeatures).
+ */
+export const creditedFeature = (f: Pick<MapFeature, 'kind' | 'properties'>) => {
+	if (f.kind !== 'river') return false;
+	if (f.properties?.credit === 'hydrorivers') return true;
+	const ref = f.properties?.ref;
+	return typeof ref === 'string' && /^river-network:hydro\s*(rivers|sheds)/i.test(ref);
+};
+
 /** A reach as the list names it: its own name, else its id. */
 export const reachLabel = (r: { name: string; reachId: number }) => r.name || `Reach ${r.reachId}`;
 

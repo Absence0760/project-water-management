@@ -451,8 +451,8 @@ The app is a static SPA (`ssr = false`, `prerender = false` in
 `routes/+layout.ts`): every route renders in the browser from the fallback
 `index.html`. The public landing page (issue #57) is the exception.
 `routes/welcome/[[lang=locale]]/+page.ts` sets `ssr = true` and `prerender = true` (as do the
-legal pages, `routes/privacy` and `routes/terms`, and the methods page,
-`routes/methods`: `STATIC_PATHS` in
+legal pages, `routes/privacy` and `routes/terms`, the methods page,
+`routes/methods`, and the data sources' credits, `routes/data-sources`: `STATIC_PATHS` in
 `lib/auth/session.svelte.ts`), so the
 build writes `welcome.html` with the page's HTML and its meta and Open Graph
 tags in it: crawlers and link previews read it without running the app, and a
@@ -466,7 +466,7 @@ prerender and the hydration are in the address's language; `hooks.server.ts`
 alone, since the i18n state is module-wide and the fallback `index.html`
 must not inherit the last page's language. CloudFront's `spa_rewrite` function serves
 `/welcome` from `welcome.html`, `/welcome/af` from `welcome/af.html` (its
-`PRERENDERED` list), and `/privacy`, `/terms` and `/methods` from theirs (`infra/s3_cloudfront.tf`, guarded in
+`PRERENDERED` list), and `/privacy`, `/terms`, `/methods` and `/data-sources` from theirs (`infra/s3_cloudfront.tf`, guarded in
 `guardrails.tftest.hcl`, and `infra/scripts/cloudfront-functions.test.mjs`
 checks `PRERENDERED` against the routes and the language table, so a new
 language can't 404 in production only; the e2e static server mirrors it). The absolute URLs in

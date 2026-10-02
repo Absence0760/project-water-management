@@ -3604,7 +3604,8 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       licence's liability sentence ("The organisations in charge of the
       Copernicus programme by law or by delegation do not incur any
       liability for any use of the Copernicus WorldDEM-30", Art. 6(c)) in
-      the app's legal notice first (maps.md § Relief). Delineation reads the
+      the app's legal notice (maps.md § Relief): done 2026-10-02, on the
+      Data sources and credits page (`/data-sources`). Delineation reads the
       same file from the API (#326 B-delineate, maps.md § Delineation): set
       `DEM_URL=s3://<bucket>/tiles/terrain.pmtiles` on the API Lambda and
       grant its role `s3:GetObject` on that one key (it reaches S3 through
@@ -3630,11 +3631,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       production loading path above (same gap as the quaternaries).
 - [ ] **HydroRIVERS in production** (issue #345; maps.md § River network,
       § Sources). The licence allows commercial use (checked 2026-10-01),
-      on two conditions to meet before a deployment serves it: the
-      HydroSHEDS Exhibit B statement in the app's legal notice (or its
-      documentation), and the terms of service carrying the end-user
+      on two conditions to meet before a deployment serves it. The
+      HydroSHEDS Exhibit B statement is done (2026-10-02): the public Data
+      sources and credits page (`/data-sources`) carries it, and the map's
+      attribution control credits HydroRIVERS, linking there, while its
+      reaches are drawn. Open: the terms of service carrying the end-user
       protections the agreement asks for (§ 2.1.2: no stand-alone
-      redistribution of the data, no reverse engineering). Then load it
+      redistribution of the data, no reverse engineering), a material Terms
+      change for the operator (legal-status.md § Other open items). Then load it
       through the production loading path above (the same gap as the
       quaternaries). Trigger: the first deployment that wants the River
       network layer.
@@ -3811,6 +3815,15 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       Supersedes draft PR #341's pool on a dam-less run-of-river unit. No
       importer sets it (b023 has no such abstraction). The decisions are
       open question R2 in engine-audit.md, listed under § Hydrologist.
+- [x] **A river abstraction's pump-limited demand** (2026-10-02, engine
+      1.66.0, follow-up from PR #350). Each abstraction with a pump capacity
+      publishes `river_pump_limited@<key>`: the demand its pump left unmet
+      while the flow its level left, or its own pool, still had the water
+      (within the allocation room), as an other water user's `pump_limited`
+      does (§2.7c). `RiverTakeSummary.avgPumpLimitedM3Day` and
+      `daysPumpLimited`; the Units & supply **River abstractions** table and
+      the summary CSV's River abstractions block show them
+      ([model.md §2.7j](./model.md)). Nothing else in the run changes.
 - [x] **Run of river from the importer** (2026-09-27). `--run-of-river`
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per

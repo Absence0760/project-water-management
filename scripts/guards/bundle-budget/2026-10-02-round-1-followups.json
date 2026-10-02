@@ -1,0 +1,4 @@
+{
+	"addKb": 3,
+	"why": "Round-1 follow-ups: the River abstractions table on Units & supply (HumanImpactTables), the map's HydroRIVERS and relief credits (CatchmentMap, dataCredits.ts) and the river layer's deps; measured 1574 KB against 1571 KB after build:frontend"
+}
