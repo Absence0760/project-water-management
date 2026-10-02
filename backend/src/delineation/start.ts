@@ -24,6 +24,7 @@ import { beginModelChange, recordAudit, recordModelRevision } from '../history/r
 import { readJson } from '../http/body.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { logEvent } from '../logging/logEvent.js';
+import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { safeError } from '../logging/safeError.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
@@ -321,118 +322,124 @@ export const startRoutes = new Hono<AuthEnv>()
 		const body = ProposeBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const inputs = await withUser(userId, async (db) => {
+		const { inputs, attempt } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) > 0) throw new ApiError(409, NOT_EMPTY);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
 			if (rows[0]!.n >= START_PROPOSALS_PER_HOUR) {
 				throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
 			}
-			return readMapInputs(db, id, body);
+			// Counted before any work, refused and failed attempts too (184_dem_attempt).
+			const attempt = await beginDemAttempt(db, 'start');
+			return { inputs: await readMapInputs(db, id, body), attempt };
 		});
-		const dem = configuredDem();
-		let plan: StartPlan;
-		let dataset: { label: string; fingerprint: string } | null = null;
-		let method = NO_DEM_METHOD;
-		let methodVersion = START_METHOD_VERSION;
-		let demReadable = false;
-		if (dem) {
-			try {
-				await dem.info();
-				demReadable = true;
-			} catch (err) {
-				logEvent('warn', { event: 'dem_unreadable', ...safeError(err) });
+		try {
+			const dem = configuredDem();
+			let plan: StartPlan;
+			let dataset: { label: string; fingerprint: string } | null = null;
+			let method = NO_DEM_METHOD;
+			let methodVersion = START_METHOD_VERSION;
+			let demReadable = false;
+			if (dem) {
+				try {
+					await dem.info();
+					demReadable = true;
+				} catch (err) {
+					logEvent('warn', { event: 'dem_unreadable', ...safeError(err) });
+				}
 			}
-		}
-		if (!dem || !demReadable) {
-			if (!inputs.boundary && !inputs.points.length) throw new ApiError(400, 'Put the catchment boundary or some points on the map first.');
-			plan = planWithoutDem(inputs);
-		} else {
-			let r;
-			try {
-				r = await delineateUnits(dem, {
-					outlet: inputs.outlet.point,
-					boundary: inputs.boundary?.geometry ?? null,
-					points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry }))
-				});
-			} catch (err) {
-				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
-				logEvent('error', { event: 'start_proposal_failed', ...safeError(err) });
-				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
+			if (!dem || !demReadable) {
+				if (!inputs.boundary && !inputs.points.length) throw new ApiError(400, 'Put the catchment boundary or some points on the map first.');
+				plan = planWithoutDem(inputs);
+			} else {
+				let r;
+				try {
+					r = await delineateUnits(dem, {
+						outlet: inputs.outlet.point,
+						boundary: inputs.boundary?.geometry ?? null,
+						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry }))
+					});
+				} catch (err) {
+					if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
+					logEvent('error', { event: 'start_proposal_failed', ...safeError(err) });
+					throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
+				}
+				const named = new Map(inputs.points.map((p) => [p.featureId, p]));
+				const warnings: string[] = [];
+				if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
+					warnings.push(
+						`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The units’ areas follow the elevation model; check the outlet and the boundary.`
+					);
+				}
+				const units: StartUnit[] = r.units.map((u) => ({
+					key: u.id,
+					featureName: named.get(u.id)!.name,
+					role: u.role,
+					name: named.get(u.id)!.name,
+					point: u.point,
+					snapDistanceM: u.snapDistanceM,
+					areaM2: u.role === 'user' || u.role === 'gauge' ? null : u.areaM2,
+					// A gauge's whole area above it is worth showing (what it measures); a user's isn't.
+					totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
+					geometry: u.geometry,
+					drainsInto: u.drainsInto,
+					drainsIntoProposed: true
+				}));
+				for (const u of units) {
+					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
+					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
+				}
+				plan = {
+					fromDem: true,
+					outlet: { featureId: inputs.outlet.featureId, name: inputs.outlet.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
+					catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
+					units: upstreamFirst(units),
+					rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry },
+					dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
+					warnings,
+					cellSizeM: r.cellSizeM,
+					zoom: r.zoom,
+					windowCells: r.windowCells
+				};
+				dataset = { label: r.dataset.label, fingerprint: r.dataset.fingerprint };
+				method = r.method;
+				methodVersion = r.methodVersion;
 			}
-			const named = new Map(inputs.points.map((p) => [p.featureId, p]));
-			const warnings: string[] = [];
-			if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
-				warnings.push(
-					`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The units’ areas follow the elevation model; check the outlet and the boundary.`
+			return await withUser(userId, async (db) => {
+				await requireRole(db, id, 'editor');
+				if ((await nodeCount(db, id)) > 0) throw new ApiError(409, NOT_EMPTY);
+				await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
+				const { rows } = await db
+					.query<{ id: string }>(
+						`INSERT INTO start_proposal (project_id, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
+						 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+						[id, JSON.stringify(plan), plan.fromDem, dataset?.label ?? null, dataset?.fingerprint ?? null, method, methodVersion]
+					)
+					.catch((err: unknown) => {
+						if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
+							throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
+						}
+						throw err;
+					});
+				await db.query(
+					`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
+						SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
+					[id, START_PROPOSALS_KEPT]
 				);
-			}
-			const units: StartUnit[] = r.units.map((u) => ({
-				key: u.id,
-				featureName: named.get(u.id)!.name,
-				role: u.role,
-				name: named.get(u.id)!.name,
-				point: u.point,
-				snapDistanceM: u.snapDistanceM,
-				areaM2: u.role === 'user' || u.role === 'gauge' ? null : u.areaM2,
-				// A gauge's whole area above it is worth showing (what it measures); a user's isn't.
-				totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
-				geometry: u.geometry,
-				drainsInto: u.drainsInto,
-				drainsIntoProposed: true
-			}));
-			for (const u of units) {
-				if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
-				if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
-			}
-			plan = {
-				fromDem: true,
-				outlet: { featureId: inputs.outlet.featureId, name: inputs.outlet.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
-				catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
-				units: upstreamFirst(units),
-				rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry },
-				dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
-				warnings,
-				cellSizeM: r.cellSizeM,
-				zoom: r.zoom,
-				windowCells: r.windowCells
-			};
-			dataset = { label: r.dataset.label, fingerprint: r.dataset.fingerprint };
-			method = r.method;
-			methodVersion = r.methodVersion;
-		}
-		return withUser(userId, async (db) => {
-			await requireRole(db, id, 'editor');
-			if ((await nodeCount(db, id)) > 0) throw new ApiError(409, NOT_EMPTY);
-			await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
-			const { rows } = await db
-				.query<{ id: string }>(
-					`INSERT INTO start_proposal (project_id, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
-					 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
-					[id, JSON.stringify(plan), plan.fromDem, dataset?.label ?? null, dataset?.fingerprint ?? null, method, methodVersion]
-				)
-				.catch((err: unknown) => {
-					if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
-						throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
-					}
-					throw err;
+				const proposal = toProposal(await loadProposal(db, id, rows[0]!.id));
+				await recordAudit(db, id, 'map.start_proposed', {
+					proposalId: proposal.id,
+					units: plan.units.length,
+					dropped: plan.dropped.length,
+					fromDem: plan.fromDem,
+					dataset: dataset?.label ?? null,
+					methodVersion
 				});
-			await db.query(
-				`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
-					SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
-				[id, START_PROPOSALS_KEPT]
-			);
-			const proposal = toProposal(await loadProposal(db, id, rows[0]!.id));
-			await recordAudit(db, id, 'map.start_proposed', {
-				proposalId: proposal.id,
-				units: plan.units.length,
-				dropped: plan.dropped.length,
-				fromDem: plan.fromDem,
-				dataset: dataset?.label ?? null,
-				methodVersion
+				return c.json({ proposal }, 201);
 			});
-			return c.json({ proposal }, 201);
-		});
+		} finally {
+			await finishDemAttempt(userId, attempt);
+		}
 	})
 	.post('/:id/map/start/:spid/apply', async (c) => {
 		const body = ApplyBody.parse(await readJson(c));

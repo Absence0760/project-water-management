@@ -48,8 +48,8 @@ const base: ModelInput = {
 		nodes: [
 			node(G, 'Gauge', 'gauge', null, 0),
 			node(N2, 'Waterval Estate', 'farm', G, 3, { damCapacityM3: 250_000 }),
-			node(MINE, 'Rooikloof', 'farm', G, 1),
-			node(N1, 'Waterval', 'farm', G, 2),
+			node(MINE, 'Rooikloof', 'farm', G, 1, { cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 }),
+			node(N1, 'Waterval', 'farm', G, 2, { cropWaterSource: 'river', cropRiverPumpM3Day: 400, cropRiverPoolM3: null }),
 			node(U1, 'Town', 'user', G, 4, { userDemandM3Day: monthly(500), userPriority: 'junior' })
 		],
 		crops: [
@@ -110,6 +110,15 @@ describe('projectBaseForApplicant', () => {
 		expect(view.anonymisedNodeIds.sort()).toEqual([N1, N2, U1].sort());
 		// The base's order is kept.
 		expect(view.model.nodes.map((n) => n.id)).toEqual(base.model.nodes.map((n) => n.id));
+	});
+
+	it('doesn’t say how a hidden farm waters its crops: no water source, no pump, no pool (positive control: their own farm’s stay)', () => {
+		const hidden = byId.get(N1)!;
+		expect(hidden).not.toHaveProperty('cropWaterSource');
+		expect(hidden.cropRiverPumpM3Day).toBe(0);
+		expect(hidden.cropRiverPoolM3).toBeNull();
+		expect(JSON.stringify(view.model.nodes.filter((n) => n.id !== MINE))).not.toMatch(/river/);
+		expect(byId.get(MINE)).toMatchObject({ cropWaterSource: 'river', cropRiverPumpM3Day: 250, cropRiverPoolM3: 1000 });
 	});
 
 	it('keeps only what is on their own farm: crops, crop areas, transfers, land cover, boreholes', () => {

@@ -23,8 +23,8 @@
 // covers; this file is about the link and the notes.
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, asOwner, node, signUp } from '../__tests__/helpers.js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { anon, asOwner, node, settlePendingNotices, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -175,6 +175,12 @@ async function plantRun(q: (sql: string, params?: unknown[]) => Promise<Record<s
 	);
 	return rows[0]!.id as string;
 }
+
+// Withdrawing and issuing packs here queues their "pack issued / withdrawn" emails (pack_notice, 133);
+// nothing here runs the tick, so they're settled, or a later file's tick mails them (src/__tests__/db-setup.ts).
+afterAll(async () => {
+	await settlePendingNotices(projectId, smallProjectId);
+});
 
 beforeAll(async () => {
 	[owner, assessor, ngo, applicant, farmer] = (await Promise.all(['Pkowner', 'Pkassessor', 'Pkngo', 'Pkapplicant', 'Pkfarmer'].map((n) => signUp(n)))) as [User, User, User, User, User];

@@ -434,7 +434,9 @@ Split / Save the shape as any drawing, through the server's checks
   "<boundary> part 1/2" unless renamed. The server
   (`POST …/map/features/:fid/split`) checks each part as any polygon, and
   that together they are the shape: their geodesic areas add up to its
-  area within 0.1 % (plus 1 m²) and they lie within its bounds; one
+  area within 0.1 % (plus 1 m²) and each lies within the shape (every
+  edge of a part that isn't the shape's own stays inside its outline,
+  `geo/splitCheck.ts`; security.md § Map uploads); one
   `map.feature_split` event names both parts. A unit whose area was taken
   from the split shape keeps that area until **Use** is pressed again.
   Splitting into more than two is done a cut at a time.
@@ -833,9 +835,11 @@ boundary itself rather than over a box around it.
   latitude)*, the weighting `bboxCells` gives a box, so a rectangle gets
   exactly a box's cells and weights. Holes are subtracted and the parts of a
   MultiPolygon add up. The share is computed by **exact clipping**, not
-  sampling: each ring is clipped to its row of cells, then to each cell
-  (Sutherland–Hodgman; clipping to a convex cell is exact in area even for a
-  concave ring), and the share is the clipped area over the cell's in degrees.
+  sampling: each ring is clipped to its rows of cells, then to their cells,
+  halving the range each time (`geo/clip.ts eachBand`, so the work grows
+  with the vertices times log(cells), not vertices × cells; security.md §
+  Map uploads; Sutherland–Hodgman: clipping to a convex cell is exact in
+  area even for a concave ring), and the share is the clipped area over the cell's in degrees.
   Exact to floating point, and cheaper than a sampling grid fine enough to
   match it; the degree-space share and the ellipsoidal one differ by under
   1e-4 within a cell. A cell with under 0.1 % of its area inside is left out

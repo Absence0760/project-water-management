@@ -7,7 +7,7 @@
 // The tests queue alert checks and run ticks; each leaves no job queued, so
 // another file's tick never picks one up (jobs and feeds tests count them).
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, monthly, node, settlePendingNotices, signUp } from '../__tests__/helpers.js';
 import { hashToken } from '../auth/tokens.js';
 import { withoutUser, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
@@ -998,6 +998,8 @@ describe('the project’s local day', () => {
 		await asOwner(`UPDATE alert_delivery SET claimed_at = $2 WHERE user_id = $1 AND via = 'immediate' AND claimed_at > $2`, [u.id, `${today}T10:00:00Z`]);
 		await sendAlerts({ now: new Date(`${today}T15:00:00Z`) });
 		expect(await pending()).toEqual([{ status: 'digest', reason: 'over the daily cap' }]);
+		// That line waits for a digest a later file's tick would send: settled here (src/__tests__/db-setup.ts).
+		await settlePendingNotices(kiri);
 	});
 });
 

@@ -184,6 +184,12 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   retires them so only the leaking file fails. It runs after the file's own
   `afterAll` (`sequence.hooks: 'stack'`, pinned in `backend/vitest.config.ts`);
   `__tests__/db-setup.db.test.ts` checks that order and the guard itself.
+  The same guard covers the notice queues, which the tick also drains
+  globally: a file that leaves a `pack_notice`, `erratum_notice` or
+  `alert_delivery` pending, sending or waiting for the digest fails, so a
+  file that issues or withdraws a pack, sweeps an erratum or fires an alert
+  sends the mail (`runTick`) or settles it
+  (`settlePendingNotices(projectId)` in `__tests__/helpers.ts`).
 - **e2e ticks are scoped to the test's own projects.** Playwright's workers
   share one e2e database and run in parallel, so unlike the DB files an e2e
   test can't count on nobody else ticking: `runJobsTick` requires the

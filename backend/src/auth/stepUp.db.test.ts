@@ -107,6 +107,15 @@ describe('an owner’s actions need two-step sign-in', () => {
 		expect((await leaver.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBeLessThan(300);
 	});
 
+	it('recording a signer’s registration check too, though the route is open to an acting editor (its minimum role is editor)', async () => {
+		const check = { registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationNo: '400999/20', registerName: 'Step Signer', outcome: 'registered', checkedByOrg: 'Step WUA', checkedAt: '2026-01-01' };
+		expect(await owner.call('POST', `/projects/${projectId}/members/${viewer.id}/registration-checks`, check)).toMatchObject({ status: 403, body: { code: 'mfa_required' } });
+		// Positive control: an owner signed in with a code gets past the check (to the route's own answer about the member).
+		const r = await anon('POST', `/projects/${ownProjectId}/members/${uuid()}/registration-checks`, check, enrolledOwnerTwoStep);
+		expect(String(r.body?.code ?? '')).not.toMatch(/^mfa_/);
+		expect(r.status).not.toBe(403);
+	});
+
 	it('with one, but a session signed in before it (password only): 403 mfa_step_up', async () => {
 		expect(await enrolledOwner.call('POST', `/projects/${ownProjectId}/api-keys`, { name: 'logger' })).toMatchObject({ status: 403, body: { code: 'mfa_step_up' } });
 	});

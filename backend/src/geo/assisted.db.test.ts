@@ -90,6 +90,19 @@ describe('splitting a polygon', () => {
 		const r = await editor.call('POST', at(`/features/${h.body.feature.id}/split`), { parts: splitHalves(21.38, -33.68, 0.01) });
 		expect(r.status).toBe(400);
 		expect(r.body.error).toMatch(/one outline/);
+		// An L cut into two rectangles: within its bounds, areas adding up, but the second lies wholly outside the L.
+		const d = 0.01;
+		const [x, y] = [21.4, -33.7];
+		const ell = { type: 'Polygon', coordinates: [[[x, y], [x + 2 * d, y], [x + 2 * d, y + d], [x + d, y + d], [x + d, y + 2 * d], [x, y + 2 * d], [x, y]]] };
+		const box = (x0: number, y0: number, x1: number, y1: number) => ({ type: 'Polygon', coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]] });
+		const l = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Ell', geometry: ell });
+		expect(l.status, JSON.stringify(l.body)).toBe(201);
+		const outside = await editor.call('POST', at(`/features/${l.body.feature.id}/split`), { parts: [box(x, y, x + 2 * d, y + d), box(x + d, y + d, x + 2 * d, y + 2 * d)] });
+		expect(outside.status).toBe(400);
+		expect(outside.body.error).toMatch(/not this shape cut in two/);
+		// Positive control: the same L cut into its two real rectangles splits.
+		const real = await editor.call('POST', at(`/features/${l.body.feature.id}/split`), { parts: [box(x, y, x + 2 * d, y + d), box(x, y + d, x + d, y + 2 * d)] });
+		expect(real.status, JSON.stringify(real.body)).toBe(201);
 		// Nothing changed: the refused parcel is still whole.
 		const [row] = await asOwner('SELECT area_m2 FROM map_feature WHERE id = $1', [fid]);
 		expect(row!.area_m2).toBeCloseTo(p.body.feature.areaM2, 3);

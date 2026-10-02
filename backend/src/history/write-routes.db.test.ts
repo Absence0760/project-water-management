@@ -16,7 +16,7 @@
 import { declaredRuleRequest, runEnsemble, type DeclaredUncertaintyRule } from '@water-management/engine';
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingPackNotices, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, settlePendingNotices, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
 import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
@@ -947,7 +947,7 @@ describe('every write route records its change', () => {
 	// Issuing and withdrawing it also queue its emails (pack_notice, 133): settled here, or the next file's tick sends them into its outbox.
 	afterAll(async () => {
 		await retirePendingJobs(ctx.packProjectId as string | undefined);
-		await settlePendingPackNotices(ctx.packProjectId as string | undefined);
+		await settlePendingNotices(ctx.packProjectId as string | undefined);
 	});
 
 	const recorded = WRITE_ROUTES.filter((e): e is Extract<Entry, { records: string[] }> => 'records' in e);

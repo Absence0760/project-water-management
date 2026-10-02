@@ -26,6 +26,7 @@ import { beginModelChange, recordAudit, recordModelRevision } from '../history/r
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { logEvent } from '../logging/logEvent.js';
+import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { safeError } from '../logging/safeError.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
@@ -262,105 +263,111 @@ export const divideRoutes = new Hono<AuthEnv>()
 		const body = DivideBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const inputs = await withUser(userId, async (db) => {
+		const { inputs, attempt } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) === 0) throw new ApiError(409, NOT_EMPTY_NEEDED);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
 			if (rows[0]!.n >= START_PROPOSALS_PER_HOUR) throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
-			return readInputs(db, id, body);
+			// Counted before any work, refused and failed attempts too (184_dem_attempt).
+			const attempt = await beginDemAttempt(db, 'divide');
+			return { inputs: await readInputs(db, id, body), attempt };
 		});
-		const dem = configuredDem();
-		if (!dem) throw new ApiError(422, NO_DEM, { reason: 'no_dem' });
-		let r;
 		try {
-			r = await delineateUnits(dem, {
-				outlet: inputs.outlet.point,
-				boundary: inputs.boundary?.geometry ?? null,
-				points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry }))
-			});
-		} catch (err) {
-			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
-			logEvent('error', { event: 'divide_proposal_failed', ...safeError(err) });
-			throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
-		}
-		const named = new Map(inputs.points.map((p) => [p.featureId, p]));
-		const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
-		const warnings: string[] = [];
-		if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
-			warnings.push(
-				`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The areas follow the elevation model; check the outlet and the boundary.`
-			);
-		}
-		const units: DivideUnit[] = r.units.map((u) => {
-			const p = named.get(u.id)!;
-			const n = p.node;
-			const land = ownsLand(u.role);
-			return {
-				key: u.id,
-				featureName: p.name,
-				nodeId: n?.id ?? null,
-				name: n?.name ?? p.name,
-				role: u.role,
-				point: u.point,
-				snapDistanceM: u.snapDistanceM,
-				areaM2: land ? u.areaM2 : null,
-				totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
-				geometry: land ? u.geometry : null,
-				drainsInto: u.drainsInto,
-				current: n
-					? {
-							areaKm2: n.areaKm2,
-							areaSource: inputs.areaSource.get(n.id) ?? 'typed',
-							downstreamNodeId: n.downstreamNodeId,
-							downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
-							pctRunoffToDam: n.pctRunoffToDam
-						}
-					: null
-			};
-		});
-		for (const u of units) {
-			if (u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another one’s?`);
-			if (u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
-		}
-		const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
-		const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
-		const plan: DividePlan = {
-			mode: 'divide',
-			outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
-			catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
-			units: upstreamFirst(units),
-			rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry },
-			untouched,
-			dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
-			warnings,
-			cellSizeM: r.cellSizeM,
-			zoom: r.zoom,
-			windowCells: r.windowCells
-		};
-		return withUser(userId, async (db) => {
-			await requireRole(db, id, 'editor');
-			await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
-			const { rows } = await db
-				.query<{ id: string }>(
-					`INSERT INTO start_proposal (project_id, mode, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
-					 VALUES ($1, 'divide', $2, true, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-					[id, JSON.stringify(plan), r.dataset.label, r.dataset.fingerprint, r.method, r.methodVersion]
-				)
-				.catch((err: unknown) => {
-					if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
-						throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
-					}
-					throw err;
+			const dem = configuredDem();
+			if (!dem) throw new ApiError(422, NO_DEM, { reason: 'no_dem' });
+			let r;
+			try {
+				r = await delineateUnits(dem, {
+					outlet: inputs.outlet.point,
+					boundary: inputs.boundary?.geometry ?? null,
+					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry }))
 				});
-			await db.query(
-				`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
-					SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
-				[id, START_PROPOSALS_KEPT]
-			);
-			const proposal = toProposal(await loadProposal<DividePlan, DivideDecision>(db, id, rows[0]!.id));
-			await recordAudit(db, id, 'map.divide_proposed', { proposalId: proposal.id, units: plan.units.length, dropped: plan.dropped.length, dataset: r.dataset.label, methodVersion: r.methodVersion });
-			return c.json({ proposal }, 201);
-		});
+			} catch (err) {
+				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
+				logEvent('error', { event: 'divide_proposal_failed', ...safeError(err) });
+				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
+			}
+			const named = new Map(inputs.points.map((p) => [p.featureId, p]));
+			const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
+			const warnings: string[] = [];
+			if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
+				warnings.push(
+					`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The areas follow the elevation model; check the outlet and the boundary.`
+				);
+			}
+			const units: DivideUnit[] = r.units.map((u) => {
+				const p = named.get(u.id)!;
+				const n = p.node;
+				const land = ownsLand(u.role);
+				return {
+					key: u.id,
+					featureName: p.name,
+					nodeId: n?.id ?? null,
+					name: n?.name ?? p.name,
+					role: u.role,
+					point: u.point,
+					snapDistanceM: u.snapDistanceM,
+					areaM2: land ? u.areaM2 : null,
+					totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
+					geometry: land ? u.geometry : null,
+					drainsInto: u.drainsInto,
+					current: n
+						? {
+								areaKm2: n.areaKm2,
+								areaSource: inputs.areaSource.get(n.id) ?? 'typed',
+								downstreamNodeId: n.downstreamNodeId,
+								downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
+								pctRunoffToDam: n.pctRunoffToDam
+							}
+						: null
+				};
+			});
+			for (const u of units) {
+				if (u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another one’s?`);
+				if (u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
+			}
+			const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
+			const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
+			const plan: DividePlan = {
+				mode: 'divide',
+				outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
+				catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
+				units: upstreamFirst(units),
+				rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry },
+				untouched,
+				dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
+				warnings,
+				cellSizeM: r.cellSizeM,
+				zoom: r.zoom,
+				windowCells: r.windowCells
+			};
+			return await withUser(userId, async (db) => {
+				await requireRole(db, id, 'editor');
+				await db.query(`UPDATE start_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
+				const { rows } = await db
+					.query<{ id: string }>(
+						`INSERT INTO start_proposal (project_id, mode, plan, from_dem, dataset, dataset_fingerprint, method, method_version, created_by)
+						 VALUES ($1, 'divide', $2, true, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
+						[id, JSON.stringify(plan), r.dataset.label, r.dataset.fingerprint, r.method, r.methodVersion]
+					)
+					.catch((err: unknown) => {
+						if ((err as { constraint?: string }).constraint === 'start_proposal_one_open_idx') {
+							throw new ApiError(409, 'Another proposal for this catchment finished at the same moment; look at it, or propose again.');
+						}
+						throw err;
+					});
+				await db.query(
+					`DELETE FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') AND id NOT IN (
+						SELECT id FROM start_proposal WHERE project_id = $1 AND status IN ('superseded', 'discarded') ORDER BY created_at DESC, id LIMIT $2)`,
+					[id, START_PROPOSALS_KEPT]
+				);
+				const proposal = toProposal(await loadProposal<DividePlan, DivideDecision>(db, id, rows[0]!.id));
+				await recordAudit(db, id, 'map.divide_proposed', { proposalId: proposal.id, units: plan.units.length, dropped: plan.dropped.length, dataset: r.dataset.label, methodVersion: r.methodVersion });
+				return c.json({ proposal }, 201);
+			});
+		} finally {
+			await finishDemAttempt(userId, attempt);
+		}
 	})
 	.post('/:id/map/divide/:spid/apply', async (c) => {
 		const body = DivideApplyBody.parse(await readJson(c));

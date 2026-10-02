@@ -1596,8 +1596,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
   accepted or rejected). RLS: viewers read, editors insert, update and
-  delete (the route prunes superseded and rejected rows past the newest 50
-  a project; accepted ones stay as their features' provenance). No node
+  delete all but an accepted one (the route prunes superseded and rejected
+  rows past the newest 50 a project; accepted ones stay as their features'
+  provenance, 185). Every column but the decision's never changes (what
+  was proposed, its project; `created_by` only cleared with its account),
+  and an insert's `created_by` is the signed-in user
+  (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
@@ -1613,10 +1617,13 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
-  `decided_at` (set exactly when applied or discarded). The plan never
-  changes and a decision is final (`start_proposal_final`). RLS: viewers
-  read, editors insert, update and delete (the route prunes superseded and
-  discarded rows past the newest 50 a project). What apply makes is
+  `decided_at` (set exactly when applied or discarded). The plan, the mode
+  and every other column but the decision's never change (185: dataset,
+  method, project; `created_by` only cleared with its account, and set to
+  the signed-in user on insert), and a decision is final
+  (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
+  editors insert, update and delete all but an applied one (the route
+  prunes superseded and discarded rows past the newest 50 a project). What apply makes is
   ordinary model data: nodes, `farm_parcel` features linked to them, and
   `node.area_source = 'map'` for a ticked area. A division's plan
   (`divide.ts` `DividePlan`) also keeps each node's values when proposed
@@ -2645,6 +2652,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
+| `dem_attempt` (184) | One row per elevation-model request (delineate, start, divide): `user_id` (cascade), `kind`, `started_at`, `finished_at`. For the account's cap (2 running, 60 an hour); rows older than a day are deleted on the next attempt. SECURITY DEFINER access only (`app_dem_attempt`, `app_dem_attempt_done`) |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** or **applicant** (`contributor`, 097) invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` or `contributor` invite of the same project |
 | `invite_throttle` (101) | The daily cap on adding people by email (issue #51): `bucket` (`user:<id>`, `project:<id>` or `team:<id>`), `window_start`, `attempts`. Deny-all RLS; only `app_invite_attempt` (SECURITY DEFINER, the project's owner or the team's admin) counts; rows go once their 24-hour window is over |

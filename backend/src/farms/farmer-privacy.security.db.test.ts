@@ -23,6 +23,7 @@
 // reached the tables and routes they claim to.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { plantDelineationProposal, plantStartProposal } from '../__tests__/routeSamples.js';
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 
@@ -161,7 +162,43 @@ beforeAll(async () => {
 	});
 	expect(pub.status).toBe(201);
 	await tick();
+
+	// The map's proposals and provenance (175, 178, 174, 181), planted as the schema owner (no DEM, no grids):
+	// none has a farmer policy, so the sweep below must find a farmer reads none of them, the neighbour's farm's included.
+	await plantDelineationProposal(projectId);
+	await plantStartProposal(projectId);
+	for (const [n, crop] of [
+		[home, lucerne],
+		[theirs, secretCrop]
+	] as const) {
+		await asOwner(
+			`INSERT INTO crop_area_land_cover (project_id, node_id, crop_id, area_m2, dataset, source, version, method, basis, feature_name)
+			 VALUES ($1, $2, $3, 1000, 'synthetic', 'Synthetic', 'v1', 'planted', 'parcel', $4)`,
+			[projectId, n.id, crop.id, `Parcel ${n === theirs ? MARKER : 'home'}`]
+		);
+	}
+	await asOwner(
+		`INSERT INTO evaporation_accepted (project_id, target, monthly_mm, dataset, kind, source, version, method, coverage)
+		 VALUES ($1, 'apan', $2, 'synthetic', 'apan', 'Synthetic', 'v1', 'planted', 1)`,
+		[projectId, monthly(150)]
+	);
 }, 90_000);
+
+const MAP_PROVENANCE = ['delineation_proposal', 'start_proposal', 'crop_area_land_cover', 'evaporation_accepted'];
+
+describe('the map’s proposals and provenance (rounds 1–3)', () => {
+	it('have rows here, a viewer reads them all (positive control), and no farmer or applicant reads any', async () => {
+		const applicant = await signUp('Pvapplicant');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: applicant.email, role: 'contributor' })).status).toBe(201);
+		const count = (u: User, t: string) => withUser(u.id, async (db) => (await db.query(`SELECT count(*)::int AS n FROM "${t}" WHERE project_id = $1`, [projectId])).rows[0].n as number);
+		for (const t of MAP_PROVENANCE) {
+			const [all] = await asOwner(`SELECT count(*)::int AS n FROM "${t}" WHERE project_id = $1`, [projectId]);
+			expect(all!.n, `${t} has rows`).toBeGreaterThan(0);
+			expect(await count(viewer, t), `the viewer reads ${t}`).toBe(all!.n);
+			for (const u of [farmer, cofarmer, neighbour, applicant]) expect(await count(u, t), `a farmer or applicant reads ${t}`).toBe(0);
+		}
+	});
+});
 
 afterAll(async () => {
 	// Leave no job for another file's tick (jobs and feeds tests count them).
