@@ -3,12 +3,13 @@
 	// serves or reads, and the notice each licence asks for (the legal
 	// notice docs/maps.md § Sources names). The texts are
 	// lib/components/legal/dataCredits.ts, checked against the licences as
-	// read in docs/maps.md. Linked from the legal pages' footer and from the
-	// map's attribution while a credited layer is drawn. A notice, not part
+	// read in docs/maps.md. Linked from the legal pages' footer, the landing
+	// page's footer, Terms §9 and the map's attribution while a credited
+	// layer is drawn. A notice, not part
 	// of the terms: changing it asks no one to accept anything again.
 	import { base } from '$app/paths';
 	import LegalPage from '$lib/components/legal/LegalPage.svelte';
-	import { DATA_CREDITS, licencesReadLine } from '$lib/components/legal/dataCredits';
+	import { DATA_CREDITS, licencesReadLine, readDay } from '$lib/components/legal/dataCredits';
 
 	const sections = [{ id: 'about', label: 'About these credits' }, ...DATA_CREDITS.map((c, i) => ({ id: c.id, label: `${i + 1}. ${c.name}` }))];
 </script>
@@ -31,15 +32,19 @@
 		<h2 id={c.id}>{i + 1}. {c.name}</h2>
 		<p><strong>Used for:</strong> {c.usedFor}</p>
 		<p><strong>Published by:</strong> {c.publisher}</p>
-		<p><strong>Licence:</strong> <a href={c.licenceUrl} rel="external">{c.licence}</a></p>
+		<p><strong>Licence:</strong> <a href={c.licenceUrl} rel="external">{c.licence}</a> (read on {readDay(c.read)})</p>
 		{#each c.statements as s (s)}
 			<blockquote class="credit">{s}</blockquote>
 		{/each}
-		{#if c.citation}<p><strong>Cite as:</strong> {c.citation}</p>{/if}
+		{#if c.citation}<p class="cite"><strong>Cite as:</strong> {c.citation}</p>{/if}
 	{/each}
 </LegalPage>
 
 <style>
+	/* A citation can end in a long DOI link, which must wrap on a phone. */
+	.cite {
+		overflow-wrap: anywhere;
+	}
 	.credit {
 		margin: 0.5rem 0 1rem;
 		padding: 0.5rem 0.9rem;

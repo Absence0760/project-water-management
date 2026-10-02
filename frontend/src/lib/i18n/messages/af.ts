@@ -223,20 +223,8 @@ export const af: Catalogue = {
 	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
 	// Loading the puzzle…
 	'20707b22': 'Laai tans die raaisel…',
-	// We now say which lawful basis covers each use of your information. Alert emails are service messages that never advertise anything, and you can object to them, or to an organisation’s use of your information, at any time.
-	'b216c7f0': 'Ons sê nou op watter regsgrond elke gebruik van jou inligting berus. Waarskuwings-e-posse is diensboodskappe wat nooit enigiets adverteer nie, en jy kan enige tyd beswaar maak teen hulle, of teen ’n organisasie se gebruik van jou inligting.',
-	// A deleted note’s text is erased 90 days after it is deleted, and when you delete your account, the partly hidden email in invitation entries is removed.
-	'596c0a0e': 'Die teks van ’n nota wat uitgevee is, word 90 dae daarna uitgewis, en wanneer jy jou rekening uitvee, word die gedeeltelik versteekte e-posadres in uitnodigingsinskrywings verwyder.',
-	// If we ever restore the database from a backup, we first delete again everything that was deleted after the backup was made.
-	'062d7e8b': 'As ons ooit die databasis uit ’n rugsteun herstel, vee ons eers weer alles uit wat uitgevee is nadat die rugsteun gemaak is.',
-	// Licence records, and the names they keep, are kept until a set date and then deleted.
-	'e7b636d7': 'Lisensierekords, en die name wat hulle behou, word tot ’n vasgestelde datum gehou en dan uitgevee.',
-	// Outside the organisation, registered water use is shown only as totals, never with a name.
-	'3c1e1737': 'Buite die organisasie word geregistreerde watergebruik net as totale gewys, nooit met ’n naam nie.',
-	// Each organisation can now name whom to ask about your information; you’ll find it on your farm page and in your invitation.
-	'111c02c6': 'Elke organisasie kan nou noem wie jy oor jou inligting moet vra; jy kry dit op die bladsy oor jou hidrologiese eenheid en in jou uitnodiging.',
-	// When you comment publicly on a licence application, the applicant receives your comment, display name and date for their public participation report, and your email only if you tick the box to join their register. You can also comment through a share link without joining the project.
-	'a4f4b99d': 'Wanneer jy in die openbaar kommentaar op ’n lisensieaansoek lewer, ontvang die aansoeker jou kommentaar, vertoonnaam en die datum vir hul verslag oor openbare deelname, en jou e-posadres net as jy die blokkie merk om by hul register aan te sluit. Jy kan ook deur ’n deelskakel kommentaar lewer sonder om by die projek aan te sluit.',
+	// Some map data, such as the river network, is licensed to us by others. You may use it in the service and in your projects, results, reports and maps, but not copy or share it on its own, or try to reverse engineer it.
+	'c6f5422c': 'Sommige kaartdata, soos die riviernetwerk, word deur ander aan ons gelisensieer. Jy mag dit in die diens en in jou projekte, resultate, verslae en kaarte gebruik, maar jy mag dit nie afsonderlik kopieer of deel nie, en ook nie probeer om tru-ingenieurswese daarop toe te pas nie.',
 	// {page} · Water Management
 	'96d7c65d': '{page} · Water Management',
 	// Our terms have changed
@@ -1019,6 +1007,8 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
+	// Data sources
+	'51f21a4b': 'Databronne',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.

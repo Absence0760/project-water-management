@@ -9,7 +9,9 @@ name: Load a reference dataset
 #
 # Only the kinds docs/maps.md § Sources marks allowed load: land-cover (ESA
 # WorldCover), evaporation (dPET's reference ET) and rivers (HydroRIVERS, once
-# HydroSHEDS' Exhibit B statement is in the app's legal text). Quaternaries, the register of dams and the gauging
+# HydroSHEDS' Exhibit B statement and the Terms' clause on map data licensed to
+# us are in the app's legal text, scripts/release/map-data-gates.mjs).
+# Quaternaries, the register of dams and the gauging
 # stations stay blocked by their licences; the input offers only the allowed
 # kinds, the check job refuses the rest, and so does the Lambda.
 #

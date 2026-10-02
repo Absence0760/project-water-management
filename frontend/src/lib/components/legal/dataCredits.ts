@@ -6,12 +6,12 @@
 // test checks each against docs/maps.md, where the licence was read).
 // Plain text, never HTML: the page renders it as text.
 
-/** The day the licences below were last read on their publishers' pages (docs/maps.md § Sources, "read <date>"). */
-export const LICENCES_READ = '2026-10-01';
+/** A `YYYY-MM-DD` day in words, "1 October 2026" (UTC, so the day never shifts). */
+export const readDay = (read: string): string =>
+	new Date(`${read}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-/** The page's line under its title: "Licences last read 1 October 2026" (UTC, so the day never shifts). */
-export const licencesReadLine = (read: string = LICENCES_READ): string =>
-	`Licences last read ${new Date(`${read}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
+/** The page's line under its title: "Licences last read 2 October 2026", the latest of the credits' read dates. */
+export const licencesReadLine = (read: string = LICENCES_READ): string => `Licences last read ${readDay(read)}`;
 
 export interface DataCredit {
 	/** The fragment id on /data-sources. */
@@ -25,6 +25,8 @@ export interface DataCredit {
 	/** The licence, in a few words, and where it was read. */
 	licence: string;
 	licenceUrl: string;
+	/** The day the licence was read on its publisher's page, `YYYY-MM-DD` (docs/maps.md § Sources, "read <date>"). */
+	read: string;
 	/** The licensor's required notice(s), word for word. */
 	statements: string[];
 	/** The citation for published material, when the publisher asks for one. */
@@ -48,6 +50,13 @@ export const COPERNICUS_NOTICE =
 export const COPERNICUS_LIABILITY =
 	'The organisations in charge of the Copernicus programme by law or by delegation do not incur any liability for any use of the Copernicus WorldDEM-30';
 
+/** JRC Global Surface Water's attribution for a published map (its download page); bin/tiles-dev.sh writes it as the water archive's attribution, which a traced dam's description carries. */
+export const JRC_WATER_STATEMENT = 'Source: EC JRC/Google';
+
+/** dPET's attribution, with ERA5-Land's Copernicus line (CC BY 4.0): the backend's `DPET.attribution` (geo/evaporationGrid.ts), word for word. */
+export const DPET_STATEMENT =
+	'hPET/dPET © Singer et al. 2021, University of Bristol, CC BY 4.0. Contains modified Copernicus Climate Change Service information (ERA5-Land, CC BY 4.0); neither the European Commission nor ECMWF is responsible for any use of it.';
+
 /** ESA WorldCover's attribution for a map or figure (CC BY 4.0). */
 export const WORLDCOVER_STATEMENT = '© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium';
 
@@ -62,6 +71,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'Protomaps; OpenStreetMap contributors',
 		licence: 'Open Database License (ODbL) 1.0, commercial use allowed with attribution',
 		licenceUrl: 'https://www.openstreetmap.org/copyright',
+		read: '2026-10-01',
 		statements: ['© Protomaps © OpenStreetMap contributors']
 	},
 	{
@@ -71,6 +81,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'DLR e.V. and Airbus Defence and Space, provided under COPERNICUS by the European Union and ESA; tiles compiled by Mapterhorn',
 		licence: 'The Copernicus WorldDEM-30 licence: free of charge, worldwide, adaptation and commercial use allowed',
 		licenceUrl: 'https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/DEM/resources/license/License-COPDEM-30.pdf',
+		read: '2026-10-01',
 		statements: [`Relief and delineated catchments ${COPERNICUS_NOTICE}.`, `${COPERNICUS_LIABILITY}.`, 'Elevation tiles © Mapterhorn (https://mapterhorn.com/attribution).']
 	},
 	{
@@ -80,6 +91,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'WWF (World Wildlife Fund, Inc.), HydroSHEDS',
 		licence: 'The HydroSHEDS version 1 License Agreement: free for non-commercial and commercial use, with attribution',
 		licenceUrl: 'https://www.hydrosheds.org/products/hydrorivers',
+		read: '2026-10-01',
 		statements: [HYDROSHEDS_STATEMENT],
 		citation: 'Lehner, B., Grill, G. (2013). Global river hydrography and network routing: baseline data and new approaches to study the world’s large river systems. Hydrological Processes, 27(15): 2171–2186.'
 	},
@@ -90,8 +102,31 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'European Space Agency, WorldCover consortium',
 		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
 		licenceUrl: 'https://creativecommons.org/licenses/by/4.0/',
+		read: '2026-10-01',
 		statements: [WORLDCOVER_STATEMENT],
 		citation: 'Zanaga, D. et al. (2022). ESA WorldCover 10 m 2021 v200. https://doi.org/10.5281/zenodo.7254221'
+	},
+	{
+		id: 'jrc-water',
+		name: 'JRC Global Surface Water v1.5 (1984–2024), water occurrence',
+		usedFor: 'Trace a dam: the outline of a dam’s water, proposed from how often satellites saw water there.',
+		publisher: 'European Commission Joint Research Centre, with Google',
+		licence: 'Produced under the Copernicus Programme: free of charge, without restriction of use',
+		read: '2026-10-02',
+		licenceUrl: 'https://global-surface-water.appspot.com/download',
+		statements: [JRC_WATER_STATEMENT],
+		citation: 'Pekel, J.-F., Cottam, A., Gorelick, N., Belward, A.S. (2016). High-resolution mapping of global surface water and its long-term changes. Nature 540, 418–422.'
+	},
+	{
+		id: 'dpet',
+		name: 'dPET (the daily files of hPET, potential evapotranspiration)',
+		usedFor: 'The evaporation proposals: a catchment’s monthly reference evapotranspiration.',
+		publisher: 'University of Bristol (data.bris); computed from ERA5-Land, Copernicus Climate Change Service',
+		licence: 'Creative Commons Attribution 4.0 International (CC BY 4.0)',
+		read: '2026-10-02',
+		licenceUrl: 'https://data.bris.ac.uk/data/dataset/qb8ujazzda0s2aykkv0oq0ctp',
+		statements: [DPET_STATEMENT],
+		citation: 'Singer, M.B. et al. (2021). Scientific Data 8, 224. Dataset: https://doi.org/10.5523/bris.qb8ujazzda0s2aykkv0oq0ctp'
 	},
 	{
 		id: 'chirps',
@@ -100,6 +135,7 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'Climate Hazards Center, UC Santa Barbara',
 		licence: 'Public domain, and Creative Commons Attribution 4.0 International (CC BY 4.0)',
 		licenceUrl: 'https://www.chc.ucsb.edu/data/chirps3',
+		read: '2026-10-01',
 		statements: ['Climate Hazards Center Infrared Precipitation with Stations version 3 (CHIRPS3) Data Repository: https://doi.org/10.15780/G2JQ0P (2025).']
 	},
 	{
@@ -109,6 +145,10 @@ export const DATA_CREDITS: readonly DataCredit[] = [
 		publisher: 'The Noto Project Authors; packaged by Protomaps',
 		licence: 'SIL Open Font License 1.1',
 		licenceUrl: 'https://openfontlicense.org/open-font-license-official-text/',
+		read: '2026-10-01',
 		statements: ['Noto Sans © The Noto Project Authors, under the SIL Open Font License 1.1.']
 	}
 ];
+
+/** The day the licences above were last read (the latest of their `read` dates): the page's line under its title. */
+export const LICENCES_READ = DATA_CREDITS.map((c) => c.read).reduce((a, b) => (a > b ? a : b));

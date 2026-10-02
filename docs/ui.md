@@ -248,7 +248,7 @@ own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
 title is the first `<title>` and these pages run no script to correct it
 (WCAG 2.4.2; `legal.spec.ts`). English
 only: the English text binds; the link labels to them are translated. Linked
-from the landing footer, under every sign-in form (a **Legal** nav in
+from the landing footer (with **Data sources**, below), under every sign-in form (a **Legal** nav in
 `AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
 **The short version**: the four main points of `lib/components/legal/termsSummary.ts`,
 the same list the sign-up form and the re-acceptance notice show translated
@@ -258,12 +258,14 @@ counsel: what it assumes and what is open is in [legal-status.md](./legal-status
 **Data sources and credits** (`/data-sources`, `routes/data-sources`, the
 same frame, prerendered; 2026-10-02): the third-party data the service
 serves or reads (the basemap, the Copernicus GLO-30 relief and delineation
-DEM, HydroRIVERS, ESA WorldCover, CHIRPS, the map's label fonts), each with
-what it is used for, its publisher, its licence and the credit that licence
+DEM, HydroRIVERS, ESA WorldCover, JRC Global Surface Water (Trace a dam),
+dPET (the evaporation proposals), CHIRPS, the map's label fonts), each with
+what it is used for, its publisher, its licence (and the day it was read, "read on …") and the credit that licence
 asks for, word for word: the HydroSHEDS Exhibit B statement, the Copernicus
-Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit
+Art. 6(b) notice and Art. 6(c) liability sentence, the WorldCover credit,
+"Source: EC JRC/Google" and dPET's line (the backend's `DPET.attribution`)
 (`lib/components/legal/dataCredits.ts`; `dataCredits.test.ts` checks each
-against [maps.md § Sources](./maps.md#sources)). A notice, not part of the
+against [maps.md § Sources](./maps.md#sources), and dPET's against the backend's). A notice, not part of the
 terms, so changing it bumps no `LEGAL_VERSION`. Linked from the footer of
 the legal pages ("Data sources"), from Terms §9, and from the map's
 attribution control while HydroRIVERS reaches are drawn (the River network
@@ -271,11 +273,12 @@ layer's credit, "Rivers: HydroRIVERS, HydroSHEDS v1 © World Wildlife Fund,
 Inc. (2006-2022), used under license", linking to its section, and on any
 map, the farm map included, that draws a river added from a HydroRIVERS
 reach), and from the relief's credit ("licence notice", to the Copernicus
-section). Its line under the title is the day the licences were last read
-(`LICENCES_READ`, the Sources table's date). Not linked from the landing
-page's footer: its links are translated (`t()`), and this English-only page
-is reached from the legal pages it sits with; a link there is a new farmer-facing
-string through the i18n agents if the landing page ever needs it.
+section). Its line under the title is the latest day a licence was read
+(`LICENCES_READ`, the latest of the credits' `read` dates, each one a date
+the Sources table records). Also linked from the landing page's footer
+(**Data sources**, translated like its other links; 2026-10-03). The Terms'
+§9 clause on map data licensed to us (HydroRIVERS' end-user terms) points
+back here for the list of sources.
 
 **Sign-up assent.** Directly above the sign-up button (invitations
 included): a bordered box, **The main things you agree to**, with the four
