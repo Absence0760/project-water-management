@@ -76,7 +76,7 @@ Cost, us-east-1:
 | WAF (ACL + 4 rules) | 9.00 |
 | CloudWatch alarms, logs, RDS log export | ~3.40 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
-| SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
+| SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda (the migrate Lambda's 3008 MB is billed only while it migrates or loads), CloudFront | ~1.50 |
 | **Total** | **≈ $54** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
@@ -124,7 +124,7 @@ Cost, us-east-1:
 | WAF (ACL + 4 rules + requests) | ~9.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.60 |
 | 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
-| SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
+| SQS polling, ECR image, S3 (incl. the map tiles and reference buckets, ~$0.10), SES, Lambda, CloudFront | ~2.50 |
 | **Total** | **≈ $114–119** |
 
 af-south-1: **≈ $136–151**.

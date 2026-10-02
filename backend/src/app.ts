@@ -27,6 +27,7 @@ import { quaternaryLayerRoutes } from './geo/quaternaryLayer.js';
 import { stationRoutes } from './geo/stationRoutes.js';
 import { riverRoutes } from './geo/rivers.js';
 import { croplandRoutes } from './geo/croplandRoutes.js';
+import { evaporationRoutes } from './geo/evaporationRoutes.js';
 import { damRoutes } from './geo/damRoutes.js';
 import { delineationRoutes } from './delineation/routes.js';
 import { startRoutes } from './delineation/start.js';
@@ -192,6 +193,7 @@ export function createApp() {
 	projects.route('/', delineationRoutes);
 	projects.route('/', startRoutes);
 	projects.route('/', croplandRoutes);
+	projects.route('/', evaporationRoutes);
 	projects.route('/', reportRoutes);
 	projects.route('/', farmerRoutes);
 	projects.route('/', farmViewRoutes);

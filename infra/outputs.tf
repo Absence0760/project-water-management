@@ -62,6 +62,16 @@ output "packs_bucket" {
   value       = aws_s3_bucket.packs.bucket
 }
 
+output "tiles_bucket" {
+  description = "S3 bucket of the map's basemap, relief and glyphs, under tiles/, served at the site's /tiles/* (map_data.tf; the operator uploads, docs/deployment.md § Map tiles)."
+  value       = aws_s3_bucket.tiles.bucket
+}
+
+output "reference_bucket" {
+  description = "Private S3 bucket of the operator's reference-dataset files, under reference/<kind>/, read by the migrate Lambda's loads (map_data.tf; docs/deployment.md § Reference datasets)."
+  value       = aws_s3_bucket.reference.bucket
+}
+
 # The database's names, for infra/scripts/restore-db.sh: a restore has to land
 # in this subnet group, security group and parameter group, and the parameter
 # group's name carries a generated suffix (name_prefix, rds.tf), so the script

@@ -165,7 +165,9 @@ import type {
 	StartRole,
 	StartState,
 	StartTicks,
-	CroplandProposals
+	CroplandProposals,
+	EvaporationProposals,
+	EvaporationTarget
 } from './types';
 
 export class ApiError extends Error {
@@ -1133,6 +1135,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					`${p(id)}/nodes/${enc(nodeId)}/crop-area-from-land-cover`,
 					body
 				)
+		},
+		/**
+		 * The catchment boundary's evaporation from a grid (issue #326 B-evap, docs/api.md § Catchment map): reference ET proposed as
+		 * GR4J's monthly PE, or A-pan as the A-pan row, never converted. An accept saves the 12 values as one settings revision citing the dataset.
+		 */
+		evaporation: {
+			get: (id: string, dataset?: string) => request<EvaporationProposals>('GET', `${p(id)}/evaporation-proposals${dataset ? `?${new URLSearchParams({ dataset })}` : ''}`),
+			fromMap: (id: string, dataset: string) =>
+				request<{ target: EvaporationTarget; monthlyMm: number[]; dataset: string; revisionId: string | null }>('POST', `${p(id)}/evaporation-from-map`, { dataset })
 		},
 		/** Background jobs (docs/api.md § Jobs): the status list, newest first. */
 		jobs: {

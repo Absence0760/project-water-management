@@ -19,6 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, DECISION, lastMailTo, monthly, node, plantCompleteOutlook, retirePendingJobs, signUp, tokenIn } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { loadSyntheticDamRegister } from '../../scripts/import-dam-register.js';
+import { loadSyntheticEvaporation } from '../../scripts/import-evaporation.js';
 import { fileURLToPath } from 'node:url';
 import { fixtureLonLat, OUTLET_CELL } from '../delineation/fixture.js';
 import { loadSyntheticRivers } from '../../scripts/import-rivers.js';
@@ -674,6 +675,18 @@ const WRITE_ROUTES: Entry[] = [
 			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
 			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
 			return c.owner.call('POST', `${at(c)}/feeds/chirps/from-boundary`, { featureId: b.body.feature.id, updatedAt: b.body.feature.updatedAt });
+		}
+	},
+	{
+		// Evaporation from the map (issue #326 B-evap): a settings revision whose reason names the dataset, version and method.
+		route: `POST ${P}/evaporation-from-map`,
+		records: ['revision'],
+		call: async (c) => {
+			await loadSyntheticEvaporation(process.env.TEST_MIGRATION_DATABASE_URL!);
+			const square = [[21.3, -33.75], [21.38, -33.75], [21.38, -33.69], [21.3, -33.69], [21.3, -33.75]];
+			const b = await c.owner.call('POST', `${at(c)}/map/features`, { kind: 'catchment_boundary', name: 'Guard boundary', geometry: { type: 'Polygon', coordinates: [square] } });
+			expect(b.status).toBe(201);
+			return c.owner.call('POST', `${at(c)}/evaporation-from-map`, { dataset: 'synthetic' });
 		}
 	},
 	{

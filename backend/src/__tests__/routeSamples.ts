@@ -146,6 +146,8 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/map/start/:spid/apply': () => ({ body: { outletName: 'Ladder outlet', units: [], rest: { include: false, name: 'Rest', area: false } } }),
 	// Needs the synthetic land-cover grid loaded (scripts/import-land-cover.ts); the ladder's parcel lies in its 0.5 block.
 	'POST /projects/:id/nodes/:nodeId/crop-area-from-land-cover': (c) => ({ body: { cropId: c.ids.cropId, dataset: 'synthetic' } }),
+	// Needs the synthetic evaporation grid loaded (scripts/import-evaporation.ts) and a catchment boundary on the map inside it.
+	'POST /projects/:id/evaporation-from-map': () => ({ body: { dataset: 'synthetic' } }),
 	'POST /projects/:id/allocations/import': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/allocations/import/commit': () => ({ body: { kind: 'csv', fileName: 'ladder.csv', text: csv } }),
 	'POST /projects/:id/notes': (c) => ({ body: { body: 'Ladder note', nodeId: c.farmId } }),

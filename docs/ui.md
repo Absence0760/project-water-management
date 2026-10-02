@@ -3861,6 +3861,32 @@ which checks every catchment tab).
     pan coefficient, or the monthly PE row): the engine then refuses GR4J
     runs and fits. Under pan coefficient × A-pan a daily A-pan series counts
     as evaporation, so a project with one isn't warned.
+    Last in the group, **Evaporation from the map** (issue #326 B-evap,
+    `settings/EvaporationProposal.svelte`, its own lazy chunk;
+    [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)):
+    the catchment boundary's monthly evaporation from the loaded grid. A
+    line says over which boundary, how many cells, the share of it with
+    values, and what it goes into (GR4J's monthly PE for a reference-ET grid,
+    the A-pan row for an A-pan grid). A monthly table then shows the
+    **Proposed** row and the **Saved** row it would replace ("None: GR4J
+    runs on pan coefficient × A-pan" when there is no monthly PE), each with
+    its year total, and for reference ET a third row, **ET₀ ÷ saved A-pan**,
+    the pan coefficient the two imply, as a cross-check: a month outside
+    FAO-56's 0.6–0.85 is bold and named in a note under the table. **Source
+    and method** (collapsed) cites the dataset, its version and period, its
+    attribution and its method. **Use as GR4J’s monthly PE** (or **Use as the
+    A-pan evaporation row**; editors) asks first (what reads the values, and
+    that an earlier GR4J fit is marked "Forcing changed since fit"), saves
+    the 12 values as one settings revision, says so in a notice, and the
+    form reloads the saved settings (the PE kind switches to monthly, its
+    source naming the dataset). Use waits, with the reason, while the form
+    has unsaved changes. When the saved settings hold the proposal it says
+    so instead of offering Use; an accepted row's provenance line says when
+    it was used, or "Typed over since". Without a grid: "No evaporation grid
+    is loaded" with the loader's command; without a boundary: a pointer to
+    the Map; a boundary the grid can't stand for (no value inside, under
+    half covered) says why. Synthetic data carries the "Synthetic test data"
+    warning. With more than one grid loaded, a **Grid** picker.
 - **Rain gaps and CHIRPS** (`#set-rain`): the **CHIRPS bias correction**
   picker (`settings.chirpsBiasCorrection`, `settings/rain.ts`: bias-corrected
   per month, the default, or raw CHIRPS; it applies to the runoff model and to
