@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The river layer's map-view fallback (riverViewBbox, the answer cache, CatchmentMap onview/data-view): 1606 KB on this branch against main's 1605 KB at e3dba5a2 after build:frontend"
+}

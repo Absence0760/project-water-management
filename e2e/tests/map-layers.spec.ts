@@ -210,9 +210,9 @@ test('the river network with nothing on the map yet: zoom in and it asks for the
 		await zoomIn.click();
 		await expect(wrap).not.toHaveAttribute('data-view', before ?? '');
 	}
-	const bbox = new URL((await asked).url()).searchParams.get('bbox')!.split(',').map(Number);
-	expect(bbox[2] - bbox[0]).toBeLessThanOrEqual(2);
-	expect(bbox[3] - bbox[1]).toBeLessThanOrEqual(2);
+	const [w, s, e, n] = new URL((await asked).url()).searchParams.get('bbox')!.split(',').map(Number) as [number, number, number, number];
+	expect(e - w).toBeLessThanOrEqual(2);
+	expect(n - s).toBeLessThanOrEqual(2);
 	await expect(rivers).toContainText('No reach of the loaded river network is in view.');
 });
 
