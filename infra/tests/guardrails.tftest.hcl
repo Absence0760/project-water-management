@@ -438,6 +438,42 @@ override_resource {
   }
 }
 
+# The map's data (map_data.tf, s3_cloudfront.tf's /tiles/*)
+override_resource {
+  target          = aws_s3_bucket.tiles
+  override_during = plan
+  values = {
+    arn                         = "arn:aws:s3:::water-management-tiles-000000000000"
+    bucket                      = "water-management-tiles-000000000000"
+    bucket_regional_domain_name = "water-management-tiles-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.tiles
+  override_during = plan
+  values = {
+    id = "tiles-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_function.tiles_range
+  override_during = plan
+  values = {
+    arn = "arn:aws:cloudfront::000000000000:function/water-management-tiles-range"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.reference
+  override_during = plan
+  values = {
+    arn    = "arn:aws:s3:::water-management-reference-000000000000"
+    bucket = "water-management-reference-000000000000"
+  }
+}
+
 override_resource {
   target          = aws_cloudfront_origin_request_policy.report_downloads
   override_during = plan
@@ -2659,15 +2695,21 @@ run "packs" {
       length(aws_vpc_endpoint.s3.subnet_ids) == 1 &&
       length(aws_vpc_endpoint.s3.security_group_ids) == 1 &&
       can(regex("security_group_ids\\s*=\\s*\\[aws_security_group\\.vpce_s3\\.id\\]", regex("(?s)resource \"aws_vpc_endpoint\" \"s3\" \\{.*?\\n\\}", file("packs.tf")))) &&
-      length(data.aws_iam_policy_document.s3_endpoint.statement) == 2 &&
+      length(data.aws_iam_policy_document.s3_endpoint.statement) == 4 &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[0].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[0].principals).identifiers) == toset([aws_iam_role.worker_lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[1].actions) == toset(["s3:PutObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[1].resources) == toset(["${aws_s3_bucket.packs.arn}/packs/*.zip"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn])
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[2].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[2].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[2].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.s3_endpoint.statement[3].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
     )
-    error_message = "The worker and the API reach S3 through one interface endpoint whose policy allows only the worker's read of packs/ and the API's put of a bundle (packs/*.zip) in the packs bucket."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's read of the delineation DEM (tiles/terrain.pmtiles) and migrate's read of a reference file (reference/*)."
   }
   assert {
     condition = (
@@ -2690,6 +2732,141 @@ run "rejects_short_pack_retention" {
   }
 
   expect_failures = [var.pack_retention_days]
+}
+
+# ---------------------------------------------------------------------------
+# The map's data (map_data.tf, s3_cloudfront.tf; docs/deployment.md § Map
+# tiles and § Reference datasets): a tiles bucket read only by CloudFront's
+# /tiles/* (and, with delineation_dem, the API's read of one key), and a
+# private reference bucket read only by the migrate Lambda's loads.
+# ---------------------------------------------------------------------------
+
+run "map_data" {
+  command = plan
+
+  # --- Both buckets: private, encrypted, TLS only, ACLs off, broken uploads cleaned up -------
+  assert {
+    condition = alltrue([for b in [aws_s3_bucket_public_access_block.tiles, aws_s3_bucket_public_access_block.reference] :
+    b.block_public_acls && b.block_public_policy && b.ignore_public_acls && b.restrict_public_buckets])
+    error_message = "The tiles and reference buckets must block every kind of public access (the tiles reach viewers only through CloudFront's OAC)."
+  }
+  assert {
+    condition = alltrue([for c in [aws_s3_bucket_server_side_encryption_configuration.tiles, aws_s3_bucket_server_side_encryption_configuration.reference] :
+    one([for r in c.rule : one(r.apply_server_side_encryption_by_default).sse_algorithm]) == "AES256"])
+    error_message = "The tiles and reference buckets must be encrypted at rest (SSE-S3)."
+  }
+  assert {
+    condition = alltrue([for c in [aws_s3_bucket_ownership_controls.tiles, aws_s3_bucket_ownership_controls.reference] :
+    one([for r in c.rule : r.object_ownership]) == "BucketOwnerEnforced"])
+    error_message = "ACLs off: the bucket owner owns every object."
+  }
+  assert {
+    condition = alltrue([for l in [aws_s3_bucket_lifecycle_configuration.tiles, aws_s3_bucket_lifecycle_configuration.reference] :
+    length(l.rule) == 1 && l.rule[0].status == "Enabled" && one(l.rule[0].abort_incomplete_multipart_upload).days_after_initiation == 7 && length(l.rule[0].expiration) == 0])
+    error_message = "Each bucket aborts multipart uploads left unfinished after 7 days (a broken 2 GB upload isn't billed for ever), and expires nothing else."
+  }
+  assert {
+    condition = (
+      contains([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport") &&
+      contains([for s in data.aws_iam_policy_document.reference_bucket_policy.statement : s.sid if s.effect == "Deny"], "DenyInsecureTransport")
+    )
+    error_message = "The tiles and reference buckets must refuse plain-HTTP access."
+  }
+
+  # --- Tiles: CloudFront reads tiles/*, nothing else is granted in the bucket policy -----
+  assert {
+    condition = (
+      length([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s if s.effect != "Deny"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.sid if s.effect != "Deny"]) == "AllowCloudFrontReadTiles" &&
+      toset(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.actions if s.effect != "Deny"])) == toset(["s3:GetObject"]) &&
+      toset(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.resources if s.effect != "Deny"])) == toset(["${aws_s3_bucket.tiles.arn}/tiles/*"]) &&
+      tolist(one(one([for s in data.aws_iam_policy_document.tiles_bucket_policy.statement : s.condition if s.effect != "Deny"])).values) == tolist([aws_cloudfront_distribution.frontend.arn])
+    )
+    error_message = "The tiles bucket policy's only grant is this distribution's GetObject of tiles/* (no list, so a miss reveals nothing)."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_origin_access_control.tiles.origin_access_control_origin_type == "s3" &&
+      aws_cloudfront_origin_access_control.tiles.signing_behavior == "always" &&
+      aws_cloudfront_origin_access_control.tiles.signing_protocol == "sigv4"
+    )
+    error_message = "The tiles OAC must sign every origin request (sigv4)."
+  }
+
+  # --- Reference: the policy names no reader; migrate's own grant is a read of reference/* --
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.reference_bucket_policy.statement : s if s.effect != "Deny"]) == 0
+    error_message = "The reference bucket policy grants nothing: the migrate role's own policy is the only read, and CloudFront never serves it."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.migrate_reference.statement) == 1 &&
+      toset(data.aws_iam_policy_document.migrate_reference.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.migrate_reference.statement[0].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
+      aws_iam_role_policy.migrate_reference.role == aws_iam_role.migrate_lambda.id &&
+      aws_lambda_function.migrate.environment[0].variables["REFERENCE_BUCKET"] == aws_s3_bucket.reference.bucket
+    )
+    error_message = "The migrate role may only read reference files (reference/*): no list, put or delete, and it knows the bucket (REFERENCE_BUCKET)."
+  }
+  assert {
+    condition     = aws_lambda_function.migrate.timeout == 900 && aws_lambda_function.migrate.memory_size == var.migrate_memory_mb && var.migrate_memory_mb == 3008 && aws_lambda_function.migrate.reserved_concurrent_executions == 1
+    error_message = "The migrate Lambda runs a load for up to 900 s with 3008 MB by default, one at a time (reserved concurrency 1)."
+  }
+
+  # --- Delineation off by default: no DEM, no grant -----------------------------------------
+  assert {
+    condition     = !var.delineation_dem && aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
+    error_message = "Delineation is off by default: DEM_URL empty and the API role holds no read of the tiles bucket."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.api_dem.statement) == 1 &&
+      toset(data.aws_iam_policy_document.api_dem.statement[0].actions) == toset(["s3:GetObject"]) &&
+      toset(data.aws_iam_policy_document.api_dem.statement[0].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"])
+    )
+    error_message = "The API's DEM grant is GetObject on the one key, tiles/terrain.pmtiles."
+  }
+}
+
+run "map_data_with_delineation" {
+  command = plan
+
+  variables {
+    delineation_dem = true
+  }
+
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "s3://${aws_s3_bucket.tiles.bucket}/tiles/terrain.pmtiles"
+    error_message = "With delineation_dem the API reads the DEM from the tiles bucket (s3://<bucket>/tiles/terrain.pmtiles)."
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.api_dem) == 1 && aws_iam_role_policy.api_dem[0].role == aws_iam_role.lambda.id
+    error_message = "With delineation_dem the API role gets the DEM read."
+  }
+}
+
+# Delineation keeps a 20 s budget and peaks near 460 MB: a smaller or shorter
+# API Lambda is refused (positive control: map_data_with_delineation).
+run "rejects_delineation_on_a_small_api_lambda" {
+  command = plan
+
+  variables {
+    delineation_dem  = true
+    lambda_memory_mb = 512
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
+run "rejects_delineation_on_a_short_api_lambda" {
+  command = plan
+
+  variables {
+    delineation_dem        = true
+    lambda_timeout_seconds = 15
+  }
+
+  expect_failures = [aws_lambda_function.backend]
 }
 
 # A rotation's overlap: two trusted keys, the API signing with the new one.
@@ -3393,8 +3570,9 @@ run "network" {
       "vpce_ses <- worker_lambda tcp/443-443",
       "vpce_s3 <- worker_lambda tcp/443-443",
       "vpce_s3 <- api_lambda tcp/443-443",
+      "vpce_s3 <- migrate_lambda tcp/443-443",
     ])
-    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf). A new edge is a deliberate change to this list."
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker; the S3 endpoint from the worker (pack PDF checks, packs.tf), the API and migrate (reference loads, map_data.tf). A new edge is a deliberate change to this list."
   }
   assert {
     condition = aws_vpc.main.cidr_block != "" && toset(flatten([
@@ -3421,6 +3599,7 @@ run "network" {
       "worker_lambda -> vpce tcp/443-443",
       "worker_lambda -> vpce_s3 tcp/443-443",
       "api_lambda -> vpce_s3 tcp/443-443",
+      "migrate_lambda -> vpce_s3 tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -3483,13 +3662,13 @@ run "network" {
       vpce_s3        = aws_security_group.vpce_s3.description
       } == {
       api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
-      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
+      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager and S3 endpoints only."
       worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES, S3 and Secrets Manager endpoints only."
       rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
       vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
       vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
       vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
-      vpce_s3        = "S3 interface endpoint: 443 from the API and worker Lambdas only."
+      vpce_s3        = "S3 interface endpoint: 443 from the API, worker and migrate Lambdas only."
     }
     error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
   }
