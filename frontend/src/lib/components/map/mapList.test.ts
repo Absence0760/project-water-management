@@ -39,6 +39,12 @@ describe('areaSourceOf', () => {
 		expect(areaSourceOf(parcel, [farm('A'), farm('B', { areaSource: 'map', areaFeatureId: 'Parcel' })])?.node.id).toBe('B');
 		expect(areaSourceText(areaSourceOf(parcel, [farm('A', { areaSource: 'map', areaFeatureId: 'Parcel' })]))).toBe('area from the map');
 	});
+	it('says the area is from an earlier outline once the feature was reshaped or split after its area was taken', () => {
+		const s = areaSourceOf(parcel, [farm('A', { areaKm2: 12, areaSource: 'map', areaFeatureId: 'Parcel' })]);
+		expect(s).toMatchObject({ source: 'this', earlier: true });
+		expect(areaSourceText(s)).toBe('area from an earlier outline');
+		expect(areaSourceOf(parcel, [farm('A', { areaSource: 'map', areaFeatureId: 'Parcel' })])).not.toHaveProperty('earlier');
+	});
 	it('says other when the linked unit took its area from another feature', () => {
 		expect(areaSourceOf(parcel, [farm('A', { areaSource: 'map', areaFeatureId: 'X' })])?.source).toBe('other');
 	});

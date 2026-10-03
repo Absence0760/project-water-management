@@ -2,7 +2,7 @@
 // § Map). Pure, so the list, the card, the grid modal and the header agree
 // and vitest covers them (mapList.test.ts).
 import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
-import { areaTargets, areaText, KIND_LABEL, takesArea } from './mapData';
+import { alreadyAccepted, areaTargets, areaText, KIND_LABEL, takesArea } from './mapData';
 
 /** The list's groups, in order: the parcels first (what the model's units are), the boundary last (one feature, framed by Show everything). */
 export const KIND_ORDER: readonly MapFeatureKind[] = ['farm_parcel', 'dam', 'gauge', 'river', 'other', 'catchment_boundary'];
@@ -46,25 +46,27 @@ export const inListOrder = (features: readonly MapFeature[]) => groupFeatures(fe
 /**
  * Where the area of the unit a feature stands for came from (E6), or null
  * when the feature can't give a unit its area or stands for no unit:
- * - `this`: the unit's area is this feature's (taken from the map);
+ * - `this`: the unit's area is this feature's (taken from the map); `earlier`
+ *   when the feature was reshaped or split since, so the unit still has the
+ *   old outline's area until Use is pressed again (docs/maps.md § Areas);
  * - `other`: from the map, from another feature;
  * - `typed`: typed in on the Network.
  */
-export function areaSourceOf(f: MapFeature, nodes: readonly MapNodeArea[]): { node: MapNodeArea; source: 'this' | 'other' | 'typed' } | null {
+export function areaSourceOf(f: MapFeature, nodes: readonly MapNodeArea[]): { node: MapNodeArea; source: 'this' | 'other' | 'typed'; earlier?: boolean } | null {
 	if (!takesArea(f)) return null;
 	const farms = areaTargets(nodes);
 	// A unit that took its area from this feature, linked or not, is the one to name.
 	const took = farms.find((n) => n.areaSource === 'map' && n.areaFeatureId === f.id);
-	if (took) return { node: took, source: 'this' };
+	if (took) return alreadyAccepted(took, f) ? { node: took, source: 'this' } : { node: took, source: 'this', earlier: true };
 	const linked = f.nodeId ? farms.find((n) => n.id === f.nodeId) : undefined;
 	if (!linked) return null;
 	return { node: linked, source: linked.areaSource === 'map' ? 'other' : 'typed' };
 }
 
-/** That source in a few words, for a list row: "area typed", "area from this parcel", "area from the map". */
+/** That source in a few words, for a list row: "area typed", "area from the map", "area from an earlier outline". */
 export function areaSourceText(s: ReturnType<typeof areaSourceOf>): string | null {
 	if (!s) return null;
-	return s.source === 'this' ? 'area from the map' : s.source === 'other' ? 'area from another feature' : 'area typed';
+	return s.source === 'this' ? (s.earlier ? 'area from an earlier outline' : 'area from the map') : s.source === 'other' ? 'area from another feature' : 'area typed';
 }
 
 /**
