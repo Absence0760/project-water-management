@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DelineationProposal, DelineationRequest } from '$lib/api/types';
-import { COPERNICUS_NOTICE, datasetNotice, failedText, isWaiting, openProposal, proposalFacts, provenanceFacts, waitingText } from './delineation';
+import { afterPollError, COPERNICUS_NOTICE, datasetNotice, failedText, POLL_GIVE_UP, isWaiting, openProposal, proposalFacts, provenanceFacts, waitingText } from './delineation';
 
 const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal => ({
 	id: 'p1',
@@ -87,5 +87,16 @@ describe('a delineation the background worker has', () => {
 			'The background delineation failed: The elevation model could not be read just now. Try again, or draw or import the boundary.'
 		);
 		expect(failedText(request({ status: 'failed', error: 'cancelled' }))).toBe('The background delineation failed. Try again, or draw or import the boundary.');
+	});
+
+	it('keeps asking after a failed ask (the job runs on), giving up after five in a row or at once on a 404', () => {
+		expect(POLL_GIVE_UP).toBe(5);
+		for (let n = 1; n < 5; n++) {
+			expect(afterPollError(n, undefined), `network ${n}`).toBe('retry');
+			expect(afterPollError(n, 503), `503 ${n}`).toBe('retry');
+		}
+		expect(afterPollError(5, undefined)).toBe('give_up');
+		expect(afterPollError(5, 500)).toBe('give_up');
+		expect(afterPollError(1, 404)).toBe('give_up');
 	});
 });

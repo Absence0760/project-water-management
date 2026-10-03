@@ -13,6 +13,21 @@ export const isWaiting = (r: DelineationRequest | null | undefined): boolean => 
 /** How often the sheet asks the server about a waiting delineation (ms). */
 export const POLL_MS = 2000;
 
+/** Failed asks in a row before the sheet stops waiting for a delineation. */
+export const POLL_GIVE_UP = 5;
+
+/**
+ * After a failed ask about a waiting delineation (`failures` in a row,
+ * counting this one; `status` the HTTP status, if there was an answer): ask
+ * again, since a dropped connection or a 5xx says nothing about the job,
+ * which keeps running; give up after POLL_GIVE_UP in a row, or at once on a
+ * 404 (the request is gone, or another project's).
+ */
+export function afterPollError(failures: number, status: number | undefined): 'retry' | 'give_up' {
+	if (status === 404) return 'give_up';
+	return failures >= POLL_GIVE_UP ? 'give_up' : 'retry';
+}
+
 /** What the sheet says while the worker has it. */
 export function waitingText(r: DelineationRequest): string {
 	if (r.status === 'running') {
