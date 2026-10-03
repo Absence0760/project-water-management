@@ -3900,6 +3900,28 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `area_m2`, so the unit's area equals its parcel's. Splitting such a
       parcel checks the parts against the outline's own area, and "area from
       the map" names the cells in its revision reason.
+- [ ] **Rerun the gauge experiment after the persona's delineation fixes**
+      (issue #390 part 1, design/delineation-snapping.md § Gauges). At 446
+      published gauge positions the failures were persona-hydrologist
+      findings 1, 4 (in both directions: a gauge on a river moved onto a
+      tributary's nearer line, 9 cases, all within 1 km of a junction), 6
+      (94 of 129 gauges of 1 000–10 000 km² refused `too_large`), 7 (with no
+      reach, an off-river position gets a gully and no caveat at all), 10
+      and 11. Each fix gets its regression test in that round; then rerun
+      `backend/scripts/research/snap-gauges.ts` (the header says how) and
+      refresh the section's numbers. Trigger: the round fixing those
+      findings merging.
+- [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
+      gauge run). On 2 flat lower rivers (a Zululand floodplain, a wide
+      Western Cape valley) GLO-30 has no channel within 2.5 km carrying the
+      river, and Delineate accepts a far smaller catchment (under 0.01× and 0.4×
+      the published area) with only the *unmatched* caveat. Durable fix:
+      refuse, or ask, when the placed area is under ~10 % of the reach's
+      area and no matching channel lies within 2.5 km (the same rule
+      finding 7 asks for), and name the cause ("the elevation model routes
+      this river elsewhere here: draw or import the boundary"). Trigger:
+      finding 7's fix, which should cover these with a test on a DEM whose
+      river is diverted.
 
 ## Crop factors (issue #54 item 1)
 
