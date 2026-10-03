@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import type { TickResult } from './jobs/runner.js';
 
-const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
+const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, released: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
 	alerts: { scheduled: 0, purged: 0, sent: 7, skipped: 1, failed: 2, digests: 1 },
 	packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
 	erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },

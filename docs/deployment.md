@@ -1123,7 +1123,9 @@ plan-only until the first deploy):
   jobs lease for 6 minutes, longer than the function can run. A handler
   that bounds its own work gets the function's deadline (less 10 s;
   `JobContext.deadline`): a `delineate` job fits its budget inside it, and
-  one claimed with under 20 s left goes back to the queue.
+  one claimed with under 20 s left, or cut short by it before its last
+  window, goes back to the queue 120 s on without spending an attempt
+  (`app_release_job`, `job_released` in the log).
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.

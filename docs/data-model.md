@@ -1665,6 +1665,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   two links clearing (`delineation_request_final`). The route keeps the
   newest 20 finished a project. `job.kind` accepts `delineate`, and
   `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
+  `app_release_job` (191, the worker's own call) puts a claimed job back to
+  `queued` 120 s on, giving back the attempt its claim counted: a delineate
+  job the tick had too little time left for (never a failure, no backoff).
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.

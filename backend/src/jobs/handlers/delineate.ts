@@ -22,11 +22,11 @@ import { configuredDem } from '../../delineation/dem.js';
 import { delineate, DelineationRefused, type LargerChannel } from '../../delineation/delineate.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
-import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
+import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
 import { ApiError } from '../../http/errors.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
-import { JobError } from '../errors.js';
+import { JobError, JobRelease } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const DelineatePayload = z.object({ requestId: z.string().uuid() }).strict();
@@ -73,7 +73,8 @@ export const delineateHandler = defineHandler({
 		}
 		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
 		const budgetMs = jobBudget(deadline, Date.now());
-		const later = () => new JobError('The worker had too little time left for it in this run; it runs again shortly.', { retry: true });
+		// Handed back without spending an attempt: a late claim says nothing about the catchment.
+		const later = () => new JobRelease('too little time left in this tick', RELEASE_DELAY_SECONDS);
 		if (budgetMs < MIN_JOB_TIME_MS) throw later();
 		let result;
 		try {
