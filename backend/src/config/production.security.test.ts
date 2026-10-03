@@ -409,7 +409,7 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['worker', 'ALERTS_TOKEN_SECRET', 'dev-only-alerts-token-secret-000000000'],
 			['worker', 'MAIL_EVENTS_QUEUE_ARN', undefined],
 			['api', 'VITEST', 'true'],
-			['worker', 'PASSWORD_HASH_COST', '4'],
+			['worker', 'PASSWORD_HASH_FAST', '1'],
 			['api', 'SIGNUP_THROTTLE', 'off'],
 			['migrate', 'MASTER_SECRET_ARN', undefined],
 			['migrate', 'DB_HOST', 'localhost'],

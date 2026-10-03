@@ -7,12 +7,21 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 
 ## Authentication
 
-- **Accounts:** email + password. Passwords are hashed with **bcrypt**
-  (`bcryptjs`, cost 12; 4 under vitest and on the e2e API server, which sets `PASSWORD_HASH_COST=4`, an override Lambda refuses at startup; `auth/password.ts`) and are 8–200 characters. bcrypt reads only 72 bytes, so
-  what it hashes is the password's SHA-256 (base64), stored under a `$wm-sha256$` prefix: two long
-  passphrases that share their first 72 bytes are different passwords. A hash without the prefix (made
-  before it) is checked against the password as typed. Emails are `citext`, so
-  lookups ignore case. The hash never leaves the backend.
+- **Accounts:** email + password, 8–200 characters. Passwords are hashed
+  with **Argon2id** (OWASP's first choice; RFC 9106) from Node's own
+  `node:crypto`, as a standard PHC string carrying its parameters
+  (`$argon2id$v=19$m=65536,t=3,p=1$<salt>$<tag>`: 64 MiB, 3 passes, a 16-byte
+  random salt, compared in constant time; `auth/password.ts`). Argon2id reads
+  the whole password, so long passphrases are never cut short. Under vitest
+  and on the e2e API server (`PASSWORD_HASH_FAST=1`, an override Lambda
+  refuses at startup) new hashes use the smallest parameters. An account
+  hashed before 2026-10 has a **bcrypt** hash (`bcryptjs`, cost 12), which
+  still checks; its next successful sign-in replaces it with an Argon2id one
+  (only if it is still the hash just checked; it revokes no session). Until
+  then bcrypt reads only the first 72 bytes of its password. A hash with
+  other Argon2id parameters than new ones get is upgraded the same way, so
+  raising them later needs no migration. Emails are `citext`, so lookups
+  ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
   the user id and a random session id (`jti`, required: a token without one
   is refused, since it could never be signed out) and has a 7-day expiry. It sits in the **`wm_session` cookie**,
@@ -55,7 +64,7 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   or a password reset clears the count; a day without attempts forgets it.
   It is keyed by the typed address, not the account, so an address with no
   account locks exactly the same way and the lockout reveals nothing about
-  which accounts exist. Attempts are counted *before* the bcrypt check under
+  which accounts exist. Attempts are counted *before* the password check under
   a row lock, so parallel guesses can't slip past. Attempts made during a
   lock never extend it.
 - **Trusted devices keep the lockout bounded** (070, `auth/device.ts`).
@@ -523,8 +532,8 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
   never the typed address, an account id, the client address or a token; the
   logger's signature takes two closed unions, so a caller can't pass one.
 - *The client can't tell the reasons apart:* an unknown address and a wrong
-  password answer the same `401 wrong_credentials` after the same bcrypt work
-  (`DUMMY_HASH`), and neither sets a cookie. `login-throttle.security.db.test.ts`
+  password answer the same `401 wrong_credentials` after the same password-hash
+  work (`dummyHash()`, a real hash at the parameters in use), and neither sets a cookie. `login-throttle.security.db.test.ts`
   compares the two answers and checks the lines (with a no-line positive
   control for a correct password and a good link).
 - *Why an alarm and no global circuit breaker:* a breaker that slows every

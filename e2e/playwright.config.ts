@@ -78,13 +78,13 @@ export default defineConfig({
 				SITE_URL: WEB_URL,
 				// Print emails to the server log; e2e doesn't need Mailpit running.
 				MAIL_TRANSPORT: 'log',
-				// bcrypt at its minimum cost, as under vitest (backend/src/auth/password.ts).
-				// Every test registers a user, and a cost-12 hash holds this one shared
-				// server's event loop for ~250 ms: at 12, hashing took over a third of the
-				// server's time in a parallel run, and model saves and page loads queued
-				// past their waits behind it (issue #41). e2e tests sign-up and login, not
-				// the work factor; Lambda refuses the override.
-				PASSWORD_HASH_COST: '4',
+				// Argon2id at its smallest parameters, as under vitest (backend/src/auth/password.ts).
+				// Every test registers a user, and a production hash is ~110 ms of CPU on
+				// this one shared server: with bcrypt at cost 12, hashing took over a
+				// third of the server's time in a parallel run, and model saves and page
+				// loads queued past their waits behind it (issue #41). e2e tests sign-up
+				// and login, not the work factor; Lambda refuses the override.
+				PASSWORD_HASH_FAST: '1',
 				// TEST-ONLY: every e2e test signs up accounts, all from this one address,
 				// far past the sign-up throttle's 10 an hour (backend/src/auth/signupThrottle.ts;
 				// its own tests are in the backend). Lambda refuses the setting.

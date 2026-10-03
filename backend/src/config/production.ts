@@ -165,12 +165,12 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	COOKIE_SECURE: { why: 'Session cookie Secure flag; only "false" (local http) turns it off.', checks: { api: optional(oneOf('true')) } },
 	ALLOWED_ORIGINS: { why: 'CORS and CSRF allowlist; defaults to the dev site.', checks: { api: publicHttpsList } },
-	PASSWORD_HASH_COST: { why: 'bcrypt cost override for the local e2e server; auth/password.ts refuses it in Lambda.', checks: { api: optional(oneOf('12')), worker: optional(oneOf('12')) } },
+	PASSWORD_HASH_FAST: { why: '1 hashes new passwords with the smallest Argon2id parameters, for the local e2e server only; auth/password.ts refuses it in Lambda.', checks: { api: unset, worker: unset } },
 	SIGNUP_THROTTLE: {
 		why: 'off turns the sign-up throttle off for the backend tests and the e2e server only (auth/signupThrottle.ts); Lambda ignores it too.',
 		checks: { api: unset }
 	},
-	VITEST: { why: 'Set by the test runner; lowers the bcrypt cost to 4.', checks: ALL(unset) },
+	VITEST: { why: 'Set by the test runner; new password hashes use the smallest Argon2id parameters.', checks: ALL(unset) },
 	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
 	AWS_LAMBDA_LOG_FORMAT: {
 		why: 'Set by the Lambda runtime from the function\'s logging_config (reserved; infra/lambda.tf local.lambda_logging): JSON makes logging/logEvent.ts log an object, so every alarm\'s filter ($.message.event) matches. Pinned to JSON on every Lambda by infra/tests/logging.tftest.hcl, not here: Terraform sets it through logging_config, not an environment block.'

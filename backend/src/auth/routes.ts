@@ -13,7 +13,7 @@ import { buildSubjectExport, ExportThrottled } from './export.js';
 import { attachment } from '../export/csv.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
-import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
+import { dummyHash, hashPassword, needsRehash, verifyPassword } from './password.js';
 import { clearSession, issueMfaChallenge, issueSession, revokeSession } from './session.js';
 import { isEnrolled } from './mfa.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
@@ -85,7 +85,7 @@ const isCheckViolation = (err: unknown) => (err as { code?: string } | null)?.co
  */
 async function checkPasswordAgain(c: Context<AuthEnv>, route: LoginFailureRoute, typed: string): Promise<{ email: string; locale: Locale | null; passwordHash: string }> {
 	const userId = c.get('userId');
-	// Counted in its own transaction before the bcrypt check, as in login.
+	// Counted in its own transaction before the password check, as in login.
 	const { lockedSeconds, row } = await withUser(userId, async (db) => {
 		const { rows } = await db.query<{ email: string; locale: Locale | null; password_hash: string; sessions_revoked_at: Date | null }>(
 			'SELECT email, locale, password_hash, sessions_revoked_at FROM app_user WHERE id = $1',
@@ -318,7 +318,7 @@ export const authRoutes = new Hono<AuthEnv>()
 			c.header('Retry-After', String(lockedSeconds));
 			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
 		}
-		const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
+		const ok = await verifyPassword(body.password, row?.password_hash ?? (await dummyHash()));
 		if (!row || !ok) {
 			// One line counted across all accounts (auth/loginFailed.ts): the
 			// reason tells the operator an unknown address from a wrong
@@ -326,9 +326,14 @@ export const authRoutes = new Hono<AuthEnv>()
 			logLoginFailed('/auth/login', row ? 'bad_password' : 'unknown_account');
 			throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
 		}
-		// The password proved the account: read it as its owner.
+		// The password proved the account: read it as its owner. A hash made
+		// before Argon2id (bcrypt), or with older parameters, is replaced while
+		// the password is in hand (auth/password.ts); only if it is still the one
+		// just checked, so a concurrent change or reset wins. It revokes nothing.
+		const upgraded = needsRehash(row.password_hash) ? await hashPassword(body.password) : null;
 		const found = await withUser(row.id, async (db) => {
 			await attemptSucceeded(db, body.email, device);
+			if (upgraded) await db.query('UPDATE app_user SET password_hash = $3 WHERE id = $1 AND password_hash = $2', [row.id, row.password_hash, upgraded]);
 			const user = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
 			return user ? { user, twoStep: await isEnrolled(db, row.id) } : undefined;
 		});

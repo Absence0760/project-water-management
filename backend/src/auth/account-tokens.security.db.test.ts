@@ -40,7 +40,7 @@ const NOT_A_CREDENTIAL: Record<string, string> = {
 	'api_key_throttle.tokens': 'the token bucket’s fill level (a number), not a secret',
 	'data_feed_run_now.tokens': 'the “Run now” bucket’s fill level (a number), not a secret',
 	'job.lease_token': 'a worker’s lease on a claimed job (uuid); it authorises nothing outside the worker',
-	'app_user.password_hash': 'bcrypt, not SHA-256: checked on its own below'
+	'app_user.password_hash': 'Argon2id, not SHA-256: checked on its own below'
 };
 /**
  * Credentials the server must read back, so they can't be a digest: stored
@@ -89,10 +89,10 @@ describe('no table stores a raw credential', () => {
 		}
 	});
 
-	it('passwords are bcrypt hashes of the password’s SHA-256 (auth/password.ts), never the password', async () => {
+	it('passwords are Argon2id PHC hashes (auth/password.ts), never the password', async () => {
 		const u = await signUp('Bcrypt');
 		const [row] = await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]);
-		expect(row.password_hash).toMatch(/^\$wm-sha256\$\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$/);
+		expect(row.password_hash).toMatch(/^\$argon2id\$v=19\$m=\d+,t=\d+,p=\d+\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/);
 		expect(row.password_hash).not.toContain('correct horse');
 	});
 

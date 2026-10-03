@@ -35,7 +35,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
-`user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars (all of it counts: bcrypt hashes their SHA-256, so its 72-byte limit doesn't cut a long one short).
+`user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars, all of it counted (Argon2id; a pre-2026-10 bcrypt hash is upgraded on the next sign-in, security.md § Authentication).
 
 ### Two-step sign-in
 
@@ -104,7 +104,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   confirmation before calling it (docs/ui.md § Header).
 - **`change-password`** (the Account page, WP-1.9) checks the current
   password through the **same lockout as `login`**: each attempt counts
-  against the account's address before the bcrypt check, a wrong current
+  against the account's address before the password check, a wrong current
   password (`403`) is a failed attempt, and while the address is locked it
   answers `429` without checking. On success it sets the new password, moves
   `app_user.sessions_revoked_at` to now (every existing session, this
