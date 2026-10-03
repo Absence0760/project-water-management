@@ -3046,6 +3046,12 @@ map feature like any other.
   `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
   kind, the area, the dataset; never the polygon). A stranger gets `404`.
 
+### The elevation model's channels
+
+| Method | Path | Body | Response | Min role |
+| --- | --- | --- | --- | --- |
+| GET | `/projects/:id/map/channels?tile=i,j` | – | `200 { tile: [i, j], bounds: [w, s, e, n], minKm2, lines: { coordinates: [lon, lat][], km2 }[], cellSizeM, dataset: { label, fingerprint }, cached }`: one 0.2° tile (i = floor(lon / 0.2), j = floor(lat / 0.2)) of the DEM's channels, each line from a stream head or confluence to the next, `km2` the window-local upstream area at its lower end (maps.md § The elevation model's channels). `400` for a missing or malformed tile, `409` when there is no DEM, `422 { error }` outside it, `429` past the account's elevation-model cap (a computed tile counts; a cached one doesn't), `503` when the DEM can't be read | editor |
+
 ### Sub-catchments from clicks
 
 Each click on a river is an outlet, and its piece is its incremental

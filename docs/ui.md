@@ -2722,6 +2722,14 @@ map" card) stays the schematic; this is the geography.
   outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
   the map
   changed.
+- **The elevation model's channels** (while Delineate or Sub-catchments is
+  on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):
+  solid red lines over the river network, wider for a larger area, and one
+  slim status line under the bar with a red swatch ("Red lines: the
+  elevation model's channels, where a click goes. River lines can sit
+  hundreds of metres off them."; "Drawing …", "Zoom in to see …" past
+  0.35°, "… are drawn on the map, which isn't showing here." without WebGL,
+  or the refusal's sentence).
 - **Sub-catchments** (editors, with a DEM on the server, beside Delineate;
   `ClickBar.svelte`, `clickPieces.svelte.ts`, [maps.md § Sub-catchments
   from clicks](./maps.md#sub-catchments-from-clicks)). Pressed, the map
