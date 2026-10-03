@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 71 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 79 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -206,7 +206,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (71
+`test_verify.py` breaks `model.py` one documented rule at a time (79
 mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -214,7 +214,7 @@ accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's and later 48: a
+the return share; the exchange; no catchment area. Phase 2a's and later 56: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
@@ -233,7 +233,11 @@ level, the pump's capacity and what it must leave; the survey curve, the
 outlet on a pass-inflow release, dead storage and the room for transfers on
 a fixed one; the hands-off flow on a dam, its EWR flag, no River to dam on
 a dam on the river (engine 1.68.0), River to dam by
-month. Each mutant must disagree with the engine somewhere on the examples,
+month; a cap's year with no licence in force, its per-day budget and the
+use outside a licence's days, a full allocation's unlicensed year, an
+off-take into a capped unit sized to the whole demand (engine 1.70.0);
+blank days counted however many, a reading after a blank outage kept on its
+day, and the 7-day limit off by one (engine 1.70.0). Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
