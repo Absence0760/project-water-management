@@ -7,6 +7,7 @@
 	// members and navigate away), so they come in as callbacks.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
+	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
 	import { api, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { thresholdsError, thresholdsRule, thresholdsSource } from '$lib/components/portfolio/portfolio';
@@ -70,10 +71,11 @@
 
 	async function rename(e: SubmitEvent) {
 		e.preventDefault();
+		renameError = workspaceNameProblem(newName, 'team');
+		if (renameError) return;
 		renaming = true;
-		renameError = null;
 		try {
-			team = await api.teams.rename(team.id, newName.trim());
+			team = await api.teams.rename(team.id, cleanName(newName));
 			newName = team.name;
 			renamed = true;
 		} catch (err) {

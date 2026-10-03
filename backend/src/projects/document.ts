@@ -13,6 +13,7 @@
 import { DAY_BOUNDARIES, ENGINE_VERSION, SERIES_KINDS, type DayBoundary, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
+import { projectName } from '../http/visibleName.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
@@ -26,7 +27,8 @@ export const PROJECT_DOCUMENT_FORMAT = 'water-management/project';
 export const PROJECT_DOCUMENT_VERSION = 1;
 
 export const ProjectFile = z.object({
-	name: z.string().min(1).max(200),
+	/** Cleaned and checked as POST /projects's name is (http/visibleName.ts). */
+	name: projectName,
 	description: z.string().max(5000).default(''),
 	/** The project's time zone (058_project_time_zone); absent in a file from before it = the default. */
 	timeZone: TimeZone.default(DEFAULT_TIME_ZONE),

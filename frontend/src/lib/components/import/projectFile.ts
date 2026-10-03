@@ -4,6 +4,7 @@
 // document in full and answers with every problem, so this never duplicates
 // its rules. A workbook source (WP-1.31) adds its own branch to
 // `readImportFile` and returns the same `ParsedImport`, with its notes.
+import { cleanName } from '$lib/format/visibleName';
 import type { ImportReport, ProjectFile } from '$lib/api';
 
 /** File types the picker offers. */
@@ -117,7 +118,7 @@ function addDays(iso: string, n: number): string | null {
 export function importBody(file: ProjectFile, name: string, report?: ImportReport): { file: ProjectFile; bytes: number } {
 	// The server ignores an export's notes, so they aren't sent (or counted against the cap).
 	const { notes: _notes, ...rest } = file;
-	const out = { ...rest, name: name.trim() } as ProjectFile;
+	const out = { ...rest, name: cleanName(name) } as ProjectFile;
 	return { file: out, bytes: new TextEncoder().encode(JSON.stringify(report ? { ...out, importReport: report } : out)).length };
 }
 

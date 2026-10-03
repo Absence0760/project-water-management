@@ -92,7 +92,7 @@ describe('passwordProblem', () => {
 	});
 });
 
-describe('displayNameProblem (the server’s rule, auth/displayName.ts)', () => {
+describe('displayNameProblem (the server’s rule, http/visibleName.ts)', () => {
 	it('accepts an ordinary name, an emoji and a script that needs joiners', () => {
 		for (const ok of ['Ann', '  Thandi Nkosi ', 'Piet 🚜', 'می‌خواهم', 'x'.repeat(100)]) expect(displayNameProblem(ok), ok).toBeNull();
 	});

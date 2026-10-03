@@ -27,6 +27,7 @@ import { actAsUser, withoutUser, withUser } from '../src/db/tx.js';
 import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
 import { fitDocument, fitSummary, withSettingsPatch, withTransferPatch, type FitOptions, type ProjectDocument } from './fit-project.js';
 import { loadDevEnv } from '../src/config/devEnv.js';
+import { cleanName } from '../src/http/visibleName.js';
 
 export async function importProject(file: string, email: string, opts: ImportOptions = {}) {
 	return importProjectData(JSON.parse(await readFile(file, 'utf8')), email, opts);
@@ -106,7 +107,9 @@ export interface PrepareOptions {
 /** The CLI: import, or with --skip-existing leave an owned project of the same name alone. */
 async function main(file: string, email: string, opts: ImportOptions & PrepareOptions & { skipExisting?: boolean }): Promise<string> {
 	let raw = JSON.parse(await readFile(file, 'utf8')) as ProjectDocument;
-	const name = opts.name ?? (typeof raw.name === 'string' ? raw.name : undefined);
+	// As the import will store it (http/visibleName.ts), so --skip-existing finds a name that cleaning changed.
+	const given = opts.name ?? (typeof raw.name === 'string' ? raw.name : undefined);
+	const name = given === undefined ? undefined : cleanName(given);
 	if (opts.skipExisting) {
 		const existing = name ? await findOwnedProject(email, name) : null;
 		if (existing) return `✓ ${name} already exists for ${email} (project ${existing}): skipped`;

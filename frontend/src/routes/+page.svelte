@@ -5,6 +5,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { isFarmerOnly } from '$lib/auth/frame';
+	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
 	import { api, hasTeamRole, type PortfolioProject, type ProjectSummary, type Team } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -251,10 +252,11 @@
 
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
+		actionError = workspaceNameProblem(newName, 'project');
+		if (actionError) return;
 		creating = true;
-		actionError = null;
 		try {
-			const p = await api.projects.create(newName.trim(), newDescription.trim() || undefined, newTeamId || null);
+			const p = await api.projects.create(cleanName(newName), newDescription.trim() || undefined, newTeamId || null);
 			createOpen = false;
 			await goto(`${base}/projects/${p.id}`);
 		} catch (err) {
@@ -274,10 +276,11 @@
 	async function copy(e: SubmitEvent) {
 		e.preventDefault();
 		if (!copySource) return;
+		actionError = workspaceNameProblem(copyName, 'project');
+		if (actionError) return;
 		copying = true;
-		actionError = null;
 		try {
-			await api.projects.copy(copySource.id, copyName.trim());
+			await api.projects.copy(copySource.id, cleanName(copyName));
 			copyOpen = false;
 			await load();
 		} catch (err) {

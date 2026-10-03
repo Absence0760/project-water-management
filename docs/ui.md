@@ -426,7 +426,8 @@ under a dead-invitation warning).
   account's (`POST /auth/verify-email` answers the address it confirmed)
   confirms it and says so without naming the signed-in account as confirmed.
 - **Display names** are checked as the server checks them
-  (`lib/api/emailAuth.ts displayNameProblem`, `backend/src/auth/displayName.ts`):
+  (`lib/api/emailAuth.ts displayNameProblem`, `lib/format/visibleName.ts`,
+  `backend/src/http/visibleName.ts`):
   a name of only invisible characters (zero-width spaces, a lone bidi
   control) is *Enter a display name.* on the sign-up and account pages; the
   server also turns whitespace runs into one space and drops control and
@@ -1826,6 +1827,14 @@ a reopened dialog.
 Laid out for the app frame (issue #17): the layouts answer to the page's own
 width through container queries, not the window's, since the sidebar takes
 240 px.
+
+**Team and project names** (issue #383) are checked in the form as the
+server checks them (`lib/format/visibleName.ts workspaceNameProblem`,
+`backend/src/http/visibleName.ts`): a name of only invisible characters is
+*The team needs a name.* / *The project needs a name.* in the New team, team
+settings, New project, Copy and Project details forms, and the import
+preview says so under its Name field and holds Import back. What is sent is
+the name as stored, whitespace runs one space and bidi controls dropped.
 
 **Role names** (issue #162): the UI uses one set of names for team and
 project roles, **Viewer / Editor / Owner**. A team role is shown by the
