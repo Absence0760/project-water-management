@@ -5556,17 +5556,15 @@ all of Africa. `GET …/map/stations` counts its datasets the same way.
 What the round-4 `sec-input` pass fixed is in docs/security.md (§ Input
 handling: Delineation, Map data files, Geometry cost). Left open:
 
-- [ ] **A work budget on summing a polygon over a grid.** `gridShares`
-      (land cover, evaporation; a viewer's read) clips every vertex to every
-      row it is summed over. Halving the rows and cells (the `sec-access`
-      round-4 branch, `eachBand`) fixes the ordinary case, but a comb whose
-      every edge runs the polygon's whole height keeps all its vertices in
-      every row: a valid 50 000-vertex one over 0.0025° × 178° is about
-      72 000 rows × 50 000 vertices, billions of steps, and `maxCells`
-      doesn't stop it (one column). The durable fix is a budget on the
-      vertices the clipping makes (`eachBand`'s `work` counter, refused past
-      a few million) with a test of that comb. Trigger: the halving lands on
-      main (it was left to that branch to avoid two rewrites of one file).
+- [x] **A work budget on summing a polygon over a grid** (2026-10-03).
+      `eachBand` counts the vertices it clips and throws `GridWorkExceeded`
+      past `GRID_WORK_BUDGET` (8 million, about a second);
+      `gridShares` and the CHIRPS `boundaryCells` answer it as a problem
+      ("too detailed … simplify it"). Halving can't help a comb whose teeth
+      run its full height (every row holds every vertex: measured 15 s at
+      2 000 rows, so minutes at 20 000), so a budget is the fix, not a
+      cleverer order; the comb is refused in about 0.3 s
+      (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`).
 - [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
       outer ring or another hole, but not a hole wholly inside another hole
       (its area is subtracted twice). A full check is a point-in-ring test
