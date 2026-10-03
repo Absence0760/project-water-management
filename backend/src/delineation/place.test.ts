@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNEL_MIN_KM2 } from './channels.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, ON_LINE_M, place, WIDE_MATCH_M, type PlaceGrid } from './place.js';
+import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, ON_LINE_M, onOwnChannel, place, WIDE_MATCH_M, type PlaceGrid } from './place.js';
 
 // Hand-made accumulation grids with 100 m cells (0.01 km² each): a river down
 // column 20 whose upstream cells grow southward, a gully beside the click, and
@@ -190,6 +190,16 @@ describe('place: a click on a DEM channel of its own, off the mapped line (delin
 		expect(g.acc[p.larger!.cell]!).toBeLessThan(g.acc[p.cell]!);
 		// Positive control: the editor picked the tributary at a confluence, so it is taken.
 		expect(place(g, 20.5, 25.5, { snapRadiusM: 150, expectedKm2: 15, reachDistanceM: 60, chosen: true })).toMatchObject({ how: 'matched' });
+	});
+
+	it('onOwnChannel, which also keeps such a click off an unpicked junction: smaller channels only off the line, larger ones anywhere', () => {
+		const g = withStream();
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 125, reachDistanceM: 600 })).toBe(true);
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 125, reachDistanceM: 100 })).toBe(false);
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 3, reachDistanceM: 600 })).toBe(false); // in band
+		expect(onOwnChannel(g, 20.5, 25.5, { expectedKm2: 3, reachDistanceM: 60 })).toBe(true); // the river, under a 3 km² line
+		expect(onOwnChannel(g, 23.5, 25.5, { expectedKm2: 125, reachDistanceM: 600 })).toBe(false); // hillside
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: null, reachDistanceM: 600 })).toBe(false);
 	});
 
 	it('a click off any channel (hillside under 1 km²) still matches', () => {

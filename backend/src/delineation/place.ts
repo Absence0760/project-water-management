@@ -142,17 +142,9 @@ export function place(
 	const matched = hasExpected ? match(opts.chosen ? WIDE_MATCH_M : MATCH_RADIUS_M) : null;
 	if (matched) {
 		// Rule 3: the click on a channel of its own, outside the band, isn't carried past the snap radius to the reach's channel.
-		let onChannel = -1;
-		if (!opts.chosen && matched.distanceM > opts.snapRadiusM) {
-			disc(ON_CHANNEL_CELLS * cellSizeM, (i) => {
-				if (acc[i]! * cellKm2 >= ON_CHANNEL_KM2 && (onChannel < 0 || acc[i]! > acc[onChannel]!)) onChannel = i;
-			});
+		if (opts.chosen || matched.distanceM <= opts.snapRadiusM || !onOwnChannel(g, cx, cy, { expectedKm2: expected!, reachDistanceM: opts.reachDistanceM })) {
+			return { cell: matched.cell, how: 'matched', larger: null };
 		}
-		// On the reach's line, a channel smaller than the band is the displaced line's gully (rule 1's case); a larger one is another,
-		// bigger river under a tributary's line (a gauge beside a junction), so it counts wherever the line is.
-		const smaller = onChannel >= 0 && acc[onChannel]! * cellKm2 < expected!;
-		const applies = onChannel >= 0 && accordance(acc[onChannel]!) < MIN_ACCORDANCE && (!smaller || (opts.reachDistanceM ?? 0) > ON_LINE_M);
-		if (!applies) return { cell: matched.cell, how: 'matched', larger: null };
 		offer = { ...matched, reach: { onChannel: true } };
 	}
 	// Measured from the exact click in metres, so the snap distance never exceeds snapRadiusM (issue #387).
@@ -179,4 +171,32 @@ export function place(
 		if (far) return { cell, how: 'snapped', larger: { ...far, reach: { onChannel: false } } };
 	}
 	return { cell, how: 'snapped', larger: null };
+}
+
+/**
+ * Rule 3's test: the click is on a DEM channel of its own (ON_CHANNEL_KM2 or more within ON_CHANNEL_CELLS) whose area is
+ * outside the reach's 50 % band. On the reach's line (within ON_LINE_M; unknown counts as on it), a channel smaller than the
+ * band is the displaced line's gully (rule 1's case), so only a larger one counts there: another, bigger river under a
+ * tributary's line (a gauge beside a junction). Delineate and Sub-catchments also use it to keep such a click off a junction
+ * nobody picked a river at (reach.ts junctionBeside), whose side rule is for clicks on the river.
+ */
+export function onOwnChannel(g: PlaceGrid, cx: number, cy: number, opts: { expectedKm2: number | null | undefined; reachDistanceM?: number | null }): boolean {
+	const expected = opts.expectedKm2;
+	if (!expected || expected <= 0) return false;
+	const { nx, ny, acc, edge, cellSizeM } = g;
+	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
+	const r = ON_CHANNEL_CELLS;
+	let best = -1;
+	for (let y = Math.floor(cy - r); y <= Math.floor(cy + r); y++) {
+		for (let x = Math.floor(cx - r); x <= Math.floor(cx + r); x++) {
+			if (x < 0 || y < 0 || x >= nx || y >= ny) continue;
+			const i = y * nx + x;
+			if (edge[i] || Math.hypot(x + 0.5 - cx, y + 0.5 - cy) > r) continue;
+			if (acc[i]! * cellKm2 >= ON_CHANNEL_KM2 && (best < 0 || acc[i]! > acc[best]!)) best = i;
+		}
+	}
+	if (best < 0) return false;
+	const a = acc[best]! * cellKm2;
+	if ((100 * Math.min(a, expected)) / Math.max(a, expected) >= MIN_ACCORDANCE) return false;
+	return a > expected || (opts.reachDistanceM ?? 0) > ON_LINE_M;
 }
