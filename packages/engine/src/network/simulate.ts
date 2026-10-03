@@ -1092,9 +1092,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				let need = dst.river ? damD![o.to]! : rD ? rD[o.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
 				if (o.topUpDam && dstCap > 0) {
+					// The dam's room after today's step (§2.7a): its losses clamped as the step clamps them (it can't
+					// lose more than it holds with today's rain and transfers), and what dam rules already moved in
+					// today counted, so neither shows as room the water would only spill from (engine ≥ 1.69.0).
+					// What it sends out makes no room, as for a dam rule's destination (§2.6).
 					const q = prevQ(o.to);
 					const g = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
-					need += Math.max(0, dstCap - (q + g.Pd - g.E - g.Sp));
+					const held = q + g.Pd + jToday[o.to]!;
+					const E = Math.min(g.E, Math.max(held, 0));
+					const Sp = Math.min(g.Sp, Math.max(held - E, 0));
+					need += Math.max(0, dstCap - (q + g.Pd + intoToday[o.to]! - E - Sp));
 				}
 				otShare[k] = (need * cap) / otCapInto[o.to]!;
 			}

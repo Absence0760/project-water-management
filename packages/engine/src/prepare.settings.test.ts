@@ -19,6 +19,19 @@ describe('mergeSettings range guards', () => {
 		expect(warnings).toContain('A-pan evaporation below 0 in some months; using 0 there');
 	});
 
+	it('a negative pragmatic EWR month runs as 0, with a warning', () => {
+		const ewr = [5, -1, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5];
+		const { s, warnings } = merge({ ewrPragmaticM3PerDay: ewr });
+		expect(s.ewrPragmaticM3PerDay).toEqual(ewr.map((v) => Math.max(v, 0)));
+		expect(warnings).toContain('pragmatic EWR below 0 in some months; using 0 there');
+	});
+
+	it('the monthly effective-rain fallback names the scalar the run uses, not a bad one', () => {
+		const { s, warnings } = merge({ effectiveRainFraction: 7, effectiveRainFractionMonthly: [2] });
+		expect(s.effectiveRainFractionMonthly).toBeNull();
+		expect(warnings).toContain(`monthly effective rain fractions should be 12 numbers from 0 to 1; using ${d.effectiveRainFraction} in every month`);
+	});
+
 	it.each([-0.5, 1.5, Number.NaN, '0.6'])('effective rain fraction %s falls back to the default', (v) => {
 		const { s, warnings } = merge({ effectiveRainFraction: v });
 		expect(s.effectiveRainFraction).toBe(d.effectiveRainFraction);

@@ -228,6 +228,21 @@ describe("allocationMode 'fullAllocation'", () => {
 		expect(whole.years[0]!.registeredM3).toBeCloseTo(365, 9);
 	});
 
+	it('asOf: fits the water year in progress on its days before that day only, as a tail starting there would (engine 1.69.0, §2.15)', () => {
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
+		const start = toEpochDay('2000-10-01');
+		// Two water years; the second's demand is 1 a day for 75 days, then 3 a day.
+		const demand = Float64Array.from({ length: 730 }, (_, t) => (t < 365 + 75 ? 1 : 3));
+		const f = fullAllocationFactors(a, demand, start, 730, undefined, 730, 0, 365 + 75);
+		// The whole year's factor is unchanged; `before` reads the 75 days only (75 m³ registered over 75 m³).
+		expect(f.factor[365]).toBeCloseTo(365 / (75 + 3 * 290), 12);
+		expect(f.before).toBeCloseTo(1, 12);
+		expect(f.before).toBe(fullAllocationFactors(a, demand, start, 730, undefined, 365 + 75).factor[365 + 75]);
+		// On a water year's first day nothing of the year is known: no `before`.
+		expect(fullAllocationFactors(a, demand, start, 730, undefined, 730, 0, 365).before).toBeUndefined();
+		expect(fullAllocationFactors(a, demand, start, 730).before).toBeUndefined();
+	});
+
 	it('a year with no demand on its historical days takes nothing on its tail days either', () => {
 		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
 		const demand = Float64Array.from({ length: 365 }, (_, t) => (t < 100 ? 0 : 2));

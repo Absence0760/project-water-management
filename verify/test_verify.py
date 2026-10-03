@@ -43,7 +43,7 @@ MUTANTS = [
     ),
     (
         "the receiver's room leaves out its dam's own rain, evaporation and seepage (before engine 0.19.0)",
-        "(storage[dst] + pd - e_raw - sp_raw)",
+        "(storage[dst] + pd + sched[dst] - e_c - sp_c)",
         "storage[dst]",
     ),
     (

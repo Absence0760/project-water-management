@@ -98,6 +98,15 @@ describe('calibrationStats — window', () => {
 		expect(c.kgeAlpha).toBe(0);
 	});
 
+	it('a large constant simulation is flat too: r = 0, not the float residue of its own mean', () => {
+		// o varies by a few m³/s; s is 1e6 m³/s every day, whose (s − s̄)² residue is ~(1e-10)² a day.
+		const o = [1, 3, 2, 5, 4, 2, 1, 3];
+		const big = m3day(new Array(o.length).fill(1e6));
+		const c = calibrationStats(big, o);
+		expect(c.kgeR).toBe(0);
+		expect(c.r2).toBe(0);
+	});
+
 	it('clamps the window to the run and flags part years', () => {
 		const c = calibrationStats(sim, obs, { startDate: '2020-09-29', windowStart: '2000-01-01', windowEnd: '2020-09-30' });
 		expect(c.days).toBe(2);

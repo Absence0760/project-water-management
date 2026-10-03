@@ -609,7 +609,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   within 5 %; otherwise `400` naming the field.
   `ewrRules` (engine ≥ 0.21.0; model.md §2.9c) is a list, default `[]`, of at
   most 20 Reserve rule tables, one per EWR site: `{ siteNodeId` (`null` = the
-  outlet, else a gauge's node id; checked by the run, not here), `source`
+  outlet, else a gauge's node id; checked by the run, not here, except that a
+  table for `null` beside one keyed by the outlet node's own id is `400`, since
+  the run treats both as the outlet's and would use neither, engine ≥ 1.69.0), `source`
   1–500 chars, optional `sourceKind` (engine ≥ 1.5.0: `gazetted` | `desktop`
   | `other` | `null`, absent = not stated), optional `category` (ER9, issue
   #71: the REC, `A` … `F` or a band of two neighbouring classes like `B/C`,

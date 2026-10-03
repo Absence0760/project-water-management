@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { chirpsQuantileMapError, dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, lakeFactorPresetFill, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { autoFitRecordError, dataQualityPatchError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -1395,13 +1395,32 @@ describe('remapSettingNodeIds and the drought restriction rule (engine 1.54.0)',
 
 describe('SettingsPatch monthly rows that must not be negative (engine ≥ 1.69.0)', () => {
 	const row = (v: number) => new Array(12).fill(10).map((x, i) => (i === 3 ? v : x));
-	it('refuses a negative A-pan month and one over 10 000 mm, as scenarios do', () => {
+	it('refuses a negative A-pan month', () => {
 		expect(SettingsPatch.safeParse({ apanMm: row(-1) }).success).toBe(false);
-		expect(SettingsPatch.safeParse({ apanMm: row(10_001) }).success).toBe(false);
 		expect(SettingsPatch.safeParse({ apanMm: row(0) }).success).toBe(true);
 	});
 	it('refuses a negative pragmatic EWR month', () => {
 		expect(SettingsPatch.safeParse({ ewrPragmaticM3PerDay: row(-5) }).success).toBe(false);
 		expect(SettingsPatch.safeParse({ ewrPragmaticM3PerDay: row(0) }).success).toBe(true);
+	});
+});
+
+describe('ewrOutletTableError (engine ≥ 1.69.0, model.md §2.9c)', () => {
+	it('refuses a table for "the outlet" beside one keyed by the outlet node', () => {
+		expect(ewrOutletTableError([{ siteNodeId: null }, { siteNodeId: 'out' }], ['out'])).toMatch(/two Reserve rule tables for the outlet/);
+	});
+	it('accepts either alone, and a gauge table beside the outlet’s (positive controls)', () => {
+		expect(ewrOutletTableError([{ siteNodeId: null }], ['out'])).toBeNull();
+		expect(ewrOutletTableError([{ siteNodeId: 'out' }], ['out'])).toBeNull();
+		expect(ewrOutletTableError([{ siteNodeId: null }, { siteNodeId: 'g1' }], ['out'])).toBeNull();
+		expect(ewrOutletTableError(undefined, ['out'])).toBeNull();
+	});
+});
+
+describe('SettingsPatch dates that do not exist (engine ≥ 1.69.0)', () => {
+	it('refuses 29 February in a common year and 31 April, and takes a real date', () => {
+		expect(SettingsPatch.safeParse({ reportStart: '2001-02-29' }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ simulationStart: '2001-04-31' }).success).toBe(false);
+		expect(SettingsPatch.safeParse({ reportStart: '2004-02-29' }).success).toBe(true);
 	});
 });

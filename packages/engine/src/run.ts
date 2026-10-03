@@ -24,7 +24,7 @@ import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind }
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
-import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
+import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -116,6 +116,8 @@ interface WarmRun {
 	captureDay?: number;
 	resume?: ModelState;
 	continued?: boolean;
+	/** A resumed run: the capture run's first epoch day (the snapshot's runStart). */
+	runStart?: number;
 	sink?: { state?: ModelState };
 }
 
@@ -164,7 +166,7 @@ export function runModelWithoutChecks(input: ModelInput): ModelOutput {
  * captured (runModelWith).
  */
 export function runModelCapturing(input: ModelInput, at: string): { output: ModelOutput; snapshot: ModelStateSnapshot } {
-	if (typeof at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(at) || fromEpochDay(toEpochDay(at)) !== at) throw new RangeError(`capture date "${String(at)}" is not an ISO date (YYYY-MM-DD)`);
+	if (!isRealDate(at)) throw new RangeError(`capture date "${String(at)}" is not an ISO date (YYYY-MM-DD)`);
 	const sink: WarmRun['sink'] = {};
 	const output = runNetwork(input, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx), null, null, { captureDay: toEpochDay(at), sink });
 	const state = sink.state!;
@@ -211,7 +213,7 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 	const end = settings.simulationEnd;
 	if (typeof end === 'string' && end < snapshot.date) throw new ModelStateMismatchError('window', `the run ends (${end}) before the snapshot's day ${snapshot.date}`);
 	const resumed: ModelInput = { ...input, settings };
-	const output = runNetwork(resumed, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart) });
+	const output = runNetwork(resumed, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart), runStart: toEpochDay(snapshot.runStart) });
 	if (output.startDate !== snapshot.date) throw new Error(`the resumed run starts on ${output.startDate}, not the snapshot's day ${snapshot.date}`);
 	for (const c of state.columns) {
 		const has = (nodeId: string | null, key: string) => output.series.findIndex((x) => x.nodeId === nodeId && x.key === key);
@@ -326,7 +328,8 @@ function runNetwork(
 	// --- network ----------------------------------------------------------------
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
-		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {})
+		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
+		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {})
 	}, historyDays);
 	const { plan, topo } = built;
 	const nodes = input.model.nodes;
@@ -1078,7 +1081,8 @@ function runNetwork(
 				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
-				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
+				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {}),
+				...(built.allocation.scaled.get(i)?.before !== undefined ? { allocationFactorBefore: built.allocation.scaled.get(i)!.before! } : {})
 			})),
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
@@ -1371,8 +1375,10 @@ export function buildNetworkPlan(
 	 * Capture / resume (engine ≥ 1.1.0, ./warmstart): report each node's
 	 * soil-water store (m³) at the start of run day `captureAt` as
 	 * soilStoreAtM3, or start each farm's store from `soilStoreM3` (node order).
+	 * `runStart`: a resumed run's capture run's first epoch day, which decides
+	 * whether a dam that came into service carries dam_capacity (§2.16).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[] } = {},
+	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[]; runStart?: number } = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array } {
@@ -1383,6 +1389,14 @@ export function buildNetworkPlan(
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
 	const model = upgradeLegacyModel(input.model);
 	const nodes = model.nodes;
+	// Shares of 0–1, as the API and the database hold them: 80 meant as a percent would start a dam at 80 × its
+	// capacity and spill water that never existed, with every self-check passing (engine ≥ 1.69.0: refused).
+	for (const n of nodes) {
+		for (const f of ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'lossReturnFraction'] as const) {
+			const v = n[f];
+			if (v != null && !(v >= 0 && v <= 1)) throw new Error(`unit "${n.name}": ${f} is ${String(v)}, not a share from 0 to 1 (enter 80 % as 0.8)`);
+		}
+	}
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
 	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
@@ -1416,6 +1430,12 @@ export function buildNetworkPlan(
 		}
 		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
 			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
+			continue;
+		}
+		// The API refuses one on save (modelRules.ts); a direct input's moved nothing yet drew a share of the dam from
+		// the source's other rules (engine ≥ 1.69.0: skipped, as a river off-take to itself is).
+		if (from === to) {
+			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: a transfer can't run from a unit to itself; skipped`);
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
@@ -1491,6 +1511,8 @@ export function buildNetworkPlan(
 	if (abstractFrom.some((s) => s > 0)) allocation.abstractFrom = new Map(abstractFrom.flatMap((s, i) => (s > 0 ? [[i, s] as [number, number]] : [])));
 	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
+	// A capture run also fits the year in progress on its days before the snapshot's (engine ≥ 1.69.0): an outlook's members keep that.
+	if (warm.captureAt !== undefined) allocation.asOf = warm.captureAt;
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => {
 		d.fill(0, 0, abstractFrom[i]!);
@@ -1545,7 +1567,7 @@ export function buildNetworkPlan(
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
 			const u = users.byNode.get(i);
-			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings);
+			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings, warm.runStart ?? start);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -2475,7 +2497,12 @@ export function resolveReportWindow(
 	const runEnd = runStart + days - 1;
 	const parse = (v: string | null | undefined, name: string): number | null => {
 		if (v == null || v === '') return null;
-		const d = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? toEpochDay(v) : NaN;
+		let d = NaN;
+		try {
+			if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) d = toEpochDay(v);
+		} catch {
+			// An impossible date (2001-02-30, month 13): not a date, as the warning below says.
+		}
 		if (!Number.isFinite(d)) {
 			warnings.push(`${name} "${String(v)}" is not a date (YYYY-MM-DD); using the run's ${name === 'reportStart' ? 'start' : 'end'}`);
 			return null;

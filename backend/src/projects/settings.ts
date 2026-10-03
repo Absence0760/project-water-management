@@ -70,7 +70,8 @@ import {
 	SIGNED_OFF_BY_MAX,
 	declaredRuleError,
 	droughtRestrictionIssues,
-	type ProjectSettings
+	type ProjectSettings,
+	isIsoDate
 } from '@water-management/engine';
 import { z } from 'zod';
 import { AutoRunPatch } from '../runs/autoRun.js';
@@ -115,6 +116,19 @@ function withoutRetiredCalibration(c: Json): Json {
 	const out = { ...c };
 	for (const k of RETIRED_CALIBRATION_KEYS) delete out[k];
 	return out;
+}
+
+/**
+ * Why the Reserve rule tables name the outlet twice, or null: one keyed null
+ * ("the outlet") beside one keyed by the outlet node's own id. The run treats
+ * the two as one site and uses neither (engine ≥ 1.69.0, model.md §2.9c), so
+ * a save that carries both would drop the outlet's compliance silently.
+ */
+export function ewrOutletTableError(ewrRules: unknown, outletIds: readonly string[]): string | null {
+	const tables = Array.isArray(ewrRules) ? ewrRules.filter(isObj) : [];
+	const byNull = tables.some((t) => t.siteNodeId === null || t.siteNodeId === undefined);
+	const byId = tables.some((t) => typeof t.siteNodeId === 'string' && outletIds.includes(t.siteNodeId));
+	return byNull && byId ? 'ewrRules: two Reserve rule tables for the outlet (one for "the outlet" and one keyed by the outlet node): keep one' : null;
 }
 
 /**
@@ -256,8 +270,8 @@ export function importedAutoFitError(settings: Record<string, unknown>): string 
 }
 
 const monthly = z.array(z.number().finite()).length(12);
-/** 12 monthly values ≥ 0 (and ≤ max): what the engine and scenarios accept for A-pan and the pragmatic EWR (engine ≥ 1.69.0). */
-const monthlyNonNeg = (max = Number.MAX_VALUE) => z.array(z.number().finite().min(0).max(max)).length(12);
+/** 12 monthly values ≥ 0: a negative A-pan or pragmatic EWR month is refused (engine ≥ 1.69.0, ER-17); migration 187 clamped stored rows. */
+const monthlyNonNeg = z.array(z.number().finite().min(0)).length(12);
 
 const dqDays = (min: number) => z.number().int().min(min).max(366);
 /** The zero-run and low-vs-CHIRPS limits (engine RAIN_CHECK_KEYS): also recorded in a fit's forcing. */
@@ -401,7 +415,8 @@ const bounded = (key: string) => {
 	const p = GR4J_PARAMS.find((x) => x.key === key)!;
 	return z.number().min(p.min).max(p.max);
 };
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+// A date that exists (engine ≥ 1.69.0: 2001-02-29 no longer runs as 1 March).
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => isIsoDate(s), 'not a calendar date');
 
 /**
  * A dated period with a reason: a whole water year, or a date range (engine
@@ -897,7 +912,7 @@ export const SettingsPatch = z
 		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
 		// Where the dam evaporation factors came from (engine ≥ 1.49.0): free text, e.g. a lake-factor preset's note; provenance only; '' = none.
 		lakeEvapFactorSource: z.string().trim().max(PE_SOURCE_MAX),
-		apanMm: monthlyNonNeg(10_000),
+		apanMm: monthlyNonNeg,
 		flowShareMethod: z.enum(['area', 'hiLo', 'manual']),
 		hiLoSplit: z.object({ hi: z.number().min(0).max(1), lo: z.number().min(0).max(1) }),
 		// GR4J is the only model since engine 1.0.0 (issue #16); the setting records it.
@@ -948,7 +963,7 @@ export const SettingsPatch = z
 			(v) => (isObj(v) ? withoutRetiredCalibration(v) : v),
 			z.object({ rainThresholdMm: z.number().finite().min(0).max(1000), catchmentAreaKm2: z.number().finite().min(0).max(1e6).nullable() }).partial().strict()
 		),
-		ewrPragmaticM3PerDay: monthlyNonNeg(),
+		ewrPragmaticM3PerDay: monthlyNonNeg,
 		// Reserve rule tables per EWR site (engine ≥ 0.21.0); the list is replaced whole.
 		ewrRules: EwrRuleList,
 		// What the EWR charge follows and what low flows are judged on (engine ≥ 1.3.0, issue #64); pending the hydrologist.

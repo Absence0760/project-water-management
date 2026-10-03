@@ -165,8 +165,10 @@ export function calibrationStats(
 	const sdSim = Math.sqrt(varS / n);
 	// A flat simulation against a varying record has no correlation: r = 0, as the fit's KGE′ scores it
 	// (calibrate/objective.ts), so the mean-flow benchmark scores KGE 1 − √2 and a dried-out outlet 1 − √3
-	// (Knoben et al. 2019) rather than none. The tolerance absorbs a constant's own-mean float residue.
-	const r = sdObs > 0 ? (varS > 1e-24 * sst ? covOS / n / (sdObs * sdSim) : 0) : null;
+	// (Knoben et al. 2019) rather than none. The tolerances absorb a constant's own-mean float residue, relative
+	// to the record's spread and to the simulation's own size (a large constant mean leaves (1e-16 · mean)² a day).
+	const flat = !(varS > 1e-24 * sst) || !(varS > n * (1e-13 * meanSim) ** 2);
+	const r = sdObs > 0 ? (flat ? 0 : covOS / n / (sdObs * sdSim)) : null;
 	const alpha = sdObs > 0 ? sdSim / sdObs : null;
 	const beta = meanObs !== 0 ? meanSim / meanObs : null;
 	const kge =

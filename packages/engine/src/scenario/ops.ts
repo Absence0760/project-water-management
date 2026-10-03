@@ -5,7 +5,9 @@
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
+/** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
+export { isIsoDate };
 import {
 	ACCUMULATION_MODES,
 	BOREHOLE_MODES,
@@ -146,16 +148,6 @@ const months: Check = (v) => {
 	if (!Array.isArray(v) || v.length > 12) return 'must be a list of at most 12 calendar months';
 	return v.every((m) => Number.isInteger(m) && m >= 1 && m <= 12) ? null : 'months must be whole numbers 1–12';
 };
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-/** An ISO calendar date that exists (not 2021-02-30). */
-export function isIsoDate(v: unknown): v is string {
-	if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;
-	try {
-		return fromEpochDay(toEpochDay(v)) === v;
-	} catch {
-		return false;
-	}
-}
 const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
 /** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
 const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');

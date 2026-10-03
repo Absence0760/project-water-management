@@ -666,7 +666,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const a = byId.get(tr.fromNodeId);
 		const b = byId.get(tr.toNodeId);
 		// River off-takes (engine ≥ 1.14.0) have their own limits (checkOfftakes, below).
-		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || isRiverOfftake(tr)) continue;
+		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || a === b || isRiverOfftake(tr)) continue;
 		// The month's own rate (engine ≥ 1.14.0), or the one max rate in the listed months.
 		// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
 		rules.push({ from: a.id, to: b.id, on: transferActiveMonths(tr), limit: transferDailyLimit(tr), reserve: Math.max(tr.minStoragePct, a.damMinPct), priority: Number.isFinite(tr.priority) ? tr.priority : 0 });
@@ -815,8 +815,8 @@ function checkRuleReserves(rules: readonly Rule[], defs: readonly Transfer[], ou
  * volume so far this water year. On a day the dam has no capacity (its
  * dam_capacity column 0) a primary dam-target unit is direct too; on the other
  * days what the dam-target units pumped into the dam (groundwater_to_dam) is
- * given to them in order, each up to its room, which is what they pumped when
- * every dam-target unit is primary, or there is one. Like boreholeReplay it
+ * charged to each of them, up to its room: exact with one dam-target unit, and
+ * with several an over-count, which only loosens the bound. Like boreholeReplay it
  * assumes a fresh run: each unit starts at 0, not a resumed run's saved volumes.
  */
 function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model']['boreholes']>, get: SeriesMap, day0: number, days: number, D: readonly number[]): Float64Array {
@@ -852,14 +852,12 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
 			gLeft -= v;
 			got += v;
 		}
-		// What the dam-target units pumped into the dam today, in order.
-		let gd = noDam ? 0 : (GD?.[t] ?? 0);
-		for (let k = 0; k < units.length && gd > 0; k++) {
-			if (!units[k]!.toDam) continue;
-			const v = Math.min(roomOf(k), gd);
-			used[k]! += v;
-			gd -= v;
-		}
+		// What the dam-target units pumped into the dam today. The run stores only their total, and which unit
+		// pumped it depends on each one's mode and trigger, so each is charged all of it (up to its room): a unit's
+		// volume so far is never under-counted, so its room, the primary pumping and the bound's credit for it are
+		// never overstated. Exact with one dam-target unit; otherwise the bound is looser, never false.
+		const gd = noDam ? 0 : (GD?.[t] ?? 0);
+		if (gd > 0) for (let k = 0; k < units.length; k++) if (units[k]!.toDam) used[k]! += Math.min(roomOf(k), gd);
 	}
 	return out;
 }
@@ -1392,7 +1390,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			}
 		}
 		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ../network/development.ts): the
-		// day's factor k, as runModel resolves it, and the dam_capacity column it reports.
+		// day's factor k, as runModel resolves it, and the dam_capacity column it reports. The checks judge a
+		// fresh run, whose record starts on day0 (a resumed run also carries the column when the dam came into
+		// service after its capture run's first day, §2.16; capacityScaleOf's spanStart).
 		const ks = capacityScaleOf(n, day0, out.days, []);
 		const CAPS = g(DAM_CAPACITY_SERIES.key);
 		if (!!ks !== !!CAPS) return `${n.id}: ${CAPS ? 'a dam_capacity column for a dam whose capacity doesn\'t change' : 'no dam_capacity column for a dam whose capacity changes'}`;

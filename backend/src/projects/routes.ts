@@ -19,7 +19,7 @@ import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { requireStepUp } from '../auth/stepUp.js';
 import { checkCalibrationSite } from './calibrationSite.js';
-import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
+import { autoFitRecordError, dataQualityPatchError, ewrOutletTableError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
 import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
@@ -331,6 +331,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
 				await checkOutcomeSite(db, id, site, (settings as { ewrRules?: unknown }).ewrRules);
+			}
+			// The outlet's Reserve rule table once: by null or by the outlet's id, never both (engine ≥ 1.69.0, §2.9c).
+			if (settings && body.settings?.ewrRules !== undefined) {
+				const { rows: outlets } = await db.query<{ id: string }>('SELECT id FROM node WHERE project_id = $1 AND downstream_node_id IS NULL', [id]);
+				const outletError = ewrOutletTableError((settings as { ewrRules?: unknown }).ewrRules, outlets.map((r) => r.id));
+				if (outletError) throw new ApiError(400, outletError);
 			}
 			// The calibration site (engine ≥ 1.41.0): a change to a gauge is checked against the network and its records.
 			const calSite = (body.settings as { calibrationSiteNodeId?: string | null } | undefined)?.calibrationSiteNodeId;

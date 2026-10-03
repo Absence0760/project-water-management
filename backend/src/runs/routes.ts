@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { damCapacityOn, fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary, isIsoDate } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -202,7 +202,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				date: z
 					.string()
 					.regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
-					.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date')
+					.refine((s) => isIsoDate(s), 'not a date')
 			})
 			.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {

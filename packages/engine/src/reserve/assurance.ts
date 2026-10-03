@@ -652,7 +652,9 @@ export function assessSite(
 		};
 	}
 	if (table.highFlows?.length) {
-		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
+		// Every complete month of the run, the one a forecast tail starts inside included: events are counted day by
+		// day, not on the duration curves that leave that month out, so a water year is judged whole (engine ≥ 1.69.0).
+		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, completeMonths(startDate, days), site.natural, site.impacted));
 	}
 	if (onBase) report.lowFlowMeasure = 'baseflow';
 	report.daily = dailyCompliance(inRun, site.impacted, requiredM3Day);

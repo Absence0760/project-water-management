@@ -1292,7 +1292,12 @@ def run(doc: dict) -> dict:
                 tot_cap += c
             f = by_id[dst]
             area, pd, e_raw, sp_raw = pre[dst]
-            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw))
+            # The room after today's step: losses clamped as the step clamps them, today's
+            # dam-rule receipts counted (engine >= 1.69.0); what it sends makes no room.
+            held = storage[dst] + pd + J[dst]
+            e_c = min(e_raw, max(held, 0.0))
+            sp_c = min(sp_raw, max(held - e_c, 0.0))
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
             for t, c in caps:
                 need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0

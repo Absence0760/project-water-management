@@ -316,7 +316,8 @@ export function compareAllocations(input: AllocationComparisonInput): Allocation
 				(!a.validFrom || toEpochDay(a.validFrom) <= end)
 		);
 		const registeredStorage = stated.length ? stated.reduce((s, a) => s + (a.storageM3 ?? 0), 0) : null;
-		const capacity = n.kind === 'farm' ? (n.damCapacityM3 ?? null) : null;
+		// A farm whose modelled dam holds 0 m³ has no dam to compare (engine ≥ 1.69.0): 'none', as a water user's.
+		const capacity = n.kind === 'farm' && typeof n.damCapacityM3 === 'number' && n.damCapacityM3 > 0 ? n.damCapacityM3 : null;
 		return {
 			nodeId: n.nodeId,
 			name: n.name,

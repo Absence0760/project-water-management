@@ -210,11 +210,14 @@ describe('compareAllocations', () => {
 			const supplied = Array.from({ length: n }, () => rnd() * 500);
 			const gw = supplied.map((v) => v * rnd() * 0.5);
 			const river = supplied.map((v, i) => (v - gw[i]!) * rnd());
+			// The river side split three ways (engine ≥ 1.69.0): the river pump, off-take water used, a river abstraction.
+			const shares = river.map(() => [rnd(), rnd(), rnd()]);
+			const part = (j: number) => river.map((v, i) => (v * shares[i]![j]!) / (shares[i]![0]! + shares[i]![1]! + shares[i]![2]!));
 			const toDam = Array.from({ length: n }, () => (rnd() < 0.3 ? rnd() * 800 : 0));
 			const startDate = fromEpochDay(toEpochDay('1990-01-01') + Math.floor(rnd() * 5000));
 			const r = compareAllocations({
 				startDate,
-				nodes: [farm(supplied, gw, { groundwaterToDam: toDam, riverAbstraction: river })],
+				nodes: [farm(supplied, gw, { groundwaterToDam: toDam, riverAbstraction: part(0), riverTakes: [part(1), part(2)] })],
 				allocations: []
 			});
 			const x = r.nodes[0]!;
@@ -228,7 +231,7 @@ describe('compareAllocations', () => {
 					draw += supplied[t]! - gw[t]! - river[t]!;
 				}
 				netted += Math.min(pumped, draw);
-				// The surface side never goes below the year's river pumping.
+				// The surface side never goes below the year's river water (pump, off-takes, abstractions).
 				expect(y.modelledM3).toBeGreaterThanOrEqual(river.slice(t - y.days, t).reduce((s, v) => s + v, 0) - 1e-6);
 			}
 			const total = [...x.surface.years, ...x.groundwater.years].reduce((s, y) => s + y.modelledM3, 0);

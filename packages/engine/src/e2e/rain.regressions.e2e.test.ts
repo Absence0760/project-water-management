@@ -32,7 +32,7 @@ function catchment(series: ModelInput['series'], settings: Record<string, unknow
 			nodes: [
 				{ ...NODE, id: 'G', name: 'Outlet gauge', kind: 'gauge', downstreamNodeId: null, areaKm2: 0 },
 				// A unit with a farm dam (2 ha full), so rain on the dam (§2.7a) is visible.
-				{ ...NODE, id: 'F', name: 'Unit A', kind: 'farm', downstreamNodeId: 'G', areaKm2: 10, damCapacityM3: 50_000, damInitialPct: 50, damAreaFullM2: 20_000, pctRunoffToDam: 50 }
+				{ ...NODE, id: 'F', name: 'Unit A', kind: 'farm', downstreamNodeId: 'G', areaKm2: 10, damCapacityM3: 50_000, damInitialPct: 0.5, damAreaFullM2: 20_000, pctRunoffToDam: 0.5 }
 			] as never,
 			crops: [],
 			cropAreas: [],

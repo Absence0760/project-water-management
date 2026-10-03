@@ -227,7 +227,7 @@ taking 1 m³/day, let the others take the river below their hands-off flow:
 two rules keeping 900 m³/day took 100 m³ together on 1 000 m³ alone, but
 200 m³ (leaving 799 m³) beside a 1 m³/day rule without one. They now share
 in bands at their keeps exactly as N6's dam rules do at their reserves
-(found by the e2e hunt, `src/e2e/network.bugs.e2e.test.ts`). Where a
+(found by the engine end-to-end tests, `src/e2e/network.regressions.e2e.test.ts`; erratum ER-14). Where a
 source's rules keep the same flow the split is the old one to the bit, and
 the examples have no river off-take, so they are unchanged. `checkTransferLimits` (its off-take part)
 gained N6's invariant: the rules of one priority keeping at least a rule's

@@ -139,14 +139,14 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"firstAffected": "1.14.0",
 		"fixedIn": "1.69.0",
 		"severity": "Medium",
-		"appliesWhen": "Two or more river off-takes of one priority from one source, at different hands-off flows (one without a hands-off flow counts as 0)",
-		"summary": "The off-takes shared the flow above the lowest hands-off flow among them, so the ones with a higher hands-off flow together took the river below it (the dam-transfer form of this was ER-11)",
+		"appliesWhen": "Two or more river off-takes of one priority from one source that keep different flows in the river (a hands-off flow, keeping the EWR at the source, or the senior users' requirement; none counts as 0)",
+		"summary": "The off-takes shared the flow above the lowest keep among them, so the ones with a higher keep together took the river below it (the dam-transfer form of this was ER-11)",
 		"source": "model.md §2.6a; engine-audit.md N6"
 	},
 	{
 		"id": "ER-15",
 		"keyedOn": "run",
-		"firstAffected": "1.27.0",
+		"firstAffected": "1.30.0",
 		"fixedIn": "1.69.0",
 		"severity": "Medium",
 		"appliesWhen": "A dam with a release rule (fixed or pass the inflow) on days it doesn't exist: before its in-service date, or once sediment has filled it",
@@ -156,7 +156,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	{
 		"id": "ER-16",
 		"keyedOn": "run",
-		"firstAffected": "1.27.0",
+		"firstAffected": "1.30.0",
 		"fixedIn": "1.69.0",
 		"severity": "Medium",
 		"appliesWhen": "A borehole pumping into a dam (primary, supplemental or emergency) on days the dam doesn't exist: before its in-service date, or once sediment has filled it",
@@ -170,7 +170,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"fixedIn": "1.69.0",
 		"severity": "Medium",
 		"appliesWhen": "A negative monthly A-pan value in settings (the API accepted any number until 1.69.0)",
-		"summary": "Dam and river-pool evaporation came out negative, so a dam gained water from nothing in that month, and demand used the negative A-pan",
+		"summary": "Dam and river-pool evaporation came out negative, so a dam or river pool gained water from nothing in that month (demand was not affected: it reads MAX(0, A-pan))",
 		"source": "model.md §2.2 Settings out of range, §2.7a"
 	},
 	{
@@ -186,7 +186,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	{
 		"id": "ER-19",
 		"keyedOn": "run",
-		"firstAffected": "1.17.0",
+		"firstAffected": "1.19.0",
 		"fixedIn": "1.69.0",
 		"severity": "Low",
 		"appliesWhen": "A sensitivity run (rain × 0.9 / × 1.1) on a project with a rain-source period",
@@ -206,7 +206,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 	{
 		"id": "ER-21",
 		"keyedOn": "run",
-		"firstAffected": "1.17.0",
+		"firstAffected": "1.19.0",
 		"fixedIn": "1.69.0",
 		"severity": "Low",
 		"appliesWhen": "Reserve compliance on a run with a forecast tail (an outlook-style run made directly; a saved forecast run reports the history only)",
@@ -222,5 +222,75 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"appliesWhen": "Calibration statistics where the simulated flow is the same every day (the mean flow, or an outlet the network dries out)",
 		"summary": "KGE, r and R² read \"not computed\" instead of r = 0: KGE 1 − √2 for the mean flow, 1 − √3 for no flow",
 		"source": "model.md §2.10"
+	},
+	{
+		"id": "ER-23",
+		"keyedOn": "run",
+		"firstAffected": "1.18.0",
+		"fixedIn": "1.69.0",
+		"severity": "Medium",
+		"appliesWhen": "A seasonal outlook or review triggers on a full-allocation project (allocation mode full allocation) whose decision or review date lies inside the base record (a hindcast), made from the base run's snapshot (the default)",
+		"summary": "Every member kept the decision year's factor fitted on the whole real year, days after the decision date included: from 1 October a member asked for more than its prorated registered volume, and later in the year its demand depended on the real record after the decision date",
+		"source": "model.md §2.15, §2.15a"
+	},
+	{
+		"id": "ER-24",
+		"keyedOn": "run",
+		"firstAffected": "1.14.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A river off-take sized to its destination's demand that also tops up the destination's dam (topUpDam), on a day the dam received water by a dam rule, or could lose less to evaporation and seepage than the day's full rate (a shallow or leaky dam near empty)",
+		"summary": "The top-up counted the dam's room without that day's dam-rule receipts and with losses the dam couldn't have, so it took more from the river than fitted, and the extra spilled on arrival (and lost its conveyance losses)",
+		"source": "model.md §2.6, §2.6a; found by the engine end-to-end tests"
+	},
+	{
+		"id": "ER-25",
+		"keyedOn": "run",
+		"firstAffected": "0.37.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A Reserve rule table with high-flow components on a run with a forecast tail that starts mid-month (an outlook-style run made directly)",
+		"summary": "The water year holding that month was left out of the high-flow assessment, though its events are counted day by day from observed history",
+		"source": "model.md §2.9d"
+	},
+	{
+		"id": "ER-26",
+		"keyedOn": "run",
+		"firstAffected": "0.31.1",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A farm with registered storage (an s21(b) allocation) but no modelled dam",
+		"summary": "The storage comparison read \"under\" (a dam of 0 m³) instead of \"none\" (no dam to compare)",
+		"source": "model.md §2.12"
+	},
+	{
+		"id": "ER-27",
+		"keyedOn": "run",
+		"firstAffected": "1.25.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "Parameters from automated calibration whose rules left water years out, on a run whose settings don't exclude those years",
+		"summary": "The run's calibration statistics read as in-sample (fit status \"fitted\") though they also scored the years the fit never saw",
+		"source": "model.md §2.10, §2.10j"
+	},
+	{
+		"id": "ER-28",
+		"keyedOn": "run",
+		"firstAffected": "0.1.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A simulation or report window date that doesn't exist (29 February in a common year, 31 April; the API accepted any YYYY-MM-DD until 1.69.0)",
+		"summary": "The date rolled over silently (2001-02-29 ran as 1 March), so the run or the report window started or ended a day or two late; a month of 13 stopped the run",
+		"source": "model.md §2.8"
+	},
+	{
+		"id": "ER-29",
+		"keyedOn": "run",
+		"firstAffected": "0.1.0",
+		"fixedIn": "1.69.0",
+		"severity": "Low",
+		"appliesWhen": "A CHIRPS value below 0 (the product's −9999 no-data value, from an upload or a direct input; the feed drops it) on a day with no catchment rain",
+		"summary": "It counted as CHIRPS rain: the day ran as 0 mm instead of falling through to forecast rain, and rain_final showed the negative value × the factor",
+		"source": "model.md §2.4b"
 	}
 ];

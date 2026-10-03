@@ -129,9 +129,16 @@ natural (unused) area, depending on its parameters (see the `[Models]` sheet). A
 **Settings out of range** (engine ≥ 1.69.0). The engine holds the settings to
 the ranges the API and scenarios accept, so an input saved some other way can't
 run nonsense: a negative monthly A-pan runs as 0 (evaporation is a loss; a dam
-would otherwise gain water), and an effective-rain fraction outside 0–1,
+would otherwise gain water), so does a negative pragmatic EWR month, and an effective-rain fraction outside 0–1,
 February days outside 28–29 or a rain threshold outside 0–1 000 mm falls back
-to its default. Each says so in a run warning.
+to its default. Each says so in a run warning. A unit's dam and return shares
+(`pctUpstreamToDam`, `pctRunoffToDam`, `damInitialPct`, `damMinPct`,
+`lossReturnFraction`) outside 0–1 stop the run with an error naming the unit
+(80 meant as a percent would start a dam at 80 × its capacity), and a window
+or period date that doesn't exist (2001-02-29) is not a date: a report window
+date warns and falls back, a simulation date stops the run (before 1.69.0
+Date.parse rolled it over to 1 March). A dam rule from a unit to itself is
+skipped with a warning, as an off-take to itself is.
 
 ### 2.3 Irrigation demand
 
@@ -1232,7 +1239,13 @@ fallback, shows as recorded in `rain_final`, and runs as 0 mm in GR4J,
 demand's effective rain and the rain on the dams (verify/ probe
 `negative-reading`). A day where the catchment reads 0 keeps its
 0 (a zero is a reading and blocks the fallback, §2.10a), unless §2.4c sets
-it aside as missing first: then it is a blank day like any other. **Forecast rain is
+it aside as missing first: then it is a blank day like any other. A **negative
+CHIRPS** value is not a reading (engine ≥ 1.69.0): CHIRPS has no negative rain,
+and −9999 is the product's own no-data value (the feed drops it; an upload or a
+direct input may not), so the day reads it as missing, as the factor fit and the
+accumulation check always did, and falls through to forecast rain or has no
+value; the series checks warn about it. Before 1.69.0 it blocked the forecast,
+showed × the factor in `rain_final` and ran as 0 mm. **Forecast rain is
 not corrected**: there is no overlap to fit a forecast factor from, and a
 forecast product's bias is not CHIRPS's. The corrected rain then goes
 through everything that reads rain used: GR4J, the effective-rain offset on
@@ -1509,6 +1522,13 @@ changed.**
   is dropped when its window touches a period listed as missing, or (in
   zero-run mode `'missing'`) a keep-dry period: the hydrologist has already
   said what those days are.
+- **A long blank outage.** Because blank days count like zeros, a reading of
+  20 mm or more that ends a long outage of an automatic logger (blank, not a
+  gauge read by hand) is spread over the outage's last 92 days, which can
+  replace most of a season's CHIRPS fill with the one reading's total. List
+  such an outage under `zeroRainRuns.missing`: the detection then stands down
+  and the days fall back to CHIRPS (pending the hydrologist: whether only
+  zeros, or only a short blank run, should count towards an accumulation).
 - **The CHIRPS fit.** Window days are left out of the §2.4b fit day by day,
   in either mode (§2.4b says why), and the spread uses the factors fitted
   without them, so spread rain never feeds its own factors. A reading kept
@@ -1989,7 +2009,8 @@ method is chosen in `[Farm spec]`:
 | **Specific** | A value entered by hand ("external fragmentation") |
 
 The shares should sum to 1 within `0.0002` (fragmentation tolerance). Below
-that the run warns that natural flow and EWR are not fully allocated to farms.
+that the run warns that natural flow and EWR are not fully allocated to farms,
+a network of gauges alone included (engine ≥ 1.69.0).
 **Above it the run is refused** (engine ≥ 0.27.1, `overAllocationError`): the
 farms would generate more runoff than the catchment's natural flow, water from
 nowhere that lifts the outflow and hides EWR failures while every self-check
@@ -2305,6 +2326,7 @@ keep among them, so a sibling without a hands-off flow, even one taking
 keep_k  = MAX(Zs, handsOff_k, handsOffEwr_k ? Z : 0)      Zs: senior users' requirement passing the source (§2.7c)
 free_k  = MAX(0, U₀ − taken so far − keep_k)
 need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
+room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp)), E and Sp clamped as §2.7a's step clamps them (engine ≥ 1.69.0)
 v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), then shared in bands at the keep_k (above)
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
 arrives = Σ v_k × (1 − l_k) at each destination             summed in rule-id order (§6, the ordering rule; engine ≥ 1.69.0)
@@ -3934,7 +3956,10 @@ borehole pumped nothing). The dam's starting storage is its initial level × the
 first day's capacity.
 
 A run with such a dam carries its `dam_capacity` column (m³, the day's
-capacity); the self-checks recompute k from the node and hold every
+capacity); a run resumed from a snapshot (§2.16) judges "such a dam" by the
+capture run's first day, so it carries the column whenever the uninterrupted
+run does, even resumed on or after the in-service date (engine ≥ 1.69.0;
+before, it dropped it). The self-checks recompute k from the node and hold every
 capacity-dependent step to it. Every dam level the app shows (% full, the
 lowest level, days at the minimum level, the seasonal outlook's and review
 triggers' storage bands, the farmer view) is a share of **that day's**
@@ -5064,7 +5089,9 @@ component: a label, the calendar months an event may peak in, a peak
 (m³/s, daily mean; × the table's scale), an event duration (1–90 days) and
 the events required per water year (1–12; `duration × per year ≤ 366`).
 Per **complete water year** (1 Oct … 30 Sep inside the run; a part year at
-either end is not assessed):
+either end is not assessed; a forecast tail that starts mid-month doesn't make
+that month's year a part year, since events are counted day by day: engine ≥
+1.69.0):
 
 ```
 level     = EWR_HIGH_FLOW_EVENT_LEVEL × peak          (0.5: half the peak)
@@ -5266,7 +5293,10 @@ fitted parameter edited since, the same calibration window and exclusions,
 and the same flow record as the one scored; `notFitted` when there is no
 such record (parameters set by hand, imported or defaults); `edited` when a
 fitted parameter was changed by hand; `otherPeriod` when the fit used another
-window, other exclusions or the other record. A forcing change since the fit
+window, other exclusions or the other record, or (engine ≥ 1.69.0) when an
+automated fit's rule left water years out (§2.10j) that the settings don't
+exclude, so the run also scores days the fit never saw; settings excluding the
+fit's exclusions and those years are the fit's own days. A forcing change since the fit
 (PE, CHIRPS, rain-source settings, and from engine 0.40.0 a daily A-pan series
 added, replaced or removed, §2.3a) doesn't change it: the question here is
 whether the scored days are the fitted ones, and they still are. That the fit
@@ -5624,8 +5654,8 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     `BOOTSTRAP_MIN_DAYS`); below that `intervals` is null, since a
     percentile over a handful of distinct resamples means little. Shorter
     years are still resampled, they just don't count towards the minimum.
-    A score whose resamples can't be scored half the time or more gets a
-    null interval. Three years is a floor, not a recommendation: with
+    A score that can be scored in fewer than half of the resamples gets a
+    null interval (exactly half still gets one). Three years is a floor, not a recommendation: with
     few years the interval is wide, which is the point.
   - `benchmarks`: every score (`FitScores`) for two naive simulations on
     the same days. `meanFlow` repeats the period's mean observed flow (KGE′
@@ -7247,7 +7277,7 @@ always read the stored records: filling one record from the other would make
 them agree by construction. A gauge node's own record (§2.10d) is never
 filled.
 
-**Outputs.** Each filled record gets two run series beside it:
+**Outputs.** Each record the fill filled on at least one day of the stored record (not only the run's days, so a resumed run of the same record carries the same columns, §2.16; on a run with no filled day of its own they read 0 and blank) gets two run series beside it:
 `observed_flow_fill` / `observed_flow_other_fill` (per day 0 = measured or
 still missing, 1 = interpolated, 2 = from the donor: `FLOW_FILL_CODE`) and
 `observed_flow_filled` / `observed_flow_other_filled` (the filled values,
@@ -7821,14 +7851,18 @@ the days *D(y)* of *y* inside the run:
   **unregistered** = a dam with no storage registered. Arithmetic only:
   whether filling the dam is also a s21(a) take is the hydrologist's
   question (issue #90). A storage-only row is never part of *R(n,s,y)*.
+  A farm with no modelled dam (capacity 0) has no dam to compare: its
+  storage status is `none`, as a water user's (engine ≥ 1.69.0; before, it
+  read `under`, a dam of 0 m³).
 
 Invariant (`compare.test.ts`, WP-3.10 `checkAllocations`): Σ over *y* and *s*
 of *M(n,s,y)* equals Σ of the node's `supplied` series plus Σ
 `groundwater_to_dam` less Σ over *y* of MIN(Σ `groundwater_to_dam`, Σ dam
 draw), so a pumped m³ drawn from the dam in the year it was pumped counts
 once; the groundwater side alone equals Σ `groundwater_used` + Σ
-`groundwater_to_dam`; the surface side is never below the year's
-`river_abstraction`; every run day falls in exactly one water year; and the
+`groundwater_to_dam`; the surface side is never below the year's river
+water (`river_abstraction` + `offtake_used` + Σ `river_take@<key>`, engine ≥
+1.69.0); every run day falls in exactly one water year; and the
 result is the same at UTC+14 and UTC−11.
 
 **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** ([calibration-research.md § Provisional decisions](./calibration-research.md#provisional-decisions-on-the-hydrologists-questions-2026-10-01)): keep τ = 0.1 (a project setting) and the s21b reading (supply from a farm's own dam counts as abstraction; storage compared with capacity only). The abstraction estimate to trust is metered, else SAPWAT4, with the registered volume as an upper bound (CR-21/32).
@@ -8004,7 +8038,9 @@ does), and the whole run, a forecast tail included, is counted.
 the water year (`allocationUsedM3`) and a full allocation's factor for the
 year in progress (`allocationFactor`), so a resumed run's days are the
 uninterrupted run's to the bit (`warmstart.invariants.test.ts`, whose random
-networks carry allocations in every mode).
+networks carry allocations in every mode). It also keeps the factor the
+year's days before the snapshot's alone fit (`allocationFactorBefore`,
+engine ≥ 1.69.0), which an outlook's members use instead (§2.15).
 
 **Yield** (§2.13): the probed dam's own cap is taken off (a yield is what the
 dam can give, not what is registered); the other units keep theirs. Automatic
@@ -8485,7 +8521,14 @@ level and year starts from the base run's state **to the bit**, and the
 record-wide statistics (the land-cover low-flow threshold §2.5a, the
 Reserve's natural duration curves §2.9c, the CHIRPS and rain-source factors
 §2.4b, §2.4e) are the base run's, pinned in the snapshot, never refitted on
-a member's record. The older path, kept as `warmStart: false` and
+a member's record. A full allocation's factor for the decision year (§2.12a)
+is the exception: the whole year's, fitted on days after the decision date
+in a hindcast, would read the future, so the snapshot's factor is replaced by
+the one the year's days before the decision date fit, and dropped on
+1 October, where the member fits its own part year and asks for its prorated
+volume (`withAllocationKnownBefore`, in `outlookBaseAndSnapshot` and
+`runOutlookMember`; engine ≥ 1.69.0, before, errata ER-23): what the older
+path's members fit. The older path, kept as `warmStart: false` and
 `outlookMemberInput`, re-ran the history in every member as forecast mode
 does (§2.4f) and refitted those statistics on each member's record
 (history + analogue season; from engine 1.28.0 on the history before the
@@ -8624,8 +8667,11 @@ every member runs the season from it: the rest of the state is the
 history's, shared by every band, level and year. That is exactly what the
 storage reset below does on the snapshot's day, every series to the bit
 except the reset's `dam_storage_set` step, which a snapshot's dams don't
-need (`warmstart.invariants.test.ts`). With `warmStart: false` each member
-re-runs the history and sets the storage inside the run:
+need (`warmstart.invariants.test.ts`). The snapshot comes from
+`outlookBaseAndSnapshot`, so a full allocation's decision-year factor is the
+one fitted before the review date, as in §2.15 (engine ≥ 1.69.0). With
+`warmStart: false` each member re-runs the history and sets the storage
+inside the run:
 
 **`settings.damStorageReset` (engine ≥ 0.46.0).**
 `{ date, storageM3: { nodeId: m³ } }`
@@ -8849,7 +8895,9 @@ can store one per base run. The state holds:
 - the columns the capture run carried because some day of it needed them
   (a zero-run or accumulation mask, a storage reset's step, the senior
   users' requirement), so a resumed run has the same columns, 0 on days
-  that don't need them;
+  that don't need them; a dam that came into service after the capture
+  run's first day keeps its `dam_capacity` column from the snapshot's
+  `runStart` (§2.7g, engine ≥ 1.69.0);
 - the **pinned record-wide statistics** (the decision below).
 
 **What a resumed run is.** Every daily series equals, **to the bit**, the

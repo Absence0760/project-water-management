@@ -30,8 +30,17 @@ export function daysPerMonth(februaryDays = 28.25): Monthly {
 /** ISO `YYYY-MM-DD` → UTC epoch day number (days since 1970-01-01). */
 export function toEpochDay(iso: string): number {
 	const ms = Date.parse(`${iso}T00:00:00Z`);
-	if (Number.isNaN(ms)) throw new RangeError(`not an ISO date: ${iso}`);
+	// Date.parse rolls an impossible day over (2001-02-29 → 1 March, 2001-04-31 → 1 May): refused as not a date
+	// (engine ≥ 1.69.0), so a window or period never moves silently.
+	if (Number.isNaN(ms) || new Date(ms).getUTCDate() !== Number(iso.slice(8, 10))) throw new RangeError(`not an ISO date: ${iso}`);
 	return Math.round(ms / 86_400_000);
+}
+
+/** A real calendar date written `YYYY-MM-DD` (not 2001-02-29, not month 13); never throws. */
+export function isIsoDate(v: unknown): v is string {
+	if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+	const ms = Date.parse(`${v}T00:00:00Z`);
+	return !Number.isNaN(ms) && new Date(ms).getUTCDate() === Number(v.slice(8, 10));
 }
 
 /** UTC epoch day number → ISO `YYYY-MM-DD`. */

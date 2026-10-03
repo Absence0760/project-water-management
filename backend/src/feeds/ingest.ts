@@ -52,7 +52,7 @@
 // new-data hook (series/newData.ts onSeriesDaysChanged), which queues the project's
 // debounced automatic re-run when it has them on (WP-2.11). Staged days don't:
 // a run can't see them yet.
-import { provenanceKey, provenanceLabel, type SeriesProvenance } from '@water-management/engine';
+import { provenanceKey, provenanceLabel, type SeriesProvenance, isIsoDate } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
@@ -148,7 +148,7 @@ export function finalThroughAfter(feed: FeedRow, result: OkResult, window: Fetch
 	if (feed.source !== 'chirps') return null;
 	const claim = result.meta.finalThrough;
 	let reported: string | null = null;
-	if (typeof claim === 'string' && ISO_DAY.test(claim) && fromEpochDay(toEpochDay(claim)) === claim && result.startDate === window.start) {
+	if (isIsoDate(claim) && result.startDate === window.start) {
 		const idx = toEpochDay(claim) - toEpochDay(window.start);
 		if (idx >= 0 && idx < result.values.length && result.values.slice(0, idx + 1).every((v) => v !== null)) reported = claim;
 	}

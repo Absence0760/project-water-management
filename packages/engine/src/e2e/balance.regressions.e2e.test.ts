@@ -126,3 +126,38 @@ describe('fixed in 1.69.0: a dam-target borehole pumps nothing on days the dam d
 		});
 	}
 });
+
+describe('fixed in 1.69.0: the self-check charges dam-target boreholes their pumping, never less (code review, round 2)', () => {
+	// verify/checks.ts transferDrawBound replays each borehole's volume so far this water year. The run stores only
+	// the dam-target units' total pumped into the dam, so the check charges it to each of them: with two dam-target
+	// units of different modes it once gave it to the first in list order, under-counting the other, whose annual
+	// room then read too large on a later day with no dam, so the bound on the transfer draw came out too low.
+	// Here: two dam-target units (primary and supplemental, each with an annual cap) feed a dam that silts empty
+	// mid-run while a transfer draws on it; every self-check must pass, either listing.
+	for (const order of ['primary first', 'supplemental first'] as const) {
+		it(`${order}: the run passes its self-checks`, () => {
+			const days = 40;
+			const bh: Borehole[] = [
+				{ id: 'p', nodeId: 'A', name: 'Primary', capacityM3Day: 400, annualCapM3: 6_000, mode: 'primary', emergencyBelowPct: 0.5, target: 'dam', depletionFactor: 0 },
+				{ id: 's', nodeId: 'A', name: 'Supplemental', capacityM3Day: 300, annualCapM3: 5_000, mode: 'supplemental', emergencyBelowPct: 0.5, target: 'dam', depletionFactor: 0 }
+			];
+			if (order === 'supplemental first') bh.reverse();
+			const i = input(
+				[
+					node('G', 'gauge', null),
+					node('B', 'farm', 'G', { damCapacityM3: 20_000, damInitialPct: 0.1 }),
+					// Surveyed 5 years before the run at 0.2 a year (+ a few days): full of sediment by 2021-01-20.
+					node('A', 'farm', 'B', { damCapacityM3: 8_000, damInitialPct: 0.5, damSurveyDate: '2016-01-20', damSedimentPctPerYear: 0.2 })
+				],
+				days,
+				{ need: 800, boreholes: bh }
+			);
+			i.model.transfers = [{ id: 't', fromNodeId: 'A', toNodeId: 'B', months: [1, 2], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }];
+			const o = run(i, new Array(days).fill(200));
+			const cap = col(o, 'A', 'dam_capacity')!;
+			expect(cap[0]!).toBeGreaterThan(0);
+			expect(cap[days - 1]).toBe(0);
+			expect(o.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		});
+	}
+});
