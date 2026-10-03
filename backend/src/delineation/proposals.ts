@@ -86,7 +86,7 @@ export async function loadProposal(db: Db, projectId: string, pid: string): Prom
  */
 export function checkNote(r: Delineation): string | null {
 	if (r.unmatched)
-		return `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km², but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`;
+		return `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km² there, but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`;
 	if (r.farJunction)
 		return `The outlet was moved ${(r.farJunction.movedM / 1000).toFixed(1)} km from the point to keep it on ${r.farJunction.reach}'s side of a confluence: the elevation model's rivers meet away from where the river network joins them. A gauge or weir that far from its site records another catchment, so check the outlet against the map.`;
 	return null;

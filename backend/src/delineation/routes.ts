@@ -140,7 +140,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			try {
 				result = await delineate(dem, [body.lon, body.lat], {
 					windows: delineationLimits.requestWindows,
-					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach } : null,
+					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM } : null,
 					junction: attempt.junction,
 					keepPoint: body.keepPoint
 				});

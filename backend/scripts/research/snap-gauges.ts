@@ -211,7 +211,8 @@ async function diagnose(db: Db, dem: Dem, s: Station, reachKm2: number | null): 
 	const distM = (c: number) => Math.hypot((c % N) + 0.5 - cx, Math.floor(c / N) + 0.5 - cy) * cellSizeM;
 	const match = (km2: number | null, R: number) => {
 		if (!km2) return null;
-		const pl = place(g, cx, cy, { snapRadiusM: 150, expectedKm2: km2, matchRadiusM: R });
+		// place() takes no radius since delineate-5: 1 km is an unnamed click as placed (rule 3 can decline it), 2.5 km a named river.
+		const pl = place(g, cx, cy, { snapRadiusM: 150, expectedKm2: km2, chosen: R > MATCH_RADIUS_M });
 		return pl && pl.how === 'matched' ? { km2: acc[pl.cell]! * cellKm2, distM: distM(pl.cell) } : null;
 	};
 	const maxWithin = (m: number) => {

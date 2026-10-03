@@ -27,7 +27,7 @@ import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
-import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach, type ReachAtClick } from './reach.js';
 import { configuredDem } from './dem.js';
 import { delineateUnits, type PlacedBy, type Subcatchments } from './subcatchments.js';
 
@@ -89,10 +89,11 @@ export interface ClickPieces {
 const clickPlacedBy = (h: PlacedBy | undefined): ClickPiece['placedBy'] => (h === 'matched' || h === 'junction' ? h : 'snapped');
 
 /** The partition's answer in clicks: the lowest click's piece is its "rest". Pure. */
-export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | null)[] = []): ClickPieces {
+export function toClickPieces(r: Subcatchments, reaches: readonly ((NearReach & Partial<Pick<ReachAtClick, 'reachKm2'>>) | null)[] = []): ClickPieces {
 	const reachOf = (i: number) => {
 		const x = reaches[i];
-		return x ? { dataset: x.dataset, reachId: x.reachId, upstreamKm2: x.upstreamKm2 } : null;
+		// The reach's own area, as the River network layer shows it (not its area at the click, which the point was matched to).
+		return x ? { dataset: x.dataset, reachId: x.reachId, upstreamKm2: x.reachKm2 ?? x.upstreamKm2 } : null;
 	};
 	const lowest = Number(r.outlet.id);
 	const index = (id: string | null) => (id === null ? lowest : Number(id));
@@ -162,7 +163,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 	const { attempt, reaches, junctions } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
 		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
-		const reaches: (NearReach | null)[] = [];
+		const reaches: (ReachAtClick | null)[] = [];
 		const junctions: (Awaited<ReturnType<typeof reachFor>>['junction'])[] = [];
 		for (const [i, c] of clicks.entries()) {
 			try {
@@ -185,7 +186,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 			const r = await delineateUnits(dem, {
 				outlet: 'lowest',
 				boundary: null,
-				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
+				points: clicks.map((c, i) => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, reachDistanceM: reaches[i]?.distanceM ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
 			});
 			return toClickPieces(r, reaches);
 		} catch (err) {
