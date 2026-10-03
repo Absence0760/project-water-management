@@ -21,6 +21,22 @@ export class JobError extends Error {
 	}
 }
 
+/**
+ * Throw from a handler to hand the job back to the queue without spending
+ * the attempt its claim counted (app_release_job, 191): the tick had too
+ * little time left for it, which says nothing about the job. It runs again
+ * after `delaySeconds` (past the rest of this tick). Not a failure: no
+ * error kept, no backoff.
+ */
+export class JobRelease extends Error {
+	constructor(
+		message: string,
+		readonly delaySeconds: number
+	) {
+		super(message);
+	}
+}
+
 /** The worker lost its lease (another worker claimed the job): roll back, record nothing. */
 export class LeaseLostError extends Error {
 	constructor() {

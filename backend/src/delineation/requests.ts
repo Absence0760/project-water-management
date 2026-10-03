@@ -36,12 +36,20 @@ export const DELINEATE_JOBS_PER_USER = 1;
 /** Finished requests kept per project (the newest); waiting ones are all kept. */
 export const REQUESTS_KEPT = 20;
 /**
- * Attempts a delineate job gets: retries for a DEM read that failed, or a
- * tick that had too little time left for it. A refusal is an outcome, never retried.
+ * Attempts a delineate job gets: retries for a DEM read that failed. A
+ * refusal is an outcome, never retried; a tick with too little time left
+ * hands the job back without spending one (JobRelease).
  */
 export const DELINEATE_MAX_ATTEMPTS = 3;
 /** The least time worth starting a delineate job with (ms): less, and it goes back to the queue for the next tick. */
 export const MIN_JOB_TIME_MS = 20_000;
+/**
+ * How long a job handed back for want of time waits (s): longer than a tick
+ * still claims for once its budget is under the job's own (a tick claims
+ * until 60 s before its deadline's 50 s margin, and the job's budget is cut
+ * only when under 155 s were left), so the same tick never claims it again.
+ */
+export const RELEASE_DELAY_SECONDS = 120;
 
 /**
  * The job's time budget: its own, or what is left before the worker's

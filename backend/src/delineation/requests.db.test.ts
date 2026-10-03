@@ -278,11 +278,23 @@ describe('the worker’s time', () => {
 		expect(cutShort(4096, [4096, 6144], 150_000, 150_000)).toBe(false);
 	});
 
-	it('puts a job claimed with too little time left back in the queue (failed, to retry), the request still waiting', async () => {
+	it('hands a job claimed late back to the queue without spending an attempt, however often, and runs it in a tick with time', async () => {
 		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall', background: true });
 		expect(res.status).toBe(202);
-		await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], deadline: Date.now() + 5_000 });
-		expect(await jobOf(res.body.request.id)).toMatchObject({ status: 'failed', last_error: expect.stringMatching(/too little time left/) });
-		expect((await viewer.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request).toMatchObject({ status: 'queued' });
+		const rid = res.body.request.id;
+		// More late claims than the job has attempts: none of them counts.
+		for (let i = 0; i < 5; i++) {
+			const t = await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], deadline: Date.now() + 5_000 });
+			expect(t).toMatchObject({ claimed: 1, released: 1, failed: 0, dead: 0 });
+			const [job] = await asOwner(`SELECT j.status, j.attempts, j.last_error, j.run_after > now() + interval '100 seconds' AS later FROM job j JOIN delineation_request r ON r.job_id = j.id WHERE r.id = $1`, [rid]);
+			// Queued again, past the rest of the tick, its attempt given back, no error kept.
+			expect(job).toEqual({ status: 'queued', attempts: 0, last_error: null, later: true });
+			expect((await viewer.call('GET', at(`/map/delineation/requests/${rid}`))).body.request.status).toBe('queued');
+			await asOwner(`UPDATE job SET run_after = now() WHERE id = (SELECT job_id FROM delineation_request WHERE id = $1)`, [rid]);
+		}
+		// A tick with time runs it.
+		await tick();
+		expect((await jobOf(rid)).status).toBe('done');
+		expect((await viewer.call('GET', at(`/map/delineation/requests/${rid}`))).body.request).toMatchObject({ status: 'proposed', proposal: { from: 'dam_wall' } });
 	});
 });
