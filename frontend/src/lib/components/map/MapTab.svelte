@@ -7,8 +7,12 @@
 	// largest, opened on few visits (an empty model), loads when opened,
 	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
 	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
+	// Upload GeoJSON (the sheet and its review table, importReview.ts) loads
+	// when opened too: round 3's delineation work took the tab back to 62 KB,
+	// and the split brought it to 58 KB for ~1.8 KB of overhead in the total.
 	const loadMap = () => import('./CatchmentMap.svelte');
 	const loadStartSheet = () => import('./StartSheet.svelte');
+	const loadUploadSheet = () => import('./UploadSheet.svelte');
 </script>
 
 <script lang="ts">
@@ -92,7 +96,6 @@
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
-	import UploadSheet from './UploadSheet.svelte';
 
 	let {
 		projectId,
@@ -1165,7 +1168,11 @@
 			</div>
 
 			{#if upload.open}
-				<UploadSheet bind:open={upload.open} {projectId} sources={data.sources} onimported={imported} />
+				<Lazy load={loadUploadSheet}>
+					{#snippet children(UploadSheet)}
+						<UploadSheet bind:open={upload.open} {projectId} sources={data!.sources} onimported={imported} />
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if checksSheet.open}
 				<Dialog bind:open={checksSheet.open} title="Map checks" side>
