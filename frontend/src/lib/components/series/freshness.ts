@@ -111,7 +111,7 @@ const KEYWORDS: [RegExp, string][] = [
 
 /** The file's header line (first line whose first cell isn't a date), if any. */
 export function headerLine(text: string): string {
-	for (const raw of text.replace(/^﻿/, '').split(/\r?\n/)) {
+	for (const raw of text.replace(/^﻿/, '').split(/\r\n?|\n/)) {
 		const line = raw.trim();
 		if (!line || line.startsWith('#')) continue;
 		const first = (line.split(/[,;\t]/)[0] ?? '').trim().replace(/^"|"$/g, '');

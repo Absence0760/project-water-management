@@ -25,6 +25,11 @@ describe('parseSeriesCsv', () => {
 		expect(r.values).toEqual([3, 4]);
 	});
 
+	it('reads a file with bare CR line endings (Excel for Mac’s "CSV (Macintosh)")', () => {
+		const r = parseSeriesCsv('date,value\r2020-01-01,3\r2020-01-02,4\r');
+		expect([r.startDate, r.endDate, r.values]).toEqual(['2020-01-01', '2020-01-02', [3, 4]]);
+	});
+
 	it('fills gaps and blank values with null and sorts out-of-order rows', () => {
 		const r = parseSeriesCsv('2020-01-04,4\n2020-01-01,1\n2020-01-02,\n');
 		expect(r.startDate).toBe('2020-01-01');

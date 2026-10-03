@@ -312,7 +312,7 @@ export function denseDays(byDay: Map<number, number | null>): Pick<ParsedSeries,
  * day throws a CsvError marked `subDaily`, so the form can ask for a boundary.
  */
 export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary } = {}): ParsedSeries {
-	const lines = text.replace(/^﻿/, '').split(/\r?\n/);
+	const lines = text.replace(/^﻿/, '').split(/\r\n?|\n/);
 	const rows = lines.map((raw, i) => ({ line: raw.trim(), n: i + 1 })).filter((r) => r.line && !r.line.startsWith('#'));
 	const delim = detectDelimiter(rows.map((r) => r.line));
 	const cellsOf = rows.map((r) => splitFields(r.line, delim));

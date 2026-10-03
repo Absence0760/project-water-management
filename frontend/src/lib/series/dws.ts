@@ -35,7 +35,7 @@ const VALUE_SPEC = /^\s*POS\.\s*10\s*-\s*18\s*=\s*/i;
  */
 export function isDwsExport(text: string): boolean {
 	const body = dwsTableText(text) ?? text;
-	for (const raw of body.split(/\r?\n/)) {
+	for (const raw of body.split(/\r\n?|\n/)) {
 		const l = raw.trim();
 		if (DWS_HEADER.test(l) && /\bQUAL\b/i.test(l)) return true;
 		if (/^\d/.test(l)) return DWS_ROW.test(l) && !/[,;]/.test(l);
@@ -49,7 +49,7 @@ export function parseDwsExport(text: string): ParsedSeries {
 	const table = dwsTableText(clean);
 	// Line numbers are the file's only when the table is the file (not a saved page's <pre>).
 	const plain = table === null || table === clean;
-	const lines = (table ?? clean).split(/\r?\n/).map((l) => l.trimEnd());
+	const lines = (table ?? clean).split(/\r\n?|\n/).map((l) => l.trimEnd());
 	const lineNo = (i: number) => (plain ? i + 1 : undefined);
 	const firstRow = lines.findIndex((l) => DWS_ROW.test(l.trim()));
 	const h = lines.findIndex((l) => DWS_HEADER.test(l));
