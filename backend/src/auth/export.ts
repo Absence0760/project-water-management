@@ -8,6 +8,7 @@
 // only the caller's own rows. Never a secret: no password hash, token hash,
 // unsubscribe nonce or API key material.
 import type { FarmProjection, NoticeText } from '@water-management/engine';
+import { withoutAllocationIdentifiers } from '../allocations/viewerUnits.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { currentFor, farmerProjection } from '../farms/view.js';
@@ -332,7 +333,8 @@ export async function buildSubjectExport(userId: string, now = new Date()) {
 			securityEvents,
 			reportSubscriptions: rest.reportSubscriptions,
 			// Without a publication's per-farm figures (the decision log, issue #119): the project's figures about others' farms.
-			auditEvents: rest.auditEvents.map(withoutFarmFigures),
+			// And without an allocation's registration number and volume (190): the registered user's, not this person's.
+			auditEvents: rest.auditEvents.map((e) => withoutAllocationIdentifiers(withoutFarmFigures(e))),
 			auditEventsTruncated: rest.auditEventsTruncated
 		};
 	});

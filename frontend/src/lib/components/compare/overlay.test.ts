@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { commonOptions, deltaStats, fmtSig, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText, zeroFillable, zeroSeries, type SeriesRefLike } from './overlay';
+import {
+	commonOptions,
+	deltaStats,
+	fmtSig,
+	isFlowSeries,
+	matchOverlay,
+	overlayForecastFrom,
+	pickOption,
+	recordOf,
+	seriesDelta,
+	summaryText,
+	zeroFillable,
+	zeroSeries,
+	type SeriesRefLike
+} from './overlay';
 
 const ref = (nodeId: string | null, key: string, unit = 'm³/day', label = key): SeriesRefLike => ({ nodeId, key, label, unit });
 
@@ -258,5 +272,32 @@ describe('summaryText', () => {
 			'Over the 120 days both runs have: mean A 1\u202f000, mean B 1\u202f000, B − A 0 m³. The two runs are identical on every one of those days.'
 		);
 		expect(summaryText({ ...stats, days: 0 }, 'm³')).toMatch(/^The two runs share no day/);
+	});
+});
+
+describe('a forecast run in the overlay (issue #51)', () => {
+	const a = { startDate: '2024-01-01', values: [1, 2, 3, 4, 5] };
+	const b = { startDate: '2024-01-01', values: [1, 2, 3, 40, 50] };
+
+	it('cuts a forecast run to its record, and leaves an ordinary run whole', () => {
+		expect(recordOf(b, '2024-01-04')).toEqual({ startDate: '2024-01-01', values: [1, 2, 3] });
+		expect(recordOf(b, null)).toBe(b);
+		// A first forecast day past the end leaves the series whole.
+		expect(recordOf(b, '2024-02-01').values).toEqual([1, 2, 3, 40, 50]);
+	});
+
+	it('reads out and differences the record only: the forecast days of B change nothing', () => {
+		const stats = deltaStats(recordOf(a, null), recordOf(b, '2024-01-04'));
+		expect(stats).toMatchObject({ days: 3, meanDelta: 0, daysHigher: 0, largest: null });
+		// Positive control: whole, the forecast days would read as B being higher.
+		expect(deltaStats(a, b)).toMatchObject({ days: 5, daysHigher: 2 });
+		expect(seriesDelta(recordOf(a, null), recordOf(b, '2024-01-04')).values).toEqual([0, 0, 0]);
+	});
+
+	it('bands from the earlier first forecast day of the two', () => {
+		expect(overlayForecastFrom('2024-03-01', '2024-02-01')).toBe('2024-02-01');
+		expect(overlayForecastFrom(null, '2024-02-01')).toBe('2024-02-01');
+		expect(overlayForecastFrom('2024-03-01', undefined)).toBe('2024-03-01');
+		expect(overlayForecastFrom(null, null)).toBeNull();
 	});
 });

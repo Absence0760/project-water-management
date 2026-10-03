@@ -2791,7 +2791,12 @@ what](./allocations.md#who-sees-what)).
   run's per-unit daily series (`supplied`, `allocation_left_*`) still reach
   them ([followups.md § Allocations](./followups.md#allocations-wp-310)).
 - History: `allocation.created/changed/deleted/imported/import_deleted/viewer_units`; the
-  preview is exempt (it writes nothing).
+  preview is exempt (it writes nothing). `GET …/history` gives a viewer
+  `allocation.created/changed/deleted` without `registrationNo` and
+  `volumeM3PerYear` until an owner switches **What viewers see** on
+  (`app_audit_subject`, 190), and `GET …/runs/:runId/changes-since` lists
+  no registered-volume line to that viewer. The data-subject export carries
+  neither field in any allocation event.
 
 ## Publication
 
@@ -2920,6 +2925,9 @@ never a farm's row, name or id.
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
   key below `k` holders. A body without `token` (or `key`) is `400`.
+  When the published run is a forecast run, the series stops the day before
+  its first forecast day (190): the monthly means and the last 365 days are
+  the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
@@ -3970,11 +3978,11 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event). An event's `subject` is read as the caller may see it (`app_audit_subject`, 190): an `allocation.created/changed/deleted` without `registrationNo` and `volumeM3PerYear` for a viewer until an owner lets viewers read each volume ([Allocations](#allocations)) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
-| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
+| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100). To a viewer who can't read each registered volume, neither side has the allocations (no registered-volume line) | viewer |
 | POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
 | GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length, …, siteNodeId }[] }` (kept: the newest 5, ≤ 180 days; `siteNodeId` = the flow record's gauge when the revision was kept, null = the outlet, 085) | viewer |
 | POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id; a flow record comes back at the site it had, `409` when that gauge is no longer in the model) | editor |

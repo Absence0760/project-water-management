@@ -46,6 +46,7 @@
 	import { loadOnce } from '$lib/components/common/lazy';
 	import CurtailmentTable from '$lib/components/curtailment/CurtailmentTable.svelte';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import { forecastBand } from '$lib/components/forecast/forecast';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
 	import SignoffSection from '$lib/components/liability/SignoffSection.svelte';
 	import ValidationStatement from '$lib/components/liability/ValidationStatement.svelte';
@@ -445,6 +446,7 @@
 							unit="m³/s"
 							height={300}
 							series={hydro}
+							band={forecastBand(summary.forecast?.from)}
 							caption="The whole run. {observedCaption(flows, sources)}"
 						/>
 						{@render table(
@@ -464,6 +466,7 @@
 							height={260}
 							log
 							series={ewrLines}
+							band={forecastBand(summary.forecast?.from)}
 							caption={`Days the outflow dips below the pragmatic EWR line count as EWR not met.${flows.ewrRule ? ` ${EWR_RULE_CAPTION}` : ''}`}
 						/>
 						{#each summary.ewrAssurance ?? [] as site (site.nodeId ?? '(outlet)')}

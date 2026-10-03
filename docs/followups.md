@@ -3616,12 +3616,17 @@ from the WP:
       say on a cap run's per-unit pages that its use is capped by a volume
       they can't see. Trigger: a project with outside viewers runs in cap
       mode, or counsel reads per-unit modelled use as personal information.
-- [ ] **Registration numbers in History** are readable by viewers
-      (`allocation.created/changed/deleted` carry `registrationNo`), and a
-      registration number is a "unique identifier" (POPIA s1). Durable fix:
-      leave `registrationNo` out of those events for a viewer in the History
-      route (as `allocation.viewer_units` is off). Trigger: with the share
-      views item above, or counsel's review (#92).
+- [x] **Registration numbers in History** (2026-10-03): viewers read
+      `allocation.created/changed/deleted` with `registrationNo` (a "unique
+      identifier", POPIA s1) and `allocation.created` with the volume. Done:
+      the History reads every event's subject through `app_audit_subject`
+      (190), which leaves both out for a reader who can't read the
+      allocation rows (a viewer while `allocations_viewer_units` is off);
+      `changes-since` gave that viewer the run's volumes as "removed" lines,
+      now it compares neither side's; the data-subject export leaves both out
+      of every allocation event (`withoutAllocationIdentifiers`). Share
+      views, packs and mail carry no audit event
+      (`allocations/history-viewer.db.test.ts`).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -5570,13 +5575,19 @@ own. Loop in the CISO or security analyst before acting on any of them.
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.
       Trigger: a WUA asks, or Step 3's licensing evidence needs it.
-- [ ] **One guard for views over a run's stored series.** Every view that
-      reads a run's daily series (not its summary) must cut a forecast run
-      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
-      that didn't, one at a time. A guard test listing each
-      `api.runs.series` / `run_series` consumer and how it treats a forecast
-      run would stop the next one. Trigger: the next view over stored
-      series.
+- [x] **One guard for views over a run's stored series** (2026-10-03).
+      `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
+      reader of a run's stored series (the frontend's `api.runs.series`, the
+      bulk route and a share link's series; the backend's `FROM run_series`;
+      every SQL function whose latest definition reads it), how each treats a
+      forecast run (cut, band, whole, never, …) and the code that shows it,
+      and fails on an unlisted reader, a changed count or lost evidence. It
+      caught five, now fixed: a share link's chart averaged a published
+      forecast run's forecast days into the river's months (190 cuts
+      `app_share_series`); River & reserve counted forecast days below the
+      EWR; Compare runs' overlay read out and differenced the forecast days,
+      with no band; the report's licence-impact board counted them; the
+      runoff stores chart and the printed report's two charts had no band.
 
 ## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
 

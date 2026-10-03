@@ -12,9 +12,12 @@
 	// Runs tab's old controls can be turned on: the m³/s ↔ m³/day switch
 	// (`units`) and Earlier / Later by the window picked (`pannable`). The
 	// shaded days are dates from the shortfall series, so they hold in both units.
+	// On a forecast run they and their count are the record's (issue #51): the
+	// days before the forecast; the forecast's days at risk are the Forecast
+	// panel's, and the band marks the forecast days on the plot.
 	// The Summary drew this chart too until issue #162: it now shows the
 	// days below the reserve by month (ReserveStrip.svelte) and links here.
-	import type { DailySeries } from '@water-management/engine';
+	import { beforeForecast, type DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -88,13 +91,15 @@
 	const conv = (d: DailySeries) => toDisplayUnit(d.values, 'm³/day', unit).values;
 	const series = $derived(ewrChartSeries(flows, conv));
 	const band = $derived(forecastBand(forecastFrom));
-	const shade = $derived(flows.shortfall ? belowReserve(flows.shortfall) : []);
+	const record = (d: DailySeries) => ({ startDate: d.startDate, values: Array.from(beforeForecast(d.values, d.startDate, forecastFrom)) });
+	const shade = $derived(flows.shortfall ? belowReserve(record(flows.shortfall)) : []);
 	const shortDays = $derived(shade.reduce((n, r) => n + (Date.parse(r.end) - Date.parse(r.start)) / 86_400_000 + 1, 0));
+	const before = $derived(forecastFrom ? ' before the forecast' : '');
 	const pragmatic = $derived(
 		flows.shortfall && shortDays === 0
-			? 'The outflow never fell below the pragmatic EWR line: the EWR was met every day.'
+			? `The outflow never fell below the pragmatic EWR line${before}: the EWR was met every day.`
 			: flows.shortfall
-			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'} the outflow was below the pragmatic EWR line (EWR not met).`
+			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'}${before} the outflow was below the pragmatic EWR line (EWR not met).`
 			: 'Days the outflow dips below the pragmatic EWR line count as EWR not met.'
 	);
 	const caption = $derived(flows.ewrRule ? `${pragmatic} ${EWR_RULE_CAPTION}` : pragmatic);

@@ -5122,13 +5122,21 @@ read it before.
   before the forecast only, and every "X of N days" beside them counts N
   over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
   EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
-  outflow, the hydrograph, dam storage, supply vs demand, the explorer)
+  outflow, the hydrograph, dam storage, supply vs demand, the explorer, the
+  runoff model's stores, the printed report's two charts, Compare runs'
+  overlay)
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
   option), so the band never rests on colour alone; the figure carries
   `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
   only the days before the forecast, and the caption says how many forecast
-  days it left out (issue #51).
+  days it left out (issue #51). The same for every figure read off the
+  stored series: River & reserve's shaded days below the EWR and their
+  count, the overlay's difference and read-out ("Run A is a forecast run: …
+  stop the day before"), the report's licence-impact board, and a share
+  link's chart. `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`)
+  lists every reader of a run's stored series and how it treats the
+  forecast days, and fails on a new one that doesn't say.
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &

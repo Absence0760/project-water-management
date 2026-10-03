@@ -396,7 +396,10 @@ bottom:
    like every daily chart: Earlier / Later and Shift+drag pan through the
    record, the last three years or the full period, and on a flow series the
    log scale and the m³/s ↔ m³/day switch (the read-out follows the unit). A
-   day either run has no value for is a gap in B − A, never zero. Series come
+   day either run has no value for is a gap in B − A, never zero. A forecast
+   run is drawn whole with its forecast days in the band, but B − A and the
+   read-out stop the day before its first forecast day, and a note says so
+   (issue #51, `overlay.ts` `recordOf`). Series come
    from the existing `GET /projects/:id/runs/:runId` (which series a run
    stored) and `…/series?key&nodeId` (the values, one pair at a time); no
    compare-specific route.
