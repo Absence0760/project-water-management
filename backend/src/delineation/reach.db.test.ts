@@ -109,7 +109,7 @@ describe('Delineate', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(Math.abs(r.body.proposal.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(r.body.proposal.method).toMatch(/best matches reach 99000001 of snap-test/);
-		expect(r.body.proposal.methodVersion).toBe('delineate-10');
+		expect(r.body.proposal.methodVersion).toBe('delineate-11');
 	});
 
 	it('keeps a click on a channel of its own 500 m off the reach’s line there, offering the river’s channel (finding 4)', async () => {
@@ -293,7 +293,7 @@ describe('Sub-catchments', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 		const [matched] = r.body.pieces;
 		expect(matched).toMatchObject({ click: 0, placedBy: 'matched', reach: { dataset: DATASET, reachId: 99000001 }, larger: null });
-		expect(r.body.methodVersion).toBe('start-12');
+		expect(r.body.methodVersion).toBe('start-13');
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
 		const plain = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, {
 			clicks: [

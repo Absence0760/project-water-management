@@ -6,7 +6,7 @@ import { openDem } from './dem.js';
 import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M, tooLargeText } from './delineate.js';
 import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
-import { PAN_METHOD } from './pans.js';
+import { ON_RIVER_METHOD, PAN_METHOD } from './pans.js';
 
 // Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
 // valley in an elliptical ridge whose area is known, with a dam, a pan and a
@@ -258,5 +258,31 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 		// A slope west of the river, away from the pan on the east flank.
 		const side = await delineate(dem, at(OUTLET_CELL.x - 30, OUTLET_CELL.y - 60), { keepPoint: true });
 		expect(side.pans).toEqual({ nonContributingM2: 0, count: 0, largest: [], method: PAN_METHOD });
+	});
+
+	// The cross-check (delineate-11). The fixture's pan spills down the 6 % flank, which falls past its floor within a cell or two,
+	// as below a dam's wall: so a river drawn through it and out to the valley's river makes it storage on a river.
+	const through = [at(PAN.x + 12, PAN.y - 2), at(PAN.x, PAN.y), at(OUTLET_CELL.x, PAN.y + 8)];
+	const reference = (rivers: { line: [number, number][]; directed: boolean }[], dams: [number, number][][] = []) => async () => ({ rivers, dams });
+
+	it('lists the pan as storage on a river when a mapped river flows through it and out, and counts nothing', async () => {
+		const r = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([{ line: through, directed: false }]) });
+		expect(r.pans.count).toBe(0);
+		expect(r.pans.nonContributingM2).toBe(0);
+		expect(r.pans.onRiver).toMatchObject({ count: 1, largest: [{ by: 'river' }] });
+		expect(Math.abs(r.pans.onRiver!.largest[0]!.drainsM2 / expected - 1)).toBeLessThan(0.01);
+		expect(r.pans.method).toBe(`${PAN_METHOD} ${ON_RIVER_METHOD}`);
+		expect(r.method).toMatch(/is storage on a river: not counted\)$/);
+		// The catchment itself is the same either way.
+		expect(Math.abs(r.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
+	});
+
+	it('keeps it a pan when the river ends in it, and lists a dam on it as the dam’s', async () => {
+		const ending = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([{ line: through.slice(0, 2), directed: true }]) });
+		expect(ending.pans.count).toBe(1);
+		expect(ending.pans.onRiver).toEqual({ count: 0, largest: [] });
+		const dam = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { panReference: reference([], [[at(PAN.x, PAN.y)]]) });
+		expect(dam.pans.count).toBe(0);
+		expect(dam.pans.onRiver).toMatchObject({ count: 1, largest: [{ by: 'dam' }] });
 	});
 });

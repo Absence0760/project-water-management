@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
+import { panReferenceLoader } from './panReference.js';
 import type { Geometry, Position } from '../geo/geojson.js';
 import { loadFeature, toFeature } from '../geo/routes.js';
 import { recordAudit } from '../history/record.js';
@@ -192,7 +193,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 				outlet: 'lowest',
 				boundary: null,
 				points: clicks.map((c, i) => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, expectedKm2: reaches[i]?.upstreamKm2 ?? null, reachDistanceM: reaches[i]?.distanceM ?? null, chosen: !!c.reach, junction: junctions[i] ?? null }))
-			});
+			}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), projectId) });
 			return toClickPieces(r, reaches);
 		} catch (err) {
 			if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });

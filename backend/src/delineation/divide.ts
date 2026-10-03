@@ -20,6 +20,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
+import { panReferenceLoader } from './panReference.js';
 import { featureNameOf, type Geometry, type Position } from '../geo/geojson.js';
 import { KIND_NODES } from '../geo/routes.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
@@ -304,7 +305,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 					outletHints: outletHints(inputs.outlet.foundIn, reaches),
 					boundary: inputs.boundary?.geometry ?? null,
 					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
-				});
+				}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id) });
 			} catch (err) {
 				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 				logEvent('error', { event: 'divide_proposal_failed', ...safeError(err) });

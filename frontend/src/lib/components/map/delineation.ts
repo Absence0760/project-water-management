@@ -71,15 +71,35 @@ export function proposalFacts(p: DelineationProposal): [string, string][] {
 export function panFacts(p: Pick<DelineationProposal, 'areaM2' | 'pans'>): [string, string][] {
 	const pans = p.pans;
 	if (!pans) return [];
+	return [...intoPans(p.areaM2, pans), ...onRiverFacts(pans)];
+}
+
+function intoPans(areaM2: number, pans: NonNullable<DelineationProposal['pans']>): [string, string][] {
 	if (!pans.count) return [['Into pans', 'none found (no closed depression deep and large enough)']];
 	const nc = pans.nonContributingM2;
 	const big = pans.largest[0];
 	return [
 		[
 			'Into pans',
-			`${fmtNum(nc / 1e6, 2)} km² (${Math.round((100 * nc) / p.areaM2)} %) drains into ${pans.count === 1 ? 'a pan' : `${fmtNum(pans.count)} pans`}${big ? `; the largest holds ${fmtNum(big.storageMm)} mm over its ${fmtNum(big.drainsM2 / 1e6, 2)} km²` : ''}. Non-contributing in WR2012’s sense; still inside the area and outline`
+			`${fmtNum(nc / 1e6, 2)} km² (${Math.round((100 * nc) / areaM2)} %) drains into ${pans.count === 1 ? 'a pan' : `${fmtNum(pans.count)} pans`}${big ? `; the largest holds ${fmtNum(big.storageMm)} mm over its ${fmtNum(big.drainsM2 / 1e6, 2)} km²` : ''}. Non-contributing in WR2012’s sense; still inside the area and outline`
 		],
-		['Effective area', `${fmtNum((p.areaM2 - nc) / 1e6, 2)} km², if the pans contribute nothing`]
+		['Effective area', `${fmtNum((areaM2 - nc) / 1e6, 2)} km², if the pans contribute nothing`]
+	];
+}
+
+/** The depressions found to be storage on a river (delineate-11): listed, not counted as pans. Nothing when none or not checked. */
+function onRiverFacts(pans: NonNullable<DelineationProposal['pans']>): [string, string][] {
+	const r = pans.onRiver;
+	if (!r?.count) return [];
+	const big = r.largest[0]!;
+	const why = big.by === 'dam' ? 'a dam holds it' : 'a mapped river flows out of it over a wall';
+	return [
+		[
+			'Storage on a river',
+			r.count === 1
+				? `A closed depression holds as much as a pan, but ${why}: storage on a river, so the ${fmtNum(big.drainsM2 / 1e6, 2)} km² draining into it is not counted as non-contributing`
+				: `${fmtNum(r.count)} closed depressions hold as much as pans, but a mapped river flows out of each over a wall or a dam holds it: storage on a river, not counted as non-contributing (the largest has ${fmtNum(big.drainsM2 / 1e6, 2)} km² draining into it)`
+		]
 	];
 }
 
@@ -95,6 +115,6 @@ export function provenanceFacts(p: DelineationProposal): [string, string][] {
 /** What every proposal says about its accuracy (docs/design/delineation.md § Accuracy). */
 export const CAVEATS = [
 	'A proposal from a 30 m global elevation model, not a survey. In flat land the divide can be hundreds of metres out, and a catchment can come out joined to, or cut from, its neighbour.',
-	'Flats, dams and pans drain towards their outlet by construction: the area draining into pans is reported beside it, not taken out. A dam drawn down below its spillway, or a pond behind an embankment, can count as a pan if it holds a lot over its catchment. Canals, pipelines, culverts and transfers between basins are invisible to it.',
+	'Flats, dams and pans drain towards their outlet by construction: the area draining into pans is reported beside it, not taken out. A dam drawn down below its spillway, or a pond behind an embankment, can count as a pan if it holds a lot over its catchment, unless a mapped river flows out of it over a wall or the register or the map has a dam there (then it is listed as storage on a river). Canals, pipelines, culverts and transfers between basins are invisible to it.',
 	'Check it against the map (the Relief layer, the rivers, the quaternary outlines) before accepting; you can edit the shape afterwards.'
 ] as const;
