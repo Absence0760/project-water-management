@@ -181,8 +181,8 @@ describe('the basic-needs floor of a demand object (engine 1.44.0)', () => {
 		expect(bad.summary.warnings.join()).toMatch(/population -5 is not a number ≥ 0; it has no basic-needs floor/);
 	});
 
-	describe('with a full allocation (engine 1.44.0)', () => {
-		// 3 days of October: the restricted unit wants 10 (crops, 200 × 0.05) + 25 (the village at its floor) = 105 m³.
+	describe('with a full allocation (engine ≥ 1.70.0: the factor scales the registered use)', () => {
+		// 3 days of October: crops F₀ = 100 m³/day at e = 0.5 (200 abstracted) and the village's 230: D₀ = 430 m³/day, 1 290 over the run.
 		const withAllocation = (volumeM3PerYear: number, factor: number | null) => {
 			const m = model([village()], [400, 400, 400], factor);
 			m.input.model.allocations = [{ id: 'al', nodeId: 'A', waterSource: 'surface', volumeM3PerYear }];
@@ -190,22 +190,36 @@ describe('the basic-needs floor of a demand object (engine 1.44.0)', () => {
 			return run(m);
 		};
 
-		it('never rescales a restricted object below its floor: MAX(factor × demand, MIN(floor, demand))', () => {
-			// Registered over the 3 days: 52.5 m³, half the 105 wanted. The crops take the factor, the village keeps its 25.
-			const half = withAllocation((52.5 * 365) / 3, 0.05);
+		it('fits k on the demand before the factor, then cuts it, never below MIN(floor, k × demand)', () => {
+			// Registered over the 3 days: 645 m³, half the 1 290 wanted: k = 0.5. A cut to 0.05: the crops need
+			// F = 100 × 0.5 × 0.05 = 2.5 (5 abstracted); the village MAX(230 × 0.5 × 0.05, MIN(25, 230 × 0.5)) =
+			// MAX(5.75, 25) = 25. D = 2.5 ÷ 0.5 + 25 = 30.
+			const half = withAllocation((645 * 365) / 3, 0.05);
 			passed(half);
-			expect(get(half, 'A', 'allocation_demand_factor')[0]).toBeCloseTo(0.5, 12);
+			get(half, 'A', 'allocation_demand_factor').forEach((v) => expect(v).toBeCloseTo(0.5, 12));
 			get(half, 'A', 'object_demand@village').forEach((v) => expect(v).toBeCloseTo(25, 12));
 			get(half, 'A', 'crop_requirement').forEach((v) => expect(v).toBeCloseTo(2.5, 12));
+			get(half, 'A', 'demand').forEach((v) => expect(v).toBeCloseTo(30, 12));
 			expect(half.summary.farms[0]!.demandObjects![0]!.daysBelowBasicNeeds).toBe(0);
 		});
 
-		it('keeps the floor in a year with nothing registered (factor 0)', () => {
+		it('the floor is MIN(floor, k × demand): a registered use below the floor is the floor (as the drought rule has it, audit W1)', () => {
+			// Registered 52.5 m³ over the 3 days: k = 52.5 ÷ 1 290. The village's scaled demand 230 k = 9.36 is under
+			// its 25 m³ floor, so the cut leaves it whole: MAX(230 k × 0.05, MIN(25, 230 k)) = 230 k.
+			const k = 52.5 / 1290;
+			const small = withAllocation((52.5 * 365) / 3, 0.05);
+			passed(small);
+			get(small, 'A', 'allocation_demand_factor').forEach((v) => expect(v).toBeCloseTo(k, 12));
+			get(small, 'A', 'object_demand@village').forEach((v) => expect(v).toBeCloseTo(230 * k, 12));
+			get(small, 'A', 'crop_requirement').forEach((v) => expect(v).toBeCloseTo(100 * k * 0.05, 12));
+		});
+
+		it('takes nothing in a year with nothing registered (factor 0), the floor included: a cut never adds demand', () => {
 			const none = withAllocation(0, 0.05);
 			passed(none);
-			expect(get(none, 'A', 'object_demand@village')).toEqual([25, 25, 25]);
+			expect(get(none, 'A', 'object_demand@village')).toEqual([0, 0, 0]);
 			expect(get(none, 'A', 'crop_requirement')).toEqual([0, 0, 0]);
-			expect(get(none, 'A', BASIC_NEEDS_SERIES.key)).toEqual([25, 25, 25]);
+			expect(get(none, 'A', BASIC_NEEDS_SERIES.key)).toEqual([0, 0, 0]);
 		});
 
 		it('without a restriction, rescales the whole demand to the registered volume, floor included (audit W1, needs the hydrologist)', () => {

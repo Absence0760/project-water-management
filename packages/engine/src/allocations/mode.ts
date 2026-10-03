@@ -318,10 +318,26 @@ function factorBefore(allocs: readonly AllocationEntry[], demand: ArrayLike<numb
 interface ModePlanNode {
 	demand: Float64Array;
 	irrigationEfficiency: number;
-	/** `floor` and `restricted` (engine ≥ 1.44.0): a restricted day's rescaling never takes an object below its basic-needs floor. */
-	objects?: { demand: Float64Array[]; total: Float64Array; floor?: readonly (number | null)[]; restricted?: Uint8Array | null };
+	objects?: { demand: Float64Array[]; total: Float64Array };
 	borehole?: unknown;
 	allocationCap?: AllocationCap;
+}
+
+/**
+ * A full allocation's view of a unit's demand before its demand factors
+ * (engine ≥ 1.70.0, docs/model.md §2.12a): the factor is fitted on that, and
+ * the demand factors (a scenario's `demand.scale`, an outlook's level) apply
+ * after it, so a level of 0.8 is 80 % of the registered use.
+ */
+export interface FullAllocationHooks {
+	/**
+	 * Unit i's abstraction demand before its demand factors (m³/day: F ÷ e +
+	 * its objects', after its abstraction date), or undefined when no demand
+	 * factor applies to it (its plan demand is then that, to the bit).
+	 */
+	baseDemand?: (i: number) => Float64Array | undefined;
+	/** Unit i's demand objects re-planned with the factor `k` per day applied before the demand factor and the basic-needs floor. */
+	scaledObjects?: (i: number, k: Float64Array) => { demand: Float64Array[]; total: Float64Array } | undefined;
 }
 
 /**
@@ -411,6 +427,13 @@ export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Floa
  * demand objects alike, so D = F / e + objects scales with them; water users
  * were scaled before their claims, scaleDemandToAllocation). Warns about
  * units the mode leaves alone.
+ *
+ * From engine 1.70.0 (issue #90 Q29) a full allocation's factor is fitted on
+ * the demand before the demand factors (`hooks.baseDemand`), and the factors
+ * then cut the scaled demand: F = factor × k × F₀, and each object
+ * MAX(raw × k × factor, MIN(floor, raw × k)) on a day its factor is below 1
+ * (`hooks.scaledObjects`). Before, the factor was fitted on the demand after
+ * them, so a uniform level cancelled out.
  */
 export function planAllocations(
 	ap: AllocationPlan,
@@ -418,7 +441,8 @@ export function planAllocations(
 	plan: ModePlanNode[],
 	start: number,
 	days: number,
-	warnings: string[]
+	warnings: string[],
+	hooks: FullAllocationHooks = {}
 ): void {
 	const { mode, byNode } = ap;
 	if (mode === 'none' || days <= 0) return;
@@ -444,23 +468,28 @@ export function planAllocations(
 			continue;
 		}
 		if (nodes[i]!.kind !== 'farm') continue;
-		const e = p.irrigationEfficiency;
-		const D = new Float64Array(days);
-		for (let t = 0; t < days; t++) D[t] = p.demand[t]! / e + (p.objects ? p.objects.total[t]! : 0);
+		// The demand the factor is fitted on: before the demand factors (engine ≥ 1.70.0); without one, the plan's.
+		const base = hooks.baseDemand?.(i);
+		let D: Float64Array;
+		if (base) D = Float64Array.from(base);
+		else {
+			const e = p.irrigationEfficiency;
+			D = new Float64Array(days);
+			for (let t = 0; t < days; t++) D[t] = p.demand[t]! / e + (p.objects ? p.objects.total[t]! : 0);
+		}
 		const factor = scaleDemandToAllocation(ap, i, D, start, days, nodes[i]!.name, warnings)!;
+		// The crop requirement already carries its demand factor: × k is factor × k × F₀.
 		p.demand = Float64Array.from(p.demand, (v, t) => v * factor[t]!);
 		if (p.objects) {
-			// A restriction what-if on a full-allocation run (engine ≥ 1.44.0, issue #123): on a day the unit is
-			// restricted, an object with a basic-needs floor keeps MIN(floor, its restricted demand), as the
-			// restriction alone would leave it; the rest of its demand, and every other day, scale as before.
-			const { floor, restricted } = p.objects;
-			const demand = p.objects.demand.map((d, k) => {
-				const fl = floor?.[k] ?? null;
-				return Float64Array.from(d, (v, t) => (fl !== null && restricted?.[t] ? Math.max(v * factor[t]!, Math.min(fl, v)) : v * factor[t]!));
-			});
-			const total = new Float64Array(days);
-			for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-			p.objects = { ...p.objects, demand, total };
+			// The objects are re-planned with k before their factor, so the floor is MIN(floor, k × demand) (engine ≥ 1.70.0).
+			const again = hooks.scaledObjects?.(i, factor);
+			if (again) p.objects = { ...p.objects, demand: again.demand, total: again.total };
+			else {
+				const demand = p.objects.demand.map((d) => Float64Array.from(d, (v, t) => v * factor[t]!));
+				const total = new Float64Array(days);
+				for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
+				p.objects = { ...p.objects, demand, total };
+			}
 		}
 	}
 }

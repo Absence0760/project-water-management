@@ -1414,7 +1414,10 @@ export function buildNetworkPlan(
 	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
 	if (dated && start === undefined) throw new Error('buildNetworkPlan: a dated dam or abstraction needs the run start');
 	const abstractFrom = nodes.map((n) => (start === undefined ? 0 : abstractionStartDay(n, start, days, warnings)));
-	demand.forEach((d, i) => d.net.fill(0, 0, abstractFrom[i]!));
+	demand.forEach((d, i) => {
+		d.net.fill(0, 0, abstractFrom[i]!);
+		d.netBase?.fill(0, 0, abstractFrom[i]!);
+	});
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -1530,11 +1533,17 @@ export function buildNetworkPlan(
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
 	const objectsBy = demandObjectsByNode(model, warnings);
 	const wyOfDay = objectsBy.size ? waterYearMonths(month, days) : null;
-	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
+	/**
+	 * `factors` false: the objects before any demand factor (a full allocation's fit, engine ≥ 1.70.0); `scale`: a
+	 * full allocation's factor per day, applied before the demand factor and the floor (planObjects).
+	 */
+	const objectsOf = (n: NetworkNode, opts: { factors?: boolean; scale?: Float64Array } = {}): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one),
 		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
-		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, (o) => unitPartFactor(n, o.category, []), factorFrom, warnings, start) : undefined;
+		// Warned about once, on the plan's own call.
+		const w = opts.factors === false || opts.scale ? [] : warnings;
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, opts.factors === false ? null : (o) => unitPartFactor(n, o.category, []), factorFrom, w, start, opts.scale) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
 		if (po && s > 0) {
@@ -1597,7 +1606,20 @@ export function buildNetworkPlan(
 			};
 		})
 	};
-	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings);
+	// A full allocation fits its factor on the demand before the demand factors (engine ≥ 1.70.0, §2.12a): only a unit
+	// with a factor needs the hooks, so one without runs as before, to the bit.
+	const factored = (n: NetworkNode) => factorFrom < days && (n.demandFactor != null || n.partDemandFactor != null);
+	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings, {
+		baseDemand: (i) => {
+			const n = nodes[i]!;
+			if (!factored(n)) return undefined;
+			const p = plan.nodes[i]!;
+			const F = demand[i]!.netBase ?? demand[i]!.net;
+			const po = objectsBy.has(n.id) ? objectsOf(n, { factors: false }) : undefined;
+			return Float64Array.from(F, (v, t) => v / p.irrigationEfficiency + (po ? po.total[t]! : 0));
+		},
+		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
+	});
 	if (warm.captureAt === undefined) return { plan, topo, allocation };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
 }
@@ -1925,7 +1947,7 @@ function otherUsers(
 	month: Uint8Array,
 	warnings: string[],
 	factorFrom: number,
-	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down. */
+	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
@@ -1945,9 +1967,10 @@ function otherUsers(
 			}
 		}
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month, from settings.demandFactorFrom (0.44.0).
+		// A full allocation scales it first (engine ≥ 1.70.0), so the demand factor is a share of the registered use.
+		scale?.(i, demand);
 		const factor = demandFactorOf(n, warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
-		scale?.(i, demand);
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -2669,7 +2692,7 @@ function buildDemand(
 	warnings: string[],
 	factorFrom: number,
 	warm: { captureAt?: number; soilStoreM3?: readonly number[] } = {}
-): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
+): { net: Float64Array; netBase?: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
 		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
@@ -2751,10 +2774,12 @@ function buildDemand(
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
 		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 		const factor = unitPartFactor(node, 'crops', warnings);
+		// The requirement before the factor (engine ≥ 1.70.0): a full allocation fits its factor on it (§2.12a).
+		const netBase = factor && factorFrom < days ? Float64Array.from(f.net) : undefined;
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
-		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
+		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.
 	if (anyArea && !apanDay && settings.apanMm.every((v) => v === 0)) {

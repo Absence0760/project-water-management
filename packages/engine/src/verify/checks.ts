@@ -6,7 +6,8 @@
 // balance (mass conservation, bounds, limits honoured, totals that add up),
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
+import { fromEpochDay, isIsoDate, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
+import { demandFactorStart } from '../demand';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
 import { ALLOCATION_SERIES, dailyLimits, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
@@ -1756,9 +1757,10 @@ function checkObjectsDay(
 		const df = factors ? factors[k]!.df[t]! : unitDf;
 		const sc = factors ? factors[k]!.sc[t]! : unitSc;
 		const floored = fl !== null && abstracts && sc < 1;
-		// Restricted: MAX(demand × sc, MIN(floor, demand)); a full allocation's factor then scales it, holding that floor too.
-		const pre = floored ? Math.max(objs.monthly[k]![wy]! * sc * sf, dayFloor(fl!, objs.monthly[k]![wy]! * sf)) : 0;
-		const expect = floored ? Math.max(alloc * pre, dayFloor(fl!, pre)) : objs.monthly[k]![wy]! * df * sf;
+		// Restricted: MAX(demand × sc, MIN(floor, demand)), where a full allocation's factor scales the demand first
+		// (engine ≥ 1.70.0): the factor cuts the registered use and the floor is MIN(floor, KF × demand).
+		const raw = objs.monthly[k]![wy]! * sf * alloc;
+		const expect = floored ? Math.max(raw * sc, dayFloor(fl!, raw)) : objs.monthly[k]![wy]! * df * sf;
 		if (Math.abs(objs.demand[k]![t]! - expect) > tol(expect))
 			return `${where}: demand object ${k}'s demand ${objs.demand[k]![t]} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}${objs.schedule[k] ? ` × schedule factor ${sf}` : ''}${floored ? `, held at its basic-needs floor ${fl}` : ''}`;
 		if (g < -eps || g > d + eps) return `${where}: demand object ${k} got ${g}, outside [0, its demand ${d}${restriction ? ' after the drought restriction' : ''}]`;
@@ -2638,8 +2640,9 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  *   from those columns, the use and the unit's deficit (limitBoundKind);
  * - a full allocation ('fullAllocation'): the demand factor is one number per
  *   water year, and a scaled unit's demand over the run's days of a year adds
- *   up to the volume registered for it over them (none when it had no demand),
- *   plus what a restriction's basic-needs floor holds above it (engine ≥ 1.44.0);
+ *   up to the volume registered for it over them (none when it had no demand);
+ *   with a demand factor (engine ≥ 1.70.0) its demand before the factor × the
+ *   year's factor does, the factor then cutting the registered use;
  *   the year a forecast tail starts in (summary.historyDays, engine ≥
  *   1.28.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
@@ -2648,30 +2651,42 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  *   compareAllocations of the run's own series.
  */
 /**
- * What the basic-needs floor holds of a full allocation's rescaling on a
- * restricted day (engine ≥ 1.44.0, allocations/mode.ts planAllocations), per
- * run day: Σ over the unit's objects with a floor of MAX(KF × r, MIN(floor,
- * r)) − KF × r, where r is the object's restricted demand, recomputed from the
- * model as checkObjectsDay does. Null when none is held.
+ * A full allocation's fit (engine ≥ 1.70.0, allocations/mode.ts
+ * planAllocations): unit `n`'s abstraction demand before its demand factors,
+ * per run day, recomputed from the run's columns and the input: for a farm
+ * (MAX(0, gross demand) − effective rain used) ÷ e + Σ its objects' month ×
+ * schedule, for a water user its monthly demand; 0 before its abstraction
+ * date. Null when no demand factor applies to it (the demand column is then
+ * that demand × the factor), or a farm's working columns are missing.
  */
-function allocationFloorHeld(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput, KF: ArrayLike<number>): Float64Array | null {
-	const objs = objectColumns(input, n, get, out);
-	if (!objs || typeof objs === 'string' || !objs.floor.some((f) => f !== null)) return null;
+function demandBeforeFactors(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): Float64Array | null {
 	const day0 = toEpochDay(out.startDate);
-	const SC = dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay;
+	const dff = input.settings?.demandFactorFrom;
+	const from = typeof dff === 'string' && isIsoDate(dff) ? demandFactorStart(dff, day0, out.days) : 0;
+	if (from >= out.days || (n.demandFactor == null && n.partDemandFactor == null)) return null;
 	const abstractFrom = abstractionStartDay(n, day0, out.days, []);
-	const held = new Float64Array(out.days);
-	for (let t = abstractFrom; t < out.days; t++) {
-		if (!(SC[t]! < 1)) continue;
-		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
-		objs.floor.forEach((fl, k) => {
-			if (fl === null) return;
-			const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
-			const r = Math.max(objs.monthly[k]![wy]! * SC[t]! * sf, dayFloor(fl, objs.monthly[k]![wy]! * sf));
-			held[t]! += Math.max(KF[t]! * r, dayFloor(fl, r)) - KF[t]! * r;
-		});
+	const wyOf = (t: number) => (monthOfEpochDay(day0 + t) + 2) % 12;
+	const base = new Float64Array(out.days);
+	if (n.kind === 'user') {
+		const m = n.userDemandM3Day;
+		for (let t = abstractFrom; t < out.days; t++) {
+			const v = Number(m?.[wyOf(t)]);
+			base[t] = Number.isFinite(v) && v > 0 ? v : 0;
+		}
+		return base;
 	}
-	return held;
+	const gross = get.get(`${n.id}|gross_demand`);
+	const used = get.get(`${n.id}|effective_rain`);
+	if (!gross || !used) return null;
+	const e = runEfficiency(input, n);
+	const objs = objectColumns(input, n, get, out);
+	if (typeof objs === 'string') return null;
+	for (let t = abstractFrom; t < out.days; t++) {
+		let v = (Math.max(0, gross[t]!) - used[t]!) / e;
+		if (objs) for (let k = 0; k < objs.monthly.length; k++) v += objs.monthly[k]![wyOf(t)]! * (objs.schedule[k] ? objs.schedule[k]![t]! : 1);
+		base[t] = v;
+	}
+	return base;
 }
 
 export function checkAllocations(input: ModelInput, out: ModelOutput): string | null {
@@ -2780,19 +2795,19 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			if (!D) return `${n.id}: demand series missing`;
 			// Before a forecast tail (engine ≥ 1.28.0): the year it starts in is fitted on its historical days.
 			const history = out.summary.historyDays ?? out.days;
-			// A restriction what-if's basic-needs floor (engine ≥ 1.44.0) holds some demand above the registered volume.
-			const held = allocationFloorHeld(input, n, get, out, KF);
+			// With a demand factor (engine ≥ 1.70.0) the factor is fitted on the demand before it, and the factor then
+			// cuts (or raises) the registered use: the demand before it × KF adds up to the volume, the demand column
+			// doesn't. Without one, the demand column is that demand.
+			const base = demandBeforeFactors(input, n, get, out);
 			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
 			const span = (a: number, b: number, wy: number, reg: number): string | null => {
 				let d = 0;
 				for (let k = a; k <= b; k++) {
 					if (KF[k] !== KF[a]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
-					d += D[k]!;
+					d += base ? base[k]! * KF[k]! : D[k]!;
 				}
-				let h = 0;
-				if (held) for (let k = a; k <= b; k++) h += held[k]!;
-				const want = (KF[a]! > 0 ? reg : 0) + h;
-				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run${h > 0 ? ` (with ${h} held by the basic-needs floor)` : ''}` : null;
+				const want = KF[a]! > 0 ? reg : 0;
+				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand${base ? ' before its demand factors × the full-allocation factor' : ''} over water year ${wy} is ${d}, not the ${want} registered for its days in the run` : null;
 			};
 			for (let t = 0; t < out.days; ) {
 				const wy = waterYearOf(day0 + t);

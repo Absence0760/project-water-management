@@ -94,6 +94,35 @@ describe('planObjects with a schedule (engine 1.17.0)', () => {
 	});
 });
 
+describe('planObjects with a full allocation’s scale (engine 1.70.0, issue #90 Q29)', () => {
+	// A town of 100 m³/day (2 000 people: a floor of 50), a unit factor of 0.2 from day 1, k per day.
+	const town = obj({ population: 2000 });
+	const factor = new Float64Array(12).fill(0.2);
+	it('scales before the factor and the floor: MAX(100 k × 0.2, MIN(50, 100 k))', () => {
+		const k = Float64Array.from([0.25, 0.25, 1, 2]);
+		const po = planObjects([town], 4, [0, 0, 0, 0], factor, 1, [], undefined, k);
+		// Day 0 is before the factor: 100 × 0.25 = 25. Day 1: MAX(5, MIN(50, 25)) = 25. Day 2: MAX(20, 50) = 50.
+		// Day 3: MAX(40, MIN(50, 200)) = 50.
+		expect(Array.from(po.demand[0]!)).toEqual([25, 25, 50, 50]);
+		expect(Array.from(po.total)).toEqual([25, 25, 50, 50]);
+	});
+	it('a factor above 1 raises the scaled demand, with no floor (1.2 × 100 × 0.5 = 60)', () => {
+		const po = planObjects([town], 1, [0], new Float64Array(12).fill(1.2), 0, [], undefined, Float64Array.from([0.5]));
+		expect(po.demand[0]![0]).toBeCloseTo(60, 12);
+	});
+	it('a k of 0 takes the object to 0, the floor included', () => {
+		const po = planObjects([town], 2, [0, 0], factor, 0, [], undefined, Float64Array.from([0, 0]));
+		expect(Array.from(po.demand[0]!)).toEqual([0, 0]);
+	});
+	it('a scale of 1 on every day is the plan without one, to the bit, the schedule included', () => {
+		const sched = obj({ population: 2000, monthlyM3Day: [101.3, 7.7, 33.1, 1, 2, 3, 4, 5, 6, 7, 8, 9], schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [7], factor: 0.37 }] });
+		const f = Float64Array.from([0.3, 0.71, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0.9]);
+		const a = planObjects([sched], 3, [0, 1, 2], f, 0, [], 1);
+		const b = planObjects([sched], 3, [0, 1, 2], f, 0, [], 1, new Float64Array(3).fill(1));
+		expect(Array.from(b.demand[0]!)).toEqual(Array.from(a.demand[0]!));
+	});
+});
+
 describe('splitSupply', () => {
 	const po = planObjects(
 		[obj({ id: 'first', priority: 'first' }), obj({ id: 'shared', priority: 'shared' }), obj({ id: 'last', priority: 'last' })],
