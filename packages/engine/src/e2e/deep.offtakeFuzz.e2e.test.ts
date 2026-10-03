@@ -5,14 +5,16 @@
 // restrictions, development, full-allocation and capped runs, gauges as ends
 // and loops the run skips). The re-derivation reads only the run's published
 // series (the flow before the off-takes, the senior requirement, the EWR, the
-// destinations' demand and dam) and the rules as stored, never the engine's
-// code. A destination with a river abstraction (§2.7j) is sized to its dam
+// destinations' demand and dam, each dam's capacity) and the rules and
+// release rules as stored, never the engine's code. Engine ≥ 1.70.0: a rule
+// also keeps its source's pass-inflow release target (issue #90 Q27), and a
+// top-up's room counts its destination's fixed release floor (Q26). A destination with a river abstraction (§2.7j) is sized to its dam
 // side, which no series publishes, so the sources feeding one by demand are
 // left out. Synthetic values only.
 import { isRiverOfftake } from '../network/offtake';
 import { describe, expect, it } from 'vitest';
 import { monthOfEpochDay, toEpochDay } from '../calendar';
-import type { ModelInput, ModelOutput, Transfer } from '../project';
+import type { ModelInput, ModelOutput, NetworkNode, Transfer } from '../project';
 import { runModel } from '../run';
 import { randomInput } from '../testing/fuzz';
 
@@ -31,6 +33,15 @@ const lossOf = (tr: Transfer) => {
 const handsOf = (tr: Transfer) => {
 	const h = tr.handsOffM3Day ?? 0;
 	return Number.isFinite(h) && h >= 0 ? h : 0;
+};
+/** A dam's entered release amount for calendar month m (stored Oct–Sep); a missing or non-positive one is 0 (§2.7a). */
+const releaseAmount = (n: NetworkNode, m: number) => {
+	const x = Number(n.damReleaseM3Day?.[(m + 2) % 12]);
+	return Number.isFinite(x) && x > 0 ? x : 0;
+};
+const outletOf = (n: NetworkNode) => {
+	const c = n.damOutletCapacityM3Day;
+	return typeof c === 'number' && Number.isFinite(c) && c >= 0 ? c : Infinity;
 };
 
 /** §2.6a bands at one source on one day (see deep.offtake.e2e.test.ts refShare). */
@@ -60,6 +71,9 @@ function share(rules: { id: string; priority: number; cap: number; keep: number;
 	return got;
 }
 
+/** Rule-days where a source's pass-inflow target set a rule's keep, and where a top-up's room counted a fixed release floor. */
+const reach = { target: 0, floor: 0 };
+
 function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: string | null } {
 	const nodes = new Map(input.model.nodes.map((n) => [n.id, n]));
 	const priorityOf = (tr: Transfer) => (Number.isFinite(tr.priority) ? tr.priority : 0);
@@ -80,8 +94,14 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 		const xout = opt(out, src, 'offtake_out')!;
 		const Zs = opt(out, src, 'senior_requirement');
 		const Z = opt(out, src, 'ewr_cumulative')!;
+		const srcNode = nodes.get(src)!;
 		for (let t = 1; t < out.days; t++) {
 			const m = monthOfEpochDay(d0 + t);
+			// §2.6a keep (engine ≥ 1.70.0): a pass-inflow release's target at the source, on a day its dam has
+			// capacity: the month's amount, or the EWR required there when the rule has no amounts (§2.7a, §2.7e).
+			const srcCap = opt(out, src, 'dam_capacity')?.[t] ?? srcNode.damCapacityM3;
+			const target =
+				srcNode.damReleaseRule === 'passInflow' && srcNode.damCapacityM3 > 0 && srcCap > 0 ? (Array.isArray(srcNode.damReleaseM3Day) ? releaseAmount(srcNode, m) : Z[t]!) : 0;
 			const U0 = outflow[t]! - (ret ? ret[t]! : 0) + xout[t]!;
 			const zs = Zs ? Zs[t]! : 0;
 			// A top-up destination that both sends and receives by dam rules today: the run's `transfer` column is
@@ -103,11 +123,19 @@ function replay(input: ModelInput, out: ModelOutput): { checked: number; bad: st
 						const q = opt(out, dst.id, 'dam_storage')![t - 1]!;
 						const g = (k: string) => opt(out, dst.id, k)?.[t] ?? 0;
 						// The step's own (clamped) losses, and today's dam-rule receipts (engine ≥ 1.69.0).
-						need += Math.max(0, capNow - (q + g('rain_on_dam') + Math.max(0, g('transfer')) - g('dam_evaporation') - g('dam_seepage')));
+						// A fixed release's floor (engine ≥ 1.70.0): MIN(amount, outlet, held − dead), never below 0, held = the dam
+						// after yesterday, its rain, losses and the day's net dam-rule transfers (§2.6a, as §2.6's room).
+						const held = Math.max(0, q + g('rain_on_dam') + g('transfer') - g('dam_evaporation') - g('dam_seepage'));
+						const floor =
+							dst.damReleaseRule === 'fixed' && Array.isArray(dst.damReleaseM3Day) ? Math.max(0, Math.min(releaseAmount(dst, m), outletOf(dst), held - dst.damMinPct * capNow)) : 0;
+						if (floor > 0) reach.floor++;
+						need += Math.max(0, capNow - (q + g('rain_on_dam') + Math.max(0, g('transfer')) - g('dam_evaporation') - g('dam_seepage')) + floor);
 					}
 					limit = cap > 0 ? Math.min(cap, (need * cap) / capInto / (1 - lossOf(tr))) : 0;
 				}
-				return { id: tr.id, priority: priorityOf(tr), cap, keep: Math.max(zs, handsOf(tr), tr.handsOffEwr ? Z[t]! : 0), limit };
+				const keep = Math.max(zs, target, handsOf(tr), tr.handsOffEwr ? Z[t]! : 0);
+				if (target > 0 && target === keep && cap > 0) reach.target++;
+				return { id: tr.id, priority: priorityOf(tr), cap, keep, limit };
 			});
 			const ref = share(spec, U0);
 			for (const tr of mine) {
@@ -142,5 +170,9 @@ describe('deep: the off-take bands on the engine’s own random networks (§2.6a
 		expect(runs).toBe(600);
 		expect(checked).toBeGreaterThan(10_000);
 		expect(positive).toBeGreaterThan(50);
+		// …and the engine ≥ 1.70.0 terms: a pass-inflow target setting a keep (986 rule-days at writing) and a
+		// fixed release floor in a top-up's room (119).
+		expect(reach.target).toBeGreaterThan(200);
+		expect(reach.floor).toBeGreaterThan(30);
 	});
 });
