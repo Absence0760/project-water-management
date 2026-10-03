@@ -45,7 +45,10 @@ describe('handler', () => {
 	it('runs a tick on the EventBridge schedule, within the time left', async () => {
 		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const res = await handler({ source: 'aws.events', 'detail-type': 'Scheduled Event' } as never, { getRemainingTimeInMillis: () => 300_000 });
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000 });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000, deadline: expect.any(Number) });
+		// The deadline a job must fit: the Lambda's timeout, less 10 s.
+		const { deadline } = runTick.mock.calls[0]![0] as { deadline: number };
+		expect(Math.abs(deadline - (Date.now() + 290_000))).toBeLessThan(5_000);
 		expect(res).toEqual({ claimed: 3, done: 1, failed: 1, dead: 1 });
 	});
 
@@ -80,7 +83,7 @@ describe('handler', () => {
 		await handler({ Records: records } as never, { getRemainingTimeInMillis: () => 30_000 });
 		expect(runTick).toHaveBeenCalledTimes(1);
 		// Never less than 10 s of budget.
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000 });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000, deadline: expect.any(Number) });
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'job_message_ignored', messageId: 'm2' }));
 	});
 

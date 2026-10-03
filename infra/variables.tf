@@ -400,7 +400,7 @@ variable "lambda_timeout_seconds" {
 }
 
 variable "delineation_dem" {
-  description = "Catchment delineation in production (docs/design/delineation.md, docs/deployment.md § Map tiles): true sets the API's DEM_URL to s3://<tiles bucket>/tiles/terrain.pmtiles and lets its role read that one key. Turn it on only once terrain.pmtiles is uploaded and the Copernicus liability sentence (Art. 6(c)) is in the app's legal notice. false (the default): no Delineate."
+  description = "Catchment delineation in production (docs/design/delineation.md, docs/deployment.md § Map tiles): true sets the API's and the worker's DEM_URL to s3://<tiles bucket>/tiles/terrain.pmtiles and lets both roles read that one key (the worker delineates a catchment too large for the request, with at least 2048 MB). Turn it on only once terrain.pmtiles is uploaded and the Copernicus liability sentence (Art. 6(c)) is in the app's legal notice. false (the default): no Delineate."
   type        = bool
   default     = false
 }
@@ -453,7 +453,7 @@ variable "migrate_reserved_concurrency" {
 # --- Background jobs (jobs.tf) -------------------------------------------------
 
 variable "worker_memory_mb" {
-  description = "Worker Lambda memory. A queued re-run is the same engine run the API does, so the same 1024 MB."
+  description = "Worker Lambda memory. A queued re-run is the same engine run the API does, so the same 1024 MB. With delineation_dem on, the worker gets at least 2048 MB whatever this says: a `delineate` job (a catchment too large for the request) peaks near 1 GB (jobs.tf local.worker_memory_mb)."
   type        = number
   default     = 1024
 }

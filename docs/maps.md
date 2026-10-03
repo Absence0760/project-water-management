@@ -1139,9 +1139,22 @@ to a point on a river. The design, the method and its accuracy are in
   cells while the catchment reaches its edge), fills depressions
   (Priority-Flood+ε), routes flow with D8, collects every cell upstream of
   the outlet and outlines them as one polygon, simplified to about a cell.
-  A catchment still at the edge of the largest window, or reaching the edge
-  of the DEM's data, is refused rather than cut off; so is a point outside
-  the DEM or one almost nothing drains to.
+  A catchment reaching the edge of the DEM's data is refused rather than
+  cut off; so is a point outside the DEM or one almost nothing drains to.
+- **A large catchment** (still at the edge of the request's largest window,
+  about 100 km, or past its 20 s) goes to the **background worker** instead
+  (`requests.ts`, the `delineate` job, `191_delineation_request`): the same
+  code with larger windows (4 096 and 6 144 cells, up to about 200 km) from
+  the one after where the request stopped, within the worker's 300 s. The
+  sheet says it is queued, then how far it is, asks every 2 s, and shows
+  the proposal (or the refusal) as the request would have; a reloaded Map
+  picks it up. **A large catchment, over about 100 km across: work it out
+  in the background** sends a point straight there. One per editor at a
+  time: a new click in the same catchment replaces a waiting one, and one
+  running, or waiting in another catchment, is refused (429). Locally the
+  worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
+  under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
+  is refused, never cut off.
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, the dataset (with its fingerprint) and the method, and the
@@ -1162,13 +1175,16 @@ to a point on a river. The design, the method and its accuracy are in
   tests and e2e use it). Any PMTiles of Terrarium-encoded tiles works: WebP
   (lossless only) or PNG. `DEM_LABEL` names it on the proposals.
   Production: `delineation_dem = true` in the tfvars sets
-  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and lets
-  its role read that one key, read through the VPC's S3 interface endpoint
-  ([deployment.md § Map tiles](./deployment.md#map-tiles)); off by default.
+  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and the
+  worker and lets both roles read that one key, read through the VPC's S3
+  interface endpoint ([deployment.md § Map tiles](./deployment.md#map-tiles)),
+  and gives the worker at least 2 048 MB; off by default.
 - **Limits.** 30 delineations per project per hour (429 beyond); each takes
   one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
   460 MB at the largest window) and stops before 20 s, under the API's
-  30 s timeout.
+  30 s timeout. On the worker a 6 144-cell window takes about 11 s on a
+  laptop and peaks near 1 GB (an invented 6 144-cell valley, 2026-10-03),
+  and a job stops before 150 s.
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.

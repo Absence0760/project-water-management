@@ -30,7 +30,7 @@ export const DEFAULT_LEASE_SECONDS = 360;
 export type JobOutcome = Extract<JobStatus, 'done' | 'failed' | 'dead'> | 'lost';
 
 /** Run one claimed job as its acting user and record the outcome. */
-export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtInHandlers): Promise<JobOutcome> {
+export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtInHandlers, deadline: number | null = null): Promise<JobOutcome> {
 	const handler = registry[job.kind];
 	try {
 		if (!handler) throw new JobError(`no handler for "${job.kind}" jobs`, { retry: false });
@@ -45,7 +45,7 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 			// Between alsoRole and role (an editor demoted to viewer, for a contributor's kind): refused too.
 			if (rank[role] < rank[handler.role] && role !== handler.alsoRole) throw refused();
 			const payload = handler.payload.parse(await readPayload(db, job.id));
-			await handler.run({ db, job, payload, progress: (pct) => reportProgress(job, pct) });
+			await handler.run({ db, job, payload, progress: (pct) => reportProgress(job, pct), deadline });
 			// Same transaction as the work: both commit, or neither.
 			if ((await finishJob(db, job, { ok: true })) !== 'done') throw new LeaseLostError();
 			return 'done' as const;
@@ -154,6 +154,8 @@ export interface TickOptions {
 	leaseSeconds?: number;
 	/** Stop claiming once this much time has passed (a job already started still finishes). */
 	budgetMs?: number;
+	/** When a job must be done by (epoch ms), passed to each handler (JobContext.deadline): the worker Lambda's timeout, less a margin. */
+	deadline?: number;
 	handlers?: HandlerRegistry;
 	/** Queue due data feeds first (default true; tests of the queue alone turn it off). */
 	feeds?: boolean;
@@ -255,7 +257,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		const [job] = await withoutUser((db) => claimJobs(db, 1, leaseSeconds, o.projectIds));
 		if (!job) break;
 		result.claimed++;
-		result[await runJob(job, o.handlers)]++;
+		result[await runJob(job, o.handlers, o.deadline ?? null)]++;
 	}
 	// After the jobs, so every delivery an alert_eval queued is sent once it committed.
 	result.alerts = { scheduled: alertsScheduled, purged: alertsPurged, ...(await sendAlerts()) };

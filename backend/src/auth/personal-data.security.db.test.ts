@@ -241,6 +241,8 @@ beforeAll(async () => {
 	process.env.DEM_URL = fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url));
 	const proposal = await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet' });
 	await call(subject, 'POST', `/projects/${projectId}/map/delineation/${proposal.proposal.id}/reject`, {});
+	// One they handed to the worker (191): created_by is set null on deletion (its job, theirs, goes with them).
+	await call(subject, 'POST', `/projects/${projectId}/map/delineation`, { lon: 20.7428741, lat: -33.5396777, from: 'outlet', background: true });
 	// A start-from-the-map proposal they made and discarded (178), on an empty project of the owner's where they edit: the same.
 	const emptyId = (await call(owner, 'POST', '/projects', { name: `Pd start ${tag}` })).project.id;
 	await call(owner, 'POST', `/projects/${emptyId}/members`, { email: subject.email, role: 'editor' });

@@ -2757,7 +2757,18 @@ map" card) stays the schematic; this is the geography.
   confluence shows "This point is at a confluence. Which river do you mean?
   The outlet goes on the channel whose area matches it." with one button
   per river ("The river below the junction, 497 km²", "The main river above
-  the junction, 422 km²", "The tributary above the junction, 67 km²"). The proposal is drawn dashed in teal
+  the junction, 422 km²", "The tributary above the junction, 67 km²").
+  A catchment too large for the request goes to the background worker
+  (191_delineation_request; maps.md § Delineation): the form shows a box
+  (`role="status"`) "The catchment is too large to work out at once, so it
+  is queued for the background. It takes a minute or two.", then "Working out the catchment in the background
+  (50 % through). …" with a progress bar while the worker has it; the
+  sheet asks every 2 s, and the outcome arrives as the request's would (the
+  proposal, or the refusal's sentence or warning box). The tick **A large
+  catchment, over about 100 km across: work it out in the background**
+  above the dataset line sends the point straight there. A reload shows a
+  waiting one again (the state's `request`); a sheet closed while it waits
+  shows the proposal once the Map's state reloads. The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the

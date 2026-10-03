@@ -3200,4 +3200,28 @@ export interface DelineationState {
 	available: boolean;
 	dataset: { label: string; attribution: string; fingerprint: string; tileType: string; maxZoom: number; bounds: [number, number, number, number] } | null;
 	proposals: DelineationProposal[];
+	/** The project's newest delineation still with the background worker (queued or running), else null. */
+	request: DelineationRequest | null;
+}
+
+/**
+ * A click handed to the background worker: a catchment too large for the request, or one the editor sent there
+ * (191_delineation_request, docs/api.md § Delineation). `failed`: the job died, and `error` says why.
+ */
+export interface DelineationRequest {
+	id: string;
+	status: 'queued' | 'running' | 'failed' | 'proposed' | 'refused' | 'superseded';
+	from: DelineationProposal['from'];
+	click: MapPosition;
+	/** 0–100 while it runs (a step a window), else null. */
+	progress: number | null;
+	error: string | null;
+	/** With `proposed`: the proposal it made (null once pruned). */
+	proposal: DelineationProposal | null;
+	/** With `proposed`: the river-network check that came with it. */
+	check: string | null;
+	/** With `refused`: the reason and sentence the request would have answered with (and the larger channel to offer). */
+	refusal: { reason: string; message: string; larger?: LargerChannel } | null;
+	createdAt: string;
+	finishedAt: string | null;
 }

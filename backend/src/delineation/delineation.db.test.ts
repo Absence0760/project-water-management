@@ -62,7 +62,7 @@ describe('delineation off', () => {
 		process.env.DEM_URL = '';
 		const get = await viewer.call('GET', at('/map/delineation'));
 		expect(get.status).toBe(200);
-		expect(get.body).toEqual({ available: false, dataset: null, proposals: [] });
+		expect(get.body).toEqual({ available: false, dataset: null, proposals: [], request: null });
 		const post = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(post.status).toBe(409);
 		expect(post.body.error).toMatch(/Delineation is off/);
