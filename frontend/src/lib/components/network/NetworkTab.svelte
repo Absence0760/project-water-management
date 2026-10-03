@@ -1212,6 +1212,11 @@
 		font-size: 0.85rem;
 	}
 	.jump-link {
+		/* At least 24 px (WCAG 2.5.8): the wrapped rows sit too close for the spacing exception. */
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+		min-width: 24px;
 		background: none;
 		border: 0;
 		padding: 0.15rem 0.35rem;

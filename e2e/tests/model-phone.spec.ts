@@ -81,7 +81,7 @@ test.describe('phone', () => {
 		const project = await createProject(page.request, 'Phone transfers');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=transfers`);
-		await expect(page.getByLabel('From, transfer 1')).toBeVisible();
+		await expect(page.getByLabel('From, transfer 1', { exact: true })).toBeVisible();
 
 		await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
 		for (const label of [

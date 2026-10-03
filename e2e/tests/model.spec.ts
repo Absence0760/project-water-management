@@ -76,8 +76,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await tab(page, 'Transfers').click();
 	// The section header's main action (issue #17).
 	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await page.getByLabel('From, transfer 1').selectOption({ label: 'Hilltop farm' });
-	await page.getByLabel('To, transfer 1').selectOption({ label: 'Valley farm' });
+	await page.getByLabel('From, transfer 1', { exact: true }).selectOption({ label: 'Hilltop farm' });
+	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'Valley farm' });
 	// A rate for each month it runs (engine 1.14.0).
 	await page.getByLabel('Max rate of transfer 1 in Dec, m³/s').fill('0.02');
 	await page.getByLabel('Max rate of transfer 1 in Jan, m³/s').fill('0.02');
@@ -93,8 +93,8 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 
 	// --- reload: everything came back from the server ------------------------
 	await page.reload();
-	await expect(page.getByLabel('From, transfer 1').locator('option:checked')).toHaveText('Hilltop farm');
-	await expect(page.getByLabel('To, transfer 1').locator('option:checked')).toHaveText('Valley farm');
+	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Hilltop farm');
+	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Valley farm');
 	await expect(page.getByLabel('Max rate of transfer 1 in Dec, m³/s')).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 1 in Jan, m³/s')).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 1 in Feb, m³/s')).toHaveValue('');
