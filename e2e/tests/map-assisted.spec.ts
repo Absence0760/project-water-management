@@ -60,7 +60,7 @@ test('snapping: a click near a parcel’s corner lands on it; Alt, and Snap to f
 	await place(page, project.id, { kind: 'farm_parcel', name: 'Upper farm', geometry: { type: 'Polygon', coordinates: [box(21.31, -33.69, 0.04)] } });
 	await openMap(page, project.id);
 	await expect(page.locator('.map-wrap[data-status="ready"]')).toBeVisible();
-	await header(page).getByRole('button', { name: 'Show everything' }).click();
+	await page.getByTestId('map-show-everything').click();
 
 	// The draw bar takes room above the map, which keeps its middle: measure the canvas once it is there.
 	await header(page).getByRole('button', { name: 'Draw a shape' }).click();

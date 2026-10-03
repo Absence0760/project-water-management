@@ -114,7 +114,7 @@ describe('the request and the names', () => {
 
 	it('describes a saved piece and sums up a save, naming the inflow points it leaves out', () => {
 		const sq = { type: 'Polygon' as const, coordinates: [[[20, -33], [20.1, -33], [20.1, -33.1], [20, -33]]] as [number, number][][] };
-		const base = { snapDistanceM: 10, geometry: sq, open: false, placedBy: 'snapped' as const, reach: null, larger: null };
+		const base = { snapDistanceM: 10, geometry: sq, open: false, placedBy: 'snapped' as const, reach: null, larger: null, unmatched: null };
 		const r: ClickPieces = {
 			pieces: [
 				{ ...base, click: 0, point: [20.123456, -33.5], drainsInto: 2, areaM2: null, totalAreaM2: null, geometry: null, open: true },

@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The Delineate / Sub-catchments UI rework (DelineateChoice, the side-column click panel with badges, the map pill, the river-network check line): 1614 KB before it, 1615 KB after; tab 57 -> 58 KB"
+}

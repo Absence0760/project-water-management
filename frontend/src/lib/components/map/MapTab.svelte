@@ -2,9 +2,13 @@
 	// The map itself is a chunk of its own, and MapLibre one more below it
 	// (CatchmentMap.svelte imports it when it mounts): the list and card here
 	// load with the tab; the map library only once the map is drawn. The
-	// sheets stay in the tab's chunk: they are small, and a chunk of their
-	// own cost more in overhead than it saved (ui-playbook § 6).
+	// small sheets stay in the tab's chunk (a chunk of their own costs more
+	// in overhead than it saves, ui-playbook § 6); Start from the map, the
+	// largest, opened on few visits (an empty model), loads when opened,
+	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
+	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
 	const loadMap = () => import('./CatchmentMap.svelte');
+	const loadStartSheet = () => import('./StartSheet.svelte');
 </script>
 
 <script lang="ts">
@@ -43,6 +47,7 @@
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import DivideSheet from './DivideSheet.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { saveBlob } from '$lib/export/download';
@@ -55,7 +60,7 @@
 	import { mapChecks } from './mapChecks';
 	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
-	import { glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
+	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
 	import { layersOn } from './mapLayers';
 	import MapLayers from './MapLayers.svelte';
@@ -71,10 +76,9 @@
 	import DelineateSheet from './DelineateSheet.svelte';
 	import ClickBar from './ClickBar.svelte';
 	import { ClickDivider, clickShape } from './clickPieces.svelte';
+	import { ChannelLayer } from './channelLayer.svelte';
 	import { openProposal } from './delineation';
-	import StartSheet from './StartSheet.svelte';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
-	import DivideSheet from './DivideSheet.svelte';
 	import type { DivideDraft } from './divideFlow';
 	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
@@ -397,6 +401,9 @@
 	);
 	/** The mode is on: each point placed is an outlet, added at once, and the draw bar gives way to the click bar. */
 	let dividing = $state(false);
+	/** The page's width: from 56rem (784 px at the 14 px root, the side column's breakpoint) the click panel sits beside the map, else above it. */
+	let pageWidth = $state(0);
+	const wide = $derived(pageWidth >= 784);
 	let clickLit = $state<string | null>(null);
 	const clickPieces = $derived(dividing ? clickShape(divider.result, clickLit) : null);
 	function startDividing() {
@@ -440,7 +447,24 @@
 		clickLit = null;
 		draft.cancel();
 		await tick();
-		document.querySelector<HTMLButtonElement>('[data-testid="map-start-subcatchments"]')?.focus();
+		document.querySelector<HTMLButtonElement>('[data-testid="map-start-delineate"]')?.focus();
+	}
+	/** The panel's "One catchment, above a point": leave the clicks (asking first if unsaved) for Delineate's point. */
+	async function toOneCatchment() {
+		if (divider.unsaved) {
+			const ok = await confirmDialog({
+				title: 'Drop these clicks?',
+				message: 'The sub-catchments from your clicks haven’t been saved.',
+				confirmLabel: 'Drop them',
+				cancelLabel: 'Keep clicking',
+				danger: true
+			});
+			if (!ok) return;
+		}
+		divider.clear();
+		dividing = false;
+		clickLit = null;
+		startDelineate();
 	}
 	async function saveClicks() {
 		const r = await divider.save();
@@ -687,6 +711,14 @@
 		await load();
 	}
 
+	// --- the elevation model's channels (issue #374): drawn while Delineate or Sub-catchments is on, where a click goes ---
+	const channels = new ChannelLayer({
+		projectId: () => projectId,
+		on: () => canEdit && !!delineation?.available && (delineating || dividing),
+		view: () => mapView,
+		load: api.delineation.channels
+	});
+
 	// --- the relief: the land shaded from the DEM, on while `layers=relief` (and a DEM is configured) ---
 	const relief = $derived(!!terrainUrl && layersOn(params).has('relief'));
 	let reliefFailed = $state(false);
@@ -798,24 +830,14 @@
 {/snippet}
 {#snippet headerContext()}<span data-testid="map-summary">{data ? headerLine(features, nodes) : 'Loading the map…'}</span>{/snippet}
 {#snippet headerActions()}
-	{#if features.length}<button type="button" class="btn" onclick={() => mapRef?.showAll()}>Show everything</button>{/if}
 	{#if mapState !== 'failed'}
 		<button type="button" class="btn" onclick={startMeasure} aria-pressed={measure.active} disabled={draft.active} data-testid="map-start-measure">Measure</button>
 	{/if}
-	{#if features.length}<button type="button" class="btn" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>{/if}
 	{#if canEdit}
 		<button type="button" class="btn" onclick={() => startDraw()} aria-pressed={draft.mode === 'draw'} data-testid="map-start-draw">Draw a shape</button>
 		<button type="button" class="btn" onclick={startPlace} aria-pressed={draft.mode === 'place' && !delineating && !tracing} data-testid="map-start-place">Place a point</button>
 		{#if delineation?.available}
-			<button type="button" class="btn" onclick={startDelineate} aria-pressed={delineating} data-testid="map-start-delineate">Delineate</button>
-			<button
-				type="button"
-				class="btn"
-				onclick={startDividing}
-				aria-pressed={dividing}
-				title="Click the rivers: each click gets the land that drains to it before any other click"
-				data-testid="map-start-subcatchments">Sub-catchments</button
-			>
+			<button type="button" class="btn" onclick={() => (dividing ? doneDividing() : startDelineate())} aria-pressed={delineating || dividing} data-testid="map-start-delineate">Delineate</button>
 		{/if}
 		{#if damTrace?.available}
 			<button type="button" class="btn" onclick={startTrace} aria-pressed={tracing} data-testid="map-start-trace">Trace a dam</button>
@@ -901,7 +923,7 @@
 	{/if}
 {/snippet}
 
-<div class="map-page" data-ready={data ? 'true' : undefined}>
+<div class="map-page" data-ready={data ? 'true' : undefined} bind:clientWidth={pageWidth}>
 	{#if notice}
 		<p class="alert alert-info slim" role="status" data-testid="map-notice">
 			{notice}
@@ -940,9 +962,9 @@
 					{#if measure.active}
 						<MeasureBar {measure} ondone={endMeasure} />
 					{/if}
-					{#if canEdit && dividing}
-						<ClickBar {divider} mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} />
-					{:else if canEdit && draft.active}
+					{#if canEdit && dividing && !wide}
+						<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="above" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
+					{:else if canEdit && draft.active && !dividing}
 						<DrawBar
 							{draft}
 							mapReady={mapState === 'ready'}
@@ -955,10 +977,32 @@
 							onlocated={located}
 							{delineating}
 							{tracing}
+							onsubcatchments={startDividing}
 							bind:minOccurrence
 						/>
 					{/if}
-					<div class="map-body">
+					<div class="map-body" data-channel-tiles={channels.on ? channels.tileCount : undefined}>
+						{#if features.length && mapState === 'ready'}
+							<!-- On the map, not the header: the map's own view action, and the header keeps one row at 1440. -->
+							<button type="button" class="btn btn-sm map-fit" onclick={() => mapRef?.showAll()} data-testid="map-show-everything">Show everything</button>
+						{/if}
+						{#if dividing && divider.busy === 'pieces'}
+							<p class="map-pill small" aria-hidden="true" data-testid="map-click-busy">Working out the sub-catchments…</p>
+						{:else if channels.on && (channels.noView || channels.zoomIn || channels.error || channels.loading)}
+							<!-- Only what needs saying: the bars already say the red lines are where a click goes. -->
+							<p class="map-pill channel-note small" role="status" data-testid="map-channels-note">
+								<span class="swatch" aria-hidden="true" style:background={channelColour(dark)}></span>
+								{#if channels.noView}
+									The elevation model’s channels are drawn on the map, which isn’t showing here.
+								{:else if channels.zoomIn}
+									Zoom in to see the elevation model’s channels.
+								{:else if channels.error}
+									<span class="err">The elevation model’s channels couldn’t be drawn: {channels.error}</span>
+								{:else}
+									Drawing the elevation model’s channels…
+								{/if}
+							</p>
+						{/if}
 						<Lazy load={loadMap}>
 							{#snippet children(CatchmentMap)}
 								<CatchmentMap
@@ -976,6 +1020,7 @@
 									pickedQuaternary={quaternaries.picked}
 									onquaternary={(code) => (quaternaries.picked = code)}
 									rivers={rivers.reaches}
+									channels={channels.lines}
 									riversCredit={rivers.credited}
 									pickedReach={rivers.picked}
 									onreach={reachFromMap}
@@ -998,6 +1043,12 @@
 				</section>
 
 				<aside class="map-side" aria-label="Features">
+					{#if canEdit && dividing && wide}
+						<!-- Beside the map: the clicks' key in the picked feature's place, so the map keeps its height. -->
+						<div class="panel side-box card click-panel">
+							<ClickBar {divider} pieces={clickPieces?.pieces ?? []} placement="side" mapReady={mapState === 'ready'} ondone={doneDividing} onsave={saveClicks} onlit={(k) => (clickLit = k)} onone={toOneCatchment} />
+						</div>
+					{:else}
 					<section class="panel side-box card" aria-label="Picked feature" data-testid="map-feature-card" bind:this={cardEl}>
 						{#if picked}
 							<h2 class="card-h">{featureName(picked)}</h2>
@@ -1070,12 +1121,16 @@
 							</div>
 						{/if}
 					</section>
+					{/if}
 
 					{#if features.length}
 						<section class="panel side-box list-box" aria-labelledby="{uid}-list-h">
 							<div class="list-head">
 								<h2 class="list-h" id="{uid}-list-h">Features</h2>
-								<a class="btn btn-sm" href={withParam(page.url, 'grid', GRID_ID)} data-testid="map-open-grid">Every feature</a>
+								<span class="list-actions">
+									<button type="button" class="btn btn-sm" onclick={downloadGeoJson} data-testid="map-download-geojson">Download GeoJSON</button>
+									<a class="btn btn-sm" href={withParam(page.url, 'grid', GRID_ID)} data-testid="map-open-grid">Every feature</a>
+								</span>
 							</div>
 							<FeatureList {features} {nodes} {selectedId} onselect={selectFromList} labelledby="{uid}-list-h" />
 						</section>
@@ -1133,11 +1188,13 @@
 				/>
 			{/if}
 			{#if startSheet.open && startInfo}
+				<Lazy load={loadStartSheet}>
+					{#snippet children(StartSheet)}
 				<StartSheet
 					bind:open={startSheet.open}
 					{projectId}
 					{features}
-					info={startInfo}
+					info={startInfo!}
 					bind:draft={startDraft}
 					onupload={() => fromStart(() => goto(withParam(page.url, 'upload', '1'), { noScroll: true, keepFocus: true }), false)}
 					ondelineate={delineation?.available ? () => fromStart(startDelineate) : null}
@@ -1149,6 +1206,8 @@
 					onhighlight={(k) => (pieceLit = k)}
 					focusKey={pieceFocus}
 				/>
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if divideSheet.open && startInfo}
 				<DivideSheet
@@ -1156,7 +1215,7 @@
 					{projectId}
 					{features}
 					nodes={editor.model.nodes}
-					info={startInfo}
+					info={startInfo!}
 					bind:draft={divideDraft}
 					onplace={() => fromStart(startPlace, true, 'divide')}
 					onproposed={loadStart}
@@ -1332,6 +1391,51 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+	}
+	.map-fit {
+		position: absolute;
+		z-index: 2;
+		left: 0.6rem;
+		bottom: 0.6rem;
+		box-shadow: var(--shadow-sm, none);
+	}
+	/* Over the map's top middle (the picked name is top-left, the zoom top-right): the channels' key and status, or the busy line. */
+	.map-pill {
+		position: absolute;
+		z-index: 2;
+		top: 0.5rem;
+		left: 50%;
+		transform: translateX(-50%);
+		max-width: min(30rem, calc(100% - 6rem));
+		margin: 0;
+		padding: 0.25rem 0.7rem;
+		border-radius: 1rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		box-shadow: var(--shadow-sm, none);
+		pointer-events: none;
+	}
+	.list-actions {
+		display: inline-flex;
+		flex: none;
+		gap: 0.4rem;
+		white-space: nowrap;
+	}
+	.channel-note {
+		display: flex;
+		gap: 0.45rem;
+		align-items: center;
+		margin: 0;
+		color: var(--text-muted);
+	}
+	.channel-note .swatch {
+		flex: none;
+		width: 1.25rem;
+		height: 3px;
+		border-radius: 2px;
+	}
+	.channel-note .err {
+		color: var(--danger);
 	}
 	.map-body {
 		position: relative;

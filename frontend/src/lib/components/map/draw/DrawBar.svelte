@@ -20,6 +20,7 @@
 	import { areaText, KIND_LABEL, POINT_KINDS } from '../mapData';
 	import { cutText, type Draft } from './draft.svelte';
 	import { draftProblem, DRAW_CHOICES } from './shape';
+	import DelineateChoice from '../DelineateChoice.svelte';
 
 	let {
 		draft,
@@ -32,6 +33,7 @@
 		onlocated,
 		delineating = false,
 		tracing = false,
+		onsubcatchments,
 		minOccurrence = $bindable(25)
 	}: {
 		draft: Draft;
@@ -48,6 +50,8 @@
 		delineating?: boolean;
 		/** The point placed is inside a dam's water (#326 C2): Save asks the server to trace its outline. */
 		tracing?: boolean;
+		/** Delineating: switch to sub-catchments, one per click (the choice in the bar; issue #374). */
+		onsubcatchments?: () => void;
 		/** Tracing: the share of observations (%) a cell must be water in. */
 		minOccurrence?: MinOccurrence;
 	} = $props();
@@ -104,7 +108,7 @@
 		if (draft.shape === 'point' && delineating) {
 			return draft.coords.length
 				? `Drag the point onto the river if it missed, then Delineate…`
-				: `${phone ? 'Tap' : 'Click'} the river at the catchment’s outlet, or just below a dam wall.`;
+				: `${phone ? 'Tap' : 'Click'} a red line (the elevation model’s channel) at the catchment’s outlet, or just below a dam wall.`;
 		}
 		if (draft.shape === 'point') {
 			return draft.coords.length
@@ -148,6 +152,7 @@
 			</label>
 		{:else if draft.mode === 'place' && delineating}
 			<h2 class="bar-h" id="{uid}-h">Delineating a catchment</h2>
+			{#if onsubcatchments}<DelineateChoice value="one" onchange={(v) => v === 'clicks' && onsubcatchments()} />{/if}
 		{:else if draft.mode === 'place'}
 			<h2 class="bar-h" id="{uid}-h"><label for="{uid}-what">Placing a point</label></h2>
 			<select id="{uid}-what" class="cap" value={draft.kind} onchange={(e) => (draft.kind = e.currentTarget.value as typeof draft.kind)}>

@@ -48,7 +48,7 @@ export interface PlaceGrid {
 }
 
 /** The click's cell coordinates in the grid (fractional); the expected upstream area (km²) when a river reach gives one. */
-export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM: number; expectedKm2?: number | null }): Placement | null {
+export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM: number; expectedKm2?: number | null; matchRadiusM?: number }): Placement | null {
 	const { nx, ny, acc, edge, cellSizeM } = g;
 	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
 	const disc = (m: number, visit: (i: number, d: number) => void) => {
@@ -70,11 +70,12 @@ export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM:
 	if (expected && expected > 0) {
 		let best = -1;
 		let bestOc = Infinity;
-		disc(MATCH_RADIUS_M, (i, d) => {
+		const R = opts.matchRadiusM ?? MATCH_RADIUS_M;
+		disc(R, (i, d) => {
 			const a = acc[i]! * cellKm2;
 			const accordance = (100 * Math.min(a, expected)) / Math.max(a, expected);
 			if (accordance < MIN_ACCORDANCE) return;
-			const oc = 100 - accordance + (2 * 50 * d) / MATCH_RADIUS_M;
+			const oc = 100 - accordance + (2 * 50 * d) / R;
 			if (oc < bestOc) (best = i), (bestOc = oc);
 		});
 		if (best >= 0) return { cell: best, how: 'matched', larger: null };

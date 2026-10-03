@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The elevation model's channels on the Map (channelLayer.svelte.ts, the channels source and status line; ~1 KB) and StartSheet in a lazy chunk of its own to keep the Map tab under 60 KB (~3 KB of chunk overhead): base 1610 KB after #377, this branch 1614 KB, tab 61 -> 57 KB"
+}

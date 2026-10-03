@@ -105,7 +105,7 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		const d = await delineate(dem, off, { keepPoint: true });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
 		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe('delineate-2');
+		expect(d.methodVersion).toBe('delineate-3');
 	});
 
 	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {
@@ -126,6 +126,7 @@ describe('the e2e copy of the fixture’s points', () => {
 		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
 		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
 		expect(pair('FIXTURE_OFF_CHANNEL')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 60));
+		expect(pair('FIXTURE_JUNCTION')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 30));
 	});
 });
 
