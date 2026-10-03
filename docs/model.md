@@ -3969,6 +3969,14 @@ took the water routed to the absent dam before irrigation, and a dam-target
 borehole pumped nothing). The dam's starting storage is its initial level × the
 first day's capacity.
 
+**Drought restriction reviews** (§2.7i, engine ≥ 1.70.0): a dam that comes
+into service after the run's first day starts empty, and the reviews leave
+it out, storage and capacity, until it first starts a day holding the
+mildest level's share of its capacity; a dam in service on the first day is
+an existing dam and counts from the start. Before 1.70.0 a review on or
+after the in-service day read the new, empty dam, so the deepest level
+applied (issue #90 Q30).
+
 A run with such a dam carries its `dam_capacity` column (m³, the day's
 capacity); a run resumed from a snapshot (§2.16) judges "such a dam" by the
 capture run's first day, so it carries the column whenever the uninterrupted
@@ -4160,9 +4168,11 @@ unit's crop water requirement F) and each demand-object category
 **Each day** t (before the transfers, so their room reads it):
 
 ```
+start of every day (engine ≥ 1.70.0): a dam still filling joins when Q_start(d) ÷ capacity(d, t) ≥ θ
+  (θ = the mildest level's belowPct, 1 without a level; never on a day without capacity)
 review day (or a fresh run's first day when the latest date before it is a review):
   share = Σ Q_start(d) ÷ Σ capacity(d, t)      over the dams read (every farm dam, the listed ones, or the
-                                               unit's own) with capacity > 0 today, in node-id order
+                                               unit's own) with capacity > 0 today and not filling, in node-id order
           Q_start = the storage at the start of the day (the day before's, after any storage reset that day)
   storage level = the deepest level with share < belowPct; 0 when none (or no dam)
   failed = the EWR trigger's site had ewr_shortfall < 0 the day before (false on a fresh run's first day)
@@ -4222,6 +4232,53 @@ each **pending the hydrologist**, listed in
   that day, so it is the uninterrupted run to the bit (`checkResume` on
   random networks), and records that state in its summary (`start`) so the
   self-check redoes it.
+- *A new dam's first filling* (engine ≥ 1.70.0, issue #90 Q30, the
+  operator's decision pending the hydrologist). A dam that comes into
+  service after the run's first day (§2.7g) has no water the day it starts:
+  it starts that day empty and fills from what flows in. Read as it is, an
+  empty new dam made every review on a shared basis read the system
+  emptier (a 1 000 m³ new dam beside a 1 000 m³ dam at 70 % read 35 %) and,
+  under `own`, put its unit at the deepest level until it filled. So it is
+  **left out of the reviews while it fills**, its storage and its capacity
+  both, until the first day it starts holding θ of its capacity, θ the
+  mildest level's `belowPct` (the share below which any level applies; 1,
+  full, for a rule without a level, which a save refuses but a stored input
+  could hold). It is checked at the start of every day, from the same
+  storage a review reads (the day before's, after a storage reset), not
+  only on review days, and once a dam has joined it counts like any other
+  for the rest of the run, whatever its storage does after. Because it
+  joins only at a share that by itself triggers no level, its joining never
+  deepens a review on its day; but leaving a part-filled dam out can read a
+  review deeper than counting it would (a new dam at 50 % beside a dam at
+  20 % reads 20 %, not 35 %): the rule treats it as not built yet, neither
+  for nor against. Under `own` its unit isn't restricted by storage while
+  it fills (it has no dam to read, as before its in-service date); the EWR
+  trigger still raises it. The water balance is untouched: the exemption
+  changes only which dams a review reads. The cases: a dam in service on or
+  before the run's first day is an **existing** dam with its initial
+  storage and always counts (a dam in service on the first day runs as one
+  without the date, to the bit); several new dams each join on their own
+  day; a dam that never reaches θ in the run is left out of every review,
+  and the run warns, naming it; a dam not in service yet, or silted empty
+  (ER-15's no-dam days, §2.7g), has no capacity and is read by no review
+  whether filling or not, and an existing dam that silts empty is never
+  "filling"; a run resumed from a snapshot (§2.16) takes the dams still
+  filling at its first day from the snapshot (`restrictionFilling`), so it
+  is the uninterrupted run to the bit, and judges "new" by the capture
+  run's first day; the summary lists each filling dam with its in-service
+  date and the day it joined (`filling`, null when it never did), and a
+  resumed run records the ones filling at its start (`start.fillingBefore`)
+  so the self-check redoes it. **No published source covers first
+  filling**: DWS decides restrictions from the system's storage at set
+  decision dates (the Western Cape system's planning model "is normally run
+  annually on the 1st November … using the current system storage", and
+  restrictions hold until lifted; [WCWSS operating rules, Annexure C
+  §C.1.3](https://sbm.gov.za/wp-content/uploads/Pages/E-Library/Council_Item_BRVAS/BRVAS-Annexure-C-Operating-Rules-CLN.pdf)),
+  but we found nothing on how a dam under first impoundment is counted, so
+  the exemption and θ are **judgement**, for the hydrologist. Tests:
+  `e2e/demand.firstFilling.e2e.test.ts` (each case above by hand,
+  monotonicity, resumed runs), `run.droughtRestriction.test.ts` (the helpers,
+  the self-check, random networks with dams coming into service).
 - *Every farm's demand; not the other water users.* A user node's demand
   has no category and no population, so a cut on it could take a town's
   water below basic needs with no floor to stop it. Users keep taking their
@@ -4267,9 +4324,11 @@ under `own`, its own `restriction_level`. The summary's
 over the run, the reviews in the run (with a trigger, `ewrReviews`: those
 after a day its site failed), and per unit its mean demand, mean restricted
 demand and mean supply over the run, its mean cut over the restricted days
-alone and its days at each level; on a resumed run, `start`. Also a block
+alone and its days at each level; on a resumed run, `start`; with a new dam
+filling (engine ≥ 1.70.0), `filling`. Also a block
 of the summary CSV. A model-state snapshot carries each unit's level held
-(`restrictionLevels`) and the trigger's state (`restrictionEwrFailed`).
+(`restrictionLevels`), the trigger's state (`restrictionEwrFailed`) and the
+dams still filling (`restrictionFilling`, engine ≥ 1.70.0).
 
 **From the published notice** (engine ≥ 1.54.0). `restrictionRuleFromNotice`
 turns the WUA's published restriction notice (WP-2.3) into a starting rule,
@@ -8949,7 +9008,8 @@ can store one per base run. The state holds:
   EWR trigger site failed that day (`restrictionEwrFailed`), left out
   without the rule; a run resumed part-way keeps the levels until its next
   review or lift date, one resumed on the capture run's first day decides
-  that day as the capture run did;
+  that day as the capture run did; from engine 1.70.0 the dams still
+  filling, left out of the reviews (`restrictionFilling`, §2.7i);
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
   split by the snapshot is still assessed whole (§2.9c); with low flows on
@@ -9254,7 +9314,7 @@ text:
 | `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkOperatingRules` | Engine ≥ 1.32.0 (§2.7h), every farm, every day: the river pump within its capacity, 0 ≤ Gr ≤ pump capacity; the flow left after it S − Gr ≥ MIN(S, hands-off keep); the flow left after River to dam S ≥ MIN(L + N, hands-off keep) on a farm with a dam today, S = H + I − (K + M + O) ≥ MIN(H + I, hands-off keep) on one without; 0 ≤ O ≤ River to dam's capacity that month. Without a hands-off flow the keep is 0 and the two keep checks hold trivially. |
-| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the storage at the start of that day (every farm dam's, the listed dams', or under `own` each unit's own dam, in its own `restriction_level` column, the catchment column the deepest), raised to the EWR trigger's level after a day its site's EWR wasn't met (the outlet's catchment column, or the gauge's), 0 from a lift date, else held; only the units the rule cuts carry `restricted_demand`; each part's cut column (a shared basis only) is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's reviews, EWR-triggered reviews, days per level and unit means add up to the columns. The level, cut and floor formulas are written out in the check, not the engine's. A resumed run starts from the state its summary records (`start`), which the check takes as given: it can't see the snapshot. Without the rule, no restriction column or summary. |
+| `checkDroughtRestriction` | Engine ≥ 1.54.0 (§2.7i), with `settings.droughtRestriction`: the level each day is the one its review decided from the storage at the start of that day (every farm dam's, the listed dams', or under `own` each unit's own dam, in its own `restriction_level` column, the catchment column the deepest; from engine 1.70.0 without a dam that came into service after the run's first day until it starts a day at the mildest level's share of its capacity, worked out in the check from the input, the storage and capacity columns, and the summary's `filling` held to it), raised to the EWR trigger's level after a day its site's EWR wasn't met (the outlet's catchment column, or the gauge's), 0 from a lift date, else held; only the units the rule cuts carry `restricted_demand`; each part's cut column (a shared basis only) is the level's cut; each unit's `restricted_demand` = F × (1 − crops' cut) ÷ e + Σ objects' demand × (1 − their category's cut), never below MIN(floor, demand); supplied ≤ restricted demand ≤ demand; the summary's reviews, EWR-triggered reviews, days per level and unit means add up to the columns. The level, cut and floor formulas are written out in the check, not the engine's. A resumed run starts from the state its summary records (`start`), which the check takes as given: it can't see the snapshot. Without the rule, no restriction column or summary. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |
 | `checkReliability` | Engine ≥ 0.32.0 (§2.11a, in `testing/invariants.ts`): every reliability and stress ratio is in [0, 1]; each farm's volumetric reliability equals the curtailment table's I ÷ H; time-based reliability is 1 exactly when no demand day in the window fell short; the months add up to the whole; each stress class matches its ratio. `checkDoubledCropAreas` also asserts that no farm's time-based, volumetric or annual reliability rises. |
