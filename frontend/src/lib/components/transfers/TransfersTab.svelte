@@ -1,11 +1,11 @@
 <script lang="ts">
 	// Transfers (issue #17, option A): the rules, one card per rule, on a page that
 	// scrolls as a whole. On the page (`page`) the section header carries the
-	// title, the count (workspace/context.ts), Show on the map and + Add
+	// title, the count (workspace/context.ts), Show on the Network and + Add
 	// transfer. The grid modal (`grid=transfers`) and scenario override mode show
 	// the same cards, with Add transfer under them.
 	//
-	// Each card: a head line (the rule's number, From → To, an On/Off switch and
+	// Each card: a head line (the rule's number, From → To, an Enabled switch and
 	// Remove), then its fields in three top-aligned groups: the max rate by month,
 	// the limits (daily cap, priority) and the source (takes from, and the dam's
 	// minimum or a river off-take's fields). The groups sit side by side where the
@@ -13,12 +13,24 @@
 	// the card is widest the head line becomes a column on the card's left (From
 	// over To, the switch and Remove under them), level with the rates, so a rule
 	// is about as tall as its month fields rather than a head line taller.
-	import { tick } from 'svelte';
+	//
+	// A rule with a problem (lib/model/validate.ts, by its id) has a danger edge
+	// and its problems in words under its head line; the save bar links each
+	// problem to the rule's heading (`#tr-<id>-h`), which the page focuses on
+	// landing (a fragment into a lazy tab needs the tab to land it).
+	//
+	// Every field's accessible name starts with its visible label, then the
+	// rule ("From, transfer 3"), so speech input can say what it sees (WCAG
+	// 2.5.3).
+	import { onDestroy, tick } from 'svelte';
+	import { page as appPage } from '$app/state';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { transferIsBlank, type ModelEditor } from '$lib/model/editor.svelte';
+	import { transferAnchor } from '$lib/model/validate';
 	import MonthRates from './MonthRates.svelte';
 	import type { Transfer, TransferSizing, TransferSource } from '@water-management/engine';
 
@@ -27,7 +39,19 @@
 	const nodes = $derived(editor.model.nodes);
 	const transfers = $derived(editor.model.transfers);
 	const name = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
-	const canAdd = $derived(!readonly && nodes.length >= 2);
+	// A transfer runs between hydrological units' dams (or a unit's river): a gauge or an other water user can't take part.
+	const units = $derived(nodes.filter((n) => n.kind === 'farm'));
+	const canAdd = $derived(!readonly && units.length >= 2);
+	/** Each rule's problems, by its id, without the "Transfer N: " the card's heading already says. */
+	const problemsOf = $derived.by(() => {
+		const out = new Map<string, string[]>();
+		for (const i of editor.issues) {
+			if (i.area !== 'transfers' || !i.itemId) continue;
+			const m = i.message.replace(/^Transfer \d+: /, '');
+			out.set(i.itemId, [...(out.get(i.itemId) ?? []), m.charAt(0).toUpperCase() + m.slice(1)]);
+		}
+		return out;
+	});
 	/**
 	 * Where a river off-take's canal seepage can rejoin the river (engine ≥ 1.42.0): below its source, or
 	 * below a farm downstream of it along the river (the engine's offtakeReturnAt), nearest first.
@@ -54,17 +78,18 @@
 	}
 
 	/**
-	 * Removes a rule. One with a rate in any month asks first (its rates and limits go with it; until the
-	 * model is saved, Discard on the save bar still brings it back); a blank one goes at once. Focus moves
-	 * to the next rule's heading (the previous one's for the last), or the empty card's Add transfer.
+	 * Removes a rule. One with anything set (a rate in any month, a limit, an off-take's fields; not
+	 * just its ends) asks first, as everything typed into it goes with it; a blank one goes at once.
+	 * Focus moves to the next rule's heading (the previous one's for the last), or the empty card's
+	 * Add transfer.
 	 */
 	async function remove(t: Transfer, n: number) {
 		const route = `${name(t.fromNodeId)} → ${name(t.toNodeId)}`;
 		if (
-			t.months.length &&
+			!transferIsBlank(t) &&
 			!(await confirmDialog({
 				title: `Remove transfer ${n}?`,
-				message: `${route}: its monthly rates and limits go with it. Until you save, Discard on the save bar brings it back.`,
+				message: `${route}: its monthly rates, limits and source settings go with it.`,
 				confirmLabel: 'Remove transfer',
 				danger: true
 			}))
@@ -80,18 +105,44 @@
 	}
 
 	$effect(() => fillHeader({ actions: headerActions }, page));
+
+	// A link to one rule (the save bar's problems, `#tr-<id>-h`): its heading is focused and held in view
+	// while the page settles, on landing and on a jump within the page.
+	// Once per fragment: another navigation that keeps it (a sheet's parameter) doesn't take the focus back.
+	let release = () => {};
+	let landed = '';
+	$effect(() => {
+		if (!page) return;
+		const id = hashId(appPage.url.hash);
+		if (id === landed) return;
+		landed = id;
+		if (!id.startsWith('tr-')) return;
+		const heading = root?.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
+		if (!heading) {
+			landed = '';
+			return;
+		}
+		release();
+		release = holdAnchor(heading);
+		heading.focus({ preventScroll: true });
+	});
+	onDestroy(() => release());
 </script>
 
 {#snippet headerActions()}
-	{#if transfers.length && nodes.length >= 2}<a class="btn" href="?tab=network">Show on the map</a>{/if}
+	{#if transfers.length && nodes.length >= 2}<a class="btn" href="?tab=network">Show on the Network</a>{/if}
 	{#if canAdd}<button type="button" class="btn" onclick={add}>+ Add transfer</button>{/if}
 {/snippet}
 
 <div class="transfers" bind:this={root} data-testid="transfers">
-	{#if nodes.length < 2}
+	{#if units.length < 2 && transfers.length === 0}
 		<section class="panel" aria-label="Transfer rules">
 			<p class="muted">
-				Transfers need at least two hydrological units in the network. Add them on the <a href="?tab=network">Network tab</a>.
+				{#if readonly}
+					This catchment has fewer than two hydrological units, so it has no transfers.
+				{:else}
+					Transfers need at least two hydrological units in the network. Add them on the <a href="?tab=network">Network tab</a>.
+				{/if}
 			</p>
 		</section>
 	{:else if transfers.length === 0}
@@ -116,38 +167,49 @@
 				{#each transfers as t, i (t.id)}
 					{@const label = `transfer ${i + 1}`}
 					{@const river = (t.source ?? 'dam') === 'river'}
-					<li class="rule" class:off={!t.enabled} data-id={t.id} data-testid="transfer-rule" aria-labelledby="tr-{t.id}-h">
+					{@const problems = problemsOf.get(t.id) ?? []}
+					<li
+						class="rule"
+						class:off={!t.enabled}
+						class:bad={problems.length > 0}
+						data-id={t.id}
+						data-testid="transfer-rule"
+						aria-labelledby={transferAnchor(t.id)}
+						aria-describedby={problems.length ? `tr-${t.id}-problems` : undefined}
+					>
+						{#if problems.length}
+							<ul class="rule-problems" id="tr-{t.id}-problems">
+								{#each problems as p, j (j)}<li>{p}</li>{/each}
+							</ul>
+						{/if}
 						<div class="rule-in" class:river>
 						<div class="rule-head">
 							<div class="title">
-								<h3 class="rule-title" id="tr-{t.id}-h" tabindex="-1">
+								<h3 class="rule-title" id={transferAnchor(t.id)} tabindex="-1">
 									Transfer {i + 1}{#if !t.enabled}{' '}<span class="off-tag">off</span>{/if}
 								</h3>
 							</div>
 							<div class="route">
-								<label class="end">
-									<span class="end-l" aria-hidden="true">From</span>
-									<select aria-label="Source of {label}" disabled={readonly} bind:value={t.fromNodeId}>
-										{#if !nodes.some((n) => n.id === t.fromNodeId)}<option value={t.fromNodeId}>— choose —</option>{/if}
-										{#each nodes as n (n.id)}<option value={n.id}>{n.name || '(unnamed)'}</option>{/each}
-									</select>
-								</label>
-								<span class="arrow" aria-hidden="true">→</span>
-								<label class="end">
-									<span class="end-l" aria-hidden="true">To</span>
-									<select aria-label="Destination of {label}" disabled={readonly} bind:value={t.toNodeId}>
-										{#if !nodes.some((n) => n.id === t.toNodeId)}<option value={t.toNodeId}>— choose —</option>{/if}
-										{#each nodes as n (n.id)}<option value={n.id}>{n.name || '(unnamed)'}</option>{/each}
-									</select>
-								</label>
+								{#each [['From', 'fromNodeId'], ['To', 'toNodeId']] as const as [word, key], k (key)}
+									{#if k}<span class="arrow" aria-hidden="true">→</span>{/if}
+									<label class="end">
+										<span class="end-l" aria-hidden="true">{word}</span>
+										<!-- Hydrological units only; a saved end that isn't one stays, named so, until it is changed. -->
+										<select aria-label="{word}, {label}" disabled={readonly} aria-invalid={problems.length && !units.some((n) => n.id === t[key]) ? 'true' : undefined} bind:value={t[key]}>
+											{#if !nodes.some((n) => n.id === t[key])}<option value={t[key]}>— choose —</option>
+											{:else if !units.some((n) => n.id === t[key])}<option value={t[key]}>{name(t[key])} (not a hydrological unit)</option>{/if}
+											{#each units as n (n.id)}<option value={n.id}>{n.name || '(unnamed)'}</option>{/each}
+										</select>
+									</label>
+								{/each}
 								<HelpTip key="transfer.fromNodeId" />
 							</div>
 							<div class="rule-acts">
-								<!-- A switch that says its state in words beside it; named "transfer N enabled" (other specs and scenarios use it). -->
+								<!-- A switch with its word beside it, "Enabled", which its name starts with; the off state is said in words in the rule's heading. -->
 								<label class="switch">
-									<input type="checkbox" role="switch" aria-label="{label} enabled" disabled={readonly} bind:checked={t.enabled} />
+									<input type="checkbox" role="switch" aria-label="Enabled, {label}" disabled={readonly} bind:checked={t.enabled} />
 									<span class="track" aria-hidden="true"></span>
-									<span class="state" aria-hidden="true">{t.enabled ? 'On' : 'Off'}</span>
+									<span class="state" aria-hidden="true">Enabled</span>
 								</label>
 								{#if !readonly}
 									<button type="button" class="btn btn-sm btn-ghost btn-danger remove" aria-label="Remove {label} ({name(t.fromNodeId)} → {name(t.toNodeId)})" onclick={() => remove(t, i + 1)}>Remove</button>
@@ -166,8 +228,8 @@
 								<div class="grp-t">Limits</div>
 								<div class="fields">
 									<div class="fld">
-										<span class="fld-l" aria-hidden="true">Daily cap, m³</span>
-										<NumberInput label="Daily cap of {label}, m³" min={0} nullable placeholder="none" disabled={readonly} bind:value={t.dailyCapM3} />
+										<span class="fld-l"><span aria-hidden="true">Daily cap, m³</span> <HelpTip key="transfer.dailyCapM3" /></span>
+										<NumberInput label="Daily cap of {label}, m³" min={0} nullable grouped placeholder="none" disabled={readonly} bind:value={t.dailyCapM3} />
 									</div>
 									<div class="fld">
 										<span class="fld-l"><span aria-hidden="true">Priority, lower first</span> <HelpTip key="transfer.priority" /></span>
@@ -182,7 +244,7 @@
 									<div class="fld sel">
 										<span class="fld-l"><span aria-hidden="true">Takes from</span> <HelpTip key="transfer.source" /></span>
 										<!-- The source's dam (§2.6) or the river leaving the source unit today: a river off-take (engine ≥ 1.14.0, §2.6a). -->
-										<select aria-label="Where {label} takes its water" disabled={readonly} value={t.source ?? 'dam'} onchange={(e) => (t.source = e.currentTarget.value as TransferSource)}>
+										<select aria-label="Takes from, {label}" disabled={readonly} value={t.source ?? 'dam'} onchange={(e) => (t.source = e.currentTarget.value as TransferSource)}>
 											<option value="dam">The source’s dam</option>
 											<option value="river">The river (an off-take)</option>
 										</select>
@@ -190,29 +252,29 @@
 									{#if river}
 										<div class="fld sel">
 											<span class="fld-l"><span aria-hidden="true">Takes</span> <HelpTip key="transfer.sizing" /></span>
-											<select aria-label="How much {label} takes" disabled={readonly} value={t.sizing ?? 'demand'} onchange={(e) => (t.sizing = e.currentTarget.value as TransferSizing)}>
+											<select aria-label="Takes, {label}" disabled={readonly} value={t.sizing ?? 'demand'} onchange={(e) => (t.sizing = e.currentTarget.value as TransferSizing)}>
 												<option value="demand">What the destination needs</option>
 												<option value="capacity">Up to capacity</option>
 											</select>
 										</div>
 										<div class="fld">
 											<span class="fld-l"><span aria-hidden="true">Hands-off flow, m³/day</span> <HelpTip key="transfer.handsOffM3Day" /></span>
-											<NumberInput label="Hands-off flow for {label}, m³/day" min={0} nullable placeholder="none" disabled={readonly} value={t.handsOffM3Day ?? null} onchange={(v) => (t.handsOffM3Day = v)} />
+											<NumberInput label="Hands-off flow for {label}, m³/day" min={0} nullable grouped placeholder="none" disabled={readonly} value={t.handsOffM3Day ?? null} onchange={(v) => (t.handsOffM3Day = v)} />
 										</div>
 										<div class="fld">
 											<span class="fld-l"><span aria-hidden="true">Losses on the way, %</span> <HelpTip key="transfer.lossPct" /></span>
-											<NumberInput label="Conveyance losses of {label}, %" min={0} max={99.9} scale={100} disabled={readonly} value={t.lossPct ?? 0} onchange={(v) => (t.lossPct = v ?? 0)} />
+											<NumberInput label="Losses on the way of {label}, %" min={0} max={99.9} scale={100} disabled={readonly} value={t.lossPct ?? 0} onchange={(v) => (t.lossPct = v ?? 0)} />
 										</div>
 										<!-- Canal seepage back to the river (engine ≥ 1.42.0, §2.6a): a share of the losses, and where it rejoins. -->
 										<div class="fld">
 											<span class="fld-l"><span aria-hidden="true">Losses seeping back, %</span> <HelpTip key="transfer.lossReturnPct" /></span>
-											<NumberInput label="Share of the losses of {label} seeping back to the river, %" min={0} max={100} scale={100} disabled={readonly} value={t.lossReturnPct ?? 0} onchange={(v) => (t.lossReturnPct = v ?? 0)} />
+											<NumberInput label="Losses seeping back of {label}, %" min={0} max={100} scale={100} disabled={readonly} value={t.lossReturnPct ?? 0} onchange={(v) => (t.lossReturnPct = v ?? 0)} />
 										</div>
 										{#if (t.lossReturnPct ?? 0) > 0}
 											{@const below = rejoinUnits(t.fromNodeId)}
 											<div class="fld sel">
 												<span class="fld-l"><span aria-hidden="true">Rejoins the river below</span> <HelpTip key="transfer.lossReturnNodeId" /></span>
-												<select aria-label="Where the seepage of {label} rejoins the river" disabled={readonly} value={t.lossReturnNodeId ?? ''} onchange={(e) => (t.lossReturnNodeId = e.currentTarget.value || null)}>
+												<select aria-label="Rejoins the river below, {label}" disabled={readonly} value={t.lossReturnNodeId ?? ''} onchange={(e) => (t.lossReturnNodeId = e.currentTarget.value || null)}>
 													<option value="">The source ({name(t.fromNodeId)})</option>
 													{#each below as b (b.id)}<option value={b.id}>{b.name}</option>{/each}
 													{#if t.lossReturnNodeId && !below.some((b) => b.id === t.lossReturnNodeId)}<option value={t.lossReturnNodeId}>{name(t.lossReturnNodeId)} (not below the source)</option>{/if}
@@ -220,19 +282,25 @@
 											</div>
 										{/if}
 										<div class="checks">
-											<label class="check">
-												<input type="checkbox" aria-label="{label} leaves the EWR in the river" disabled={readonly} checked={!!t.handsOffEwr} onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)} />
-												<span aria-hidden="true">Leaves the EWR in the river</span>
-											</label>
-											<label class="check">
-												<input type="checkbox" aria-label="{label} tops up the destination’s dam" disabled={readonly} checked={!!t.topUpDam} onchange={(e) => (t.topUpDam = e.currentTarget.checked)} />
-												<span aria-hidden="true">Tops up the destination’s dam</span>
-											</label>
+											<span class="check-row">
+												<label class="check">
+													<input type="checkbox" aria-label="Leaves the EWR in the river, {label}" disabled={readonly} checked={!!t.handsOffEwr} onchange={(e) => (t.handsOffEwr = e.currentTarget.checked)} />
+													<span aria-hidden="true">Leaves the EWR in the river</span>
+												</label>
+												<HelpTip key="transfer.handsOffEwr" />
+											</span>
+											<span class="check-row">
+												<label class="check">
+													<input type="checkbox" aria-label="Tops up the destination’s dam, {label}" disabled={readonly} checked={!!t.topUpDam} onchange={(e) => (t.topUpDam = e.currentTarget.checked)} />
+													<span aria-hidden="true">Tops up the destination’s dam</span>
+												</label>
+												<HelpTip key="transfer.topUpDam" />
+											</span>
 										</div>
 									{:else}
 										<div class="fld">
 											<span class="fld-l"><span aria-hidden="true">Min source storage, %</span> <HelpTip key="transfer.minStoragePct" /></span>
-											<NumberInput label="Minimum source storage for {label}, %" min={0} max={100} scale={100} disabled={readonly} bind:value={t.minStoragePct} />
+											<NumberInput label="Min source storage of {label}, %" min={0} max={100} scale={100} disabled={readonly} bind:value={t.minStoragePct} />
 										</div>
 									{/if}
 								</div>
@@ -294,6 +362,18 @@
 		background: var(--surface-2);
 		border-left-color: var(--border-strong);
 		box-shadow: none;
+	}
+	/* A rule with a problem: a danger edge, whether on or off, and its problems in words under the head line. */
+	.rule.bad {
+		border-left-color: var(--danger);
+	}
+	.rule-problems {
+		margin: 0;
+		padding: 0.4rem 0.9rem;
+		list-style: none;
+		font-size: 0.85rem;
+		color: var(--danger);
+		border-bottom: 1px solid var(--border);
 	}
 
 	/* ---- The head line: number, route, switch, remove ---- */
@@ -373,7 +453,7 @@
 		min-height: 28px;
 	}
 
-	/* On / Off: a checkbox drawn as a switch, its state in words beside it; the words are part of the target. */
+	/* Enabled: a checkbox drawn as a switch, its word beside it; the word is part of the target. */
 	.switch {
 		position: relative;
 		display: inline-flex;
@@ -524,6 +604,11 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0 1.25rem;
+	}
+	.check-row {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
 	}
 	.check {
 		display: flex;

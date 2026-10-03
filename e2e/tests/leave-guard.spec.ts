@@ -36,6 +36,7 @@ test('unsaved model edits: a tab change keeps them without asking; leaving asks,
 
 	// Discarded: nothing asks any more.
 	await page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Discard' }).click();
+	await answerConfirm(page, true, 'Your unsaved changes to the network will be lost.');
 	await projectsLink(page).click();
 	await expect(projectsHeading(page)).toBeVisible();
 	await expect(confirmBox(page)).toBeHidden();

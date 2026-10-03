@@ -219,10 +219,10 @@ test('crops and a transfer, entered through the UI, feed a run and each unit’s
 	await tab(page, 'Transfers').click();
 	// The section header's main action (issue #17).
 	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await page.getByLabel('Source of transfer 1').selectOption({ label: 'Ridge farm' });
-	await page.getByLabel('Destination of transfer 1').selectOption({ label: 'River farm' });
+	await page.getByLabel('From, transfer 1').selectOption({ label: 'Ridge farm' });
+	await page.getByLabel('To, transfer 1').selectOption({ label: 'River farm' });
 	for (const m of ['Nov', 'Dec', 'Jan', 'Feb']) await page.getByLabel(`Max rate of transfer 1 in ${m}, m³/s`).fill('0.01');
-	await page.getByLabel('Minimum source storage for transfer 1, %').fill('25');
+	await page.getByLabel('Min source storage of transfer 1, %').fill('25');
 
 	// --- save the model ------------------------------------------------------------
 	const saveBar = page.getByRole('region', { name: 'Unsaved model changes' });

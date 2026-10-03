@@ -87,7 +87,7 @@ test('an owner shares a project read-only with a viewer, who joins by accepting 
 	await closeModal(v);
 
 	await v.getByRole('link', { name: 'Transfers' }).click();
-	await expect(v.getByLabel('Source of transfer 1')).toBeDisabled();
+	await expect(v.getByLabel('From, transfer 1')).toBeDisabled();
 
 	await v.getByRole('link', { name: 'Settings' }).click();
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();

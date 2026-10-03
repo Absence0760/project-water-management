@@ -279,7 +279,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 
 	// Transfers too; Back closes a grid as well.
 	await (await gridLink(page, 'Transfers')).click();
-	await expect(page.getByRole('dialog', { name: 'Transfers' }).getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByRole('dialog', { name: 'Transfers' }).getByLabel('Enabled, transfer 1')).toBeChecked();
 	await page.goBack();
 	await expect(page.getByRole('dialog', { name: 'Transfers' })).toHaveCount(0);
 
@@ -291,7 +291,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 
 	// Over the grid's own tab it isn't opened: the Transfers table is already on the page.
 	await page.goto(`/projects/${project.id}?tab=transfers&grid=transfers`);
-	await expect(page.getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByLabel('Enabled, transfer 1')).toBeChecked();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).toHaveURL(/\?tab=transfers$/);
 });

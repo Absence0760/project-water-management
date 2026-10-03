@@ -396,7 +396,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
 	await page.getByLabel('Orchard on Lower farm, ha').fill('15');
 	await mode.getByRole('button', { name: 'Transfers', exact: true }).click();
-	await page.getByLabel('transfer 1 enabled').uncheck();
+	await page.getByLabel('Enabled, transfer 1').uncheck();
 	const pending = record.getByRole('list', { name: `Edits to record in ${NAME}` }).getByRole('listitem');
 	// The capacity edit brings the area the table shows with it (blank = estimated): the
 	// capacity change alone would resize the dam's area along its own relation (docs/scenarios.md).

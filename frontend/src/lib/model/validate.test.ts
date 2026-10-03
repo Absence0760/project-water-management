@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { modelRuleIssues, SUPPLY_RULES, type NetworkNode, type ProjectModel } from '@water-management/engine';
-import { ewrSiteIssue, operatingIssues, supplyIssues, validateModel } from './validate';
+import { ewrSiteIssue, issueHref, operatingIssues, supplyIssues, transferAnchor, validateModel } from './validate';
 
 function node(id: string, name: string, down: string | null): NetworkNode {
 	return {
@@ -110,13 +110,42 @@ describe('validateModel', () => {
 		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
 	});
 
+	it('flags a transfer to or from a gauge or an other water user, whatever its source (the engine skips such a rule)', () => {
+		const g = node('g', 'Gauge', null);
+		const f = node('f', 'F', 'g');
+		const h = node('h', 'H', 'g');
+		const town: NetworkNode = { ...node('u', 'Town', 'g'), kind: 'user', userDemandM3Day: new Array(12).fill(0), userReturnPct: 0, userPriority: 'senior' };
+		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
+		expect(messages(model([g, f, h, town], { transfers: [t] }))).toEqual([]);
+		expect(messages(model([g, f, h, town], { transfers: [{ ...t, fromNodeId: 'g' }] }))).toEqual(['Transfer 1: "Gauge" is a gauge, which can\'t send or receive water; choose a hydrological unit.']);
+		expect(messages(model([g, f, h, town], { transfers: [{ ...t, toNodeId: 'u' }] }))).toEqual(['Transfer 1: "Town" is an other water user; transfers run between hydrological units’ dams.']);
+		// The same node at both ends says that, not twice that it is a gauge.
+		expect(messages(model([g, f, h, town], { transfers: [{ ...t, fromNodeId: 'g', toNodeId: 'g' }] }))).toEqual(['Transfer 1: source and destination are the same node.']);
+	});
+
+	it('names the item each issue is about, and links it to where it is fixed', () => {
+		const g = node('g', 'Gauge', null);
+		const a = { ...node('a', 'A', 'g'), damMinPct: 2 };
+		const t = { id: 't1', fromNodeId: 'a', toNodeId: 'a', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 };
+		const issues = validateModel(model([g, a], { crops: [{ id: 'c1', name: '', cropFactor: new Array(12).fill(1) }], transfers: [t] }));
+		expect(issues.map((i) => [i.area, i.itemId])).toEqual([
+			['network', 'a'],
+			['crops', 'c1'],
+			['transfers', 't1']
+		]);
+		expect(issues.map(issueHref)).toEqual(['?tab=network&edit=a', '?tab=crops&crop=c1', `?tab=transfers#${transferAnchor('t1')}`]);
+		// An issue about the whole list links to its page.
+		expect(issueHref({ area: 'network' })).toBe('?tab=network');
+		expect(validateModel(model([node('x', 'X', null), node('y', 'Y', null)]))[0]).not.toHaveProperty('itemId');
+	});
+
 	it('checks a river off-take: hydrological unit to hydrological unit, losses below 100 %, no negative hands-off flow (engine 1.14.0)', () => {
 		const g = node('g', 'G', null);
 		const f = node('f', 'F', 'g');
 		const h = node('h', 'H', 'g');
 		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const };
 		expect(messages(model([g, f, h], { transfers: [t] }))).toEqual([]);
-		expect(messages(model([g, f, h], { transfers: [{ ...t, toNodeId: 'g' }] }))).toContain('Transfer 1: a river off-take runs from one hydrological unit to another.');
+		expect(messages(model([g, f, h], { transfers: [{ ...t, toNodeId: 'g' }] }))).toContain('Transfer 1: "G" is a gauge, which can\'t send or receive water; choose a hydrological unit.');
 		expect(messages(model([g, f, h], { transfers: [{ ...t, lossPct: 1 }] }))).toContain('Transfer 1: conveyance losses are 0–99%.');
 		expect(messages(model([g, f, h], { transfers: [{ ...t, handsOffM3Day: -1 }] }))).toContain("Transfer 1: the hands-off flow can't be negative.");
 	});
@@ -165,7 +194,7 @@ describe('validateModel', () => {
 			'"Town": the share returned must be between 0% and 100%.',
 			'"Town": demand needs 12 monthly values, none negative.',
 			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
-			'"Town" is an other water user: transfers run between hydrological units’ dams.'
+			'Transfer 1: "Town" is an other water user; transfers run between hydrological units’ dams.'
 		]);
 	});
 

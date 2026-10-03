@@ -1,16 +1,29 @@
 <script lang="ts">
 	// The workspace's one sticky footer for unsaved edits: the model's (the
-	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the
-	// project details (the Project page, issue #162 item 12). Unsaved
-	// indicator, validation summary, the optional reason for a model change
-	// (kept with it in the History tab), Preview of the model's edits against
-	// the last run (issue #284), Save / Discard for everything unsaved.
+	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the page's
+	// other drafts (`drafts`: the project details, issue #162 item 12; see
+	// pageDraft.ts for adding one). Unsaved indicator naming what changed, the
+	// problems that block the save as links to where they are fixed, the
+	// optional reason for a model change (kept with it in the History tab),
+	// Preview of the model's edits against the last run (issue #284), Save /
+	// Discard for everything unsaved. Discard asks first, naming what goes.
+	// Once a save or a discard takes the bar away, a live region outside it
+	// says so and the focus moves to the page's title (it was on a button that
+	// is gone).
+	import { tick } from 'svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { invalidFields } from '$lib/components/common/invalidFields.svelte';
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import type { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
+	import { issueHref } from '$lib/model/validate';
+	import { listAnd } from '$lib/nav/unsaved';
+	import { AREA_WORDS, changedAreas } from './changedAreas';
+	import type { PageDraft, ProblemLink } from './pageDraft';
+	import ProblemLinks from './ProblemLinks.svelte';
 
 	let {
 		editor,
-		details = null,
+		drafts = [],
 		onsave,
 		readonly,
 		height = $bindable(0),
@@ -18,10 +31,10 @@
 		onpreview = null
 	}: {
 		editor: ModelEditor;
-		/** The project details being edited, saved and discarded with the model's edits. */
-		details?: ProjectDetailsDraft | null;
-		/** Save everything unsaved. */
-		onsave: () => void;
+		/** The page's other unsaved forms (the project details), saved and discarded with the model's edits. */
+		drafts?: readonly PageDraft[];
+		/** Save everything unsaved (the page's saveAll); the bar waits for it to say "Changes saved". */
+		onsave: () => unknown;
 		readonly: boolean;
 		/** Rendered height (0 when hidden), so the page can keep content clear of it. */
 		height?: number;
@@ -31,29 +44,78 @@
 		onpreview?: (() => void) | null;
 	} = $props();
 
-	const detailsDirty = $derived(!!details?.dirty);
-	const dirty = $derived(editor.dirty || detailsDirty);
-	const saving = $derived(editor.saving || !!details?.saving);
-	const saveError = $derived(editor.saveError ?? details?.saveError ?? null);
+	const dirtyDrafts = $derived(drafts.filter((d) => d.dirty));
+	// Number fields holding text they can't take (common/invalidFields): unsaved work too, and they block the save.
+	const invalid = $derived(invalidFields.fields);
+	const dirty = $derived(editor.dirty || dirtyDrafts.length > 0 || invalid.length > 0);
+	const saving = $derived(editor.saving || drafts.some((d) => d.saving));
+	const saveError = $derived(editor.saveError ?? drafts.find((d) => d.saveError)?.saveError ?? null);
 	const shown = $derived(!readonly && (dirty || !!saveError));
 	let measured = $state(0);
 	$effect(() => {
 		height = shown ? measured : 0;
 	});
 
-	const detailProblems = $derived(detailsDirty ? (details?.problems ?? []) : []);
-	const blocking = $derived((editor.dirty ? editor.issues.length : 0) + detailProblems.length);
-	/** What the unsaved edits are to. */
-	const what = $derived(editor.dirty && detailsDirty ? 'the model and the project details' : detailsDirty ? 'the project details' : 'the model');
-	function discard() {
+	/** The model's areas with unsaved edits (network, crops, transfers). */
+	const areas = $derived(editor.dirty ? changedAreas(editor.savedModel(), editor.model) : []);
+	const problems = $derived<ProblemLink[]>([
+		...(editor.dirty ? editor.issues.map((i) => ({ message: i.message, href: issueHref(i) })) : []),
+		...dirtyDrafts.flatMap((d) => d.problems.map((message) => ({ message, href: d.href }))),
+		...invalid.map((f) => ({ message: f.label ? `${f.label}: ${f.message}` : f.message, href: `#${f.id}` }))
+	]);
+	const blocking = $derived(problems.length);
+	/** What the unsaved edits are to, as the line says it. */
+	const what = $derived(listAnd([...(editor.dirty ? ['the model'] : []), ...dirtyDrafts.map((d) => d.what)]) || 'numbers that need fixing');
+	/** The same, naming the model's areas: the Discard question's words. */
+	const lost = $derived(
+		listAnd([
+			...(editor.dirty ? (areas.length ? areas.map((a) => AREA_WORDS[a]) : ['the model']) : []),
+			...dirtyDrafts.map((d) => d.what),
+			...(invalid.length ? [`the ${invalid.length === 1 ? 'number' : 'numbers'} that need fixing`] : [])
+		])
+	);
+	const region = $derived(editor.dirty || !dirtyDrafts.length ? 'Unsaved model changes' : dirtyDrafts[0]!.region);
+
+	let bar: HTMLDivElement | undefined = $state();
+	let announcement = $state('');
+	/** Say what happened; when the bar is gone with the focus in it, focus the page's title. */
+	async function settled(message: string, hadFocus: boolean) {
+		announcement = '';
+		await tick();
+		announcement = message;
+		if (hadFocus && !shown) await focusPageStart();
+	}
+	const focusInBar = () => !!bar && bar.contains(document.activeElement);
+
+	async function save() {
+		const hadFocus = focusInBar();
+		await onsave();
+		if (dirty || saveError) return;
+		invalidFields.reset();
+		await settled('Changes saved.', hadFocus);
+	}
+
+	async function discard() {
+		const hadFocus = focusInBar();
+		const ok = await confirmDialog({
+			title: 'Discard your unsaved changes?',
+			message: `Your unsaved changes to ${lost} will be lost. This can’t be undone.`,
+			confirmLabel: 'Discard changes',
+			danger: true
+		});
+		if (!ok) return;
 		editor.revert();
-		details?.revert();
+		for (const d of drafts) d.revert();
+		invalidFields.reset();
 		reason = '';
+		await settled('Changes discarded.', hadFocus);
 	}
 </script>
 
+<!-- Outside the bar, so it is still there to speak once a save or discard takes the bar away. -->
+<p class="visually-hidden" aria-live="polite" data-testid="savebar-announcement">{announcement}</p>
 {#if shown}
-	<div class="savebar" role="region" aria-label={editor.dirty || !detailsDirty ? 'Unsaved model changes' : 'Unsaved project details'} bind:offsetHeight={measured}>
+	<div class="savebar" role="region" aria-label={region} bind:offsetHeight={measured} bind:this={bar}>
 		<div class="inner">
 			<span class="dot" aria-hidden="true"></span>
 			<span class="status" aria-live="polite">
@@ -61,12 +123,10 @@
 					Saving…
 				{:else if saveError}
 					<span class="err">Save failed: {saveError}</span>
-				{:else if detailProblems.length === 1 && blocking === 1}
-					Unsaved changes · <span class="err">{detailProblems[0]}</span>
 				{:else if blocking}
 					Unsaved changes · <span class="err">{blocking} problem{blocking === 1 ? '' : 's'} to fix before saving</span>
 				{:else}
-					Unsaved changes to {what}{#if editor.dirty && !detailsDirty}{' '}<span class="muted where">(network, crops and transfers)</span>{/if}
+					Unsaved changes to {what}{#if editor.dirty && !dirtyDrafts.length && areas.length}{' '}<span class="muted where">({listAnd(areas)})</span>{/if}
 				{/if}
 			</span>
 			<div class="spacer"></div>
@@ -79,11 +139,14 @@
 			{/if}
 			<!-- The model's edits only, so it waits until they have no problems the engine would refuse. -->
 			{#if editor.dirty && onpreview}
-				<button type="button" class="btn" onclick={onpreview} disabled={saving || editor.issues.length > 0}>Preview</button>
+				<button type="button" class="btn" onclick={onpreview} disabled={saving || editor.issues.length > 0} aria-describedby={editor.issues.length ? 'savebar-problems' : undefined}>Preview</button>
 			{/if}
 			<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
-			<button type="button" class="btn btn-primary" onclick={onsave} disabled={saving || blocking > 0 || !dirty}>Save changes</button>
+			<button type="button" class="btn btn-primary" onclick={save} disabled={saving || blocking > 0 || !dirty} aria-describedby={blocking ? 'savebar-problems' : undefined}>Save changes</button>
 		</div>
+		{#if blocking && !saving}
+			<div class="inner problems-row"><ProblemLinks {problems} id="savebar-problems" /></div>
+		{/if}
 	</div>
 {/if}
 
@@ -125,6 +188,9 @@
 	}
 	.where {
 		font-weight: 400;
+	}
+	.problems-row {
+		padding-top: 0;
 	}
 	.reason {
 		flex: 0 1 22rem;

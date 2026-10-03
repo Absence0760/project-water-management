@@ -8,6 +8,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, createRun, putModel, putSeries, sampleModel, seedRunnableProject, syntheticRain } from '../support/api.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 import { openRiver, seedRiverProject } from '../support/river.ts';
@@ -154,6 +155,7 @@ test.describe('desktop', () => {
 		const bar = page.getByRole('region', { name: 'Unsaved model changes' });
 		await expect(bar.getByRole('button', { name: 'Save changes' })).toBeVisible();
 		await bar.getByRole('button', { name: 'Discard' }).click();
+		await answerConfirm(page, true, 'Discard your unsaved changes?');
 		await expect(header(page).getByText('Unsaved changes', { exact: true })).toHaveCount(0);
 	});
 });

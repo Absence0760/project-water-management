@@ -81,15 +81,15 @@ test.describe('phone', () => {
 		const project = await createProject(page.request, 'Phone transfers');
 		await putModel(page.request, project.id, sampleModel());
 		await page.goto(`/projects/${project.id}?tab=transfers`);
-		await expect(page.getByLabel('Source of transfer 1')).toBeVisible();
+		await expect(page.getByLabel('From, transfer 1')).toBeVisible();
 
 		await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
 		for (const label of [
-			'Source of transfer 1',
-			'Destination of transfer 1',
+			'From, transfer 1',
+			'To, transfer 1',
 			'Daily cap of transfer 1, m³',
-			'Minimum source storage for transfer 1, %',
-			'transfer 1 enabled'
+			'Min source storage of transfer 1, %',
+			'Enabled, transfer 1'
 		])
 			await expectOnScreen(page.getByLabel(label, { exact: true }), page);
 		// A rate per month (engine 1.14.0), four to a row, each field on screen and tap-sized.
@@ -101,15 +101,15 @@ test.describe('phone', () => {
 		expect(apr.y).toBeGreaterThan(oct.y + oct.height - 1);
 
 		// A river off-take's fields (engine 1.14.0) stay on screen, its switches tap-sized.
-		await page.getByLabel('Where transfer 1 takes its water', { exact: true }).selectOption('river');
-		for (const label of ['Hands-off flow for transfer 1, m³/day', 'Conveyance losses of transfer 1, %', 'How much transfer 1 takes'])
+		await page.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('river');
+		for (const label of ['Hands-off flow for transfer 1, m³/day', 'Losses on the way of transfer 1, %', 'Takes, transfer 1'])
 			await expectOnScreen(page.getByLabel(label, { exact: true }), page);
 		const ewr = (await page.getByTestId('transfer-rule').locator('.check').first().boundingBox())!;
 		expect(ewr.height).toBeGreaterThanOrEqual(44);
-		await page.getByLabel('Where transfer 1 takes its water', { exact: true }).selectOption('dam');
+		await page.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('dam');
 
-		// The switch's visible state ("On") is part of its tap target, and says "Off" once switched.
-		const enabled = page.getByLabel('transfer 1 enabled');
+		// The switch's visible word ("Enabled", which its name starts with) is part of its tap target; switched off, the heading says so.
+		const enabled = page.getByLabel('Enabled, transfer 1');
 		await expect(enabled).toBeChecked();
 		const sw = page.getByTestId('transfer-rule').locator('.switch');
 		const swBox = (await sw.boundingBox())!;
@@ -118,7 +118,8 @@ test.describe('phone', () => {
 		expect(inputBox.height).toBeGreaterThanOrEqual(44);
 		await sw.click({ position: { x: swBox.width - 4, y: swBox.height / 2 } });
 		await expect(enabled).not.toBeChecked();
-		await expect(page.getByTestId('transfer-rule').locator('.switch')).toHaveText('Off');
+		await expect(page.getByTestId('transfer-rule').locator('.switch')).toHaveText('Enabled');
+		await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1 off', exact: true })).toBeVisible();
 
 		await expectNoSidewaysScroll(page);
 	});

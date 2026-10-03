@@ -198,11 +198,14 @@ export function canOpenTab(role: Role | null | undefined, id: string): boolean {
 /**
  * The strip's tabs: `visible`, plus the open tab when a deep link opened one
  * that is hidden, in its `rendered` place, so the strip always shows where you
- * are (and the tab body's aria-labelledby has its tab).
+ * are (and the tab body's aria-labelledby has its tab). `keep` are hidden
+ * tabs that must show anyway: the model tabs with problems to fix before a
+ * save, so their link and its problem dot are never out of reach.
  */
-export function stripTabs<T extends string>(visible: readonly T[], open: T, rendered: readonly T[]): T[] {
-	if (visible.includes(open) || !rendered.includes(open)) return [...visible];
-	return rendered.filter((id) => id === open || visible.includes(id));
+export function stripTabs<T extends string>(visible: readonly T[], open: T, rendered: readonly T[], keep: readonly T[] = []): T[] {
+	const extra = [open, ...keep].filter((id) => rendered.includes(id) && !visible.includes(id));
+	if (!extra.length) return [...visible];
+	return rendered.filter((id) => extra.includes(id) || visible.includes(id));
 }
 
 /**

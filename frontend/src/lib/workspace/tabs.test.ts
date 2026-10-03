@@ -188,6 +188,14 @@ describe('stripTabs', () => {
 	it('ignores an open tab the page doesn’t render', () => {
 		expect(stripTabs(short, 'scenarios', PAGE.filter((id) => id !== 'scenarios'))).toEqual(short);
 	});
+
+	it('keeps a hidden tab with problems to fix, in its place, beside the open one', () => {
+		expect(stripTabs(short, 'runs', PAGE, ['transfers'])).toEqual(['overview', 'transfers', 'series', 'runs']);
+		expect(stripTabs(short, 'network', PAGE, ['transfers', 'network'])).toEqual(['overview', 'network', 'transfers', 'series', 'runs']);
+		// A kept tab already shown, or one the page doesn't render, adds nothing.
+		expect(stripTabs(short, 'runs', PAGE, ['series'])).toEqual(short);
+		expect(stripTabs(short, 'runs', PAGE.filter((id) => id !== 'crops'), ['crops'])).toEqual(short);
+	});
 });
 
 describe('navSections', () => {

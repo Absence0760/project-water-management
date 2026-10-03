@@ -64,7 +64,7 @@
 		{#if readonly}
 			<button type="button" class="btn" onclick={() => (open = false)}>Close</button>
 		{:else}
-			<ModelSaveRow {editor} {onsave} ondone={() => (open = false)} bind:reason />
+			<ModelSaveRow {editor} {onsave} ondone={() => (open = false)} bind:reason listed={area} />
 		{/if}
 	{/snippet}
 </Dialog>

@@ -706,11 +706,46 @@ holds them (`project/detailsDraft.svelte.ts`), so they survive a tab change,
 and **Save changes** saves whatever is unsaved (the details, then the
 model), **Discard** puts both back. The bar says what is unsaved ("Unsaved
 changes to the project details", "… to the model and the project
-details"; its region is named *Unsaved project details* while only the
-details are), and an empty name or time zone blocks it with the reason. The
-optional reason field shows only with model edits (it goes into History with
-them). Every other card on the Project page acts at once. Settings has its
-own save button, which sits above that bar.
+details", and for the model alone the areas that changed: "… to the model
+(network and transfers)", `model/changedAreas.ts`; its region is named
+*Unsaved project details* while only the details are). Anything that blocks
+the save is listed under the bar as links to where it is fixed
+(`model/ProblemLinks.svelte`: the first three, then **and N more**): a
+node's problem opens its sheet (`?tab=network&edit=<id>`), a crop's its
+sheet (`crop=`), a transfer's its card (`?tab=transfers#tr-<id>-h`, the
+rule's heading focused on landing), the details' the Project page, and a
+number field holding text it can't take (`invalidFields`, above) the field
+itself, which counts as unsaved work. The disabled **Save changes** and
+**Preview** name that list (`aria-describedby`). A model tab with such a
+problem stays in the sidebar, with its problem dot, even when hidden
+(`stripTabs`' `keep`). **Discard** asks first ("Discard your unsaved
+changes?", naming what goes: "Your unsaved changes to the network and
+transfers will be lost.", **Discard changes**). Once a save or a discard
+takes the bar away, a live region outside it says "Changes saved." or
+"Changes discarded." and the focus moves to the page's title
+(`focusPageStart`). The bar's other drafts come to it as a list
+(`model/pageDraft.ts` `PageDraft`: what it is called, its region name,
+where its problems are fixed, `dirty`/`saving`/`saveError`/`problems`,
+`revert()`); the page adapts the details to it and saves them in
+`saveAll`. The optional reason field shows only with model edits (it goes
+into History with them). Every other card on the Project page acts at once.
+Settings has its own save button, which sits above that bar.
+
+The save rows of the modals over the workspace (the node and crop sheets,
+the farm drawer, a grid; `model/ModelSaveRow.svelte`) carry the model's part
+of the bar: the problems as the same links (a grid lists only the other
+areas', its own being above it), **Discard model changes**, which asks
+first and says it reverts every unsaved model edit, not only the modal's,
+and **Save changes**, after which the row says "Changes saved." and the
+focus stays in it, on **Done**.
+
+**Run model with unsaved edits.** A run uses the saved model, so the
+header's **Run model** (and the new-data line's **Re-run model**) with
+unsaved edits asks "Save your changes and run?" (**Save and run**), saves
+them (`saveAll`) and runs once they are saved; the button's description
+says so. While problems block that save it refuses, saying why and naming
+the first problem, with **Show the problem**, rather than run the saved
+model behind the person's back.
 
 **Preview unsaved edits** (issue #284, roadmap WP-1.17). With model edits
 unsaved and no problems to fix, the save bar has **Preview** (Network, Crops
@@ -752,7 +787,9 @@ runs, about 0.3 s on the client catchment, `run.perf.test.ts`).
 itself while it is on screen (`guardUnsaved`): the model's edits and the
 project details (the workspace page), override mode's unrecorded edits, a
 half-filled **Add a change** form or a typed but unsaved scenario rename,
-and a name typed into the **New scenario** dialog. A navigation that would
+a name typed into the **New scenario** dialog, and a number field holding
+text it can't take ("numbers that need fixing": any change of page or tab
+drops it, since the field unmounts; a `#fragment` doesn't). A navigation that would
 drop any of it (another page for the page-level work; another tab or
 scenario for a scenario's) is cancelled and the app's own dialog asks,
 naming what is unsaved and where the link goes: "You have unsaved changes
@@ -777,6 +814,16 @@ destructive question would remove) and a confirm button named for the action
 (red when it destroys something). Esc answers Cancel; focus returns to what
 asked. The farm view's note delete passes its words translated.
 `lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
+
+When a remove asks: each list asks only when something typed goes with the
+item, and names the button after the action. Network's node remove asks when
+there is something to say about what goes with the node (its crop areas,
+transfers, boreholes…, `removeMessage`); Crops' **Remove crop** when the crop
+has planted areas; Transfers' **Remove transfer** whenever the rule has
+anything set besides its ends (a month's rate, a limit, an off-take's
+fields: `transferIsBlank`), so a rule just added goes at once. Discarding
+unsaved edits always asks (the save bar's **Discard changes**, a save row's
+**Discard model changes**).
 
 **A part that fails to download.** Every tab but Overview, the Add data
 dialog and several panels download on first use. If one can't (a network
@@ -830,7 +877,7 @@ role, freshness, Add data) and each tab's own header:
   run it shows (label, workbook-comparison and evidence badges, period,
   engine, "ran N days ago", **Open in Runs**); the Network its summary
   ("8 farms · 8 dams · 2 gauges · draining to … · 184.0 km²"); Crops its
-  line ("3 crops · 675 ha irrigated on 8 farms · …"); Settings & calibration
+  line ("3 crops · 675 ha irrigated on 8 hydrological units · …"); Settings & calibration
   where the runoff parameters came from; Runs & results its run count and
   when the newest ran; River & reserve the run it shows (label, badges,
   period, engine, the EWR rule); Hydrological units, Dams, Scenarios,
@@ -841,7 +888,7 @@ role, freshness, Add data) and each tab's own header:
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
   (below), the section's own (the Network's **Tables** and **+ Add node**,
-  Crops' **Tables** and **+ Add crop**, Transfers' **Show on the map** and
+  Crops' **Tables** and **+ Add crop**, Transfers' **Show on the Network** and
   **+ Add transfer**, Data's **Preview all data**, Settings & calibration's
   **Fit the parameters** (a viewer: **Fit record**, when there is one),
   River & reserve's **Run** menu and **Open in Runs & results**, Units &
@@ -951,7 +998,7 @@ same way on every screen:
   west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab
   (`series/AddDataDialog.svelte`, the shared `common/Dialog.svelte`, wide).
-  Dropping a CSV anywhere on the page opens it with that file. The form's
+  Dropping a CSV anywhere on the page opens it with that file (a viewer's drop is taken and refused, "View only: ask an editor to add data.", so the browser doesn't open the file instead). The form's
   buttons sit in the dialog's action row, on the right: **Cancel** and the
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
@@ -1256,8 +1303,10 @@ for every workspace tab. Its own chunk.
 
 - **Header**: the section header titled "Dams", with the context line
   "8 dams · 2.73 million m³ capacity · latest run “Baseline”, ran today"
-  (`damsSummary`, `fmtVolume`) and **Open in Runs** once there is a run, both
-  filled through `fillHeader` like Crops & demand.
+  (`damsSummary`, `fmtVolume`), **Node table** (the grid modal over this
+  page, `grid=nodes`) once there is a dam, and **Open in Runs** once there
+  is a run, all filled through `fillHeader` like Crops & demand. The cards'
+  and the chart's headings are h2 under its h1.
 - **Which dams**: a farm with a capacity of at least 1 m³ (`modelDams`). Only
   a farm has a dam in the engine; a capacity on a gauge or another water user
   is inert (no storage, no `dam_storage` series), so it is not listed, and
@@ -1300,10 +1349,16 @@ for every workspace tab. Its own chunk.
   its minimum (10%) in its last year", `DamLevel.daysAtMin`; none for a dam
   without one). While the levels load, each card says "Loading dam levels
   (N of M)…". Then links
+  **Edit dam** (viewers: **Dam details**; `?tab=network&edit=<id>`, the
+  node sheet, where the dam's capacity, minimum level, area when full,
+  sediment, storage curve and release rule are set; Back returns to Dams with
+  the pick),
   **On the Network** (`?tab=network&node=<id>`, the node picked on the map),
   **Show on map** (`?tab=map&node=<id>`, only for a dam's unit with a linked
-  map feature) and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
-  this page). A coloured edge repeats the band (accent, amber below 30 %, red
+  map feature), **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
+  this page) and **Proposals** (picks the dam and brings the proposals box
+  below into view, focus on its **Dam of**, so it is never ten or thirty
+  cards down out of reach). A coloured edge repeats the band (accent, amber below 30 %, red
   at the minimum; grey without a level).
 - **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
   cards (`dams/DamLevels.svelte`: every column was already on the cards, their
@@ -1315,7 +1370,11 @@ for every workspace tab. Its own chunk.
   over the card, so a click anywhere on it picks the dam, the URL can be
   shared, and Back returns to the one before. Without `dam=` (or with one
   that has no card) the first, emptiest, card is charted. When the layout is
-  stacked the chart scrolls into view after a pick.
+  stacked the chart scrolls into view after a pick. Whether it is stacked is
+  worked out from the same 56rem as the container query, in px at the root's
+  font size (14 px: 784 px; until 2026-10-02 the script used 896 px, so a
+  column between the two drew a stacked chart's 260 px beside the cards and
+  a pick scrolled the window).
 - **Every dam's card shows**, always, emptiest first, so a `dam=` link always
   has its card. Until 2026-09-29 the list folded (`common/fold.ts` `foldList`:
   three beside the chart, four stacked, eight before a run) behind a **Show
@@ -1347,7 +1406,10 @@ for every workspace tab. Its own chunk.
   dam capacity is set or a node added; a new dam shows as a card at once).
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
-  it), with no chart.
+  it), with no chart. A run list that failed to load (the page loads it
+  before any tab draws, so `runs` null means failed, never still loading) is
+  said as such, an error to reload, not "No run yet" with a prompt to run,
+  and each card reads "Run list couldn’t be loaded" (as River & reserve).
 - **Proposed from the register and the map** (issue #326 B-dams,
   `dams/DamProposalsBox.svelte`, rows in `dams/damProposals.ts`; the
   sources and rules in [maps.md § Dams from the register and the
@@ -1355,8 +1417,11 @@ for every workspace tab. Its own chunk.
   cards (and under the empty state), shown whenever the model has a
   hydrological unit. **Dam of** picks the unit (the dams first in the
   cards' order, then the other units; it opens on `dam=`'s, else the first
-  card's). The box says which dam on the map it searched from (its name,
-  "its polygon's centre" or "a point", the coordinates, **Show on map**),
+  card's, and follows `dam=` whenever a card is picked, so a click and a fresh
+  load of the same URL agree; Dam of still picks any unit until the next
+  pick). The box says which dam on the map it searched from (its name,
+  "its polygon's centre" or "a point", the place in degrees with a hemisphere,
+  "33.6800° S, 21.3200° E" as the Map writes it, `searchedFrom`, **Show on map**),
   then a table: one row per registered dam within 1 km ("Capacity:
   Grootdraai Dam (Z100/01)", its distance, wall height, completion year,
   river and farm under it) and one for the dam polygon's area ("Full-supply
@@ -3026,11 +3091,15 @@ The answers first, the crop grids one click away (issue #17, option A · A3;
 and units, and 30 crops on 20 units, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
-  farms · water year October to September", `cropsSummary`), and on the right
+  hydrological units · water year October to September", `cropsSummary`; the
+  workspace says unit, not farm), and on the right
   a **Tables** menu (Crop factors, Planted areas → the
   [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
-  or a click outside closes it) and **+ Add crop** for editors. The header
-  shows with no crops too, over an "Add crop" prompt.
+  or a click outside closes it), then for editors **Load crop factors…**
+  (once there is a crop; the [same dialog](#load-crop-factors), its own
+  chunk) and **+ Add crop**. The header shows with no crops too, over an
+  "Add crop" prompt that says the factors can then come from the library or
+  a workbook. The panels' headings are h2 under the header's h1.
 - **Crop list** ("Crops", *Largest planted area first*): one compact row per
   crop, sorted by planted area on the units shown, largest first (equal areas,
   unplanted crops included, keep crop order; `rankCrops`). A row has the
@@ -3062,12 +3131,16 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   after each render and taken off the plot). Hovering a segment names the
   month, crop and value. The annual volume, mean m³/s and peak month sit
   under it. **Show table** opens the demand table (`crops/DemandTable.svelte`:
-  the formula, m³/day per month, the mean and Mm³/a per unit and for the
-  catchment) in place; `#crop-demand-table` opens it from a link. The
+  the formula, m³/day per month, the mean and Mm³/a per hydrological unit and for the
+  catchment) in place; `#crop-demand-table` opens it from a link. The table
+  is wider than its card beside the list, so its scroll box is a labelled
+  region ("Irrigation demand by hydrological unit and month") that takes
+  focus, for the arrow keys to scroll it. The
   Irrigation demand grid (`grid=demand`), a modal with the same chart and
   table, was removed (issue #174): an old link goes to `?tab=crops#crop-demand-table`
   (`movedGridHref`). An alert says when A-pan isn't set (demand is then
-  zero). The preview multiplies the monthly A-pan means; when the project
+  zero); its link opens Settings at Demand (`?tab=settings#set-demand`), as do the
+  crop grids' and the farm drawer's. The preview multiplies the monthly A-pan means; when the project
   has a daily A-pan series, which runs use instead on the days it has a
   value ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)),
   a line under the heading (and the chart's accessible name) says the chart
@@ -3094,7 +3167,7 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   "and N more" (`noPlantedAreaNote`).
 - **Layout** (a container query on the page column, `crops-page`): from a
   60rem (840 px) column, which is a window of about 1100 px beside the
-  sidebar, the crop list is a left column (19–25rem) that scrolls inside
+  sidebar, the crop list is a left column (19–28rem) that scrolls inside
   itself, and the demand chart over the unit bars fills the rest; the row
   reaches the window's bottom (its top and the room the page keeps below it
   are measured with a ResizeObserver, as the Network's map), so the chart and
@@ -3103,7 +3176,9 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   demand table lets the row grow and the page scroll. Narrower, the list
   comes first, capped at about six rows (it scrolls inside itself, and
   **Show all N crops** / **Show fewer** lift the cap, `aria-expanded`), then
-  the chart, then the bars (also capped, key pinned). On a phone everything
+  the chart, then the bars (also capped, key pinned). In a column under
+  44rem (616 px, a 640 px window; the same container query, not the
+  viewport's) everything
   is one column with no sideways scroll, the bars put the unit and total
   above a full-width bar, and the row buttons are 44 px targets.
 
@@ -3139,7 +3214,12 @@ linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
 name focused. The sheet shows the factors four to a row (labelled "Orchard
 crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
-much. **Remove crop** asks first when the crop is planted anywhere, removes
+much. A factor cleared is 0 (a month the crop isn't irrigated): the field
+reads 0 when it loses focus, never a blank over a value the model keeps. A
+block pasted into a month (one row copied from a spreadsheet) opens the same
+paste preview as the grid, filling from that month on
+(`planFactorPaste` in `crops/areaPaste.ts`). For editors, **Load crop
+factors…** opens the [dialog](#load-crop-factors) over the sheet. **Remove crop** asks first when the crop is planted anywhere, removes
 it with its areas, and closes the sheet. The Edit button that opened it went
 with its row, so the focus moves to the Edit button now in that place in the
 list (the next crop's, or the last one's), or to **Add crop** once the list is
@@ -3153,8 +3233,21 @@ The old tab body is `crops/CropGrids.svelte`: crop factors (no mean column
 since issue #174: an unweighted 12-month average the b023 workbook doesn't
 have, which read as a figure it isn't; reorderable, the × A-pan intro, the warning naming every crop and month
 above 1.0: `highCropFactors`, a hint, never a block on saving), planted areas
-in **ha** (stored as m²; farm rows in network order, reorderable; the
+in **ha** (stored as m²; hydrological-unit rows in network order, reorderable; the
 no-planted-area note) and the demand preview (chart and `DemandTable`).
+A cleared area is 0 (nothing planted; the editor drops the row) and a
+cleared factor is 0, so a field never shows empty over a value the model
+still holds. Both tables take a block pasted from a spreadsheet, into any
+cell or from **Paste from a spreadsheet…** under them (the
+[node table](#grid-modal)'s preview, `model/GridPasteDialog.svelte`, with a
+CSV of the table to fill in): planted areas in hectares, a row per unit
+under crop names (`planAreaPaste`), and crop factors, a row per crop under
+the months Oct … Sep ("Oct" or "October", `planFactorPaste`), so one row
+copied from Excel fills a crop's 12 months; both in `crops/areaPaste.ts` on
+the shared reader (`spreadsheet/paste/grid.ts`). A value below 0 stops the
+paste. Below a 44rem column (`@container crop-grids`, a wrapper, so scenario
+override mode's narrow column beside the Scenarios rail counts, not the
+window) each row is a card with labelled fields instead of a sideways-scrolling table.
 `CropsTab` with a `sections` prop renders it: the grid modal passes one
 section (crop factors or planted areas), scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
 inline, on the scenario's model, so neither the crop sheet nor the page's
@@ -3162,10 +3255,10 @@ overlays ever edit the catchment from there.
 
 ### Load crop factors
 
-**Load crop factors…**, under the crop-factor table of the [crop
-grids](#crop-grids) (editors only: Crops & demand's **Tables › Crop
-factors**, the grid modal from any tab, and scenario override mode, where it
-fills the scenario's crops), opens a dialog over it
+**Load crop factors…** (editors only: in the Crops & demand header, in a
+crop's sheet, and under the crop-factor table of the [crop
+grids](#crop-grids): **Tables › Crop factors**, the grid modal from any
+tab, and scenario override mode, where it fills the scenario's crops) opens a dialog
 that fills the project's crop factors from a source, shows what changes and
 what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
 `crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
@@ -3197,7 +3290,8 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
   set against reference ET₀ while the engine multiplies crop factors by
   A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
-  mid value). A line under the input says which and why, linking [FAO-56
+  mid value). The field takes 0.1 to 1.5, shown beside it and in its
+  description, and the warning for a missing Kp says that range. A line under the input says which and why, linking [FAO-56
   Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
   re-applies the new source's default only while Kp is still the previous
   default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
@@ -3209,7 +3303,10 @@ catchment uses is the hydrologist's call (issue #54 Q9/Q10).
   areas"; ambiguous or unknown names stay on **Keep current**). A library
   vegetable (staged by portion of the season) asks for a planting month and
   day and a season length, preset from the manual's Table 4.7 where it gives
-  one; until the month is set it has no factors. An **irrigation system**
+  one; until the month is set it has no factors, and a line under it says so
+  ("Pick a planting month: until then Onions has no factors to load into
+  Orchard", the month select's description), since the crop is left out of
+  **Apply** until then. An **irrigation system**
   select sets the crop's own efficiency (engine ≥ 0.43.0) from the SABI 2021
   values, default **Keep**; the library crop's typical system is shown as a
   hint, never applied unasked.
@@ -3251,6 +3348,10 @@ saves the catchment's model, and override mode there edits the scenario's
   comes back to exactly where it was opened.
 - **Content:** every crop in the model with this farm's area (ha, the same
   inputs and labels as the Crops tab's row, "Orchard on Upper farm, ha"), the
+  crops planted here first, largest first, then the rest in crop order
+  (`plantedFirst`, taken as the drawer opens, so a row doesn't jump while its
+  area is typed; with 30 crops the planted two are at the top). A cleared area
+  is 0, never a blank over the old value. Then the
   total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
   the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
@@ -3401,21 +3502,26 @@ node table above).
 
 The rules under the section header, which counts them ("3
 transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
-map** (the Network, where transfers are dashed arrows) and **+ Add transfer**
-(editors, with at least two units). A new rule starts after the existing ones
-(the highest priority + 1), and the cursor lands in its **From**, scrolled into
-view.
+Network** (the Network diagram, where transfers are dashed arrows; not the
+Map) and **+ Add transfer** (editors, with at least two hydrological units).
+A new rule starts after the existing ones (the highest priority + 1), between
+the first two hydrological units (never the outflow gauge first in the
+list), and the cursor lands in its **From**, scrolled into view. With fewer
+than two units and no rule, the card says transfers need two and links the
+Network; a viewer is told the catchment has none instead.
 
 **Transfer rules** is one card per rule (`transfers/TransfersTab.svelte`),
 in a list that grows with its rules. Each card's **head line** holds its
 number ("Transfer N", a heading, with an **off** pill when the rule is
-switched off), **From → To** (two selects), an **On / Off** switch (a
-checkbox with `role="switch"`, named "transfer N enabled", its state in words
-beside it and part of the tap target) and **Remove** (named "Remove transfer
-N (From → To)"). Remove asks first (the app's confirm dialog) once the rule
-has a rate in any month, since its rates and limits go with it, and says
-Discard on the save bar still brings it back until the model is saved; a blank
-rule goes at once. Focus moves to the next rule's heading (the previous one's
+switched off), **From → To** (two selects listing hydrological units only: a
+gauge or an other water user can't take part, and a saved end that isn't a
+unit shows as "<name> (not a hydrological unit)" and is a problem until
+changed), an **Enabled** switch (a checkbox with `role="switch"`, its word
+beside it and part of the tap target; the off state is said in the heading)
+and **Remove** (named "Remove transfer N (From → To)"). Remove asks first
+(the app's confirm dialog) when the rule has anything set besides its ends
+(a month's rate, a limit, an off-take's fields), since that goes with it; a
+rule as **+ Add transfer** made it goes at once. Focus moves to the next rule's heading (the previous one's
 for the last). An off rule's card is tinted, with a neutral edge instead of
 the accent one, and says **off** in words (not faded text). Where the card is
 widest (1280 and 1440 windows) the head line is a column on the card's left
@@ -3454,7 +3560,17 @@ The card's body holds three top-aligned groups:
   the EWR in the river and topping up the destination’s dam. The fields sit
   two to a row, not one tall column.
 
-Every field keeps its visible label and its ⓘ tip. The groups sit side by
+Every field keeps its visible label and its ⓘ tip, and its accessible name
+starts with that label, then the rule ("From, transfer 3", "Losses on the
+way of transfer 3, %", "Enabled, transfer 3"), so speech input can use the
+words on screen (WCAG 2.5.3). The daily cap and hands-off flow show
+thousands separators at rest, as the node sheet's volumes do.
+
+A rule with a problem the save refuses (`lib/model/validate.ts`, by the
+rule's id: the same node at both ends, a gauge or other water user at an
+end, a bad month or rate…) has a danger edge and its problems in words under
+its head line (the card's `aria-describedby`); the save bar's link to it
+lands on its heading. The groups sit side by
 side where the card is 70rem wide (1280 and 1440 windows), beside the head
 column; there the Limits and Source titles are dropped (dividers mark the
 groups and every field names itself), a dam source's two fields stack in a
