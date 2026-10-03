@@ -124,6 +124,13 @@ export interface ModelState {
 	restrictionLevels?: number[];
 	restrictionEwrFailed?: boolean;
 	/**
+	 * The dams still filling (engine ≥ 1.70.0, docs/model.md §2.7i): 1 per node
+	 * (model order) for a dam still filling, so a resumed run goes on reading
+	 * its reviews both ways until it fills, as the uninterrupted run does.
+	 * Absent when none is.
+	 */
+	restrictionFilling?: number[];
+	/**
 	 * The scored flow record had readings before the snapshot's day (engine ≥ 1.48.0): its per-day quality flags'
 	 * suspect class reads the whole record, so a resumed input without that history can't reproduce them
 	 * (../run.ts leaves the class out and warns). Absent = no such history.

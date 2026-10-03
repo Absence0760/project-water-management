@@ -6511,7 +6511,8 @@ reserve's chunk, view model `outcomes/matrix.ts`).
   demand, default *100, 85, 70*; up to 12, 0–200 %, separated by commas)
   and **Run demand sweep** queue a [sweep](./scenarios.md#sweeps) of the
   shown run: one member per level, each a single `demand.scale` op on every
-  farm, named "85 %". Only on an ordinary run of the model (a scenario or
+  farm, named "85 %" (on a full-allocation run, 85 % of each unit's
+  registered volume, engine ≥ 1.70.0). Only on an ordinary run of the model (a scenario or
   forecast run says it can't), and only when the run stores its natural
   flow. Viewers see the newest sweep, with no button.
 - **Pending and complete** follow the sweep's own status and its job's
@@ -6584,7 +6585,10 @@ confirmed farmers see the outlook, O5, issue #90).
 
 - **Starting an outlook** (editors): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 6, 0–200 %, separated by commas),
-  each one `demand.scale` op on every farm from the decision date. **Add a
+  each one `demand.scale` op on every farm from the decision date. On a
+  full-allocation project a level is that % of each unit's registered
+  volume (engine ≥ 1.70.0, [model.md §2.12a](./model.md)), which the field's
+  hint says. **Add a
   monthly plan** adds one more level: a name (default *Monthly plan*) and
   a % per month of the project's season (Oct … Apr by default), sent as
   R1's `months` form, one `demand.scale` per distinct % (so the plan and

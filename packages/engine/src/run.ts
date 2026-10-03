@@ -45,8 +45,8 @@ import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanNode, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
-import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
-import { ALLOCATION_SERIES, limitBoundKind, matchAllocations, outsideMonths, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationEntry } from './allocations/compare';
+import { ALLOCATION_SERIES, inForceOver, limitBoundKind, matchAllocations, outsideMonths, planAllocations, registeredOver, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
@@ -100,7 +100,7 @@ import type { AllocationLimitBound } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
-import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn } from './network/development';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
@@ -353,11 +353,21 @@ function runNetwork(
 		if (plan.restriction && warm.continued) {
 			plan.restriction.initialLevels = Uint8Array.from(nodes, (_, i) => resume.restrictionLevels?.[i] ?? 0);
 			plan.restriction.initialEwrFailed = resume.restrictionEwrFailed === true;
+			// The dams still filling the day before (engine ≥ 1.70.0): the capture run's state, not rebuilt.
+			const f = Uint8Array.from(nodes, (_, i) => (resume.restrictionFilling?.[i] ? 1 : 0));
+			if (f.some((x) => x)) plan.restriction.filling = f;
+			else delete plan.restriction.filling;
 		}
 	}
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
 	const sim = simulateNetwork(plan, { workings: true, ...(capturing ? { captureAt: captureAt! } : {}) });
+	// A new dam that never filled (engine ≥ 1.70.0, §2.7i): every review took the milder of the readings without and with it.
+	if (sim.restrictionJoined) {
+		const pct = `${Math.round(plan.restriction!.fillShare * 1000) / 10} %`;
+		const never = nodes.flatMap((n, i) => (sim.restrictionJoined![i] === -1 ? [n] : [])).sort((a, b) => cmpStr(a.id, b.id));
+		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
+	}
 
 	// --- outputs -----------------------------------------------------------------
 	const out: RunSeries[] = [];
@@ -1092,7 +1102,9 @@ function runNetwork(
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
-			...(plan.restriction ? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}) } : {}),
+			...(plan.restriction
+				? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}), ...(net.restrictionFilling.some((x) => x) ? { restrictionFilling: net.restrictionFilling } : {}) }
+				: {}),
 			...(flowRecordHistory ? { flowRecordHistory: true as const } : {}),
 			...(fillHistory.length ? { flowFillHistory: fillHistory } : {})
 		};
@@ -1414,7 +1426,10 @@ export function buildNetworkPlan(
 	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
 	if (dated && start === undefined) throw new Error('buildNetworkPlan: a dated dam or abstraction needs the run start');
 	const abstractFrom = nodes.map((n) => (start === undefined ? 0 : abstractionStartDay(n, start, days, warnings)));
-	demand.forEach((d, i) => d.net.fill(0, 0, abstractFrom[i]!));
+	demand.forEach((d, i) => {
+		d.net.fill(0, 0, abstractFrom[i]!);
+		d.netBase?.fill(0, 0, abstractFrom[i]!);
+	});
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -1525,16 +1540,28 @@ export function buildNetworkPlan(
 	const restriction = restrictionRule
 		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
 		: null;
+	// First filling (engine ≥ 1.70.0, §2.7i): a dam that comes into service after the first day of the record (a
+	// resumed run's capture run's) starts filling; a resumed run takes the snapshot's state instead.
+	if (restriction) {
+		const filling = Uint8Array.from(nodes, (n) => (entersServiceAfter(n, warm.runStart ?? start!) ? 1 : 0));
+		if (filling.some((x) => x)) restriction.filling = filling;
+	}
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
 	const objectsBy = demandObjectsByNode(model, warnings);
 	const wyOfDay = objectsBy.size ? waterYearMonths(month, days) : null;
-	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
+	/**
+	 * `factors` false: the objects before any demand factor (a full allocation's fit, engine ≥ 1.70.0); `scale`: a
+	 * full allocation's factor per day, applied before the demand factor and the floor (planObjects).
+	 */
+	const objectsOf = (n: NetworkNode, opts: { factors?: boolean; scale?: Float64Array } = {}): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one),
 		// × their category's own (engine ≥ 1.45.0, demand.scale with a part), through planObjects' basic-needs floor.
-		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, (o) => unitPartFactor(n, o.category, []), factorFrom, warnings, start) : undefined;
+		// Warned about once, on the plan's own call.
+		const w = opts.factors === false || opts.scale ? [] : warnings;
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, opts.factors === false ? null : (o) => unitPartFactor(n, o.category, []), factorFrom, w, start, opts.scale) : undefined;
 		// None before the unit's abstraction date.
 		const s = abstractFrom[indexById.get(n.id)!]!;
 		if (po && s > 0) {
@@ -1597,7 +1624,20 @@ export function buildNetworkPlan(
 			};
 		})
 	};
-	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings);
+	// A full allocation fits its factor on the demand before the demand factors (engine ≥ 1.70.0, §2.12a): only a unit
+	// with a factor needs the hooks, so one without runs as before, to the bit.
+	const factored = (n: NetworkNode) => factorFrom < days && (n.demandFactor != null || n.partDemandFactor != null);
+	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings, {
+		baseDemand: (i) => {
+			const n = nodes[i]!;
+			if (!factored(n)) return undefined;
+			const p = plan.nodes[i]!;
+			const F = demand[i]!.netBase ?? demand[i]!.net;
+			const po = objectsBy.has(n.id) ? objectsOf(n, { factors: false }) : undefined;
+			return Float64Array.from(F, (v, t) => v / p.irrigationEfficiency + (po ? po.total[t]! : 0));
+		},
+		scaledObjects: (i, k) => (factored(nodes[i]!) && objectsBy.has(nodes[i]!.id) ? objectsOf(nodes[i]!, { scale: k }) : undefined)
+	});
 	if (warm.captureAt === undefined) return { plan, topo, allocation };
 	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
 }
@@ -1608,7 +1648,15 @@ export function buildNetworkPlan(
  * decided, and per unit (node-id order) its mean demand before and after the
  * cut and its mean supply.
  */
-function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number, resumed: boolean): DroughtRestrictionSummary {
+function restrictionSummary(
+	rule: DroughtRestrictionRule,
+	plan: NetworkPlan,
+	sim: ReturnType<typeof simulateNetwork>,
+	nodes: readonly NetworkNode[],
+	start: number,
+	days: number,
+	resumed: boolean
+): DroughtRestrictionSummary {
 	const lv = sim.restrictionLevel!;
 	const n = rule.levels.length + 1;
 	const byYear = new Map<number, { waterYear: number; days: number; daysByLevel: number[] }>();
@@ -1655,12 +1703,21 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 				daysByLevel: byLevel
 			};
 		});
+	// First filling (engine ≥ 1.70.0, §2.7i): each dam filling at the start, and the day it joined.
+	const joined = sim.restrictionJoined;
+	const filling = joined
+		? nodes
+				.flatMap((node, i) => (joined[i]! >= -1 ? [{ node, at: joined[i]! }] : []))
+				.sort((a, b) => cmpStr(a.node.id, b.node.id))
+				.map(({ node, at }) => ({ nodeId: node.id, inServiceFrom: node.damInServiceFrom!, joinedOn: at >= 0 ? fromEpochDay(start + at) : null }))
+		: [];
 	// A resumed run (engine ≥ 1.54.0): the state its first day starts from, for the self-check.
 	const startState = resumed
 		? {
 				start: {
 					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
 					ewrFailedBefore: rp.initialEwrFailed === true,
+					...(rp.filling ? { fillingBefore: nodes.flatMap((node, i) => (rp.filling![i] ? [node.id] : [])).sort(cmpStr) } : {}),
 					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
 				}
 			}
@@ -1672,7 +1729,8 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 		reviews,
 		...(ewrReviews !== undefined ? { ewrReviews } : {}),
 		units,
-		...startState
+		...startState,
+		...(filling.length ? { filling } : {})
 	};
 }
 
@@ -1925,7 +1983,7 @@ function otherUsers(
 	month: Uint8Array,
 	warnings: string[],
 	factorFrom: number,
-	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down. */
+	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down, and (engine ≥ 1.70.0) before its demand factor. */
 	scale?: (i: number, demand: Float64Array) => void
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
@@ -1945,9 +2003,10 @@ function otherUsers(
 			}
 		}
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month, from settings.demandFactorFrom (0.44.0).
+		// A full allocation scales it first (engine ≥ 1.70.0), so the demand factor is a share of the registered use.
+		scale?.(i, demand);
 		const factor = demandFactorOf(n, warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
-		scale?.(i, demand);
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -2054,7 +2113,7 @@ function runAllocations(
 				const cap = plan.nodes[i]!.allocationCap!;
 				const limit = side.waterSource === 'surface' ? cap.surfaceLimit : cap.groundwaterLimit;
 				const outside = outsideMonths(ap.byNode.get(i) ?? [], side.waterSource, toEpochDay(startDate), budget.length);
-				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3));
+				Object.assign(src, capYears(budget, limit ?? null, outside, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3, (ap.byNode.get(i) ?? []).filter((a) => a.waterSource === side.waterSource)));
 			}
 			sources.push(src);
 		}
@@ -2071,7 +2130,9 @@ function runAllocations(
  * (engine ≥ 1.40.0), the days per year the licence limit bound, split by
  * which limit set the room (limitBoundKind). A run resumed inside a water
  * year (`before`, the snapshot's use so far that year) counts the year's use
- * before the snapshot too, as the cap did.
+ * before the snapshot too, as the cap did. Only capped days count (engine ≥
+ * 1.70.0: a day no allocation of the source is in force on has an Infinity
+ * budget, and its use doesn't count); a year with none isn't listed.
  */
 function capYears(
 	budget: Float64Array,
@@ -2080,17 +2141,20 @@ function capYears(
 	source: 'surface' | 'groundwater',
 	r: NodeResult,
 	startDate: string,
-	before?: readonly [number, number]
+	before?: readonly [number, number],
+	/** The unit's allocations of `source`: a resumed run's first year counts as capped when one was in force before the snapshot. */
+	own: readonly AllocationEntry[] = []
 ): { capReached: { waterYear: number; budgetM3: number; usedM3: number }[]; limitBound: AllocationLimitBound[] } {
 	const capReached: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
 	const limitBound: AllocationLimitBound[] = [];
 	const start = toEpochDay(startDate);
 	let wy = NaN;
 	let used = 0;
-	let lastT = 0;
+	// The year's budget, from its capped days (engine ≥ 1.70.0: a day no allocation is in force on isn't capped,
+	// Infinity, and its use doesn't count); NaN for a year with none, which can't reach a cap.
+	let b = NaN;
 	let bound: AllocationLimitBound | null = null;
 	const close = () => {
-		const b = budget[lastT]!;
 		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) capReached.push({ waterYear: wy, budgetM3: b, usedM3: used });
 		if (bound?.days) limitBound.push(bound);
 	};
@@ -2099,18 +2163,23 @@ function capYears(
 		if (y !== wy) {
 			close();
 			// A run that starts on 1 October starts the year afresh (simulateNetwork clears the use then too).
-			used = t === 0 && before && startDate.slice(5) !== '10-01' ? before[source === 'surface' ? 0 : 1] : 0;
+			const resumed = t === 0 && before && startDate.slice(5) !== '10-01';
+			used = resumed ? before[source === 'surface' ? 0 : 1] : 0;
 			wy = y;
+			// A resumed run's first year had capped days before the snapshot if an allocation was in force on one of them.
+			const ys = toEpochDay(`${y}-10-01`);
+			b = resumed && inForceOver(own, ys, start - 1) ? registeredOver(own, y, ys, toEpochDay(`${y + 1}-10-01`) - 1) : NaN;
 			bound = { waterYear: y, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		}
+		if (!(budget[t]! < Infinity)) continue;
+		b = budget[t]!;
 		const use = source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
-		const kind = limitBoundKind(Math.max(0, budget[t]! - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, budget[t]!);
+		const kind = limitBoundKind(Math.max(0, b - used), limit ? limit[t]! : Infinity, outside?.[t] === 1, use, r.demand[t]!, r.deficit[t]!, b);
 		if (kind) {
 			bound!.days++;
 			bound![kind]++;
 		}
 		used += use;
-		lastT = t;
 	}
 	close();
 	return { capReached, limitBound };
@@ -2669,7 +2738,7 @@ function buildDemand(
 	warnings: string[],
 	factorFrom: number,
 	warm: { captureAt?: number; soilStoreM3?: readonly number[] } = {}
-): { net: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
+): { net: Float64Array; netBase?: Float64Array; gross: Float64Array; rainOffset: Float64Array; soilWater: Float64Array; efficiency: (farmEfficiency: number) => number; storeAtM3?: number }[] {
 	const { nodes, crops: cropDefs, cropAreas } = input.model;
 	const crops: Crop[] = cropDefs.map((c) => {
 		// A crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54); one outside (0, 1] falls back to the farm's.
@@ -2751,10 +2820,12 @@ function buildDemand(
 		// from settings.demandFactorFrom on (engine ≥ 0.44.0, the seasonal outlook), else every day.
 		// × the crops' own factor (engine ≥ 1.45.0, demand.scale with part 'crops').
 		const factor = unitPartFactor(node, 'crops', warnings);
+		// The requirement before the factor (engine ≥ 1.70.0): a full allocation fits its factor on it (§2.12a).
+		const netBase = factor && factorFrom < days ? Float64Array.from(f.net) : undefined;
 		if (factor) for (let t = factorFrom; t < days; t++) f.net[t]! *= factor[wy[t]!]!;
 		// Crops under their own irrigation system (engine ≥ 0.43.0): weighted by their annual requirement at the monthly A-pan.
 		const efficiency = (e: number) => farmIrrigationEfficiency(e, crops, areas, settings.apanMm);
-		return { net: f.net, gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
+		return { net: f.net, ...(netBase ? { netBase } : {}), gross: d.gross, rainOffset: f.used, soilWater: f.storeMm, efficiency, ...(f.storeAtM3 !== undefined ? { storeAtM3: f.storeAtM3 } : {}) };
 	});
 	// With a daily A-pan series the run's A-pan warning (prepare.ts) says which days fall back to these zeros.
 	if (anyArea && !apanDay && settings.apanMm.every((v) => v === 0)) {

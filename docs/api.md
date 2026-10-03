@@ -2189,6 +2189,12 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`runDays`, `nearChirpsMm`, `runChirpsMm`) are `null` for a listed window,
   and `chirpsMm` for a window not spread. The catchment series
   `rain_catchment_spread` is 1 on each day whose rain came from a window.
+  Engine ≥ 1.70.0 adds `criteria.maxBlankDays` (7), the status `'setAside'`
+  (a reading straight after an outage, more than 7 days blank or listed as
+  missing, treated as missing: its window is its own day, and `usedMm` is the CHIRPS or forecast
+  rain the run used there instead) and `outageDays` on each window (the
+  outage's length for a set-aside or as-recorded outage reading, else
+  `null`; absent on older runs).
   Rules: [model.md §2.4d](./model.md#24d-multi-day-rainfall-accumulations).
 - `summary.rainSource` (engine ≥ 0.30.0) is what `settings.rainSource` did,
   `null` without periods, absent on older runs: `{ periods: [{ start, end,
@@ -2756,8 +2762,13 @@ what](./allocations.md#who-sees-what)).
   years with one). A capped source whose licence states months or a rate has
   the run series `allocation_left_surface` / `allocation_left_groundwater`
   (what is left of the year's volume, m³, start of the day) beside
-  `allocation_room_*`. The summary CSV adds an "Allocation cap by water year"
-  block in a cap run.
+  `allocation_room_*`. Both are `null` on a day none of the unit's
+  allocations of the source is in force, which isn't capped and whose use
+  doesn't count (engine ≥ 1.70.0; a year with no capped day is in neither
+  `capReached` nor `limitBound`). In a full-allocation run `scaled` leaves
+  out a water year with no allocation in force (its factor is 1, the
+  modelled demand; engine ≥ 1.70.0).
+  The summary CSV adds an "Allocation cap by water year" block in a cap run.
 - `capYears` (the run comparison, `GET …/runs/:runId/allocations`): in a cap
   run, one `{ nodeId, waterSource, capReached, limitBound }` per unit and
   capped source of `RunSummary.allocations` (`limitBound` `null` on a run

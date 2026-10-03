@@ -273,6 +273,14 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   municipal object with people below its basic-needs floor, MIN(people ×
   25 l a day, its demand) (engine ≥ 1.44.0, issue #123), also under a full
   allocation. One object is changed with `demandObject.set`.
+- **Under a full allocation it scales the registered use** (engine ≥
+  1.70.0, issue #90 Q29, [model.md §2.12a](./model.md)). The allocation's
+  factor is fitted on the demand before the op, and the op then multiplies
+  the scaled demand: "everyone takes 85 %" asks for 85 % of every registered
+  volume, a months-only op takes those months' share of it down, and a cut
+  keeps a floored object at MIN(floor, its registered use). Before 1.70.0
+  the factor was refitted after the op and a uniform op changed nothing on a
+  registered unit. Outside a full allocation nothing changed.
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of
@@ -400,7 +408,14 @@ requested volume in a full-allocation background, is one op.
   Under `cap` (engine ≥ 1.37.0) the months of use and the maximum rate
   bind the scenario run as they bind a stored licence ([model.md
   §2.12a](./model.md)), so "what if this licence were winter-only" is one
-  op too.
+  op too. Its `validFrom` / `validTo` bind as well: under `cap` a day on
+  which none of the unit's licences of that source is in force isn't capped
+  for it, and its use doesn't count against the year's volume (engine ≥
+  1.70.0, #90 Q24), so a proposed licence that starts partway through the
+  run leaves the days before it as the unit's modelled demand (the run
+  warns, naming them); under a full allocation a water year with none in
+  force keeps the modelled demand. A demand-sized off-take into a capped
+  unit takes only the demand its cap still allows (§2.6a).
   Unknown keys are dropped, so a holder's name or a registration number never
   enters an op. An id the input has replaces that volume in place; a new id
   adds one.

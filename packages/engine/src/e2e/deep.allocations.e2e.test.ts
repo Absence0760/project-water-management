@@ -8,10 +8,15 @@
 //                    and groundwater use (groundwater_used + groundwater_to_dam)
 //                    never exceed the whole year's budget; the stored room is
 //                    MIN(MAX(0, budget − use so far), the licence limit) and
-//                    each day's use stays within it;
+//                    each day's use stays within it; a day with none of the
+//                    source's allocations in force isn't capped (engine ≥
+//                    1.70.0, #90 Q24): its room is blank, its use doesn't
+//                    count, and a year without a capped day is in neither
+//                    capReached nor limitBound;
 //   fullAllocation — the factor is constant within a water year, and a year
 //                    with demand asks for exactly the volume registered over
-//                    its run days (both sources);
+//                    its run days (both sources); a year with none in force
+//                    on those days keeps its demand, factor 1 (engine ≥ 1.70.0);
 //   every mode     — RunSummary.allocations equals compareAllocations on the
 //                    run's own stored series, selected with the backend's own
 //                    key set (backend/src/allocations/runUse.ts, read here);
@@ -90,6 +95,8 @@ function budget(allocs: readonly AllocationEntry[], wy: number): number {
 	}
 	return sum;
 }
+/** Whether any of the allocations is in force on epoch day d (§2.12a, engine ≥ 1.70.0: a day none is isn't capped). */
+const inForceOn = (allocs: readonly AllocationEntry[], d: number) => allocs.some((a) => !((a.validFrom && d < toEpochDay(a.validFrom)) || (a.validTo && d > toEpochDay(a.validTo))));
 /** §2.12a licence limit on epoch day d: Σ rate × 86 400 over the in-force allocations whose months include d's; none in force or none stated = ∞. */
 function limit(allocs: readonly AllocationEntry[], d: number): number {
 	if (!allocs.some((a) => (a.months != null && a.months.length > 0) || a.maxRateM3s != null)) return Infinity;
@@ -112,6 +119,7 @@ const GEN = { maxNodes: 9, maxDays: 800 };
 describe('deep: an allocation cap holds a year’s use to its whole-year budget (§2.12a)', () => {
 	it('surface and groundwater, every unit, every water year; the room column and each day’s use replayed', () => {
 		let bound = 0;
+		let uncapped = 0;
 		const kinds = { volumeDays: 0, rateDays: 0, monthsDays: 0 };
 		const bad: string[] = [];
 		for (const seed of SEEDS) {
@@ -139,6 +147,11 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 						const b = budget(own, s.wy);
 						let used = 0;
 						for (let t = s.from; t <= s.to; t++) {
+							if (!inForceOn(own, d0 + t)) {
+								uncapped++;
+								if (!Number.isNaN(room[t]!)) bad.push(`seed ${seed} ${n.id} ${source} ${fromEpochDay(d0 + t)}: room ${room[t]} on an uncapped day, not blank`);
+								continue;
+							}
 							const use = source === 'surface' ? sup[t]! - gw[t]! : gw[t]! + gd[t]!;
 							const want = Math.min(Math.max(0, b - used), limit(own, d0 + t));
 							const tol = 1e-9 * Math.max(1, b, Number.isFinite(want) ? want : 0);
@@ -160,8 +173,11 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 					for (const s of spans(out)) {
 						const b = budget(own, s.wy);
 						let used = 0;
+						let capped = false;
 						const y = { waterYear: s.wy, days: 0, volumeDays: 0, rateDays: 0, monthsDays: 0 };
 						for (let t = s.from; t <= s.to; t++) {
+							if (!inForceOn(own, d0 + t)) continue;
+							capped = true;
 							const use = source === 'surface' ? sup[t]! - gw[t]! : gw[t]! + gd[t]!;
 							const left = Math.max(0, b - used);
 							const lim = limit(own, d0 + t);
@@ -176,7 +192,7 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 							}
 							used += use;
 						}
-						if (used >= b * (1 - 1e-9)) reached.push(s.wy);
+						if (capped && used >= b * (1 - 1e-9)) reached.push(s.wy);
 						if (y.days) lb.push(y);
 					}
 					const got = (src.capReached ?? []).map((r) => r.waterYear);
@@ -187,7 +203,11 @@ describe('deep: an allocation cap holds a year’s use to its whole-year budget 
 			if (bad.length > 8) break;
 		}
 		expect(bad).toEqual([]);
-		expect(bound).toBeGreaterThan(20);
+		// The cap binds in enough years for this to test something (15 on these seeds since 1.70.0, which no longer
+		// counts the use before a licence's start against its first year).
+		expect(bound).toBeGreaterThan(10);
+		// Some days have none of a unit's allocations of a source in force, so the uncapped rule is reached.
+		expect(uncapped).toBeGreaterThan(100);
 		// Each kind of limit binds somewhere, so the limitBound replay isn't vacuous.
 		expect(kinds.volumeDays).toBeGreaterThan(0);
 		expect(kinds.rateDays).toBeGreaterThan(0);
@@ -199,6 +219,7 @@ describe('deep: a full-allocation run (§2.12a)', () => {
 	it('the factor is constant within each water year, and a year with demand asks for exactly its registered volume over its run days', () => {
 		const bad: string[] = [];
 		let scaled = 0;
+		let unlicensed = 0;
 		for (const seed of SEEDS) {
 			const input = withAllocations(randomInput(seed, GEN), seed, 'fullAllocation');
 			const out = runModel(input);
@@ -225,6 +246,12 @@ describe('deep: a full-allocation run (§2.12a)', () => {
 					let asked = 0;
 					for (let t = s.from; t <= fit; t++) asked += D[t]!;
 					const lo = Math.max(d0 + s.from, from);
+					// No allocation in force on the days it is fitted on (engine ≥ 1.70.0): the modelled demand, factor 1.
+					if (lo <= d0 + fit && !own.some((a) => (!a.validFrom || toEpochDay(a.validFrom) <= d0 + fit) && (!a.validTo || toEpochDay(a.validTo) >= lo))) {
+						unlicensed++;
+						if (k[s.from] !== 1) bad.push(`seed ${seed} ${n.id} ${s.wy}: factor ${k[s.from]} with no allocation in force, not 1`);
+						continue;
+					}
 					let reg = 0;
 					for (const a of own) {
 						const a0 = Math.max(lo, a.validFrom ? toEpochDay(a.validFrom) : -Infinity);
@@ -241,6 +268,7 @@ describe('deep: a full-allocation run (§2.12a)', () => {
 		}
 		expect(bad).toEqual([]);
 		expect(scaled).toBeGreaterThan(50);
+		expect(unlicensed).toBeGreaterThan(5);
 	});
 });
 

@@ -111,17 +111,34 @@ export function releaseToday(r: PlanRelease, calendarMonth: number, inflow: numb
 }
 
 /**
- * A fixed release's floor before the day's inflow and transfers are known
- * (engine ≥ 1.29.0): releaseToday with `held` (the dam after the day's
- * rain, evaporation and seepage, less what it has sent so far) as all it
- * has; a transfer's room into the dam counts it. For a dam that only
- * receives, the day's release is at least this (inflow and water
- * transferred in only add to what it releases from). A dam that sends more
- * later the same day can release less, but only when its release is cut to
- * the water above dead storage, so it ends the day at dead storage and is
- * never overfilled. 0 for a pass-inflow release, which is at most the day's
- * inflow, which the room doesn't count either.
+ * The flow a pass-inflow release is there to keep below the dam today (m³):
+ * the month's amount, or the EWR required at the node (`ewrRequired`, its
+ * cumulative Z) when the rule has no amounts; 0 for a fixed release or none.
+ * What must pass below the dam holds against everything that takes from the
+ * river there: the unit's river pump (§2.7e), its river abstractions (§2.7j)
+ * and, engine ≥ 1.70.0, the river off-takes from the unit (§2.6a), so none of
+ * them takes the water the release passes on. `r` is the release in force
+ * today (none on a day the dam has no capacity, §2.7g).
  */
-export function fixedReleaseFloor(r: PlanRelease, calendarMonth: number, held: number, dead: number): number {
-	return r.rule === 2 ? releaseToday(r, calendarMonth, 0, 0, 0, Math.max(held, 0), dead) : 0;
+export function passInflowTarget(r: PlanRelease | null | undefined, calendarMonth: number, ewrRequired: number): number {
+	if (!r || r.rule !== 1) return 0;
+	return r.m3DayByMonth ? r.m3DayByMonth[calendarMonth]! : ewrRequired;
+}
+
+/**
+ * A fixed release's amount today as a receiving dam's room counts it (engine
+ * ≥ 1.70.0, issue #90 Q26; docs/model.md §2.6, §2.6a): MIN(the month's
+ * amount, outlet), in full; 0 for a pass-inflow release (at most the day's
+ * inflow, which the room doesn't count) or none. Water moved into a dam
+ * arrives before its release (§2.7a item 3 releases from the dam with it
+ * in), so a dam whose room counts this never ends the day above capacity:
+ * either the release is the full MIN(amount, outlet) and the room made for
+ * it leaves again, or the release is cut to the water above dead storage
+ * and the dam ends at dead storage, which is never above its capacity (a
+ * run refuses damMinPct outside 0–1). Before 1.70.0 a room counted only the
+ * release as it would be with no inflow and nothing moved in (the "floor"),
+ * which left a dam near its dead storage below full.
+ */
+export function fixedReleaseRoom(r: PlanRelease | null | undefined, calendarMonth: number): number {
+	return r && r.rule === 2 ? Math.max(0, Math.min(r.m3DayByMonth![calendarMonth]!, r.outletM3Day)) : 0;
 }

@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Engine 1.70.0 (issue #393, #90 Q24–Q31): the engine the frontend bundles grew (per-day allocation budgets, proportional rationing in rounds, first-filling restriction readings, blank-outage accumulation detection, their self-checks and warnings) plus the off-take, transfer, cap, restriction and accumulation help text. Measured on CI (Typecheck and unit tests): main @ 75259d809 1676 KB, feat/393-engine-decisions @ cddec2b1f 1680 KB (+4 KB); locally 1677 KB. Headroom left: 0 KB."
+}

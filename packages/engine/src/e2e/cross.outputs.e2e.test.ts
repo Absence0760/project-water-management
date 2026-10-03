@@ -3,8 +3,9 @@
 //   - a full-allocation run (§2.12a) with a scenario applied (src/scenario)
 //     and compared with its base (src/compare.ts): a registered volume
 //     changed by allocation.set moves each year's demand to exactly the new
-//     volume; a demand.scale on some months only reshapes the year but
-//     can't change its volume; the comparison's deltas are B − A of the two
+//     volume; a demand.scale on some months only cuts those months' share of
+//     the volume (engine ≥ 1.70.0: the factor applies after the full
+//     allocation's); the comparison's deltas are B − A of the two
 //     runs' summaries, worked by hand from the volumes;
 //   - the seasonal outlook (§2.15) on a network with a river off-take to a
 //     canal town (§2.6a) and an allocation cap (§2.12a): every member from
@@ -116,15 +117,14 @@ describe('a full-allocation run with a scenario, compared with its base (§2.12a
 		expect(JSON.stringify(changes)).toMatch(/220[\s,.]?000|220000/);
 	});
 
-	it('demand.scale on Nov–Jan only: the year still asks for its volume, moved out of those months in proportion', () => {
+	it('demand.scale on Nov–Jan only (engine ≥ 1.70.0): the factor applies after the full allocation, so those months take half their share of the volume and the year less', () => {
 		const ops: ScenarioOp[] = [{ op: 'demand.scale', factor: 0.5, nodeIds: ['a'], months: [11, 12, 1] }];
 		const r = applyScenario(BASE, ops);
 		const out = withVerification(r.input, runModel(r.input));
 		expect(out.summary.verification!.passed, JSON.stringify(out.summary.verification!.checks.filter((c) => !c.passed))).toBe(true);
-		const y = yearDemand(out, 'a');
-		expect(y.get(2003)!).toBeCloseTo(220_000, 4);
-		// By hand: in a year, D′ = k′ × f × D₀ with f = 0.5 in Nov–Jan, else 1, and k′ = V ÷ Σ f × D₀;
-		// the base has k = V ÷ Σ D₀. So D′ ÷ D = f × Σ D₀ ÷ Σ f D₀, the same every day of the year.
+		// By hand (model.md §2.12a, issue #90 Q29): k is fitted on the demand before the factor, so it is the base
+		// run's k, and D′ = f × k × D₀ = f × D, f = 0.5 in Nov–Jan, else 1. The year asks for V × Σ f D₀ ÷ Σ D₀.
+		// (Before 1.70.0, k′ = V ÷ Σ f D₀ put the whole volume back: the factor only moved water between months.)
 		const d0 = toEpochDay(out.startDate);
 		const D = series(base, 'a', 'demand');
 		const D1 = series(out, 'a', 'demand');
@@ -133,18 +133,18 @@ describe('a full-allocation run with a scenario, compared with its base (§2.12a
 		let all = 0;
 		let scaled = 0;
 		for (let t = from; t <= to; t++) {
-			const m = new Date((d0 + t) * 86_400_000).getUTCMonth() + 1;
+			const f = [11, 12, 1].includes(new Date((d0 + t) * 86_400_000).getUTCMonth() + 1) ? 0.5 : 1;
 			all += D[t]!;
-			scaled += ([11, 12, 1].includes(m) ? 0.5 : 1) * D[t]!;
+			scaled += f * D[t]!;
+			expect(Math.abs(D1[t]! - f * D[t]!), fromEpochDay(d0 + t)).toBeLessThanOrEqual(1e-9 * Math.max(1, D[t]!));
 		}
-		for (let t = from; t <= to; t++) {
-			const m = new Date((d0 + t) * 86_400_000).getUTCMonth() + 1;
-			const want = (([11, 12, 1].includes(m) ? 0.5 : 1) * all * D[t]!) / scaled;
-			expect(Math.abs(D1[t]! - want), fromEpochDay(d0 + t)).toBeLessThanOrEqual(1e-9 * Math.max(1, want));
-		}
+		expect(all).toBeCloseTo(220_000, 4);
+		expect(yearDemand(out, 'a').get(2003)!).toBeCloseTo((220_000 * scaled) / all, 4);
+		expect(yearDemand(out, 'a').get(2003)!).toBeLessThan(220_000);
+		// The full-allocation factor is the base run's, day for day.
+		expect(series(out, 'a', 'allocation_demand_factor')).toEqual(series(base, 'a', 'allocation_demand_factor'));
 		const c = compareRuns(base, out);
-		// Over the run the demand moves months but not volume: the delta is float noise.
-		expect(Math.abs(c.farms.find((f) => f.nodeIdA === 'a')!.demandM3Day.delta!)).toBeLessThan(1e-6);
+		expect(c.farms.find((f) => f.nodeIdA === 'a')!.demandM3Day.delta!).toBeLessThan(0);
 	});
 
 	it('settings.set to a cap: no unit uses more than its volume in any water year, and the comparison sees less supply nowhere above the volume', () => {

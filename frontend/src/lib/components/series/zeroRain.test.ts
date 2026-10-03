@@ -29,7 +29,7 @@ describe('zeroRainShading', () => {
 	it('shades nothing when the run is kept dry or the mode is as recorded, or with no flagged run (positive control above)', () => {
 		const s = series();
 		for (let i = idx('2003-05-01'); i <= idx('2003-07-31'); i++) s.values[i] = 0;
-		expect(zeroRainShading(s, zr({ mode: 'asRecorded', keepDry: [], missing: [] }))).toEqual({ ranges: [], days: 0, spreadDays: 0, caption: null });
+		expect(zeroRainShading(s, zr({ mode: 'asRecorded', keepDry: [], missing: [] }))).toEqual({ ranges: [], days: 0, spreadDays: 0, setAsideDays: 0, caption: null });
 		expect(zeroRainShading(s, zr({ mode: 'missing', keepDry: [{ waterYear: 2002, reason: 'real' }], missing: [] })).days).toBe(0);
 		expect(zeroRainShading(series(), zr({ mode: 'missing', keepDry: [], missing: [] })).caption).toBeNull();
 	});
@@ -74,5 +74,29 @@ describe('zeroRainShading', () => {
 		// Without CHIRPS nothing can be judged; as recorded, nothing is spread.
 		expect(zeroRainShading(s, zr()).caption).toBeNull();
 		expect(zeroRainShading(s, zr({ accumulationMode: 'asRecorded' }), chirps).caption).toBeNull();
+	});
+
+	it('shades a reading that ends a blank outage (engine ≥ 1.70.0): its own day, set aside; 7 blank days are a window instead', () => {
+		const s = series();
+		const chirps = { startDate: s.startDate, values: s.values.slice() };
+		// A logger out for 30 winter days (blank), then 60 mm on 2003-06-21, a day CHIRPS was dry on (and either side).
+		const r = idx('2003-06-21');
+		for (let i = r - 30; i < r; i++) s.values[i] = null;
+		s.values[r] = 60;
+		for (const i of [r - 1, r, r + 1]) chirps.values[i] = 0;
+		const res = zeroRainShading(s, zr(), chirps);
+		expect(res.ranges).toEqual([{ start: '2003-06-21', end: '2003-06-21' }]);
+		expect(res).toMatchObject({ days: 0, spreadDays: 0, setAsideDays: 1 });
+		expect(res.caption).toBe('Shaded: 1 reading after an outage that a run sets aside, so CHIRPS fills its day.');
+		// Kept as recorded, nothing is shaded.
+		expect(zeroRainShading(s, zr({ keepReadings: [{ start: '2003-06-21', end: '2003-06-21', reason: 'storm' }] }), chirps).caption).toBeNull();
+		// Only 7 blank days before it: a window over them, the fixture's zero day before them and the reading day
+		// (40 mm: CHIRPS over the run, 24 mm, is over half).
+		const t = series();
+		for (let i = r - 7; i < r; i++) t.values[i] = null;
+		t.values[r] = 40;
+		const w = zeroRainShading(t, zr(), chirps);
+		expect(w.ranges).toEqual([{ start: '2003-06-13', end: '2003-06-21' }]);
+		expect(w).toMatchObject({ spreadDays: 9, setAsideDays: 0 });
 	});
 });

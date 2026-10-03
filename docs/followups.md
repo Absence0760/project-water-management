@@ -396,6 +396,12 @@ runs and accumulations are real) can't be decided without the client.
       rule tables' monthly compliance) and raises the level to at least its
       own; a rule **from the published notice** is one level in force below
       100 % from the publication date to the next expected one.
+      From engine 1.70.0 (issue #90 Q30, the operator's decision): a dam that
+      comes into service mid-run **can only make a review milder while it
+      fills**: each review reads the level with the filling dams left out and
+      counted and applies the milder, until the dam first starts a day at the
+      mildest level's share of its capacity (no published source covers first
+      filling; judgement).
 - [ ] **Drought restrictions on the other water users: decide whether and
       how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
       only hydrological units: an other water user's demand has no category
@@ -732,6 +738,22 @@ runs and accumulations are real) can't be decided without the client.
       once the hydrologist says which; until then the gauge total is kept.
       Trigger: the hydrologist's review of issue #2.
       **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
+      **Blank outages (issue #90 Q31, issue #393), built in engine 1.70.0:** a blank stretch counts towards a run only up to 7 days (`ACC_MAX_BLANK_DAYS`); days listed as missing count as blank; a ≥ 20 mm reading straight after a longer outage that passes the CHIRPS tests is set aside as missing (CHIRPS fills it, out of the fit, warned). Provisional (operator, 2026-10-03), to be confirmed by the hydrologist with the limit itself (it rests on reasoning, not a source; model.md §2.4d).
+- [x] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).** *Done (issue #393): (1)–(3) and the probe are in `verify/` (`outage-reading-set-aside`, `short-blank-run-window`, three mutants); (4) stays out of scope while the harness refuses `keepReadings`/`addAccumulations`.*
+      `verify/model.py` `detect_accumulations` counts every blank day back
+      from a reading like a zero. It needs: (1) the run to stop at a stretch
+      of more than 7 days blank or listed as missing (measured whole; the
+      detection reads listed-missing days as blank), so the window is only the
+      days after it; (2) a reading with an outage straight before it (no run)
+      judged by the same tests over the outage's last 92 days (the day before
+      left out), and, when it passes, added to the days set aside (CHIRPS ×
+      factor, then forecast) and to the fit's left-out days, not spread; (3)
+      in accumulation mode `'asRecorded'`, kept on its day but still left out
+      of the fit; (4) `keepReadings`/`addAccumulations` as for any detection
+      (the harness refuses those today). A probe: 150 blank days ended by
+      30 mm (the `item 11 (b)` case in `open.behaviour.e2e.test.ts`). The probe
+      `accumulation-window-run` (zeros only) is unaffected. Trigger: the next
+      `verify/` change, before engine 1.70.0 ships.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #2; the hydrologist's answer is on #46). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
@@ -2758,7 +2780,8 @@ role and not before it.
       - ~~*Transfer room ignores today's release*~~: done (engine 1.29.0,
         issue #67): the room counts a fixed release's floor, the release
         with no inflow and nothing transferred in (`fixedReleaseFloor`,
-        model.md §2.6). A pass-inflow release stays uncounted: it is at most
+        model.md §2.6); from engine 1.70.0 its MIN(amount, outlet) in full
+        (`fixedReleaseRoom`, issue #90 Q26). A pass-inflow release stays uncounted: it is at most
         the day's inflow, which the room doesn't count either, and both are
         only known after the transfers are settled.
       - ~~*Self-checks water-balance table*~~: done (76f24440): optional

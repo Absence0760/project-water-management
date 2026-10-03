@@ -4,7 +4,8 @@
 //   - a drought restriction (§2.7i) on a unit whose dam comes into service
 //     part-way through the run (§2.7g), with a demand object on a weekday
 //     schedule (§2.7f) and a basic-needs floor: the level a review decides
-//     with no dam in service, on the in-service day and while the dam fills;
+//     with no dam in service, on the in-service day and while the dam fills
+//     (engine ≥ 1.70.0: a filling dam is left out of the reviews);
 //   - demand objects (§2.7f) on the dam and on a river abstraction beside it
 //     (§2.7j), a supplemental dam-target borehole (§2.7d) and an allocation
 //     cap on both sources (§2.12a): who gets the surface room, day by day.
@@ -104,28 +105,25 @@ describe('a drought restriction on a unit whose dam comes into service mid-run, 
 	const Q = [500, 500, 0, 1000, 0, 0, 0, 0, 0, 0];
 	const demand = [300, 100, 100, 300, 300, 300, 300, 300, 100, 100];
 
-	it('a review on the in-service day reads the dam empty (its start: no dam the day before) and cuts to level 2', () => {
+	it('a review on the in-service day leaves the new, empty dam out (engine ≥ 1.70.0, first filling, #90 Q30): no level until the 8 Oct review', () => {
 		const rule: DroughtRestrictionRule = { reviewDates: ['10-04', '10-08'], levels };
 		const input = build(a, { objects, start, days: 10, settings: { droughtRestriction: rule } });
 		const out = run(input, Q);
 		// No capacity before 4 October: the starting storage is 50 % of the first day's capacity, 0.
 		near(get(out, 'A', 'dam_capacity'), [0, 0, 0, 1000, 1000, 1000, 1000, 1000, 1000, 1000]);
 		// The first day: the latest review (8 Oct last year) has no lift after it, so the level is decided
-		// from the starting storage, and no dam has capacity that day: level 0. On 4 Oct the dam starts
-		// empty (0 ÷ 1000 < 30 %): level 2, held to the 8 Oct review (800 ÷ 1000 = 80 %): level 0.
-		expect(get(out, null, 'restriction_level')).toEqual([0, 0, 0, 2, 2, 2, 2, 0, 0, 0]);
+		// from the starting storage, and no dam has capacity that day: level 0. On 4 Oct the dam is in
+		// service but filling (it starts the day empty, below the mildest level's 60 %), so the review reads no
+		// dam: level 0 (before 1.70.0, 0 ÷ 1000 < 30 %: level 2). 4 Oct: 0 + 1000 − 300 = 700 m³, so the dam starts
+		// 5 Oct at 70 % ≥ 60 % and counts from then. The 8 Oct review reads it empty (700 − 300 − 300 − 100): level 2.
+		expect(get(out, null, 'restriction_level')).toEqual([0, 0, 0, 0, 0, 0, 0, 2, 2, 2]);
 		near(get(out, 'A', 'demand'), demand);
-		// Level 2: the works cut to 0, the town to its floor, 50.
-		near(get(out, 'A', 'restricted_demand'), [300, 100, 100, 50, 50, 50, 50, 300, 100, 100]);
-		// Before the dam: supplied from the day's runoff, the rest passes as spill. Sunday is dry: nothing.
-		near(get(out, 'A', 'supplied'), [300, 100, 0, 50, 50, 50, 50, 300, 100, 100]);
+		near(get(out, 'A', 'restricted_demand'), [300, 100, 100, 300, 300, 300, 300, 50, 50, 50]);
+		near(get(out, 'A', 'supplied'), [300, 100, 0, 300, 300, 300, 100, 0, 0, 0]);
 		near(get(out, 'A', 'spill'), [200, 400, 0, 0, 0, 0, 0, 0, 0, 0]);
-		near(get(out, 'A', 'dam_storage'), [0, 0, 0, 950, 900, 850, 800, 500, 400, 300]);
-		near(get(out, 'A', 'object_supplied@town'), [100, 100, 0, 50, 50, 50, 50, 100, 100, 100]);
-		near(get(out, 'A', 'object_supplied@works'), [200, 0, 0, 0, 0, 0, 0, 200, 0, 0]);
+		near(get(out, 'A', 'dam_storage'), [0, 0, 0, 700, 400, 100, 0, 0, 0, 0]);
 		near(get(out, 'A', 'basic_needs'), [50, 50, 50, 50, 50, 50, 50, 50, 50, 50]);
-		// The deficit is against the unrestricted demand.
-		near(get(out, 'A', 'deficit'), demand.map((d, t) => d - [300, 100, 0, 50, 50, 50, 50, 300, 100, 100][t]!));
+		expect(out.summary.droughtRestriction!.filling).toEqual([{ nodeId: 'A', inServiceFrom: '2021-10-04', joinedOn: '2021-10-05' }]);
 		passes(input, out);
 	});
 

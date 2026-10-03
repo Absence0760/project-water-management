@@ -202,13 +202,23 @@ What it can't see:
 `packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per
 area (`demand`, `rain`, `network`, `balance`, `ewr`, `outputs`, `calibration`; then `cross` for
 features together, `edge` for long, tiny, huge and boundary-date runs, `deep` for the off-takes
-and allocations, `open` for questions the first round left):
+and allocations, `open` for questions the first round left, `caps` for the allocation cap
+around its licences' dates and the off-takes into a capped unit, engine 1.70.0, #393):
 small invented catchments run through `runModel` (or `calibrate`, the outlook,
 a resumed run), checked against values worked by hand, or by a small
 re-derivation inside the test, from docs/model.md, never against what the
 engine returned before. The `*.differential.e2e.test.ts` files replay the
 documented formulas over a few hundred random networks. `*.regressions.e2e.test.ts`
-pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29). They run in
+pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29),
+`deep.transfers.e2e.test.ts` replays dam rules' rounds (§2.6) from the docs
+over 600 random multi-source networks, and
+`network.offtakeDecisions.e2e.test.ts` the decisions of engine 1.70.0
+(issue #90 Q25–Q27: proportional rationing within a priority for off-takes
+and dam rules, with split-invariance property tests (several sources into one
+receiver too), dam rules' rounds handing on room a dry source can't fill, and
+the warning about a licence entered twice; a fixed release counted in full in a room into a dam,
+with a no-overfill property test over both paths; the pass-inflow target an
+off-take keeps). They run in
 `pnpm test` (a few seconds in all); run one area with
 `pnpm -C packages/engine exec vitest run src/e2e/<area>`.
 

@@ -220,14 +220,31 @@ decides what the volumes do to a run
   groundwater use per water year stay within its volumes. The budget is the
   whole year's volume, so a unit may take it early; its boreholes cover what
   a capped surface can't, within the groundwater volume. A source with no
-  volume isn't capped. What a cap does is visible: the run warns about the
-  units it leaves alone, and the Allocations tab says the run was capped.
+  volume isn't capped, and nor is a day on which none of a unit's volumes
+  of that source is in force (before its first licence starts, after its
+  last ends, or between two): the use on those days doesn't count against
+  the year's volume, which is prorated to the licences' days (a licence
+  from 1 September caps September at 30/365 of it; engine ≥ 1.70.0, #90 Q24,
+  provisional: before, a year with none in force was capped at 0 and a
+  licence's first year from 1 October). A demand-sized river off-take into a
+  capped unit takes only the demand its cap still allows (engine ≥ 1.70.0,
+  #90 Q28). What a cap does is visible: the run warns about the units it
+  leaves alone and, in one warning, the units and days no licence was in
+  force on (check the licence dates), and the Allocations tab says the run
+  was capped. Both answers are provisional, pending the hydrologist
+  ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72), §2.6a).
 - **Full allocation**: each unit's demand is scaled, year by year, to ask
   for exactly its volumes, keeping its seasonal shape: the river if every
   registered or licensed volume were taken in full (a registration is not an
   entitlement), the background of a cumulative
   assessment (WP-3.11). A scenario can switch it on for one run
-  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
+  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)). A demand
+  level (an outlook's, a sweep's, a scenario's `demand.scale`, the
+  abstraction sensitivity case) applies after the scaling, so 80 % asks for
+  80 % of the volumes (engine ≥ 1.70.0, [model.md §2.12a](./model.md)). A
+  water year with no licence in force keeps the unit's modelled demand, and
+  a level applies to that (engine ≥ 1.70.0, #90 Q24, provisional; before,
+  such a year was scaled to 0); the run warns, naming the units and years.
 
 A scenario can also set, replace or remove a volume for one run
 (`allocation.set` / `allocation.remove`, engine ≥ 1.35.0, [scenarios.md §

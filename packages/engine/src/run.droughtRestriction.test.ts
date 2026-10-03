@@ -8,7 +8,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import { diffInputs, type RunInputsSnapshot } from './compare';
-import { droughtRestrictionIssues, droughtRestrictionNodeIssues, levelCut, restrictedObjectDemand, restrictionLevelFor, restrictionRuleFromNotice, RESTRICTION_SERIES } from './network/restriction';
+import { damHasFilled, droughtRestrictionIssues, droughtRestrictionNodeIssues, levelCut, restrictedObjectDemand, restrictionFillShare, restrictionLevelFor, restrictionRuleFromNotice, RESTRICTION_SERIES } from './network/restriction';
+import { entersServiceAfter } from './network/development';
+import { fromEpochDay, toEpochDay } from './calendar';
 import type { CropArea, CropDef, DemandObject, DroughtRestrictionRule, ModelInput, ModelOutput, NetworkNode, RunSeries } from './project';
 import { captureModelState, runModel, runModelFrom, runModelWith, runModelWithoutChecks, withVerification } from './run';
 import { applyScenario, classifyOp, validateScenarioOps } from './scenario';
@@ -627,4 +629,79 @@ describe('a rule from the published restriction notice (engine 1.54.0)', () => {
 		expect(leap.rule!.liftDates).toBeUndefined();
 		expect(leap.rule!.levels[0]!.label).toBe('Advisory notice');
 	});
+});
+
+describe('first filling: a new dam left out of the reviews until it fills (engine 1.70.0, issue #90 Q30)', () => {
+	it('the fill share is the mildest level’s threshold, or full without a level', () => {
+		expect(restrictionFillShare([0.6, 0.3])).toBe(0.6);
+		expect(restrictionFillShare([1])).toBe(1);
+		expect(restrictionFillShare([])).toBe(1);
+	});
+
+	it('a dam has filled when its share is not below the fill share, read as a level reads it; never without capacity', () => {
+		expect(damHasFilled(600, 1000, 0.6)).toBe(true);
+		expect(damHasFilled(599.999, 1000, 0.6)).toBe(false);
+		expect(damHasFilled(1000, 1000, 1)).toBe(true);
+		expect(damHasFilled(0, 0, 0.6)).toBe(false);
+		expect(damHasFilled(5, 0, 0)).toBe(false);
+		// Consistent with the level: a dam that has filled never by itself reads below the mildest level.
+		for (const q of [0, 299.9, 300, 599.9, 600, 600.1, 1000]) expect(damHasFilled(q, 1000, 0.6)).toBe(restrictionLevelFor(q / 1000, [0.6, 0.3]) === 0);
+	});
+
+	it('entersServiceAfter: a dam in service after the record’s first day only; not on it, not without a date, not a bad date', () => {
+		const start = toEpochDay('2021-10-01');
+		const dam = (over: Partial<NetworkNode>) => node('A', { damCapacityM3: 1000, ...over });
+		expect(entersServiceAfter(dam({ damInServiceFrom: '2021-10-02' }), start)).toBe(true);
+		expect(entersServiceAfter(dam({ damInServiceFrom: '2030-01-01' }), start)).toBe(true);
+		expect(entersServiceAfter(dam({ damInServiceFrom: '2021-10-01' }), start)).toBe(false);
+		expect(entersServiceAfter(dam({ damInServiceFrom: '2020-01-01' }), start)).toBe(false);
+		expect(entersServiceAfter(dam({}), start)).toBe(false);
+		expect(entersServiceAfter(dam({ damInServiceFrom: '2021-02-30' }), start)).toBe(false);
+		expect(entersServiceAfter(node('A', { damInServiceFrom: '2021-10-02' }), start)).toBe(false);
+	});
+
+	describe('the self-check', () => {
+		// The hand model's dam (A) in service from 3 October, catching 300 m³/day with a 100 m³/day crop; reviewed daily.
+		const rule: DroughtRestrictionRule = { reviewDates: ['10-03', '10-04', '10-05', '10-06', '10-07'], levels: [{ label: 'Level 1', belowPct: 0.7, cuts: { crops: 0.5 } }] };
+		const input = model(rule, { initialPct: 0, days: 8 });
+		input.model.nodes[0] = { ...input.model.nodes[0]!, damInServiceFrom: '2020-10-03' };
+		const out = withVerification(input, runModelWith(input, (ctx) => ({ naturalFlowM3Day: new Array(ctx.days).fill(300) })));
+
+		it('passes on the run: the dam fills 200 m³ a day and joins on 7 October (800 ≥ 700); no level while it fills', () => {
+			passed(out);
+			expect(get(out, 'A', 'dam_storage')).toEqual([0, 0, 200, 400, 600, 800, 1000, 1000]);
+			expect(out.summary.droughtRestriction!.filling).toEqual([{ nodeId: 'A', inServiceFrom: '2020-10-03', joinedOn: '2020-10-07' }]);
+			expect(get(out, null, RESTRICTION_SERIES.level.key)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+		});
+
+		it('catches a level decided as if the filling dam counted, and a wrong join day', () => {
+			const tampered = { ...out, series: out.series.map((x) => (x.nodeId === null && x.key === RESTRICTION_SERIES.level.key ? { ...x, values: x.values.map((v, t) => (t === 2 ? 1 : v)) } : x)) };
+			expect(checkDroughtRestriction(input, tampered)).toMatch(/day 2: drought restriction level 1 ≠ 0/);
+			const wrongDay = { ...out, summary: { ...out.summary, droughtRestriction: { ...out.summary.droughtRestriction!, filling: [{ nodeId: 'A', inServiceFrom: '2020-10-03', joinedOn: '2020-10-06' }] } } };
+			expect(checkDroughtRestriction(input, wrongDay)).toMatch(/the dams filling/);
+			const none = { ...out, summary: { ...out.summary, droughtRestriction: { ...out.summary.droughtRestriction!, filling: undefined } } };
+			expect(checkDroughtRestriction(input, none)).toMatch(/the dams filling/);
+		});
+	});
+
+	it('random networks with dams coming into service: every invariant holds, and some dams are filling', () => {
+		const failures: string[] = [];
+		let filling = 0;
+		for (let seed = 1; seed <= 60 && failures.length < 3; seed++) {
+			const x = randomInput(seed);
+			const span = runModelWithoutChecks(x);
+			const days = span.days;
+			const d0 = toEpochDay(span.startDate);
+			const g = new Rng(seed ^ 0x51);
+			// Every dam comes into service somewhere in the first half of the run.
+			x.model.nodes = x.model.nodes.map((n) => (n.kind === 'farm' && n.damCapacityM3 > 0 ? { ...n, damInServiceFrom: fromEpochDay(d0 + 1 + g.int(0, Math.max(1, Math.floor(days / 2)))) } : n));
+			x.settings.droughtRestriction = randomDroughtRestriction(new Rng(seed ^ 0x2a), x.model.nodes);
+			const bad = checkAll(x, seed);
+			if (bad && !bad.startsWith('threw')) failures.push(`seed ${seed}: ${bad}`);
+			if (bad) continue;
+			if (runModelWithoutChecks(x).summary.droughtRestriction?.filling?.length) filling++;
+		}
+		expect(failures).toEqual([]);
+		expect(filling).toBeGreaterThan(10);
+	}, 300_000);
 });

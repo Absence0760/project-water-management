@@ -6,12 +6,13 @@
 // balance (mass conservation, bounds, limits honoured, totals that add up),
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
+import { fromEpochDay, isIsoDate, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
+import { demandFactorStart } from '../demand';
 import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
-import { ALLOCATION_SERIES, dailyLimits, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
+import { ALLOCATION_SERIES, dailyLimits, inForceOver, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease } from '../network/dam';
+import { curveAreaAt, fixedReleaseRoom, passInflowTarget, resolveDamCurve, resolveRelease } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -59,7 +60,17 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
 // observed_flow_filled / observed_flow_other_filled (engine ≥ 1.23.0) are NaN on every day the gap fill didn't fill.
 // rain_chirps_mapped (engine ≥ 1.53.0, the CHIRPS gap map) is NaN where rain_chirps_corrected is (checkChirpsGapMap).
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+/**
+ * A cap's room and left columns are blank (NaN) on a day the source isn't capped, none of the unit's
+ * allocations of it being in force (engine ≥ 1.70.0); checkAllocations holds them finite on every other day.
+ */
+const ALLOCATION_CAP_COLUMNS = [ALLOCATION_SERIES.surfaceRoom.key, ALLOCATION_SERIES.groundwaterRoom.key, ALLOCATION_SERIES.surfaceLeft.key, ALLOCATION_SERIES.groundwaterLeft.key];
+/** A cap's room column on day t as a limit: Infinity without the column, or on a blank day (an uncapped water year). */
+const capRoomOn = (c: ArrayLike<number> | undefined, t: number): number => {
+	const v = c?.[t];
+	return v === undefined || Number.isNaN(v) ? Infinity : v;
+};
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', FLOW_FILL_COLUMNS.observed_flow.values.key, FLOW_FILL_COLUMNS.observed_flow_other.values.key, 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'rain_chirps_mapped', 'chirps_factor', 'ewr_rule', 'ewr_binding_site', ...ALLOCATION_CAP_COLUMNS]);
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -597,7 +608,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const avail = senior ? h : Math.max(0, h - zIn);
 		const river = pump === null ? avail : Math.min(avail, pump);
 		// Primary boreholes pump first; otherwise the river goes first and groundwater tops it up.
-		const rp = replay(t, d, 0, river, 0, 0, 0, 1, RS?.[t] ?? Infinity, RG?.[t] ?? Infinity);
+		const rp = replay(t, d, 0, river, 0, 0, 0, 1, capRoomOn(RS, t), capRoomOn(RG, t));
 		const wantGw = rp.direct;
 		const want = rp.surface + wantGw;
 		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − senior requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
@@ -611,7 +622,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		if (pump !== null) {
 			const take = G[t]! - gw;
 			if (take > pump + tol(pump)) return `${where}: user took ${take} from the river, above its pump capacity ${pump}`;
-			const wantPl = Math.max(0, Math.min(avail, RS?.[t] ?? Infinity, d - gw) - take);
+			const wantPl = Math.max(0, Math.min(avail, capRoomOn(RS, t), d - gw) - take);
 			if (Math.abs(PL![t]! - wantPl) > tol(Math.max(h, d)) || PL![t]! > W[t]! + tol(d)) return `${where}: user pump_limited ${PL![t]} ≠ ${wantPl} (or above the deficit ${W[t]})`;
 			// A senior user's claim was MIN(demand, capacity): what passes below it drops by at most that.
 			if (Zs && senior && Zs[t]! < zIn - Math.min(d, pump) - tol(zIn)) return `${where}: senior requirement ${Zs[t]} below the user dropped by more than MIN(demand, pump capacity)`;
@@ -704,9 +715,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
 	 * + rain on the dam − evaporation − seepage) + the most its dam is drawn
 	 * today (engine ≥ 1.31.0: D less its primary boreholes, within its
-	 * allocation rooms; engine ≥ 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
-	 * (engine ≥ 1.29.0: the release with no inflow and nothing transferred
-	 * in, fixedReleaseFloor). The reported evaporation
+	 * allocation rooms; engine ≥ 0.19.0 counts the dam's gains and losses, N2) + a fixed release
+	 * (engine ≥ 1.29.0; engine ≥ 1.70.0 MIN(amount, outlet) in full, fixedReleaseRoom). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
 	 * days that cap bites the room read here is smaller than the engine's but
 	 * still at least capacity + the volume that moved + D, so neither check
@@ -718,7 +728,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const cap = capOn(f.id, t);
 		const held = storage(f.id, t) + pd! - e! - sp!;
 		// A dam with no capacity today (not in service yet, or silted full) releases nothing (docs/model.md §2.7g).
-		const rel = farmRelease[fi] && cap > 0 ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
+		const rel = cap > 0 ? fixedReleaseRoom(farmRelease[fi], monthOfEpochDay(d0 + t)) : 0;
 		return cap - held + (farmDraw[fi]?.[t] ?? farmD[fi]![t]!) + rel;
 	};
 	for (let t = 0; t < out.days; t++) {
@@ -835,11 +845,11 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
 		const noDam = !((CAPS ? CAPS[t]! : n.damCapacityM3) > 0);
 		const direct = (k: number) => units[k]!.mode === 1 && (!units[k]!.toDam || noDam);
 		const d = D[t]!;
-		const gRoom = RG?.[t] ?? Infinity;
+		const gRoom = capRoomOn(RG, t);
 		let room = 0;
 		for (let k = 0; k < units.length; k++) if (direct(k)) room += roomOf(k);
 		const primary = Math.min(room, gRoom);
-		out[t] = Math.min(Math.max(0, d - primary), RS?.[t] ?? Infinity);
+		out[t] = Math.min(Math.max(0, d - primary), capRoomOn(RS, t));
 		// Today's pumping, as groundwaterDay's first step: in order, each for what the others left.
 		let gLeft = gRoom;
 		let got = 0;
@@ -869,15 +879,19 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   daily cap; 0 in a month it is off), so never more than capacity;
  * - at the source, Σ v = offtake_out, and the flow there before the off-takes
  *   (outflow + Σ v) gave each rule at most what lay above what it must leave
- *   (the senior users' requirement passing, its hands-off flow, the EWR here
- *   when asked), so never more than the river there; the outflow is what was
+ *   (the senior users' requirement passing, a pass-inflow release's target
+ *   there on a day its dam has capacity (engine ≥ 1.70.0), its hands-off
+ *   flow, the EWR here when asked), so never more than the river there; the outflow is what was
  *   left, reduced by exactly Σ v;
  * - no rule takes the river below its own keep (audit N6's rule for dam
  *   rules, applied to off-takes): of a rule's priority, the rules keeping at
  *   least its keep k take together at most MAX(0, U₀ − taken by lower
  *   priorities − k), U₀ the flow before the off-takes; a rule that takes
  *   nothing doesn't count;
- * - at the destination, Σ v × (1 − loss) = offtake_in;
+ * - at the destination, Σ v × (1 − loss) = offtake_in; into a unit under an
+ *   allocation cap whose rules are all sized to demand without a top-up, at
+ *   most its surface room today (engine ≥ 1.70.0: they size to the capped
+ *   demand);
  * - at the farm each rule's seepage rejoins (engine ≥ 1.42.0: the source or
  *   a farm below it), Σ v × loss × its return share = offtake_loss_return,
  *   which joins the outflow after the farm's own off-takes (so the flow the
@@ -900,6 +914,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 	for (const [k, at] of returnAt.entries()) if (at >= 0 && rules[k]!.volume && !returnUnits.has(input.model.nodes[at]!.id)) return `river off-take ${rules[k]!.tr.id}: no offtake_loss_return series on ${input.model.nodes[at]!.id}, where its seepage rejoins`;
 	const d0 = toEpochDay(out.startDate);
 	const sources = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.fromNodeId))];
+	// Each source's release rule (a pass-inflow target is kept, engine ≥ 1.70.0), in force on a day its dam has capacity.
+	const srcRelease = new Map(sources.map((id) => [id, resolveRelease(byId.get(id)!, [])]));
 	const dests = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.toNodeId))];
 	// A rule without a stored volume moved nothing: it can never take water, or the run skipped it (its
 	// destination drains into its source); a planned rule's missing series shows in offtake_out / offtake_in.
@@ -912,6 +928,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			const taken = get.get(`${src}|offtake_out`)?.[t];
 			const Zs = get.get(`${src}|senior_requirement`)?.[t] ?? 0;
 			const Z = get.get(`${src}|ewr_cumulative`)![t]!;
+			const capNow = get.get(`${src}|${DAM_CAPACITY_SERIES.key}`)?.[t] ?? byId.get(src)!.damCapacityM3;
+			const rt = passInflowTarget(capNow > 0 ? srcRelease.get(src) : null, month, Z);
 			const where = `${src} day ${t}`;
 			let sum = 0;
 			let caps = 0;
@@ -922,7 +940,7 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 				if (!(v >= -tol(0)) || v > cap + tol(cap)) return `${where}: river off-take ${r.tr.id} took ${v}, outside [0, its capacity today ${cap}]`;
 				sum += v;
 				caps += cap;
-				const keep = Math.max(Zs, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
+				const keep = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				keepMax = Math.max(keepMax, cap > 0 ? keep : 0);
 				if (v > 0 && v > Math.max(0, U + sumAll(mine, t) - keep) + tol(Math.max(U, keep))) return `${where}: river off-take ${r.tr.id} took ${v}, more than the flow above what it must leave (${keep})`;
 			}
@@ -931,11 +949,11 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			const U0 = U + sum;
 			for (const r of mine) {
 				if (!(r.volume![t]! > 0)) continue;
-				const k = Math.max(Zs, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
+				const k = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				let earlier = 0;
 				let above = 0;
 				for (const x of mine) {
-					const kx = Math.max(Zs, x.o.handsOffM3Day, x.o.handsOffEwr ? Z : 0);
+					const kx = Math.max(Zs, rt, x.o.handsOffM3Day, x.o.handsOffEwr ? Z : 0);
 					if (x.o.priority < r.o.priority) earlier += x.volume![t]!;
 					else if (x.o.priority === r.o.priority && kx >= k) above += x.volume![t]!;
 				}
@@ -954,6 +972,11 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			for (const r of rules) if (r.volume && r.tr.toNodeId === dst) got += r.volume[t]! * (1 - r.o.loss);
 			const xin = get.get(`${dst}|offtake_in`)?.[t];
 			if (xin === undefined || Math.abs(xin - got) > tol(got)) return `${dst} day ${t}: offtake_in ${xin} ≠ what its river off-takes delivered, ${got}`;
+			// Into a capped unit, rules sized to its demand deliver at most the demand its cap still allows (engine ≥
+			// 1.70.0, #90 Q28), so at most its surface room today, when none of them also tops up its dam.
+			const room = get.get(`${dst}|${ALLOCATION_SERIES.surfaceRoom.key}`)?.[t];
+			if (room !== undefined && Number.isFinite(room) && rules.every((r) => r.tr.toNodeId !== dst || (r.o.sizing === 0 && !r.o.topUpDam)) && got > room + tol(Math.max(room, got)))
+				return `${dst} day ${t}: its demand-sized river off-takes delivered ${got}, more than its surface allocation room today ${room}`;
 		}
 		for (const unit of returnUnits) {
 			let back = 0;
@@ -1551,7 +1574,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					if (r.topUp) toppers += v;
 				}
 				if (!near(xin, delivered, delivered)) return `${where}: off-take water in ${xin} ≠ what its rules took less their losses, ${delivered}`;
-				if (!near(xused, Math.min(xin, dr, RS?.[t] ?? Infinity), Math.max(xin, d))) return `${where}: off-take water used ${xused} ≠ MIN(what arrived ${xin}, demand ${dr}${RS ? `, the allocation room ${RS[t]}` : ''})`;
+				if (!near(xused, Math.min(xin, dr, capRoomOn(RS, t)), Math.max(xin, d))) return `${where}: off-take water used ${xused} ≠ MIN(what arrived ${xin}, demand ${dr}${RS ? `, the allocation room ${RS[t]}` : ''})`;
 				const rest = xin - xused;
 				const wantDam = rest > 0 && toppers > 0 ? Math.min(rest, (rest * toppers) / xin) : 0;
 				if (!near(xdam, wantDam, xin)) return `${where}: off-take water into the dam ${xdam} ≠ ${wantDam} (the top-up rules' share of the ${rest} left)`;
@@ -1589,15 +1612,15 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
 				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
-				keep = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				keep = Math.max(ZS?.[t] ?? 0, passInflowTarget(relNow, month, Zc[t]!), ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
 				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
 				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
 			}
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
-			const sLeft = (RS?.[t] ?? Infinity) - xused;
-			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity, dDay);
+			const sLeft = (capRoomOn(RS, t)) - xused;
+			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, capRoomOn(RG, t), dDay);
 			let wantGs: number;
 			let wantGr = 0;
 			const dsl = Math.min(dl, sLeft);
@@ -1642,7 +1665,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (riv) {
 				flowTaken = gRivT + poolChg;
 				const month = monthOfEpochDay(day0 + t);
-				const keepR = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				const keepR = Math.max(ZS?.[t] ?? 0, passInflowTarget(relNow, month, Zc[t]!), ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				const past = r + (ss - gRiv) + (sp - spl) + x + xpass;
 				const free = Math.max(0, past - keepR);
 				const sc = Math.max(past, keepR, gRivT);
@@ -1756,9 +1779,10 @@ function checkObjectsDay(
 		const df = factors ? factors[k]!.df[t]! : unitDf;
 		const sc = factors ? factors[k]!.sc[t]! : unitSc;
 		const floored = fl !== null && abstracts && sc < 1;
-		// Restricted: MAX(demand × sc, MIN(floor, demand)); a full allocation's factor then scales it, holding that floor too.
-		const pre = floored ? Math.max(objs.monthly[k]![wy]! * sc * sf, dayFloor(fl!, objs.monthly[k]![wy]! * sf)) : 0;
-		const expect = floored ? Math.max(alloc * pre, dayFloor(fl!, pre)) : objs.monthly[k]![wy]! * df * sf;
+		// Restricted: MAX(demand × sc, MIN(floor, demand)), where a full allocation's factor scales the demand first
+		// (engine ≥ 1.70.0): the factor cuts the registered use and the floor is MIN(floor, KF × demand).
+		const raw = objs.monthly[k]![wy]! * sf * alloc;
+		const expect = floored ? Math.max(raw * sc, dayFloor(fl!, raw)) : objs.monthly[k]![wy]! * df * sf;
 		if (Math.abs(objs.demand[k]![t]! - expect) > tol(expect))
 			return `${where}: demand object ${k}'s demand ${objs.demand[k]![t]} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}${objs.schedule[k] ? ` × schedule factor ${sf}` : ''}${floored ? `, held at its basic-needs floor ${fl}` : ''}`;
 		if (g < -eps || g > d + eps) return `${where}: demand object ${k} got ${g}, outside [0, its demand ${d}${restriction ? ' after the drought restriction' : ''}]`;
@@ -2447,17 +2471,36 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	const shared = basis === 'own' ? [] : nodes.filter((n) => isDam(n) && (!listed || listed.has(n.id))).sort((a, b) => cmpStr(a.id, b.id)).map(damOf);
 	const missing = shared.find((x) => !x.Q || x.before0 === undefined);
 	if (missing) return `${missing.n.id}: dam_storage column or starting storage missing`;
-	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number => {
+	const qStart = ({ Q, SET, before0 }: ReturnType<typeof damOf>, t: number) => (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
+	const capOn = ({ n, ks }: ReturnType<typeof damOf>, t: number) => n.damCapacityM3 * (ks ? ks[t]! : 1);
+	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): a dam that comes into service after the record's first
+	// day is filling (each review the milder of the levels without and with the filling dams) until it starts a
+	// day at the mildest level's share of its capacity (full without a level). A fresh run works out which from the input; a resumed one starts from its summary's state.
+	const fillShare = thresholds.length ? thresholds[0]! : 1;
+	const filling = new Set(
+		resumed
+			? (resumed.fillingBefore ?? [])
+			: nodes.filter((n) => isDam(n) && !!n.damInServiceFrom && isIsoDate(n.damInServiceFrom) && toEpochDay(n.damInServiceFrom) > day0 && capacityScaleOf(n, day0, out.days, []) !== undefined).map((n) => n.id)
+	);
+	const joinedOn = new Map<string, string | null>([...filling].map((id) => [id, null]));
+	const fillDams = nodes.filter((n) => filling.has(n.id)).map(damOf);
+	const unread = fillDams.find((x) => !x.Q || x.before0 === undefined);
+	if (unread) return `${unread.n.id}: dam_storage column or starting storage missing`;
+	/** The level of `dams` on day t with the dams still filling left out, or with every dam counted. */
+	const levelWith = (dams: ReturnType<typeof damOf>[], t: number, leaveOut: boolean): number => {
 		let q = 0;
 		let c = 0;
-		for (const { n, Q, SET, ks, before0 } of dams) {
-			const cap = n.damCapacityM3 * (ks ? ks[t]! : 1);
-			if (!(cap > 0)) continue;
-			q += (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
+		for (const d of dams) {
+			const cap = capOn(d, t);
+			if (!(cap > 0) || (leaveOut && filling.has(d.n.id))) continue;
+			q += qStart(d, t);
 			c += cap;
 		}
 		return c > 0 ? checkedLevel(q / c, thresholds) : 0;
 	};
+	// With a dam filling, the milder of the two readings (engine ≥ 1.70.0): its empty capacity never deepens a review.
+	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number =>
+		dams.some((d) => filling.has(d.n.id) && capOn(d, t) > 0) ? Math.min(levelWith(dams, t, true), levelWith(dams, t, false)) : levelWith(dams, t, true);
 	// The EWR trigger's site: null = the outlet (the node nothing drains into), else a gauge that is an EWR site.
 	// At the outlet the trigger reads the catchment's EWR column (the outflow against the whole EWR), not the
 	// outflow node's own share-weighted one.
@@ -2475,6 +2518,14 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	let ewrReviews = 0;
 	let reviewCount = 0;
 	for (let t = 0; t < out.days; t++) {
+		for (const d of fillDams) {
+			if (!filling.has(d.n.id)) continue;
+			const cap = capOn(d, t);
+			if (cap > 0 && !(qStart(d, t) / cap < fillShare)) {
+				filling.delete(d.n.id);
+				joinedOn.set(d.n.id, fromEpochDay(day0 + t));
+			}
+		}
 		const e = eventOf(day0 + t);
 		if (e === 1 || (t === 0 && e === 0 && startDecides)) {
 			reviewCount++;
@@ -2489,6 +2540,9 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		} else if (e === 2) for (const u of units) held.set(u.id, 0);
 		for (const u of units) unitLevels.get(u.id)![t] = held.get(u.id)!;
 	}
+	// The summary's dams that were filling, and the day each joined the reviews.
+	const wantFill = [...joinedOn].sort((a, b) => cmpStr(a[0], b[0])).map(([nodeId, on]) => ({ nodeId, inServiceFrom: nodes.find((n) => n.id === nodeId)!.damInServiceFrom!, joinedOn: on }));
+	if (JSON.stringify(sum.filling ?? []) !== JSON.stringify(wantFill)) return `drought restriction: the dams filling ${JSON.stringify(sum.filling ?? [])} ≠ ${JSON.stringify(wantFill)} from the storage and capacity columns`;
 	// The level columns.
 	for (let t = 0; t < out.days; t++) {
 		let want = 0;
@@ -2638,8 +2692,9 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  *   from those columns, the use and the unit's deficit (limitBoundKind);
  * - a full allocation ('fullAllocation'): the demand factor is one number per
  *   water year, and a scaled unit's demand over the run's days of a year adds
- *   up to the volume registered for it over them (none when it had no demand),
- *   plus what a restriction's basic-needs floor holds above it (engine ≥ 1.44.0);
+ *   up to the volume registered for it over them (none when it had no demand);
+ *   with a demand factor (engine ≥ 1.70.0) its demand before the factor × the
+ *   year's factor does, the factor then cutting the registered use;
  *   the year a forecast tail starts in (summary.historyDays, engine ≥
  *   1.28.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
@@ -2648,30 +2703,42 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  *   compareAllocations of the run's own series.
  */
 /**
- * What the basic-needs floor holds of a full allocation's rescaling on a
- * restricted day (engine ≥ 1.44.0, allocations/mode.ts planAllocations), per
- * run day: Σ over the unit's objects with a floor of MAX(KF × r, MIN(floor,
- * r)) − KF × r, where r is the object's restricted demand, recomputed from the
- * model as checkObjectsDay does. Null when none is held.
+ * A full allocation's fit (engine ≥ 1.70.0, allocations/mode.ts
+ * planAllocations): unit `n`'s abstraction demand before its demand factors,
+ * per run day, recomputed from the run's columns and the input: for a farm
+ * (MAX(0, gross demand) − effective rain used) ÷ e + Σ its objects' month ×
+ * schedule, for a water user its monthly demand; 0 before its abstraction
+ * date. Null when no demand factor applies to it (the demand column is then
+ * that demand × the factor), or a farm's working columns are missing.
  */
-function allocationFloorHeld(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput, KF: ArrayLike<number>): Float64Array | null {
-	const objs = objectColumns(input, n, get, out);
-	if (!objs || typeof objs === 'string' || !objs.floor.some((f) => f !== null)) return null;
+function demandBeforeFactors(input: ModelInput, n: NetworkNode, get: SeriesMap, out: ModelOutput): Float64Array | null {
 	const day0 = toEpochDay(out.startDate);
-	const SC = dailyDemandFactor(input.settings, n, day0, out.days, undefined).perDay;
+	const dff = input.settings?.demandFactorFrom;
+	const from = typeof dff === 'string' && isIsoDate(dff) ? demandFactorStart(dff, day0, out.days) : 0;
+	if (from >= out.days || (n.demandFactor == null && n.partDemandFactor == null)) return null;
 	const abstractFrom = abstractionStartDay(n, day0, out.days, []);
-	const held = new Float64Array(out.days);
-	for (let t = abstractFrom; t < out.days; t++) {
-		if (!(SC[t]! < 1)) continue;
-		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
-		objs.floor.forEach((fl, k) => {
-			if (fl === null) return;
-			const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
-			const r = Math.max(objs.monthly[k]![wy]! * SC[t]! * sf, dayFloor(fl, objs.monthly[k]![wy]! * sf));
-			held[t]! += Math.max(KF[t]! * r, dayFloor(fl, r)) - KF[t]! * r;
-		});
+	const wyOf = (t: number) => (monthOfEpochDay(day0 + t) + 2) % 12;
+	const base = new Float64Array(out.days);
+	if (n.kind === 'user') {
+		const m = n.userDemandM3Day;
+		for (let t = abstractFrom; t < out.days; t++) {
+			const v = Number(m?.[wyOf(t)]);
+			base[t] = Number.isFinite(v) && v > 0 ? v : 0;
+		}
+		return base;
 	}
-	return held;
+	const gross = get.get(`${n.id}|gross_demand`);
+	const used = get.get(`${n.id}|effective_rain`);
+	if (!gross || !used) return null;
+	const e = runEfficiency(input, n);
+	const objs = objectColumns(input, n, get, out);
+	if (typeof objs === 'string') return null;
+	for (let t = abstractFrom; t < out.days; t++) {
+		let v = (Math.max(0, gross[t]!) - used[t]!) / e;
+		if (objs) for (let k = 0; k < objs.monthly.length; k++) v += objs.monthly[k]![wyOf(t)]! * (objs.schedule[k] ? objs.schedule[k]![t]! : 1);
+		base[t] = v;
+	}
+	return base;
 }
 
 export function checkAllocations(input: ModelInput, out: ModelOutput): string | null {
@@ -2718,40 +2785,54 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 				// known from the first day of a water year, or a day the limit doesn't bind (a resumed run
 				// starts with the year's use before the snapshot, which the output doesn't carry).
 				let left: number | null = null;
-				// This water year's use on the run's days: what is left is at most the budget less it, whatever
+				// This water year's use on the run's capped days: what is left is at most the budget less it, whatever
 				// came before the run (a resumed run's use before the snapshot is ≥ 0), so it bounds every day.
 				let usedInRun = 0;
+				// A water year began inside the run and its first capped day hasn't come yet: what is left is then the budget.
+				let fresh = false;
+				// The allocation_left value today should have: the last capped day's less its use (null until known).
+				let leftWant: number | null = null;
 				for (let t = 0; t < out.days; t++) {
 					const where = `${n.id} day ${t}`;
 					const use = useOn(t);
 					const b = budget[t]!;
 					const lim = limit ? limit[t]! : Infinity;
+					if (t > 0 && monthOfEpochDay(day0 + t) === 10 && monthOfEpochDay(day0 + t - 1) !== 10) {
+						left = null;
+						leftWant = null;
+						usedInRun = 0;
+						fresh = true;
+					}
+					// A day none of the source's allocations is in force on isn't capped (engine ≥ 1.70.0): its room and
+					// left columns are blank, its use is anything and doesn't count. Every other day's are numbers.
+					if (b === Infinity) {
+						if (!Number.isNaN(room[t]!) || (LEFT && !Number.isNaN(LEFT[t]!))) return `${where}: ${source} allocation room ${room[t]}${LEFT ? ` / left ${LEFT[t]}` : ''} on a day none of its ${source} allocations is in force, which isn't capped (blank)`;
+						continue;
+					}
+					if (!Number.isFinite(room[t]!) || (LEFT && !Number.isFinite(LEFT[t]!))) return `${where}: ${source} allocation room ${room[t]}${LEFT ? ` / left ${LEFT[t]}` : ''} is not a number on a capped day`;
+					const first = fresh;
+					if (fresh) {
+						left = b;
+						leftWant = b;
+						fresh = false;
+					}
 					const eps = tol(Math.max(b, Math.abs(use)));
 					if (room[t]! < 0 || room[t]! > Math.min(b, lim) + eps) return `${where}: ${source} allocation room ${room[t]} outside [0, the year's registered ${b}${lim < b ? ` and the licence's ${lim} today` : ''}]`;
 					if (use > room[t]! + eps) return `${where}: took ${use} of ${source} water with only ${room[t]} allowed today by its registered volume${limit ? ' and licence conditions' : ''}`;
-					const newYear = t > 0 && monthOfEpochDay(day0 + t) === 10 && monthOfEpochDay(day0 + t - 1) !== 10;
-					if (newYear) {
-						left = b;
-						usedInRun = 0;
-					} else if (t > 0) {
-						usedInRun += useOn(t - 1);
-						if (left !== null) left = Math.max(0, left - useOn(t - 1));
-					}
 					if (room[t]! > Math.max(0, b - usedInRun) + tol(Math.max(b, usedInRun)))
 						return `${where}: ${source} allocation room ${room[t]} is more than the year's registered ${b} less the ${usedInRun} it has taken this water year`;
 					if (left !== null) {
 						const want = Math.min(left, lim);
 						if (Math.abs(room[t]! - want) > tol(Math.max(b, left)))
-							return newYear
-								? `${where}: the ${source} allocation room starts the water year at ${room[t]}, not ${lim < b ? `the licence's ${lim} today` : `its registered ${b}`}`
+							return first
+								? `${where}: the ${source} allocation room starts the water year's capped days at ${room[t]}, not ${lim < b ? `the licence's ${lim} today` : `its registered ${b}`}`
 								: `${where}: ${source} allocation room ${room[t]} ≠ MIN(what is left of the year's volume ${left}, the licence's ${lim} today)`;
 					} else if (room[t]! < lim - tol(Math.max(b, room[t]!))) left = room[t]!;
 					if (LEFT) {
 						const l = LEFT[t]!;
 						if (l < 0 || l > b + eps) return `${where}: what is left of the ${source} volume, ${l}, is outside [0, the year's registered ${b}]`;
 						if (Math.abs(room[t]! - Math.min(l, lim)) > tol(Math.max(b, l))) return `${where}: ${source} allocation room ${room[t]} ≠ MIN(what is left ${l}, the licence's ${lim} today)`;
-						const want = newYear ? b : t > 0 ? Math.max(0, LEFT[t - 1]! - useOn(t - 1)) : null;
-						if (want !== null && Math.abs(l - want) > tol(Math.max(b, want))) return `${where}: what is left of the ${source} volume is ${l}, not ${want}`;
+						if (leftWant !== null && Math.abs(l - leftWant) > tol(Math.max(b, leftWant))) return `${where}: what is left of the ${source} volume is ${l}, not ${leftWant}`;
 					}
 					// Whether the limit bound today, and which (engine ≥ 1.40.0): without a limit the room is what is left.
 					if (src?.limitBound) {
@@ -2765,6 +2846,10 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 							bound.set(wy, y);
 						}
 					}
+					// Today's use counts against the year (a capped day).
+					usedInRun += use;
+					if (left !== null) left = Math.max(0, left - use);
+					leftWant = LEFT ? Math.max(0, LEFT[t]! - use) : null;
 				}
 				if (src?.limitBound) {
 					const want = [...bound.values()];
@@ -2780,19 +2865,19 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			if (!D) return `${n.id}: demand series missing`;
 			// Before a forecast tail (engine ≥ 1.28.0): the year it starts in is fitted on its historical days.
 			const history = out.summary.historyDays ?? out.days;
-			// A restriction what-if's basic-needs floor (engine ≥ 1.44.0) holds some demand above the registered volume.
-			const held = allocationFloorHeld(input, n, get, out, KF);
+			// With a demand factor (engine ≥ 1.70.0) the factor is fitted on the demand before it, and the factor then
+			// cuts (or raises) the registered use: the demand before it × KF adds up to the volume, the demand column
+			// doesn't. Without one, the demand column is that demand.
+			const base = demandBeforeFactors(input, n, get, out);
 			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
 			const span = (a: number, b: number, wy: number, reg: number): string | null => {
 				let d = 0;
 				for (let k = a; k <= b; k++) {
 					if (KF[k] !== KF[a]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
-					d += D[k]!;
+					d += base ? base[k]! * KF[k]! : D[k]!;
 				}
-				let h = 0;
-				if (held) for (let k = a; k <= b; k++) h += held[k]!;
-				const want = (KF[a]! > 0 ? reg : 0) + h;
-				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run${h > 0 ? ` (with ${h} held by the basic-needs floor)` : ''}` : null;
+				const want = KF[a]! > 0 ? reg : 0;
+				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand${base ? ' before its demand factors × the full-allocation factor' : ''} over water year ${wy} is ${d}, not the ${want} registered for its days in the run` : null;
 			};
 			for (let t = 0; t < out.days; ) {
 				const wy = waterYearOf(day0 + t);
@@ -2803,6 +2888,14 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					const s = Math.max(x, abstractFrom);
 					return s > y ? 0 : registeredOver(allocs, wy, day0 + s, day0 + y);
 				};
+				// No allocation in force on the days the year is fitted on (engine ≥ 1.70.0): the modelled demand, factor 1.
+				const fitTo = t < history && last >= history ? history - 1 : last;
+				const fitFrom = Math.max(t, abstractFrom);
+				if (fitFrom <= fitTo && !inForceOver(allocs, day0 + fitFrom, day0 + fitTo)) {
+					for (let k = t; k <= last; k++) if (KF[k] !== 1) return `${n.id} day ${k}: full-allocation demand factor ${KF[k]} in water year ${wy}, which has no allocation in force (its modelled demand, 1)`;
+					t = last + 1;
+					continue;
+				}
 				// Cut by the tail: the historical days add up on their own, and the tail days keep their factor.
 				let bad = t < history && last >= history ? span(t, history - 1, wy, regOver(t, history - 1)) : span(t, last, wy, regOver(t, last));
 				if (!bad && t < history && last >= history)

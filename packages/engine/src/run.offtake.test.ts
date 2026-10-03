@@ -222,13 +222,14 @@ describe('river off-takes (engine 1.14.0)', () => {
 		near(get(r, 'S', 'transfer_rule@o1'), [600, 600]);
 		near(get(r, 'S', 'transfer_rule@o2'), [400, 400]);
 		passes(ranked, r);
-		// Equal priority, capacities 900 and 300: 1000 shared 3 : 1 (750 and 250); on 700 each limit is
-		// MIN(flow, capacity), 700 and 300, so 490 and 210. Whatever the list order.
+		// Equal priority, capacities 900 and 300: 1000 shared 3 : 1 (750 and 250), and 700 too (525 and 175):
+		// each asks its capacity, never capped at the flow (engine ≥ 1.70.0, issue #90 Q25; before, 490 and 210).
+		// Whatever the list order.
 		for (const order of [1, -1]) {
 			const tied = model([offtake({ maxRateM3s: 900 / 86_400 }), offtake({ id: 'o2', toNodeId: 'E', maxRateM3s: 300 / 86_400 })].sort(() => order), { nodes, objects: [] });
 			const o = run(tied, [1000, 700]);
-			near(get(o, 'S', 'transfer_rule@o1'), [750, 490]);
-			near(get(o, 'S', 'transfer_rule@o2'), [250, 210]);
+			near(get(o, 'S', 'transfer_rule@o1'), [750, 525]);
+			near(get(o, 'S', 'transfer_rule@o2'), [250, 175]);
 			passes(tied, o);
 		}
 	});
@@ -280,6 +281,27 @@ describe('river off-takes (engine 1.14.0)', () => {
 		expect(checkInvariants(input, edit('C', 'offtake_in', (v) => (v[1] = 60)))).toMatch(/off-take|balance/);
 		// The source's reach not reduced by what was taken.
 		expect(checkInvariants(input, edit('S', 'offtake_out', (v) => (v[0] = 0)))).toMatch(/balance|off-take/);
+	});
+
+	it('the self-check holds an off-take to its source’s pass-inflow target too (engine ≥ 1.70.0, issue #90 Q27)', () => {
+		// S has a dam off the river (no inflow into it) with a pass-inflow release of 950 a day: of 1 000 below it the
+		// off-take (capacity 100) may take only 50, as the unit's own pump could.
+		const nodes = [
+			node('G', { kind: 'gauge', downstreamNodeId: null, sortOrder: 9 }),
+			node('S', { areaKm2: 1, sortOrder: 1, damCapacityM3: 500, damInitialPct: 1, damReleaseRule: 'passInflow', damReleaseM3Day: flat(950) }),
+			node('C', { downstreamNodeId: 'T', sortOrder: 2 }),
+			node('T', { sortOrder: 3, supplyRule: 'runOfRiver', pumpCapacityM3Day: null })
+		];
+		const input = model([offtake()], { nodes });
+		const out = run(input);
+		near(get(out, 'S', 'transfer_rule@o1'), [50, 50]);
+		passes(input, out);
+		// Before 1.70.0 it took its full 100, leaving 900 below S: the self-check now refuses that.
+		const greedy = structuredClone(out);
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'transfer_rule@o1')!.values[0] = 100;
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'offtake_out')!.values[0] = 100;
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'outflow')!.values[0] = 900;
+		expect(checkTransferLimits(input, greedy)).toMatch(/more than the flow above what it must leave \(950\)/);
 	});
 
 	it('changes nothing when off, or with a dam transfer of the same fields', () => {

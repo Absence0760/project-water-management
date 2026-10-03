@@ -2,7 +2,7 @@
 // the calculation order that puts each destination after its source.
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode, Transfer } from '../project';
-import { offtakeOrder, planOfftakes } from './offtake';
+import { offtakeOrder, planOfftakes, splitLicenceWarnings } from './offtake';
 import { buildTopology } from './topology';
 
 const n = (id: string, downstreamNodeId: string | null, kind: NetworkNode['kind'] = 'farm', sortOrder = 0) => ({ id, name: id, kind, downstreamNodeId, sortOrder }) as NetworkNode;
@@ -50,6 +50,40 @@ describe('planOfftakes', () => {
 		const [o] = planOfftakes([t('1', 'a', 'c', { lossPct: 1.5, handsOffM3Day: -3 })], nodes, warnings, () => undefined);
 		expect([o!.loss, o!.handsOffM3Day]).toEqual([0, 0]);
 		expect(warnings).toHaveLength(2);
+	});
+});
+
+describe('splitLicenceWarnings (engine ≥ 1.70.0, issue #90 Q25)', () => {
+	const nodes = [n('g', null, 'gauge'), n('a', 'g'), n('c', 'g'), n('e', 'g')];
+	const warn = (rules: Transfer[]) => {
+		const warnings: string[] = [];
+		planOfftakes(rules, nodes, warnings, () => undefined);
+		return warnings;
+	};
+	it('warns once per group of rules with one source, one destination and one priority that share a month, in id order', () => {
+		const w = warn([t('2', 'a', 'c'), t('1', 'a', 'c'), t('3', 'a', 'c', { priority: 4 }), t('4', 'a', 'c', { priority: 4 })]);
+		expect(w).toHaveLength(2);
+		expect(w[0]).toMatch(/^river off-take a → c: 2 rules of priority 0 \(1, 2\) take from the same river for the same unit\. If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once/);
+		expect(w[1]).toMatch(/2 rules of priority 4 \(3, 4\)/);
+	});
+	it('no warning across sources, destinations or priorities, for one rule, or for rules that never run in one month', () => {
+		expect(warn([t('1', 'a', 'c'), t('2', 'a', 'e')])).toEqual([]);
+		expect(warn([t('1', 'a', 'c'), t('2', 'e', 'c')])).toEqual([]);
+		expect(warn([t('1', 'a', 'c'), t('2', 'a', 'c', { priority: 1 })])).toEqual([]);
+		expect(warn([t('1', 'a', 'c')])).toEqual([]);
+		expect(warn([t('1', 'a', 'c', { months: [1] }), t('2', 'a', 'c', { months: [2] })])).toEqual([]);
+		// A rule with no capacity in any month never meets another.
+		expect(warn([t('1', 'a', 'c'), t('2', 'a', 'c', { maxRateM3s: 0 })])).toEqual([]);
+	});
+	it('counts only the planned rules: a skipped or disabled twin doesn’t make a group', () => {
+		expect(warn([t('1', 'a', 'c'), t('2', 'a', 'c', { enabled: false })])).toEqual([]);
+		// A twin into the gauge is skipped (an off-take runs between units), with its own warning only.
+		expect(warn([t('1', 'a', 'g'), t('2', 'a', 'g')]).filter((x) => /licence/.test(x))).toEqual([]);
+	});
+	it('reads the plan directly: an empty or single plan warns nothing', () => {
+		const w: string[] = [];
+		splitLicenceWarnings([], nodes, w);
+		expect(w).toEqual([]);
 	});
 });
 

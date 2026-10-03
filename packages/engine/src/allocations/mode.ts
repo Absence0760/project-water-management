@@ -12,7 +12,12 @@
 //    water year's registered volume (each allocation × its valid days in
 //    the year ÷ the year's days), so a run that starts or ends inside a year
 //    doesn't shrink it, and a farm may take its volume early. A source with
-//    no allocation isn't capped (a run warning names them).
+//    no allocation isn't capped (a run warning names them), nor (engine ≥
+//    1.70.0, issue #393, #90 Q24) is a day on which none of the unit's
+//    allocations of the source is in force, and that day's use doesn't count
+//    against the year's budget (one run warning names the units and days).
+//    Before 1.70.0 every day of the year was capped: a year with none in
+//    force at 0, and a licence's first year from 1 October.
 //    Every draw from the dam counts as surface use, groundwater pumped into
 //    it included, so that water uses up both volumes; the comparison nets it
 //    (docs/model.md §2.12). Pending the hydrologist (followups.md §
@@ -29,7 +34,9 @@
 //    registered volume in force over the run's days of that year (both
 //    sources together), keeping the unit's own seasonal pattern. A unit with
 //    no demand in a year can't be scaled and takes nothing that year (a
-//    warning names it).
+//    warning names it). A year with no allocation in force on those days
+//    keeps the unit's modelled demand, factor 1 (engine ≥ 1.70.0, #90 Q24;
+//    before, 0), and one warning names the units and years.
 //
 // 'fullAllocation' doesn't apply the licence conditions: it scales demand to
 // the volume, and its months and rate are what a cap run adds on top.
@@ -141,25 +148,81 @@ export function registeredOver(allocs: readonly AllocationEntry[], wy: number, f
 	return sum;
 }
 
+/** Each allocation's validity as epoch days [lo, hi] (no date = open). */
+const spanOf = (a: AllocationEntry) => ({ lo: a.validFrom ? toEpochDay(a.validFrom) : -Infinity, hi: a.validTo ? toEpochDay(a.validTo) : Infinity });
+
+/** Whether any of `own` is in force (its validity dates) on some epoch day in [from, to]. */
+export function inForceOver(own: readonly AllocationEntry[], from: number, to: number): boolean {
+	return from <= to && own.some((a) => {
+		const v = spanOf(a);
+		return v.lo <= to && v.hi >= from;
+	});
+}
+
 /**
- * The cap's budget for each run day (`cap` mode): the registered volume of
- * `source` over the whole water year the day falls in (not only the run's
- * days of it), the same number on every day of a year. null when the node
- * has no allocation of that source (no cap).
+ * The cap's budget on each run day (`cap` mode): the registered volume of
+ * `source` over the whole water year the day falls in (each allocation × its
+ * valid days in the year ÷ the year's days; not only the run's days of it),
+ * the same number on every capped day of a year. null when the node has no
+ * allocation of that source (no cap).
+ * A day on which none of its allocations of the source is in force isn't
+ * capped (engine ≥ 1.70.0, issue #393, #90 Q24): Infinity, as for a unit
+ * with no allocation of the source, and the day's use doesn't count against
+ * the year's budget (simulateNetwork counts use only on capped days). So a
+ * licence from 1 September leaves October–August uncapped and caps September
+ * at its 30/365 share. Before 1.70.0 every day of the year was capped, a year
+ * with none in force at 0, and the use before a licence's start in its first
+ * year counted against its share.
  */
 export function yearBudgets(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): Float64Array | null {
 	const own = allocs.filter((a) => a.waterSource === source);
 	if (!own.length) return null;
+	const spans = own.map(spanOf);
 	const out = new Float64Array(days);
 	for (let t = 0; t < days; ) {
 		const wy = waterYearOf(start + t);
 		const end = wyStart(wy + 1) - 1;
 		const v = registeredOver(own, wy, wyStart(wy), end);
 		const last = Math.min(days - 1, end - start);
-		for (let k = t; k <= last; k++) out[k] = v;
+		for (let k = t; k <= last; k++) {
+			const d = start + k;
+			out[k] = spans.some((x) => x.lo <= d && d <= x.hi) ? v : Infinity;
+		}
 		t = last + 1;
 	}
 	return out;
+}
+
+/**
+ * The run days a capped source isn't capped on (engine ≥ 1.70.0,
+ * yearBudgets), as spans [first, last] of run days: none of the unit's
+ * allocations of `source` is in force on them. Empty when the unit has no
+ * allocation of the source (that source isn't capped at all, and
+ * planAllocations warns about it apart).
+ */
+export function uncappedSpans(allocs: readonly AllocationEntry[], source: AllocationWaterSource, start: number, days: number): [number, number][] {
+	const b = yearBudgets(allocs, source, start, days);
+	const out: [number, number][] = [];
+	if (!b) return out;
+	for (let t = 0; t < days; t++) {
+		if (b[t]! < Infinity) continue;
+		const last = out.at(-1);
+		if (last && last[1] === t - 1) last[1] = t;
+		else out.push([t, t]);
+	}
+	return out;
+}
+
+/** Water years as a short list: runs of consecutive years as a range ("2001–2003, 2007"). */
+export function waterYearList(years: readonly number[]): string {
+	const parts: string[] = [];
+	for (let k = 0; k < years.length; ) {
+		let j = k;
+		while (j + 1 < years.length && years[j + 1] === years[j]! + 1) j++;
+		parts.push(j === k ? String(years[k]) : `${years[k]}–${years[j]}`);
+		k = j + 1;
+	}
+	return parts.join(', ');
 }
 
 /**
@@ -243,6 +306,9 @@ export function outsideMonths(allocs: readonly AllocationEntry[], source: Alloca
  * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
  * it starts in asks for that part of the year's volume, a year wholly before
  * it for none (and isn't unscaled).
+ * A year with no allocation in force on the days it is fitted on (engine ≥
+ * 1.70.0, #90 Q24) keeps the modelled demand: factor 1, not listed in
+ * `years`, listed in `unlicensed` (before 1.70.0 it was scaled to 0).
  * `asOf` (a run day, engine ≥ 1.69.0, a snapshot's day): `before` is the
  * factor of the water year that day falls in fitted on that year's days
  * before it only (as a forecast tail starting that day would have it), or
@@ -262,10 +328,11 @@ export function fullAllocationFactors(
 	from = 0,
 	/** A snapshot's run day (0 … days): also fit its water year on the days before it (`before`). */
 	asOf?: number
-): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[]; before?: number } {
+): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[]; unlicensed: number[]; before?: number } {
 	const factor = new Float64Array(days);
 	const years: { waterYear: number; demandM3: number; registeredM3: number }[] = [];
 	const unscaled: number[] = [];
+	const unlicensed: number[] = [];
 	for (let t = 0; t < days; ) {
 		const wy = waterYearOf(start + t);
 		const last = Math.min(days - 1, wyStart(wy + 1) - 1 - start);
@@ -276,6 +343,14 @@ export function fullAllocationFactors(
 		let d = 0;
 		for (let k = a; k <= fit; k++) d += demand[k]!;
 		const pinned = t === 0 && pinnedFirst !== undefined;
+		// No allocation in force on any of the days it is fitted on (engine ≥ 1.70.0, #90 Q24): the unit keeps its
+		// modelled demand there (factor 1), as a unit with no allocation does, and the year isn't listed as scaled.
+		if (!pinned && a <= fit && !inForceOver(allocs, start + a, start + fit)) {
+			unlicensed.push(wy);
+			for (let k = t; k <= last; k++) factor[k] = 1;
+			t = last + 1;
+			continue;
+		}
 		const reg = a > fit ? 0 : registeredOver(allocs, wy, start + a, start + fit);
 		const f = pinned ? pinnedFirst : d > 0 ? reg / d : 0;
 		if (!pinned && !(d > 0) && reg > 0) unscaled.push(wy);
@@ -290,7 +365,7 @@ export function fullAllocationFactors(
 		t = last + 1;
 	}
 	const before = asOf === undefined ? undefined : factorBefore(allocs, demand, start, asOf, pinnedFirst, historyDays, from);
-	return { factor, years, unscaled, ...(before !== undefined ? { before } : {}) };
+	return { factor, years, unscaled, unlicensed, ...(before !== undefined ? { before } : {}) };
 }
 
 /**
@@ -308,6 +383,8 @@ function factorBefore(allocs: readonly AllocationEntry[], demand: ArrayLike<numb
 	if (t0 === 0 && pinnedFirst !== undefined) return pinnedFirst;
 	const fit = (t0 < historyDays ? Math.min(at, historyDays) : at) - 1;
 	const a = Math.max(t0, from);
+	// No allocation in force on those days: the modelled demand, as fullAllocationFactors has it (engine ≥ 1.70.0).
+	if (a <= fit && !inForceOver(allocs, start + a, start + fit)) return 1;
 	let d = 0;
 	for (let k = a; k <= fit; k++) d += demand[k]!;
 	const reg = a > fit ? 0 : registeredOver(allocs, wy, start + a, start + fit);
@@ -318,10 +395,26 @@ function factorBefore(allocs: readonly AllocationEntry[], demand: ArrayLike<numb
 interface ModePlanNode {
 	demand: Float64Array;
 	irrigationEfficiency: number;
-	/** `floor` and `restricted` (engine ≥ 1.44.0): a restricted day's rescaling never takes an object below its basic-needs floor. */
-	objects?: { demand: Float64Array[]; total: Float64Array; floor?: readonly (number | null)[]; restricted?: Uint8Array | null };
+	objects?: { demand: Float64Array[]; total: Float64Array };
 	borehole?: unknown;
 	allocationCap?: AllocationCap;
+}
+
+/**
+ * A full allocation's view of a unit's demand before its demand factors
+ * (engine ≥ 1.70.0, docs/model.md §2.12a): the factor is fitted on that, and
+ * the demand factors (a scenario's `demand.scale`, an outlook's level) apply
+ * after it, so a level of 0.8 is 80 % of the registered use.
+ */
+export interface FullAllocationHooks {
+	/**
+	 * Unit i's abstraction demand before its demand factors (m³/day: F ÷ e +
+	 * its objects', after its abstraction date), or undefined when no demand
+	 * factor applies to it (its plan demand is then that, to the bit).
+	 */
+	baseDemand?: (i: number) => Float64Array | undefined;
+	/** Unit i's demand objects re-planned with the factor `k` per day applied before the demand factor and the basic-needs floor. */
+	scaledObjects?: (i: number, k: Float64Array) => { demand: Float64Array[]; total: Float64Array } | undefined;
 }
 
 /**
@@ -360,6 +453,11 @@ export interface AllocationPlan {
 	pinned?: Map<number, number>;
 	/** A capture run (../warmstart, engine ≥ 1.69.0): the snapshot's run day, so each scaled unit also records `before` there. */
 	asOf?: number;
+	/**
+	 * 'fullAllocation' (engine ≥ 1.70.0): node index → the water years it keeps its modelled demand in, no
+	 * allocation being in force on the days its factor is fitted on; planAllocations names them in one warning.
+	 */
+	unlicensed?: Map<number, number[]>;
 }
 
 /** The usable allocations matched to the run's farms and water users (node index → its allocations). */
@@ -400,6 +498,7 @@ export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Floa
 	const f = fullAllocationFactors(allocs, D, start, days, plan.pinned?.get(i), plan.historyDays ?? days, plan.abstractFrom?.get(i) ?? 0, plan.asOf);
 	for (let t = 0; t < days; t++) D[t]! *= f.factor[t]!;
 	plan.scaled.set(i, { factor: f.factor, years: f.years, ...(f.before !== undefined ? { before: f.before } : {}) });
+	if (f.unlicensed.length) (plan.unlicensed ??= new Map()).set(i, f.unlicensed);
 	if (f.unscaled.length) warnings.push(`full allocation: "${name}" has no demand in water year${f.unscaled.length === 1 ? '' : 's'} ${f.unscaled.join(', ')}, so it takes none of its registered volume there`);
 	return f.factor;
 }
@@ -411,6 +510,13 @@ export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Floa
  * demand objects alike, so D = F / e + objects scales with them; water users
  * were scaled before their claims, scaleDemandToAllocation). Warns about
  * units the mode leaves alone.
+ *
+ * From engine 1.70.0 (issue #90 Q29) a full allocation's factor is fitted on
+ * the demand before the demand factors (`hooks.baseDemand`), and the factors
+ * then cut the scaled demand: F = factor × k × F₀, and each object
+ * MAX(raw × k × factor, MIN(floor, raw × k)) on a day its factor is below 1
+ * (`hooks.scaledObjects`). Before, the factor was fitted on the demand after
+ * them, so a uniform level cancelled out.
  */
 export function planAllocations(
 	ap: AllocationPlan,
@@ -418,7 +524,8 @@ export function planAllocations(
 	plan: ModePlanNode[],
 	start: number,
 	days: number,
-	warnings: string[]
+	warnings: string[],
+	hooks: FullAllocationHooks = {}
 ): void {
 	const { mode, byNode } = ap;
 	if (mode === 'none' || days <= 0) return;
@@ -427,9 +534,18 @@ export function planAllocations(
 		warnings.push(
 			`allocation mode ${mode}: ${without.length} unit${without.length === 1 ? ' has' : 's have'} no registered volume, so ${mode === 'cap' ? 'nothing caps their use' : 'their demand is left as modelled'} (${without.join('; ')})`
 		);
+	// No licence in force (engine ≥ 1.70.0, #90 Q24): under a cap the days a source isn't capped on, under a full
+	// allocation the water years a unit keeps its modelled demand in, named in one warning after the loop, by node id
+	// (whatever order the nodes came in).
+	const notInForce: [number, string][] = [];
 	for (const [i, allocs] of byNode) {
 		const p = plan[i]!;
 		if (mode === 'cap') {
+			for (const source of ['surface', 'groundwater'] as const) {
+				const spans = uncappedSpans(allocs, source, start, days);
+				if (spans.length)
+					notInForce.push([i, `"${nodes[i]!.name}" ${source === 'surface' ? 'surface water' : 'groundwater'} ${spans.map(([a, b]) => (a === b ? fromEpochDay(start + a) : `${fromEpochDay(start + a)} to ${fromEpochDay(start + b)}`)).join(', ')}`]);
+			}
 			const surface = yearBudgets(allocs, 'surface', start, days);
 			const groundwater = yearBudgets(allocs, 'groundwater', start, days);
 			const surfaceLimit = dailyLimits(allocs, 'surface', start, days);
@@ -444,25 +560,35 @@ export function planAllocations(
 			continue;
 		}
 		if (nodes[i]!.kind !== 'farm') continue;
-		const e = p.irrigationEfficiency;
-		const D = new Float64Array(days);
-		for (let t = 0; t < days; t++) D[t] = p.demand[t]! / e + (p.objects ? p.objects.total[t]! : 0);
+		// The demand the factor is fitted on: before the demand factors (engine ≥ 1.70.0); without one, the plan's.
+		const base = hooks.baseDemand?.(i);
+		let D: Float64Array;
+		if (base) D = Float64Array.from(base);
+		else {
+			const e = p.irrigationEfficiency;
+			D = new Float64Array(days);
+			for (let t = 0; t < days; t++) D[t] = p.demand[t]! / e + (p.objects ? p.objects.total[t]! : 0);
+		}
 		const factor = scaleDemandToAllocation(ap, i, D, start, days, nodes[i]!.name, warnings)!;
+		// The crop requirement already carries its demand factor: × k is factor × k × F₀.
 		p.demand = Float64Array.from(p.demand, (v, t) => v * factor[t]!);
 		if (p.objects) {
-			// A restriction what-if on a full-allocation run (engine ≥ 1.44.0, issue #123): on a day the unit is
-			// restricted, an object with a basic-needs floor keeps MIN(floor, its restricted demand), as the
-			// restriction alone would leave it; the rest of its demand, and every other day, scale as before.
-			const { floor, restricted } = p.objects;
-			const demand = p.objects.demand.map((d, k) => {
-				const fl = floor?.[k] ?? null;
-				return Float64Array.from(d, (v, t) => (fl !== null && restricted?.[t] ? Math.max(v * factor[t]!, Math.min(fl, v)) : v * factor[t]!));
-			});
-			const total = new Float64Array(days);
-			for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-			p.objects = { ...p.objects, demand, total };
+			// The objects are re-planned with k before their factor, so the floor is MIN(floor, k × demand) (engine ≥ 1.70.0).
+			const again = hooks.scaledObjects?.(i, factor);
+			if (again) p.objects = { ...p.objects, demand: again.demand, total: again.total };
+			else {
+				const demand = p.objects.demand.map((d) => Float64Array.from(d, (v, t) => v * factor[t]!));
+				const total = new Float64Array(days);
+				for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
+				p.objects = { ...p.objects, demand, total };
+			}
 		}
 	}
+	if (mode === 'fullAllocation') for (const [i, years] of ap.unlicensed ?? []) notInForce.push([i, `"${nodes[i]!.name}" in water year${years.length === 1 ? '' : 's'} ${waterYearList(years)}`]);
+	if (notInForce.length)
+		warnings.push(
+			`${mode === 'cap' ? 'allocation cap' : 'full allocation'}: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates)${mode === 'cap' ? ", and that use doesn't count against the water year's volume" : ''}: ${notInForce.sort((a, b) => cmpStr(nodes[a[0]]!.id, nodes[b[0]]!.id)).map((x) => x[1]).join('; ')}`
+		);
 }
 
 /**
@@ -482,7 +608,8 @@ export function planAllocations(
 export function limitBoundKind(left: number, limit: number, outside: boolean, use: number, demand: number, deficit: number, budget: number): 'volumeDays' | 'rateDays' | 'monthsDays' | null {
 	if (!(deficit > 1e-9 * Math.max(demand, 1))) return null;
 	const room = Math.min(left, limit);
-	if (use < room - 1e-9 * Math.max(room, 1)) return null;
+	// No room limit at all (a day the source isn't capped, engine ≥ 1.70.0) never binds.
+	if (room === Infinity || use < room - 1e-9 * Math.max(room, 1)) return null;
 	// What is left carries the year's summing noise: a volume used up to within 10⁻⁹ of the budget is used up.
 	return left <= limit + 1e-9 * Math.max(budget, 1) ? 'volumeDays' : outside ? 'monthsDays' : 'rateDays';
 }

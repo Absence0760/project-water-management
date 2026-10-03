@@ -10,6 +10,7 @@ import { resolveAllocationMode } from './allocations/mode';
 import {
 	accumulationWarnings,
 	applyAccumulations,
+	finishSetAside,
 	claimsDays,
 	fitExcludedWindows,
 	rainAccumulations,
@@ -383,13 +384,17 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const rainSourceColumn = rainSource ? finishRainSource(rainSource, catchment, aligned('rain_chirps_mm'), aligned('rain_forecast_mm'), start) : null;
 	if (rainSource) warnings.push(...rainSourcePeriodWarnings(rainSource.info));
 	if (accumulation) {
-		// Left as recorded while CHIRPS fills the zero run it ends: that rain counts twice.
+		// What CHIRPS (then forecast) put on a reading set aside after a blank outage (engine ≥ 1.70.0, §2.4d).
+		const chirps = aligned('rain_chirps_mm');
+		const forecast = aligned('rain_forecast_mm');
+		finishSetAside(accumulation, start, (t) => chirps[t] ?? forecast[t] ?? null);
+		// Left as recorded while CHIRPS fills the zero run or the blank outage it ends: that rain may count twice.
 		const filled = (w: { start: string; end: string }) => {
 			if (!zeroRain) return false;
 			for (let d = Math.max(toEpochDay(w.start), start); d <= Math.min(toEpochDay(w.end), end); d++) if (zeroRain.mask[d - start]) return true;
 			return false;
 		};
-		const doubled = accumulation.info.windows.filter((w) => w.status === 'asRecorded' && filled(w));
+		const doubled = accumulation.info.windows.filter((w) => w.status === 'asRecorded' && (w.outageDays != null || filled(w)));
 		warnings.push(...accumulationWarnings(accumulation.info, doubled));
 	}
 

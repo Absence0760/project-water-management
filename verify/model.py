@@ -188,6 +188,7 @@ ACC_MIN_RUN_DAYS = 3
 ACC_READING_DAY_SHARE = 0.25
 ACC_RUN_SHARE = 0.5
 ACC_MAX_RUN_DAYS = 92
+ACC_MAX_BLANK_DAYS = 7
 
 
 def flagged_zero_runs(c: Series, min_wet_days: int) -> list[list[int]]:
@@ -290,43 +291,71 @@ def corrected_chirps(h: Series, factors, o: int, apply: bool):
     return w * f if f is not None else w
 
 
-def detect_accumulations(c: Series, h: Series, factors, blocked: set[int]):
+def detect_accumulations(c: Series, h: Series, factors, blocked: set[int], missing: set[int]):
     """§2.4d: reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS × the
     factors (raw where a month has none) little on the reading day ± 1 and a
-    lot over the window's run days (the day before the reading left out)."""
+    lot over the window's run days (the day before the reading left out).
+    Engine ≥ 1.70.0: a day listed as missing reads as blank, and a stretch of
+    more than 7 blank days in a row (measured whole) is an outage that ends
+    the run; a reading straight after one is judged over the outage's last
+    92 days instead and, when it passes, set aside. Returns (windows,
+    set-aside reading days)."""
     wins = []
+    set_aside = []
     if not c or not h:
-        return wins
+        return wins, set_aside
 
     def ch(o):
         v = corrected_chirps(h, factors, o, True)
         return 0.0 if v is None else v
 
+    def blank(j):
+        u = c.values[j]
+        return (c.start + j) in missing or u is None or (isinstance(u, float) and not math.isfinite(u))
+
     for i, v in enumerate(c.values):
-        if v is None or not math.isfinite(v) or v < ACC_MIN_MM:
+        if blank(i) or v < ACC_MIN_MM:
             continue
         r = c.start + i
         k = 0
+        outage = 0
         j = i - 1
         while j >= 0:
-            u = c.values[j]
-            if u is None or (isinstance(u, float) and not math.isfinite(u)) or u == 0:
+            if blank(j):
+                s = j
+                while s >= 0 and blank(s):
+                    s -= 1
+                if j - s > ACC_MAX_BLANK_DAYS:
+                    outage = j - s
+                    break
+                k += j - s
+                j = s
+            elif c.values[j] == 0:
                 k += 1
                 j -= 1
             else:
                 break
-        if k < ACC_MIN_RUN_DAYS or h.get(r) is None:
+        if h.get(r) is None:
             continue
-        run_days = list(range(r - min(k, ACC_MAX_RUN_DAYS), r))
+        if k >= ACC_MIN_RUN_DAYS:
+            run_days = list(range(r - min(k, ACC_MAX_RUN_DAYS), r))
+        elif k == 0 and outage > 0:
+            run_days = list(range(r - min(outage, ACC_MAX_RUN_DAYS), r))
+        else:
+            continue
         if ch(r - 1) + ch(r) + ch(r + 1) >= ACC_READING_DAY_SHARE * v:
             continue
         if sum(ch(o) for o in run_days if o != r - 1) < ACC_RUN_SHARE * v:
+            continue
+        if k == 0:
+            if r not in blocked:
+                set_aside.append(r)
             continue
         window = run_days + [r]
         if any(o in blocked for o in window):
             continue
         wins.append({"days": window, "reading": r, "total": v})
-    return wins
+    return wins, set_aside
 
 
 def prepare_rain(settings: dict, series: dict) -> dict:
@@ -352,12 +381,16 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     base_left_out = flagged_out | missing_days
     det_factors = fit_chirps_factors(c, h, base_left_out, low_years)
     blocked = missing_days | (keep_dry if mode == "missing" else set())
-    windows = detect_accumulations(c, h, det_factors, blocked)
+    windows, outage_readings = detect_accumulations(c, h, det_factors, blocked, missing_days)
     window_days = {o for w in windows for o in w["days"]}
-    factors = fit_chirps_factors(c, h, base_left_out | window_days, low_years)
+    # A reading after an outage is left out of the fit in either mode; in
+    # 'spread' mode its day is set aside (CHIRPS, then forecast, fill it).
+    factors = fit_chirps_factors(c, h, base_left_out | window_days | set(outage_readings), low_years)
 
     set_aside = ((flagged_days - kept_dry) if mode == "missing" else set()) | missing_days
     set_aside -= window_days - missing_days
+    if acc_mode != "asRecorded":
+        set_aside |= set(outage_readings)
 
     spread: dict[int, float] = {}
     if acc_mode == "spread":
@@ -404,8 +437,9 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     first = min(a for a, _ in cands) if cands else None
     last = max(b for _, b in cands) if cands else None
     diag = {
-        "zero_run_days_set_aside": len(set_aside - missing_days),
+        "zero_run_days_set_aside": len(set_aside - missing_days - set(outage_readings)),
         "accumulation_windows": len(windows),
+        "accumulation_readings_set_aside": len(outage_readings),
         "low_vs_chirps_years": len(low_years),
     }
     return {
@@ -772,7 +806,7 @@ def run(doc: dict) -> dict:
         e = farm_efficiency(f, rows, apan)
         smax = cropped * store_mm / 1000
         w = 0.0
-        gross_s, eff_s, soil_s, F_s, D_s = [], [], [], [], []
+        gross_s, eff_s, soil_s, F_s, D_s, F0_s = [], [], [], [], [], []
         for i, m in enumerate(wm):
             gross = 0.0
             for crop, a in rows:
@@ -783,6 +817,7 @@ def run(doc: dict) -> dict:
             need = max(0.0, gross)
             # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
             used = need if need - available <= 1e-12 * need else available
+            F0_s.append(need - used)
             F = (need - used) * dfac(f, i)
             w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
@@ -790,7 +825,7 @@ def run(doc: dict) -> dict:
             soil_s.append(w / cropped * 1000 if cropped > 0 else 0.0)
             F_s.append(F)
             D_s.append(F / e)
-        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "Dc": D_s, "e": e}
+        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "Dc": D_s, "e": e, "F0": F0_s}
 
     # Demand objects (§2.7f): enabled, on a farm, in id order.
     objs: dict[str, list[dict]] = {f["id"]: [] for f in farms}
@@ -800,6 +835,8 @@ def run(doc: dict) -> dict:
         objs[ob["nodeId"]].append(ob)
     obj_dem: dict[str, list[float]] = {}
     obj_floor: dict[str, list[float]] = {}
+    # Each object's demand before the demand factor (its month × its schedule): a full allocation fits on it.
+    obj_raw: dict[str, list[float]] = {}
     obj_B: dict[str, float] = {}
     for fid, lst in objs.items():
         x = by_id[fid]
@@ -818,9 +855,10 @@ def run(doc: dict) -> dict:
             if ob.get("category") in ("domestic", "municipal") and pop is not None:
                 B = pop * BASIC_LITRES / 1000 / (1 - loss)
             sched = ob.get("schedule") or []
-            dem, flo = [], []
+            dem, flo, raw = [], [], []
             for i, o in enumerate(days):
                 s = schedule_factor(sched, o)
+                raw.append(base[wm[i]] * s)
                 f_ = dfac(x, i)
                 v = base[wm[i]] * f_ * s
                 if B is not None and f_ < 1:
@@ -831,22 +869,30 @@ def run(doc: dict) -> dict:
                 flo.append(min(B, v) if B is not None else NAN)
             obj_dem[ob["id"]] = dem
             obj_floor[ob["id"]] = flo
+            obj_raw[ob["id"]] = raw
             if B is not None:
                 obj_B[ob["id"]] = B
 
-    # The unit's abstraction demand before a full allocation's factor.
+    # The unit's abstraction demand, D (after its demand factors), and D_base before them: a full
+    # allocation's factor is fitted on D_base and the demand factors apply after it (§2.12a, engine 1.70.0).
+    D_fact: dict[str, list[float]] = {}
     D_base: dict[str, list[float]] = {}
     for f in farms:
-        dd = []
+        dd, db = [], []
         for i in range(n):
             v = fd[f["id"]]["Dc"][i]
+            b = fd[f["id"]]["F0"][i] / fd[f["id"]]["e"]
             for ob in objs[f["id"]]:
                 v += obj_dem[ob["id"]][i]
+                b += obj_raw[ob["id"]][i]
             dd.append(v)
-        D_base[f["id"]] = dd
+            db.append(b)
+        D_fact[f["id"]] = dd
+        D_base[f["id"]] = db
     for u in users:
         ud = u.get("userDemandM3Day")
-        D_base[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
+        D_base[u["id"]] = [float(ud[wm[i]]) if ud else 0.0 for i in range(n)]
+        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
 
     # ---- allocations (§2.12a) -------------------------------------------
     alloc_mode = settings.get("allocationMode") or "none"
@@ -875,7 +921,14 @@ def run(doc: dict) -> dict:
             dem_y: dict[int, float] = {}
             scaled_rows: list = []
             fa_scaled[nid] = scaled_rows
+            unlicensed: set[int] = set()
             for y, idx in yrs.items():
+                # §2.12a (engine >= 1.70.0): no allocation in force on the days a year is scaled
+                # on: the unit keeps its modelled demand there (factor 1), not listed as scaled.
+                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in idx):
+                    unlicensed.add(y)
+                    fac_y[y] = 1.0
+                    continue
                 vol = 0.0
                 for a in both:
                     inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"])
@@ -892,6 +945,8 @@ def run(doc: dict) -> dict:
             for i in range(n):
                 ally.setdefault(water_year(days[i]), []).append(i)
             for y, idx in sorted(ally.items()):
+                if y in unlicensed:
+                    continue
                 tot = 0.0
                 for i in idx:
                     tot += D_base[nid][i]
@@ -916,13 +971,17 @@ def run(doc: dict) -> dict:
             if nid in fd:
                 fd[nid]["F"] = [fd[nid]["F"][i] * k[i] for i in range(n)]
                 fd[nid]["Dc"] = [fd[nid]["Dc"][i] * k[i] for i in range(n)]
+                # Each object: its raw demand × k, then the demand factor, never below MIN(floor, raw × k).
                 for ob in objs[nid]:
                     od = obj_dem[ob["id"]]
+                    rw = obj_raw[ob["id"]]
+                    B = obj_B.get(ob["id"])
                     x = by_id[nid]
                     for i in range(n):
-                        v = od[i] * k[i]
-                        if not math.isnan(obj_floor[ob["id"]][i]) and dfac(x, i) < 1:
-                            v = max(v, obj_floor[ob["id"]][i])
+                        f_ = dfac(x, i)
+                        v = rw[i] * k[i] * f_
+                        if B is not None and f_ < 1:
+                            v = max(v, min(B, rw[i] * k[i]))
                         od[i] = v
                 dn = []
                 for i in range(n):
@@ -932,9 +991,9 @@ def run(doc: dict) -> dict:
                     dn.append(v)
                 Dn[nid] = dn
             else:
-                Dn[nid] = [dd[i] * k[i] for i in range(n)]
+                Dn[nid] = [D_fact[nid][i] * k[i] for i in range(n)]
         else:
-            Dn[nid] = list(dd)
+            Dn[nid] = list(D_fact[nid])
     capped = alloc_mode == "cap"
 
     # ---- river abstractions beside a unit's dam (§2.7j) -------------------
@@ -1125,6 +1184,7 @@ def run(doc: dict) -> dict:
     bh_used = {x["id"]: [0.0] * len(units.get(x["id"], [])) for x in nodes}
     al_used = {(nid, s): 0.0 for nid, bysrc in ald.items() for s in bysrc}
     al_budget: dict[tuple, float] = {}
+    al_capped_y: set[tuple] = set()
     lb_days: dict[tuple, dict] = {}
     sim_out = [0.0] * n
     cat_short = [0.0] * n
@@ -1132,6 +1192,10 @@ def run(doc: dict) -> dict:
     use_y: dict[tuple, float] = {}
 
     def spend(nid, src, v):
+        # §2.12a (engine >= 1.70.0): use on a day none of the source's allocations is in
+        # force isn't capped and doesn't count against the year's volume.
+        if not math.isfinite(room[(nid, src)][3]):
+            return
         al_used[(nid, src)] += v
         k_ = (nid, src, water_year(days[i]))
         use_y[k_] = use_y.get(k_, 0.0) + v
@@ -1174,6 +1238,12 @@ def run(doc: dict) -> dict:
                 for a in lst:
                     b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)
                 al_budget[(nid, s, wy)] = b
+            # §2.12a (engine >= 1.70.0): a day none of the unit's allocations of the source is
+            # in force on isn't capped, as a unit with no allocation of it: no room, no budget.
+            if not any(a["from"] <= o <= a["to"] for a in lst):
+                room[(nid, s)] = (math.inf, math.inf, math.inf, math.inf)
+                continue
+            al_capped_y.add((nid, s, wy))
             budget = al_budget[(nid, s, wy)]
             left = max(0.0, budget - al_used[(nid, s)])
             limit = licence_limit(lst, o)
@@ -1226,51 +1296,77 @@ def run(doc: dict) -> dict:
                 active.append((t, lim))
         for prio in sorted({t["priority"] for t, _ in active}):
             group = [(t, lim) for t, lim in active if t["priority"] == prio]
-            want = {}
+            # Proportional rationing in rounds (engine >= 1.70.0, issue #90 Q25, §2.6): what each rule
+            # still asks (its limit alone, never first cut to its source's free water or its receiver's room).
+            rem = {}
             reserve = {}
             for t, lim in group:
                 src = by_id[t["fromNodeId"]]
-                res = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
-                reserve[t["id"]] = res
-                free = max(0.0, storage[src["id"]] - drawn[src["id"]] - res)
-                want[t["id"]] = min(lim, free)
+                reserve[t["id"]] = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
+                rem[t["id"]] = lim
+            # Each receiver's room.
+            room_left = {}
             for dst in sorted({t["toNodeId"] for t, _ in group}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
                 after = storage[dst] + pd - e_raw - sp_raw
                 floor_rel = 0.0
                 if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                    # A fixed release's MIN(amount, outlet), in full (engine >= 1.70.0, issue #90 Q26).
                     outlet_c = f.get("damOutletCapacityM3Day")
-                    floor_rel = min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c,
-                                    after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0))
-                    floor_rel = max(0.0, floor_rel)
+                    floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
-                rm = max(0.0, rm)
-                into = [t for t, _ in group if t["toNodeId"] == dst]
-                tot = sum(want[t["id"]] for t in into)
-                if tot > rm and tot > 0:
-                    diag["room_bound"] += 1
-                    for t in into:
-                        want[t["id"]] = want[t["id"]] * rm / tot
+                room_left[dst] = max(0.0, rm)
+            full = {d for d, v in room_left.items() if not v > 0}
             vol = {t["id"]: 0.0 for t, _ in group}
-            for src in sorted({t["fromNodeId"] for t, _ in group}):
-                from_src = [t for t, _ in group if t["fromNodeId"] == src]
-                cur = storage[src] - drawn[src]
-                left = {t["id"]: want[t["id"]] for t in from_src}
-                levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
-                if len(levels) > 1 and any(want[t["id"]] > 0 for t in from_src):
-                    diag["band_split"] += 1
-                for level in levels:
-                    band = max(0.0, cur - level)
-                    cur = min(cur, level)
-                    elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]
-                    tot = sum(left[t["id"]] for t in elig)
-                    if band <= 0 or tot <= 0:
+            taken = {}
+            while True:
+                # (1) At each source, its water above each rule's reserve, in bands at the reserves, pro rata
+                # to what each rule into a receiver that isn't full still asks.
+                given = {t["id"]: 0.0 for t, _ in group}
+                for src in sorted({t["fromNodeId"] for t, _ in group}):
+                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and t["toNodeId"] not in full]
+                    cur = storage[src] - drawn[src] - taken.get(src, 0.0)
+                    left = {t["id"]: rem[t["id"]] for t in from_src}
+                    levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
+                    if len(levels) > 1:
+                        diag["band_split"] += 1
+                    for level in levels:
+                        band = max(0.0, cur - level)
+                        cur = min(cur, level)
+                        elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]
+                        tot = sum(left[t["id"]] for t in elig)
+                        if band <= 0 or tot <= 0:
+                            continue
+                        for t in elig:
+                            give = left[t["id"]] if tot <= band else band * left[t["id"]] / tot
+                            given[t["id"]] += give
+                            left[t["id"]] -= give
+                # (2) Each receiver's room, pro rata to what the sources gave; a receiver given more is full.
+                basis = given
+                filled = False
+                for dst in sorted(room_left):
+                    if dst in full:
                         continue
-                    for t in elig:
-                        give = left[t["id"]] if tot <= band else band * left[t["id"]] / tot
-                        vol[t["id"]] += give
-                        left[t["id"]] -= give
+                    into = [t for t, _ in group if t["toNodeId"] == dst and rem[t["id"]] > 0]
+                    tot = sum(basis[t["id"]] for t in into)
+                    rm_left = room_left[dst]
+                    for t in into:
+                        x = min(given[t["id"]], basis[t["id"]] * rm_left / tot) if tot > rm_left else given[t["id"]]
+                        x = min(x, max(0.0, storage[t["fromNodeId"]] - drawn[t["fromNodeId"]] - taken.get(t["fromNodeId"], 0.0)))
+                        vol[t["id"]] += x
+                        rem[t["id"]] -= x
+                        taken[t["fromNodeId"]] = taken.get(t["fromNodeId"], 0.0) + x
+                    if tot > rm_left:
+                        diag["room_bound"] += 1
+                        full.add(dst)
+                        room_left[dst] = 0.0
+                        filled = True
+                    else:
+                        room_left[dst] = rm_left - tot
+                # (3) Room a source couldn't fill is offered again, while a receiver filled this round.
+                if not filled:
+                    break
             if any(vol[t["id"]] > 0 for t, _ in group):
                 diag["transfer_days"] += 1
             for t, _ in group:
@@ -1297,9 +1393,17 @@ def run(doc: dict) -> dict:
             held = storage[dst] + pd + J[dst]
             e_c = min(e_raw, max(held, 0.0))
             sp_c = min(sp_raw, max(held - e_c, 0.0))
-            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
+            # A fixed release's MIN(amount, outlet) in full (engine >= 1.70.0, issue #90 Q26), as a dam rule's room.
+            floor_ot = 0.0
+            if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                outlet_o = f.get("damOutletCapacityM3Day")
+                floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o))
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)
             for t, c in caps:
-                need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
+                # Under an allocation cap, the demand the cap still allows (§2.6a, §2.12a, engine >= 1.70.0):
+                # at most the destination's surface room at the start of the day; the top-up isn't capped.
+                sr_ = room.get((dst, "surface"))
+                need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
@@ -1393,8 +1497,9 @@ def run(doc: dict) -> dict:
                 ZS[xid] = zs_out
                 for s_, r_ in (("surface", sroom), ("groundwater", groom)):
                     if r_:
-                        cc[f"allocation_room_{s_}"][i] = r_[0]
-                        cc[f"allocation_left_{s_}"][i] = r_[1]
+                        # Blank (NaN) in a water year the source isn't capped in (§2.12a, engine >= 1.70.0).
+                        cc[f"allocation_room_{s_}"][i] = r_[0] if math.isfinite(r_[3]) else math.nan
+                        cc[f"allocation_left_{s_}"][i] = r_[1] if math.isfinite(r_[3]) else math.nan
                 continue
 
             # A farm (§2.7). With river abstractions (§2.7j) its dam side is asked for its dam-sourced demand only.
@@ -1712,10 +1817,13 @@ def run(doc: dict) -> dict:
                 keeps = {}
                 for t in grp:
                     hk = t.get("handsOffM3Day")
-                    keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
+                    # Engine >= 1.70.0 (issue #90 Q27): the source dam's pass-inflow target is kept too.
+                    keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
                     keeps[t["id"]] = keep_k
                     lim = rule_limit(t, o, m)
-                    v = min(max(0.0, U0 - taken - keep_k), lim)
+                    # Asks MIN(capacity, need share), never capped at the flow above its keep (engine >= 1.70.0,
+                    # issue #90 Q25); the bands keep it above its keep.
+                    v = lim
                     if t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
                     wants[t["id"]] = max(0.0, v)
@@ -1773,8 +1881,9 @@ def run(doc: dict) -> dict:
                 cc[key][i] = val
             for s_, r_ in (("surface", sroom), ("groundwater", groom)):
                 if r_:
-                    cc[f"allocation_room_{s_}"][i] = r_[0]
-                    cc[f"allocation_left_{s_}"][i] = r_[1]
+                    # Blank (NaN) in a water year the source isn't capped in (§2.12a, engine >= 1.70.0).
+                    cc[f"allocation_room_{s_}"][i] = r_[0] if math.isfinite(r_[3]) else math.nan
+                    cc[f"allocation_left_{s_}"][i] = r_[1] if math.isfinite(r_[3]) else math.nan
             if cap > 0 and G < dem and avail > 0 and avail <= dead + 1e-9 * cap:
                 diag["dead_storage_days"] += 1
             if R > 0 and cap > 0:
@@ -1983,7 +2092,7 @@ def run(doc: dict) -> dict:
         for (nid, s_, wy), budget in sorted(al_budget.items()):
             ent = summary.setdefault((nid, s_), {"capReached": [], "limitBound": []})
             used_ = use_y.get((nid, s_, wy), 0.0)
-            if used_ >= budget - 1e-9 * budget:
+            if (nid, s_, wy) in al_capped_y and used_ >= budget - 1e-9 * budget:
                 ent["capReached"].append({"waterYear": wy, "budgetM3": budget, "usedM3": used_})
             row = lb_days.get((nid, s_, wy))
             if row:
