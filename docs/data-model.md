@@ -85,6 +85,17 @@ erDiagram
 | `run_series` | One daily output array per (run, node, key). `node_id` null = catchment-level; otherwise a node of the **run's own** model snapshot, not a foreign key to the live `node` table (since 024: a scenario run has nodes the live model doesn't, and a node deleted from the model keeps its series in earlier runs) | Element-sheet columns (storage, spill, outflow, deficit, EWR shortfall…) and `[Flow data]` natural flow and simulated outflow |
 | `project_import` | What the importer flagged when the project was imported (017): file name, source, importer version, who and when, and the notes and unmapped report as jsonb. Written once by the import, never changed; see [Import reports](#import-reports-017_project_importsql) | The whole workbook (or project file), as the browser importer read it |
 
+Model names are one line (migration 189, issue #385): `node.name`,
+`crop.name`, `borehole.name` and `demand_object.name` each have a CHECK
+refusing the engine's `NAME_CONTROL_CHARS` (C0, DEL, C1, U+2028, U+2029).
+The migration first made every stored name one line, as the engine's
+`cleanName` does, a node or crop name it made equal to another in its
+project (ignoring case) taking " (2)", " (3)" …, an empty one "Unnamed";
+schedule labels in `demand_object.schedule` likewise. Run input snapshots,
+model revisions and scenario ops (hash-pinned) keep the names they were
+written with; a restore cleans them on the way in ([api.md § Model
+data](./api.md#model-data)).
+
 ### Field mapping details
 
 | `node` column | Farm spec column | Notes |

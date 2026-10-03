@@ -15,7 +15,7 @@
 // runoff to the dam. Apply takes only the ticked values, and refuses (409) a
 // value whose current one changed since the proposal: what the editor saw
 // replaced is exactly what is replaced, never anything typed since.
-import { newNetworkNode, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { cleanName, newNetworkNode, type NetworkNode, type ProjectModel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -29,7 +29,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { safeError } from '../logging/safeError.js';
 import { loadModel, saveModel } from '../model/store.js';
-import { ModelBody, modelProblems } from '../model/validate.js';
+import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
@@ -71,7 +71,8 @@ export const DivideBody = z
 	})
 	.strict();
 
-const Name = z.string().trim().min(1).max(100);
+// A node's name, as the model schema takes one (one line, issue #385).
+const Name = nameText(1, 100);
 export const DivideApplyBody = z
 	.object({
 		units: z
@@ -246,7 +247,7 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 		if (p.nodeId === null) {
 			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge node.`);
 			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a node'} already.`);
-			return { featureId: f.id, featureKind: f.kind, name: f.name || `Gauge ${++gauges}`, node: null, geometry: f.geometry };
+			return { featureId: f.id, featureKind: f.kind, name: cleanName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry };
 		}
 		const n = nodes.get(p.nodeId);
 		if (!n) throw new ApiError(400, `${label} is matched to a node that isn’t in the model (deleted since?). Reload and propose again.`);

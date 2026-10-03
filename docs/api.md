@@ -1350,6 +1350,18 @@ Ids are client-generated UUIDs; rows missing from a `PUT` are deleted.
 | GET | `/projects/:id/model` | – | `ProjectModel` | viewer |
 | PUT | `/projects/:id/model` | `ProjectModel` | `ProjectModel` | editor |
 
+Names are one line (issue #385, migration 189): a node or crop name (1–100
+characters after trimming), a borehole or demand object name (1–200) and a
+demand schedule window's `label` (0–200) may not hold a line break, a tab or
+any other control character (C0, DEL, C1, U+2028, U+2029; the engine's
+`NAME_CONTROL_CHARS`). `PUT` refuses one with `cannot contain line breaks or
+control characters`, as do the scenario ops that set a name or label and
+the map's Start and Divide apply. A demand object's `note` may still run
+over lines. The bulk paths make a name one line instead (every run of
+whitespace and control characters one space, the engine's `cleanName`): a
+project document's import (`POST /projects/import`, `pnpm import:project`),
+a restore of a version saved before the rule, and the workbook importers.
+
 Transfers carry `priority` (integer, lower moves first, engine ≥ 0.16.0) and
 `monthlyRateM3s` (engine ≥ 1.14.0, migration 090: twelve numbers ≥ 0, the max
 rate in m³/s per water-year month Oct–Sep, 0 = off that month, or `null`, the

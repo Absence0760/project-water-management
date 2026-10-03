@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -6,6 +6,13 @@ const frac = z.number().min(0).max(1);
 const nonNeg = z.number().finite().min(0);
 /** A day as YYYY-MM-DD; whether it is a real date is a model rule (developmentProblem). */
 const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-DD)');
+/**
+ * A name or label: trimmed, `min` to `max` characters, one line (issue #385):
+ * no line break, tab or other control character (the engine's
+ * NAME_CONTROL_CHARS), which the schematic, map labels and tables would draw
+ * broken. The workbook importers turn those into spaces (cleanName).
+ */
+export const nameText = (min: number, max: number) => z.string().trim().min(min).max(max).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE);
 
 /**
  * A project model as PUT /model and a project document carry it. A model from
@@ -19,7 +26,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 		.array(
 			z.object({
 				id: uuid,
-				name: z.string().trim().min(1).max(100),
+				name: nameText(1, 100),
 				kind: z.enum(['farm', 'gauge', 'user']),
 				downstreamNodeId: uuid.nullable(),
 				sortOrder: z.number().int(),
@@ -103,7 +110,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 		.array(
 			z.object({
 				id: uuid,
-				name: z.string().trim().min(1).max(100),
+				name: nameText(1, 100),
 				sortOrder: z.number().int().optional(),
 				cropFactor: z.array(z.number().finite().min(0)).length(12),
 				// The crop's own irrigation efficiency (engine ≥ 0.43.0, issue #54): 0 < e ≤ 1,
@@ -163,7 +170,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				nodeId: uuid,
-				name: z.string().trim().min(1).max(200),
+				name: nameText(1, 200),
 				capacityM3Day: nonNeg,
 				annualCapM3: nonNeg.nullable().default(null),
 				mode: z.enum(BOREHOLE_MODES).default('supplemental'),
@@ -180,7 +187,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 			z.object({
 				id: uuid,
 				nodeId: uuid,
-				name: z.string().trim().min(1).max(200),
+				name: nameText(1, 200),
 				category: z.enum(DEMAND_OBJECT_CATEGORIES).default('other'),
 				sizing: z.enum(DEMAND_OBJECT_SIZINGS).default('monthly'),
 				monthlyM3Day: z.array(nonNeg).length(12).nullable().default(null),
@@ -199,7 +206,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				schedule: z
 					.array(
 						z.object({
-							label: z.string().trim().max(200).default(''),
+							label: nameText(0, 200).default(''),
 							span: z.enum(DEMAND_SCHEDULE_SPANS),
 							from: z.string().max(10).nullable().default(null),
 							to: z.string().max(10).nullable().default(null),

@@ -367,4 +367,23 @@ describe('what the log leaves out, and what a restore refuses', () => {
 		expect((await revisions()).length).toBe(revs.length);
 		expect((await editor.call('GET', `/projects/${projectId}/model`)).body).toEqual(before);
 	});
+
+	it('restores a version saved with a name over several lines (before issue #385) with the name made one line', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'History one line' })).body.project.id as string;
+		const weir = node('Weir', null);
+		const hill = node('Hilltop', weir.id);
+		const m = (cap: number) => ({ nodes: [weir, { ...hill, damCapacityM3: cap }], crops: [], cropAreas: [], transfers: [] });
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m(100))).status).toBe(200);
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m(200))).status).toBe(200);
+		const target = (await revisions(pid)).find((r) => r.source === 'model_put')!;
+		// As a save before #385 could store it; today's PUT /model refuses it.
+		const [{ snapshot }] = await asOwner('SELECT snapshot FROM model_revision WHERE id = $1', [target.id]);
+		for (const n of snapshot.model.nodes) if (n.id === hill.id) n.name = 'Hill\r\ntop';
+		await asOwner('UPDATE model_revision SET snapshot = $2 WHERE id = $1', [target.id, JSON.stringify(snapshot)]);
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { ...m(100), nodes: [weir, { ...hill, name: 'Hill\r\ntop' }] })).status).toBe(400);
+		const res = await owner.call('POST', `/projects/${pid}/history/revisions/${target.id}/restore`, {});
+		expect(res.status).toBe(201);
+		const model = (await owner.call('GET', `/projects/${pid}/model`)).body;
+		expect(model.nodes.find((n: { id: string }) => n.id === hill.id)).toMatchObject({ name: 'Hill top', damCapacityM3: 100 });
+	});
 });
