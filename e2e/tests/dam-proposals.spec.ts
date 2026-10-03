@@ -7,7 +7,7 @@
 // them. The table is read, never the map's pixels. Invented data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, seedRunnableProject } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { loadSyntheticDamRegister } from '../support/damRegister.ts';
 import { API_URL } from '../support/env.ts';
@@ -121,4 +121,47 @@ test('an editor uses the map’s area, then the register’s capacity, one at a 
 	await expect(panel(v).getByRole('button', { name: /^Use / })).toHaveCount(0);
 	await expect(panel(v)).toContainText('Only an editor can use a value.');
 	await expectNoSidewaysScroll(v);
+});
+
+test('the box follows the picked dam: a card click or its Proposals link shows that dam’s proposals, as a fresh load of the URL does', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam proposals follow');
+	await createRun(page.request, project.id, 'Baseline');
+	const lowerId = project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string;
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	const card = (name: string) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) });
+	const unit = panel(page).getByLabel('Dam of');
+
+	// Picking a card moves the box to that dam.
+	await card('Lower farm').locator('a.name').click();
+	await expect(page).toHaveURL(new RegExp(`[?&]dam=${lowerId}$`));
+	await expect(unit).toHaveValue(lowerId);
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('No dam on the map is linked to Lower farm.');
+
+	// Dam of still picks any unit; the next pick moves it again.
+	await unit.selectOption({ label: 'Upper farm' });
+	await expect(panel(page).getByTestId('dam-proposals-no-dam')).toContainText('linked to Upper farm');
+	await card('Upper farm').locator('a.name').click();
+	await card('Lower farm').getByRole('link', { name: 'Lower farm: proposed from the register and the map' }).click();
+	await expect(unit).toHaveValue(lowerId);
+	// The link brings the box into view, the keyboard on its picker, without scrolling past every card by hand.
+	await expect(panel(page).getByRole('heading', { name: 'Proposed from the register and the map' })).toBeInViewport();
+	await expect(unit).toBeFocused();
+
+	// A fresh load of the same URL agrees.
+	await page.reload();
+	await expect(unit).toHaveValue(lowerId);
+});
+
+test('the dam’s place is written in degrees with a hemisphere', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam proposals place');
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!;
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, {
+		data: { kind: 'dam', name: 'Upper dam', nodeId: upper.id, geometry: { type: 'Point', coordinates: [21.32, -33.68] } }
+	});
+	expect(made.status(), await made.text()).toBe(201);
+	await openProposals(page, project.id, 'Upper farm');
+	await expect(panel(page)).toContainText('Searched from “Upper dam” (a point, 33.6800° S, 21.3200° E)');
 });

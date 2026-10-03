@@ -175,8 +175,9 @@
 	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3, 365, 60, c.level ? capacityOver(c.level, storage.get(c.nodeId)!.startDate) : undefined) : null])));
 	const pct = (v: number) => `${fmtNum(v, 0)}%`;
 	const BAND_WORDS = { 'at-min': 'at its minimum level', low: `below ${LOW_PCT}%`, ok: '' } as const;
-	/** Why a card has no level: before a run, while loading, or the run has no storage for it. */
+	/** Why a card has no level: the run list didn't load, before a run, while loading, or the run has no storage for it. */
 	function noLevel(): string {
+		if (runs === null) return 'Run list couldn’t be loaded';
 		if (!latest) return 'No run yet';
 		if (damsLoading && damsTotal) return `Loading dam levels (${damsDone} of ${damsTotal})…`;
 		if (runLoading || damsLoading) return 'Loading…';
@@ -186,8 +187,10 @@
 
 	// --- picking a dam: a link (`dam=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
 	let pageW = $state(0);
-	// The same width as the container query that sets the two columns (56rem).
-	const side = $derived(pageW >= 896);
+	// The container query that sets the two columns is 56rem: in px at the root's font size (14 px, app.css), so one number drives both.
+	const SIDE_REM = 56;
+	const remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
+	const side = $derived(pageW >= SIDE_REM * remPx);
 	let chartEl: HTMLElement | undefined = $state();
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -210,12 +213,26 @@
 		return [...farms].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity)).map((n) => ({ id: n.id, name: n.name }));
 	});
 	const proposalStart = $derived(damParam && proposalUnits.some((u) => u.id === damParam) ? damParam : (cards[0]?.nodeId ?? null));
+	const PROPOSALS_ID = 'dam-proposals';
+	// A card's Proposals: pick the dam (the box follows `dam=`), then bring the box into view.
+	function toProposals(e: MouseEvent, id: string) {
+		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+		e.preventDefault();
+		void goto(withParam(page.url, 'dam', id), { noScroll: true, keepFocus: true }).then(() => {
+			const box = document.getElementById(PROPOSALS_ID);
+			box?.scrollIntoView({ block: 'start' });
+			box?.querySelector<HTMLElement>('select')?.focus({ preventScroll: true });
+		});
+	}
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
 {#snippet headerContext()}<span data-testid="dams-summary">{summary}</span>{/snippet}
-{#snippet headerActions()}{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs</a>{/if}{/snippet}
+{#snippet headerActions()}
+	{#if cards.length}<a class="btn" href={withParam(page.url, 'grid', 'nodes')}>Node table</a>{/if}
+	{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs</a>{/if}
+{/snippet}
 
 <div class="dams-page" bind:clientWidth={pageW}>
 
@@ -233,7 +250,12 @@
 			</div>
 		</section>
 	{:else}
-		{#if !latest}
+		{#if runs === null}
+			<!-- The page loads the run list before any tab draws, so null is a failure, never "still loading" (as River & reserve). -->
+			<p class="alert alert-error" role="alert" data-testid="dams-runs-error">
+				The run list couldn’t be loaded, so the cards show each dam's capacity only. Reload the page to try again.
+			</p>
+		{:else if !latest}
 			<p class="alert alert-info" role="note">
 				{#if readonly}
 					No run yet, so the cards show each dam's capacity only. Once an editor runs the model, how full each dam was shows
@@ -247,7 +269,7 @@
 
 		<div class="first" class:with-chart={!!latest}>
 			<section class="list" aria-labelledby="dam-cards-h">
-				<h3 id="dam-cards-h" class="visually-hidden">Each dam</h3>
+				<h2 id="dam-cards-h" class="visually-hidden">Each dam</h2>
 				<ul class="cards" aria-label="Dams">
 					{#each cards as c (c.nodeId)}
 						{@const band = c.level ? levelBand(c.level) : null}
@@ -304,9 +326,12 @@
 								<p class="muted small nolevel">{noLevel()}</p>
 							{/if}
 							<p class="links small">
+								<!-- The dam's inputs (capacity, minimum level, area, curve, release rule) are its node sheet's (ui.md § Network). -->
+								<a href="?tab=network&edit={encodeURIComponent(c.nodeId)}" aria-label="{readonly ? 'Dam details' : 'Edit dam'}: {c.name}" data-testid="dam-edit-link">{readonly ? 'Dam details' : 'Edit dam'}</a>
 								<a href="?tab=network&node={encodeURIComponent(c.nodeId)}" aria-label="{c.name} on the Network">On the Network</a>
 								{#if mapped.has(c.nodeId)}<a href={mapNodeHref(c.nodeId)} aria-label="Show on map ({c.name})" data-testid="dam-map-link">Show on map</a>{/if}
 								{#if c.farm}<a href={withParam(page.url, 'farm', c.nodeId)} aria-label="{c.name}: planted areas">Planted areas</a>{/if}
+								{#if c.farm}<a href="{withParam(page.url, 'dam', c.nodeId)}#{PROPOSALS_ID}" aria-label="{c.name}: proposed from the register and the map" onclick={(e) => toProposals(e, c.nodeId)}>Proposals</a>{/if}
 							</p>
 						</li>
 					{/each}
@@ -316,7 +341,7 @@
 			{#if latest}
 				<section class="panel chart-panel" bind:this={chartEl} aria-labelledby="dam-chart-h" aria-busy={runLoading || damsLoading}>
 					<div class="panel-head">
-						<h3 id="dam-chart-h">Storage{#if picked}: {picked.name}{/if}</h3>
+						<h2 id="dam-chart-h">Storage{#if picked}: {picked.name}{/if}</h2>
 						<span class="seg" role="group" aria-label="Show storage as">
 							<button type="button" class="btn btn-sm" aria-pressed={unit === 'pct'} onclick={() => (unit = 'pct')}>% full</button>
 							<button type="button" class="btn btn-sm" aria-pressed={unit === 'm3'} onclick={() => (unit = 'm3')}>m³</button>
@@ -353,7 +378,7 @@
 	{/if}
 
 	{#if proposalUnits.length}
-		<DamProposalsBox {projectId} units={proposalUnits} initial={proposalStart} {readonly} dirty={editor.dirty} {onModelChanged} />
+		<DamProposalsBox id={PROPOSALS_ID} {projectId} units={proposalUnits} initial={proposalStart} follow={damParam} {readonly} dirty={editor.dirty} {onModelChanged} />
 	{/if}
 </div>
 
@@ -527,7 +552,7 @@
 		display: flex;
 		flex-direction: column;
 	}
-	.panel-head h3 {
+	.panel-head h2 {
 		font-size: 1.05rem;
 	}
 	.seg {

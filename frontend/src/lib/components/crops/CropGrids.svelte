@@ -27,7 +27,7 @@
 	import DemandTable from './DemandTable.svelte';
 	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
 	import { gridPasteTarget, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-	import { applyAreaPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
+	import { applyAreaPaste, applyFactorPaste, cropFactorsCsv, planFactorPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 	let {
 		editor,
@@ -137,7 +137,7 @@
 		const f = farms[from];
 		if (!f || to < 0 || to >= farms.length) return;
 		editor.model.nodes = reorderSubset(editor.model.nodes, farms.map((x) => x.id), from, to);
-		announce = `${f.name || 'Farm'} moved to row ${to + 1} of ${farms.length} (network order).`;
+		announce = `${f.name || 'Unit'} moved to row ${to + 1} of ${farms.length} (network order).`;
 		if (focus) void refocusMover('mvf', f.id, focus);
 	}
 	// --- paste a block of hectares from a spreadsheet (issue #285): into a cell, or from the button ---
@@ -161,12 +161,39 @@
 		applyAreaPaste(plan, (nodeId, cropId, m2) => editor.setCropArea(nodeId, cropId, m2));
 		announce = `Pasted ${plan.changes.length} planted ${plan.changes.length === 1 ? 'area' : 'areas'}. Save the model to keep them.`;
 	}
+	// The crop factors take a pasted block the same way: one copied row of 12 months, or the whole table.
+	let factorPasteOpen = $state(false);
+	let factorPasteText = $state('');
+	let factorAnchor = $state<PasteAnchor | null>(null);
+	const factorWhere = $derived(factorAnchor ? `${crops[factorAnchor.row]?.name || '(unnamed)'}, ${WATER_YEAR_MONTHS[factorAnchor.col] ?? 'Oct'}` : null);
+	function onFactorsPaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		factorAnchor = t.anchor;
+		factorPasteText = t.text;
+		factorPasteOpen = true;
+	}
+	function openFactorPaste() {
+		factorAnchor = null;
+		factorPasteText = '';
+		factorPasteOpen = true;
+	}
+	function applyFactors(plan: PastePlan) {
+		applyFactorPaste(plan, (cropId, m, f) => {
+			const c = editor.model.crops.find((x) => x.id === cropId);
+			if (c) c.cropFactor[m] = f;
+		});
+		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}. Save the model to keep them.`;
+	}
 
 	const cropReorder = new RowReorder(() => crops.map((c) => c.id), (from, to) => moveCrop(from, to));
 	const farmReorder = new RowReorder(() => farms.map((f) => f.id), (from, to) => moveFarm(from, to));
 </script>
 
 <p class="visually-hidden" aria-live="polite">{announce}</p>
+
+<!-- The container the phone layout queries (a query never styles its own container: playbook § 2). -->
+<div class="crop-grids">
 
 {#if show('factors')}
 <section class="panel" aria-labelledby="crops-h">
@@ -194,12 +221,12 @@
 						{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
 				</thead>
-				<tbody bind:this={cropReorder.body}>
+				<tbody bind:this={cropReorder.body} onpaste={readonly ? undefined : onFactorsPaste}>
 					{#each crops as crop, ci (crop.id)}
 						{@const label = crop.name || 'unnamed crop'}
 						{@const rs = cropReorder.rowState(crop.id, ci, crops.length)}
 						<tr data-idx={ci} class:dragging={rs.dragging} class:drop-before={rs.before} class:drop-after={rs.after}>
-							<th scope="row" class="sticky">
+							<th scope="row" class="sticky" data-paste-col="0">
 								<span class="namecell">
 									{#if !readonly}
 										<MoveControls id={crop.id} {label} index={ci} count={crops.length} reorder={cropReorder} idPrefix="mvc" onmove={(d) => moveCrop(ci, ci + d, d < 0 ? 'up' : 'down')} />
@@ -208,14 +235,16 @@
 								</span>
 							</th>
 							{#each WATER_YEAR_MONTHS as m, i (m)}
-								<td>
+								<td data-paste-col={i}>
 									<span class="cell-label" aria-hidden="true">{m}</span>
+									<!-- Cleared, a factor is 0 (a month the crop isn't irrigated): the model never keeps a value the field doesn't show. -->
 									<NumberInput
 										label="{label} crop factor, {m}"
 										min={0}
 										step={0.01}
 										disabled={readonly}
-										bind:value={crop.cropFactor[i]}
+										nullable
+										bind:value={() => crop.cropFactor[i] ?? 0, (v) => (crop.cropFactor[i] = v ?? 0)}
 									/>
 								</td>
 							{/each}
@@ -238,7 +267,19 @@
 			<div class="toolbar after">
 				<button type="button" class="btn" onclick={add}>+ Add crop</button>
 				<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
+				<button type="button" class="btn" onclick={openFactorPaste}>Paste from a spreadsheet…</button>
 			</div>
+			<GridPasteDialog
+				bind:open={factorPasteOpen}
+				bind:text={factorPasteText}
+				title="Paste crop factors"
+				layout="Crop factors (× A-pan): a row per crop with its name first, under a heading row of months, Oct to Sep (as the CSV below has them); without names or headings the values fill the grid from the cell you pasted into, so one copied row of 12 months fills a crop. 0 is a month the crop isn't irrigated."
+				where={factorWhere}
+				plan={(t) => planFactorPaste(t, crops, factorAnchor)}
+				onapply={applyFactors}
+				csv={() => cropFactorsCsv(crops)}
+				csvName="crop-factors.csv"
+			/>
 		{/if}
 	{/if}
 </section>
@@ -266,7 +307,7 @@
 			<table class="data compact areas">
 				<thead>
 					<tr>
-						<th scope="col" class="sticky">Farm</th>
+						<th scope="col" class="sticky">Hydrological unit</th>
 						{#each crops as c (c.id)}<th scope="col" class="num">{c.name || '(unnamed)'}<br /><span class="u">ha</span></th>{/each}
 						<th scope="col" class="num">Total<br /><span class="u">ha</span></th>
 					</tr>
@@ -278,7 +319,7 @@
 							<th scope="row" class="sticky" data-paste-col="0">
 								<span class="namecell">
 									{#if !readonly}
-										<MoveControls id={f.id} label={f.name || 'farm'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
+										<MoveControls id={f.id} label={f.name || 'unit'} index={fi} count={farms.length} reorder={farmReorder} idPrefix="mvf" onmove={(d) => moveFarm(fi, fi + d, d < 0 ? 'up' : 'down')} />
 									{/if}
 									<span>{f.name || '(unnamed)'}</span>
 								</span>
@@ -286,14 +327,15 @@
 							{#each crops as c, ci (c.id)}
 								<td data-paste-col={ci}>
 									<span class="cell-label" aria-hidden="true">{c.name || '(unnamed)'} <span class="u">ha</span></span>
+									<!-- Cleared, an area is 0: nothing planted (the editor drops the row). -->
 									<NumberInput
-										label="{c.name || 'crop'} on {f.name || 'farm'}, ha"
+										label="{c.name || 'crop'} on {f.name || 'unit'}, ha"
 										min={0}
 										step={0.1}
 										scale={1 / 10_000}
 										disabled={readonly}
-										value={editor.cropArea(f.id, c.id)}
-										onchange={(n) => editor.setCropArea(f.id, c.id, n ?? 0)}
+										nullable
+										bind:value={() => editor.cropArea(f.id, c.id), (n) => editor.setCropArea(f.id, c.id, n ?? 0)}
 									/>
 								</td>
 							{/each}
@@ -342,9 +384,9 @@
 	{#if !apanSet}
 		<div class="alert alert-info">
 			{#if apanDaily}
-				{DAILY_APAN_NO_MEANS} <a href="?tab=settings">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
+				{DAILY_APAN_NO_MEANS} <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
 			{:else}
-				A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+				A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a>
 				(Settings & calibration, Demand).
 			{/if}
 		</div>
@@ -363,8 +405,12 @@
 	{/if}
 </section>
 {/if}
+</div>
 
 <style>
+	.crop-grids {
+		container: crop-grids / inline-size;
+	}
 	.intro {
 		margin: -0.25rem 0 0.75rem;
 		max-width: 75ch;
@@ -430,7 +476,8 @@
 	.cell-label {
 		display: none;
 	}
-	@media (max-width: 640px) {
+	/* 44rem is 616 px at the 14 px root: the page column of a 640 px window, or override mode's column beside the Scenarios rail. */
+	@container crop-grids (max-width: 44rem) {
 		.factors thead,
 		.areas thead {
 			display: none;

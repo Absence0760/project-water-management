@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamProposals, RegisterDamProposal } from '$lib/api';
-import { confirmWords, damProposalRows, fmtDistance } from './damProposals';
+import { confirmWords, damProposalRows, fmtDistance, searchedFrom } from './damProposals';
 
 const reg = (registerNo: string, over: Partial<RegisterDamProposal> = {}): RegisterDamProposal => ({
 	registerNo,
@@ -77,5 +77,13 @@ describe('fmtDistance', () => {
 	it('rounds to 10 m under a kilometre, else km to one place', () => {
 		expect(fmtDistance(246)).toBe('250 m');
 		expect(fmtDistance(1234)).toMatch(/^1[.,]2 km$/);
+	});
+});
+
+describe('searchedFrom', () => {
+	it('writes the place in degrees with a hemisphere, as the rest of the app does', () => {
+		const dam = { id: 'f', name: 'Upper dam', geometryType: 'Polygon' as const, point: [18.45, -33.72] as [number, number], areaM2: 40_000 };
+		expect(searchedFrom(dam)).toBe('Searched from “Upper dam” (its polygon’s centre, 33.7200° S, 18.4500° E)');
+		expect(searchedFrom({ ...dam, name: '', geometryType: 'Point', point: [-0.5, 51.5] })).toBe('Searched from the dam on the map (a point, 51.5000° N, 0.5000° W)');
 	});
 });

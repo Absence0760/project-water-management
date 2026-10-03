@@ -8,7 +8,7 @@
 // there are. The full grids open from the Tables menu; nothing on the old tab
 // is lost.
 import type { Page } from '@playwright/test';
-import { addMember, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
+import { addMember, createRun, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid, openCropSheet } from '../support/crops.ts';
 import { API_URL } from '../support/env.ts';
@@ -41,7 +41,7 @@ test('the header, crop list, demand chart and hydrological unit bars; Edit opens
 	await page.goto(`/projects/${project.id}?tab=crops`);
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
-	await expect(page.getByTestId('crops-summary')).toHaveText('2 crops · 40 ha irrigated on 2 farms · water year October to September');
+	await expect(page.getByTestId('crops-summary')).toHaveText('2 crops · 40 ha irrigated on 2 hydrological units · water year October to September');
 
 	// A row per crop, largest area first: area, peak need (A-pan × factor), a sparkline with a name; the high-factor flag on Vines only.
 	await expect(page.getByRole('heading', { name: 'Crops', exact: true })).toBeVisible();
@@ -254,7 +254,7 @@ test('with a daily A-pan series the demand chart says it shows the monthly means
 	await expect(alert).toHaveText(
 		"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value. Enter the monthly A-pan values (Settings & calibration, Demand) for the other days."
 	);
-	await expect(alert.getByRole('link', { name: 'Enter the monthly A-pan values' })).toHaveAttribute('href', '?tab=settings');
+	await expect(alert.getByRole('link', { name: 'Enter the monthly A-pan values' })).toHaveAttribute('href', '?tab=settings#set-demand');
 	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);
 });
 
@@ -397,4 +397,105 @@ test.describe('a big catchment', () => {
 			await expectNoViolations(page);
 		});
 	});
+});
+
+test('a cleared crop factor reads 0 after blur, in the sheet and in the grid, and saves as 0', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page cleared factor');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+
+	// The sheet: Orchard's Jan factor (water-year month 3) deleted is 0, never a blank over the old value.
+	const sheet = await openCropSheet(page, 'Orchard');
+	const jan = sheet.getByLabel('Orchard crop factor, Jan');
+	await jan.fill('');
+	await jan.press('Tab');
+	await expect(jan).toHaveValue('0');
+	await expect(jan).not.toHaveAttribute('aria-invalid', 'true');
+	await expect(sheet).toContainText('Unsaved changes to the model');
+	await saveModelChanges(page);
+	await expect(sheet).toContainText('No unsaved changes');
+	expect(await savedFactor(page, project.id, 'Orchard', 3)).toBe(0);
+	await closeModal(page);
+
+	// The grid: the same for Vines' Oct.
+	const grid = await openCropGrid(page, 'crop-factors');
+	const oct = grid.getByLabel('Vines crop factor, Oct');
+	await expect(oct).toHaveValue('0.3');
+	await oct.fill('');
+	await oct.press('Tab');
+	await expect(oct).toHaveValue('0');
+	await saveModelChanges(page);
+	expect(await savedFactor(page, project.id, 'Vines', 0)).toBe(0);
+});
+
+test('the A-pan link opens Settings at Demand', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page A-pan link');
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.getByRole('link', { name: 'Enter the monthly A-pan values' }).click();
+	await expect(page).toHaveURL(/\?tab=settings#set-demand$/);
+	await expect(page.locator('#set-demand')).toBeInViewport();
+});
+
+test('the panels are h2 under the page’s h1', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page headings');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	for (const name of ['Crops', 'Irrigation demand by month', 'Planted area by hydrological unit'])
+		await expect(page.getByRole('heading', { level: 2, name, exact: name === 'Crops' })).toBeVisible();
+	await expect(page.locator('.crops-page h3')).toHaveCount(0);
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+	for (const [sizeName, viewport] of [
+		['1440', { width: 1440, height: 960 }],
+		['390', { width: 390, height: 844 }]
+	] as const) {
+		test.describe(`the open demand table, ${colorScheme}, ${sizeName}`, () => {
+			test.use({ colorScheme, viewport });
+
+			test('is a labelled region the keyboard can reach and scroll, with no violations', async ({ page, owner }) => {
+				void owner;
+				const project = await seed(page, `Crops demand table ${colorScheme} ${sizeName}`);
+				await page.goto(`/projects/${project.id}?tab=crops`);
+				await page.getByText('Show table', { exact: true }).click();
+				const region = page.getByRole('region', { name: 'Irrigation demand by hydrological unit and month' });
+				await expect(region.getByRole('rowheader', { name: 'Catchment' })).toBeVisible();
+				await expect(region.getByRole('columnheader', { name: /^Hydrological unit/ })).toBeVisible();
+				// Focusable, so the arrow keys scroll it when it is wider than its card.
+				await region.focus();
+				await expect(region).toBeFocused();
+				if (await region.evaluate((el) => el.scrollWidth > el.clientWidth)) {
+					await page.keyboard.press('End');
+					await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+				}
+				// The heat-shaded cells too: the scan runs with the table open.
+				await expectNoViolations(page);
+			});
+		});
+	}
+}
+
+test('in scenario override mode at 1024 px, the crop-factor grid fits its column (cards when narrow), with no sideways scroll', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1024, height: 768 });
+	const project = await seed(page, 'Crops override narrow');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	// A scenario as scenarios.spec.ts seeds one: one raise on Upper farm's dam.
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+		data: { name: 'Narrow', baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }], ownedNodeIds: [upper] }
+	});
+	expect(res.status()).toBe(201);
+	const { scenario } = (await res.json()) as { scenario: { id: string } };
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenario.id}`);
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+	const mode = page.getByTestId('override-mode');
+	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
+	const factors = mode.locator('table.factors');
+	await expect(factors.getByLabel('Vines crop factor, Jan')).toBeVisible();
+	// Its wrap never scrolls sideways: the table fits, or (in a column under 44rem) its rows are cards.
+	const wrap = factors.locator('xpath=..');
+	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });
