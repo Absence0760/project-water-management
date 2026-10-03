@@ -5,6 +5,7 @@
 // unticked until the editor ticks it), and the body apply sends.
 import type { DivideProposal, MapFeature, StartPlan, StartProposal, StartRole, StartState, StartTicks, StartUnit } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
+import type { PlacementChoices } from './placement';
 
 export type StartStep = 'boundary' | 'points' | 'review' | 'data' | 'closed';
 
@@ -20,6 +21,8 @@ export interface StartDraft {
 	outlet: string | null;
 	pointsAsked: boolean;
 	ticks: Record<string, StartTicks>;
+	/** The rivers picked at confluences and the larger channels taken, by point ('' the outlet gauge): sent with every proposal (placement.ts). */
+	placement: PlacementChoices;
 }
 
 /** A point's choice in the points step: one of the roles, or not in the model. */
