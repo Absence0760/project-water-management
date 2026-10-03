@@ -3501,8 +3501,8 @@ as a run uses it; 1 for a non-farm) and splits it by crop, `catchmentDemand` giv
 to them. It is the abstraction demand before the daily effective-rain
 reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0):
 an efficiency below 100 % raises it above the crops' requirement, as a run's
-demand series does (audit N1). The Load crop factors dialog's Demand
-difference shows both, the requirement (Gross) and ÷ efficiency. The Irrigation
+demand series does (audit N1). The Load crop factors dialog's effect on
+demand shows both, the crop requirement and the abstraction (÷ efficiency). The Irrigation
 demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
 ### Crop sheet
@@ -3562,69 +3562,112 @@ tab, and scenario override mode, where it fills the scenario's crops) opens a di
 that fills the project's crop factors from a source, shows what changes and
 what it does to demand, and changes nothing until **Apply** (issue #54 item 1;
 `crops/LoadCropFactorsDialog.svelte`, its own chunk, fetched on first open;
-logic in `crops/loadFactors.ts`, data in `crops/library.ts`). Which crop set a
+logic in `crops/loadFactors.ts`, its presentation helpers in
+`crops/loadFactorsView.ts`, data in `crops/library.ts`). Which crop set a
 catchment uses is the hydrologist's call (issue #54 Q9/Q10).
 
-- **Source:** the **reference library** (ARC/SABI Irrigation Design Manual
-  ch. 4 A-pan design factors, winter rainfall area; [model.md §2.3
-  item 8](./model.md) lists the crops, sources and conversions), or **a b023
-  workbook** the user picks: its [Crop demand] factors, read by the browser
-  importer in its worker (`spreadsheet/import/`, the same reader and
-  failure messages as Import a b023 workbook; it reads the whole workbook,
-  so a large one takes a few seconds). Workbooks never leave the
-  browser.
-  **A node-based workbook** is the third source: its [Crop_Factors] and
-  [Crop_Areas] sheets, read by the same worker
-  (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
-  those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
-  efficiency column isn't loaded (a crop's efficiency changes only through
-  the system select below), nor are its farm areas. For
-  either workbook, the dialog lists what the reader flagged as text under
-  the file: for a node-based workbook, a missing sheet (a b023 file picked
-  under this option), names that differ between the two sheets and cells
-  read as 0; for a b023 workbook, the import report's
-  `crop-factors-copied` and `crop-factors-suspect` warnings.
-- **Pan coefficient Kp** multiplies the source factors. It starts at the
-  source's default by the shape of its factors (`SOURCE_KINDS`, `defaultKp`
-  in `loadFactors.ts`, issue #289): **1** for A-pan factors (the library,
-  b023), **0.75** for an FAO-56 Kc set (the node-based workbook), which is
-  set against reference ET₀ while the engine multiplies crop factors by
-  A-pan (FAO-56 Table 5 gives a Class A pan's Kp as 0.35–0.85; 0.75 is a
-  mid value). The field takes 0.1 to 1.5, shown beside it and in its
-  description, and the warning for a missing Kp says that range. A line under the input says which and why, linking [FAO-56
-  Table 5](https://www.fao.org/4/x0490e/x0490e08.htm). Changing the source
-  re-applies the new source's default only while Kp is still the previous
-  default (or blank); a Kp the modeller typed is kept (`kpForShape`), and
-  **Use the default, N** puts the default back.
-- **Match crops:** a row per project crop with a **Load factors from**
-  select, preset by name (`matchByName`: the same name ignoring case,
-  accents, punctuation and a plural s, or the one source whose words hold the
-  crop's or the other way round, "Lucerne" → "Alfalfa (lucerne), frost
-  areas"; ambiguous or unknown names stay on **Keep current**). A library
-  vegetable (staged by portion of the season) asks for a planting month and
-  day and a season length, preset from the manual's Table 4.7 where it gives
-  one; until the month is set it has no factors, and a line under it says so
-  ("Pick a planting month: until then Onions has no factors to load into
-  Orchard", the month select's description), since the crop is left out of
-  **Apply** until then. An **irrigation system**
-  select sets the crop's own efficiency (engine ≥ 0.43.0) from the SABI 2021
-  values, default **Keep**; the library crop's typical system is shown as a
-  hint, never applied unasked.
-- **Diff:** per mapped crop, its current and new factors month by month
-  (changed cells highlighted) and the efficiency, with the source table and
-  page and the entry's notes, and an **Apply to <crop>** tick (on) to accept
-  or reject that crop.
-- **Demand difference:** for the accepted changes, the mean gross irrigation
-  demand (m³/day, before rain, at the saved A-pan) now and new per farm and
-  for the catchment with the change in %, the same ÷ each farm's irrigation
-  efficiency (its crops' blend, `farmIrrigationEfficiency`), and the
-  catchment's demand by month. The engine's own functions, so it is what a
-  run would use before effective rain.
-- **Apply** replaces the accepted crops' factors (and efficiency) in the
-  shared `ModelEditor` and closes; the save bar then saves them with the
-  optional reason, and History records the change. Cancel, Esc or unticking
-  every crop leaves the model untouched. It loads into the project's existing
-  crops only: add a crop first to load into it.
+The dialog is a full dialog laid out as the task's four numbered steps.
+Wide (its body from 64rem, 896 px), steps 1–3 scroll in the left column and
+step 4, the effect on demand, sits in its own column beside them, so the
+effect stays in view while crops are matched; every scroll box is positioned,
+so the visually hidden words inside it never grow the dialog. On a phone it
+is one column that scrolls as a whole. The action row says how many crops
+change and the catchment's change in abstraction ("8 of 30 crops will
+change. Save the model afterwards to keep it. Abstraction −21 %."), so the
+answer is beside **Apply** at every size.
+
+1. **Where the factors come from:** three choices, each with a line saying
+   what it is (`SOURCE_KINDS`' `hint`). The **reference library** (ARC/SABI
+   Irrigation Design Manual ch. 4 A-pan design factors, winter rainfall area;
+   [model.md §2.3 item 8](./model.md) lists the crops, sources and
+   conversions), or **a b023 workbook** the user picks: its [Crop demand]
+   factors, read by the browser importer in its worker
+   (`spreadsheet/import/`, the same reader and failure messages as Import a
+   b023 workbook; it reads the whole workbook, so a large one takes a few
+   seconds). Workbooks never leave the browser, and the dialog says so under
+   the file field.
+   **A node-based workbook** is the third source: its [Crop_Factors] and
+   [Crop_Areas] sheets, read by the same worker
+   (`spreadsheet/import/nodeCrops.ts`, `readNodeCrops`, which parses only
+   those two sheets). Its factors are FAO-56 Kc values (against ET₀); its
+   efficiency column isn't loaded (a crop's efficiency changes only through
+   the system select below), nor are its farm areas. For
+   either workbook, the dialog lists what the reader flagged as text under
+   the file (the first five, **Show all N** for the rest): for a node-based
+   workbook, a missing sheet (a b023 file picked under this option), names
+   that differ between the two sheets and cells read as 0; for a b023
+   workbook, the import report's `crop-factors-copied` and
+   `crop-factors-suspect` warnings.
+2. **Convert them to A-pan:** the **pan coefficient Kp** multiplies the
+   source factors. It starts at the source's default by the shape of its
+   factors (`SOURCE_KINDS`, `defaultKp` in `loadFactors.ts`, issue #289):
+   **1** for A-pan factors (the library, b023), **0.75** for an FAO-56 Kc
+   set (the node-based workbook), which is set against reference ET₀ while
+   the engine multiplies crop factors by A-pan (FAO-56 Table 5 gives a
+   Class A pan's Kp as 0.35–0.85; 0.75 is a mid value). The field takes 0.1
+   to 1.5, shown beside it and in its description, and the warning for a
+   missing Kp says that range. A line under the input says which and why,
+   linking [FAO-56 Table 5](https://www.fao.org/4/x0490e/x0490e08.htm).
+   Changing the source re-applies the new source's default only while Kp is
+   still the previous default (or blank); a Kp the modeller typed is kept
+   (`kpForShape`), and **Use the default, N** puts the default back.
+3. **Match your crops and check each change:** a card per project crop,
+   **largest planted area first** (the Crops page's order, `rankCrops` on
+   the units' areas; an unplanted crop says "Not planted"), with the count
+   matched by name above them ("14 of 30 crops matched by name. Check each
+   match."). Each card has:
+   - a **Load factors from** select (accessible name "Load factors from, for
+     <crop>"), preset by name (`matchByName`: the same name ignoring case,
+     accents, punctuation and a plural s, or the one source whose words hold
+     the crop's or the other way round, "Lucerne" → "Alfalfa (lucerne),
+     frost areas"; ambiguous or unknown names stay on **Keep current**,
+     which leaves the crop as it is);
+   - an **Irrigation system** select (`crops/CropSystemSelect.svelte`, one
+     self-contained control: the crop, its choice and the source crop's
+     typical system in, the chosen id out) that sets the crop's own
+     efficiency (engine ≥ 0.43.0) from the SABI 2021 values, default
+     **Keep**; the library crop's typical system is shown under it as a
+     hint, never applied unasked;
+   - its status: an **Apply** tick (on; its name "Apply to <crop>") to
+     accept or reject that crop, **No change** when the choice is what the
+     crop already has, or **No month yet** for a vegetable without one;
+   - for a library vegetable (staged by portion of the season), a planting
+     month and day and a season length, and the manual's Table 4.7 season
+     lengths for it as buttons that set the field (the one in it pressed).
+     They show as soon as the vegetable is the source, by name match as
+     much as by hand, and the season starts at that vegetable's own first
+     Table 4.7 length: picking another vegetable keeps the planting date but
+     takes the new one's season (`plantingFor` in `loadFactorsView.ts`).
+     Until the month is set it has no factors, and a line under it says so
+     ("Pick a planting month: until then Onions has no factors to load into
+     Orchard", the month select's description; without "into …" when the two
+     names are the same), since the crop is left out of **Apply** until then;
+   - once it has a change, its current and new factors month by month
+     (changed cells bold on a tint; captioned "Crop factor by month: now, and
+     from <source> × Kp <n>"), in one row of twelve or, where the card is
+     narrower than 560 px, two rows of six; the efficiency in words
+     ("Irrigation efficiency: hydrological unit's → 90 %", or "stays …"); and
+     the source table and page with the entry's notes, or the workbook sheet
+     and file.
+4. **Check the effect on demand**, for the ticked changes: two tiles, the
+   catchment's mean **crop requirement** (gross irrigation demand, m³/day,
+   before rain, at the saved A-pan) and its **abstraction** (the same ÷ each
+   unit's irrigation efficiency, its crops' blend,
+   `farmIrrigationEfficiency`), each as the change in % with now → new;
+   then both per hydrological unit, the biggest change in abstraction first
+   (`rowsByChange`), the first eight with **Show all N hydrological units**,
+   and the catchment as the foot row (one table with both measures, or one
+   table per measure where the column is narrower than 470 px); then the
+   catchment's abstraction by month, a row per month. The engine's own
+   functions, so it is what a run would use before effective rain. With
+   nothing to show it says why and what to do (no choice yet, every change
+   unticked, or choices that change nothing).
+
+**Apply** replaces the accepted crops' factors (and efficiency) in the
+shared `ModelEditor` and closes; the save bar then saves them with the
+optional reason, and History records the change. Cancel, Esc or unticking
+every crop leaves the model untouched. It loads into the project's existing
+crops only: add a crop first to load into it.
 
 ### Farm drawer
 

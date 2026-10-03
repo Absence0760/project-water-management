@@ -189,6 +189,20 @@ section it belongs to, with the example that taught it.
   positioned ancestor inside the scroller, so it sat at its static place far
   down the list, outside the clip, and the measured "space below" fed the
   overflow back into the fit. Test the fit with the big case, not the seed.
+  The same in a dialog: Load crop factors' two columns scroll inside a full
+  dialog that clips, and each crop card's visually hidden "to <crop>" (in its
+  Apply tick) sat at its static place under thirty cards, so the `<dialog>`
+  measured 1,116 px of hidden overflow; positioning the columns fixed it
+  (`crop-library.spec.ts` checks the dialog's `scrollHeight`).
+- **A dialog that changes many things shows the effect beside the choices.**
+  Load crop factors stacked source, Kp, a match table, a diff table per
+  crop and the demand difference in one 720 px column, with Apply at the
+  foot: with thirty crops a crop's match was 1,500 px from its diff and the
+  demand 3,000 px down. It is now a full dialog in numbered steps: the
+  choices in a scrolling left column, one card per item holding its choice
+  and its change together, the effect (headline tiles, then the detail) in
+  its own column beside them, and a one-line summary in the action row, so
+  a phone, where the columns stack, still sees the answer beside Apply.
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once

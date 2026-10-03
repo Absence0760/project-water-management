@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "The Load crop factors dialog's redesign (feat/load-factors-ux): the task as numbered steps, a card per crop with its match, system and month-by-month change together, the effect on demand in its own column (headline tiles, units sorted by change and folded, a table per measure on a phone, months as rows), and the self-contained system select. Lazy chunk, loaded on the first open. Measured 2026-10-03 against feat/run-model-runs-only @ ce390ad9: total 1681 KB there (at the ceiling), 1684 KB here; the dialog's JS chunk 9,126 to 11,608 bytes gzipped, its CSS 334 to 1,519 bytes (+3,667 bytes). Headroom ~0.4 KB."
+}
