@@ -3,8 +3,9 @@
 	// header): the section's title, a one-line context under it, and on the
 	// right, in this order, the page's rain-freshness pill (`status`, after the
 	// Summary's "Setup complete" pill), the
-	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's pair,
-	// Add data and Run model or the tab's main action in its place (`main`).
+	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's main
+	// box: Add data, then the tab's main action if it has one (`main`; Runs &
+	// results' run form, the one place a run starts).
 	// Under them, one slim line of notices (view only, new data) instead of
 	// full-width banners.
 	//
@@ -12,10 +13,8 @@
 	// it when they would squeeze the context line onto a second line. In a
 	// narrow header (a phone), in the same order: the pill on a line of its
 	// own; the tab's pickers, each a full row; then its buttons and the page's
-	// pair in full rows, every control growing to fill its row. Add data and
-	// Run model are one box that never splits, so they always end the header
-	// side by side (a page action used to push them onto rows of their own,
-	// or split them over two).
+	// main box in full rows, every control growing to fill its row. The main
+	// box never splits, so it always ends the header.
 	import type { Snippet } from 'svelte';
 
 	let {
@@ -38,7 +37,7 @@
 		status?: Snippet | null;
 		/** The section's own actions (pickers, links, its buttons). */
 		actions?: Snippet | null;
-		/** The page's pair, last: Add data and Run model, or the section's main action. */
+		/** The page's main box, last: Add data, then the section's main action. */
 		main?: Snippet | null;
 		notices?: Snippet;
 	} = $props();
@@ -171,8 +170,8 @@
 			width: 100%;
 			max-width: none;
 		}
-		/* Add data and Run model never split: one box, last, sharing a row with the tab's
-		   buttons when they fit and taking the next row when they don't. */
+		/* The main box never splits: one box, last, sharing a row with the tab's
+		   buttons when it fits and taking the next row when it doesn't. */
 		.main {
 			display: flex;
 			flex: 1 1 auto;

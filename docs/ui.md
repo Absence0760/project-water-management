@@ -782,13 +782,14 @@ first and says it reverts every unsaved model edit, not only the modal's,
 and **Save changes**, after which the row says "Changes saved." and the
 focus stays in it, on **Done**.
 
-**Run model with unsaved edits.** A run uses the saved model, so the
-header's **Run model** (and the new-data line's **Re-run model**) with
-unsaved edits asks "Save your changes and run?" (**Save and run**), saves
-them (`saveAll`) and runs once they are saved; the button's description
-says so. While problems block that save it refuses, saying why and naming
-the first problem, with **Show the problem**, rather than run the saved
-model behind the person's back.
+**Run model with unsaved edits.** A run uses the saved model, so Runs &
+results' **Run model** and **Run forecast** (and the new-data line's
+**Re-run model**) with unsaved edits ask "Save your changes and run?"
+(**Save and run**), save them (`saveAll`) and run once they are saved: the
+page passes its `saveBeforeRun` to the Runs tab as `beforeRun`, and the run
+form's status line says so. While problems block that save it refuses,
+saying why and naming the first problem, with **Show the problem**, rather
+than run the saved model behind the person's back.
 
 **Preview unsaved edits** (issue #284, roadmap WP-1.17). With model or
 settings edits unsaved, the save bar has **Preview**, on every tab. It takes
@@ -948,16 +949,15 @@ role, freshness, Add data) and each tab's own header:
   supply's run menu and **Open in Runs**, Dams' **Open in Runs**, Scenarios'
   **+ New scenario**, Allocations' run menu, **Download CSV**, **Import** and
   **+ Add volume**, Project's **Download** menu, Applications' **Decide the
-  longest waiting**), **Add data** (editors), and **Run
-  model** (editors; on the Summary, Network, Crops, Transfers and Settings).
-  Run model starts a run with no label and opens it in Runs, through the
-  same `startRun` as the new-data line's Re-run model. On Runs & results the
-  tab's own run form (**Run label**, Run forecast, Run model) takes its place,
-  last, after a plain Add data (`fillHeader({ main })`, the header slot's
-  `main` part), and on Data **Add data** is the main (primary) action. Run model is
-  disabled until there is a network and a rainfall series, and its
-  accessible description says which is missing. A tab shown inside the grid
-  modal or scenario override mode fills nothing.
+  longest waiting**) and **Add data** (editors), the primary action on
+  every section but Runs & results. A run starts from the header only on
+  Runs & results, whose run form (**Run label**, Run forecast, Run model)
+  comes last, after a plain Add data (`fillHeader({ main })`, the header
+  slot's `main` part), so every run can be named. The other sections had
+  their own unlabelled **Run model** until it was removed for that reason;
+  the new-data line's **Re-run model** still runs from any section, labelled
+  with the data's end. A tab shown inside the grid modal or scenario
+  override mode fills nothing.
 - **Notices, one slim line** under the title row, instead of full-width
   banners: the viewer's **View only** note (every section), the upload
   result with **Re-run model** / **Dismiss**, **New data since the last
@@ -967,10 +967,10 @@ role, freshness, Add data) and each tab's own header:
   (Save changes, Discard, the reason), and the grid modal and sheets keep
   their own `ModelSaveRow`.
 - **The groups:** `SectionHeader` takes the pill as `status`, the tab's
-  controls as `actions` and the page's pair (Add data, then Run model or the
-  tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
+  controls as `actions` and the page's main box (Add data, then the tab's
+  `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
-  on Allocations at 1440); the pair is one box, so a wrap never splits it.
+  on Allocations at 1440); the main box is one box, so a wrap never splits it.
   The title column asks for its context's full one-line width (and no more:
   a 16rem floor made a short one wrap its controls under it in a wide font,
   Data at 1024 in DejaVu Sans), so the controls sit beside the title only while the context
@@ -982,11 +982,9 @@ role, freshness, Add data) and each tab's own header:
 - **Phones (a header 640 px wide or less, a container query):** the same
   header after the Sections button. The pill is a line of its own (its list
   opens rightwards, on the screen); a picker (a run select) takes a full row;
-  the tab's buttons and the pair then fill full rows, every control growing to
-  fill its row, and Add data and Run model always end the header side by side
-  (Transfers fits all three on one row; Settings puts Fit the parameters on
-  one row and the pair on the next). Runs' run form is a row of its own under
-  Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
+  the tab's buttons and the main box then fill full rows, every control
+  growing to fill its row, and Add data always ends the header. Runs' run
+  form is a row of its own under Add data. Targets are 44 px. `e2e/tests/workspace-phone.spec.ts` pins this
   on every section with a big catchment, plus the overlays' phone scans (node
   sheet, node table, Allocations' sheets, New scenario, Add data, the
   Sections menu).
@@ -4341,7 +4339,7 @@ section header, which it fills (`fillHeader`) like the other sections.
   window or the record changed; it follows the unsaved form), or "GR4J · no
   fit record: the parameters were set by hand or imported". The actions add
   **Fit the parameters** for editors (a link to `#set-fit`), or **Fit record**
-  for a viewer when there is one, before Add data and Run model. The old
+  for a viewer when there is one, before Add data. The old
   intro paragraph is gone: the header and the menu's groups say what it
   said, and the monthly tables' own Oct … Sep headers show the water year.
 - **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
@@ -5555,10 +5553,11 @@ read it before.
 - **The page** (issue #17): a reading page with the runs list beside the
   shown run. The section header's line counts the runs and says when the
   newest ran ("20 runs · newest ran today", "No runs yet"), and for an
-  editor the **run form** sits where the other pages have Run model, last in
-  the header: a **Run label** field, **Run forecast** (with a forecast
+  editor the **run form** sits last in the header, after Add data, the only
+  place a run starts from the header: a **Run label** field, **Run forecast** (with a forecast
   series) and **Run model**. Its status (what a run still needs, flow shares
-  over 100 %, unsaved model changes, inputs changed since the latest run,
+  over 100 %, unsaved model changes (Run model asks to save them first),
+  inputs changed since the latest run,
   the progress while a run goes, else "Runs use the saved network…") is one
   slim line under the header (`#run-note`, the buttons' accessible
   description), with the progress bar under it. A viewer gets no form, and
@@ -7463,7 +7462,7 @@ the viewer's day, with a request's change set folded into one entry.
   when changes are recorded: "Latest change today 14:05 by Ann: Model
   changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
   since …" (`timeline.ts` `historyContext`). No actions of its own beside
-  Add data and Run model.
+  Add data.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
   erased"), then the filters: **Hydrological unit** ("All hydrological units"), **Kind of change** and

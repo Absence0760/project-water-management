@@ -21,7 +21,7 @@ test('the run form sits in the section header, last, with its status one slim li
 	await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
 
-	// Run model where the other pages have it: last, after a plain Add data, one row with the title.
+	// The run form, the only Run model in the header: last, after a plain Add data, one row with the title.
 	await expect(h.getByRole('button')).toHaveText(['Add data', 'Run model']);
 	const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 	const run = h.getByRole('button', { name: 'Run model' });

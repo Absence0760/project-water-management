@@ -360,9 +360,8 @@
 		};
 	}
 
-	// The header's Run model and the new-data line's Re-run model both start a
-	// run here and open it in Runs.
-	/** The new-data re-run (labelled with the data's end), or the header's Run model (no label). */
+	// The new-data line's Re-run model starts a run here and opens it in Runs.
+	/** The new-data re-run, labelled with the data's end. */
 	const rerun = () => runModel(`Data to ${fresh?.latest ?? today}`);
 	async function startRun(label?: string) {
 		rerunning = true;
@@ -384,18 +383,8 @@
 	const isOwner = $derived(hasRole(project?.role, 'owner'));
 
 	// --- the section header (SectionHeader, issue #17) -------------------------
-	// Run model on the Summary and the Build-the-model pages; the Runs tab puts
-	// its own form (with a label) in the same place (headerSlot.main), and
-	// Data's main action is Add data.
-	const RUN_TABS: TabId[] = ['overview', 'network', 'crops', 'transfers', 'settings'];
-	const showRun = $derived(canEdit && RUN_TABS.includes(tab));
-	// What a run still needs (the Runs tab's check: the engine refuses without these).
-	const runNeeds = $derived.by(() => {
-		const out: string[] = [];
-		if (!editor.model.nodes.length) out.push('a network');
-		if (series && !series.some((x) => x.kind.startsWith('rain_'))) out.push('a rainfall series');
-		return out;
-	});
+	// Every section ends on Add data; Runs & results puts its run form (Run label, Run model)
+	// after it (headerSlot.main), the one place a run starts from the header so it can be named.
 	// The Data badge in the sections: series a run is driven by that are behind today (freshness.ts).
 	const behindCount = $derived(fresh?.behind.length ?? 0);
 	const contextText = $derived(
@@ -555,7 +544,7 @@
 		return !editor.dirty && !editor.saveError;
 	}
 
-	// --- Run model with unsaved edits (a run uses the saved model) -------------
+	// --- Re-run model with unsaved edits (a run uses the saved model) -------------
 	const unsavedWhat = $derived(
 		listAnd([
 			...(editor.dirty ? ['model edits'] : []),
@@ -572,11 +561,12 @@
 		...invalidFields.fields.map((f) => ({ message: f.label ? `${f.label}: ${f.message}` : f.message, href: `#${f.id}` }))
 	]);
 	/**
-	 * The header's Run model. A run uses the saved model, so with unsaved edits it asks to save them
-	 * first and runs once they are saved; while problems block that save it says so and offers the
-	 * first problem instead of running the saved model behind the person's back.
+	 * Before any run (Runs & results' Run model and Run forecast, the new-data line's Re-run model).
+	 * A run uses the saved model, so with unsaved edits it asks to save them first and goes on once
+	 * they are saved; while problems block that save it says so and offers the first problem instead
+	 * of running the saved model behind the person's back. True when the run may start.
 	 */
-	async function runModel(label?: string) {
+	async function saveBeforeRun(): Promise<boolean> {
 		if (unsaved) {
 			const n = saveProblems.length;
 			if (n) {
@@ -590,16 +580,19 @@
 				// A number field on this page: focus it; anything else is another page or sheet.
 				if (show && href.startsWith('#')) document.getElementById(href.slice(1))?.focus();
 				else if (show) await goto(href, { noScroll: true });
-				return;
+				return false;
 			}
 			const ok = await confirmDialog({
 				title: 'Save your changes and run?',
 				message: `A run uses the saved model. Your unsaved ${unsavedWhat} aren’t in it yet: save them, then run.`,
 				confirmLabel: 'Save and run'
 			});
-			if (!ok || !(await saveAll())) return;
+			if (!ok || !(await saveAll())) return false;
 		}
-		await startRun(label);
+		return true;
+	}
+	async function runModel(label?: string) {
+		if (await saveBeforeRun()) await startRun(label);
 	}
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
@@ -796,13 +789,13 @@
 		<span class="fresh-none muted">No data yet</span>
 	{/if}
 {/snippet}
-<!-- Add data, then Run model or the tab's main action in its place: the pair every section ends on. -->
+<!-- Add data, then the tab's main action (Runs & results' run form): what every section ends on. -->
 {#snippet headerMain()}
 	{#if canEdit}
 		<button
 			type="button"
 			class="btn add"
-			class:btn-primary={!showRun && !headerSlot.main}
+			class:btn-primary={!headerSlot.main}
 			onclick={() => openAddData()}
 			onpointerenter={() => prefetch(loadAddData)}
 			onfocus={() => prefetch(loadAddData)}
@@ -812,17 +805,6 @@
 		</button>
 	{/if}
 	{@render headerSlot.main?.()}
-	{#if showRun}
-		<button
-			type="button"
-			class="btn btn-primary"
-			disabled={rerunning || runNeeds.length > 0}
-			aria-describedby={runNeeds.length ? 'run-needs' : unsaved ? 'run-unsaved' : undefined}
-			onclick={() => runModel()}>{rerunning ? 'Running model…' : 'Run model'}</button
-		>
-		{#if runNeeds.length}<span class="visually-hidden" id="run-needs">A run needs {runNeeds.join(' and ')} first.</span>
-		{:else if unsaved}<span class="visually-hidden" id="run-unsaved">A run uses the saved model: your unsaved {unsavedWhat} are saved first.</span>{/if}
-	{/if}
 {/snippet}
 <!-- The notices: one slim line under the header, not full-width banners. -->
 {#snippet headerNotices()}
@@ -979,6 +961,7 @@
 								{runs}
 								canRun={canEdit}
 								modelDirty={editor.dirty}
+								beforeRun={saveBeforeRun}
 								onRunsChange={setRuns}
 								onInputsRestored={reloadInputs}
 							/>

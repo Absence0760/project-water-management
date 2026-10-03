@@ -64,7 +64,7 @@ section it belongs to, with the example that taught it.
 - **The section header is the only page title.** Every workspace section
   gets `workspace/SectionHeader` from the page: the title (`TAB_LABELS`) as
   the `h1`, a one-line context, and on the right the rain pill, the
-  section's own actions, **Add data** and **Run model**. A tab adds its
+  section's own actions and **Add data**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
   (`workspace/headerSlot.svelte.ts`), and a status pill of its own beside
   the rain pill as `status` (the Summary's **Setup complete**); it never
@@ -73,7 +73,7 @@ section it belongs to, with the example that taught it.
   only there: Compare runs showed "Compare runs" twice in the workspace
   (the header's `h1` and its own `h2`, 65 px) until it filled the header
   with its context and actions when inside a tab and kept its own `h1`
-  only on `/compare`. A section whose main action replaces Run model passes
+  only on `/compare`. A section with a main action of its own passes
   it as `main`, rendered last after a plain Add data: Runs & results' run
   form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the

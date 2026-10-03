@@ -166,7 +166,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the hydrological units and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**. On a phone the actions sit under the name in full-width rows, with **Add data** and **Run model** always side by side at the end.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the hydrological units and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file. Runs start from **Runs & results**, whose header adds the run form after it: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**. On a phone the actions sit under the name in full-width rows, with **Add data** (and on Runs & results the run form) at the end.'
 					},
 					{
 						type: 'p',
@@ -708,7 +708,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'With unsaved changes, **Run model** asks first and offers **Save and run**.',
-							'On **Runs & results**, optionally type a **Run label** in the header (where the other pages have Run model), and press **Run model**. It needs a network and a rainfall series; until then the line under the header says what is missing.',
+							'On **Runs & results**, optionally type a **Run label** in the header and press **Run model**. It needs a network and a rainfall series; until then the line under the header says what is missing.',
 							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **River & reserve** and **Hydrological units** for that run.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
