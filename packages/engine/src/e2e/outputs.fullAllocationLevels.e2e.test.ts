@@ -74,7 +74,7 @@ const node = (id: string, over: Partial<NetworkNode> = {}): NetworkNode => ({
 	damMinPct: 0,
 	divertCapacityM3Day: 0,
 	irrigationEfficiency: 1,
-	lossReturnFraction: 0,
+	returnFlowFraction: 0,
 	damAreaFullM2: 0,
 	damAreaExponent: 0.7,
 	damSeepagePerDay: 0,
@@ -408,7 +408,7 @@ describe('Q29: the abstraction sensitivity case under full allocation (§2.10g)'
 	const input: ModelInput = {
 		...X,
 		settings: { ...X.settings, allocationMode: 'fullAllocation' },
-		model: { ...X.model, nodes: X.model.nodes.map((n) => ({ ...n, lossReturnFraction: 0 })), allocations: [{ id: 'a1', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: V.a }, { id: 'b1', nodeId: 'b', waterSource: 'surface', volumeM3PerYear: V.b }] }
+		model: { ...X.model, nodes: X.model.nodes.map((n) => ({ ...n, returnFlowFraction: 0 })), allocations: [{ id: 'a1', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: V.a }, { id: 'b1', nodeId: 'b', waterSource: 'surface', volumeM3PerYear: V.b }] }
 	};
 
 	it('its low and high ask 0.7 and 1.3 × the registered volume in every whole water year', () => {

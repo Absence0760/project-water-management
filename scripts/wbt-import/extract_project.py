@@ -184,9 +184,11 @@ def farm_operating_rules(name: str, spec: dict[str, Any], notes: list[str]) -> d
         )
     r = num(spec.get("returnFlowPct"))
     if r > 0:
-        irrigation = {"irrigationEfficiency": max(1 - min(r, 1), 0.01), "lossReturnFraction": 1}
+        # Every loss returns: r of the water supplied (engine ≥ 1.71.0), 0.99 when e is floored at 0.01.
+        e = max(1 - min(r, 1), 0.01)
+        irrigation = {"irrigationEfficiency": e, "returnFlowFraction": min(r, 0.99)}
     else:
-        irrigation = {"irrigationEfficiency": 1, "lossReturnFraction": 0}
+        irrigation = {"irrigationEfficiency": 1, "returnFlowFraction": 0}
     return {"damMinPct": 0, **irrigation, "damAreaFullM2": None, "damAreaExponent": 0.7, "damSeepagePerDay": 0}
 
 

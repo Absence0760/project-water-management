@@ -32,7 +32,7 @@ describe('cardLabel', () => {
 			pctRunoffToDam: 'Incremental runoff to dam',
 			divertCapacityM3Day: 'River to dam',
 			irrigationEfficiency: 'Efficiency',
-			lossReturnFraction: 'Losses returning',
+			returnFlowFraction: 'Return flow',
 			flowShareManual: 'Manual flow share'
 		});
 		// Distinct, so no two cells of a card read the same.

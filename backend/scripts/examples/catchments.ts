@@ -127,8 +127,8 @@ interface FarmSpec {
 	divertM3Day?: number;
 	/** Irrigation system: its SABI 2021 efficiency (IRRIGATION_SYSTEMS) is the farm's (audit N1). Default NEW_FARM_IRRIGATION. */
 	system?: IrrigationSystem;
-	/** Share of the application losses returning to the river. Default NEW_FARM_IRRIGATION's. */
-	lossReturn?: number;
+	/** Share of the water supplied returning to the river the same day, at most 1 − efficiency (engine ≥ 1.71.0). Default NEW_FARM_IRRIGATION's, capped there. */
+	returnFlow?: number;
 	/** hectares per crop */
 	crops?: Record<string, number>;
 	/** The crops from a river abstraction of their own beside the dam (engine ≥ 1.65.0, docs/model.md §2.7j), not the dam. */
@@ -259,7 +259,7 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			damMinPct: f.damMin ?? 0.15,
 			divertCapacityM3Day: f.divertM3Day ?? 0,
 			irrigationEfficiency: f.system ? efficiencyOf(f.system) : NEW_FARM_IRRIGATION.irrigationEfficiency,
-			lossReturnFraction: f.lossReturn ?? NEW_FARM_IRRIGATION.lossReturnFraction,
+			returnFlowFraction: f.returnFlow ?? Math.min(NEW_FARM_IRRIGATION.returnFlowFraction, 1 - (f.system ? efficiencyOf(f.system) : NEW_FARM_IRRIGATION.irrigationEfficiency)),
 			// Full-supply area from a surveyed mean depth (audit N2); drives dam evaporation and rain on the dam.
 			damAreaFullM2: cap > 0 && depth !== null ? Math.round(cap / depth) : null,
 			damAreaExponent: DAM_AREA_EXPONENT,
@@ -511,10 +511,10 @@ const KLEINBERG: CatchmentSpec = {
 	fit: { budget: 300, seed: 7 },
 	farms: [
 		{ name: 'Kleinberg Weir', kind: 'gauge', into: null },
-		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, system: 'micro', lossReturn: 0.3, crops: ha({ Citrus: 45, Pasture: 20 }) },
-		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, system: 'drip', lossReturn: 0.3, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
-		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, upstreamToDam: 0, divertM3Day: 5000, system: 'micro', lossReturn: 0.3, crops: ha({ Apples: 40 }) },
-		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2500, system: 'drip', lossReturn: 0.3, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
+		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, system: 'micro', returnFlow: 0.05, crops: ha({ Citrus: 45, Pasture: 20 }) },
+		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, system: 'drip', returnFlow: 0.03, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
+		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, upstreamToDam: 0, divertM3Day: 5000, system: 'micro', returnFlow: 0.05, crops: ha({ Apples: 40 }) },
+		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2500, system: 'drip', returnFlow: 0.03, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
 	],
 	transfers: [
 		// Doornhoek first; Rustenvrede gets what the upper dam can still spare.
@@ -551,7 +551,7 @@ const DROEVLEI: CatchmentSpec = {
 	farms: [
 		{ name: 'Droëvlei Gauge', kind: 'gauge', into: null },
 		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, system: 'movable', crops: ha({ Citrus: 110, Lucerne: 40 }) },
-		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, system: 'surface', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
+		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, system: 'surface', returnFlow: 0.18, crops: ha({ Lucerne: 80 }) },
 		{ name: 'Brakfontein', into: 'Sandkraal', areaKm2: 9, damM3: 80_000, damDepthM: 3, upstreamToDam: 0, divertM3Day: 1000, system: 'micro', crops: ha({ Citrus: 70 }) }
 	]
 };

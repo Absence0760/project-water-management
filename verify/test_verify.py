@@ -99,7 +99,7 @@ MUTANTS = [
     ),
     ("GR4J's PE uses the 28.25-day February", "pet.append(monthly / calendar_days_in_month(o))", "pet.append(monthly / mdays[m])"),
     ("dam evaporation uses calendar days", "e_raw = k_lake[m] * apan[m] / mdays[m] / 1000 * area", "e_raw = k_lake[m] * apan[m] / calendar_days_in_month(o) / 1000 * area"),
-    ("return flow is the whole loss (β ignored, N1)", "T = beta * (1 - d[\"e\"]) * G", "T = (1 - d[\"e\"]) * G"),
+    ("return flow is the whole loss (r ignored, N1)", "T = r_ret * G", "T = (1 - d[\"e\"]) * G"),
     ("GR4J's routing store gets no exchange", "r = max(0.0, self.r + q9 + f)", "r = max(0.0, self.r + q9)"),
     # Phase 2a.
     # Boreholes and stream depletion (§2.7d).

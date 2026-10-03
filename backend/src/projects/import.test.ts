@@ -175,7 +175,7 @@ describe('a project document’s names are made one line (issue #385)', () => {
 			damMinPct: 0,
 			divertCapacityM3Day: 0,
 			irrigationEfficiency: 1,
-			lossReturnFraction: 0,
+			returnFlowFraction: 0,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0

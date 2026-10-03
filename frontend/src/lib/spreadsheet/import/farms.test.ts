@@ -26,13 +26,13 @@ describe('farm operating rules', () => {
 		const ops = farmOperatingRules('Synthetic farm', { returnFlowPct: 0.2 }, new Report());
 		expect(ops.irrigationEfficiency).toBeCloseTo(0.8);
 		expect(ops.irrigationEfficiency).toBe(1 - 0.2); // the same float arithmetic as the Python
-		expect(ops.lossReturnFraction).toBe(1);
+		expect(ops.returnFlowFraction).toBe(0.2);
 		expect(ops).not.toHaveProperty('returnFlowPct');
 	});
 
 	it('N1: no return flow is full efficiency and no return', () => {
 		const ops = farmOperatingRules('Synthetic farm', { returnFlowPct: 0 }, new Report());
-		expect([ops.irrigationEfficiency, ops.lossReturnFraction]).toEqual([1, 0]);
+		expect([ops.irrigationEfficiency, ops.returnFlowFraction]).toEqual([1, 0]);
 	});
 
 	it('N1: all returning maps to the smallest efficiency', () => {

@@ -358,7 +358,7 @@ test.describe('network layout', () => {
 			await expect(sheet.getByRole('button', { name: /^Move (up|down) the list$/ })).toHaveCount(0);
 
 			// Deep in the farm form, the picker and ‹ › are still on screen, at the top of the sheet.
-			await sheet.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
+			await sheet.getByLabel('Return flow (% of supply)').scrollIntoViewIfNeeded();
 			await expect(picker).toBeInViewport();
 			await expect(sheet.getByRole('button', { name: 'Next node' })).toBeInViewport();
 			await sheet.getByRole('button', { name: 'Next node' }).click();

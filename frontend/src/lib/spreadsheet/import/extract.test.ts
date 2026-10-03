@@ -31,12 +31,12 @@ describe('extractProject on a small synthetic workbook', () => {
 			divertCapacityM3Day: 1000,
 			damMinPct: 0,
 			irrigationEfficiency: 0.8,
-			lossReturnFraction: 1,
+			returnFlowFraction: 0.2,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0
 		});
-		expect(b).toMatchObject({ downstreamNodeId: uid('node:Outlet'), irrigationEfficiency: 1, lossReturnFraction: 0 });
+		expect(b).toMatchObject({ downstreamNodeId: uid('node:Outlet'), irrigationEfficiency: 1, returnFlowFraction: 0 });
 		// A gauge takes the Python's defaults and no flow share.
 		expect(outlet).toMatchObject({ kind: 'gauge', downstreamNodeId: null, areaKm2: 0, flowShareManual: null, pctUpstreamToDam: 1, sortOrder: 2 });
 		expect(project.model.crops.map((c) => c.id)).toEqual([uid('crop:Maize'), uid('crop:Wheat')]);

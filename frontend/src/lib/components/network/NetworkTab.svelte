@@ -1059,6 +1059,8 @@
 		gap: 0.2rem;
 		margin-top: 0.2rem;
 		min-height: 1.25rem;
+		/* A unit stays on its line ("% of supply"), so every header's help button sits on one row. */
+		white-space: nowrap;
 	}
 	/* Numbers right-aligned in even-width digits, like the totals under them. */
 	.net td :global(input) {

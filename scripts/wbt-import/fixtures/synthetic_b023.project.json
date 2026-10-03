@@ -66,7 +66,7 @@
         "divertCapacityM3Day": 8640.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.8,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.2,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -88,7 +88,7 @@
         "divertCapacityM3Day": 21600.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.8,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.2,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -110,7 +110,7 @@
         "divertCapacityM3Day": 0.0,
         "damMinPct": 0,
         "irrigationEfficiency": 1,
-        "lossReturnFraction": 0,
+        "returnFlowFraction": 0,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -132,7 +132,7 @@
         "divertCapacityM3Day": 0,
         "damMinPct": 0,
         "irrigationEfficiency": 1,
-        "lossReturnFraction": 0,
+        "returnFlowFraction": 0,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -154,7 +154,7 @@
         "divertCapacityM3Day": 21600.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.85,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.15,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -176,7 +176,7 @@
         "divertCapacityM3Day": 0,
         "damMinPct": 0,
         "irrigationEfficiency": 1,
-        "lossReturnFraction": 0,
+        "returnFlowFraction": 0,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -198,7 +198,7 @@
         "divertCapacityM3Day": 4320.0,
         "damMinPct": 0,
         "irrigationEfficiency": 1,
-        "lossReturnFraction": 0,
+        "returnFlowFraction": 0,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -220,7 +220,7 @@
         "divertCapacityM3Day": 0.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.7,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.3,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -242,7 +242,7 @@
         "divertCapacityM3Day": 12960.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.9,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.1,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -264,7 +264,7 @@
         "divertCapacityM3Day": 8640.0,
         "damMinPct": 0,
         "irrigationEfficiency": 0.9,
-        "lossReturnFraction": 1,
+        "returnFlowFraction": 0.1,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0
@@ -286,7 +286,7 @@
         "divertCapacityM3Day": 0,
         "damMinPct": 0,
         "irrigationEfficiency": 1,
-        "lossReturnFraction": 0,
+        "returnFlowFraction": 0,
         "damAreaFullM2": null,
         "damAreaExponent": 0.7,
         "damSeepagePerDay": 0

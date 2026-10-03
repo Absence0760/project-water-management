@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
-import { defaultProjectSettings, irrigationFromReturnFlow, OBSERVED_SERIES_LABEL } from './project';
+import { defaultProjectSettings, NEW_FARM_IRRIGATION, OBSERVED_SERIES_LABEL, upgradeLegacyModel } from './project';
 
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
@@ -43,7 +43,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -100,9 +100,9 @@ describe('runModel — three-node network (A → B → gauge)', () => {
 			damCapacityM3: 1000,
 			damInitialPct: 0.9,
 			irrigationEfficiency: 0.5,
-			lossReturnFraction: 0.5
+			returnFlowFraction: 0.25
 		}),
-		node('B', { downstreamNodeId: 'G', sortOrder: 1, pctRunoffToDam: 0.5, irrigationEfficiency: 1, lossReturnFraction: 0 }),
+		node('B', { downstreamNodeId: 'G', sortOrder: 1, pctRunoffToDam: 0.5, irrigationEfficiency: 1, returnFlowFraction: 0 }),
 		node('G', { kind: 'gauge', areaKm2: 0, sortOrder: 2 })
 	];
 	// A: one crop, 1000 m², crop factor 1.
@@ -232,7 +232,7 @@ describe('runModel — no rounding in the balance (audit R1)', () => {
 	it('keeps a sub-m³ dam and the exact return flow', () => {
 		const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 		const out = run({
-			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 })],
+			nodes: [node('D', { damCapacityM3: 0.4, damInitialPct: 1, irrigationEfficiency: 0.8, returnFlowFraction: 0.1 })],
 			crops,
 			cropAreas: [{ nodeId: 'D', cropId: 'c', areaM2: 1 }],
 			settings: { apanMm: flat(31) as Monthly }, // 1 m² × 31 mm / 1000 / 31 = 0.001 m³/day
@@ -379,7 +379,7 @@ describe('runModel — dam behaviour', () => {
 	});
 });
 
-describe('runModel — irrigation efficiency and loss return (audit N1, engine 0.16.0)', () => {
+describe('runModel — irrigation efficiency and return flow (audit N1, engine 0.16.0; r a share of the water supplied, 1.71.0)', () => {
 	const crops: CropDef[] = [{ id: 'c', name: 'Crop', cropFactor: [...flat(1)] }];
 	// 1000 m² × 3100 mm / 1000 / 31 = 100 m³/day of crop requirement in October.
 	const farm = (over: Partial<NetworkNode>, natural = [0]) =>
@@ -393,7 +393,7 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		});
 
 	it('abstracts crop requirement ÷ efficiency, so a fully supplied crop gets all it needs (F = 100, e = 0.9)', () => {
-		const out = farm({ irrigationEfficiency: 0.9, lossReturnFraction: 1 });
+		const out = farm({ irrigationEfficiency: 0.9, returnFlowFraction: 0.1 });
 		const G = get(out, 'F', 'supplied')[0]!;
 		expect(get(out, 'F', 'crop_requirement')[0]).toBe(100);
 		expect(get(out, 'F', 'demand')[0]).toBeCloseTo(111.111111, 5);
@@ -405,18 +405,19 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		expect(G - get(out, 'F', 'return_flow')[0]!).toBeCloseTo(100, 9);
 	});
 
-	it('returns only the share β of the losses; the rest leaves the catchment', () => {
-		const out = farm({ irrigationEfficiency: 0.8, lossReturnFraction: 0.25 });
+	it('returns the share r of the water supplied; the rest of the losses leaves the catchment', () => {
+		const out = farm({ irrigationEfficiency: 0.8, returnFlowFraction: 0.05 });
 		const G = get(out, 'F', 'supplied')[0]!;
 		expect(G).toBeCloseTo(125, 9);
-		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.25 * 0.2 * 125, 9);
+		// 5 % of the 125 m³ supplied returns; of the 25 m³ lost, the other 18.75 m³ leaves.
+		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.05 * 125, 9);
 		expect(get(out, 'F', 'outflow')[0]).toBeCloseTo(6.25, 9);
 		expect(Math.abs(get(out, 'F', 'balance_residual')[0]!)).toBeLessThan(1e-9);
 	});
 
 	it('measures a shortage against the abstraction demand: deficit = D − G, supplied fraction = G / D', () => {
 		// 60 m³ in the dam and no inflow: D = 125, G = 60.
-		const out = farm({ damCapacityM3: 60, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 });
+		const out = farm({ damCapacityM3: 60, irrigationEfficiency: 0.8, returnFlowFraction: 0.1 });
 		expect(get(out, 'F', 'supplied')).toEqual([60]);
 		expect(get(out, 'F', 'deficit')[0]).toBeCloseTo(65, 9);
 		const s = out.summary.farms[0]!;
@@ -426,14 +427,58 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		expect(out.summary.curtailment!.farms[0]!.demandM3Day).toBeCloseTo(125, 9);
 	});
 
-	it('e = 1 and β = 0 is the workbook with no return flow, bit for bit', () => {
-		const out = farm({ irrigationEfficiency: 1, lossReturnFraction: 0.7 });
+	it('the new-unit default, 10 % returning at 90 %, returns a tenth of the water supplied the same day', () => {
+		const out = farm({ ...NEW_FARM_IRRIGATION });
+		const G = get(out, 'F', 'supplied')[0]!;
+		expect(G).toBeCloseTo(100 / 0.9, 9);
+		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.1 * G, 9);
+		expect(get(out, 'F', 'outflow')[0]).toBeCloseTo(0.1 * G, 9);
+	});
+
+	it('caps a return flow above the losses at 1 − e, with a warning naming the unit', () => {
+		const out = farm({ irrigationEfficiency: 0.9, returnFlowFraction: 0.3 });
+		const G = get(out, 'F', 'supplied')[0]!;
+		expect(get(out, 'F', 'return_flow')[0]).toBeCloseTo(0.1 * G, 9);
+		expect(out.summary.warnings).toContain('unit "F": return flow 30 % of the water supplied is more than its losses at 90 % irrigation efficiency; using 10 %');
+		// The cap holds against the efficiency the run uses: a crop on its own 95 % system leaves 5 % to return.
+		const own = run({
+			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1, irrigationEfficiency: 0.9, returnFlowFraction: 0.1 })],
+			crops: [{ ...crops[0]!, irrigationEfficiency: 0.95 }],
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		expect(get(own, 'F', 'return_flow')[0]).toBeCloseTo(0.05 * get(own, 'F', 'supplied')[0]!, 9);
+	});
+
+	it('runs a model saved by engine 0.16.0–1.70.0 (β, a share of the losses) as r = β(1 − e)', () => {
+		const input0 = input({
+			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1, irrigationEfficiency: 0.8 })],
+			crops,
+			cropAreas: [{ nodeId: 'F', cropId: 'c', areaM2: 1000 }],
+			settings: { apanMm: flat(3100) as Monthly },
+			natural: [0],
+			startDate: '2020-10-01'
+		});
+		for (const n of input0.model.nodes as unknown as Record<string, unknown>[]) {
+			delete n.returnFlowFraction;
+			n.lossReturnFraction = 0.25;
+		}
+		const old = runModelWith(input0, () => ({ naturalFlowM3Day: [0] }));
+		const now = farm({ irrigationEfficiency: 0.8, returnFlowFraction: 0.05 });
+		// 0.25 × (1 − 0.8) is 0.05 to the last bit or two.
+		expect(get(old, 'F', 'return_flow')[0]).toBeCloseTo(get(now, 'F', 'return_flow')[0]!, 9);
+	});
+
+	it('e = 1 and r = 0 is the workbook with no return flow, bit for bit', () => {
+		const out = farm({ irrigationEfficiency: 1, returnFlowFraction: 0 });
 		expect(get(out, 'F', 'demand')).toEqual([100]);
 		expect(get(out, 'F', 'supplied')).toEqual([100]);
 		expect(get(out, 'F', 'return_flow')).toEqual([0]);
 	});
 
-	it('runs a model saved before engine 0.16.0 as migration 006 stores it (r = 0.2 → e = 0.8, β = 1)', () => {
+	it('runs a model saved before engine 0.16.0 as migration 006 stores it (r = 0.2 → e = 0.8, r = 0.2 returning)', () => {
 		const legacy = farm({});
 		const input0 = input({
 			nodes: [node('F', { areaKm2: 0, damCapacityM3: 10_000, damInitialPct: 1 })],
@@ -445,19 +490,21 @@ describe('runModel — irrigation efficiency and loss return (audit N1, engine 0
 		});
 		for (const n of input0.model.nodes as unknown as Record<string, unknown>[]) {
 			delete n.irrigationEfficiency;
-			delete n.lossReturnFraction;
+			delete n.returnFlowFraction;
 			n.returnFlowPct = 0.2;
 		}
 		const old = runModelWith(input0, () => ({ naturalFlowM3Day: [0] }));
-		const now = farm({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		const now = farm({ irrigationEfficiency: 0.8, returnFlowFraction: 0.2 });
 		expect(get(old, 'F', 'supplied')).toEqual(get(now, 'F', 'supplied'));
 		expect(get(old, 'F', 'return_flow')).toEqual(get(now, 'F', 'return_flow'));
 		expect(get(legacy, 'F', 'supplied')).toEqual([100]);
 	});
 
 	it('warns and runs e = 1 for an efficiency outside (0, 1] instead of dividing by 0', () => {
-		const out = farm({ irrigationEfficiency: 0, lossReturnFraction: 0.5 });
+		const out = farm({ irrigationEfficiency: 0, returnFlowFraction: 0.5 });
 		expect(get(out, 'F', 'demand')).toEqual([100]);
+		// At e = 1 nothing is lost, so nothing returns.
+		expect(get(out, 'F', 'return_flow')).toEqual([0]);
 		expect(out.summary.warnings.some((w) => w.includes('irrigation efficiency 0 is not in (0, 1]'))).toBe(true);
 	});
 });
@@ -1595,16 +1642,18 @@ describe.skipIf(!clientCatchmentFixture)(
 		// before the ÷ e) makes the engine abstract F again, so its supplied,
 		// return flow and everything downstream are the workbook's again, and
 		// the N1 columns are compared against this run instead of skipped. That
-		// needs β = 1, which is what migration 006 and the importer write for
-		// r > 0; the "N1 replay" test fails on any N1 farm without it.
-		// An older extract carries returnFlowPct only: take e and β as migration 006 does.
+		// needs every loss returning (r = 1 − e), which is what migration 006 and
+		// the importer write for r > 0; the "N1 replay" test fails on any N1 farm without it.
+		// An older extract carries returnFlowPct, or β (lossReturnFraction, engine 0.16.0–1.70.0):
+		// take e and r as the migrations do.
 		const irrigation = (n: NetworkNode) => {
-			const r = (n as NetworkNode & { returnFlowPct?: number }).returnFlowPct;
-			return n.irrigationEfficiency === undefined && r !== undefined
-				? irrigationFromReturnFlow(r)
-				: { irrigationEfficiency: n.irrigationEfficiency ?? 1, lossReturnFraction: n.lossReturnFraction ?? 0 };
+			const up = upgradeLegacyModel({ nodes: [n] }).nodes[0]!;
+			return { irrigationEfficiency: up.irrigationEfficiency, returnFlowFraction: up.returnFlowFraction };
 		};
-		const replaysN1 = (n: NetworkNode) => irrigation(n).irrigationEfficiency < 1 && irrigation(n).lossReturnFraction === 1;
+		const replaysN1 = (n: NetworkNode) => {
+			const { irrigationEfficiency: e, returnFlowFraction: r } = irrigation(n);
+			return e < 1 && Math.abs(r - (1 - e)) < 1e-12;
+		};
 		const n1Input: ModelInput = {
 			...modelInput,
 			model: {

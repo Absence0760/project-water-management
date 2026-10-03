@@ -32,7 +32,7 @@ const reference = {
 };
 
 function doc(settings: Record<string, unknown> = {}): ProjectDocument {
-	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+	const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 	const days = 1461;
 	const rain = Array.from({ length: days }, (_, i) => (i % 13 === 0 ? 30 : i % 4 === 0 ? 2 : 0));
 	const flow = Array.from({ length: days }, (_, i) => 0.04 + 0.25 * Math.exp(-(i % 13) / 3) * (1 + 0.5 * Math.sin(i / 58)));

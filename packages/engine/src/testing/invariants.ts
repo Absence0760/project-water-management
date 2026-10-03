@@ -152,7 +152,7 @@ export function orderFreeDifference(out: ModelOutput, y: ModelOutput): string | 
  * the catchment's Σ supplied / Σ demand.
  *
  * This is a law only without return flow, so both runs set every
- * lossReturnFraction to 0 (no losses return; irrigation efficiency stays as it
+ * returnFlowFraction to 0 (no losses return; irrigation efficiency stays as it
  * is, audit N1). With return flow it can fail legitimately: a farm that
  * doubles its draw on stored water that would otherwise have stayed in its dam
  * returns part of it to the river, and a starved farm downstream gets more
@@ -182,7 +182,7 @@ export function orderFreeDifference(out: ModelOutput, y: ModelOutput): string | 
  */
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
-	for (const n of base.model.nodes) n.lossReturnFraction = 0;
+	for (const n of base.model.nodes) n.returnFlowFraction = 0;
 	// Demand objects' returns (engine ≥ 1.7.0) likewise: a return from stored water helps the farms below today.
 	for (const o of base.model.demandObjects ?? []) o.returnPct = 0;
 	// An allocation mode (engine ≥ 1.18.0) is taken off: a full allocation scales every allocated unit's demand

@@ -495,10 +495,10 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'return-flow',
 		term: 'Irrigation return flow',
-		short: 'The part of the irrigation losses that runs back into the river the same day: loss return fraction × (1 − efficiency) × supplied.',
-		units: 'fraction 0–1 (shown as %)',
+		short: 'The share of the irrigation water supplied that infiltrates and returns to the river the same day; at most 100 % − efficiency.',
+		units: 'fraction 0–1 of the water supplied (shown as %)',
 		category: 'farm',
-		fields: ['node.lossReturnFraction']
+		fields: ['node.returnFlowFraction']
 	},
 	{
 		id: 'spill',

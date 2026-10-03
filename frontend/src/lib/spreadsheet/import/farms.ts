@@ -150,7 +150,7 @@ export function readFarmSpec(wb: B023Workbook, report: Report): FarmSpecTable {
 export interface OperatingRules {
 	damMinPct: number;
 	irrigationEfficiency: number;
-	lossReturnFraction: number;
+	returnFlowFraction: number;
 	damAreaFullM2: null;
 	damAreaExponent: number;
 	damSeepagePerDay: number;
@@ -162,7 +162,7 @@ export interface OperatingRules {
  * Q5: the workbook's "min %" is the transfer minimum, which each transfer
  * rule carries, so the dam's minimum operating level is 0, with a note when
  * the workbook had one. N1: the return flow % r becomes an efficiency and a
- * loss return fraction, as migration 006 maps it. N2: the workbook has no dam
+ * return flow (all the losses), as migration 006 maps it. N2: the workbook has no dam
  * surface areas (the caller notes the dams once).
  */
 export function farmOperatingRules(name: string, spec: Partial<FarmSpec>, report: Report): OperatingRules {

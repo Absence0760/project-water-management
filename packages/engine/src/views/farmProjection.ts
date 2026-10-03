@@ -40,7 +40,7 @@ import {
 	type ReportWindow
 } from '../network/curtailment';
 import { buildTopology, canonicalOrder, ewrSiteNodes, type Topology } from '../network/topology';
-import type { CropArea, CurtailmentFarm, CurtailmentSummary, DemandObject, NetworkNode, Transfer } from '../project';
+import { runReturnFlow, type CropArea, type CurtailmentFarm, type CurtailmentSummary, type DemandObject, type NetworkNode, type Transfer } from '../project';
 import { BASIC_NEEDS_SERIES, basicNeedsPopulation } from '../network/demandObjects';
 import { CROPS_TAKE_KEY, onRiver, RIVER_TAKE_SERIES, riverTakeKey } from '../network/riverSource';
 import { modelFarmEfficiency, type CropEfficiencyInput } from '../demand';
@@ -429,7 +429,7 @@ function runEfficiency(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropA
 	return run.crops && run.cropAreas ? modelFarmEfficiency(e, n.id, run.crops, run.cropAreas, run.apanMm ?? []) : e;
 }
 
-/** k = 1 − β(1 − e) for a farm, 1 − r for another water user, 1 for a gauge; clamped as runModel clamps them (run.ts irrigation, otherUsers). */
+/** k = 1 − r for a farm (r at most 1 − e), 1 − r for another water user, 1 for a gauge; clamped as runModel clamps them (run.ts irrigation, otherUsers). */
 function consumptiveShare(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cropAreas' | 'apanMm'>): number {
 	if (n.kind === 'user') {
 		const r = n.userReturnPct ?? 0;
@@ -437,8 +437,7 @@ function consumptiveShare(n: NetworkNode, run: Pick<ProjectionRun, 'crops' | 'cr
 	}
 	if (n.kind !== 'farm') return 1;
 	const e = runEfficiency(n, run);
-	const b = Number.isFinite(n.lossReturnFraction) ? Math.min(Math.max(n.lossReturnFraction, 0), 1) : 0;
-	return 1 - b * (1 - e);
+	return 1 - runReturnFlow(n.returnFlowFraction, e);
 }
 
 /**

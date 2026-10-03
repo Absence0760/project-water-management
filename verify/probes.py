@@ -16,7 +16,7 @@ def _node(i: str, kind: str, down: str | None, **kw) -> dict:
         "id": i, "name": i, "kind": kind, "downstreamNodeId": down, "sortOrder": 0, "areaKm2": 0, "areaHiKm2": 0,
         "areaLoKm2": 0, "flowShareManual": None, "pctUpstreamToDam": 0, "pctRunoffToDam": 0, "damCapacityM3": 0,
         "damInitialPct": 0, "damMinPct": 0, "divertCapacityM3Day": 0, "irrigationEfficiency": 1,
-        "lossReturnFraction": 0, "damAreaFullM2": 1, "damAreaExponent": 0.7, "damSeepagePerDay": 0,
+        "returnFlowFraction": 0, "damAreaFullM2": 1, "damAreaExponent": 0.7, "damSeepagePerDay": 0,
     }
     n.update(kw)
     return n

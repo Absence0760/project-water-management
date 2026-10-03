@@ -130,7 +130,7 @@ export class ModelEditor {
 		node.kind = 'user';
 		node.pctUpstreamToDam = 0;
 		node.irrigationEfficiency = 1;
-		node.lossReturnFraction = 0;
+		node.returnFlowFraction = 0;
 		node.userDemandM3Day = new Array(12).fill(0);
 		node.userReturnPct = 0;
 		node.userPriority = 'senior';

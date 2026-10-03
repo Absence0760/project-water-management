@@ -32,7 +32,7 @@ function farm(over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 1,
+		returnFlowFraction: 0.2,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -85,11 +85,12 @@ describe('irrigation efficiency per crop (engine 0.43.0)', () => {
 		const out = run(input(twoCrops({ irrigationEfficiency: 0.5 })));
 		expect(get(out, 'crop_requirement')[0]).toBe(200);
 		expect(get(out, 'demand')[0]).toBeCloseTo(325, 9);
-		// Fully supplied, every loss returned (β = 1): consumptive use G − T is the crops' 200.
+		// Fully supplied; the farm's return flow r = 0.2 is a share of all the water supplied (engine ≥ 1.71.0),
+		// within the blend's losses (1 − 200/325): 65 of the 125 m³ lost return, and consumptive use is 260.
 		const G = get(out, 'supplied')[0]!;
 		expect(G).toBeCloseTo(325, 9);
-		expect(get(out, 'return_flow')[0]).toBeCloseTo(0.5 * 200 + 0.2 * 125, 9);
-		expect(G - get(out, 'return_flow')[0]!).toBeCloseTo(200, 9);
+		expect(get(out, 'return_flow')[0]).toBeCloseTo(0.2 * 325, 9);
+		expect(G - get(out, 'return_flow')[0]!).toBeCloseTo(260, 9);
 		expect(Math.abs(get(out, 'balance_residual')[0]!)).toBeLessThan(1e-9);
 		expect(out.summary.warnings.filter((w) => w.includes('efficiency'))).toEqual([]);
 	});

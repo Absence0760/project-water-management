@@ -64,7 +64,7 @@ describe('engine invariants on random networks', () => {
 			const input = droughtBoreholesAsSupplemental(randomInput(seed));
 			expect(input.model.boreholes!.some((b) => b.nodeId === id && b.mode === 'supplemental' && b.target === 'dam'), `seed ${seed}`).toBe(true);
 			const base = structuredClone(input);
-			for (const n of base.model.nodes) n.lossReturnFraction = 0;
+			for (const n of base.model.nodes) n.returnFlowFraction = 0;
 			const doubled = structuredClone(base);
 			for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
 			for (const x of [base, doubled]) {
@@ -339,7 +339,7 @@ function smallCase(): ModelInput {
 		damMinPct: 0,
 		divertCapacityM3Day: 500,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.1,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,

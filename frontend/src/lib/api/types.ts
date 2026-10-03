@@ -902,7 +902,7 @@ export interface RunDay {
 		damInitialPct: number | null;
 		damMinPct: number | null;
 		irrigationEfficiency: number | null;
-		lossReturnFraction: number | null;
+		returnFlowFraction: number | null;
 		damAreaFullM2: number | null;
 		damAreaExponent: number | null;
 		damSeepagePerDay: number | null;

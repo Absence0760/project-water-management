@@ -19,7 +19,7 @@ export type NodeNumberKey =
 	| 'pctRunoffToDam'
 	| 'divertCapacityM3Day'
 	| 'irrigationEfficiency'
-	| 'lossReturnFraction'
+	| 'returnFlowFraction'
 	| 'flowShareManual'
 	| 'boreholeCapacityM3Day'
 	| 'boreholeTriggerPct'
@@ -31,7 +31,7 @@ export interface NodeField {
 	key: NodeNumberKey;
 	/** Short column / field label. */
 	label: string;
-	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | 'm³/s' | '×' | 'days' | 'ha';
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | '% of supply' | 'm³/day' | 'm³/s' | '×' | 'days' | 'ha';
 	/** Shown = stored × scale, for a field entered in another unit than it is stored in (m³/s stored as m³/day). Percentages scale by 100 on their own. */
 	scale?: number;
 	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
@@ -201,13 +201,13 @@ export const NODE_FIELDS: NodeField[] = [
 		help: 'Share of the water abstracted that reaches the crop. The hydrological unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
 	},
 	{
-		key: 'lossReturnFraction',
-		label: 'Losses returning',
-		unit: '%',
+		key: 'returnFlowFraction',
+		label: 'Return flow',
+		unit: '% of supply',
 		group: 'irrigation',
 		farmOnly: true,
-		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
-		help: 'Share of the application losses that drains back to the river below the hydrological unit the same day (return flow). The rest leaves the catchment.'
+		aria: (n) => `Irrigation return flow at ${n}, % of the water supplied`,
+		help: 'Share of the irrigation water supplied that infiltrates the soil and returns to the river below the hydrological unit the same day. It comes out of the application losses, so it is at most 100 % − the irrigation efficiency (10 % at 90 %); the rest of the losses leaves the catchment (evaporation, deep percolation).'
 	},
 	{
 		key: 'flowShareManual',
@@ -296,7 +296,7 @@ export function cardLabel(f: NodeField): string {
 	return f.label;
 }
 
-export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
+export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day' || f.unit === '% of supply';
 /** What a field's input multiplies the stored value by to show it. */
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 

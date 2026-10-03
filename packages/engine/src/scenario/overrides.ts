@@ -5,7 +5,7 @@
 // unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
 import { toEpochDay } from '../calendar';
 import { withMonthlyRates } from '../network/transferRates';
-import { DAM_AREA_EXPONENT, DEMAND_PARTS, estimatedDamAreaM2, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import { DAM_AREA_EXPONENT, DEMAND_PARTS, estimatedDamAreaM2, returnFlowFromLossReturn, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
 import {
 	BASELINE_NODE_FIELDS,
 	CROP_SET_FIELDS,
@@ -27,6 +27,7 @@ import {
 	isIsoDate,
 	landCoverFieldError,
 	nodeAddFieldError,
+	LEGACY_LOSS_RETURN_FIELD,
 	nodeFieldError,
 	reductions,
 	settingsValueError,
@@ -499,6 +500,13 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 	switch (op.op) {
 		case 'node.set': {
 			const n = findNode(d, op.nodeId);
+			// A stored engine 0.16.0–1.70.0 op setting β, a share of the losses: the return flow it meant here.
+			if ((op.field as string) === LEGACY_LOSS_RETURN_FIELD) {
+				if (n.kind !== 'farm') fail(`"${LEGACY_LOSS_RETURN_FIELD}" can't be set on a ${n.kind}`);
+				if (!(typeof op.value === 'number' && op.value >= 0 && op.value <= 1)) fail(`${LEGACY_LOSS_RETURN_FIELD} must be from 0 to 1`);
+				n.returnFlowFraction = returnFlowFromLossReturn(op.value as number, n.irrigationEfficiency);
+				break;
+			}
 			// The field written is the allowlist's own name for it, never the op's text (so never `__proto__`).
 			const settable: readonly string[] = Object.hasOwn(NODE_SET_FIELDS, n.kind) ? NODE_SET_FIELDS[n.kind] : [];
 			const field = allowed(settable, op.field) ?? fail(`"${String(op.field)}" can't be set on a ${n.kind}`);

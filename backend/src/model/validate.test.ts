@@ -306,13 +306,28 @@ describe('land cover (WP-1.35)', () => {
 describe('ModelBody (PUT /model, project documents)', () => {
 	const body = (nodes: Record<string, unknown>[]) => ({ nodes, crops: [], cropAreas: [], transfers: [] });
 
-	it('needs 0 < irrigation efficiency ≤ 1 and a loss return fraction in 0–1 (N1)', () => {
+	it('needs 0 < irrigation efficiency ≤ 1 and a return flow from 0 to the losses 1 − e (N1, engine 1.71.0)', () => {
 		const out = node('Gauge', null);
 		const farm = node('A', out.id);
 		expect(ModelBody.safeParse(body([out, farm])).success).toBe(true);
 		expect(ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 0 }])).success).toBe(false);
 		expect(ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 1.01 }])).success).toBe(false);
-		expect(ModelBody.safeParse(body([out, { ...farm, lossReturnFraction: -0.1 }])).success).toBe(false);
+		expect(ModelBody.safeParse(body([out, { ...farm, returnFlowFraction: -0.1 }])).success).toBe(false);
+		// 10 % at 90 % is all the losses (1 − 0.9 is 0.0999…98 in floating point); 11 % is more than was lost.
+		expect(ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 0.9, returnFlowFraction: 0.1 }])).success).toBe(true);
+		const over = ModelBody.safeParse(body([out, { ...farm, irrigationEfficiency: 0.9, returnFlowFraction: 0.11 }]));
+		expect(over.success).toBe(false);
+		expect(over.error!.issues.map((i) => [i.path.join('.'), i.message])).toEqual([
+			['nodes.1.returnFlowFraction', 'return flow is more than the losses: at most 100 % − the irrigation efficiency of the water supplied can return']
+		]);
+	});
+
+	it('reads a model from engine 0.16.0–1.70.0, its β a share of the losses, as migration 197 stored it: r = β(1 − e)', () => {
+		const out = node('Gauge', null);
+		const { returnFlowFraction: _r, ...legacy } = node('A', out.id);
+		const parsed = ModelBody.parse(body([out, { ...legacy, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 }]));
+		expect(parsed.nodes[1]!.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect(parsed.nodes[1]).not.toHaveProperty('lossReturnFraction');
 	});
 
 	it('takes an optional own irrigation efficiency per crop, 0 < e ≤ 1 or null (engine 0.43.0)', () => {
@@ -339,10 +354,10 @@ describe('ModelBody (PUT /model, project documents)', () => {
 
 	it('reads a model from before engine 0.16.0 as migration 006 stored it: return flow % → efficiency', () => {
 		const out = node('Gauge', null);
-		const { irrigationEfficiency: _e, lossReturnFraction: _b, ...legacy } = node('A', out.id);
+		const { irrigationEfficiency: _e, returnFlowFraction: _b, ...legacy } = node('A', out.id);
 		const parsed = ModelBody.parse(body([out, { ...legacy, returnFlowPct: 0.25 }, { ...legacy, id: crypto.randomUUID(), name: 'B', returnFlowPct: 0 }]));
-		expect(parsed.nodes[1]).toMatchObject({ irrigationEfficiency: 0.75, lossReturnFraction: 1 });
-		expect(parsed.nodes[2]).toMatchObject({ irrigationEfficiency: 1, lossReturnFraction: 0 });
+		expect(parsed.nodes[1]).toMatchObject({ irrigationEfficiency: 0.75, returnFlowFraction: 0.25 });
+		expect(parsed.nodes[2]).toMatchObject({ irrigationEfficiency: 1, returnFlowFraction: 0 });
 		expect(parsed.nodes[1]).not.toHaveProperty('returnFlowPct');
 	});
 });

@@ -1674,7 +1674,9 @@ def run(doc: dict) -> dict:
                     GW += pump(k_, rem - Gs - Gr - GW)
             G = min(used_off + Gs + Gr + GW, dem)
             # The demand objects' split of G (§2.7f).
-            beta = x["lossReturnFraction"]
+            # The return flow r, a share of the water supplied, at most the losses 1 − e (model.md §2.7, engine ≥ 1.71.0).
+            r_ret = x["returnFlowFraction"]
+            r_ret = (1 - d["e"]) if r_ret > 1 - d["e"] + 1e-9 else max(r_ret, 0)
             if objs[xid]:
                 left_g = G
                 g_crop = 0.0
@@ -1698,7 +1700,7 @@ def run(doc: dict) -> dict:
                         else:
                             obj_sup[ob["id"]][i] = g_
                     left_g = max(0.0, left_g - min(tot, left_g))
-                T = beta * (1 - d["e"]) * g_crop
+                T = r_ret * g_crop
                 for ob in dam_obs:
                     r_ = 0.0 if ob.get("destination") == "external" else (ob.get("returnPct") or 0.0)
                     T += r_ * obj_sup[ob["id"]][i]
@@ -1709,7 +1711,7 @@ def run(doc: dict) -> dict:
                         bn += min(obj_B[ob["id"]], obj_dem[ob["id"]][i])
                 cc["basic_needs"][i] = bn
             else:
-                T = beta * (1 - d["e"]) * G
+                T = r_ret * G
             P = avail + GWd - Gs
             Q = min(P, cap)
             R = max(P - cap, 0.0)
@@ -1781,7 +1783,7 @@ def run(doc: dict) -> dict:
                 for a, t in enumerate(ts):
                     g_riv += got[a]
                     if t["ob"] is None:
-                        back_r += beta * (1 - d["e"]) * got[a]
+                        back_r += r_ret * got[a]
                     else:
                         obj_sup[t["ob"]["id"]][i] = got[a]
                         r_ = 0.0 if t["ob"].get("destination") == "external" else (t["ob"].get("returnPct") or 0.0)

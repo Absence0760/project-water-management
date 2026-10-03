@@ -70,7 +70,7 @@ function node(id: string, name: string, over: Partial<NetworkNode> = {}): Networ
 		damMinPct: 0.1,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.1,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -807,12 +807,12 @@ describe('diffInputs', () => {
 		const old = snapshot();
 		for (const n of old.model.nodes as unknown as Record<string, unknown>[]) {
 			delete n.irrigationEfficiency;
-			delete n.lossReturnFraction;
+			delete n.returnFlowFraction;
 			n.returnFlowPct = n.kind === 'farm' ? 0.1 : 0;
 		}
 		// r = 0.1 became e = 0.9 with every loss returning: the same model, no line.
 		const migrated = snapshot();
-		for (const n of migrated.model.nodes) Object.assign(n, n.kind === 'farm' ? { irrigationEfficiency: 0.9, lossReturnFraction: 1 } : { irrigationEfficiency: 1, lossReturnFraction: 0 });
+		for (const n of migrated.model.nodes) Object.assign(n, n.kind === 'farm' ? { irrigationEfficiency: 0.9, returnFlowFraction: 0.1 } : { irrigationEfficiency: 1, returnFlowFraction: 0 });
 		expect(texts(old, migrated)).toEqual([]);
 		// A real change since then is reported against the migrated values.
 		migrated.model.nodes[1]!.irrigationEfficiency = 0.8;

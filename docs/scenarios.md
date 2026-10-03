@@ -136,7 +136,9 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent` (0 < b ≤ 1
   from engine 1.63.0),
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
-  `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
+  `returnFlowFraction` (engine ≥ 1.71.0; a stored op setting 0.16.0–1.70.0's
+  `lossReturnFraction` β still applies, as r = β(1 − e) of the node it meets);
+  dam storage (WP-3.5) `damReleaseRule`,
   `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
   the survey curve `damCurve` (engine ≥ 1.20.0: up to 200 rows of
   `{ levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`, or null for none, the power law;
@@ -267,7 +269,7 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   multiplies the crop water requirement F (after effective rain and the
   soil-water store), so the abstraction D = F ÷ e scales with it while the
   crop area, the gross demand, the rain used, the irrigation efficiency and
-  the loss return stay as they are: 85 % means "85 % of what they'd take".
+  the return flow stay as they are: 85 % means "85 % of what they'd take".
   A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
   month by month. A cut (a factor below 1) never takes a domestic or
   municipal object with people below its basic-needs floor, MIN(people ×

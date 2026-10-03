@@ -938,7 +938,7 @@ function addUsers(g: Rng, nodes: NetworkNode[]): void {
 			damMinPct: 0,
 			divertCapacityM3Day: 0,
 			irrigationEfficiency: 1,
-			lossReturnFraction: 0,
+			returnFlowFraction: 0,
 			damAreaFullM2: null,
 			damAreaExponent: 0.7,
 			damSeepagePerDay: 0,
@@ -964,17 +964,17 @@ function damLossOps(g: Rng): Pick<NetworkNode, 'damAreaFullM2' | 'damAreaExponen
 }
 
 /**
- * A farm's irrigation efficiency and loss return (audit N1). Half the time the
+ * A farm's irrigation efficiency and return flow (audit N1). Half the time the
  * migration 006 mapping of the pre-0.15 return flow `r` the main generator
- * drew (so e = 1 − r, β = 1, and r = 1 gives e = 0.01); otherwise drawn
- * directly, with the edges e = 1 and β = 0 or 1 over-weighted.
+ * drew (so e = 1 − r, all the losses returning, and r = 1 gives e = 0.01);
+ * otherwise drawn directly, as a share β of the losses (engine 1.71.0 stores
+ * r = β(1 − e)), with the edges e = 1 and β = 0 or 1 over-weighted. The same
+ * draws as before 1.71.0, so the seeds keep their catchments.
  */
-function irrigationOps(g: Rng, r: number): Pick<NetworkNode, 'irrigationEfficiency' | 'lossReturnFraction'> {
+function irrigationOps(g: Rng, r: number): Pick<NetworkNode, 'irrigationEfficiency' | 'returnFlowFraction'> {
 	if (g.bool(0.5)) return irrigationFromReturnFlow(r);
-	return {
-		irrigationEfficiency: g.bool(0.2) ? 1 : g.bool(0.05) ? g.float(0.01, 0.1) : g.float(0.5, 1),
-		lossReturnFraction: g.frac(0.25, 0.25)
-	};
+	const e = g.bool(0.2) ? 1 : g.bool(0.05) ? g.float(0.01, 0.1) : g.float(0.5, 1);
+	return { irrigationEfficiency: e, returnFlowFraction: g.frac(0.25, 0.25) * (1 - e) };
 }
 
 /** The rain threshold and catchment area: mostly the defaults, sometimes pushed around. */

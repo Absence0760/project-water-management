@@ -1210,7 +1210,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damSeepagePerDay', 'dam seepage per day', pct],
 	['divertCapacityM3Day', 'diversion capacity', withUnit('m³/day', 0)],
 	['irrigationEfficiency', 'irrigation efficiency', pct],
-	['lossReturnFraction', 'share of losses returning', pct],
+	['returnFlowFraction', 'return flow (share of water supplied)', pct],
 	// Other water users (WP-1.33); the monthly demand is diffed month by month below.
 	['userReturnPct', 'share returned', pct],
 	['userPriority', 'priority', plain],

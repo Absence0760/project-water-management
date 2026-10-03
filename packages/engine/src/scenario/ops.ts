@@ -53,7 +53,8 @@ import {
 	type NodeKind,
 	type PeInput,
 	type Transfer,
-	type ZeroRainMode
+	type ZeroRainMode,
+	returnFlowFromLossReturn
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
 import { droughtRestrictionIssues } from '../network/restriction';
@@ -197,7 +198,7 @@ const DAM_AND_IRRIGATION = [
 	'damSeepagePerDay',
 	'divertCapacityM3Day',
 	'irrigationEfficiency',
-	'lossReturnFraction'
+	'returnFlowFraction'
 ] as const;
 /** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
 const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
@@ -273,7 +274,7 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	damSeepagePerDay: frac,
 	divertCapacityM3Day: nonNeg,
 	irrigationEfficiency: range(0, 1, { loOpen: true }),
-	lossReturnFraction: frac,
+	returnFlowFraction: frac,
 	damReleaseRule: oneOf(DAM_RELEASE_RULES),
 	damReleaseM3Day: nullable(monthlyOf(nonNeg)),
 	damOutletCapacityM3Day: nullable(nonNeg),
@@ -1069,6 +1070,14 @@ const NODE_FIELDS: Record<string, Check> = {
 	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
 	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`))
 };
+/**
+ * The field engine 0.16.0–1.70.0 scenarios set a farm's return flow by: β, a
+ * share of the losses. A stored op setting it still validates and applies
+ * (overrides.ts converts it to the return flow r = β(1 − e) on the node it
+ * meets), so a saved or frozen scenario keeps running; no form writes it now.
+ */
+export const LEGACY_LOSS_RETURN_FIELD = 'lossReturnFraction';
+
 /** Check one field of a node.add's node (any field a node may carry, not only those node.set may change). */
 const NODE_FIELD_ADD_CHECK = checksOf(NODE_FIELDS);
 export function nodeAddFieldError(field: string, value: unknown): string | null {
@@ -1127,7 +1136,22 @@ const BOREHOLE_FIELDS: Record<string, Check> = {
 };
 const NONE = new Set<string>();
 
-function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp | null {
+/**
+ * A node.add from engine 0.16.0–1.70.0 carries β, a share of its losses, and
+ * no return flow: give it r = β(1 − e) from its own efficiency, so a stored op
+ * still validates. Anything else is returned as it is.
+ */
+function upgradeLegacyNodeAdd(raw: unknown): unknown {
+	if (!isObj(raw) || raw.op !== 'node.add' || !isObj(raw.node)) return raw;
+	const n = raw.node;
+	const b = n[LEGACY_LOSS_RETURN_FIELD];
+	if (typeof b !== 'number' || n.returnFlowFraction !== undefined || typeof n.irrigationEfficiency !== 'number') return raw;
+	const { [LEGACY_LOSS_RETURN_FIELD]: _b, ...rest } = n;
+	return { ...raw, node: { ...rest, returnFlowFraction: returnFlowFromLossReturn(b, n.irrigationEfficiency) } };
+}
+
+function validateOne(input: unknown, where: string, errors: string[]): ScenarioOp | null {
+	const raw = upgradeLegacyNodeAdd(input);
 	if (!isObj(raw)) {
 		errors.push(`${where}: must be an object`);
 		return null;
@@ -1150,8 +1174,10 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 	switch (raw.op) {
 		case 'node.set': {
 			const nodeId = need('nodeId', id);
-			const field = need('field', (v) => (typeof v === 'string' && NODE_FIELD_CHECK.byName.has(v) ? null : 'is not a node field a scenario can set'));
-			if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
+			const legacy = raw.field === LEGACY_LOSS_RETURN_FIELD;
+			const field = need('field', (v) => (typeof v === 'string' && (NODE_FIELD_CHECK.byName.has(v) || legacy) ? null : 'is not a node field a scenario can set'));
+			if (legacy) need('value', frac);
+			else if (typeof field === 'string' && NODE_FIELD_CHECK.byName.has(field)) need('value', (v) => nodeFieldError(field, v));
 			op = { op: 'node.set', nodeId, field, value: cloneValue(raw.value) } as ScenarioOp;
 			break;
 		}

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { damCapacityOn, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary, isIsoDate } from '@water-management/engine';
+import { damCapacityOn, modelFarmEfficiency, runReturnFlow, toEpochDay, upgradeLegacyModel, waterYearIndex, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary, isIsoDate } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -257,7 +257,7 @@ export const runRoutes = new Hono<AuthEnv>()
 				previousStorageM3,
 				previousSoilWaterMm,
 				// A run saved before engine 0.16.0 reads as migration 006 stored its model (return flow % → efficiency).
-				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date),
+				params: dayParams(upgradeLegacyModel({ nodes: [r.node] }).nodes[0] as unknown as NetworkNode, r.node, r.crops ?? [], r.crop_areas ?? [], r.apan_mm, q.date),
 				columns: rows.map(({ key, label, unit, value }) => ({ key, label: label ?? key, unit, value }))
 			});
 		});
@@ -423,7 +423,7 @@ const DAY_PARAMS = [
 	'damInitialPct',
 	'damMinPct',
 	'irrigationEfficiency',
-	'lossReturnFraction',
+	'returnFlowFraction',
 	'damAreaFullM2',
 	'damAreaExponent',
 	'damSeepagePerDay'
@@ -437,10 +437,14 @@ const pick = <K extends string>(o: Record<string, unknown>, keys: readonly K[]):
  * (D = F ÷ e): a farm whose crops carry their own (engine ≥ 0.43.0) runs on
  * them combined (engine demand.ts modelFarmEfficiency), else its own.
  * `divertCapacityM3Day` is the day's: a farm with River to dam by month
- * (engine ≥ 1.32.0) ran on that month's value.
+ * (engine ≥ 1.32.0) ran on that month's value. `returnFlowFraction` is the
+ * share of the water supplied the run returned: its r capped at 1 − e
+ * (engine ≥ 1.71.0), or for a run saved by engine 0.16.0–1.70.0, whose
+ * snapshot (`raw`) holds β, a share of the losses, β × (1 − e) of the e it used.
  */
 function dayParams(
 	n: NetworkNode,
+	raw: unknown,
 	crops: readonly CropDef[],
 	cropAreas: readonly CropArea[],
 	apanMm: unknown,
@@ -450,7 +454,10 @@ function dayParams(
 	if (n.kind === 'farm' && Array.isArray(n.divertMonthlyM3Day) && n.divertMonthlyM3Day.length === 12)
 		p.divertCapacityM3Day = n.divertMonthlyM3Day[waterYearIndex(Number(date.slice(5, 7)))] ?? null;
 	if (n.kind === 'farm' && typeof n.irrigationEfficiency === 'number' && n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1) {
-		p.irrigationEfficiency = modelFarmEfficiency(n.irrigationEfficiency, n.id, crops, cropAreas, Array.isArray(apanMm) ? apanMm : []);
+		const e = modelFarmEfficiency(n.irrigationEfficiency, n.id, crops, cropAreas, Array.isArray(apanMm) ? apanMm : []);
+		p.irrigationEfficiency = e;
+		const beta = raw && typeof raw === 'object' ? (raw as { lossReturnFraction?: unknown }).lossReturnFraction : undefined;
+		p.returnFlowFraction = typeof beta === 'number' ? Math.min(Math.max(beta, 0), 1) * (1 - e) : runReturnFlow(n.returnFlowFraction, e);
 	}
 	return p;
 }

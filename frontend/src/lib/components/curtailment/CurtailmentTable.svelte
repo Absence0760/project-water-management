@@ -101,7 +101,7 @@
 						{#if attributed}
 							<th scope="col" class="num" title="The part of the EWR charge met by irrigating less">Irrigate less<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num" title="The part of the EWR charge met by storing less or passing inflow">Store less / pass inflow<br /><span class="u">m³/day</span></th>
-							<th scope="col" class="num" title="The cut in supply that meets the irrigation part: irrigate less ÷ (1 − β(1 − e))">Supply cut<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num" title="The cut in supply that meets the irrigation part: irrigate less ÷ (1 − the return flow share)">Supply cut<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">Supply cut<br /><span class="u">l/s</span></th>
 							<th scope="col">EWR site<br /><span class="u">setting the charge</span></th>
 						{/if}

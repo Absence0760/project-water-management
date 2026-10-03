@@ -5,13 +5,17 @@ import {
 	estimatedDamAreaForEngine,
 	estimatedDamAreaM2,
 	IRRIGATION_SYSTEMS,
+	irrigationFromReturnFlow,
 	NEW_FARM_IRRIGATION,
 	NEW_FARM_IRRIGATION_SYSTEM,
 	newNetworkNode,
 	PAN_COEFFICIENT_PRESETS,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
-	panCoefficientOutOfRange
+	panCoefficientOutOfRange,
+	returnFlowFromLossReturn,
+	runReturnFlow,
+	upgradeLegacyModel
 } from './project';
 
 describe('panCoefficientOutOfRange', () => {
@@ -75,11 +79,42 @@ describe('IRRIGATION_SYSTEMS (SABI 2021 system efficiencies, issue #54 Q10)', ()
 		expect(new Set(values).size).toBe(values.length);
 	});
 
-	it('starts a new farm on drip (confirmed by the client, issue #90), half its losses returning', () => {
+	it('starts a new farm on drip (confirmed by the client, issue #90), 10 % of the water supplied returning (all its losses)', () => {
 		expect(NEW_FARM_IRRIGATION_SYSTEM).toBe('drip');
 		const drip = IRRIGATION_SYSTEMS.find((s) => s.id === NEW_FARM_IRRIGATION_SYSTEM)!;
-		expect(NEW_FARM_IRRIGATION).toEqual({ irrigationEfficiency: drip.efficiency, lossReturnFraction: 0.5 });
+		expect(NEW_FARM_IRRIGATION).toEqual({ irrigationEfficiency: drip.efficiency, returnFlowFraction: 0.1 });
 		expect(NEW_FARM_IRRIGATION.irrigationEfficiency).toBe(0.9);
+	});
+});
+
+describe('the return flow, a share of the water supplied (engine ≥ 1.71.0)', () => {
+	it('runs r as given up to the losses 1 − e, caps it there, and takes float noise at the cap as the cap', () => {
+		expect(runReturnFlow(0.05, 0.9)).toBe(0.05);
+		expect(runReturnFlow(0.3, 0.9)).toBeCloseTo(0.1, 12);
+		expect(runReturnFlow(0.1, 1 - 0.1)).toBe(0.1); // 1 − 0.9 is 0.09999999999999998: not over the cap
+		expect(runReturnFlow(-0.1, 0.9)).toBe(0);
+		expect(runReturnFlow(Number.NaN, 0.9)).toBe(0);
+		expect(runReturnFlow(0.2, 1)).toBe(0); // nothing lost, nothing returns
+	});
+
+	it('converts β, the share of the losses engine 0.16.0–1.70.0 stored, to r = β(1 − e)', () => {
+		expect(returnFlowFromLossReturn(0.5, 0.9)).toBeCloseTo(0.05, 12);
+		expect(returnFlowFromLossReturn(1, 0.8)).toBeCloseTo(0.2, 12);
+		expect(returnFlowFromLossReturn(2, 0.8)).toBeCloseTo(0.2, 12); // β clamped to 1, as the run took it
+		expect(returnFlowFromLossReturn(0.5, 0)).toBe(0); // e outside (0, 1] ran as 1
+	});
+
+	it('upgrades a stored node: β (1.70.0 and before) to r, returnFlowPct (before 0.16.0) to e and r exactly', () => {
+		const [b, p] = upgradeLegacyModel({
+			nodes: [
+				{ id: 'b', irrigationEfficiency: 0.8, lossReturnFraction: 0.5 },
+				{ id: 'p', returnFlowPct: 0.1 }
+			]
+		}).nodes as unknown as Record<string, unknown>[];
+		expect(b!.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect('lossReturnFraction' in b!).toBe(false);
+		expect([p!.irrigationEfficiency, p!.returnFlowFraction]).toEqual([0.9, 0.1]);
+		expect(irrigationFromReturnFlow(1)).toEqual({ irrigationEfficiency: 0.01, returnFlowFraction: 0.99 });
 	});
 });
 

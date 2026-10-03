@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_AREA_EXPONENT_MAX, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_OBJECT_SOURCES, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, NAME_CONTROL_MESSAGE, RETURN_FLOW_SLACK, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, WATER_SOURCES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -17,8 +17,9 @@ export const nameText = (min: number, max: number) => z.string().trim().min(min)
 /**
  * A project model as PUT /model and a project document carry it. A model from
  * an older engine (a document exported before 0.16.0, a stale browser tab) is
- * read as migration 006 stored the database: `returnFlowPct` becomes irrigation
- * efficiency and loss return, missing dam fields get their defaults and a
+ * read as migrations 006 and 197 stored the database: `returnFlowPct` becomes
+ * irrigation efficiency and return flow, a share of the losses β (1.70.0 and
+ * before) the return flow β(1 − e), missing dam fields get their defaults and a
  * transfer without a priority gets its list position (upgradeLegacyModel).
  */
 export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgradeLegacyModel(v as { nodes?: unknown }) : v), z.object({
@@ -42,7 +43,8 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				divertCapacityM3Day: nonNeg,
 				// 0 < e ≤ 1: abstraction demand is the crop requirement ÷ e (audit N1).
 				irrigationEfficiency: z.number().gt(0).max(1),
-				lossReturnFraction: frac,
+				// The share r of the water supplied returning the same day (engine ≥ 1.71.0); at most 1 − e, checked below.
+				returnFlowFraction: frac,
 				// Dam evaporation and seepage (audit N2): area null = estimated by the run.
 				damAreaFullM2: nonNeg.nullable(),
 				// At most 1 (engine ≥ 1.63.0, issue #90): no basin's surface grows faster than its volume; the
@@ -103,6 +105,9 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 					.refine(isGa538Rate, { message: `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}` })
 					.nullable()
 					.default(null)
+			}).refine((n) => n.returnFlowFraction <= 1 - n.irrigationEfficiency + RETURN_FLOW_SLACK, {
+				path: ['returnFlowFraction'],
+				message: 'return flow is more than the losses: at most 100 % − the irrigation efficiency of the water supplied can return'
 			})
 		)
 		.max(500),

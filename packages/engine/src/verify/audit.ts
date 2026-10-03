@@ -27,7 +27,7 @@ import { resolveDamCurve } from '../network/dam';
 import { demandObjectsByNode } from '../network/demandObjects';
 import { riverSourcesOf } from '../network/riverSource';
 import { onRiverDam, operatingOf } from '../network/supply';
-import { upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
+import { runReturnFlow, upgradeLegacyModel, type ModelInput, type NetworkNode } from '../project';
 import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, onRiverDamForRun, runEfficiency } from './workings';
 
 // ── Expressions ──────────────────────────────────────────────────────────────
@@ -281,7 +281,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 		{ id: 'pct_runoff', label: '% of runoff to the dam', unit: null, value: n.pctRunoffToDam },
 		...(onRiver ? [{ id: 'divert', label: 'Diversion capacity (0: the dam is on the river)', unit: 'm³/day', value: 0 }] : Number.isFinite(n.divertCapacityM3Day) ? [{ id: 'divert', label: 'Diversion capacity', unit: 'm³/day', value: n.divertCapacityM3Day }] : []),
 		{ id: 'efficiency', label: 'Irrigation efficiency e', unit: null, value: e },
-		{ id: 'beta', label: 'Loss return fraction β (share of the losses (1 − e) × G reaching the river)', unit: null, value: n.lossReturnFraction }
+		{ id: 'return', label: 'Return flow r (share of the water supplied G reaching the river, at most 1 − e)', unit: null, value: runReturnFlow(n.returnFlowFraction, e) }
 	];
 
 	const input = (key: string, label: string, unit: string, vs: (number | null)[]): AuditColumn => ({ key, letter: LETTER[key] ?? null, label, unit, values: vs });
@@ -327,7 +327,7 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 		formula('dam_storage', 'Dam storage', 'm³', min(C('interim_storage'), P('capacity'))),
 		formula('spill', 'Spill', 'm³/day', max(sub(C('interim_storage'), P('capacity')), 0)),
 		formula('below_dam_not_diverted', 'Flow below the dam, not diverted', 'm³/day', sub(add(C('upstream_below_dam'), C('runoff_below_dam')), C('diverted_to_dam'))),
-		formula('return_flow', 'Return flow', 'm³/day', mul(mul(P('beta'), sub(1, P('efficiency'))), C('supplied'))),
+		formula('return_flow', 'Return flow', 'm³/day', mul(P('return'), C('supplied'))),
 		formula('outflow', 'Outflow', 'm³/day', chain(C('spill'), ['+', C('below_dam_not_diverted')], ['+', C('return_flow')], ['+', seepReturned])),
 		formula(
 			'balance_residual',

@@ -47,7 +47,7 @@ function farm(id: string, down: string, over: Partial<NetworkNode> = {}): Networ
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 0.75,
-		lossReturnFraction: 0.5,
+		returnFlowFraction: 0.125,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,

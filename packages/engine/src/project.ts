@@ -1139,11 +1139,15 @@ export interface NetworkNode {
 	 */
 	irrigationEfficiency: number;
 	/**
-	 * Share β (0–1) of the application losses, (1 − e) × supplied, that
-	 * returns to the river below the farm the same day (engine ≥ 0.16.0). The
-	 * rest leaves the catchment (evaporation, deep percolation).
+	 * Irrigation return flow r, 0 ≤ r ≤ 1 − e (engine ≥ 1.71.0): the share of
+	 * the irrigation water supplied that infiltrates the soil and returns to
+	 * the river below the farm the same day. It comes out of the application
+	 * losses (1 − e) × supplied, so it can't exceed them; the rest of the
+	 * losses leaves the catchment (evaporation, deep percolation). Engine
+	 * 0.16.0–1.70.0 stored β, a share of the losses (`lossReturnFraction`):
+	 * r = β × (1 − e) (migration 197, upgradeLegacyModel).
 	 */
-	lossReturnFraction: number;
+	returnFlowFraction: number;
 	/**
 	 * Dam surface area when full, m² (engine ≥ 0.16.0, audit N2). null = not
 	 * known: the run estimates it from the capacity (estimatedDamAreaM2, engine
@@ -1549,11 +1553,12 @@ export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
 /**
  * Irrigation settings of a new farm (audit N1): drip's efficiency (0.90,
  * NEW_FARM_IRRIGATION_SYSTEM; migration 099 sets the column default to match),
- * half of its losses returning. Only a newly created farm takes it: a saved
+ * and 10 % of the water supplied returning to the river (all of drip's
+ * losses; the client's hydrologist, 2026-10-03). Only a newly created farm takes it: a saved
  * farm keeps its stored efficiency, and the run never reads this, so it is
  * not a model change.
  */
-export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, lossReturnFraction: 0.5 } as const;
+export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, returnFlowFraction: 0.1 } as const;
 
 /**
  * A new network node with every default a newly created node takes: a gauge
@@ -1604,15 +1609,47 @@ export function newNetworkNode(id: string, sortOrder: number, downstreamNodeId: 
 }
 
 /**
- * The efficiency and loss return that replace an engine < 0.16.0 node's
- * `returnFlowPct` r (migration 006): r = 0 → e = 1, β = 0 (bit-identical
- * results); r > 0 → e = 1 − r (at least 0.01), β = 1, so the balance
- * (consumptive use = supplied − return flow) is as before per unit supplied,
- * and the crop is now fully supplied, at 1 / (1 − r) times the abstraction.
+ * The efficiency and return flow that replace an engine < 0.16.0 node's
+ * `returnFlowPct` r (migration 006): r = 0 → e = 1, no return (bit-identical
+ * results); r > 0 → e = 1 − r (at least 0.01) and all the losses return
+ * (1 − e of the water supplied), so the balance (consumptive use = supplied −
+ * return flow) is as before per unit supplied, and the crop is now fully
+ * supplied, at 1 / (1 − r) times the abstraction.
  */
-export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; lossReturnFraction: number } {
-	if (!(r > 0)) return { irrigationEfficiency: 1, lossReturnFraction: 0 };
-	return { irrigationEfficiency: Math.max(1 - Math.min(r, 1), 0.01), lossReturnFraction: 1 };
+export function irrigationFromReturnFlow(r: number): { irrigationEfficiency: number; returnFlowFraction: number } {
+	if (!(r > 0)) return { irrigationEfficiency: 1, returnFlowFraction: 0 };
+	const e = Math.max(1 - Math.min(r, 1), 0.01);
+	// r itself, all the losses (exactly, not 1 − (1 − r), which is a bit or two less); 0.99 when e was floored at 0.01.
+	return { irrigationEfficiency: e, returnFlowFraction: r > 1 - e + RETURN_FLOW_SLACK ? 1 - e : r };
+}
+
+/**
+ * The return flow a run uses (engine ≥ 1.71.0): the unit's r clamped to
+ * [0, 1 − e], e being the efficiency the run uses (its crops' blend), since
+ * only the losses can return; not a number runs as 0. run.ts irrigation warns
+ * when it clamps; the readers of a saved run (verify, the farm projection)
+ * take the same value.
+ */
+export function runReturnFlow(returnFlowFraction: number, efficiency: number): number {
+	if (!Number.isFinite(returnFlowFraction)) return 0;
+	const r = Math.max(returnFlowFraction, 0);
+	// Float noise is not over the cap: 1 − (1 − 0.1) is 0.09999999999999998, and 10 % at 90 % is all the losses.
+	return r > 1 - efficiency + RETURN_FLOW_SLACK ? 1 - efficiency : r;
+}
+
+/** How far a return flow may sit above 1 − e and still be taken as all the losses (float noise, not a value). */
+export const RETURN_FLOW_SLACK = 1e-9;
+
+/**
+ * An engine 0.16.0–1.70.0 node's return flow: β, the share of the losses
+ * returning, as a share of the water supplied, r = β × (1 − e) (migration
+ * 197). A β or e out of range is taken as the run took it (β clamped to
+ * [0, 1], e outside (0, 1] as 1).
+ */
+export function returnFlowFromLossReturn(lossReturnFraction: number, irrigationEfficiency: number): number {
+	const b = Number.isFinite(lossReturnFraction) ? Math.min(Math.max(lossReturnFraction, 0), 1) : 0;
+	const e = irrigationEfficiency > 0 && irrigationEfficiency <= 1 ? irrigationEfficiency : 1;
+	return b * (1 - e);
 }
 
 /**
@@ -1632,11 +1669,16 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 	const nodes = Array.isArray(model.nodes)
 		? model.nodes.map((raw) => {
 				if (!raw || typeof raw !== 'object') return raw;
-				const { returnFlowPct, ...n } = raw as Record<string, unknown>;
-				if (n.irrigationEfficiency === undefined || n.lossReturnFraction === undefined) {
-					const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
-					n.irrigationEfficiency ??= up.irrigationEfficiency;
-					n.lossReturnFraction ??= up.lossReturnFraction;
+				const { returnFlowPct, lossReturnFraction, ...n } = raw as Record<string, unknown>;
+				if (n.irrigationEfficiency === undefined || n.returnFlowFraction === undefined) {
+					// Engine 0.16.0–1.70.0: β, a share of the losses (migration 197); before that, returnFlowPct (migration 006).
+					if (n.irrigationEfficiency !== undefined && typeof lossReturnFraction === 'number') {
+						n.returnFlowFraction ??= returnFlowFromLossReturn(lossReturnFraction, n.irrigationEfficiency as number);
+					} else {
+						const up = irrigationFromReturnFlow(typeof returnFlowPct === 'number' ? returnFlowPct : 0);
+						n.irrigationEfficiency ??= up.irrigationEfficiency;
+						n.returnFlowFraction ??= up.returnFlowFraction;
+					}
 				}
 				// Dam evaporation and seepage (N2): unknown area, the default exponent, no seepage.
 				if (n.damAreaFullM2 === undefined) n.damAreaFullM2 = null;

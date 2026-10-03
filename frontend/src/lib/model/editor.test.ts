@@ -101,7 +101,7 @@ describe('ModelEditor', () => {
 		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
 		ed.addNode();
 		const farm = ed.addNode();
-		expect([farm.irrigationEfficiency, farm.lossReturnFraction]).toEqual([0.9, 0.5]);
+		expect([farm.irrigationEfficiency, farm.returnFlowFraction]).toEqual([0.9, 0.1]);
 		farm.irrigationEfficiency = 0.65;
 		ed.load(ed.snapshot());
 		expect(ed.model.nodes.find((n) => n.id === farm.id)!.irrigationEfficiency).toBe(0.65);

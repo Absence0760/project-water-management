@@ -342,7 +342,7 @@ describe('applyReport', () => {
 		const days = 3 * 365;
 		const rain = Array.from({ length: days }, (_, i) => (i % 11 === 0 ? 30 : i % 4 === 0 ? 2 : 0));
 		const flow = Array.from({ length: days }, (_, i) => 0.05 + 0.4 * Math.exp(-(i % 11) / 2));
-		const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0 };
+		const node = { sortOrder: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 0, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, returnFlowFraction: 0, damAreaFullM2: null, damAreaExponent: 0.7, damSeepagePerDay: 0 };
 		const input: ModelInput = {
 			settings: { ...defaultProjectSettings(), runoffModel: 'gr4j', apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] },
 			model: {

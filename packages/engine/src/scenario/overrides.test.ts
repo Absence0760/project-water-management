@@ -35,7 +35,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 5000,
 		irrigationEfficiency: 0.8,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: null,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -111,6 +111,27 @@ describe('applyScenario: each op', () => {
 		expect(r.problems).toEqual([]);
 		expect(nodeOf(r.input, 'A')!.damCapacityM3).toBe(240_000);
 		expect(r.applied).toHaveLength(1);
+	});
+
+	it('a stored engine 0.16.0–1.70.0 op setting β (a share of the losses) validates and sets the return flow r = β(1 − e)', () => {
+		const legacy = { op: 'node.set', nodeId: 'A', field: 'lossReturnFraction', value: 0.5 };
+		const v = validateScenarioOps([legacy]);
+		expect(v.errors).toEqual([]);
+		const r = one(v.ops[0]!);
+		expect(r.problems).toEqual([]);
+		// Farm A is at 80 %: half of its 20 % losses is 10 % of the water supplied.
+		expect(nodeOf(r.input, 'A')!.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect('lossReturnFraction' in nodeOf(r.input, 'A')!).toBe(false);
+		expect(validateScenarioOps([{ ...legacy, value: 1.5 }]).errors).toEqual(['ops[0].value: must be at most 1']);
+	});
+
+	it('a stored engine 0.16.0–1.70.0 node.add carrying β gets r = β(1 − e) from its own efficiency', () => {
+		const { returnFlowFraction: _r, ...rest } = node('N', { downstreamNodeId: 'A' });
+		const v = validateScenarioOps([{ op: 'node.add', node: { ...rest, irrigationEfficiency: 0.9, lossReturnFraction: 1 } }]);
+		expect(v.errors).toEqual([]);
+		const added = (v.ops[0] as Extract<ScenarioOp, { op: 'node.add' }>).node;
+		expect(added.returnFlowFraction).toBeCloseTo(0.1, 12);
+		expect('lossReturnFraction' in added).toBe(false);
 	});
 
 	it('a dam enlarged or shrunk by node.set keeps its own area–volume relation (engine 1.10.0, model.md §2.13)', () => {

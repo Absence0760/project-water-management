@@ -33,7 +33,7 @@ function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
 		irrigationEfficiency: 1,
-		lossReturnFraction: 0,
+		returnFlowFraction: 0,
 		damAreaFullM2: 0,
 		damAreaExponent: 0.7,
 		damSeepagePerDay: 0,
@@ -45,7 +45,7 @@ const natural = Array.from({ length: days }, (_, t) => 3000 + 2000 * Math.sin((2
 
 function base(): ModelInput {
 	const nodes = [
-		node('A', { downstreamNodeId: 'H', pctRunoffToDam: 1, damCapacityM3: 50_000, damInitialPct: 0.5, damAreaFullM2: 10_000, irrigationEfficiency: 0.5, lossReturnFraction: 0.5 }),
+		node('A', { downstreamNodeId: 'H', pctRunoffToDam: 1, damCapacityM3: 50_000, damInitialPct: 0.5, damAreaFullM2: 10_000, irrigationEfficiency: 0.5, returnFlowFraction: 0.25 }),
 		node('H', { kind: 'gauge', areaKm2: 0, downstreamNodeId: 'G', sortOrder: 1 }),
 		node('B', { downstreamNodeId: 'G', sortOrder: 2 }),
 		node('C', { downstreamNodeId: 'K', sortOrder: 3 }),
