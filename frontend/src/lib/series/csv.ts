@@ -74,13 +74,23 @@ const DMY = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/;
 
 const dateCell = (raw: string) => raw.trim().replace(/^"|"$/g, '').split(/[ T]/)[0] ?? '';
 
-/** Minutes after midnight of a cell's time part ("2020-01-05 08:30", "…T08:30:00"), 0–1440 (24:00 allowed); null without one; NaN for a bad one. */
+/**
+ * Minutes after midnight of a cell's time part ("2020-01-05 08:30", "…T08:30:00",
+ * "1/5/2020 7:30 PM"), 0–1440 (24:00 allowed); null without one; NaN for a bad
+ * one. A 12-hour time needs its AM or PM read (7:00 PM is 19:00, 12:00 AM
+ * midnight); anything else after the time (a zone, "Z") is refused, never
+ * dropped, since dropping it would book the reading to the wrong hour.
+ */
 export function parseTime(raw: string): number | null {
-	const t = raw.trim().replace(/^"|"$/g, '').split(/[ T]/)[1];
-	if (t === undefined || t === '') return null;
-	const m = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(t);
+	const t = raw.trim().replace(/^"|"$/g, '').split(/[ T]/).slice(1).join(' ').trim();
+	if (t === '') return null;
+	const m = /^(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:\s*([ap])\.?m\.?)?$/i.exec(t);
 	if (!m) return NaN;
-	const [h, min, sec] = [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
+	let [h, min, sec] = [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)];
+	if (m[4]) {
+		if (h < 1 || h > 12) return NaN;
+		h = (h % 12) + (m[4].toLowerCase() === 'p' ? 12 : 0);
+	}
 	if (min > 59 || sec > 59 || h > 24 || (h === 24 && (min > 0 || sec > 0))) return NaN;
 	return h * 60 + min + sec / 60;
 }
