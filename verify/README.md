@@ -108,7 +108,11 @@ the dense ones:
   carried as a deficit); modes and targets on a node without a dam.
 - **Allocations** (§2.12a): the cap per source (the budget prorated by the
   allocations' validity, the room MIN(left, the licence limit of the day's
-  months and rates), shared by every draw on the source), the `allocation_*`
+  months and rates), shared by every draw on the source; a water year with
+  none of the source's allocations in force uncapped, its room blank, engine
+  ≥ 1.70.0, probe `cap-before-licence`), a demand-sized off-take into a
+  capped unit sized to MIN(demand, its surface room) (§2.6a, engine ≥
+  1.70.0, probe `offtake-into-capped-unit`), the `allocation_*`
   columns, and the summary's `capReached` and `limitBound` rows (with the
   day's kind); full-allocation runs (k per unit and water year over both
   sources, with a forecast tail, the floor held, the summary's `scaled`

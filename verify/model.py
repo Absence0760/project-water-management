@@ -1171,9 +1171,15 @@ def run(doc: dict) -> dict:
             lst = ald[nid][s]
             if (nid, s, wy) not in al_budget:
                 b = 0.0
+                in_force = False
                 for a in lst:
-                    b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)
-                al_budget[(nid, s, wy)] = b
+                    k_ = overlap_days(wy, a["from"], a["to"])
+                    if k_ > 0:
+                        in_force = True
+                    b += a["volume"] * k_ / wy_length(wy)
+                # §2.12a (engine >= 1.70.0): a water year with none of the unit's allocations of
+                # the source in force isn't capped, as a unit with no allocation of it.
+                al_budget[(nid, s, wy)] = b if in_force else math.inf
             budget = al_budget[(nid, s, wy)]
             left = max(0.0, budget - al_used[(nid, s)])
             limit = licence_limit(lst, o)
@@ -1299,7 +1305,10 @@ def run(doc: dict) -> dict:
             sp_c = min(sp_raw, max(held - e_c, 0.0))
             rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
             for t, c in caps:
-                need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
+                # Under an allocation cap, the demand the cap still allows (§2.6a, §2.12a, engine >= 1.70.0):
+                # at most the destination's surface room at the start of the day; the top-up isn't capped.
+                sr_ = room.get((dst, "surface"))
+                need = min(dam_dem(dst, i), sr_[0] if sr_ else math.inf) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
         back_to: dict[str, list[tuple[str, float]]] = {}
@@ -1393,8 +1402,9 @@ def run(doc: dict) -> dict:
                 ZS[xid] = zs_out
                 for s_, r_ in (("surface", sroom), ("groundwater", groom)):
                     if r_:
-                        cc[f"allocation_room_{s_}"][i] = r_[0]
-                        cc[f"allocation_left_{s_}"][i] = r_[1]
+                        # Blank (NaN) in a water year the source isn't capped in (§2.12a, engine >= 1.70.0).
+                        cc[f"allocation_room_{s_}"][i] = r_[0] if math.isfinite(r_[3]) else math.nan
+                        cc[f"allocation_left_{s_}"][i] = r_[1] if math.isfinite(r_[3]) else math.nan
                 continue
 
             # A farm (§2.7). With river abstractions (§2.7j) its dam side is asked for its dam-sourced demand only.
@@ -1773,8 +1783,9 @@ def run(doc: dict) -> dict:
                 cc[key][i] = val
             for s_, r_ in (("surface", sroom), ("groundwater", groom)):
                 if r_:
-                    cc[f"allocation_room_{s_}"][i] = r_[0]
-                    cc[f"allocation_left_{s_}"][i] = r_[1]
+                    # Blank (NaN) in a water year the source isn't capped in (§2.12a, engine >= 1.70.0).
+                    cc[f"allocation_room_{s_}"][i] = r_[0] if math.isfinite(r_[3]) else math.nan
+                    cc[f"allocation_left_{s_}"][i] = r_[1] if math.isfinite(r_[3]) else math.nan
             if cap > 0 and G < dem and avail > 0 and avail <= dead + 1e-9 * cap:
                 diag["dead_storage_days"] += 1
             if R > 0 and cap > 0:
@@ -1983,7 +1994,7 @@ def run(doc: dict) -> dict:
         for (nid, s_, wy), budget in sorted(al_budget.items()):
             ent = summary.setdefault((nid, s_), {"capReached": [], "limitBound": []})
             used_ = use_y.get((nid, s_, wy), 0.0)
-            if used_ >= budget - 1e-9 * budget:
+            if math.isfinite(budget) and used_ >= budget - 1e-9 * budget:
                 ent["capReached"].append({"waterYear": wy, "budgetM3": budget, "usedM3": used_})
             row = lb_days.get((nid, s_, wy))
             if row:
