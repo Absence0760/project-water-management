@@ -3919,17 +3919,44 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `area_m2`, so the unit's area equals its parcel's. Splitting such a
       parcel checks the parts against the outline's own area, and "area from
       the map" names the cells in its revision reason.
-- [ ] **Rerun the gauge experiment after the persona's delineation fixes**
-      (issue #390 part 1, design/delineation-snapping.md § Gauges). At 446
-      published gauge positions the failures were persona-hydrologist
-      findings 1, 4 (in both directions: a gauge on a river moved onto a
-      tributary's nearer line, 9 cases, all within 1 km of a junction), 6
-      (94 of 129 gauges of 1 000–10 000 km² refused `too_large`), 7 (with no
-      reach, an off-river position gets a gully and no caveat at all), 10
-      and 11. Each fix gets its regression test in that round; then rerun
-      `backend/scripts/research/snap-gauges.ts` (the header says how) and
-      refresh the section's numbers. Trigger: the round fixing those
-      findings merging.
+- [x] **Rerun the gauge experiment after the persona's delineation fixes**
+      (issue #390 part 1, 2026-10-03, design/delineation-snapping.md §
+      Gauges, Rerun after the persona's fixes). The harness now follows the
+      request's windows into the worker's, answers a larger-channel refusal
+      both ways, and runs Start with the gauge as its outlet. Below 10 000
+      km² failures fell from 140 to 34 of 380; 1 000–10 000 km² went from
+      14 % to 88 % within ½–2×, main stems from 0 to 19 of 66. The run also
+      found the HTTP DEM reader failing on a kept-alive socket closed during
+      a long routing (fixed: the read is sent once more). New classes, below.
+- [ ] **The larger-channel question suggests the wrong river at gauges**
+      (new in the gauge rerun). When a click sits on a DEM channel of its
+      own and the nearby reach's matching channel is offered (place.ts
+      rules 3 and 4), "Use that channel" was wrong at all 13 such gauges
+      and "Keep my point" right at 11: the reach was mostly another stream
+      (its area outside ½–2× of the published one at 9 of 11). The silent
+      error of finding 4 became a question whose primary button is the
+      wrong answer. Durable fix: when the click is on a channel of its own
+      and the reach is beside it, not under it (rule 3), make "Keep my
+      point" the primary answer and say the mapped line may be another
+      stream, quoting both areas; keep "Use that channel" primary only for
+      rule 4's gully. Trigger: the next placement round, with a test on the
+      synthetic DEM's tributary beside the river.
+- [ ] **Start and Divide have no worker** (new in the gauge rerun). Start
+      places a gauge outlet as Delineate does (where both are right they
+      agree within 5 % at all 301 stations), but routes at most 3 072
+      cells, so it refuses `too_large` 48 of 129 gauges of 1 000–10 000 km²
+      that Delineate proposes through the worker. Durable fix: hand a Start
+      or Divide plan cut at its last window to a worker job, as Delineate
+      does (delineation_request with a plan kind, the same aim). Trigger:
+      a client catchment over about 1 000 km², or a Start refusal reported.
+- [ ] **No caveat on a gully snap with no reach within 1 km** (finding 7's
+      other half, still open after the gauge rerun). A click more than
+      1 km from any HydroRIVERS line has no reach, so nothing raises the
+      *unmatched* caveat: 4 gauges so placed snapped into gullies under
+      1 km², accepted silently. Durable fix: with no reach, warn when the
+      snapped cell drains under ~1 km² ("almost nothing drains here: is
+      this on the river?"), or offer the largest channel within 2.5 km.
+      Trigger: the next placement round.
 - [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
       review finding 9, fixed in `start-10` for the common cases). A dam
       polygon whose outline only clips a much larger channel now goes at
