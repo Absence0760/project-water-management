@@ -499,7 +499,9 @@ answer, with no database connection held.
   at zoom 12 (about 32 m a cell there; GSW is 0.00025°, about 25–28 m) with
   each cell the mean of the source cells in it, encodes them as Terrarium
   PNG tiles and uploads `tiles/water.pmtiles` to MinIO; GDAL comes from
-  PATH, else the pinned `ghcr.io/osgeo/gdal` image through docker. The
+  PATH, else the `ghcr.io/osgeo/gdal` image, pinned by digest (`pnpm
+  check:pins` holds it), through docker. Each tile is checked against its
+  SHA-256 ([§ Checksums](#checksums)). The
   archive's attribution is "Source: EC JRC/Google", carried into each
   traced feature's description. Then
   `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
@@ -1404,7 +1406,8 @@ reads it.
 - **Real data: HydroRIVERS v1.0** (WWF HydroSHEDS; § Sources: allowed).
   `pnpm dev:tiles:rivers` (`bin/tiles-dev.sh rivers`; operator-run, never in
   CI) downloads the Africa shapefile (about 110 MB, cached in
-  `~/.cache/water-management-tiles/`), cuts it to `TILES_BBOX` (South Africa
+  `~/.cache/water-management-tiles/`, its SHA-256 pinned, [§
+  Checksums](#checksums)), cuts it to `TILES_BBOX` (South Africa
   by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
   `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
   `LENGTH_KM`, `DIS_AV_CMS` at five decimals, and loads it as dataset
@@ -1644,7 +1647,8 @@ only reads them.
   BY 4.0). `pnpm import:evaporation:fetch [first] [last]`
   (`bin/evaporation-fetch.sh`, default 1991 2020, a 30-year normal) downloads
   each year's `<year>_daily_pet.nc` (about 2.4 GB) from the University of
-  Bristol's data.bris, reduces it to that year's monthly totals inside the
+  Bristol's data.bris, checks its SHA-256 (recorded on the year's first
+  fetch, [§ Checksums](#checksums)), reduces it to that year's monthly totals inside the
   box (`import:evaporation --reduce`, a few MB, kept in
   `~/.cache/water-management-tiles/evaporation/` so a re-run skips it),
   deletes the year, then averages the years and loads them as
@@ -1706,3 +1710,28 @@ fixtures only.
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+
+### Checksums
+
+Whether each downloaded source publishes a checksum, and what the fetch
+scripts check (checked 2026-10-03). The scripts are HTTPS only (redirects
+too) either way.
+
+| Source | Publisher's checksum | What the script checks |
+| --- | --- | --- |
+| HydroRIVERS v1.0 zip (`pnpm dev:tiles:rivers`) | None: the product page lists only extent, size and format, and the file server (Backblaze B2) carries no content hash (`x-bz-content-sha1: none`). The URL is versioned by file name (`HydroRIVERS_v10_af_shp.zip`, a static v1 product) | SHA-256 pinned in `bin/source-checksums.sha256` (Africa zip, recorded 2026-10-03, matching a fetch the day before) |
+| JRC GSW v1.5 occurrence tiles (`pnpm dev:tiles:water`) | None: the download page lists none, and the object store's ETags are multipart upload hashes (`…-1`, `…-2`), not a hash of the file. Versioned file names (`…_v1_5_2024.tif`) | SHA-256 pinned for the six tiles over the default `TILES_BBOX`; any other tile is recorded on its first fetch |
+| dPET yearly files (`pnpm import:evaporation:fetch`) | None: no manifest in the dataset folder, and its README and scripts name none; the site's whole-dataset zip (2.7 TB, streamed) carries only CRC-32s, which are not a tamper check. The DOI-versioned dataset doesn't change | SHA-256 recorded on each year's first fetch (2.4 GB a year, so none is pinned in advance), checked on every later fetch |
+| Protomaps daily basemap build (`pnpm dev:tiles:fetch`) | Yes, an MD5 of each whole build in `build-metadata.protomaps.dev/builds.json` | None possible: `pmtiles extract` reads only the bbox's byte ranges of a ~140 GB archive, and a whole-file MD5 can't check a partial read. The extract pins one build by date (`TILES_BUILD`), and go-pmtiles holds every range read to the archive's ETag, so a build changed mid-extract fails rather than mixing |
+| Mapterhorn planet build (`pnpm dev:tiles:terrain`) | Yes, an MD5 of each archive in `download.mapterhorn.com/download_urls.json` (with its version, 0.0.13) | None possible, for the same reason (a ~355 GB archive read by range); ETag-consistent reads as above |
+| Label fonts (basemaps-assets) | n/a | pinned by commit SHA (`FONTS_REF`); the GitHub archive itself isn't hashed |
+
+How the check works (`scripts/guards/source_checksums.mjs`, from
+`bin/tiles-dev.sh` and `bin/evaporation-fetch.sh`): after a whole-file
+download, and on each use of a cached one, the file's SHA-256 is compared
+with its line in `bin/source-checksums.sha256` (keyed by file name). A
+mismatch stops the script, moves the file to `<file>.mismatch` so a re-run
+doesn't reuse it, and prints both hashes. A file not yet listed is trusted
+on first use: its line is appended and the operator commits it, holding
+every later fetch, on any machine, to it. Replace a line only when the
+publisher has confirmed a re-issue.

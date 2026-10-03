@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { imageProblems, pinProblems, readPins } from './check_playwright_pins.mjs';
+import { imageProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
 
 const DIGEST = '@sha256:' + 'a'.repeat(64);
 
@@ -112,4 +112,26 @@ test('apt-get update or install from the live archive is refused', () => {
 test('the renderer Dockerfile in the repo passes', () => {
 	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 	assert.deepEqual(imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8')), []);
+});
+
+const GDAL = 'ghcr.io/osgeo/gdal:ubuntu-small-3.11.3';
+
+test('an operator script image default pinned by digest passes (positive control)', () => {
+	assert.deepEqual(scriptImageProblems(`GDAL_IMAGE="\${GDAL_IMAGE:-${GDAL}${DIGEST}}"\n`, 'bin/x.sh'), []);
+	assert.deepEqual(scriptImageProblems('echo "no image here"\n', 'bin/x.sh'), []);
+});
+
+test('an operator script image default by tag alone, or with a short digest, is refused', () => {
+	for (const image of [GDAL, `${GDAL}@sha256:abc`, `ghcr.io/osgeo/gdal@sha256:${'a'.repeat(63)}`]) {
+		const problems = scriptImageProblems(`\tGDAL_IMAGE="\${GDAL_IMAGE:-${image}}"\n`, 'bin/x.sh');
+		assert.equal(problems.length, 1, image);
+		assert.match(problems[0], /^bin\/x\.sh: GDAL_IMAGE default ".*" is not pinned by digest/);
+	}
+});
+
+test("the repo's operator scripts pass, and tiles-dev.sh's GDAL image is among them", () => {
+	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+	const tiles = readFileSync(join(root, 'bin/tiles-dev.sh'), 'utf8');
+	assert.match(tiles, /^GDAL_IMAGE="\$\{GDAL_IMAGE:-ghcr\.io\/osgeo\/gdal:[^@}]+@sha256:[0-9a-f]{64}\}"/m);
+	assert.deepEqual(scriptImageProblems(tiles, 'bin/tiles-dev.sh'), []);
 });
