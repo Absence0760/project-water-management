@@ -410,7 +410,7 @@
 			</div>
 			<div class="table-wrap">
 				<table class="data compact">
-					<caption class="small">Catchment gross demand by month, m³/day</caption>
+					<caption class="small">Catchment irrigation demand (÷ efficiency) by month, m³/day</caption>
 					<thead>
 						<tr><th scope="col"><span class="visually-hidden">Factors</span></th>{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}</tr>
 					</thead>

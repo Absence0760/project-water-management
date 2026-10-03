@@ -165,9 +165,9 @@ describe('demandDifference', () => {
 		expect(d.rows[0]!.abstraction[1]).toBeCloseTo(now / 2 / 0.9, 9);
 		expect(d.rows[1]).toEqual({ nodeId: 'f2', name: 'F2', gross: [0, 0], abstraction: [0, 0] });
 		expect(d.total.gross[1]).toBeCloseTo(now / 2, 9);
-		// October: 10 ha × 25 mm ÷ 31 days.
-		expect(d.monthly[0][0]).toBeCloseTo(5000 / 31, 9);
-		expect(d.monthly[1][0]).toBeCloseTo(2500 / 31, 9);
+		// October: 10 ha × 25 mm ÷ 31 days, ÷ the efficiency (0.8 now, the crop's 0.9 with the changes).
+		expect(d.monthly[0][0]).toBeCloseTo(5000 / 31 / 0.8, 9);
+		expect(d.monthly[1][0]).toBeCloseTo(2500 / 31 / 0.9, 9);
 		expect(pctChange(d.total.gross)).toBe('−50 %');
 	});
 

@@ -13,7 +13,7 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { fmtNum } from '$lib/format/number';
+	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
@@ -107,8 +107,9 @@
 			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings#set-demand">Settings &amp; calibration, Demand</a>).</p>
 		{:else if demand && planting.totalM2 > 0}
 			<p class="small" data-testid="farm-demand">
-				Gross irrigation demand: <strong>{fmtNum(demand.meanM3Day)} m³/day</strong> on average,
-				{fmtNum(demand.annualMm3, 3)} million m³ a year, highest in {WATER_YEAR_MONTHS[peak]} ({fmtNum(demand.monthlyM3Day[peak])} m³/day).
+				Irrigation demand before rain: <strong>{fmtNum(demand.meanM3Day)} m³/day</strong> on average,
+				{fmtNum(demand.annualMm3, 3)} million m³ a year, highest in {WATER_YEAR_MONTHS[peak]} ({fmtNum(demand.monthlyM3Day[peak])} m³/day),
+				at {fmtPct(demand.efficiency, 0)} irrigation efficiency.
 			</p>
 		{:else}
 			<p class="muted small">Nothing planted, so this hydrological unit draws no irrigation water.</p>

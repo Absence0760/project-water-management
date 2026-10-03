@@ -379,7 +379,7 @@
 <section class="panel" aria-labelledby="dem-h">
 	<div class="panel-head">
 		<h2 id="dem-h">Irrigation demand preview <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
-		<span class="muted small">Gross demand, m³/day per month</span>
+		<span class="muted small">Before rain, ÷ irrigation efficiency, m³/day per month</span>
 	</div>
 	{#if !apanSet}
 		<div class="alert alert-info">

@@ -4,7 +4,7 @@
 // crop, and the demand difference before anything is applied. Pure: the
 // dialog applies the accepted changes to the ModelEditor, and the normal save
 // (with its reason) saves them.
-import { farmIrrigationEfficiency, type CropDef, type ProjectModel } from '@water-management/engine';
+import { type CropDef, type ProjectModel } from '@water-management/engine';
 import { farmDemands } from './demand';
 
 /** Lower case, no accents or punctuation, a plural "s" dropped ("Pecans" ~ "pecan"; not "-ss", "-us": "Grass", "Citrus"). */
@@ -169,14 +169,14 @@ export interface DemandRow {
 export interface DemandDifference {
 	rows: DemandRow[];
 	total: { gross: [number, number]; abstraction: [number, number] };
-	/** Catchment gross requirement per water-year month, m³/day: now and with the changes. */
+	/** Catchment irrigation demand (the requirement ÷ each unit's efficiency) per water-year month, m³/day: now and with the changes. */
 	monthly: [number[], number[]];
 }
 
 /**
  * The gross irrigation demand now and with `nextCrops`, per farm and for the
- * catchment, with the engine's own maths (grossFarmDemandM3PerDay through
- * ./demand.ts farmDemands, and farmIrrigationEfficiency), so it is what a
+ * catchment, with the engine's own maths (grossFarmDemandM3PerDay and
+ * farmIrrigationEfficiency through ./demand.ts farmDemands), so it is what a
  * run would use before effective rain.
  */
 export function demandDifference(
@@ -187,24 +187,15 @@ export function demandDifference(
 	farmIds: string[]
 ): DemandDifference {
 	const next: ProjectModel = { ...model, crops: nextCrops };
+	// farmDemands is already ÷ each unit's efficiency (as a run abstracts it); × it gives back the requirement.
 	const both = [model, next].map((m) => farmDemands(m, apanMm, februaryDays, farmIds));
-	const eff = (m: ProjectModel, nodeId: string) => {
-		const node = m.nodes.find((n) => n.id === nodeId);
-		// A non-farm with crop areas abstracts its requirement (e = 1), as the run's irrigation() has it; a value outside (0, 1] runs as 1.
-		if (node?.kind !== 'farm') return 1;
-		const e = node.irrigationEfficiency;
-		const own = e > 0 && e <= 1 ? e : 1;
-		const areas = new Map<string, number>();
-		for (const a of m.cropAreas) if (a.nodeId === nodeId) areas.set(a.cropId, (areas.get(a.cropId) ?? 0) + a.areaM2);
-		return farmIrrigationEfficiency(own, m.crops, areas, apanMm);
-	};
 	const rows = farmIds.map((id, i): DemandRow => {
-		const g: [number, number] = [both[0]![i]!.meanM3Day, both[1]![i]!.meanM3Day];
+		const [now, then] = [both[0]![i]!, both[1]![i]!];
 		return {
 			nodeId: id,
 			name: model.nodes.find((n) => n.id === id)?.name || '(unnamed)',
-			gross: g,
-			abstraction: [g[0] / eff(model, id), g[1] / eff(next, id)]
+			gross: [now.meanM3Day * now.efficiency, then.meanM3Day * then.efficiency],
+			abstraction: [now.meanM3Day, then.meanM3Day]
 		};
 	});
 	const sum = (k: 'gross' | 'abstraction', j: 0 | 1) => rows.reduce((s, r) => s + r[k][j], 0);

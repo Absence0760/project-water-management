@@ -327,7 +327,7 @@
 				<section class="panel dem-card" aria-labelledby="crop-dem-h">
 					<div class="panel-head">
 						<h2 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
-						<span class="muted small">Gross demand, whole catchment, m³/day</span>
+						<span class="muted small">Before rain, ÷ irrigation efficiency, whole catchment, m³/day</span>
 					</div>
 					{#if !apanSet}
 						<div class="alert alert-info">

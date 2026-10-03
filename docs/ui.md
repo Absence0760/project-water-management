@@ -3418,7 +3418,8 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   members ("Other: Crop 10, Crop 11 and …", two lines at most) with their
   total area, and each member's row follows it with a hatched key and "in
   Other" instead of the group's grey.
-- **Irrigation demand by month:** the catchment's gross demand per
+- **Irrigation demand by month:** the catchment's irrigation demand (gross
+  demand ÷ each unit's irrigation efficiency, what a run abstracts) per
   water-year month, stacked by crop in the list's order, largest at the
   bottom, "Other" on top (`MonthlyBars`, drawn at the card's
   measured size so its text isn't scaled; its legend's height is measured
@@ -3492,11 +3493,16 @@ that no named crop uses. Area rather than annual demand because it is known
 before A-pan is set (demand is then zero for every crop), it is what the
 list and the unit bars show, and editing a month's evaporation doesn't
 repaint the crops. The chart's parts come from the same per-farm
-computation as the table: `farmDemands` splits each farm's engine demand
-(`grossFarmDemandM3PerDay`) by crop, `catchmentDemand` gives the totals and
+computation as the table: `farmDemands` divides each farm's engine gross demand
+(`grossFarmDemandM3PerDay`) by its irrigation efficiency (the engine's
+`farmIrrigationEfficiency`, the farm's own blended with its crops' systems,
+as a run uses it; 1 for a non-farm) and splits it by crop, `catchmentDemand` gives the totals and
 `cropStacks` the parts (the named crops, then "Other (N crops)"), which sum
-to them. It is gross demand, before the daily effective-rain reduction (and
-the soil-water store that carries rain over, engine ≥ 0.14.0). The Irrigation
+to them. It is the abstraction demand before the daily effective-rain
+reduction (and the soil-water store that carries rain over, engine ≥ 0.14.0):
+an efficiency below 100 % raises it above the crops' requirement, as a run's
+demand series does (audit N1). The Load crop factors dialog's Demand
+difference shows both, the requirement (Gross) and ÷ efficiency. The Irrigation
 demand grid's chart (`CropGrids`) uses the same ranking and colours.
 
 ### Crop sheet
@@ -3646,8 +3652,9 @@ saves the catchment's model, and override mode there edits the scenario's
   (`plantedFirst`, taken as the drawer opens, so a row doesn't jump while its
   area is typed; with 30 crops the planted two are at the top). A cleared area
   is 0, never a blank over the old value. Then the
-  total, and its gross demand from the saved A-pan (mean m³/day, Mm³ a year,
-  the peak month; `farmDemands`). No crops yet, A-pan unset, nothing planted
+  total, and its irrigation demand before rain from the saved A-pan, ÷ its
+  irrigation efficiency (mean m³/day, Mm³ a year, the peak month, the
+  efficiency; `farmDemands`). No crops yet, A-pan unset, nothing planted
   and a farm that is no longer in the model each say so.
 - **From land cover** (issue #326 B-landcover,
   `crops/CroplandProposalsBox.svelte`, rows in `crops/croplandProposals.ts`;
