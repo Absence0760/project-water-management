@@ -313,6 +313,42 @@ def cap_before_licence() -> dict:
             "series": _dry(731, "2019-10-01")}
 
 
+def cap_licence_from_september() -> dict:
+    """An allocation cap (§2.12a) whose only licence starts on 1 September 2020,
+    the last month of the run's first water year, and a second that ends on
+    31 March 2022: the cap holds only on the days a licence is in force, and
+    the use on the other days of the year doesn't count against its prorated
+    budget (engine >= 1.70.0). Before, October-August's use spent September's
+    30/365 share, so September took nothing. The dam is large and full."""
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=1, damCapacityM3=1e7, damInitialPct=1)]
+    crops, areas = _crop("f", 100000)
+    alloc = [
+        {"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 30000, "storageM3": None,
+         "validFrom": "2020-09-01", "validTo": "2022-03-31", "months": [], "maxRateM3s": None},
+    ]
+    s = _settings(allocationMode="cap", effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "allocations": alloc},
+            "series": _dry(1096, "2019-10-01")}
+
+
+def full_allocation_gap_year() -> dict:
+    """A full allocation (§2.12a) with one licence to 30 September 2020 and one
+    from 1 October 2021: the 2020/21 water year between them has none in force,
+    so the farm keeps its modelled demand there (factor 1, engine >= 1.70.0;
+    before, 0, and the summary listed it scaled to 0 m³)."""
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5, damCapacityM3=1e7, damInitialPct=1)]
+    crops, areas = _crop("f", 200000)
+    alloc = [
+        {"id": "a", "nodeId": "f", "waterSource": "surface", "volumeM3PerYear": 20000, "storageM3": None,
+         "validFrom": None, "validTo": "2020-09-30", "months": [], "maxRateM3s": None},
+        {"id": "b", "nodeId": "f", "waterSource": "groundwater", "volumeM3PerYear": 15000, "storageM3": None,
+         "validFrom": "2021-10-01", "validTo": None, "months": [], "maxRateM3s": None},
+    ]
+    s = _settings(allocationMode="fullAllocation", apanMm=[150] * 12, effectiveRainFraction=0)
+    return {"settings": s, "model": {"nodes": nodes, "crops": crops, "cropAreas": areas, "transfers": [], "allocations": alloc},
+            "series": _dry(1096, "2019-10-01")}
+
+
 def offtake_into_capped_unit() -> dict:
     """A demand-sized river off-take with 20 % losses into a farm under an
     allocation cap of 6 000 m³ a year at most 150 m³/day (§2.6a, §2.12a): the
@@ -352,4 +388,6 @@ PROBES = {
     "offtake-keep-bands": offtake_keep_bands(),
     "cap-before-licence": cap_before_licence(),
     "offtake-into-capped-unit": offtake_into_capped_unit(),
+    "cap-licence-from-september": cap_licence_from_september(),
+    "full-allocation-gap-year": full_allocation_gap_year(),
 }

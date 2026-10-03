@@ -125,13 +125,28 @@ MUTANTS = [
     # Allocations and the licence cap (§2.12a).
     (
         "the cap's volume isn't prorated by the allocation's dates",
-        'b += a["volume"] * k_ / wy_length(wy)',
+        'b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)',
         'b += a["volume"]',
     ),
     (
-        "a water year with no licence in force is capped at 0 (before engine 1.70.0)",
-        "al_budget[(nid, s, wy)] = b if in_force else math.inf",
-        "al_budget[(nid, s, wy)] = b",
+        "a day with no licence in force is capped at 0 when the year has none (engine 1.69.0)",
+        "            if not any(a[\"from\"] <= o <= a[\"to\"] for a in lst):\n                room[(nid, s)] = (math.inf, math.inf, math.inf, math.inf)\n                continue\n",
+        "",
+    ),
+    (
+        "the cap holds from 1 October of a licence's first year, counting the use before its start (the first 1.70.0 draft)",
+        'if not any(a["from"] <= o <= a["to"] for a in lst):',
+        'if not any(overlap_days(wy, a["from"], a["to"]) > 0 for a in lst):',
+    ),
+    (
+        "use on a day with no licence in force counts against the year's volume",
+        "        if not math.isfinite(room[(nid, src)][3]):\n            return\n",
+        "",
+    ),
+    (
+        "a full allocation scales a year with no licence in force to 0 (before engine 1.70.0)",
+        "fac_y[y] = 1.0",
+        "fac_y[y] = 0.0",
     ),
     (
         "an off-take into a capped unit sizes to its whole demand (before engine 1.70.0)",

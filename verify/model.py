@@ -875,7 +875,14 @@ def run(doc: dict) -> dict:
             dem_y: dict[int, float] = {}
             scaled_rows: list = []
             fa_scaled[nid] = scaled_rows
+            unlicensed: set[int] = set()
             for y, idx in yrs.items():
+                # §2.12a (engine >= 1.70.0): no allocation in force on the days a year is scaled
+                # on: the unit keeps its modelled demand there (factor 1), not listed as scaled.
+                if not any(a["from"] <= days[i] <= a["to"] for a in both for i in idx):
+                    unlicensed.add(y)
+                    fac_y[y] = 1.0
+                    continue
                 vol = 0.0
                 for a in both:
                     inside = sum(1 for i in idx if a["from"] <= days[i] <= a["to"])
@@ -892,6 +899,8 @@ def run(doc: dict) -> dict:
             for i in range(n):
                 ally.setdefault(water_year(days[i]), []).append(i)
             for y, idx in sorted(ally.items()):
+                if y in unlicensed:
+                    continue
                 tot = 0.0
                 for i in idx:
                     tot += D_base[nid][i]
@@ -1125,6 +1134,7 @@ def run(doc: dict) -> dict:
     bh_used = {x["id"]: [0.0] * len(units.get(x["id"], [])) for x in nodes}
     al_used = {(nid, s): 0.0 for nid, bysrc in ald.items() for s in bysrc}
     al_budget: dict[tuple, float] = {}
+    al_capped_y: set[tuple] = set()
     lb_days: dict[tuple, dict] = {}
     sim_out = [0.0] * n
     cat_short = [0.0] * n
@@ -1132,6 +1142,10 @@ def run(doc: dict) -> dict:
     use_y: dict[tuple, float] = {}
 
     def spend(nid, src, v):
+        # §2.12a (engine >= 1.70.0): use on a day none of the source's allocations is in
+        # force isn't capped and doesn't count against the year's volume.
+        if not math.isfinite(room[(nid, src)][3]):
+            return
         al_used[(nid, src)] += v
         k_ = (nid, src, water_year(days[i]))
         use_y[k_] = use_y.get(k_, 0.0) + v
@@ -1171,15 +1185,15 @@ def run(doc: dict) -> dict:
             lst = ald[nid][s]
             if (nid, s, wy) not in al_budget:
                 b = 0.0
-                in_force = False
                 for a in lst:
-                    k_ = overlap_days(wy, a["from"], a["to"])
-                    if k_ > 0:
-                        in_force = True
-                    b += a["volume"] * k_ / wy_length(wy)
-                # §2.12a (engine >= 1.70.0): a water year with none of the unit's allocations of
-                # the source in force isn't capped, as a unit with no allocation of it.
-                al_budget[(nid, s, wy)] = b if in_force else math.inf
+                    b += a["volume"] * overlap_days(wy, a["from"], a["to"]) / wy_length(wy)
+                al_budget[(nid, s, wy)] = b
+            # §2.12a (engine >= 1.70.0): a day none of the unit's allocations of the source is
+            # in force on isn't capped, as a unit with no allocation of it: no room, no budget.
+            if not any(a["from"] <= o <= a["to"] for a in lst):
+                room[(nid, s)] = (math.inf, math.inf, math.inf, math.inf)
+                continue
+            al_capped_y.add((nid, s, wy))
             budget = al_budget[(nid, s, wy)]
             left = max(0.0, budget - al_used[(nid, s)])
             limit = licence_limit(lst, o)
@@ -1994,7 +2008,7 @@ def run(doc: dict) -> dict:
         for (nid, s_, wy), budget in sorted(al_budget.items()):
             ent = summary.setdefault((nid, s_), {"capReached": [], "limitBound": []})
             used_ = use_y.get((nid, s_, wy), 0.0)
-            if math.isfinite(budget) and used_ >= budget - 1e-9 * budget:
+            if (nid, s_, wy) in al_capped_y and used_ >= budget - 1e-9 * budget:
                 ent["capReached"].append({"waterYear": wy, "budgetM3": budget, "usedM3": used_})
             row = lb_days.get((nid, s_, wy))
             if row:
