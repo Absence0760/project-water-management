@@ -59,7 +59,27 @@ export function proposalFacts(p: DelineationProposal): [string, string][] {
 		['Area', `${fmtNum(p.areaM2 / 1e6, 2)} km²`],
 		['The point is', FROM_LABEL[p.from].toLowerCase()],
 		['Outlet', snap === 0 ? 'where the point was' : `${snap} m from the point, on the channel`],
-		['Cells', `${fmtNum(p.cells)} cells, each about ${Math.round(p.cellSizeM)} m across`]
+		['Cells', `${fmtNum(p.cells)} cells, each about ${Math.round(p.cellSizeM)} m across`],
+		...panFacts(p)
+	];
+}
+
+/**
+ * What drains into pans (docs/design/delineation.md § Pans): the non-contributing area and the effective area left, or that
+ * none was found. Nothing for a proposal made before delineate-9, which never looked.
+ */
+export function panFacts(p: Pick<DelineationProposal, 'areaM2' | 'pans'>): [string, string][] {
+	const pans = p.pans;
+	if (!pans) return [];
+	if (!pans.count) return [['Into pans', 'none found (no closed depression deep and large enough)']];
+	const nc = pans.nonContributingM2;
+	const big = pans.largest[0];
+	return [
+		[
+			'Into pans',
+			`${fmtNum(nc / 1e6, 2)} km² (${Math.round((100 * nc) / p.areaM2)} %) drains into ${pans.count === 1 ? 'a pan' : `${fmtNum(pans.count)} pans`}${big ? `; the largest holds ${fmtNum(big.storageMm)} mm over its ${fmtNum(big.drainsM2 / 1e6, 2)} km²` : ''}. Non-contributing in WR2012’s sense; still inside the area and outline`
+		],
+		['Effective area', `${fmtNum((p.areaM2 - nc) / 1e6, 2)} km², if the pans contribute nothing`]
 	];
 }
 
@@ -67,13 +87,14 @@ export function proposalFacts(p: DelineationProposal): [string, string][] {
 export function provenanceFacts(p: DelineationProposal): [string, string][] {
 	return [
 		['Dataset', `${p.dataset} (${p.datasetFingerprint})`],
-		['Method', `${p.method} [${p.methodVersion}]`]
+		['Method', `${p.method} [${p.methodVersion}]`],
+		...(p.pans ? ([['Pans', p.pans.method]] as [string, string][]) : [])
 	];
 }
 
 /** What every proposal says about its accuracy (docs/design/delineation.md § Accuracy). */
 export const CAVEATS = [
 	'A proposal from a 30 m global elevation model, not a survey. In flat land the divide can be hundreds of metres out, and a catchment can come out joined to, or cut from, its neighbour.',
-	'Flats and dams drain towards their outlet by construction. Canals, pipelines, culverts and transfers between basins are invisible to it.',
+	'Flats, dams and pans drain towards their outlet by construction: the area draining into pans is reported beside it, not taken out. A dam drawn down below its spillway, or a pond behind an embankment, can count as a pan if it holds a lot over its catchment. Canals, pipelines, culverts and transfers between basins are invisible to it.',
 	'Check it against the map (the Relief layer, the rivers, the quaternary outlines) before accepting; you can edit the shape afterwards.'
 ] as const;
