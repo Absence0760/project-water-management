@@ -69,6 +69,18 @@ export function damCapacityFactor(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' 
 	return Math.max(0, 1 - (rate * (day - toEpochDay(n.damSurveyDate))) / SEDIMENT_YEAR_DAYS);
 }
 
+/**
+ * Whether a farm's dam comes into service after epoch day `runStart` (engine
+ * ≥ 1.70.0, issue #90 Q30): a new dam that starts the day empty and fills
+ * from then, which the drought restriction rule leaves out of its reviews
+ * until it first fills (./restriction.ts, docs/model.md §2.7i). A dam in
+ * service on or before the run's first day is an existing dam; one whose
+ * fields don't read runs at its entered capacity throughout, so is too.
+ */
+export function entersServiceAfter(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>, runStart: number): boolean {
+	return n.kind === 'farm' && n.damCapacityM3 > 0 && !!n.damInServiceFrom && !developmentProblem(n) && toEpochDay(n.damInServiceFrom) > runStart;
+}
+
 /** A farm dam's capacity (m³) on epoch day `day`: the entered capacity × damCapacityFactor. */
 export function damCapacityOn(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>, day: number): number {
 	const k = damCapacityFactor(n, day);

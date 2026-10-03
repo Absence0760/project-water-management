@@ -2449,13 +2449,28 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	const shared = basis === 'own' ? [] : nodes.filter((n) => isDam(n) && (!listed || listed.has(n.id))).sort((a, b) => cmpStr(a.id, b.id)).map(damOf);
 	const missing = shared.find((x) => !x.Q || x.before0 === undefined);
 	if (missing) return `${missing.n.id}: dam_storage column or starting storage missing`;
+	const qStart = ({ Q, SET, before0 }: ReturnType<typeof damOf>, t: number) => (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
+	const capOn = ({ n, ks }: ReturnType<typeof damOf>, t: number) => n.damCapacityM3 * (ks ? ks[t]! : 1);
+	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): a dam that comes into service after the record's first
+	// day is left out of the reviews until it starts a day at the mildest level's share of its capacity (full
+	// without a level). A fresh run works out which from the input; a resumed one starts from its summary's state.
+	const fillShare = thresholds.length ? thresholds[0]! : 1;
+	const filling = new Set(
+		resumed
+			? (resumed.fillingBefore ?? [])
+			: nodes.filter((n) => isDam(n) && !!n.damInServiceFrom && isIsoDate(n.damInServiceFrom) && toEpochDay(n.damInServiceFrom) > day0 && capacityScaleOf(n, day0, out.days, []) !== undefined).map((n) => n.id)
+	);
+	const joinedOn = new Map<string, string | null>([...filling].map((id) => [id, null]));
+	const fillDams = nodes.filter((n) => filling.has(n.id)).map(damOf);
+	const unread = fillDams.find((x) => !x.Q || x.before0 === undefined);
+	if (unread) return `${unread.n.id}: dam_storage column or starting storage missing`;
 	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number => {
 		let q = 0;
 		let c = 0;
-		for (const { n, Q, SET, ks, before0 } of dams) {
-			const cap = n.damCapacityM3 * (ks ? ks[t]! : 1);
-			if (!(cap > 0)) continue;
-			q += (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
+		for (const d of dams) {
+			const cap = capOn(d, t);
+			if (!(cap > 0) || filling.has(d.n.id)) continue;
+			q += qStart(d, t);
 			c += cap;
 		}
 		return c > 0 ? checkedLevel(q / c, thresholds) : 0;
@@ -2477,6 +2492,14 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	let ewrReviews = 0;
 	let reviewCount = 0;
 	for (let t = 0; t < out.days; t++) {
+		for (const d of fillDams) {
+			if (!filling.has(d.n.id)) continue;
+			const cap = capOn(d, t);
+			if (cap > 0 && !(qStart(d, t) / cap < fillShare)) {
+				filling.delete(d.n.id);
+				joinedOn.set(d.n.id, fromEpochDay(day0 + t));
+			}
+		}
 		const e = eventOf(day0 + t);
 		if (e === 1 || (t === 0 && e === 0 && startDecides)) {
 			reviewCount++;
@@ -2491,6 +2514,9 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 		} else if (e === 2) for (const u of units) held.set(u.id, 0);
 		for (const u of units) unitLevels.get(u.id)![t] = held.get(u.id)!;
 	}
+	// The summary's dams that were filling, and the day each joined the reviews.
+	const wantFill = [...joinedOn].sort((a, b) => cmpStr(a[0], b[0])).map(([nodeId, on]) => ({ nodeId, inServiceFrom: nodes.find((n) => n.id === nodeId)!.damInServiceFrom!, joinedOn: on }));
+	if (JSON.stringify(sum.filling ?? []) !== JSON.stringify(wantFill)) return `drought restriction: the dams filling ${JSON.stringify(sum.filling ?? [])} ≠ ${JSON.stringify(wantFill)} from the storage and capacity columns`;
 	// The level columns.
 	for (let t = 0; t < out.days; t++) {
 		let want = 0;

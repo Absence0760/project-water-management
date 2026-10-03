@@ -3050,7 +3050,16 @@ export interface DroughtRestrictionSummary {
 	 * day, which is decided as a fresh run's is), whether the EWR trigger's
 	 * site failed the day before, and each farm dam's storage the day before.
 	 */
-	start?: { levelsBefore: Record<string, number> | null; ewrFailedBefore: boolean; damStorageBeforeM3: Record<string, number> };
+	start?: { levelsBefore: Record<string, number> | null; ewrFailedBefore: boolean; damStorageBeforeM3: Record<string, number>; fillingBefore?: string[] };
+	/**
+	 * First filling (engine ≥ 1.70.0, docs/model.md §2.7i): each dam the
+	 * reviews left out at the run's start because it came into service after
+	 * the first day of the record and hadn't yet filled (in node-id order), its
+	 * in-service date, and the first day it counted (it started the day at the
+	 * mildest level's share of its capacity, or full without a level); null
+	 * when it never did. Absent when no dam was filling.
+	 */
+	filling?: { nodeId: string; inServiceFrom: string; joinedOn: string | null }[];
 	/**
 	 * Per unit (farm, in id order): its mean abstraction demand, the mean after
 	 * the restriction (what the unit asked its sources for) and the mean

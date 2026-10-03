@@ -10,7 +10,7 @@ import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
 import { splitSupply, type PlanObjects } from './demandObjects';
 import { hasPumpLimit, poolLosses, riverTakesDay, takeDayFor, type PlanRiver, type TakeDay } from './riverSource';
-import { PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
+import { damHasFilled, PART_INDEX, restrictedObjectDemand, restrictionLevelFor, type PlanRestriction } from './restriction';
 import type { PlanOfftake } from './offtake';
 import type { AllocationCap } from '../allocations/mode';
 
@@ -463,6 +463,8 @@ export interface NetworkState {
 	restrictionLevels: number[];
 	/** Whether the rule's EWR trigger site failed the day before (engine ≥ 1.54.0); false without one. */
 	restrictionEwrFailed: boolean;
+	/** The dams still filling, left out of the reviews (engine ≥ 1.70.0, PlanRestriction.filling): 1 per node; all 0 without the rule. */
+	restrictionFilling: number[];
 }
 
 export interface NetworkResult {
@@ -485,6 +487,12 @@ export interface NetworkResult {
 	restrictionUnitLevel?: (Uint8Array | null)[];
 	/** Days a review found the EWR trigger's site failed the day before (engine ≥ 1.54.0); 1 = yes. */
 	restrictionEwrFailed?: Uint8Array;
+	/**
+	 * First filling (engine ≥ 1.70.0): per node, the run day a dam filling at
+	 * the start of the run first counted in the reviews, -1 when it never did,
+	 * -2 for a node that wasn't filling. Absent when no dam was filling.
+	 */
+	restrictionJoined?: Int32Array;
 }
 
 function allocNode(days: number): NodeResult {
@@ -750,6 +758,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const rp = plan.restriction;
 	// The level each unit holds (0 for a unit the rule doesn't cut) and, under a shared basis, the one decided.
 	const lv = rp ? Uint8Array.from(nodes, (_, i) => (rp.initialLevels ? rp.initialLevels[i]! : 0)) : null;
+	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): the dams still left out of the reviews, and the day each joined.
+	const filling = rp?.filling?.some((x) => x) ? Uint8Array.from(rp.filling) : null;
+	const joined = filling ? Int32Array.from(filling, (f) => (f ? -1 : -2)) : null;
 	const firstIn = rp ? rp.inScope.indexOf(1) : -1;
 	const levelOut = rp ? new Uint8Array(days) : null;
 	const unitOut = rp && !rp.shared ? nodes.map((_, i) => (rp.inScope[i] ? new Uint8Array(days) : null)) : null;
@@ -767,7 +778,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		for (let k = 0; k < dams.length; k++) {
 			const i = dams[k]!;
 			const cap = nodes[i]!.damCapacityM3 * capacityK(nodes[i]!, t);
-			if (!(cap > 0)) continue;
+			if (!(cap > 0) || filling?.[i]) continue;
 			q += startStorage(i, t);
 			c += cap;
 		}
@@ -828,7 +839,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null)),
 		// Captured before the day's decision: the levels the day before held, and whether the trigger's site failed that day.
 		restrictionLevels: lv ? Array.from(lv) : [],
-		restrictionEwrFailed: ewrFailedBefore(t)
+		restrictionEwrFailed: ewrFailedBefore(t),
+		restrictionFilling: filling ? Array.from(filling) : rp ? nodes.map(() => 0) : []
 	});
 	const work = opts.workings
 		? nodes.map((n, i) => {
@@ -907,6 +919,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		// day (a fresh run's first day too, when the latest date before it is a review), a lift ends it; then each
 		// unit's demand after its cuts, before the transfers, whose room reads it.
 		if (rp) {
+			// A filling dam joins the reviews from the first day it starts at its fill share (every day, not only
+			// review days, so a review reads it from the day it has filled whenever that was).
+			if (filling)
+				for (let i = 0; i < nodes.length; i++)
+					if (filling[i] && damHasFilled(startStorage(i, t), nodes[i]!.damCapacityM3 * capacityK(nodes[i]!, t), rp.fillShare)) {
+						filling[i] = 0;
+						joined![i] = t;
+					}
 			const e = rp.event[t]!;
 			if (e === 1 || (t === 0 && e === 0 && rp.initialLevels === undefined && rp.startDecides)) decide(t);
 			else if (e === 2) lv!.fill(0);
@@ -1629,6 +1649,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		...(captured ? { captured } : {}),
 		...(levelOut ? { restrictionLevel: levelOut } : {}),
 		...(unitOut ? { restrictionUnitLevel: unitOut } : {}),
-		...(ewrOut ? { restrictionEwrFailed: ewrOut } : {})
+		...(ewrOut ? { restrictionEwrFailed: ewrOut } : {}),
+		...(joined ? { restrictionJoined: joined } : {})
 	};
 }

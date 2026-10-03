@@ -100,7 +100,7 @@ import type { AllocationLimitBound } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
-import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn } from './network/development';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn, entersServiceAfter } from './network/development';
 import { forecastTail } from './forecastTail';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
@@ -353,11 +353,21 @@ function runNetwork(
 		if (plan.restriction && warm.continued) {
 			plan.restriction.initialLevels = Uint8Array.from(nodes, (_, i) => resume.restrictionLevels?.[i] ?? 0);
 			plan.restriction.initialEwrFailed = resume.restrictionEwrFailed === true;
+			// The dams still filling the day before (engine ≥ 1.70.0): the capture run's state, not rebuilt.
+			const f = Uint8Array.from(nodes, (_, i) => (resume.restrictionFilling?.[i] ? 1 : 0));
+			if (f.some((x) => x)) plan.restriction.filling = f;
+			else delete plan.restriction.filling;
 		}
 	}
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
 	const sim = simulateNetwork(plan, { workings: true, ...(capturing ? { captureAt: captureAt! } : {}) });
+	// A new dam that never filled (engine ≥ 1.70.0, §2.7i): no review read it.
+	if (sim.restrictionJoined) {
+		const pct = `${Math.round(plan.restriction!.fillShare * 1000) / 10} %`;
+		const never = nodes.flatMap((n, i) => (sim.restrictionJoined![i] === -1 ? [n] : [])).sort((a, b) => cmpStr(a.id, b.id));
+		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so no review read it while it was filling`);
+	}
 
 	// --- outputs -----------------------------------------------------------------
 	const out: RunSeries[] = [];
@@ -1092,7 +1102,9 @@ function runNetwork(
 			},
 			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: [],
-			...(plan.restriction ? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}) } : {}),
+			...(plan.restriction
+				? { restrictionLevels: net.restrictionLevels, ...(net.restrictionEwrFailed ? { restrictionEwrFailed: true } : {}), ...(net.restrictionFilling.some((x) => x) ? { restrictionFilling: net.restrictionFilling } : {}) }
+				: {}),
 			...(flowRecordHistory ? { flowRecordHistory: true as const } : {}),
 			...(fillHistory.length ? { flowFillHistory: fillHistory } : {})
 		};
@@ -1528,6 +1540,12 @@ export function buildNetworkPlan(
 	const restriction = restrictionRule
 		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
 		: null;
+	// First filling (engine ≥ 1.70.0, §2.7i): a dam that comes into service after the first day of the record (a
+	// resumed run's capture run's) starts out of the reviews; a resumed run takes the snapshot's state instead.
+	if (restriction) {
+		const filling = Uint8Array.from(nodes, (n) => (entersServiceAfter(n, warm.runStart ?? start!) ? 1 : 0));
+		if (filling.some((x) => x)) restriction.filling = filling;
+	}
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
 	// Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f), on units only.
@@ -1630,7 +1648,15 @@ export function buildNetworkPlan(
  * decided, and per unit (node-id order) its mean demand before and after the
  * cut and its mean supply.
  */
-function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, nodes: readonly NetworkNode[], start: number, days: number, resumed: boolean): DroughtRestrictionSummary {
+function restrictionSummary(
+	rule: DroughtRestrictionRule,
+	plan: NetworkPlan,
+	sim: ReturnType<typeof simulateNetwork>,
+	nodes: readonly NetworkNode[],
+	start: number,
+	days: number,
+	resumed: boolean
+): DroughtRestrictionSummary {
 	const lv = sim.restrictionLevel!;
 	const n = rule.levels.length + 1;
 	const byYear = new Map<number, { waterYear: number; days: number; daysByLevel: number[] }>();
@@ -1677,12 +1703,21 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 				daysByLevel: byLevel
 			};
 		});
+	// First filling (engine ≥ 1.70.0, §2.7i): each dam left out of the reviews at the start, and the day it joined.
+	const joined = sim.restrictionJoined;
+	const filling = joined
+		? nodes
+				.flatMap((node, i) => (joined[i]! >= -1 ? [{ node, at: joined[i]! }] : []))
+				.sort((a, b) => cmpStr(a.node.id, b.node.id))
+				.map(({ node, at }) => ({ nodeId: node.id, inServiceFrom: node.damInServiceFrom!, joinedOn: at >= 0 ? fromEpochDay(start + at) : null }))
+		: [];
 	// A resumed run (engine ≥ 1.54.0): the state its first day starts from, for the self-check.
 	const startState = resumed
 		? {
 				start: {
 					levelsBefore: rp.initialLevels ? Object.fromEntries(nodes.flatMap((node, i) => (rp.inScope[i] ? [[node.id, rp.initialLevels![i]!]] : []))) : null,
 					ewrFailedBefore: rp.initialEwrFailed === true,
+					...(rp.filling ? { fillingBefore: nodes.flatMap((node, i) => (rp.filling![i] ? [node.id] : [])).sort(cmpStr) } : {}),
 					damStorageBeforeM3: Object.fromEntries(nodes.flatMap((node, i) => (node.kind === 'farm' && plan.nodes[i]!.damCapacityM3 > 0 ? [[node.id, plan.nodes[i]!.initialStorageM3]] : [])))
 				}
 			}
@@ -1694,7 +1729,8 @@ function restrictionSummary(rule: DroughtRestrictionRule, plan: NetworkPlan, sim
 		reviews,
 		...(ewrReviews !== undefined ? { ewrReviews } : {}),
 		units,
-		...startState
+		...startState,
+		...(filling.length ? { filling } : {})
 	};
 }
 

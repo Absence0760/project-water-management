@@ -301,6 +301,36 @@ export interface PlanRestriction {
 	initialLevels?: Uint8Array;
 	/** Whether the EWR trigger's site failed on the day before the first day (a resumed run); absent = no. */
 	initialEwrFailed?: boolean;
+	/**
+	 * First filling (engine ≥ 1.70.0, issue #90 Q30, docs/model.md §2.7i): 1
+	 * for each dam still filling at the start of the first day, a dam that came
+	 * into service after the run's first day (or, resumed, the capture run's)
+	 * and hasn't yet started a day at `fillShare` of its capacity. A review
+	 * leaves its storage and its capacity out until it has. Absent = none.
+	 */
+	filling?: Uint8Array;
+	/**
+	 * The share of a filling dam's capacity at which it joins the reviews: the
+	 * mildest level's belowPct, the share below which a level applies (so a
+	 * dam that joins never by itself pulls the share under that level), or 1
+	 * (full) for a rule with no level.
+	 */
+	fillShare: number;
+}
+
+/** The share a filling dam joins the reviews at (PlanRestriction.fillShare): the mildest level's threshold, 1 without a level. */
+export function restrictionFillShare(thresholds: ArrayLike<number>): number {
+	return thresholds.length ? thresholds[0]! : 1;
+}
+
+/**
+ * Whether a filling dam holding `q` (m³) at the start of a day with
+ * capacity `cap` has filled: it holds at least the share that triggers no
+ * level, read as restrictionLevelFor reads a share (q ÷ cap not below it).
+ * A day without capacity (not in service, silted empty) never fills it.
+ */
+export function damHasFilled(q: number, cap: number, fillShare: number): boolean {
+	return cap > 0 && !(q / cap < fillShare);
 }
 
 /** The review and lift day of each run day from `start`, and whether a fresh run decides its first day. */
@@ -379,7 +409,8 @@ export function planRestriction(
 		inScope,
 		ewrSite,
 		ewrAtOutlet: ewrSite >= 0 && ewrSite === outlet,
-		ewrLevel: ewrSite >= 0 ? rule.ewrTrigger!.level : 0
+		ewrLevel: ewrSite >= 0 ? rule.ewrTrigger!.level : 0,
+		fillShare: restrictionFillShare(rule.levels.map((l) => l.belowPct))
 	};
 }
 
