@@ -20,7 +20,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { divertMonthsCell } from './supply';
-	import { cardLabel, GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
+	import { cardLabel, fieldScale, fieldUnused, GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
@@ -639,17 +639,18 @@
 											{/if}
 										</td>
 									{:else}
-									<td class:pct={isPct(f)} class:vol={isVolume(f)} data-paste-col={fi}>
+									{@const unused = fieldUnused(f, node)}
+									<td class:pct={isPct(f)} class:vol={isVolume(f)} class:unused={unused !== null} data-paste-col={fi} title={unused ?? undefined}>
 										<span class="cell-label" aria-hidden="true">{cardLabel(f)} <span class="u">{f.unit}</span></span>
 										<NumberInput
-											label={f.aria(label)}
+											label={unused ? `${f.aria(label)}: ${unused}` : f.aria(label)}
 											min={0}
 											max={isPct(f) ? 100 : undefined}
-											scale={isPct(f) ? 100 : 1}
+											scale={fieldScale(f)}
 											nullable={f.nullable}
 											grouped={readonly && !isPct(f)}
 											placeholder={f.nullable ? '–' : undefined}
-											disabled={readonly}
+											disabled={readonly || unused !== null}
 											value={node[f.key] ?? null}
 								onchange={(v) => setNodeField(node, f.key, v)}
 										/>

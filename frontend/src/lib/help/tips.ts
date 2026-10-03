@@ -343,7 +343,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'upstream-to-dam',
 		term: 'Upstream inflow share (dam)',
-		short: 'Fraction of the water arriving from upstream that enters the hydrological unit’s dam; the rest passes below it.',
+		short: 'Fraction of the water arriving from upstream that enters the dam: 100 % for a dam on the river, 0 % for an off-channel dam.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['node.pctUpstreamToDam']
@@ -447,8 +447,8 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'diversion',
 		term: 'River to dam (diversion)',
-		short: 'Daily capacity to pump or channel water from the river below the dam into it, in m³/day. Separate from the river pump that irrigates.',
-		units: 'm³/day',
+		short: 'Most water pumped or channelled from the river into an off-channel dam, in m³/s. Separate from the river pump that irrigates.',
+		units: 'm³/s (stored as m³/day)',
 		category: 'farm',
 		fields: ['node.divertCapacityM3Day', 'node.divertMonthlyM3Day']
 	},

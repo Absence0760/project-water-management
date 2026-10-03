@@ -8,6 +8,8 @@ import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency, unitPartFactor } from '../demand';
 import { seepageReturnOf } from '../network/dam';
 import { abstractionStartDay } from '../network/development';
+import { ON_RIVER_DAM_SINCE, onRiverDam } from '../network/supply';
+import { compareEngineVersions } from '../liability/errata';
 import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, estimatedDamAreaForEngine, type DemandPart, type ModelInput, type NetworkNode } from '../project';
 
 /**
@@ -97,4 +99,15 @@ export function runEfficiency(input: Pick<ModelInput, 'settings' | 'model'>, n: 
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
 	const apan = input.settings?.apanMm;
 	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan : []);
+}
+
+/**
+ * Whether the run that saved `engineVersion` took River to dam as 0 for farm
+ * `n` because its dam is on the river (onRiverDam, engine ≥ 1.68.0). A run
+ * with no recorded version is taken as the current engine's.
+ */
+export function onRiverDamForRun(n: NetworkNode, engineVersion?: string): boolean {
+	if (!onRiverDam(n)) return false;
+	if (!engineVersion || !/^\d+\.\d+\.\d+$/.test(engineVersion)) return true;
+	return compareEngineVersions(engineVersion, ON_RIVER_DAM_SINCE) >= 0;
 }

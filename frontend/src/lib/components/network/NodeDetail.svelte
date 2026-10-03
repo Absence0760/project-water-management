@@ -1,11 +1,11 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, hasDam, hasDamDevelopment, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { damHints, fieldScale, fieldUnused, GROUPS, hasDam, hasDamDevelopment, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
 	import DamStorageFields from './DamStorageFields.svelte';
 	import DevelopmentFields from './DevelopmentFields.svelte';
 	import UserFields from './UserFields.svelte';
@@ -91,6 +91,8 @@
 	const ewrSiteProblem = $derived(ewrSiteIssue(node));
 	/** River to dam set by month (engine ≥ 1.32.0): the one value is then inert. */
 	const byMonth = $derived(node.divertMonthlyM3Day != null);
+	/** River to dam's one value, read-only while it is set by month. */
+	const divertByMonth = (f: NodeField) => f.key === 'divertCapacityM3Day' && byMonth; // gitleaks:allow (a field name, not a secret)
 </script>
 
 <div class="detail">
@@ -178,22 +180,23 @@
 			<legend>{GROUPS[g]}</legend>
 			<div class="grid">
 				{#each fields as f (f.key)}
+					{@const unused = fieldUnused(f, node)}
 					<div class="field">
 						<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
 						<NumberInput
 							id={id(f.key)}
 							min={0}
 							max={isPct(f) ? 100 : undefined}
-							scale={isPct(f) ? 100 : 1}
+							scale={fieldScale(f)}
 							nullable={f.nullable}
 							grouped={!isPct(f)}
 							placeholder={f.nullable ? 'not set' : undefined}
-							disabled={readonly || (f.key === 'divertCapacityM3Day' && byMonth)}
+							disabled={readonly || unused !== null || divertByMonth(f)}
 							aria-describedby="{id(f.key)}-h"
 							value={node[f.key] ?? null}
 							onchange={(v) => setNodeField(node, f.key, v)}
 						/>
-						<span class="hint" id="{id(f.key)}-h">{f.key === 'divertCapacityM3Day' && byMonth ? 'Not used: River to dam is set by month below.' : f.help}</span>
+						<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
 						<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
 					</div>
 				{/each}
@@ -245,7 +248,7 @@
 					</div>
 				{/if}
 				{#if g === 'routing'}
-					<RiverToDamFields {node} {readonly} />
+					<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />
 				{/if}
 				{#if g === 'irrigation'}
 					<DevelopmentFields {node} {readonly} part="abstraction" />

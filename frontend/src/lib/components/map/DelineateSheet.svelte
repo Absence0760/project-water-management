@@ -17,6 +17,8 @@
 	import type { MapPosition } from '$lib/api/types';
 	import { CAVEATS, datasetNotice, FROM_LABEL, openProposal, proposalFacts, provenanceFacts } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
+	import { choiceText, confluenceOf, largerChannelOf } from './largerChannel';
+	import type { ConfluenceChoice, LargerChannel } from '$lib/api';
 
 	let {
 		open = $bindable(false),
@@ -79,6 +81,12 @@
 	let replace = $state(false);
 	const notice = $derived(datasetNotice(info.dataset));
 
+	/** A refusal beside a much larger channel (issue #374): the sentence, the channel, and the point that was asked for. */
+	let larger = $state<{ message: string; channel: LargerChannel; asked: [number, number] } | null>(null);
+	/** A point at a confluence (the server didn't choose between rivers): the sentence, the rivers, and the point asked for. */
+	let confluence = $state<{ message: string; choices: ConfluenceChoice[]; asked: [number, number] } | null>(null);
+	/** The river-network check on the proposal just made (a reach nearby whose area no channel matched); not stored, so a reopened sheet has none. */
+	let check = $state<string | null>(null);
 	async function propose(e: SubmitEvent) {
 		e.preventDefault();
 		tried = true;
@@ -87,17 +95,37 @@
 			showCoords = true;
 			return;
 		}
+		await send([lon.value, lat.value]);
+	}
+	/** Ask the server for the catchment above `at`; `keepPoint` keeps it beside a much larger channel. */
+	async function send(at: [number, number], keepPoint = false, reach: { dataset: string; reachId: number } | null = null) {
 		busy = 'propose';
+		error = null;
+		larger = null;
+		confluence = null;
 		try {
-			const r = await api.delineation.propose(projectId, { lon: lon.value, lat: lat.value, from });
+			const r = await api.delineation.propose(projectId, { lon: at[0], lat: at[1], from, ...(keepPoint ? { keepPoint } : {}), ...(reach ? { reach } : {}) });
 			replace = false;
+			check = r.check;
 			await onproposed(r.proposal);
 			setAsking(false);
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			const channel = largerChannelOf(err);
+			const junction = confluenceOf(err);
+			if (channel) larger = { message: err instanceof Error ? err.message : '', channel, asked: at };
+			else if (junction) confluence = { message: err instanceof Error ? err.message : '', choices: junction.choices, asked: at };
+			else error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = null;
 		}
+	}
+	/** Use the channel the server named: the point moves there (the fields say so) and it is asked again. */
+	async function useLarger() {
+		if (!larger) return;
+		const at = larger.channel.at;
+		latText = deg(at[1]);
+		lonText = deg(at[0]);
+		await send([at[0], at[1]]);
 	}
 
 	async function accept(p: DelineationProposal, as: 'catchment_boundary' | 'other') {
@@ -158,6 +186,27 @@
 			</details>
 			{#if info.dataset}<p class="hint">From {info.dataset.label}. {#if notice}{notice}{/if}</p>{/if}
 			{#if error}<p class="err" role="alert" data-testid="delineate-error">{error}</p>{/if}
+			{#if confluence}
+				{@const j = confluence}
+				<div class="offer" role="alert" data-testid="delineate-confluence">
+					<p>This point is at a confluence. Which river do you mean? The outlet goes on the channel whose area matches it.</p>
+					<div class="offer-actions">
+						{#each j.choices as c (`${c.dataset}:${c.reachId}`)}
+							<button type="button" class="btn" disabled={!!busy} onclick={() => send(j.asked, false, { dataset: c.dataset, reachId: c.reachId })} data-testid="delineate-choice" data-reach={c.reachId}>{choiceText(c)}</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+			{#if larger}
+				{@const l = larger}
+				<div class="offer" role="alert" data-testid="delineate-larger">
+					<p>{l.message}</p>
+					<div class="offer-actions">
+						<button type="button" class="btn btn-primary" disabled={!!busy} onclick={useLarger} data-testid="delineate-use-larger">Use that channel</button>
+						<button type="button" class="btn" disabled={!!busy} onclick={() => send(l.asked, true)} data-testid="delineate-keep-point">Keep my point</button>
+					</div>
+				</div>
+			{/if}
 		</form>
 	{:else}
 		{@const p = pending}
@@ -183,6 +232,7 @@
 					{#each CAVEATS as c (c)}<li>{c}</li>{/each}
 				</ul>
 			</section>
+			{#if check}<p class="offer" role="note" data-testid="delineate-check">{check}</p>{/if}
 			{#if notice}<p class="hint notice">{notice}</p>{/if}
 			{#if boundary}
 				<label class="tick">
@@ -270,6 +320,22 @@
 		font-size: 0.85rem;
 		color: var(--text-muted);
 		margin: 0;
+	}
+	.offer {
+		display: grid;
+		gap: 0.5rem;
+		padding: 0.6rem 0.75rem;
+		border: 1px solid var(--warning);
+		border-radius: var(--radius-sm);
+		background: var(--warning-soft);
+	}
+	.offer p {
+		margin: 0;
+	}
+	.offer-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 	.err {
 		color: var(--danger);

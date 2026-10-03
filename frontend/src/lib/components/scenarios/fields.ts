@@ -141,7 +141,8 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damAreaFullM2: { label: 'Dam area when full', spec: num('m²', { nullable: true, nullLabel: 'estimated (7.2 × capacity^0.77)' }) },
 	damAreaExponent: { label: 'Dam area exponent', spec: num('') },
 	damSeepagePerDay: { label: 'Dam seepage per day', spec: pct() },
-	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/day') },
+	// Entered in m³/s, stored in m³/day, as in the node form.
+	divertCapacityM3Day: { label: 'River to dam', spec: num('m³/s', { scale: 1 / 86_400 }) },
 	irrigationEfficiency: { label: 'Irrigation efficiency', spec: pct() },
 	lossReturnFraction: { label: 'Share of losses returning', spec: pct() },
 	damReleaseRule: { label: 'Dam release rule', spec: { t: 'enum', options: plain(DAM_RELEASE_RULES, { none: 'none', passInflow: 'pass inflow', fixed: 'fixed release' }) } },
@@ -173,7 +174,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	// Hands-off flow and River to dam by month (engine ≥ 1.32.0, docs/model.md §2.7h).
 	handsOffM3Day: { label: 'Hands-off flow by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	handsOffEwr: { label: 'Hands-off flow keeps the EWR', spec: { t: 'bool' } },
-	divertMonthlyM3Day: { label: 'River to dam by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
+	divertMonthlyM3Day: { label: 'River to dam by month', spec: { t: 'monthly', unit: 'm³/s', scale: 1 / 86_400, nullable: true } },
 	// Where the crops take their water (engine ≥ 1.65.0, docs/model.md §2.7j).
 	cropWaterSource: { label: 'Crops’ water source', spec: { t: 'enum', options: plain(WATER_SOURCES, WATER_SOURCE_LABEL) } },
 	cropRiverPumpM3Day: { label: 'Crops’ river pump capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
@@ -477,14 +478,21 @@ export function peDraftOf(v: unknown, settings: Record<string, unknown> | undefi
 	return pe.kind === 'pan' ? { kind: 'pan', mm: '', source: '' } : { kind: 'monthly', mm: pe.mm.join(' '), source: pe.source };
 }
 
+/**
+ * A scaled value as typed: float noise trimmed to 9 decimals, or, for a field
+ * shown in a smaller unit than it is stored in (River to dam, m³/day as m³/s),
+ * 15 significant figures, so a small rate reads back as stored.
+ */
+const scaledText = (x: number, scale: number) => String(scale < 1 ? Number((x * scale).toPrecision(15)) : round(x * scale));
+
 /** A stored value as editable text: the inverse of parseValue (months are ticked, not typed). */
 export function valueText(spec: ValueSpec, v: unknown): string {
 	if (v === null || v === undefined) return '';
 	switch (spec.t) {
 		case 'number':
-			return typeof v === 'number' ? String(round(v * spec.scale)) : '';
+			return typeof v === 'number' ? scaledText(v, spec.scale) : '';
 		case 'monthly':
-			return Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? String(round(x * spec.scale)) : '')).join(' ') : '';
+			return Array.isArray(v) ? v.map((x) => (typeof x === 'number' ? scaledText(x, spec.scale) : '')).join(' ') : '';
 		case 'bool':
 			return v === true ? 'true' : v === false ? 'false' : '';
 		case 'months':

@@ -1,3 +1,4 @@
+[Farm spec] Upstream inflow above dam %: b023's formula sends that share past the dam, not into it, so the import stores 100 % − the workbook's value, which keeps what the workbook ran: 100 % there is an off-channel dam (0 % here), 0 % a dam on the river (100 % here). Check each dam (docs/model.md §3 Q1)
 transfer Foxtrot Farm -> Echo Farm: the workbook's substring match also runs it in months [1, 2], which '11,12' doesn't list; the app uses the listed months only (audit M1)
 WARNING: transfer Foxtrot Farm -> Golf Farm (column AA): its draw formula is the constant 0, so the workbook never moved this water; it is imported switched off (Transfers tab, Enabled) (issue #54)
 WARNING: transfer India Farm -> Delta Farm (column AB): its draw formula is the constant 0, so the workbook never moved this water; it is imported switched off (Transfers tab, Enabled) (issue #54)

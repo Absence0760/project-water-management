@@ -2311,20 +2311,31 @@ note's link on the Summary, `notes.ts` `noteHref`).
   `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
   button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
   a profile) is in the `.ts` neighbour, unit-tested.
+- **River to dam in m³/s, for an off-channel dam** (2026-10-02). River to
+  dam is entered in m³/s, as b023 enters it (0.2 m³/s is 17 280 m³ a day),
+  in the node table, the one-node form, its months, the paste and the
+  scenario editor; it is stored, sent and exported in m³/day
+  (`divertCapacityM3Day`; `fields.ts` `scale`, `fieldScale`). On a dam on
+  the river (**Upstream inflow to dam** 100 %) it is read-only, with the hint
+  "Not available: the dam is on the river …" (`fieldUnused`), the by-month
+  box is disabled, a paste leaves it out ("a dam on the river"), and the run
+  doesn't use it (engine ≥ 1.68.0, model.md §2.7 row O). Setting Upstream
+  inflow to dam below 100 % makes it available again; the stored value is
+  kept.
 - **River to dam by month** (engine ≥ 1.32.0, `RiverToDamFields.svelte`),
   one-node form, farms, under **River to dam** in Routing: **Set River to dam
-  by month** opens twelve m³/day fields (started from the one value, with
+  by month** opens twelve m³/s fields (started from the one value, with
   **Use October’s capacity for every month**); while it is on, the one River
   to dam field is read-only with the hint "Not used: River to dam is set by
-  month below", and a line gives the capacity ("up to 800 m³/day", or
-  "between 800 and 12 345.5 m³/day by month") and names the months it takes
+  month below", and a line gives the capacity ("up to 0.01 m³/s", or
+  "between 0.01 and 0.2 m³/s by month") and names the months it takes
   nothing in (`divertMonthsPreview`). Unticking it goes back to the one value. River to
   dam's own hint says what it leaves in the river: senior users' demand, and
   the hands-off flow under Supply when there is one. The months are edited
   only here: on a farm set by month the node table's River to dam cell
   (`NetworkTab.svelte`, desktop and phone card) has no input for the one
   value the run ignores, but the months' range, read-only ("by month:
-  0–800", `divertMonthsCell`), which in the catchment's Node table grid links
+  0–0.01", in m³/s, `divertMonthsCell`), which in the catchment's Node table grid links
   to the farm's form (`?tab=network&edit=<id>`); in a scenario's override
   tables it is plain text. A farm with the one value edits it in the table as
   before.
@@ -2531,18 +2542,21 @@ map" card) stays the schematic; this is the geography.
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
-  when empty, "no boundary" without one), and the actions **Show everything**
-  (frames every feature; with features), **Measure** (anyone, while the map
-  draws; below), **Download GeoJSON** (anyone, with features: the features
-  as a `.geojson` file named after the project and the day, built from the
+  when empty, "no boundary" without one), and the actions **Measure**
+  (anyone, while the map draws; below), and for editors **Draw a shape**
+  and **Place a point** (each puts the map in a drawing mode, below; pressed
+  while it is on), **Delineate** (with a DEM on the server; its bar chooses
+  one catchment or sub-catchments, one per click; pressed in either; below),
+  **Trace
+  a dam** (with water occurrence data on the server; below) and
+  **Upload GeoJSON** (a link that opens its sheet); they fit one row at
+  1440 (issue #374: **Show everything** moved onto the map's bottom-left
+  corner, framing every feature, and **Download GeoJSON** beside the
+  Features list's **Every feature**: anyone, with features, the features as
+  a `.geojson` file named after the project and the day, built from the
   list; the notice says "Downloaded 23 features as
   example-sandspruit-map-2026-10-01.geojson."; [maps.md §
-  Download](./maps.md#download-geojson)), and for editors **Draw a shape**
-  and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on), **Delineate** and **Sub-catchments** (with a DEM on the
-  server; below), **Trace
-  a dam** (with water occurrence data on the server; below) and
-  **Upload GeoJSON** (a link that opens its sheet). Slim
+  Download](./maps.md#download-geojson)). Slim
   notices under it: what an upload, a placed point or a saved drawing did
   (Dismiss), the no-basemap note (owners and editors only), and "No
   catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
@@ -2701,7 +2715,18 @@ map" card) stays the schematic; this is the geography.
   Latitude and Longitude behind **Enter coordinates**), the dataset line
   (with the Copernicus notice for the GLO-30 DEM), and **Delineate**
   (“Delineating…”). A refusal shows its sentence in the sheet ("That point
-  is outside the elevation model …"). The proposal is drawn dashed in teal
+  is outside the elevation model …"). A point beside a much larger channel
+  (issue #374) shows a warning box instead: "A much larger channel runs
+  504 m north of your point: about 620 km² drains through it here, against
+  0.18 km² at your point. River lines on the map can sit a few hundred
+  metres off the channel the elevation model sees. Use that channel, or
+  keep your point if you meant the small one.", with **Use that channel**
+  (primary: the coordinates move to it and it delineates there) and **Keep
+  my point** (delineates the point as asked, `keepPoint`). A point at a
+  confluence shows "This point is at a confluence. Which river do you mean?
+  The outlet goes on the channel whose area matches it." with one button
+  per river ("The river below the junction, 497 km²", "The main river above
+  the junction, 422 km²", "The tributary above the junction, 67 km²"). The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
@@ -2720,39 +2745,64 @@ map" card) stays the schematic; this is the geography.
   outlet (delineated), 547.19 km² on the map."; rejecting says nothing on
   the map
   changed.
-- **Sub-catchments** (editors, with a DEM on the server, beside Delineate;
-  `ClickBar.svelte`, `clickPieces.svelte.ts`, [maps.md § Sub-catchments
-  from clicks](./maps.md#sub-catchments-from-clicks)). Pressed, the map
-  takes the focus in the drawing mode (the crosshair; snapping off, since
-  the server snaps to the channel) and a **click bar** takes the draw bar's
-  place: "Sub-catchments from clicks", how ("Click a river (or press Enter at
-  the crosshair) for each outlet. Each one gets the land that drains to it
-  before any other click."), a polite line for the last change ("2
-  sub-catchments.", "Click 3 is not a piece: it …", "Took back click 3."),
-  and one line per click, numbered as its badge on the map: its area, where
-  its water goes ("drains into 2", or "the lowest click: everything above
-  it drains out here"), the area upstream in all (or "more upstream than
-  was routed") and the inflow points entering it, or why it is not a piece:
-  an inflow point ("an inflow point: its catchment runs past the area routed
-  around the clicks, so no piece; …"), or a click that doesn't drain to the
-  lowest. A click with under 1 km² upstream adds "very little drains here:
-  it probably missed the channel; Undo and click closer to the river". A line with the focus or the pointer lights its piece, and a piece
-  under the pointer lights itself. Under the lines: the count and total
-  area, the dataset, and "A proposal from the elevation model: check each
-  piece against the map before you save." **Enter coordinates** (a
-  disclosure, open when the map can't be drawn) adds an outlet by latitude
-  and longitude. Every click redraws all the pieces (each tinted apart from
-  its neighbours, as Start's, every click's outlet a ringed dot); the map is
-  framed on the first answer and then stays where the editor is clicking. A
-  click the server refuses is taken back with the reason ("Click not added:
-  …"). **Undo the last click** goes back to the answer before it at once,
-  **Clear** drops them all, **Save the *n* as areas** saves each piece as an
-  *other* polygon ("Saved 2 sub-catchments, 547.19 km² in all on the map as
-  areas. Link each to its unit and Use its area, or rename it on its card.",
-  the first one picked), and **Done** (or Escape in the bar) leaves the mode,
-  asking first ("Drop these clicks?": Keep clicking / Drop them) when there
-  are clicks; the header button takes the focus back. Another drawing tool
-  ends the mode.
+- **The elevation model's channels** (while Delineate or Sub-catchments is
+  on; issue #374, [maps.md § The elevation model's channels](./maps.md#the-elevation-models-channels)):
+  solid red lines over the river network, wider for a larger area, and one
+  slim status line under the bar with a red swatch ("Red lines: the
+  elevation model's channels, where a click goes. River lines can sit
+  hundreds of metres off them."; "Drawing …", "Zoom in to see …" past
+  0.35°, "… are drawn on the map, which isn't showing here." without WebGL,
+  or the refusal's sentence).
+- **Sub-catchments** (editors, with a DEM on the server; Delineate's choice
+  **Sub-catchments, one per click**, in its bar and back again with **One
+  catchment, above a point**, asking first when clicks would be lost;
+  `ClickBar.svelte`, `DelineateChoice.svelte`, `clickPieces.svelte.ts`,
+  [maps.md § Sub-catchments from clicks](./maps.md#sub-catchments-from-clicks)).
+  The map takes the focus in the drawing mode (the crosshair; snapping off,
+  since the server places the click) with the elevation model's channels
+  drawn, and the **Sub-catchments** panel opens: in the side column in the
+  picked feature's place from a 56rem page (the map keeps its fitted
+  height), above the map on a narrower one (MapTab picks by the page's
+  width, so the panel is in the DOM once). It has how ("Click a red line
+  (the elevation model's channel) for each outlet, or press Enter at the
+  crosshair. Each gets the land that drains to it before any other
+  click."), a polite line for the last change ("2 sub-catchments.", "Click 3
+  is not a piece: it …", "Took back click 3.", "Moved the click back."), and
+  one line per click under its badge (`PieceBadge`, the number and tint its
+  piece has on the map, so the list is the map's key): its area, where its
+  water goes ("drains into 2", or "the lowest point: the rest drains out
+  here"), the area upstream in all (or "more upstream than was routed"),
+  the inflow points entering it, how it was placed ("on the channel matching
+  river reach 11492928 (412.50 km²)", "moved 128 m to the channel" from
+  50 m), and its warnings: a much larger channel beside it ("a much larger
+  channel (620 km²) runs 504 m north: …" with **Use the larger channel**,
+  which moves the click there and routes again), a river reach nearby that
+  matches no channel ("river reach 11492928 nearby drains 412.50 km², and
+  no channel near the click matches it: check it is the right stream"), or
+  under 1 km² upstream ("very little drains here: it probably missed the
+  channel; …"); or why it is not a piece (an inflow point, a click that
+  doesn't drain to the lowest). A click at a confluence waits in a warning
+  box ("Click 2 is at a confluence. Which river do you mean? …") with a
+  button per river and **Drop the click**; picked, it goes at the elevation
+  model's junction ("at the elevation model's junction, on river reach
+  …"). A line with the focus or the pointer lights
+  its piece, and a piece under the pointer lights itself. Under the lines:
+  the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
+  piece against the map before you save."). **Enter coordinates** (folded,
+  open when the map can't be drawn; folded again after an outlet is added)
+  adds one by latitude and longitude. While a click is being routed a pill
+  over the map says "Working out the sub-catchments…". Every click redraws
+  all the pieces (tinted apart from their neighbours, every click's outlet
+  a ringed dot); the map is framed on the first answer and then stays where
+  the editor is clicking. A click the server refuses is taken back with the
+  reason ("Click not added: …"). **Save the *n* as areas** (primary) saves
+  each piece as an *other* polygon ("Saved 2 sub-catchments, 547.19 km² in
+  all on the map as areas. Link each to its unit and Use its area, or
+  rename it on its card.", the first one picked), **Undo** goes back to the
+  answer before the last click or move at once, **Clear** drops them all,
+  and **Done** (or Escape in the panel) leaves the mode, asking first
+  ("Drop these clicks?": Keep clicking / Drop them) when there are clicks;
+  Delineate takes the focus back. Another drawing tool ends the mode.
 - **Drawing** (#326 C1, D1; editors; `lib/components/map/draw/`,
   [maps.md § Drawing](./maps.md#drawing) has the gestures, the keys and the
   library decision). A **draw bar** sits over the map while a shape is drawn,
@@ -3291,7 +3341,8 @@ the link goes to that tab with it open (`movedGridHref`;
   value as it is; a value that isn't a number, a negative, or a % above 100
   stops it with the row and column. The node table leaves out values for a
   field the node doesn't use (a gauge's dam, any field of an other water
-  user, River to dam set by month) with a note (`network/nodePaste.ts`); the
+  user, River to dam set by month or on a dam on the river) with a note, and
+  reads River to dam in m³/s (`network/nodePaste.ts`); the
   planted-areas grid reads hectares, and 0 clears an area
   (`crops/areaPaste.ts`). The **Preview** lists every value that would
   change (row, column, now, pasted) and counts those already equal;

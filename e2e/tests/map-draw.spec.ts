@@ -184,7 +184,7 @@ test('with the mouse: a polygon clicked corner by corner and a point placed by a
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 	await mapReady(page);
-	await header(page).getByRole('button', { name: 'Show everything' }).click();
+	await page.getByTestId('map-show-everything').click();
 
 	const b = (await canvas(page).boundingBox())!;
 	const at = (fx: number, fy: number) => ({ x: b.x + b.width * fx, y: b.y + b.height * fy });

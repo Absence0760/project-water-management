@@ -2,10 +2,11 @@
 // would change, the change itself, and the table as a CSV to fill in. The
 // block is read by $lib/spreadsheet/paste (shared with the Reserve rule
 // tables); this file says what each column means: a % is entered 0–100 and
-// stored 0–1, and a field a node doesn't use is left out.
+// stored 0–1, River to dam in m³/s and stored in m³/day, and a field a node
+// doesn't use is left out.
 import type { NetworkNode } from '@water-management/engine';
 import { mapPaste, sameValue, toCsv, type GridColumn, type PasteAnchor, type PastePlan } from '$lib/spreadsheet/paste/grid';
-import { cardLabel, isPct, setNodeField, TABLE_FIELDS, type NodeField, type NodeNumberKey } from './fields';
+import { cardLabel, fieldScale, fieldUnused, isPct, setNodeField, TABLE_FIELDS, type NodeField, type NodeNumberKey } from './fields';
 import { divertMonthsCell } from './supply';
 
 /** Headings the node table's name column goes by. */
@@ -22,14 +23,18 @@ function notUsed(n: NetworkNode, f: NodeField): string | null {
 	if (n.kind === 'user') return 'an other water user';
 	if (f.farmOnly && n.kind !== 'farm') return 'a gauge';
 	if (f.key === 'divertCapacityM3Day' && divertMonthsCell(n, n.name)) return 'set by month';
+	if (fieldUnused(f, n)) return 'a dam on the river';
 	return null;
 }
 
-/** A node's field as the table shows it (0–100 for a %), null when empty. */
+/** Float noise trimmed (9 decimals), as the table's inputs show and store a scaled value. */
+const round9 = (v: number) => Math.round(v * 1e9) / 1e9;
+
+/** A node's field as the table shows it (0–100 for a %, m³/s for River to dam), null when empty. */
 function shown(n: NetworkNode, f: NodeField): number | null {
 	const v = (n as unknown as Record<NodeNumberKey, number | null | undefined>)[f.key];
 	if (v === null || v === undefined) return null;
-	return isPct(f) ? v * 100 : v;
+	return round9(v * fieldScale(f));
 }
 
 /**
@@ -68,13 +73,13 @@ export function applyNodePaste(nodes: NetworkNode[], plan: PastePlan): void {
 	for (const c of plan.changes) {
 		const n = nodes.find((x) => x.id === c.rowId);
 		const f = TABLE_FIELDS.find((x) => x.key === c.key);
-		if (n && f) setNodeField(n, f.key, isPct(f) ? c.to / 100 : c.to);
+		if (n && f) setNodeField(n, f.key, round9(c.to / fieldScale(f)));
 	}
 }
 
 /**
  * The node table as a CSV, to fill in and paste back: the name, then each
- * column of the table with its unit, a % as 0–100. A field the node doesn't
+ * column of the table with its unit, a % as 0–100, River to dam in m³/s. A field the node doesn't
  * use is blank (a blank leaves a value as it is).
  */
 export function nodeTableCsv(nodes: readonly NetworkNode[]): string {

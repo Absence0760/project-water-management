@@ -568,7 +568,7 @@ describe('licensing checks on the river abstraction (issue #54, #90 Q15 and Q16,
 		const pumps = both(setNode('F2', { supplyRule: 'riverFirst', pumpCapacityM3Day: 1200 }));
 		const more = withModels({ ...pumps, ops: [{ op: 'cropArea.set', nodeId: 'F2', cropId: 'c', areaM2: 600_000 }] });
 		expect(check(more, 'protectsEwr')!.passed).toBe(false);
-		const divert = withModels({ app: setNode('F2', { damCapacityM3: 1e5, divertCapacityM3Day: 3000 }), ops: [{ op: 'node.set', nodeId: 'F2', field: 'divertCapacityM3Day', value: 3000 }] });
+		const divert = withModels({ app: setNode('F2', { damCapacityM3: 1e5, pctUpstreamToDam: 0, divertCapacityM3Day: 3000 }), ops: [{ op: 'node.set', nodeId: 'F2', field: 'divertCapacityM3Day', value: 3000 }] });
 		expect(check(divert, 'protectsEwr')!.detail).toMatch(/^Farm two’s River to dam keeps neither/);
 		// A renamed unit changes no take.
 		expect(check(withModels({ ...pumps, ops: [{ op: 'node.set', nodeId: 'F2', field: 'name', value: 'Farm 2' }] }), 'protectsEwr')!.passed).toBe(true);

@@ -120,8 +120,10 @@ interface FarmSpec {
 	damDepthM?: number | null;
 	/** Seepage per day as a fraction of storage (audit N2). Default 0. */
 	seepage?: number;
+	/** Share of the upstream inflow entering the dam. Default 1, a dam on the river. A headwater farm has none, so 0 there changes nothing. */
 	upstreamToDam?: number;
 	runoffToDam?: number;
+	/** River to dam (m³/day): only for an off-channel dam (upstreamToDam below 1); a dam on the river takes none (engine ≥ 1.68.0). */
 	divertM3Day?: number;
 	/** Irrigation system: its SABI 2021 efficiency (IRRIGATION_SYSTEMS) is the farm's (audit N1). Default NEW_FARM_IRRIGATION. */
 	system?: IrrigationSystem;
@@ -509,10 +511,10 @@ const KLEINBERG: CatchmentSpec = {
 	fit: { budget: 300, seed: 7 },
 	farms: [
 		{ name: 'Kleinberg Weir', kind: 'gauge', into: null },
-		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, divertM3Day: 3000, system: 'micro', lossReturn: 0.3, crops: ha({ Citrus: 45, Pasture: 20 }) },
-		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, divertM3Day: 4000, system: 'drip', lossReturn: 0.3, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
-		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, divertM3Day: 5000, system: 'micro', lossReturn: 0.3, crops: ha({ Apples: 40 }) },
-		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, divertM3Day: 2500, system: 'drip', lossReturn: 0.3, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
+		{ name: 'Rustenvrede', into: 'Kleinberg Weir', areaKm2: 14, damM3: 250_000, damDepthM: 4, system: 'micro', lossReturn: 0.3, crops: ha({ Citrus: 45, Pasture: 20 }) },
+		{ name: 'Bergwater', into: 'Rustenvrede', areaKm2: 18, damM3: 400_000, damDepthM: 5, system: 'drip', lossReturn: 0.3, crops: ha({ Apples: 60, 'Wine grapes': 25 }) },
+		{ name: 'Rooikloof', into: 'Bergwater', areaKm2: 22, damM3: 600_000, damDepthM: 6, upstreamToDam: 0, divertM3Day: 5000, system: 'micro', lossReturn: 0.3, crops: ha({ Apples: 40 }) },
+		{ name: 'Doornhoek', into: 'Rustenvrede', areaKm2: 16, damM3: 180_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2500, system: 'drip', lossReturn: 0.3, crops: ha({ 'Wine grapes': 50, Vegetables: 10 }) }
 	],
 	transfers: [
 		// Doornhoek first; Rustenvrede gets what the upper dam can still spare.
@@ -548,9 +550,9 @@ const DROEVLEI: CatchmentSpec = {
 	logger: { from: '2016-01-01', drift: { waterYear: 2020, factor: 1.9 } },
 	farms: [
 		{ name: 'Droëvlei Gauge', kind: 'gauge', into: null },
-		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, divertM3Day: 1500, system: 'movable', crops: ha({ Citrus: 110, Lucerne: 40 }) },
-		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, divertM3Day: 1200, system: 'surface', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
-		{ name: 'Brakfontein', into: 'Sandkraal', areaKm2: 9, damM3: 80_000, damDepthM: 3, divertM3Day: 1000, system: 'micro', crops: ha({ Citrus: 70 }) }
+		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, system: 'movable', crops: ha({ Citrus: 110, Lucerne: 40 }) },
+		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, system: 'surface', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
+		{ name: 'Brakfontein', into: 'Sandkraal', areaKm2: 9, damM3: 80_000, damDepthM: 3, upstreamToDam: 0, divertM3Day: 1000, system: 'micro', crops: ha({ Citrus: 70 }) }
 	]
 };
 
@@ -577,14 +579,14 @@ const SANDSPRUIT: CatchmentSpec = {
 	farms: [
 		{ name: 'Sandspruit Outlet', kind: 'gauge', into: null },
 		{ name: 'Melkhout Gauge', kind: 'gauge', into: 'Uitkyk' },
-		{ name: 'Uitkyk', into: 'Sandspruit Outlet', areaKm2: 20, damM3: 300_000, damDepthM: 4, divertM3Day: 4000, system: 'pivot', crops: ha({ Maize: 80, Lucerne: 30 }) },
-		{ name: 'Lemoenkraal', into: 'Melkhout Gauge', areaKm2: 24, damM3: 500_000, damDepthM: 5, divertM3Day: 5000, system: 'pivot', crops: ha({ Maize: 120 }) },
-		{ name: 'Vaalbank', into: 'Lemoenkraal', areaKm2: 30, damM3: 350_000, damDepthM: 4, divertM3Day: 4000, system: 'movable', crops: ha({ Lucerne: 60, Vegetables: 15 }) },
-		{ name: 'Klipdrift', into: 'Vaalbank', areaKm2: 26, damM3: 60_000, damDepthM: 3, divertM3Day: 1200, system: 'pivot', crops: ha({ Maize: 170 }) },
-		{ name: 'Wilgerivier', into: 'Melkhout Gauge', areaKm2: 22, damM3: 450_000, damDepthM: 4.5, divertM3Day: 4500, system: 'movable', crops: ha({ Vegetables: 25, Lucerne: 40 }) },
-		{ name: 'Grootdraai', into: 'Wilgerivier', areaKm2: 28, damM3: 800_000, damDepthM: 6, divertM3Day: 6000, system: 'pivot', crops: ha({ Maize: 60 }) },
-		{ name: 'Bosrand', into: 'Grootdraai', areaKm2: 18, damM3: 150_000, damDepthM: 3.5, divertM3Day: 2000, system: 'drip', crops: ha({ Vegetables: 30 }) },
-		{ name: 'Rietspruit', into: 'Uitkyk', areaKm2: 16, damM3: 120_000, damDepthM: 3.5, divertM3Day: 2000, system: 'pivot', crops: ha({ Lucerne: 45 }) }
+		{ name: 'Uitkyk', into: 'Sandspruit Outlet', areaKm2: 20, damM3: 300_000, damDepthM: 4, system: 'pivot', crops: ha({ Maize: 80, Lucerne: 30 }) },
+		{ name: 'Lemoenkraal', into: 'Melkhout Gauge', areaKm2: 24, damM3: 500_000, damDepthM: 5, system: 'pivot', crops: ha({ Maize: 120 }) },
+		{ name: 'Vaalbank', into: 'Lemoenkraal', areaKm2: 30, damM3: 350_000, damDepthM: 4, system: 'movable', crops: ha({ Lucerne: 60, Vegetables: 15 }) },
+		{ name: 'Klipdrift', into: 'Vaalbank', areaKm2: 26, damM3: 60_000, damDepthM: 3, upstreamToDam: 0, divertM3Day: 1200, system: 'pivot', crops: ha({ Maize: 170 }) },
+		{ name: 'Wilgerivier', into: 'Melkhout Gauge', areaKm2: 22, damM3: 450_000, damDepthM: 4.5, system: 'movable', crops: ha({ Vegetables: 25, Lucerne: 40 }) },
+		{ name: 'Grootdraai', into: 'Wilgerivier', areaKm2: 28, damM3: 800_000, damDepthM: 6, system: 'pivot', crops: ha({ Maize: 60 }) },
+		{ name: 'Bosrand', into: 'Grootdraai', areaKm2: 18, damM3: 150_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2000, system: 'drip', crops: ha({ Vegetables: 30 }) },
+		{ name: 'Rietspruit', into: 'Uitkyk', areaKm2: 16, damM3: 120_000, damDepthM: 3.5, upstreamToDam: 0, divertM3Day: 2000, system: 'pivot', crops: ha({ Lucerne: 45 }) }
 	],
 	transfers: [
 		// Equal priority from one dam: they share Grootdraai's spare water pro rata to their limits.
@@ -614,19 +616,18 @@ export const ORANJE: CatchmentSpec = {
 	settings: { panCoefficient: panPreset('summer-rainfall') },
 	farms: [
 		{ name: 'Oranje Weir', kind: 'gauge', into: null },
-		{ name: 'Rivierplaas', into: 'Oranje Weir', areaKm2: 60, damM3: 300_000, damDepthM: 4, divertM3Day: 3000, system: 'drip', crops: ha({ 'Wine grapes': 60 }) },
+		{ name: 'Rivierplaas', into: 'Oranje Weir', areaKm2: 60, damM3: 300_000, damDepthM: 4, system: 'drip', crops: ha({ 'Wine grapes': 60 }) },
 		{
 			name: 'Wingerdhoek',
 			into: 'Rivierplaas',
 			areaKm2: 70,
 			damM3: 150_000,
 			damDepthM: 3.5,
-			divertM3Day: 2000,
 			system: 'pivot',
 			crops: ha({ Lucerne: 50, 'Wine grapes': 30 }),
 			cropRiver: { pumpM3Day: 6000, poolM3: 5000 }
 		},
-		{ name: 'Sandkop', into: 'Wingerdhoek', areaKm2: 120, damM3: 80_000, damDepthM: 3, divertM3Day: 1200, system: 'micro', crops: ha({ Vegetables: 20 }) }
+		{ name: 'Sandkop', into: 'Wingerdhoek', areaKm2: 120, damM3: 80_000, damDepthM: 3, upstreamToDam: 0, divertM3Day: 1200, system: 'micro', crops: ha({ Vegetables: 20 }) }
 	],
 	demands: [
 		{ farm: 'Rivierplaas', name: 'Rivierplaas village', category: 'domestic', m3Day: 80, priority: 'first', rank: 1, returnPct: 0.3, population: 300 },

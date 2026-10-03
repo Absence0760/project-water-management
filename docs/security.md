@@ -2603,7 +2603,8 @@ placed points. The server never trusts the browser with geometry:
   account has its own cap on elevation-model work (184_dem_attempt,
   `delineation/attempt.ts`), shared by delineate, start, divide and the
   sub-catchments from clicks (each click's preview and the save are one
-  attempt each, counted as delineation) and
+  attempt each, counted as delineation) and the elevation model's channels
+  (each tile computed, not one served from the cache) and
   counted before the work in the transaction that checks the role: at most
   2 attempts running at once and 60 started an hour, across every project,
   refused and failed attempts included (429). It is per account because the

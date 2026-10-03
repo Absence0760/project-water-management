@@ -77,19 +77,23 @@ export function diverts(n: Pick<NetworkNode, 'divertCapacityM3Day' | 'divertMont
 	return Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0;
 }
 
-/** A value as its field shows it (12 345.5, 0.0129): every figure entered, thousands grouped. */
-const asEntered = (v: number) => groupedText(v);
+/** A value as its field shows it (12 345.5, 0.0129): every figure entered, thousands grouped; River to dam's in m³/s (`scale`). */
+const asEntered = (v: number, scale = 1) => groupedText(v, scale);
+
+/** River to dam is entered and shown in m³/s, stored in m³/day (fields.ts M3S_PER_M3DAY). */
+const M3S = { scale: 1 / 86_400, unit: 'm³/s' };
+const M3DAY = { scale: 1, unit: 'm³/day' };
 
 /**
  * "120 m³/day" when every month counted is the same, else "between 80 and
  * 12 345.5 m³/day by month"; over the months above 0 when `positive`. With
  * `upTo`, the one amount reads "up to 120 m³/day" (a capacity).
  */
-function amountRange(row: readonly number[], positive: boolean, upTo = false): string {
+function amountRange(row: readonly number[], positive: boolean, upTo = false, { scale, unit } = M3DAY): string {
 	const vals = positive ? row.filter((v) => v > 0) : row;
 	const lo = Math.min(...vals);
 	const hi = Math.max(...vals);
-	return lo === hi ? `${upTo ? 'up to ' : ''}${asEntered(lo)} m³/day` : `between ${asEntered(lo)} and ${asEntered(hi)} m³/day by month`;
+	return lo === hi ? `${upTo ? 'up to ' : ''}${asEntered(lo, scale)} ${unit}` : `between ${asEntered(lo, scale)} and ${asEntered(hi, scale)} ${unit} by month`;
 }
 
 /** The water-year months (as "Oct–Mar", describeMonths) whose value is 0. */
@@ -129,7 +133,8 @@ export function handsOffTakers(n: Partial<HandsOffNode>): { pump: boolean; river
 	const pump = rule !== 'damFirst' && n.pumpCapacityM3Day !== 0;
 	const routes = rule !== 'runOfRiver';
 	const dam = (n.damCapacityM3 ?? 0) > 0;
-	const div = diverts({ divertCapacityM3Day: n.divertCapacityM3Day ?? 0, divertMonthlyM3Day: n.divertMonthlyM3Day });
+	// A dam on the river takes no River to dam (engine ≥ 1.68.0).
+	const div = (n.pctUpstreamToDam ?? 0) < 1 && diverts({ divertCapacityM3Day: n.divertCapacityM3Day ?? 0, divertMonthlyM3Day: n.divertMonthlyM3Day });
 	const noDamRouting = routes && !dam && ((n.pctUpstreamToDam ?? 0) > 0 || (n.pctRunoffToDam ?? 0) > 0 || div);
 	return { pump, riverToDam: routes && dam && div, noDamRouting };
 }
@@ -167,7 +172,7 @@ export function divertMonthsPreview(n: Pick<NetworkNode, 'divertMonthlyM3Day'>):
 	if (row === null) return null;
 	if (!row.some((v) => v > 0)) return 'River to dam is 0 in every month: it diverts nothing.';
 	const off = row.some((v) => !(v > 0));
-	return `River to dam takes ${amountRange(row, true, true)}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
+	return `River to dam takes ${amountRange(row, true, true, M3S)}${off ? `; nothing in ${zeroMonths(row)}` : ''}. The one value above is not used.`;
 }
 
 /**
@@ -185,8 +190,9 @@ export function divertMonthsCell(n: Pick<NetworkNode, 'divertMonthlyM3Day'>, nam
 	if (!vals.length) return { text: 'by month', aria: `River to dam at ${name} is set by month` };
 	const lo = Math.min(...vals);
 	const hi = Math.max(...vals);
-	const range = lo === hi ? asEntered(lo) : `${asEntered(lo)}–${asEntered(hi)}`;
-	const words = lo === hi ? `${asEntered(lo)} m³/day every month` : `between ${asEntered(lo)} and ${asEntered(hi)} m³/day`;
+	const [a, b] = [asEntered(lo, M3S.scale), asEntered(hi, M3S.scale)];
+	const range = lo === hi ? a : `${a}–${b}`;
+	const words = lo === hi ? `${a} m³/s every month` : `between ${a} and ${b} m³/s`;
 	return { text: `by month: ${range}`, aria: `River to dam at ${name} is set by month, ${words}` };
 }
 

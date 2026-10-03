@@ -439,6 +439,42 @@ export function riverNetworkLayers(dark: boolean): Layer[] {
 	];
 }
 
+/**
+ * The elevation model's own channels (issue #374): drawn while Delineate or
+ * Sub-catchments is on, where a click goes. Red, solid and wider for a
+ * larger area, so it is never mistaken for a river line (the network's
+ * dashed cyan-blue, the project's own water blue); at least 3:1 on the
+ * basemap and well apart from every other stroke.
+ */
+export const channelColour = (dark: boolean) => (dark ? '#ff6b57' : '#c8102e');
+
+/** A channel line (GET …/map/channels): its line and the upstream area at its lower end (km²). */
+export interface ChannelLineData {
+	coordinates: MapPosition[];
+	km2: number;
+}
+
+/** The `channels` source's data. */
+export function channelData(lines: readonly ChannelLineData[] | null | undefined) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (lines ?? []).map((l) => ({ type: 'Feature' as const, properties: { km2: l.km2 }, geometry: { type: 'LineString' as const, coordinates: l.coordinates } as MapGeometry }))
+	};
+}
+
+/** The channels: solid, 1 px at 1 km² up to 3.5 px at 10 000 km²; over the river network, under the features. */
+export function channelLayers(dark: boolean): Layer[] {
+	return [
+		{
+			id: 'dem-channels',
+			type: 'line',
+			source: 'channels',
+			layout: { 'line-cap': 'round', 'line-join': 'round' },
+			paint: { 'line-color': channelColour(dark), 'line-width': ['interpolate', ['linear'], ['log10', ['max', 1, ['get', 'km2']]], 0, 1, 2, 2, 4, 3.5], 'line-opacity': 0.9 }
+		}
+	];
+}
+
 export interface StyleOptions {
 	/** The glyphs URL (absolute; glyphsUrl()): place and water names, and the quaternaries' codes. Null: no labels. */
 	glyphs?: string | null;
@@ -446,6 +482,8 @@ export interface StyleOptions {
 	quaternaries?: ReturnType<typeof quaternaryData>;
 	/** The river network's reaches to draw (issue #345; null or empty: none). */
 	rivers?: ReturnType<typeof riverNetworkData>;
+	/** The elevation model's channels to draw (channelData()); none when omitted. */
+	channels?: ReturnType<typeof channelData>;
 	/** The relief's PMTiles URL, when the relief is shown (PUBLIC_TERRAIN_URL and the Relief layer on). Null: no relief, nothing fetched. */
 	terrain?: string | null;
 	/** A delineation proposal to draw (proposalData()); none when omitted. */
@@ -473,10 +511,11 @@ export function mapStyle(tilesUrl: string | null, dark: boolean, data: ReturnTyp
 			...base.sources,
 			quaternaries: { type: 'geojson', data: opts.quaternaries ?? quaternaryData(null) },
 			rivers: { type: 'geojson', data: opts.rivers ?? riverNetworkData(null) },
+			channels: { type: 'geojson', data: opts.channels ?? channelData(null) },
 			features: { type: 'geojson', data },
 			proposal: { type: 'geojson', data: opts.proposal ?? proposalData(null) }
 		},
-		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
+		layers: [...base.layers, ...qt.under, ...riverNetworkLayers(dark), ...channelLayers(dark), ...overlayLayers(dark), ...proposalLayers(dark), ...(glyphs && tilesUrl ? labelLayers(dark) : []), ...qt.labels]
 	};
 	if (opts.terrain) {
 		style.sources[TERRAIN_SOURCE] = terrainSource(opts.terrain, opts.dataSourcesHref);

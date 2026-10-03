@@ -77,7 +77,7 @@ describe('extractProject on a small synthetic workbook', () => {
 			['rain_chirps_mm', 'CHIRPS (mm)', 'mm', '2010-01-01', 5]
 		]);
 		// Maize's Jan and Feb factors, 1.1, are above 1.0 (issue #289).
-		expect(notes.map((n) => n.code)).toEqual(['dam-min-is-transfer-minimum', 'dam-area-unknown', 'crop-factors-suspect']);
+		expect(notes.map((n) => n.code)).toEqual(['upstream-pct-converted', 'dam-min-is-transfer-minimum', 'dam-area-unknown', 'crop-factors-suspect']);
 		// Column P (no destination, no rate) is an unused column, not a skipped rule.
 		expect(unmapped).toEqual([]);
 	});
@@ -204,8 +204,8 @@ describe('extractProject errors and options', () => {
 
 describe('the run-of-river option (--run-of-river, issue #54 2c/2d)', () => {
 	// Farm A's dam becomes a 0.5 m³ pool on the river (flagged), and its enabled transfer to Farm B draws on it;
-	// Farm B has no dam and now takes all of the upstream inflow (flagged).
-	const flaggedBoth = () => syntheticB023().set('Farm spec', 'P30', 0.5).set('Farm spec', 'N31', 1);
+	// Farm B has no dam and now takes all of the upstream inflow (flagged; 0 % past the dam in b023's terms).
+	const flaggedBoth = () => syntheticB023().set('Farm spec', 'P30', 0.5).set('Farm spec', 'N31', 0);
 
 	it('is off by default: the flagged units are only warned about', () => {
 		const { project, notes } = extractProject(flaggedBoth().build(), { fileName: FILE });

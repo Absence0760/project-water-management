@@ -1084,9 +1084,25 @@ to a point on a river. The design, the method and its accuracy are in
 [api.md § Delineation](./api.md#delineation).
 
 - **Where you click.** The river at the catchment's outlet, or just below a
-  dam wall (the draw bar's point; or **Enter coordinates**). The server
-  moves the point to the most-drained cell within about 150 m, and says how
-  far it moved.
+  dam wall (the draw bar's point; or **Enter coordinates**). River lines
+  (HydroRIVERS, the basemap's waterways) can sit hundreds of metres off the
+  channel the DEM routes along, so the server places the point on the
+  DEM's channel (`place.ts`, issue #374, measured in
+  [design/delineation-snapping.md](./design/delineation-snapping.md)):
+  near a loaded river reach (within 1 km), on the cell whose upstream area
+  matches the reach's; otherwise on the most-drained cell within about
+  150 m, and if a channel with 100× its upstream area runs within 1 km the
+  sheet says so instead of proposing ("A much larger channel runs 504 m
+  north of your point: …") with **Use that channel** and **Keep my
+  point**. **At a confluence** (reaches within 200 m whose areas differ by
+  1.5×) the server doesn't choose: the sheet asks which river ("The river
+  below the junction, 497 km²", "The main river above the junction, 422
+  km²", "The tributary above the junction, 67 km²"), and the outlet goes at
+  the DEM's own junction for the one picked (`junction.ts`: the tributary
+  followed downhill to where the main river joins it), else on the channel
+  within 2.5 km matching its area. Measured on 60 real junctions:
+  [design/delineation-snapping.md § Confluences](./design/delineation-snapping.md#confluences-third-experiment).
+  It says how far the point moved.
 - **What it does.** On the API, never in the engine: reads the DEM around
   the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
   cells while the catchment reaches its edge), fills depressions
@@ -1126,6 +1142,37 @@ to a point on a river. The design, the method and its accuracy are in
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
 
+## The elevation model's channels
+
+While **Delineate** or **Sub-catchments** is on, the Map draws the DEM's own
+channels in solid red, wider for a larger area (issue #374;
+`delineation/channels.ts`, `channelRoutes.ts`, the Map's
+`channelLayer.svelte.ts`). River lines sit hundreds of metres off the
+channel the DEM routes along ([design/delineation-snapping.md](./design/delineation-snapping.md)),
+so these are the lines to click: a click on one snaps onto it.
+
+- **How.** The map's view is cut into fixed 0.2° tiles; each is routed in a
+  1 024-cell window centred on it (Delineate's first window, about 6 km of
+  margin) with the same fill, D8 and accumulation as Delineate, and every
+  cell with at least 1 km² draining through it is traced into lines from
+  each stream head or confluence down to the next confluence, carrying the
+  area at its lower end (window-local: a river entering from beyond the
+  window carries less than it drains). A tile keeps the steps that start
+  inside it, so tiles meet without overlapping. Simplified by half a cell.
+- **When.** Only while one of the two tools is on, and only for a view at
+  most 0.35° a side (3 × 3 tiles); wider, a line over the map says to zoom
+  in. Tiles are fetched one at a time and kept for the session; the server
+  keeps the last 128 in memory per instance.
+- **Cost.** A tile it computes (not one it has) counts against the account's
+  elevation-model cap like a delineation (60 an hour, 2 at once;
+  security.md § Map uploads); a few seconds of CPU each.
+- **What says so.** Delineate's bar and the Sub-catchments panel say "Click
+  a red line (the elevation model's channel) …"; a pill over the map's top
+  appears only when there is something to say: "Drawing the elevation
+  model's channels…", "Zoom in to see …", that there is no map to draw them
+  on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
+  309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
+
 ## Start from the map
 
 On an empty model, editors get **Start the model from the map** (issue #326
@@ -1161,7 +1208,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-2)") and its area from it (*from the map*), the
+  delineated from … (start-4)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1195,7 +1242,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 
 ## Sub-catchments from clicks
 
-**Sub-catchments** in the Map's header (editors, with a DEM on the server;
+**Sub-catchments**, Delineate's choice **Sub-catchments, one per click** (editors, with a DEM on the server;
 `backend/src/delineation/clicks.ts`, the Map's `ClickBar.svelte`; the screen
 in [ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Sub-catchments
 from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
@@ -1227,16 +1274,20 @@ pick first.
   point, the lower 1 046 km² with the side streams entering that stretch,
   4.8 s). The totals below an inflow point are unknown ("more upstream than
   was routed"). Only when every click is open is the request refused.
-- **Clicking on the channel.** A click moves at most about 150 m to the
-  channel, the same as Delineation. A river line can sit further off the
-  channel the DEM sees: on the Orange near Upington a HydroRIVERS tributary
-  vertex was 265 m off, and the click found a gully (under 0.05 km²)
-  instead of its 573 km² catchment. A click with under 1 km² upstream is
-  flagged on its line ("very little drains here: it probably missed the
-  channel"); Undo and click closer, with the Relief layer or the basemap's
-  waterways. The snap is deliberately not wider: near a confluence a wider
-  one would move a tributary's click onto the main river, which no line
-  would flag.
+- **Clicking on the channel** (the same rules as Delineation's, [§
+  Delineation](#delineation)). A river line can sit hundreds of metres off
+  the channel the DEM routes along. A click within 1 km of a loaded river
+  reach is put on the channel whose upstream area matches the reach's; its
+  line says so ("on the channel matching river reach 11492928 (412.50
+  km²)"). Any other click snaps to the most-drained cell within 150 m, and
+  when a channel 100× larger runs within 1 km its line names it ("a much
+  larger channel (620 km²) runs 504 m north: …") with **Use the larger
+  channel**, which moves the click there and routes again (Undo moves it
+  back). A click with under 1 km² upstream and no larger channel nearby is
+  flagged ("very little drains here: it probably missed the channel").
+  A click at a confluence waits in the panel until the river is picked
+  (as Delineate's sheet asks), then goes at the DEM's junction for it.
+  Measured: [design/delineation-snapping.md](./design/delineation-snapping.md).
 - **Every click is one request.** The map redraws all the pieces after each
   one; nothing is stored. Undo goes back to the answer before it without
   asking again. A click the server refuses (off the DEM, the lowest click's

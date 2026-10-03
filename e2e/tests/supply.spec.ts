@@ -106,11 +106,11 @@ test('a hands-off flow by month with the EWR, and River to dam by month, save an
 
 	// River to dam by month: winter only (May–Sep); the one value is then not used.
 	await routing.getByRole('checkbox', { name: 'Set River to dam by month', exact: true }).check();
-	await expect(routing.getByLabel('River to dam (m³/day)', { exact: true })).not.toBeEditable();
+	await expect(routing.getByLabel('River to dam (m³/s)', { exact: true })).not.toBeEditable();
 	await expect(routing.getByText('Not used: River to dam is set by month below.', { exact: true })).toBeVisible();
-	for (const m of ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr']) await routing.getByLabel(`River to dam of Upper farm in ${m}, m³/day`).fill('0');
-	for (const m of ['May', 'Jun', 'Jul', 'Aug', 'Sep']) await routing.getByLabel(`River to dam of Upper farm in ${m}, m³/day`).fill('800');
-	await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes up to 800 m³/day; nothing in Oct–Apr. The one value above is not used.');
+	for (const m of ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr']) await routing.getByLabel(`River to dam of Upper farm in ${m}, m³/s`).fill('0');
+	for (const m of ['May', 'Jun', 'Jul', 'Aug', 'Sep']) await routing.getByLabel(`River to dam of Upper farm in ${m}, m³/s`).fill('0.01');
+	await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes up to 0.01 m³/s; nothing in Oct–Apr. The one value above is not used.');
 	// Now River to dam takes from the river, and the note names it alone (there is no river pump).
 	await expect(note).toHaveText(
 		'Leaves the larger of the set flow (between 150 and 250 m³/day by month) and the EWR required here (this unit’s share and upstream shares) in the river before River to dam takes anything. When less flows, nothing is taken.'
@@ -127,12 +127,12 @@ test('a hands-off flow by month with the EWR, and River to dam by month, save an
 	await expect(s2.getByLabel('Hands-off flow of Upper farm in Jan, m³/day')).toHaveValue('250');
 	await expect(s2.getByRole('checkbox', { name: 'Also leave the EWR in the river', exact: true })).toBeChecked();
 	await expect(r2.getByRole('checkbox', { name: 'Set River to dam by month', exact: true })).toBeChecked();
-	await expect(r2.getByLabel('River to dam of Upper farm in Apr, m³/day')).toHaveValue('0');
-	await expect(r2.getByLabel('River to dam of Upper farm in Jul, m³/day')).toHaveValue('800');
+	await expect(r2.getByLabel('River to dam of Upper farm in Apr, m³/s')).toHaveValue('0');
+	await expect(r2.getByLabel('River to dam of Upper farm in Jul, m³/s')).toHaveValue('0.01');
 
 	// Unticked, the one value is back in use and nothing by month is left.
 	await r2.getByRole('checkbox', { name: 'Set River to dam by month', exact: true }).uncheck();
-	await expect(r2.getByLabel('River to dam (m³/day)', { exact: true })).toBeEditable();
+	await expect(r2.getByLabel('River to dam (m³/s)', { exact: true })).toBeEditable();
 	await expect(r2.getByTestId('river-to-dam-months-note')).toHaveCount(0);
 });
 
@@ -145,7 +145,8 @@ test('the month fields show 12 345.5 and 0.0129 whole for an owner and a viewer,
 		pumpCapacityM3Day: 1200,
 		handsOffM3Day: [12_345.5, 0.0129, 150, 150, 150, 150, 150, 150, 150, 150, 150, 150],
 		handsOffEwr: true,
-		divertMonthlyM3Day: [0.0129, 12_345.5, 800, 800, 800, 800, 800, 800, 800, 800, 800, 800]
+		// River to dam is stored in m³/day and shown in m³/s: 0.0129 and 12 345.5 m³/s.
+		divertMonthlyM3Day: [0.0129 * 86_400, 12_345.5 * 86_400, 1728, 1728, 1728, 1728, 1728, 1728, 1728, 1728, 1728, 1728]
 	});
 	await putModel(page.request, id, model);
 	const viewer = await signIn('Month fields viewer');
@@ -160,16 +161,16 @@ test('the month fields show 12 345.5 and 0.0129 whole for an owner and a viewer,
 			await p.goto(`/projects/${id}?tab=network`);
 			const { sheet, supply, routing } = await openUpperFarm(p);
 			const handsOff = supply.getByRole('group', { name: 'Hands-off flow, m³/day, per month', exact: true });
-			const byMonth = routing.getByRole('group', { name: 'River to dam, m³/day, per month', exact: true });
+			const byMonth = routing.getByRole('group', { name: 'River to dam, m³/s, per month', exact: true });
 			await expectMonthsWhole(handsOff, (m) => `Hands-off flow of Upper farm in ${m}, m³/day`);
-			await expectMonthsWhole(byMonth, (m) => `River to dam of Upper farm in ${m}, m³/day`);
+			await expectMonthsWhole(byMonth, (m) => `River to dam of Upper farm in ${m}, m³/s`);
 			// An owner edits the plain number; a viewer reads it grouped.
 			await expect(handsOff.getByLabel('Hands-off flow of Upper farm in Oct, m³/day')).toHaveValue(who === 'owner' ? '12345.5' : '12\u202f345.5');
 			await expect(handsOff.getByLabel('Hands-off flow of Upper farm in Nov, m³/day')).toHaveValue('0.0129');
-			await expect(byMonth.getByLabel('River to dam of Upper farm in Nov, m³/day')).toHaveValue(who === 'owner' ? '12345.5' : '12\u202f345.5');
+			await expect(byMonth.getByLabel('River to dam of Upper farm in Nov, m³/s')).toHaveValue(who === 'owner' ? '12345.5' : '12\u202f345.5');
 			// The previews write every figure as entered.
 			await expect(supply.getByTestId('hands-off-note')).toContainText('between 0.0129 and 12\u202f345.5 m³/day by month');
-			await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes between 0.0129 and 12\u202f345.5 m³/day by month. The one value above is not used.');
+			await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes between 0.0129 and 12\u202f345.5 m³/s by month. The one value above is not used.');
 			// Nothing in the sheet scrolls sideways.
 			const scrollers = await sheet.evaluate((d) =>
 				[d, ...d.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1).map((el) => el.className || el.tagName)
@@ -194,10 +195,10 @@ test('River to dam by month: October’s capacity in every month, and cleared be
 	const { sheet, routing } = await openUpperFarm(page);
 
 	await routing.getByRole('checkbox', { name: 'Set River to dam by month', exact: true }).check();
-	await routing.getByLabel('River to dam of Upper farm in Oct, m³/day').fill('300');
+	await routing.getByLabel('River to dam of Upper farm in Oct, m³/s').fill('0.2');
 	await routing.getByRole('button', { name: 'Use October’s capacity for every month' }).click();
-	for (const m of MONTHS) await expect(routing.getByLabel(`River to dam of Upper farm in ${m}, m³/day`)).toHaveValue('300');
-	await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes up to 300 m³/day. The one value above is not used.');
+	for (const m of MONTHS) await expect(routing.getByLabel(`River to dam of Upper farm in ${m}, m³/s`)).toHaveValue('0.2');
+	await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes up to 0.2 m³/s. The one value above is not used.');
 
 	// A gauge can't have it: the Supply section stays with the save rule's alert and, beside it, the way out.
 	await sheet.getByLabel('Kind', { exact: true }).selectOption('gauge');
@@ -214,7 +215,7 @@ test('the node table shows River to dam set by month read-only, and links to the
 	void owner;
 	const { id, model } = await seedRunnableProject(page.request, 'Table by month');
 	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
-	Object.assign(upper, { divertCapacityM3Day: 400, divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 800, 800, 800, 800, 800] });
+	Object.assign(upper, { divertCapacityM3Day: 400, divertMonthlyM3Day: [0, 0, 0, 0, 0, 0, 0, 864, 864, 864, 864, 864] });
 	await putModel(page.request, id, model);
 
 	for (const width of [1280, 390]) {
@@ -222,14 +223,14 @@ test('the node table shows River to dam set by month read-only, and links to the
 		await page.goto(`/projects/${id}?tab=network&grid=nodes`);
 		const grid = page.getByRole('dialog', { name: 'Node table' });
 		// The run ignores the one value, so the table has no input for it, only the months' range.
-		await expect(grid.getByLabel('River to dam at Upper farm, m³/day', { exact: true })).toHaveCount(0);
+		await expect(grid.getByLabel('River to dam at Upper farm, m³/s', { exact: true })).toHaveCount(0);
 		const cell = grid.getByTestId(`divert-by-month-${upper.id}`);
-		const link = cell.getByRole('link', { name: 'River to dam at Upper farm is set by month, between 0 and 800 m³/day: edit it in the node’s form', exact: true });
-		await expect(link).toHaveText('by month: 0–800');
+		const link = cell.getByRole('link', { name: 'River to dam at Upper farm is set by month, between 0 and 0.01 m³/s: edit it in the node’s form', exact: true });
+		await expect(link).toHaveText('by month: 0–0.01');
 		// A farm with the one value keeps editing it in the table.
-		await expect(grid.getByLabel('River to dam at Lower farm, m³/day', { exact: true })).toBeEditable();
+		await expect(grid.getByLabel('River to dam at Lower farm, m³/s', { exact: true })).toBeEditable();
 		if (width === 390) {
-			await expect(cell.getByText('River to dam m³/day')).toBeVisible(); // the phone card's label
+			await expect(cell.getByText('River to dam m³/s')).toBeVisible(); // the phone card's label
 			await expectNoViolations(page, { include: `[data-testid="divert-by-month-${upper.id}"]` });
 		}
 	}
@@ -239,6 +240,31 @@ test('the node table shows River to dam set by month read-only, and links to the
 	await expect(sheet).toBeVisible();
 	await expect(page.getByRole('dialog', { name: 'Node table' })).toHaveCount(0);
 	await expect(sheet.getByRole('group', { name: 'Routing', exact: true }).getByTestId('river-to-dam-months-note')).toHaveText(
-		'River to dam takes up to 800 m³/day; nothing in Oct–Apr. The one value above is not used.'
+		'River to dam takes up to 0.01 m³/s; nothing in Oct–Apr. The one value above is not used.'
 	);
+});
+
+test('a dam on the river (Upstream inflow to dam 100 %) has no River to dam; an off-channel one enters it in m³/s', async ({ page, owner }) => {
+	void owner;
+	const { id, model } = await seedRunnableProject(page.request, 'On the river');
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	Object.assign(upper, { pctUpstreamToDam: 1, divertCapacityM3Day: 17_280 });
+	await putModel(page.request, id, model);
+	await page.goto(`/projects/${id}?tab=network`);
+	const { routing } = await openUpperFarm(page);
+	// On the river: the stored 0.2 m³/s stays, read-only, and the run doesn't use it (engine 1.68.0).
+	const divert = routing.getByLabel('River to dam (m³/s)', { exact: true });
+	await expect(divert).toHaveValue('0.2');
+	await expect(divert).not.toBeEditable();
+	await expect(routing.getByText(/^Not available: the dam is on the river/)).toBeVisible();
+	await expect(routing.getByRole('checkbox', { name: 'Set River to dam by month', exact: true })).toBeDisabled();
+	// Off the river: it is available, entered in m³/s and stored in m³/day.
+	await routing.getByLabel('Upstream inflow to dam (%)', { exact: true }).fill('0');
+	await expect(divert).toBeEditable();
+	await divert.fill('0.05');
+	await saveModelChanges(page);
+	await page.reload();
+	const { routing: r2 } = await openUpperFarm(page);
+	await expect(r2.getByLabel('River to dam (m³/s)', { exact: true })).toHaveValue('0.05');
+	await expectNoViolations(page, { include: '[data-testid^="river-to-dam-months-"]' });
 });

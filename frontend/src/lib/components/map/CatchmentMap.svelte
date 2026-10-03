@@ -24,6 +24,9 @@
 	a click inside one (with no feature there) picking it (`onquaternary`).
 	`rivers` (the River network layer, #345) draws the network's reaches over
 	them, dashed, a click on one (with no feature there) picking it (`onreach`).
+	`channels` (issue #374) draws the elevation model's own channels over the
+	river network, solid red, wider for a larger area: where a Delineate or
+	Sub-catchments click goes (channelLayer.svelte.ts).
 	With a `terrainUrl` and `relief` on (the tab's Relief layer), the land is
 	shaded from the DEM (docs/maps.md § Relief); turning it off or on changes
 	the live map, and a DEM that can't be read drops the relief (`onreliefError`)
@@ -77,6 +80,8 @@
 		reliefLayer,
 		RIVER_NETWORK_HIT_LAYER,
 		riverNetworkData,
+		channelData,
+		type ChannelLineData,
 		RIVERS_CREDIT_LAYER,
 		RIVERS_CREDIT_SOURCE,
 		riversCredit as riversCreditLink,
@@ -116,6 +121,7 @@
 		pickedQuaternary = null,
 		onquaternary,
 		rivers = null,
+		channels = null,
 		riversCredit = false,
 		pickedReach = null,
 		onreach,
@@ -155,6 +161,8 @@
 		onquaternary?: (code: string) => void;
 		/** The river network's reaches to draw (#345); null or empty: none. */
 		rivers?: readonly NetworkReach[] | null;
+		/** The elevation model's channels (channelLayer.svelte.ts), drawn while Delineate or Sub-catchments is on. */
+		channels?: readonly ChannelLineData[] | null;
 		/** Credit the river network on the map (its licence asks it: HydroRIVERS), while its reaches are drawn. */
 		riversCredit?: boolean;
 		/** The reach picked in the tab's list, drawn heavier. */
@@ -353,6 +361,7 @@
 	const syncQuaternaries = () => setSource('quaternaries', () => quaternaryData(quaternaries, pickedQuaternary));
 	const syncProposal = () => setSource('proposal', () => proposalData(proposal));
 	const syncRivers = () => setSource('rivers', () => riverNetworkData(rivers, pickedReach));
+	const syncChannels = () => setSource('channels', () => channelData(channels));
 
 	function syncOverlay() {
 		if (!map || status !== 'ready') return;
@@ -409,6 +418,7 @@
 						glyphs,
 						quaternaries: quaternaryData(quaternaries, pickedQuaternary),
 						rivers: riverNetworkData(rivers, pickedReach),
+						channels: channelData(channels),
 						terrain: reliefUrl(),
 						riversCredit: riversCreditHtml(),
 						dataSourcesHref: `${base}/data-sources`,
@@ -564,6 +574,11 @@
 		void pickedReach;
 		void status;
 		syncRivers();
+	});
+	$effect(() => {
+		void channels;
+		void status;
+		syncChannels();
 	});
 
 	// A new proposal is framed, so the editor sees all of what they are deciding on.

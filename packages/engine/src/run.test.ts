@@ -294,6 +294,33 @@ describe('runModel — dam behaviour', () => {
 		expect(get(out, 'D', 'outflow')).toEqual([0, 500]);
 	});
 
+	it('a dam on the river (pctUpstreamToDam = 1) takes no River to dam, and the run says so (engine 1.68.0)', () => {
+		// U and D each make 1000 m³/day of runoff. D's dam takes all of U's outflow
+		// (K = 1000); its own runoff passes below it (N = 1000), where the stored
+		// 300 m³/day River to dam is not used: that is for an off-channel dam.
+		const onRiver = run({
+			nodes: [node('U', { downstreamNodeId: 'D' }), node('D', { sortOrder: 1, pctUpstreamToDam: 1, divertCapacityM3Day: 300, damCapacityM3: 10_000 })],
+			natural: [2000]
+		});
+		expect(get(onRiver, 'D', 'dam_storage')).toEqual([1000]);
+		expect(get(onRiver, 'D', 'outflow')).toEqual([1000]);
+		expect(onRiver.summary.warnings.filter((w) => w.includes('River to dam isn')).length).toBe(1);
+		// Positive control: a dam that lets any of the upstream inflow past takes River to dam.
+		const offRiver = run({
+			nodes: [node('U', { downstreamNodeId: 'D' }), node('D', { sortOrder: 1, pctUpstreamToDam: 0.99, divertCapacityM3Day: 300, damCapacityM3: 10_000 })],
+			natural: [2000]
+		});
+		expect(get(offRiver, 'D', 'dam_storage')).toEqual([1290]);
+		expect(get(offRiver, 'D', 'outflow')).toEqual([710]);
+		expect(offRiver.summary.warnings.some((w) => w.includes('River to dam isn'))).toBe(false);
+		// By month too: an on-river dam ignores River to dam by month.
+		const byMonth = run({
+			nodes: [node('U', { downstreamNodeId: 'D' }), node('D', { sortOrder: 1, pctUpstreamToDam: 1, divertMonthlyM3Day: new Array(12).fill(300), damCapacityM3: 10_000 })],
+			natural: [2000]
+		});
+		expect(get(byMonth, 'D', 'dam_storage')).toEqual([1000]);
+	});
+
 	it('initial storage is pct × capacity, unrounded (the Element sheet: ROUND(pct × ROUND(capacity)))', () => {
 		const out = run({
 			nodes: [node('D', { damCapacityM3: 1001.4, damInitialPct: 0.5 })],

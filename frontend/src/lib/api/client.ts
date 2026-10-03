@@ -162,6 +162,7 @@ import type {
 	DelineationProposal,
 	DelineationState,
 	ClickPieces,
+	ChannelTileAnswer,
 	DamTraceProposal,
 	DamTraceState,
 	MinOccurrence,
@@ -1103,17 +1104,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
 		delineation: {
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
-			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from'] }) =>
-				request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation`, body),
+			/** `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel). */
+			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; reach?: { dataset: string; reachId: number } }) =>
+				request<{ proposal: DelineationProposal; check: string | null }>('POST', `${p(id)}/map/delineation`, body),
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),
-			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`)
+			reject: (id: string, pid: string) => request<{ proposal: DelineationProposal }>('POST', `${p(id)}/map/delineation/${enc(pid)}/reject`),
+			/** One tile of the elevation model's channels (GET …/map/channels?tile=i,j; editor). */
+			channels: (id: string, tile: readonly [number, number]) => request<ChannelTileAnswer>('GET', `${p(id)}/map/channels?tile=${tile[0]},${tile[1]}`)
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {
-			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
-			save: (id: string, clicks: { lon: number; lat: number }[]) =>
+			pieces: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) =>
 				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */

@@ -80,6 +80,40 @@ describe('delineate (synthetic DEM)', () => {
 	});
 });
 
+describe('delineate: a click off the channel (issue #374)', () => {
+	// Three cells (about 380 m) east of the river, between the dam and the outlet: on the valley's side, as a displaced river line puts a click.
+	const off = at(DAM_CELL.x + 3, DAM_CELL.y + 60);
+	const onRiver = at(DAM_CELL.x, DAM_CELL.y + 60);
+
+	it('refuses beside a much larger channel, naming it: where, how far, and both areas', async () => {
+		const e = await delineate(dem, off).catch((x: unknown) => x);
+		expect(e).toBeInstanceOf(DelineationRefused);
+		const r = e as DelineationRefused;
+		expect(r.code).toBe('larger_channel');
+		expect(r.message).toMatch(/^A much larger channel runs \d+ m west of your point: about [\d ,]+ km² drains through it here, against [\d.]+ km² at your point\. .*Use that channel, or keep your point/);
+		expect(r.larger!.distanceM).toBeGreaterThan(200);
+		expect(r.larger!.distanceM).toBeLessThan(1000);
+		// The channel it names is the river: delineating there gives the valley above it.
+		const river = await delineate(dem, r.larger!.at);
+		expect(river.areaM2 / 1e6).toBeGreaterThan(100 * r.larger!.pointKm2);
+	});
+
+	it('keeps the point when asked: the small catchment it snaps to', async () => {
+		const d = await delineate(dem, off, { keepPoint: true });
+		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
+		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
+		expect(d.methodVersion).toBe('delineate-3');
+	});
+
+	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {
+		const river = await delineate(dem, onRiver);
+		const d = await delineate(dem, off, { expected: { km2: river.areaM2 / 1e6, reach: 'reach 1 of test' } });
+		expect(Math.abs(d.areaM2 / river.areaM2 - 1)).toBeLessThan(0.05);
+		expect(d.snapDistanceM).toBeGreaterThan(200);
+		expect(d.method).toMatch(/best matches reach 1 of test \(\d+ km²; Lehner 2012/);
+	});
+});
+
 describe('the e2e copy of the fixture’s points', () => {
 	it('matches the fixture (e2e/support/dem.ts can’t import backend source)', () => {
 		const text = readFileSync(new URL('../../../e2e/support/dem.ts', import.meta.url), 'utf8');
@@ -88,5 +122,7 @@ describe('the e2e copy of the fixture’s points', () => {
 		expect(pair('FIXTURE_DAM')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 1));
 		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
 		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
+		expect(pair('FIXTURE_OFF_CHANNEL')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 60));
+		expect(pair('FIXTURE_JUNCTION')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 30));
 	});
 });
