@@ -213,7 +213,7 @@ cell size, zoom and window, the dataset label and the archive's
 are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
 larger-channel guard, `delineate-3` for asking the river at a confluence,
-`delineate-4` for the snap radius measured from the exact click; bumped whenever the method changes what a click
+`delineate-4` for the snap radius measured from the exact click, `delineate-7` for keeping a click beside a confluence on its river's side of the DEM's junction (issue #390); bumped whenever the method changes what a click
 proposes).
 
 ## Accuracy, as shown to the user

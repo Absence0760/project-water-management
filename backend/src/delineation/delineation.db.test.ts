@@ -100,7 +100,7 @@ describe('with the synthetic DEM', () => {
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		const p = res.body.proposal;
-		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-4', featureId: null, createdBy: 'Leditor', decidedAt: null });
+		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-7', featureId: null, createdBy: 'Leditor', decidedAt: null });
 		expect(Math.abs(p.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
 		expect(p.geometry.type).toBe('Polygon');
 		expect(p.dataset).toMatch(/Synthetic DEM/);
@@ -109,7 +109,7 @@ describe('with the synthetic DEM', () => {
 		expect(p.click).toEqual([OUTLET.lon, OUTLET.lat]);
 		firstId = p.id;
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.delineation_proposed'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-4' });
+		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-7' });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
 	});
 
