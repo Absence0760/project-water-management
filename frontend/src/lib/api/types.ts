@@ -695,6 +695,12 @@ export interface RunMeta {
 	/** That scenario's name (the name the run recorded, once the scenario is deleted); null for a run of the model. */
 	scenarioName?: string | null;
 	/**
+	 * A scenario made the run, also once that scenario is deleted and
+	 * `scenarioId` is null (model_run.from_scenario, 188). Tell a run of the
+	 * model by this (isScenarioRun), never by `scenarioId`. Absent from an older API.
+	 */
+	fromScenario?: boolean;
+	/**
 	 * What cites the run, so it is kept for good (no delete, no trim, no
 	 * unpin): the publications that hold it and the scenarios based on it
 	 * that you can see, oldest first. Absent from an older API.

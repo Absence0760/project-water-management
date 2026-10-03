@@ -365,6 +365,11 @@ describe('forecast runs (WP-2.12)', () => {
 		const refused = await nominate(owner, f.body.run.id, 'the forecast', pid);
 		expect(refused.status).toBe(409);
 		expect(refused.body.error).toMatch(/^a forecast run cannot be nominated as evidence/);
+		// The stamp trigger refuses it too, past the route (188).
+		await expect(sql(owner, `INSERT INTO run_nomination (project_id, run_id, reason) VALUES ($1, $2, 'sql')`, [pid, f.body.run.id])).rejects.toMatchObject({
+			code: '23514',
+			message: 'a forecast run cannot be nominated as evidence'
+		});
 		expect(await history(owner, pid)).toEqual([]);
 		// Positive control: the ordinary run is nominated.
 		const ordinary = await newRun(owner, pid, 'ordinary');
@@ -386,15 +391,21 @@ describe('scenario runs', () => {
 		const refused = await nominate(owner, scenarioRun, 'the what-if', pid);
 		expect(refused.status).toBe(409);
 		expect(refused.body.error).toMatch(/^a scenario run cannot be nominated as evidence/);
+		const bySql = () => sql(owner, `INSERT INTO run_nomination (project_id, run_id, reason) VALUES ($1, $2, 'sql')`, [pid, scenarioRun]);
+		// The stamp trigger refuses it too, past the route (188, issue #380).
+		await expect(bySql()).rejects.toMatchObject({ code: '23514', message: 'a scenario run cannot be nominated as evidence' });
 		// The scenario deleted: its run keeps the scenario in its inputs (scenario_id goes null), and is refused alike.
 		expect((await owner.call('DELETE', `/projects/${pid}/scenarios/${sid}`)).status).toBe(204);
-		expect((await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [scenarioRun]))[0]).toEqual({ scenario_id: null });
+		expect((await asOwner('SELECT scenario_id, from_scenario FROM model_run WHERE id = $1', [scenarioRun]))[0]).toEqual({ scenario_id: null, from_scenario: true });
 		const orphan = await nominate(owner, scenarioRun, 'the what-if', pid);
 		expect(orphan.status).toBe(409);
 		expect(orphan.body.error).toMatch(/^a scenario run cannot be nominated as evidence/);
+		await expect(bySql()).rejects.toMatchObject({ code: '23514', message: 'a scenario run cannot be nominated as evidence' });
 		expect(await history(owner, pid)).toEqual([]);
-		// Positive control: the base run is nominated.
+		// Positive control: the base run is nominated, by the route and by SQL.
 		expect((await nominate(owner, base, 'the record', pid)).status).toBe(201);
-		expect((await history(owner, pid)).map((n) => n.runId)).toEqual([base]);
+		const other = await newRun(owner, pid, 'other');
+		expect((await sql(owner, `INSERT INTO run_nomination (project_id, run_id, reason) VALUES ($1, $2, 'sql')`, [pid, other])).rowCount).toBe(1);
+		expect((await history(owner, pid)).map((n) => n.runId)).toEqual([base, other]);
 	});
 });

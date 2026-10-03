@@ -637,8 +637,11 @@ Migration `024_scenarios.sql`
   by whoever may change the scenario and printed in Appendix C, each answered
   or *Not given* ([design/evidence-report.md § 4.3](./design/evidence-report.md)).
 - `model_run.scenario_id → scenario` (`ON DELETE SET NULL`), set on insert
-  only.
-- Triggers: the base is a run of the same project and not a scenario run; a
+  only. Deleting a scenario leaves its runs scenario runs: `from_scenario`
+  (188) stays true from the snapshot's `inputs.scenario`, so a run of a
+  deleted scenario is never a base, the evidence run or a publication
+  ([data-model.md § Scenarios](./data-model.md#scenarios-024_scenariossql)).
+- Triggers: the base is a run of the same project and not a scenario run (live or orphaned); a
   run's scenario is its own project's; the owner is stamped from the session;
   a non-draft is frozen; status moves as above.
 - RLS: viewer read, editor write; **farmers read nothing** (a scenario's ops

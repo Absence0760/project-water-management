@@ -9,6 +9,7 @@
 // Page-side and engine-free (types only), so a tab can build the input
 // without loading the model's run code; the worker runs it (./compute.ts).
 import type { ModelInput, ProjectModel } from '@water-management/engine';
+import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
 
 type Plain = Record<string, unknown>;
 const isPlain = (v: unknown): v is Plain => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -167,11 +168,10 @@ export function hasUnsaved(edits: UnsavedEdits): boolean {
 }
 
 /** The parts of a run (RunMeta) the preview's choice of base reads. */
-export interface BaseRunCandidate {
+export interface BaseRunCandidate extends ScenarioRunFields {
 	id: string;
 	createdAt: string;
 	legacy?: boolean;
-	scenarioId?: string | null;
 }
 
 /**
@@ -182,7 +182,7 @@ export interface BaseRunCandidate {
 export function previewBaseRun<R extends BaseRunCandidate>(runs: readonly R[] | null | undefined): R | null {
 	let best: R | null = null;
 	for (const r of runs ?? []) {
-		if (r.scenarioId || r.legacy) continue;
+		if (isScenarioRun(r) || r.legacy) continue;
 		if (!best || Date.parse(r.createdAt) > Date.parse(best.createdAt)) best = r;
 	}
 	return best;

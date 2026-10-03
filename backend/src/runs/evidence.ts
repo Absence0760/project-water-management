@@ -135,7 +135,7 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 			// Friendly answers first; the stamp trigger enforces each of these again.
 			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null; trigger: string; scenario: boolean }>(
 				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings, "trigger",
-				        (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario
+				        from_scenario AS scenario
 				   FROM model_run WHERE project_id = $1 AND id = $2`,
 				[id, body.runId]
 			);

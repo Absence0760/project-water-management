@@ -4,6 +4,7 @@
 import type { Publication, PublicationMeta, PublicationRestriction, RunMeta } from '$lib/api/types';
 import { LANGUAGES, LOCALES, type Locale, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { PUBLICATION_TEXT_MAX } from '$lib/api/types';
+import { isScenarioRun, type ScenarioRunFields } from './scenarioRun';
 
 export const LEVEL_LABEL: Record<RestrictionLevel, string> = {
 	none: 'No restriction',
@@ -17,10 +18,10 @@ export function damsWithoutStopLevel(nodes: readonly { kind?: string; damCapacit
 }
 
 /** Why this run can't be published, or null. The server refuses the same (audit H1; a scenario run, publish.ts). */
-export function publishBlocker(run: Pick<RunMeta, 'legacy' | 'scenarioName'>): string | null {
+export function publishBlocker(run: Pick<RunMeta, 'legacy'> & ScenarioRunFields): string | null {
 	if (run.legacy) return 'This run used the legacy runoff model (a workbook comparison), so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.';
-	// scenarioName stays set once the scenario is deleted (the run records it).
-	if (run.scenarioName != null) return 'This is a scenario run, its scenario’s changes on a base run, so it can’t be published: farmers are shown the catchment as it is. Publish a run of the model.';
+	// Also once the scenario is deleted (isScenarioRun).
+	if (isScenarioRun(run)) return 'This is a scenario run, its scenario’s changes on a base run, so it can’t be published: farmers are shown the catchment as it is. Publish a run of the model.';
 	return null;
 }
 

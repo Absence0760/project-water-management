@@ -73,7 +73,7 @@ erDiagram
 | `demand_object` | A demand object on a unit (migration 088, engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md)): `node_id` (a farm node; the API refuses any other), `name` (1–200 chars), `category` (`domestic`, `municipal`, `industrial`, `livestock`, `irrigation`, `external`, `other`), `sizing` (`monthly`, `perUnit`), `monthly_m3_day` float8[12] or null, `unit_count` and `litres_per_unit_day` ≥ 0 or null, `loss_pct` 0 ≤ l < 1, `monthly_factor` float8[12] or null, `return_pct` 0–1, `priority` (`first`, `shared`, `last`), `priority_rank` smallint or null (migration 169, engine ≥ 1.64.0, issue #343: its rank within `first` or `last`, 1 supplied before 2, equal ranks pro rata, CHECKed to 1–99; null = 1, so every object saved before it runs unchanged; ignored on a `shared` object; the API's `rank`), `destination` (`internal`, `external`), `enabled`, `schedule` jsonb or null (migration 105, engine ≥ 1.17.0, issue #90 Q4: date windows with a factor on the daily demand, 0 = off; a non-empty array of at most 24 windows, each window's shape and dates checked by the API, `[]` stored as null), `population` float8 ≥ 0 or null (migration 127, engine ≥ 1.44.0, issue #123: the people a domestic or municipal object serves, for its basic-needs floor of 25 l a person a day; null = a per-unit object's count), `source` text or null (migration 139, engine ≥ 1.56.0, issue #54 Q11: where its number comes from, `meter`, `aadd`, `perCapita` or `other`, CHECKed to that list; the API refuses a source whose sizing the object doesn't have; null = not recorded), `water_source` text or null (migration 170, engine ≥ 1.65.0, issue #344: where its water comes from, `dam` or `river`, CHECKed to that list; null = the dam), `river_pump_m3_day` and `river_pool_m3` float8 ≥ 0 (finite) or null (its river abstraction's pump capacity, null = no limit, and pool, null or 0 = none; read only under `river`), `note` (≤ 1000 chars) (CHECKs, including: a monthly object has its 12 values, a per-unit one its count and litres, an external one returns nothing). Part of the model document (`ProjectModel.demandObjects`, present only when there are any), rewritten whole on save like `borehole`; cascades with its node. RLS viewer/editor policies plus `demand_object_select_farmer` (own linked farms only, so a linked contributor reads their own units' too, 045), same-project trigger on `node_id`, indexes on `project_id` and `node_id` | a unit's gross demand typed over the [Farm demand] crop formula (the importer maps the excess to a `monthly` object, scripts/wbt-import) |
 | `transfer` | A structured transfer rule: from/to node, months, max rate m³/s, optional daily cap, min source storage %, enabled, `priority` (integer, lower moves first; equal priorities share a source dam pro rata, engine ≥ 0.16.0; migration 006 set it to each rule's old position in id order), `monthly_rate_m3s` (migration 090, engine ≥ 1.14.0: float8[12], the max rate per water-year month Oct–Sep, 0 = off that month; NULL, every existing row, = the max rate in the listed months; when set, `months` and `max_rate_m3s` are kept as the months with a rate above 0 and the largest rate, and the API refuses a model where they disagree); a river off-take (migration 091, engine ≥ 1.14.0, [model.md §2.6a](./model.md)): `source` (`dam` default, `river`), `hands_off_m3_day` (≥ 0 or NULL = none), `hands_off_ewr` (default false), `loss_pct` (0 ≤ l < 1, default 0), `sizing` (`demand` default, `capacity`), `top_up_dam` (default false) (CHECKs); every existing row is a dam transfer, and the API refuses an off-take that isn't unit to unit or whose destination drains into its source; canal seepage back to the river (migration 126, engine ≥ 1.42.0): `loss_return_pct` (0–1, default 0 = none returns, every existing row) and `loss_return_node_id` (FK → `node`, ON DELETE SET NULL, NULL = the source; the API refuses a unit that isn't the source or a farm downstream of it along the river; indexed, and the same-project trigger checks it with `from_node_id` and `to_node_id`) | `[Transfers]` "Draw From" parameters. The hand-written InOut formulas become the rule itself (see [model.md §2.6](./model.md#26-transfers-transfers)). |
 | `time_series` | A daily input series, stored as one array per (project, kind, name). A flow record may carry `site_node_id`, the gauge node inside the network it was measured at (084, [Gauge records](#gauge-records-084_gauge_recordssql)); none = the outlet. `kind` is free text in the table; the API and `pnpm import:project` accept only `SERIES_KINDS` (engine 0.30.0 adds `rain_catchment_alt_mm` and `rain_reanalysis_mm`, read only by a rain-source period; engine 0.38.0 adds `evap_apan_mm`, a daily A-pan evaporation record in mm that replaces the monthly `apanMm` means on the days it covers, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45), with no migration since `kind` has no CHECK). A run stores the first series of every kind in `run_input_series`, the daily A-pan included. `product` / `product_version` (032) and `day_boundary` (033) describe the values. `name` tells several series of one kind apart; a run uses the first of each kind by name | `[Flow data]` columns G–K: gauge flow, logger flow, catchment rain, CHIRPS rain, forecast rain. Column F (Pitman flow) is not a series kind from engine 0.10.0 ([audit P1](./engine-audit.md)); rows of that kind left in an older database are ignored by runs. With the importer's `--gauge-as-reference`, the gauge column becomes `flow_reference_m3s` (a reference gauge, which runs never read; [model.md §2.10](./model.md#210-calibration-statistics-flow-calibration-cfg)) |
-| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model), and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
+| `model_run` | One run: who and when, `engine_version`, date window, an **input snapshot** (`inputs jsonb`) and a small `summary jsonb`, plus the modeller's written `notes` (007) and a `pinned` flag (015), the only columns that change after the run is made, `scenario_id` (024), the scenario that made it (null for a run of the live model, and once that scenario is deleted), `from_scenario` (188), true for a run a scenario made whether or not the scenario still exists, and `trigger` (042): `manual`, `auto` for the re-run after new data, or `forecast` for a forecast run (WP-2.12) | A "Calc. Model" press plus the `[Log]` entry |
 | `scenario` | Named overrides on a base run (024, WP-3.2): `base_run_id`, `ops jsonb`, `ops_sha256`, `owned_node_ids`, `op_names` (047), `owner_user_id`, `status`, and the answers to the evidence report's Appendix C prompts `purpose_need`, `mitigation`, `monitoring` (129); see [Scenarios](#scenarios-024_scenariossql) | none (the workbook is copied by hand for a what-if) |
 | `yield_result` | A dam's firm yield or storage–yield curve on a saved run or scenario (040, WP-3.6): `run_id` or `scenario_id`, `node_id`, `kind`, `params`, `points`; see [Yield results](#yield-results-040_yieldsql) | none (the workbook has no yield analysis) |
 | `assessment` | A cumulative impact assessment (145, WP-3.11): several scenarios on one base run, each alone and all together, run as one `assessment` job; `status` (`pending` / `complete` / `refused` / `failed`), `problems`, `report` (the `CumulativeReport`); editors only; see [Assessments](#assessments-145_assessmentsql) | none |
@@ -478,6 +478,8 @@ any row keeps the project, withdrawn or not.
   says. Runs are immutable except `notes`, so the copy can't drift.
 - **Rules the trigger enforces** (the API checks them first for a clear `409`):
   the run belongs to the same project (`foreign_key_violation`); it is not a
+  scenario run, live or of a deleted scenario (`from_scenario`, 188), nor a
+  forecast run (188); it is not a
   legacy-model run (a stored run from before engine 1.0.0), which is
   workbook comparison only (audit H1); it is not
   already the current nomination; the project has fewer than **50**
@@ -995,6 +997,25 @@ run's stored input (above), never the live model.
   what the scenario was when it ran, in `inputs.scenario`: `{ id, name,
   baseRunId, ops, opsSha256, ownedNodeIds, classified }`, so deleting,
   editing or rebasing the scenario never changes what its runs say.
+- **`model_run.from_scenario`** (188_scenario_run_flag, issues #380, #381): a
+  stored generated column, `scenario_id IS NOT NULL OR inputs ? 'scenario'`.
+  Deleting a scenario clears its runs' `scenario_id` but not their
+  `inputs.scenario`, so a run of a deleted scenario stays a scenario run.
+  **Tell a run of the model from a scenario run by `from_scenario`, never by
+  `scenario_id IS NULL`** (the API's `fromScenario`, the frontend's
+  `isScenarioRun`): the nomination stamp, `scenario_guard`, the sweep,
+  outlook, assessment and evidence-pack guards, `run_publication_model_run`,
+  the published-run readers for contributors, the API-key accepted series,
+  the hold on automatic runs, the portfolio's newest run and the sign-off
+  statement all do. `scenario_id` stays the live link: joins, and who may
+  read a run (a run with no scenario left to gate on is its project's
+  viewers', 045). Guards: `catalogue.db.test.ts` lists every remaining
+  `scenario_id IS [NOT] NULL` in the catalogue with why (another table, the
+  link, or access), `backend/src/runs/scenarioRun.test.ts` the same for the
+  backend's queries, `frontend/src/lib/components/runs/scenarioRun.test.ts`
+  for a run's `scenarioId` in the frontend. A tombstone (keeping the deleted
+  scenario row) was rejected: it would need a soft delete through every path
+  that deletes a scenario, and keep a deleted application's name and ops.
 - **Triggers.** `scenario_guard` (BEFORE INSERT, UPDATE, DELETE; `SECURITY
   DEFINER`, `search_path` pinned): stamps `owner_user_id` from the session and
   the times; the base must be a run of the **same project** and not itself a
@@ -1005,7 +1026,8 @@ run's stored input (above), never the live model.
   moves only `draft → submitted → withdrawn | decided`, `withdrawn → draft`;
   an assessor's decision changes nothing else in an application (its name,
   description and, since 129, its three prompt answers). Latest body:
-  `129_scenario_statement`.
+  `188_scenario_run_flag` (the base's scenario run test reads
+  `from_scenario`, so a run of a deleted scenario is refused as a base too).
   `model_run_scenario_same_project` (BEFORE INSERT): a run's scenario is one
   of its own project's. The API answers each of these with a `409` first.
 - **RLS**: `SELECT` viewer, `INSERT` / `UPDATE` / `DELETE` editor. **Farmers
@@ -2157,6 +2179,10 @@ chose for the project's stakeholders, with the WUA's restriction notice.
   delete publications) deletes the older superseded ones with their farm
   rows; their runs become trimmable again. `PUBLICATION_HISTORY_MAX` in
   `backend/src/publish/publish.ts` holds the same number.
+- **A run of the model only.** The `run_publication_model_run` BEFORE INSERT
+  trigger (188) refuses a scenario run, live or of a deleted scenario
+  (`from_scenario`, `check_violation`); `POST …/publication` answers `409`
+  first.
 - **RLS.** `run_publication`: SELECT any member, farmers included
   (`app_has_role(project_id, 'farmer')`); INSERT editor, as yourself
   (`published_by` = the current user); UPDATE editor; DELETE owner.

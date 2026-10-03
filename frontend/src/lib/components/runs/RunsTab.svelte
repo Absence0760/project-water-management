@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
@@ -656,7 +657,7 @@
 						<!-- The printable report of this run (routes/projects/[id]/report, docs/ui.md § Report). -->
 						<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}">Report</a>
 						<!-- The licensing evidence report (issue #71, docs/ui.md § Evidence report): for the nominated run, or an application run on it. -->
-						{#if shownRun.evidence === 'current' || shownRun.scenarioId}
+						{#if shownRun.evidence === 'current' || isScenarioRun(shownRun)}
 							<a class="btn btn-sm" href="{base}/projects/{encodeURIComponent(projectId)}/report?run={encodeURIComponent(shownRunId)}&evidence" data-testid="evidence-report-link">Evidence report</a>
 						{/if}
 						<DownloadMenu items={downloadItems} />

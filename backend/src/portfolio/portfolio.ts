@@ -156,7 +156,7 @@ const portfolioSql = (projects: string) => `
 		SELECT r.id, r.created_at, r.start_date, ${RUN_UNTIL} AS until, ${EWR_SET} AS ewr_set
 		-- A forecast run is guidance made beside the runs (daily with a GEFS
 		-- feed), never "a newer run" than the published one, nor the figures.
-		FROM model_run r WHERE r.project_id = pr.id AND r.scenario_id IS NULL AND r.trigger <> 'forecast'
+		FROM model_run r WHERE r.project_id = pr.id AND NOT r.from_scenario AND r.trigger <> 'forecast'
 		ORDER BY r.created_at DESC LIMIT 1
 	) lr ON true
 	LEFT JOIN LATERAL (
