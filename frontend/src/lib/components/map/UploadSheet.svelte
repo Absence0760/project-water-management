@@ -93,16 +93,24 @@
 			return;
 		}
 		busy = true;
+		// Review is disabled while a file is read, but the picker isn't: a file picked (or
+		// the sheet closed) meanwhile drops this read, so its review can't land under the
+		// file the picker now shows (issue #384).
+		const picked = file;
+		const current = () => open && file === picked;
 		try {
-			text = await file.text();
-			const p = await api.map.importPreview(projectId, { fileName: file.name, text });
+			const t = await picked.text();
+			if (!current()) return;
+			const p = await api.map.importPreview(projectId, { fileName: picked.name, text: t });
+			if (!current()) return;
+			text = t;
 			review = p;
 			rows = reviewRows(p);
 			everyKind = '';
 			everyNote = null;
 			replaceTicked = false;
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			if (current()) error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = false;
 		}

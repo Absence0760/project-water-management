@@ -60,17 +60,21 @@
 	let check = $state<(FileCheck & { name: string }) | null>(null);
 	let checking = $state(false);
 	let dragging = $state(false);
+	// The latest file only: a large file still hashed can't land over one picked or dropped after it (issue #384).
+	const checks = latestOnly();
 	async function checkOne(file: File | undefined) {
 		if (!file || !v) return;
 		const of = v;
+		const isLatest = checks.begin();
 		checking = true;
 		check = null;
 		try {
 			const r = { ...(await checkFile(new Uint8Array(await file.arrayBuffer()), of)), name: file.name };
 			// Checked against the pack still shown: a navigation meanwhile drops it.
-			if (v === of) check = r;
+			if (isLatest() && v === of) check = r;
 		} finally {
-			checking = false;
+			// A later file's check owns the flag.
+			if (isLatest()) checking = false;
 		}
 	}
 	function drop(e: DragEvent) {

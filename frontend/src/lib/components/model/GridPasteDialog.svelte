@@ -6,6 +6,7 @@
 	// typing them in. The grid's own file says what the columns mean
 	// (network/nodePaste.ts, crops/areaPaste.ts).
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { latestFileText } from '$lib/files/latest';
 	import { fmtNum } from '$lib/format/number';
 	import type { PastePlan } from '$lib/spreadsheet/paste/grid';
 
@@ -43,11 +44,19 @@
 	const csvHref = $derived(open ? `data:text/csv;charset=utf-8,${encodeURIComponent('﻿' + csv())}` : '');
 	let fileNote = $state('');
 
+	// The latest file only: a large file still read can't land over one picked after it, or in a closed dialog.
+	const fileText = latestFileText();
+	$effect(() => {
+		if (!open) void fileText(null);
+	});
+
 	async function loadFile(e: Event & { currentTarget: HTMLInputElement }) {
 		const f = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
 		if (!f) return;
-		text = await f.text();
+		const read = await fileText(f);
+		if (read === null) return;
+		text = read;
 		fileNote = `Read ${f.name}.`;
 	}
 

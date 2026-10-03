@@ -10,6 +10,7 @@
 	import { untrack } from 'svelte';
 	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { latestFileText } from '$lib/files/latest';
 	import { LANGUAGES } from '$lib/i18n/state.svelte';
 	import { bulkSummary, farmNames, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
 
@@ -73,10 +74,14 @@
 		problems = [];
 	}
 
+	// The latest file only: a large file still read can't land over one picked after it.
+	const fileText = latestFileText();
 	async function pickFile(file: File | undefined) {
 		if (!file) return;
 		fileName = file.name;
-		csv = await file.text();
+		const text = await fileText(file);
+		if (text === null) return;
+		csv = text;
 		csvChanged();
 	}
 

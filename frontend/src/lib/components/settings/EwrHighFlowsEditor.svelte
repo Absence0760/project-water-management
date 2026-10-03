@@ -8,6 +8,7 @@
 <script lang="ts">
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { latestFileText } from '$lib/files/latest';
 	import { describeMonths } from '$lib/format/months';
 	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, parseHighFlows, parseMonths } from './ewrRules';
 
@@ -65,10 +66,14 @@
 		note = { ok: true, text: `Filled ${r.length} high-flow component${r.length === 1 ? '' : 's'}.` };
 	}
 
+	// The latest file only: a large file still read can't land over one picked after it.
+	const fileText = latestFileText();
 	async function load(e: Event & { currentTarget: HTMLInputElement }) {
 		const f = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
-		if (f) fill(await f.text());
+		if (!f) return;
+		const text = await fileText(f);
+		if (text !== null) fill(text);
 	}
 </script>
 
