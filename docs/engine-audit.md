@@ -235,20 +235,26 @@ keep k take together at most `MAX(0, U₀ − taken by lower priorities − k)`.
 The same release adds that off-take water arriving at a unit is summed in
 rule-id order (model.md §6, the ordering rule).
 
-**Off-take keeps, top-ups and split licences (engine 1.70.0, issue #90
-Q25–Q27).** Method decisions, not errata. An off-take's keep gains its
-source's pass-inflow release target (`keep = MAX(Zs, target, handsOff,
-handsOffEwr ? Z : 0)`), so it changes only at a source whose dam has a
-pass-inflow release, on days the target is the largest term: the off-take
-takes less and the river below the source carries the target. A
-demand-sized top-up into a dam with a fixed release counts the release's
-floor in its room, so it takes more and the dam ends fuller (never above
-capacity on a day without inflow). Rules of one priority still share pro
-rata to their limits; the run now warns about what looks like one licence
-split into several rules. The examples have no river off-take and the
-client catchment none with a release, so they are unchanged to the bit.
-`checkTransferLimits` (its off-take part) holds each rule to the new keep.
-Records: § Provisional decisions 2026-10-03 below; model.md §2.6a.
+**Proportional rationing, release rooms and off-take keeps (engine 1.70.0,
+issue #90 Q25–Q27).** Method decisions, not errata. (1) Rules of one
+priority, river off-takes and dam rules alike, ask `MIN(capacity, need)`
+and share band by band in proportion to it, never first capped at the free
+flow or water above their keep (model.md §2.6a, "proportional rationing"):
+it changes only on days a source is short for its rules of one priority and
+their asks are capped differently by the free water; a licence split into
+several rules then gets the same total. The run warns about off-takes that
+may be one licence entered more than once at full size. (2) A room into a
+dam with a fixed release (a dam rule's and a top-up off-take's) counts
+`MIN(amount, outlet)` in full: the dam takes more and ends fuller, never
+above capacity. (3) An off-take's keep gains its source's pass-inflow
+release target. The examples, checked against the rules before 1.70.0:
+Droevlei and Kleinberg give every series to the bit; Sandspruit's two dam
+rules of one priority from Grootdraai share a short dam differently on 6 of
+5 489 days (about 1 270 m³ over the record moves from Uitkyk's supply to
+Lemoenkraal's, under 0.01 % of either). The client catchment has one dam rule
+and no river off-take with a release. `checkTransferLimits` holds each
+off-take to the new keep and each receiver to the new room.
+Records: § Provisional decisions 2026-10-03 below; model.md §2.6, §2.6a.
 
 ## Regression suite: deviation list
 
@@ -425,9 +431,9 @@ warning, an import warning, a form hint or an evidence-pack gate).
 | --- | --- | --- | --- |
 | Supply order at a dam | Kept: release, then boreholes into the dam, then irrigation; primary and emergency dam-target boreholes only on a day the dam is drawn for demand (1.8.0). | A release is a licence condition that binds before any take (NWA s21(b)/(c) licence conditions); pumping into an idle dam takes the room winter inflow needs and spills it. | Docs only (model.md §2.7d). |
 | Groundwater pumped into a dam | Kept: netted out of the farm's surface use per water year in the allocation comparison. | WARMS registers the s21(a) groundwater take and the s21(b) storage as separate uses, so the pumped water is already counted once. | Docs only (model.md §2.12). |
-| Transfers | Kept: capped at the receiving dam's room (with a fixed release's floor, 1.29.0), settled before irrigation. | A dam can't hold more than its room; a transfer spilling on arrival is a river release under another name. How the schemes run is client data. | Docs only (model.md §2.6, §3 Q3). |
+| Transfers | Kept: capped at the receiving dam's room (with a fixed release, 1.29.0; in full, MIN(amount, outlet), from 1.70.0), settled before irrigation. | A dam can't hold more than its room; a transfer spilling on arrival is a river release under another name. How the schemes run is client data. | Docs only (model.md §2.6, §3 Q3). |
 | Min dam % | Kept as the minimum operating level for irrigation and transfers. | DWS dam data (DW789) give a minimum operating level per dam; one level for every draw is the operating rule. Which dams keep a reserve is client data. | Needs client data; default 0 %, and the node form says "Irrigation may empty this dam" (model.md §2.7a item 2, §3 Q5). |
-| Several transfers from one dam | Kept: by priority, then pro rata to their limits. | Priority classes with proportional sharing inside a class are how SA system models allocate (WRYM/WRPM), and the result doesn't depend on list order. | Docs only (model.md §2.6, §3 Q18). |
+| Several transfers from one dam | Kept: by priority, then pro rata to their limits (from 1.70.0 the daily limit alone, proportional rationing, issue #90 Q25). | Priority classes with proportional sharing inside a class match how DWS rations a shortage (an equal percentage cut per user category, [SAnews 2016](https://www.sanews.gov.za/node/32131)), and the result doesn't depend on list order. That the WRYM/WRPM system models allocate this way is often said, but no primary source has been found for it (2026-10-03). | Docs only (model.md §2.6, §3 Q18). |
 | Other water users | The NWA reading is adopted as the target: exempt only the basic-human-needs share. Until it can be applied, a senior user stays uncurtailed with its charge shown, never moved onto farms. | Only the Reserve (basic human needs and the ecological Reserve, NWA s16–18) has priority over all use; every lawful use can be restricted (Schedule 3 item 6). The basic-needs share needs each senior user's population. | Needs client data (population per senior user); docs (model.md §2.7c). |
 | General Authorisation volume | Kept: min(property ha × the GN 538 Table 2 rate, 40 000 m³/a), with the any-12-months check; the rate an input. | GN 538 of 2016 (Gazette 40243) §4.1.1 and definition 5, as built. The quaternary schedule is a scan that can't be verified row by row. | Needs client data (each property's rate); the run warns while unknown (model.md §2.7d). |
 | River pump (WP-3.8) | Kept: draws only on the flow below the dam, leaves the senior requirement and a pass-inflow target, doesn't protect the EWR by default; a run-of-river farm takes a transfer before the river. | The roadmap's rule; EWR protection is Q15's. | Docs only (model.md §2.7e). |
@@ -451,7 +457,7 @@ warning, an import warning, a form hint or an evidence-pack gate).
 | WP-1.34 Borehole depletion | The method kept (lagged linear reservoir, d and k; unmet depletion carried as a deficit). | Glover/Hunt need T, S, distance and streambed leakance, rarely known for SA farm boreholes; the two parameters span the same behaviour. The values and whether the boreholes pumped while the calibration record was measured are the client's. | Needs client data; docs (model.md §2.7d). |
 | WP-1.35 Land-cover split | Kept: the low-flow share on each day's flow up to the Q75 natural flow, the other share above. | Scott & Smith (1997) give separate reductions to total and low flows, and Q75 is the usual SA low-flow index (the paper's own definition wasn't re-read). Covers and areas are the client's. | Needs client data; land cover stays off; docs (model.md §2.5a). |
 
-## Provisional decisions 2026-10-03: river off-takes (issue #90 Q25–Q27)
+## Provisional decisions 2026-10-03: off-takes and transfers (issue #90 Q25–Q27)
 
 Decided by the operator on 2026-10-03 from the engine end-to-end tests'
 open questions (issue #393), **provisional, to be confirmed by the client's
@@ -459,8 +465,8 @@ hydrologist**; built in engine 1.70.0 (model.md §2.6a).
 
 | Item | Decision | Why (source) | What changed |
 | --- | --- | --- | --- |
-| Q25 Several off-take rules of one priority | Kept: pro rata to their limits, in bands at their keeps, as dam rules (§3 Q18). A run warns about two or more rules with one source, one destination and one priority that run in a common month. | Priority classes with a shortage shared in proportion inside a class are SA practice (DWS sets a curtailment as a % of each user category's use: 15 % urban and 20 % irrigation on the Vaal, [SAnews 2016](https://www.sanews.gov.za/node/32131)); order-free. A rule's limit is held to the free flow before the sharing, so a licence split into several rules gets a larger share of a short river than as one rule; the warning tells the modeller to enter one licence as one rule. | *Code*: the warning (`splitLicenceWarnings`); docs (model.md §2.6a). |
-| Q26 A top-up's room and a fixed release | The room counts the dam's fixed release floor, as a dam rule's room does (1.29.0); the dam's own inflow that day stays out. | The release leaves the dam whatever arrives, so without the floor a full dam with a fixed release never refilled from the off-take; the floor is a lower bound of the day's release, so the dam is never overfilled. The inflow is known only once the network runs, after the off-takes are sized. | *Code*, engine 1.70.0. |
+| Q25 Several rules of one priority | **Changed: proportional rationing**, for river off-takes and dam rules alike. Each rule asks `MIN(capacity, need)` and the rules share band by band at their keeps in proportion to it, never first capped at the free flow or water above their keep. A run warns about two or more off-takes with one source, one destination and one priority that run in a common month: they may be one licence entered more than once at full size. | Before, a rule's ask was held to the free flow first, so a licence split into several rules got a larger share of a short river or dam than as one rule (on 200 m³, 300 + 100: 133.3 as one rule, 150 split). Proportional rationing is the equal-percentage cut DWS applies (15 % urban and 20 % irrigation on the Vaal, [SAnews 2016](https://www.sanews.gov.za/node/32131)), makes a split irrelevant and is order-free. A licence entered twice at full size still takes double, which no sharing rule can tell from two licences. Cost: a dam rule from an empty source keeps its share of a receiver's room unused that day, as a dry off-take source already did. | *Code*, engine 1.70.0 (`network/simulate.ts`, `splitLicenceWarnings`); docs (model.md §2.6, §2.6a). |
+| Q26 A room into a dam with a fixed release | A top-up off-take's room and a dam rule's room count the release in full, `MIN(amount, outlet)` (a dam rule's counted only a floor from 1.29.0); the dam's own inflow that day stays out. | The water moved in arrives before the release, so either the release is all of it (the dam ends ≤ capacity) or it is cut to the water above dead storage (the dam ends at dead storage ≤ capacity, damMinPct being 0–1): never overfilled. The floor left a dam near its dead storage below full. The inflow is known only once the network runs, after the off-takes are sized. | *Code*, engine 1.70.0. |
 | Q27 An off-take's keep and a pass-inflow release | The keep includes the source dam's pass-inflow release target (its amount, or the EWR at the source without amounts), as the unit's river pump and river abstractions keep it. The unit's own hands-off flow is still not kept by off-takes. | A pass-inflow release exists to keep that flow below the dam wall, and the off-take's intake is on that reach; taking it would turn the release into canal water. The hands-off flow is a condition on the unit's own abstraction. | *Code*, engine 1.70.0; `checkTransferLimits`. |
 
 ## Open questions for the hydrologist
@@ -489,9 +495,11 @@ hydrologist**; built in engine 1.70.0 (model.md §2.6a).
    the code; confirm the project's factors were derived against A-pan.
 5. **N4 / Q3, Q18 (confirm the decision; provisionally decided 2026-10-01, above):** engine 0.16.0 caps a transfer at
    the receiver's room (free space + that day's demand; from engine 1.29.0
-   + a fixed release's floor, so a full dam with a fixed release takes back
-   what it releases and passes it below), runs rules by
-   priority, shares equal priorities pro rata, and settles transfers before
+   + a fixed release's floor, from 1.70.0 its MIN(amount, outlet) in full,
+   so a full dam with a fixed release takes back what it releases and
+   passes it below), runs rules by priority, shares equal priorities pro
+   rata (from 1.70.0 proportional rationing, never first capped at the
+   source's free water, issue #90 Q25), and settles transfers before
    the source irrigates. Is that how the schemes are operated?
 6. **Q17 (confirm the decision):** engine 0.17.0 assesses the EWR at the
    outlet and every gauge and charges each site's shortfall to the farms

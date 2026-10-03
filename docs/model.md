@@ -2147,17 +2147,20 @@ The workbook has two blocks of columns:
   water it was allowed to send. That shortfall did not grow with the demand,
   so more irrigated land could raise a farm's supply fraction (fuzz seed
   921, `run.test.ts` › "counts the destination dam's own losses today in its
-  room"). **Engine ≥ 1.29.0** adds a *fixed* release's floor (§2.7a) to
-  the room: the release as it would be with no inflow and nothing
-  transferred in, `MIN(amount[month], outlet, storage after the dam's gains
-  and losses − drawn from it today − dead storage)`, never below 0. For a
-  dam that only receives, the day's release is at least that (inflow and
-  the transfer only add to what it releases from); one that also sends
-  later the same day can release less, but only when the release is cut to
-  the water above dead storage, and it then ends the day at dead storage.
-  So the dam passes on what it lets out and a transfer still never
-  overfills it; before, a full dam with a fixed release took
-  nothing, though it would release water that day. A *pass-inflow* release
+  room"). **Engine ≥ 1.29.0** adds a *fixed* release (§2.7a) to the room;
+  **engine ≥ 1.70.0** (issue #90 Q26) counts it in full, `MIN(amount[month],
+  outlet)`. The water moved in arrives before the release, so either the
+  release is all of that and the dam ends at most at capacity, or it is cut
+  to the water above dead storage and the dam ends at dead storage, never
+  above capacity (the proof: §2.6a, "A room into a dam with a fixed
+  release"). From 1.29.0 to 1.69.x the room counted only a floor, the
+  release as it would be with no inflow and nothing transferred in,
+  `MIN(amount, outlet, storage after the dam's gains and losses − drawn
+  from it today − dead storage)`, never below 0, which never overfilled
+  either but left a dam near its dead storage below full (500 m³ in a
+  1 000 m³ dam, dead storage 400, release 300: room 600, end 800; now 800
+  and full). Before 1.29.0 a full dam with a fixed release took nothing,
+  though it would release water that day. A *pass-inflow* release
   isn't counted: it is at most the day's inflow, which the room doesn't
   count either (transfers are settled before the day's flows are known).
   **Engine ≥ 1.31.0 ([issue #200](https://github.com/Absence0760/project-water-management/issues/200))**
@@ -2185,14 +2188,24 @@ The workbook has two blocks of columns:
   sources supply.
   Rules run by `priority` (integer, lower
   first). Within one priority, rules into one destination share its room and
-  rules from one source share its free water, each pro rata to its own limit
-  (MIN(maxDaily, srcFree)), so results never depend on the list order.
-  **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): the room cap, the fixed release's floor, settling before
+  rules from one source share its free water, each pro rata to its own limit,
+  so results never depend on the list order. **Engine ≥ 1.70.0** (issue #90
+  Q25): the limit is `maxDaily` alone, proportional rationing, never first
+  capped at the source's free water (the bands below keep each rule above
+  its reserve), so a rule split into several gets the same total; before,
+  it was `MIN(maxDaily, srcFree)`, and on a short source the pieces of a
+  split rule got more (§2.6a, "Rules of one priority: proportional
+  rationing", for the rule, the source and a worked example of both paths).
+  For one rule alone the move is still `MIN(srcFree, dstRoom, maxDaily)`.
+  **Provisional decision 2026-10-01, to be confirmed by the client's hydrologist** (issue #90): the room cap, the fixed release in the room, settling before
   irrigation and the priority-then-pro-rata sharing are kept. A dam can't
   hold more than its room, and a transfer that spilled on arrival would be a
-  river release under another name; ranking by priority with equal
-  priorities sharing in proportion is how South African system models
-  allocate (WRYM/WRPM priority classes) and is order-free. How the client's
+  river release under another name. Ranking by priority with equal
+  priorities sharing in proportion is order-free and matches how DWS
+  rations a shortage (an equal percentage cut per user category, §2.6a);
+  that it is also how the WRYM/WRPM system models allocate is often said
+  but no primary source for it has been found (the DWS model reports
+  weren't reachable, 2026-10-03), so it isn't relied on here. How the client's
   schemes are actually operated is client data (the full record: [engine-audit.md § Provisional decisions 2026-10-01](./engine-audit.md#provisional-decisions-2026-10-01-network-supply-crops-and-dams)).
   **Engine ≥ 1.36.0 ([audit N6](./engine-audit.md#findings), found
   reviewing issue #73):** each rule draws only above its **own** reserve.
@@ -2217,7 +2230,8 @@ The workbook has two blocks of columns:
   − taken by lower priorities − that reserve)` (§6 Verification).
   **The order of the two sharings within one priority** (verify/ probe
   `band-and-room`): first each receiver's room is shared among the rules
-  into it, pro rata to their limits `MIN(maxDaily, srcFree)`, which cuts
+  into it, pro rata to their limits (`maxDaily`, engine ≥ 1.70.0; `MIN(maxDaily,
+  srcFree)` before), which cuts
   each rule to what the receiver can take; then each source's bands are
   shared among its rules, pro rata to what each still wants after that cut.
   Nothing is redistributed afterwards: a rule the band cuts leaves its share
@@ -2226,7 +2240,10 @@ The workbook has two blocks of columns:
   b keeps 0 % and may send 800 m³ into an empty dam. The room cuts a to 100;
   the band 1 000–500 m³ is shared 100 : 800 (a 55.6, b 444.4) and the band
   below goes to b (355.6 more), so a moves 55.6 and b 800 (sharing the bands
-  first and the room after would give a 100). The room is counted from the
+  first and the room after would give a 100). Since a rule's limit isn't cut
+  to its source's free water before the room is shared (engine ≥ 1.70.0), a
+  rule from a source that is empty, or nearly, still takes its share of a
+  receiver's room, and the share it can't fill stays unused that day. The room is counted from the
   receiver's **yesterday's** storage, as the formula says, even when the
   receiver sends water at a lower priority the same day: what it sends first
   makes no room for what it receives (probe `room-while-sending`).
@@ -2309,8 +2326,9 @@ the destination is simulated after its source.
 **Each day.** At the source unit, after its own use (dam, river pump,
 boreholes), returns, spill, release and stream depletion, the flow leaving it
 is U₀. The rules from it run by priority, lowest first; within one priority
-each rule's limit is `MIN(capacity, the flow above what it must leave, its
-share of the destination's need ÷ (1 − l))`, and the rules share the flow in
+each rule asks `MIN(capacity, its share of the destination's need ÷ (1 −
+l))` (engine ≥ 1.70.0; before, also capped at the flow above what it must
+leave, "proportional rationing" below), and the rules share the flow in
 bands at what each must leave, as dam rules share a dam's storage in bands at
 their reserves (§2.6 step 3, audit N6; for off-takes engine ≥ 1.69.0): the
 flow between two successive keeps (highest first, the top band starting at
@@ -2327,12 +2345,11 @@ keep_k  = MAX(Zs, target, handsOff_k, handsOffEwr_k ? Z : 0)
           Zs: senior users' requirement passing the source (§2.7c)
           target: the source dam's pass-inflow release target (§2.7a, §2.7e), engine ≥ 1.70.0; 0 without one
 need_k  = (D_dst + [topUpDam] room_dst) × cap_k ÷ Σ cap into dst today     (sizing 'demand' only)
-free_k  = MAX(0, U₀ − taken so far − keep_k)
-room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp) + floor_dst)
+room_dst = MAX(0, cap − (Q[t−1] + Pd + dam-rule receipts today − E − Sp) + rel_dst)
           E and Sp clamped as §2.7a's step clamps them (engine ≥ 1.69.0)
-floor_dst = a fixed release's floor, MAX(0, MIN(amount[month], outlet, held − dead storage)),
-          held = Q[t−1] + Pd − E − Sp + the day's net dam-rule transfers (engine ≥ 1.70.0; 0 for any other release)
-v_k     = MIN(free_k, cap_k, need_k ÷ (1 − l_k)), then shared in bands at the keep_k (above)
+rel_dst = a fixed release's MIN(amount[month], outlet), in full (engine ≥ 1.70.0; 0 for any other release)
+ask_k   = MIN(cap_k, need_k ÷ (1 − l_k))                 (engine ≥ 1.70.0: never capped at the flow above keep_k)
+v_k     = ask_k shared in bands at the keep_k (above): never below its keep
 U       = U₀ − Σ v                                          the source reach loses exactly what was taken
 arrives = Σ v_k × (1 − l_k) at each destination             summed in rule-id order (§6, the ordering rule; engine ≥ 1.69.0)
 back    = Σ v_k × l_k × r_k at each return unit             engine ≥ 1.42.0: canal seepage back to the river, in rule-id order too
@@ -2402,69 +2419,93 @@ question 20):
   which it doesn't return, nothing changes (the losses left that site's
   catchment). The return unit is never charged for water it merely carries.
 
-**Rules of one priority and a split licence (provisional decision
-2026-10-03, issue #90 Q25, to be confirmed by the client's hydrologist).**
-Kept: the rules of one priority at a source share a short river pro rata to
-their limits, in bands at their keeps (above), as dam rules share a dam
-(§2.6, §3 Q18). Ranking by priority and sharing a shortage in proportion
-inside a priority class is how South African system models and DWS
-restrictions allocate: a curtailment is set as a percentage of each user
-category's use (in September 2016, 15 % of urban and 20 % of irrigation use
-on the Vaal River System; [SAnews 2016](https://www.sanews.gov.za/node/32131)),
-and the result doesn't depend on the list order. **What "pro rata to their
-limits" means here:** a rule's limit is `MIN(capacity, need share ÷ (1 − l),
-the flow above its keep)`, so each rule is held to the free flow on its own
-before the sharing. A licence entered as several rules is then held to the
-free flow piece by piece, and on a short river its pieces together get more
-than the same licence as one rule beside the other rules of that priority.
-Worked example (`e2e/network.offtakeDecisions.e2e.test.ts`): 200 m³ of free
-flow, licence A of 300 m³/day beside B of 100. As one rule A asks MIN(300,
-200) = 200 and B 100, so A gets 200 × 200 ⁄ 300 = 133.3 and B 66.7. As two
-rules of 150, A asks 150 + 150 and B 100, so A gets 150 and B 50. With plenty
-of water the split changes nothing (every rule takes its capacity), and a
-licence entered twice at full size takes double whatever the flow (a data
-error the run can't tell from two licences). **Engine ≥ 1.70.0 warns** when
-one source has two or more planned river off-takes into one destination at
-one priority, at least two of them running in a common calendar month (a
-month in which both have capacity above 0; rules that never run in the same
-month never meet): `river off-take <source> → <destination>: n rules of
-priority p (ids) take from the same river for the same unit. If they are one
-licence split up, enter it as one rule: …`. One warning per such group, its
-rules in id order (`network/offtake.ts` `splitLicenceWarnings`). It names a
-group even when no other rule shares that priority at the source (then the
-split gains nothing today, but a scenario that adds one would), and it can't
-tell a split licence from two real licences on one canal, so it is a warning,
-never a refusal. Dam rules (§2.6) are not checked: they share a dam's storage
-the same way, but no off-take question was raised about them.
+**Rules of one priority: proportional rationing (engine ≥ 1.70.0,
+provisional decision 2026-10-03, issue #90 Q25, to be confirmed by the
+client's hydrologist).** The rules of one priority at a source share a short
+river in proportion to what each **asks**, `ask_k = MIN(capacity, need share
+÷ (1 − l))`, band by band at their keeps (above): the flow above the highest
+keep goes to every rule, pro rata to what each still asks, the next band to
+the rules keeping that much or less, and so on. A rule's ask is never capped
+at the flow above its keep first; the bands alone keep it above its keep.
+Dam rules (§2.6) share a dam's water the same way, each asking its daily
+limit. This is proportional rationing, the equal-percentage cut DWS applies
+when water is short: a curtailment is set as a share of each user category's
+use (in September 2016, 15 % of urban and 20 % of irrigation use on the Vaal
+River System; [SAnews, 1 September 2016](https://www.sanews.gov.za/node/32131)),
+so every rule of a priority gets the same fraction of what it asks (within a
+band). It also makes the split of a licence irrelevant: a licence entered as
+several rules, its capacity divided between them, asks the same total, so
+its pieces together get exactly what the one rule would, on any day and with
+any keeps (each band gives every rule in it the same fraction of what it
+still asks). **Before 1.70.0** each rule's ask was `MIN(capacity, need share
+÷ (1 − l), the flow above its keep)`, so on a short river the pieces of a
+split licence were each held to the free flow on their own and together got
+more. Worked example (`e2e/network.offtakeDecisions.e2e.test.ts`): 200 m³ of
+free flow, licence A of 300 m³/day beside B of 100. A asks 300 and B 100, so
+3 : 1, A 150 and B 50, and A split into two rules of 150 gets 75 + 75 = 150
+too. Before 1.70.0, A as one rule asked MIN(300, 200) = 200 and got 133.3
+(B 66.7), and split it got 150 (B 50). With keeps: A of 600 keeping 600
+beside C of 400 keeping 0, on 1 000 m³: the band 1 000–600 is shared 6 : 4
+(A 240, C 160) and C takes its other 240 below, so A 240, C 400 and 360
+passes, whether A is one rule or two of 300. Dam rules: a full 1 000 m³ dam
+keeping 70 % (300 m³ free), limits 400 and 200: 2 : 1, 200 and 100 (before,
+MIN(400, 300) = 300 against 200: 180 and 120). **What proportional rationing
+doesn't stop:** a licence entered more than once at its full size asks, and
+gets, that many times its share (300 + 300 beside B's 100 on 200 m³: 171.4
+against 150; with plenty of water, 600). The run can't tell that from two
+licences on one canal, so **engine ≥ 1.70.0 warns** when one source has two
+or more planned river off-takes into one destination at one priority, at
+least two of them running in a common calendar month (a month in which both
+have capacity above 0; rules that never run in the same month never meet):
+`river off-take <source> → <destination>: n rules of priority p (ids) take
+from the same river for the same unit. If they are one licence entered more
+than once at its full size, it takes that many times its licence: enter each
+licence once (a licence split into parts runs the same as one rule)`. One
+warning per group, its rules in id order (`network/offtake.ts`
+`splitLicenceWarnings`); a warning, never a refusal. Dam rules aren't
+checked. **What it costs:** an ask is no longer cut to what its source can
+give before the receiver's room is shared (§2.6, "the order of the two
+sharings"), so a dam rule from a source that is empty, or nearly, takes its
+share of a receiver's room and leaves it unused that day, as a demand-sized
+off-take from a dry source already did (its share of the need, "Several
+rules into one unit" above). Proportionality is the operator's decision;
+sharing a receiver's room by what each source can actually send would need
+the source's rationing first and the room after, then the source's again.
 
-**A top-up's room and a fixed release (engine ≥ 1.70.0, provisional decision
-2026-10-03, issue #90 Q26, to be confirmed by the client's hydrologist).** A
-demand-sized off-take that tops up a dam counts the dam's fixed release
-floor in its room, `floor_dst` above, as a dam rule's room has since 1.29.0
-(§2.6): the release as it would be with no inflow and no off-take water,
-from the dam as the step holds it once the day's dam rules are settled
-(yesterday's storage, its rain, the clamped evaporation and seepage, and the
-net dam-rule transfers in and out, all known when the off-takes are sized).
-The day's release is at least that, since the dam's inflow and the off-take
-water only add to what it releases from (§2.7a item 3 releases from the dam
-with both in it), so the dam passes on what it lets out and the off-take
-still never overfills it. Before 1.70.0 a full dam with a fixed release of
-300 m³/day took nothing from a top-up off-take and ended the day 300 m³
-down; it now takes 300 and ends full. A pass-inflow release adds nothing: it
-is at most the day's inflow. **The dam's own inflow that day (K, M, O) is
-still left out** (the room can overstate what fits by it, and the inflow
-then spills): it follows the river's flow, which is known only once the
-network runs, after the off-takes are sized at the start of the day (the
-same reason a dam rule's room leaves it out, §2.6). The floor is a lower bound, and two cases leave
-the dam short of full rather than over it: a dam near its dead storage, whose
-floor is cut to the water above it while the off-take water lifts it so the
-day's release is the full amount (a 1 000 m³ dam at 500 m³, dead storage
-400, release 300: floor 100, the off-take brings 600, the dam releases 300
-and ends at 800; the next day it fills), and a dam the dam rules draw from,
-whose room ignores what it sends (as for a dam rule's destination, §2.6).
-Counting `MIN(amount, outlet)` in full would be exact for the first case and
-still never overfill (the off-take water arrives before the release); it is
-not done, to keep the off-take's room the same as a dam rule's.
+**A room into a dam with a fixed release (engine ≥ 1.70.0, provisional
+decision 2026-10-03, issue #90 Q26, to be confirmed by the client's
+hydrologist).** A demand-sized off-take that tops up a dam counts the dam's
+fixed release in its room, `rel_dst = MIN(amount[month], outlet)` above, in
+full, and a dam rule's room (§2.6) counts the same (from 1.29.0 to 1.69.x it
+counted only a floor, below). Water moved into a dam arrives before the day's
+release (§2.7a item 3 releases from the dam with it in), so the dam is never
+overfilled. **Why.** On a day without inflow to the dam, let H be what it
+holds once its rain, losses and the day's dam rules are settled, x what the
+off-take puts in (x ≤ room = C − H + rel_dst, C the day's capacity), and d
+its dead storage. Its release is `MIN(amount, outlet, H + x − d)`. If `H + x
+− d ≥ rel_dst`, the release is rel_dst and the dam ends at `H + x − rel_dst ≤
+C`; if not, the release is cut to `H + x − d` and the dam ends at d ≤ C. A
+dam rule's room adds the most the dam is drawn that day (§2.6, `draw`), and
+the same argument holds after that draw. d ≤ C always: dead storage is
+`damMinPct × C` with `damMinPct` in 0–1 (a run refuses any other, and the
+sediment and in-service scaling scale both), so the second case never ends
+above capacity. An outlet of 0 releases nothing and makes no room; a dam with
+no capacity that day (not in service yet, or silted full) has no room and no
+release. A dam that also sends water by a dam rule the same day holds less,
+which only lowers where it ends. **Effect.** A full dam with a fixed release
+of 300 m³/day takes 300 from a top-up off-take and ends full (before 1.70.0
+it took nothing and ended 300 m³ down); a 1 000 m³ dam at 500 m³ with dead
+storage 400 and a release of 300 takes 800 and ends full (the floor a dam
+rule's room counted from 1.29.0, `MIN(300, 500 − 400) = 100`, would bring
+600 and leave it at 800). When the source can't
+fill the room the release can still be cut: a dam at 300 with dead storage
+400 that gets 150 releases 50 and ends at 400, its dead storage. A
+pass-inflow release adds nothing: it is at most the day's inflow. **The
+dam's own inflow that day (K, M, O) is still left out** (the room can
+overstate what fits by it, and the inflow then spills): it follows the
+river's flow, which is known only once the network runs, after the
+off-takes are sized at the start of the day (the same reason a dam rule's
+room leaves it out, §2.6).
 
 **The keep and a pass-inflow release (engine ≥ 1.70.0, provisional decision
 2026-10-03, issue #90 Q27, to be confirmed by the client's hydrologist).** An
@@ -9134,7 +9175,7 @@ from the workbook.
 | Q15 | Shortfalls O/T | The l/s columns use `ROUNDDOWN` (truncate toward zero), not `ROUND`. A cut below 0.1 l/s (8.64 m³/day) therefore shows as 0 l/s, and the l/s total is a sum of truncated values. **Fixed (engine 0.4.0, audit R1):** the engine returns `N / 86.4` unrounded and the UI rounds for display, so a small cut stays visible. | Truncation understated every cut and every gain by up to 0.1 l/s. |
 | Q16 | Farm spec M | **Selected fragmentation is hard-coded to the area method for some farms.** In the client workbook some farm rows' M cells are `=G/rFarmSpec_AreaTotal`, not the `IF(method = Area, H, IF(method = Hi/Lo, K, L))` every other row uses. A workbook on the Area method is unaffected, but switching it to Hi/Lo or Specific would give those farms area shares and the sum would no longer be 1. The engine applies the chosen method to every farm. | Confirm this is a leftover edit. Otherwise a Hi/Lo run in the workbook and in the app will disagree. |
 | Q17 | Farm sheet AB, Shortfalls R | **Incremental shortfalls do not add up to the outlet shortfall.** AA is clamped at 0, so a surplus on one branch is never credited against a deficit on another. Example: tributary A is 100 m³/day short (AA = AB = −100), tributary B has 300 m³/day to spare (AA = 0), and confluence farm C passes both through. Then `AA_C = MIN(200, 0) = 0` and `AB_C = 0`. Σ AB = −100 even though C and the outlet meet the EWR, and [Shortfalls] still asks A to cut 100 m³/day. A farm that adds water (return flow, a dam release) also gets no credit, because AB ≤ 0. A gauge with several upstream elements summed their AA (`I = Σ AA`) instead of computing `MIN(ΣU − ΣZ, 0)`; **fixed in engine 0.4.0** (audit G1). The farm attribution (AB) was **mirrored** until engine 0.17.0. **Decided (simulated CMA-assessor recommendation, 2026-09-24; pending the real assessor and hydrologist), engine 0.17.0:** the EWR is assessed at EWR sites (the outlet and every gauge); each site's shortfall is charged to the farms upstream pro rata to their net impact `H + I + J_int − U`, at most what each took, the rest reported as natural; a farm under several sites carries the largest charge (§2.7b). AB stays as the diagnostic reach shortfall. Engine 1.5.0: a gauge can be taken off the EWR sites (`ewrSite`, WP-3.7). | Confirm the rule and the site list (which gauges are EWR sites, now a per-gauge flag; gazetted tables are WP-3.7). It changes every farm's curtailment. |
-| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment regression doesn't exercise it. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. | Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist ([§2.6](#26-transfers-transfers)). |
+| Q18 | Transfers | **Several transfers from one dam can overdraw it.** Each "Draw From" column is `MIN(MAX(Q[t−1] − reserve, 0), cap)` on its own, so two transfers from the same source can each take yesterday's full storage. Example: storage 1 000 m³, two rules of 800 m³/day: 1 600 m³ leaves, the source has `avail = −600 + inflows`, and G, P and Q can go **negative**. The workbook has the same flaw, because its columns are independent. The client catchment regression doesn't exercise it. **Not mirrored:** the engine first split the available volume in rule order (engine review F1), which makes no difference when the draws fit. **Decided (persona recommendation, 2026-09-24; pending the hydrologist), engine 0.16.0:** each rule has a `priority` (lower first); rules of equal priority from one dam share it pro rata to their limits (§2.6), so results never depend on list order. Engine ≥ 1.70.0 (issue #90 Q25): the limit is the rule's daily limit alone, never first cut to the source's free water, so a rule split into several gets the same total (proportional rationing, §2.6a). | Provisionally confirmed 2026-10-01 (issue #90), to be confirmed by the client's hydrologist ([§2.6](#26-transfers-transfers)). |
 
 ---
 
@@ -9278,7 +9319,7 @@ text:
 | `checkBalance` | Every value finite (observed flow, its gap-filled values, rain and a few other inputs may be blank on a missing day). The observed flow quality flags (`observed_flow_quality`, engine ≥ 1.48.0, §2.10h; `checkFlowQuality`): stored at most once, beside the scored `observed_flow` (the calibration site's, else the catchment's), as long as it; every day a class code, never human use; infilled exactly on the gap-filled days, missing exactly on the other days without a reading; above the highest gauging only when the reading is above the record's highest gauging, below only when it is above zero and below the lowest, in range never outside the gauged range (a gauge inside the network has none); and a run with gap-filled days stores the column. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity (0 for a dam on the river, engine ≥ 1.68.0; the month's, when River to dam is by month, engine ≥ 1.32.0), L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
-| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); per rule (engine ≥ 1.36.0, from the rules' own `transfer_rule@` volumes, skipped for a run without them), the rules of one priority from one dam keeping at least that rule's reserve send together at most MAX(0, storage[t−1] − sent by lower priorities − its reserve), so no rule takes the dam below its own reserve (§2.6, audit N6); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + the most its dam is drawn (N4; the dam terms from engine 0.19.0; from engine 1.31.0 demand D less its primary direct boreholes' room, within its allocation rooms, the units replayed from `offtake_used` and the room columns, §2.6) + a fixed release (engine ≥ 1.29.0; MIN(amount, outlet) in full from engine 1.70.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R); from engine 1.44.0, on a unit with a basic-needs floor, B is the window mean of `basic_needs`, at most H, S = MAX(N − ΔG, B − I), U = MAX(M − ΔG, 0, B) and the held volume = U − MAX(M − ΔG, 0). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
