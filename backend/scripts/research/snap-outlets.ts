@@ -89,7 +89,7 @@ async function main() {
 			asked = true;
 		}
 		const base = {
-			expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: asked } : null,
+			expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: asked, head: near.reach.head } : null,
 			junction: near.junction
 		};
 		let r: Record<string, unknown>;

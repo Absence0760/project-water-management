@@ -108,6 +108,7 @@ async function main() {
               km2: reach.upstreamKm2,
               reach: `reach ${reach.reachId}`,
               distanceM: reach.distanceM,
+              head: reach.head,
             }
           : null,
         junction,

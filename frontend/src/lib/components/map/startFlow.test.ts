@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MapFeature, StartPlan, StartProposal, StartState, StartUnit } from '$lib/api';
 import {
 	applySummary,
+	applyTicks,
 	candidatePoints,
 	defaultChoice,
 	defaultOutlet,
@@ -24,10 +25,12 @@ const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geo
 	name: id,
 	nodeId: null,
 	nodeName: null,
+	damPosition: null,
 	geometry,
 	properties: {},
 	areaM2: null,
 	center: [20, -33],
+	nonContributingM2: null,
 	sourceId: null,
 	createdBy: null,
 	createdAt: '',
@@ -164,7 +167,19 @@ describe('the ticks', () => {
 		expect(t.rest).toMatchObject({ include: true, area: true });
 		// Without an elevation model nothing but the rest's area (the boundary) is offered.
 		const bare = plan([unit('a', { areaM2: null, geometry: null, drainsIntoProposed: false })], { fromDem: false });
-		expect(unitOffers(bare.units[0]!)).toEqual({ area: false, drainsInto: false, runoffToDam: false });
+		expect(unitOffers(bare.units[0]!)).toEqual({ area: false, drainsInto: false, runoffToDam: false, upstreamToDam: false });
+	});
+
+	it('offers a marked dam’s Upstream inflow to dam, unticked until ticked, and only a marked dam’s (194)', () => {
+		const marked = plan([unit('off', { damShares: { pctUpstreamToDam: 0, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6 } }), unit('plain')]);
+		expect(unitOffers(marked.units[0]!).upstreamToDam).toBe(true);
+		expect(unitOffers(marked.units[1]!).upstreamToDam).toBe(false);
+		const open = initialTicks(marked);
+		expect(open.units.map((u) => u.upstreamToDam)).toEqual([false, undefined]);
+		expect(tickAll(marked, open).units.map((u) => [u.key, u.runoffToDam, u.upstreamToDam])).toEqual([
+			['off', true, true],
+			['plain', true, undefined]
+		]);
 	});
 
 	it('names what each unit drains into by the names as typed', () => {
@@ -194,6 +209,27 @@ describe('the ticks', () => {
 		const t = tickAll(p, initialTicks(p));
 		expect(applySummary(t)).toBe(
 			'The empty model gets 5 nodes, with 3 areas (each saved as its unit’s parcel) and 3 drains-into from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.'
+		);
+	});
+
+	it('sends an area’s basis only with its area ticked, and says which areas are effective (195)', () => {
+		const t = tickAll(p, initialTicks(p));
+		// Gross unless chosen: nothing is sent, the server's default.
+		expect(applyTicks(t).units.every((u) => !('areaBasis' in u))).toBe(true);
+		t.units[1]!.areaBasis = 'effective';
+		t.rest.areaBasis = 'effective';
+		// Chosen, then the area unticked: not sent (the server refuses an effective area not taken).
+		t.units[0]!.areaBasis = 'effective';
+		t.units[0]!.area = false;
+		const body = applyTicks(t);
+		expect(body.units.map((u) => [u.key, u.area, u.areaBasis])).toEqual([
+			['top', false, undefined],
+			['low', true, 'effective'],
+			['town', false, undefined]
+		]);
+		expect(body.rest).toEqual({ include: true, name: 'Rest of the catchment', area: true, areaBasis: 'effective' });
+		expect(applySummary(t)).toBe(
+			'The empty model gets 5 nodes, with 2 areas (each saved as its unit’s parcel; low, Rest of the catchment without what drains into pans) and 3 drains-into from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.'
 		);
 	});
 });

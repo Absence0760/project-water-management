@@ -2,7 +2,7 @@
 // form's parsing and an import refusal's problems.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapNodeArea } from '$lib/api/types';
-import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea } from './mapData';
+import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea, takesDamPosition } from './mapData';
 
 const feature = (over: Partial<MapFeature>): MapFeature => ({
 	id: 'f1',
@@ -13,6 +13,8 @@ const feature = (over: Partial<MapFeature>): MapFeature => ({
 	geometry: { type: 'Polygon', coordinates: [[[21, -34], [22, -34], [22, -33], [21, -33], [21, -34]]] },
 	properties: {},
 	areaM2: 12_345_678,
+	nonContributingM2: null,
+	damPosition: null,
 	center: [21.5, -33.5],
 	sourceId: null,
 	createdBy: null,
@@ -85,9 +87,9 @@ describe('import problems', () => {
 
 describe('area targets', () => {
 	const nodes: MapNodeArea[] = [
-		{ id: 'a', name: 'Farm A', kind: 'farm', areaKm2: 12.345678, areaSource: 'map', areaFeatureId: 'f1' },
-		{ id: 'w', name: 'Weir', kind: 'gauge', areaKm2: 0, areaSource: 'typed', areaFeatureId: null },
-		{ id: 'u', name: 'Town', kind: 'user', areaKm2: 0, areaSource: 'typed', areaFeatureId: null }
+		{ id: 'a', name: 'Farm A', kind: 'farm', areaKm2: 12.345678, areaSource: 'map', areaBasis: 'gross', areaFeatureId: 'f1' },
+		{ id: 'w', name: 'Weir', kind: 'gauge', areaKm2: 0, areaSource: 'typed', areaBasis: null, areaFeatureId: null },
+		{ id: 'u', name: 'Town', kind: 'user', areaKm2: 0, areaSource: 'typed', areaBasis: null, areaFeatureId: null }
 	];
 	it('offers only farms, and knows when a feature’s area is the one in use', () => {
 		expect(areaTargets(nodes).map((n) => n.id)).toEqual(['a']);
@@ -96,11 +98,33 @@ describe('area targets', () => {
 		expect(alreadyAccepted({ ...nodes[0]!, areaSource: 'typed' }, feature({}))).toBe(false);
 	});
 
+	it('knows the area in use on the basis it was taken, gross or effective (195)', () => {
+		const pans = feature({ nonContributingM2: 2_345_678 });
+		// Gross taken: in use for gross, not for effective.
+		expect(alreadyAccepted(nodes[0]!, pans)).toBe(true);
+		expect(alreadyAccepted(nodes[0]!, pans, 'gross')).toBe(true);
+		expect(alreadyAccepted(nodes[0]!, pans, 'effective')).toBe(false);
+		// Effective taken: the node holds the area less what drains into pans.
+		const eff = { ...nodes[0]!, areaKm2: 10, areaBasis: 'effective' as const };
+		expect(alreadyAccepted(eff, pans)).toBe(true);
+		expect(alreadyAccepted(eff, pans, 'effective')).toBe(true);
+		expect(alreadyAccepted(eff, pans, 'gross')).toBe(false);
+		// Reshaped since (its figure gone): the effective area no longer matches, so it's an earlier outline's.
+		expect(alreadyAccepted(eff, feature({ nonContributingM2: null }))).toBe(false);
+	});
+
 	it('offers a catchment area only from a farm parcel or an “other” polygon, never a dam or the boundary', () => {
 		expect(takesArea(feature({}))).toBe(true);
 		expect(takesArea(feature({ kind: 'other' }))).toBe(true);
 		expect(takesArea(feature({ kind: 'dam' }))).toBe(false);
 		expect(takesArea(feature({ kind: 'catchment_boundary' }))).toBe(false);
 		expect(takesArea(feature({ kind: 'other', geometry: { type: 'Point', coordinates: [21.5, -33.5] } }))).toBe(false);
+	});
+
+	it('asks where a dam stands against its river only of a dam drawn as its outline (194)', () => {
+		expect(takesDamPosition(feature({ kind: 'dam' }))).toBe(true);
+		expect(takesDamPosition(feature({ kind: 'dam', geometry: { type: 'Point', coordinates: [21.5, -33.5] } }))).toBe(false);
+		expect(takesDamPosition(feature({}))).toBe(false);
+		expect(takesDamPosition(feature({ kind: 'other' }))).toBe(false);
 	});
 });

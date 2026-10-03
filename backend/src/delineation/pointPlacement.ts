@@ -15,7 +15,7 @@ import type { Position } from '../geo/geojson.js';
 import { bearingWord, type LargerChannel } from './delineate.js';
 import { MATCH_RADIUS_M } from './place.js';
 import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type ConfluenceChoice, type NearReach, type ReachAtClick } from './reach.js';
-import type { PlacedBy, PlacementHints, UnitPiece } from './subcatchments.js';
+import type { DamPosition, PlacedBy, PlacementHints, UnitPiece } from './subcatchments.js';
 
 /** A point's placement choices in a propose body: the river picked at a confluence, and the larger channel chosen over a snap. */
 export const PlacementChoice = {
@@ -65,7 +65,7 @@ export async function pointReaches(db: Db, points: readonly PointToPlace[]): Pro
 			out.set(p.key, {
 				reach: f.reach,
 				chosen: !!p.reach,
-				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, chosen: !!p.reach, reachDistanceM: f.reach?.distanceM ?? null, junction: f.junction, useLarger: !!p.useLarger }
+				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, head: f.reach?.head ?? null, chosen: !!p.reach, reachDistanceM: f.reach?.distanceM ?? null, junction: f.junction, useLarger: !!p.useLarger }
 			});
 		} catch (err) {
 			if (err instanceof ConfluenceAmbiguity) ambiguous.push({ featureId: p.key, name: p.name, choices: err.choices });
@@ -93,16 +93,19 @@ export interface PointPlacement {
 	larger: LargerChannel | null;
 	/** A reach was near but no channel near the point matched its area: it may be on another stream. */
 	unmatched: boolean;
+	/** A dam polygon placed by the position the editor marked on the map (194), not by its outline; absent when unset. */
+	damPosition?: DamPosition;
 }
 
 /** A plan's placement record from the partition's facts and the reach looked up. Pure. */
-export function placementOf(piece: Pick<UnitPiece, 'placedBy' | 'larger' | 'unmatched'>, r: PointReach | undefined): PointPlacement {
+export function placementOf(piece: Pick<UnitPiece, 'placedBy' | 'larger' | 'unmatched' | 'damPosition'>, r: PointReach | undefined): PointPlacement {
 	return {
 		placedBy: piece.placedBy ?? 'snapped',
 		// The reach's own area, as the River network layer shows it (its area at the point is what the point was matched to).
 		reach: r?.reach ? { dataset: r.reach.dataset, reachId: r.reach.reachId, upstreamKm2: r.reach.reachKm2, chosen: r.chosen } : null,
 		larger: piece.larger ?? null,
-		unmatched: !!piece.unmatched
+		unmatched: !!piece.unmatched,
+		...(piece.damPosition ? { damPosition: piece.damPosition } : {})
 	};
 }
 

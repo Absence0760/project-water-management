@@ -11,7 +11,7 @@
 //    endorheic one; one that reaches the sea, out of a hollow draining
 //    under 10 km²), and as storage on a river once the catchment's own
 //    drawn river runs through it and out, or the register has a dam on it
-//    (delineate-11); the stored proposal keeps the report.
+//    (delineate-12); the stored proposal keeps the report.
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
@@ -99,7 +99,7 @@ describe('loadPanReference', () => {
 	});
 });
 
-describe('a click with the cross-check (delineate-11)', () => {
+describe('a click with the cross-check (delineate-12)', () => {
 	const click = () => {
 		const [lon, lat] = at(OUTLET_CELL.x, OUTLET_CELL.y);
 		return editor.call('POST', `/projects/${otherProjectId}/map/delineation`, { lon, lat, from: 'outlet' });
@@ -115,7 +115,7 @@ describe('a click with the cross-check (delineate-11)', () => {
 		await plantReach(98000002, true);
 		const pan = await click();
 		expect(pan.status, JSON.stringify(pan.body)).toBe(201);
-		expect(pan.body.proposal.methodVersion).toBe('delineate-11');
+		expect(pan.body.proposal.methodVersion).toBe('delineate-12');
 		expect(pan.body.proposal.pans).toMatchObject({ count: 1, onRiver: { count: 0, largest: [] } });
 		expect(pan.body.proposal.pans.nonContributingM2).toBeLessThan(10e6);
 

@@ -87,7 +87,7 @@ function intoPans(areaM2: number, pans: NonNullable<DelineationProposal['pans']>
 	];
 }
 
-/** The depressions found to be storage on a river (delineate-11): listed, not counted as pans. Nothing when none or not checked. */
+/** The depressions found to be storage on a river (delineate-12): listed, not counted as pans. Nothing when none or not checked. */
 function onRiverFacts(pans: NonNullable<DelineationProposal['pans']>): [string, string][] {
 	const r = pans.onRiver;
 	if (!r?.count) return [];

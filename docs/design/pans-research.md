@@ -110,7 +110,8 @@ took from that (`backend/src/delineation/pans.ts`;
    area** (gross less non-contributing); the hydrologist chooses. Start and
    Divide carry it per piece, per unit's whole catchment and for the
    catchment, with a warning sentence; a saved click piece says it in its
-   description.
+   description. Taking a delineated area into the model asks which, gross by
+   default (migration 195, [maps.md § Pans and the effective area](../maps.md#pans-and-the-effective-area)).
 2. **A pan is a closed depression of the filled DEM that is**
    - at least **1 m** deep below its spill (about GLO-30's RMSE over flat
      land; shallower than that the depth is within the DEM's error);
@@ -137,7 +138,7 @@ took from that (`backend/src/delineation/pans.ts`;
    § Storage on a river: no published licence, data behind a registration);
    reading the river network to reject a depression a mapped river flows
    through was built later (§ Storage on a river).
-5. **Storage on a river** (delineate-11, start-13): a depression passing
+5. **Storage on a river** (delineate-12, start-14): a depression passing
    every pan test that a mapped river flows out of over a wall, or that a
    dam holds, is listed apart and not counted (§ Storage on a river).
 

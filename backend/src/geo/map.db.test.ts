@@ -361,6 +361,63 @@ describe('placing and editing features', () => {
 	});
 });
 
+describe('a dam’s position against its river (194, map_feature.dam_position)', () => {
+	let damId: string;
+	let pointDamId: string;
+	beforeAll(async () => {
+		damId = (await editor.call('POST', at('/features'), { kind: 'dam', name: 'Long dam', geometry: { type: 'Polygon', coordinates: [box(21.32, -33.66, 0.003)] } })).body.feature.id;
+		pointDamId = (await editor.call('POST', at('/features'), { kind: 'dam', name: 'Point dam', lon: 21.33, lat: -33.65 })).body.feature.id;
+	});
+
+	it('is unset on a new dam, set and cleared by an editor, read by a viewer, and audited', async () => {
+		expect((await viewer.call('GET', at('/features'))).body.features.find((f: { id: string }) => f.id === damId)).toMatchObject({ damPosition: null });
+		const off = await editor.call('PATCH', at(`/features/${damId}`), { damPosition: 'off_channel' });
+		expect(off.status, JSON.stringify(off.body)).toBe(200);
+		expect(off.body.feature).toMatchObject({ damPosition: 'off_channel', name: 'Long dam' });
+		// Kept through an edit that doesn't name it (a rename, a reshape).
+		const renamed = await editor.call('PATCH', at(`/features/${damId}`), { name: 'Long storage dam', geometry: { type: 'Polygon', coordinates: [box(21.32, -33.66, 0.004)] } });
+		expect(renamed.body.feature).toMatchObject({ damPosition: 'off_channel', name: 'Long storage dam' });
+		expect((await viewer.call('GET', at('/features'))).body.features.find((f: { id: string }) => f.id === damId).damPosition).toBe('off_channel');
+		expect((await editor.call('PATCH', at(`/features/${damId}`), { damPosition: 'on_channel' })).body.feature.damPosition).toBe('on_channel');
+		expect((await editor.call('PATCH', at(`/features/${damId}`), { damPosition: null })).body.feature.damPosition).toBeNull();
+		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.feature_changed' AND subject->>'featureId' = $2 ORDER BY id`, [projectId, damId]);
+		expect(audit.map((r) => (r.subject as { damPosition?: unknown }).damPosition).filter(Boolean)).toEqual([
+			{ from: null, to: 'off_channel' },
+			{ from: 'off_channel', to: 'on_channel' },
+			{ from: 'on_channel', to: null }
+		]);
+	});
+
+	it('refuses a viewer, a value not on the list, a point dam and any other kind', async () => {
+		expect((await viewer.call('PATCH', at(`/features/${damId}`), { damPosition: 'off_channel' })).status).toBe(403);
+		expect((await editor.call('PATCH', at(`/features/${damId}`), { damPosition: 'beside' })).status).toBe(400);
+		const point = await editor.call('PATCH', at(`/features/${pointDamId}`), { damPosition: 'off_channel' });
+		expect(point.status).toBe(400);
+		expect(point.body.error).toMatch(/Only a dam drawn as its outline can be marked on or off the river/);
+		expect((await editor.call('PATCH', at(`/features/${damId}`), { kind: 'other', damPosition: 'on_channel' })).status).toBe(400);
+		// Positive control: the dam polygon takes it.
+		expect((await editor.call('PATCH', at(`/features/${damId}`), { damPosition: 'on_channel' })).status).toBe(200);
+	});
+
+	it('is cleared when the dam becomes another kind, and the table refuses it on anything but a dam polygon', async () => {
+		const other = await editor.call('PATCH', at(`/features/${damId}`), { kind: 'other' });
+		expect(other.status).toBe(200);
+		expect(other.body.feature).toMatchObject({ kind: 'other', damPosition: null });
+		const raw = (sql: string, params: unknown[]) => withUser(editor.id, (db) => db.query(sql, params)).then(() => 'ok', (e: { code?: string }) => e.code);
+		expect(await raw(`UPDATE map_feature SET dam_position = 'off_channel' WHERE id = $1`, [damId])).toBe('23514');
+		expect(await raw(`UPDATE map_feature SET dam_position = 'off_channel' WHERE id = $1`, [pointDamId])).toBe('23514');
+		expect(await raw(`UPDATE map_feature SET kind = 'dam', dam_position = 'sideways' WHERE id = $1`, [damId])).toBe('23514');
+		// Positive control: the same row as a dam polygon takes a listed value.
+		expect(await raw(`UPDATE map_feature SET kind = 'dam', dam_position = 'off_channel' WHERE id = $1`, [damId])).toBe('ok');
+		// A viewer's write reaches no row (RLS): the column has the table's policies.
+		await withUser(viewer.id, async (db) => {
+			const r = await db.query(`UPDATE map_feature SET dam_position = NULL WHERE id = $1`, [damId]);
+			expect(r.rowCount).toBe(0);
+		});
+		expect((await rowsAs<{ dam_position: string }>(viewer, 'SELECT dam_position FROM map_feature WHERE id = $1', [damId]))[0]!.dam_position).toBe('off_channel');
+	});
+});
+
 describe('accepting an area from the map', () => {
 	let parcelId: string;
 	let parcelAreaKm2: number;
@@ -432,7 +489,40 @@ describe('accepting an area from the map', () => {
 		expect(await source()).toMatchObject({ areaSource: 'map', areaFeatureId: parcelId });
 		saved.nodes.find((n: { id: string }) => n.id === farmA.id).areaKm2 = 3.5;
 		expect((await editor.call('PUT', `/projects/${projectId}/model`, saved)).status).toBe(200);
-		expect(await source()).toMatchObject({ areaKm2: 3.5, areaSource: 'typed', areaFeatureId: null });
+		expect(await source()).toMatchObject({ areaKm2: 3.5, areaSource: 'typed', areaBasis: null, areaFeatureId: null });
+	});
+
+	it('takes a polygon’s effective area only when it has a pans figure, and a new outline drops the figure (195)', async () => {
+		const url = `/projects/${projectId}/nodes/${farmA.id}/area-from-map`;
+		const made = await editor.call('POST', at('/features'), { kind: 'other', name: 'Pan veld', geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.01)] } });
+		expect(made.status).toBe(201);
+		const f = made.body.feature as { id: string; areaM2: number; nonContributingM2: number | null };
+		// Drawn: no figure, so no effective area; the gross one is taken and says nothing of pans (the positive control).
+		expect(f.nonContributingM2).toBeNull();
+		const refused = await editor.call('POST', url, { featureId: f.id, basis: 'effective' });
+		expect(refused.status).toBe(400);
+		expect(refused.body.error).toMatch(/has no figure for what drains into pans, so it has no effective area to take: take the gross area\.$/);
+		const gross = await editor.call('POST', url, { featureId: f.id, basis: 'gross' });
+		expect(gross.status).toBe(200);
+		expect(gross.body.areaKm2).toBeCloseTo(f.areaM2 / 1e6, 9);
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1`, [projectId]);
+		expect(rev!.reason).toMatch(/^Area of Farm A from the map: “Pan veld” \([\d.]+ km², computed from its polygon\)$/);
+		// The schema never holds a figure over the area.
+		await expect(asOwner('UPDATE map_feature SET non_contributing_m2 = area_m2 * 2 WHERE id = $1', [f.id])).rejects.toThrow(/check constraint/);
+		// With a figure (as a delineated feature has), the effective area is the area less it.
+		await asOwner('UPDATE map_feature SET non_contributing_m2 = area_m2 * 0.25 WHERE id = $1', [f.id]);
+		const eff = await editor.call('POST', url, { featureId: f.id, basis: 'effective' });
+		expect(eff.status, JSON.stringify(eff.body)).toBe(200);
+		expect(eff.body.areaKm2).toBeCloseTo((0.75 * f.areaM2) / 1e6, 9);
+		const listed = (await editor.call('GET', at('/features'))).body;
+		expect(listed.nodes.find((n: { id: string }) => n.id === farmA.id)).toMatchObject({ areaSource: 'map', areaBasis: 'effective', areaFeatureId: f.id });
+		expect(listed.features.find((x: { id: string }) => x.id === f.id).nonContributingM2).toBeCloseTo(0.25 * f.areaM2, 3);
+		// Renamed only: the figure stays. Reshaped: it was the old outline's, so it goes.
+		expect((await editor.call('PATCH', at(`/features/${f.id}`), { name: 'Pan veld (renamed)' })).body.feature.nonContributingM2).toBeCloseTo(0.25 * f.areaM2, 3);
+		const moved = await editor.call('PATCH', at(`/features/${f.id}`), { geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.012)] } });
+		expect(moved.status).toBe(200);
+		expect(moved.body.feature.nonContributingM2).toBeNull();
+		expect((await editor.call('DELETE', at(`/features/${f.id}`))).status).toBe(204);
 	});
 
 	it('keeps the area but forgets the feature when the feature is deleted', async () => {

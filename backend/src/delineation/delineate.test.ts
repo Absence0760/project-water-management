@@ -260,7 +260,7 @@ describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
 		expect(side.pans).toEqual({ nonContributingM2: 0, count: 0, largest: [], method: PAN_METHOD });
 	});
 
-	// The cross-check (delineate-11). The fixture's pan spills down the 6 % flank, which falls past its floor within a cell or two,
+	// The cross-check (delineate-12). The fixture's pan spills down the 6 % flank, which falls past its floor within a cell or two,
 	// as below a dam's wall: so a river drawn through it and out to the valley's river makes it storage on a river.
 	const through = [at(PAN.x + 12, PAN.y - 2), at(PAN.x, PAN.y), at(OUTLET_CELL.x, PAN.y + 8)];
 	const reference = (rivers: { line: [number, number][]; directed: boolean }[], dams: [number, number][][] = []) => async () => ({ rivers, dams });

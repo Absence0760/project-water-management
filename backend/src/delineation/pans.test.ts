@@ -262,10 +262,10 @@ describe('panReport and panWarning', () => {
 	it('says how much drains into pans, where the largest is and which pieces hold it; nothing when none', async () => {
 		const r = panReport(32_000_000, pans);
 		expect(panWarning(r, 320_000_000, [{ name: 'Upper dam', ncM2: 30_000_000 }, { name: 'Rest of the catchment', ncM2: 2_000_000 }, { name: 'Weir', ncM2: 0 }])).toBe(
-			'32 km² of the catchment above the outlet (10 %) drains into 2 pans (closed depressions on the elevation model; the largest at 28.290° S, 26.150° E, 30 km² draining into it). WR2012 counts such endoreic areas as non-contributing; the areas here still include them: 30 km² in Upper dam’s, 2.00 km² in Rest of the catchment’s own area. Use the effective area if you model them as non-contributing.'
+			'32 km² of the catchment above the outlet (10 %) drains into 2 pans (closed depressions on the elevation model; the largest at 28.290° S, 26.150° E, 30 km² draining into it). WR2012 counts such endoreic areas as non-contributing; the areas here still include them: 30 km² in Upper dam’s, 2.00 km² in Rest of the catchment’s own area. Choose the effective area beside an area’s tick if you model them as non-contributing.'
 		);
 		expect(panWarning(panReport(8_500_000, pans.slice(0, 1)), 0, [])).toBe(
-			'8.50 km² of the catchment above the outlet drains into a pan (a closed depression on the elevation model, at 28.290° S, 26.150° E, 30 km² draining into it). WR2012 counts such endoreic areas as non-contributing; the areas here still include them. Use the effective area if you model them as non-contributing.'
+			'8.50 km² of the catchment above the outlet drains into a pan (a closed depression on the elevation model, at 28.290° S, 26.150° E, 30 km² draining into it). WR2012 counts such endoreic areas as non-contributing; the areas here still include them. Choose the effective area beside an area’s tick if you model them as non-contributing.'
 		);
 		expect(panWarning(panReport(0, []), 1e8, [])).toBeNull();
 		expect(panWarning(panReport(0, [], []), 1e8, [])).toBeNull();
@@ -278,7 +278,7 @@ describe('panReport and panWarning', () => {
 		);
 		const both = panReport(8_500_000, pans.slice(1), [{ ...pans[0]!, by: 'dam' }, { ...pans[1]!, by: 'river' }]);
 		expect(panWarning(both, 0, [])).toMatch(
-			/drains into a pan .* Use the effective area if you model them as non-contributing\. 2 closed depressions hold as much as pans, but a mapped river flows out of each or a dam holds it \(the largest at 28\.290° S, 26\.150° E, 30 km² draining into it\): storage on a river, not counted as non-contributing\.$/
+			/drains into a pan .* Choose the effective area beside an area’s tick if you model them as non-contributing\. 2 closed depressions hold as much as pans, but a mapped river flows out of each or a dam holds it \(the largest at 28\.290° S, 26\.150° E, 30 km² draining into it\): storage on a river, not counted as non-contributing\.$/
 		);
 	});
 });

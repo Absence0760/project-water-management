@@ -24,6 +24,7 @@ import type {
 	SeriesMeta
 } from '@water-management/engine';
 import type {
+	MapAreaBasis,
 	MfaChallenge,
 	MfaStatus,
 	AddMemberResult,
@@ -1079,12 +1080,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 */
 			import: (id: string, body: { fileName: string; text: string } & ({ kind: MapFeatureKind } | { features: MapImportReviewed[]; replaceBoundary?: boolean })) =>
 				request<{ source: { id: string; fileName: string; sha256: string }; features: MapFeature[] }>('POST', `${p(id)}/map/import`, body),
-			/** Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature). */
-			areaFromMap: (id: string, nodeId: string, featureId: string) =>
-				request<{ nodeId: string; areaKm2: number; areaSource: 'map'; areaFeatureId: string; revisionId: string | null }>(
+			/**
+			 * Accept a polygon's area as a farm's area (a model change, recorded as a revision naming the feature and which area):
+			 * its gross area, or with `basis: 'effective'` (a delineated feature with a pans figure) without what drains into pans (195).
+			 */
+			areaFromMap: (id: string, nodeId: string, featureId: string, basis: MapAreaBasis = 'gross') =>
+				request<{ nodeId: string; areaKm2: number; areaSource: 'map'; areaBasis: MapAreaBasis; areaFeatureId: string; revisionId: string | null }>(
 					'POST',
 					`${p(id)}/nodes/${enc(nodeId)}/area-from-map`,
-					{ featureId }
+					{ featureId, basis }
 				),
 			quaternary: (id: string, lon: number, lat: number) =>
 				request<QuaternaryLookup>('GET', `${p(id)}/map/quaternary?${new URLSearchParams({ lon: String(lon), lat: String(lat) })}`),

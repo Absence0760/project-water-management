@@ -95,7 +95,7 @@ export const delineateHandler = defineHandler({
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM } : null,
+				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM, head: near.reach.head } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
 				// The request's last window cut the catchment here: the first window is placed over it, not centred on the click.

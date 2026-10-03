@@ -27,6 +27,7 @@
 		dividePoints,
 		divideOverlap,
 		divideProblem,
+		divideApplyTicks,
 		divideSummary,
 		doubleNode,
 		initialDivideTicks,
@@ -42,10 +43,12 @@
 		type DivideDraft
 	} from './divideFlow';
 	import { featureName } from './mapList';
+	import AreaBasisChoice from './AreaBasisChoice.svelte';
+	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
 	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { confluencePointsOf, OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { confluencePointsOf, damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import type { ConfluencePoint } from '$lib/api/types';
 	import { openDivide, outletGauges } from './startFlow';
 
@@ -171,7 +174,7 @@
 		busy = 'apply';
 		error = null;
 		try {
-			const r = await api.divide.apply(projectId, p.id, ticks);
+			const r = await api.divide.apply(projectId, p.id, divideApplyTicks(ticks));
 			delete draft.ticks[p.id];
 			await onapplied(r.proposal);
 			void focusTitle();
@@ -333,6 +336,10 @@
 										{u.current ? `${km2Now(u.current.areaKm2)}, ${u.current.areaSource === 'map' ? 'from the map' : 'typed'}` : '–'}{sameAsNow(p, u, 'area') ? ' (the same)' : ''}</span
 									>
 								</label>
+								{#if t.area && offersEffective(u.areaM2, u.nonContributingM2)}
+									<!-- Its piece holds pans (195): gross (the default) or effective, chosen here, never silently. -->
+									<AreaBasisChoice areaM2={u.areaM2!} ncM2={u.nonContributingM2!} bind:basis={() => t.areaBasis ?? 'gross', (v) => (t.areaBasis = v)} testid="divide-area-basis" />
+								{/if}
 							{/if}
 							{#if offer.drainsInto}
 								<label class="tick">
@@ -347,7 +354,19 @@
 							{#if offer.runoffToDam}
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="divide-tick-dam" />
-									<span>All of its own runoff reaches the dam (its piece ends at the wall). Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span>
+									<span
+										>{damShareLines(u.damShares, u.areaM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
+									>
+								</label>
+							{/if}
+							{#if offer.upstreamToDam}
+								<label class="tick">
+									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="divide-tick-upstream" />
+									<span
+										>{damShareLines(u.damShares, u.areaM2)?.upstream} Now: {u.current?.pctUpstreamToDam !== undefined ? pct(u.current.pctUpstreamToDam) : '–'}{sameAsNow(p, u, 'upstreamToDam')
+											? ' (the same)'
+											: ''}</span
+									>
 								</label>
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}
@@ -377,6 +396,10 @@
 									<label for="{uid}-rest-name">Its name</label>
 									<input id="{uid}-rest-name" bind:value={r.name} oninput={(e) => (restNewName = e.currentTarget.value)} maxlength="100" />
 								</div>
+							{/if}
+							{#if ticks.rest.to !== 'none' && offersEffective(p.rest.areaM2, p.rest.nonContributingM2)}
+								{@const r = ticks.rest}
+								<AreaBasisChoice areaM2={p.rest.areaM2} ncM2={p.rest.nonContributingM2!} bind:basis={() => r.areaBasis ?? 'gross', (v) => (r.areaBasis = v)} testid="divide-rest-area-basis" />
 							{/if}
 						{:else}
 							<p class="hint">Its outline couldn’t be made a polygon, so it has no parcel to save; type its area on the Network.</p>

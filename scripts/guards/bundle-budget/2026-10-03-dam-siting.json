@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The dam's Siting select on the map card (MapTab), its labels (mapData.ts) the placement lines and the Start and Divide sheets' dam-share ticks for a marked dam (placement.ts, startFlow.ts, divideFlow.ts): total 1635 KB on the base, 1636 KB with it (under 1 KB gzipped)"
+}

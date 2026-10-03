@@ -115,7 +115,7 @@ export interface PanReport {
 	largest: Pan[];
 	/**
 	 * The depressions passing the pan tests that the river network or the dams showed to be storage on a river (not counted
-	 * above). Absent when they weren't checked (before delineate-11 and start-13, or without the reference).
+	 * above). Absent when they weren't checked (before delineate-12 and start-14, or without the reference).
 	 */
 	onRiver?: { count: number; largest: RiverStorage[] };
 	method: string;
@@ -517,7 +517,7 @@ export function panWarning(report: PanReport, catchmentM2: number, pieces: reado
 		(report.count === 1
 			? `a pan (a closed depression on the elevation model, at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `
 			: `${report.count} pans (closed depressions on the elevation model; the largest at ${place(big.at)}, ${km2Text(big.drainsM2)} draining into it). `) +
-		`WR2012 counts such endoreic areas as non-contributing; the areas here still include them${held.length ? `: ${held.join(', ')} own area` : ''}. Use the effective area if you model them as non-contributing.` +
+		`WR2012 counts such endoreic areas as non-contributing; the areas here still include them${held.length ? `: ${held.join(', ')} own area` : ''}. Choose the effective area beside an area’s tick if you model them as non-contributing.` +
 		(river ? ` ${river}` : '')
 	);
 }

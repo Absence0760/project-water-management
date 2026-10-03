@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import type { ConfluencePoint, PointPlacement } from '$lib/api/types';
-import { choiceFor, confluencePointsOf, emptyPlacement, OUTLET_KEY, placementLine, withPlacement } from './placement';
+import { choiceFor, confluencePointsOf, damShareLines, emptyPlacement, OUTLET_KEY, placementLine, withPlacement } from './placement';
 
 const reach = { dataset: 'HydroRIVERS-v10', reachId: 11509680, upstreamKm2: 292.4, chosen: false };
 const pl = (over: Partial<PointPlacement>): PointPlacement => ({ placedBy: 'snapped', reach: null, larger: null, unmatched: false, ...over });
@@ -19,6 +19,23 @@ describe('placementLine', () => {
 			'At the outflow of the dam’s own outline: a much larger channel (450 km²) only clips its edge, so the dam was taken as off that channel.'
 		);
 		expect(placementLine(pl({ placedBy: 'boundary' }), null)).toBe('At the most-drained cell inside the boundary.');
+	});
+
+	it('words a marked dam’s two shares, and nothing for an unmarked one (194)', () => {
+		expect(damShareLines(undefined, 4e6)).toBeNull();
+		expect(damShareLines({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null }, 4e6)).toEqual({
+			runoff: 'All of its own runoff reaches the dam (its area ends at the wall).',
+			upstream: 'Upstream inflow to dam 100 %: on the river, as marked on the map, so it catches everything coming down.'
+		});
+		expect(damShareLines({ pctUpstreamToDam: 0, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6 }, 4e6)).toEqual({
+			runoff: '2.5 % of its runoff reaches the dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s 4.00 km²; the rest passes it by.',
+			upstream: 'Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it.'
+		});
+	});
+
+	it('says a dam was placed by the position marked on the map (194)', () => {
+		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'off_channel' }), null)).toBe('On the river where the dam’s own outflow joins it, as marked: off-channel, so the dam takes only its own catchment’s runoff.');
+		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'on_channel' }), null)).toBe('At the dam polygon’s most-drained cell, on the river, as marked.');
 	});
 
 	it('names an unmatched reach beside a snapped point, and keeps the old line for a proposal from before start-7', () => {

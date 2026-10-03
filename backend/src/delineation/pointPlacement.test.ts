@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placementWarnings, type PointPlacement } from './pointPlacement.js';
+import { placementOf, placementWarnings, type PointPlacement } from './pointPlacement.js';
 
 // The warnings a Start or Divide plan carries for a point's placement (pure).
 
@@ -21,5 +21,12 @@ describe('placementWarnings', () => {
 
 	it('says nothing for a matched point', () => {
 		expect(placementWarnings('Weir', [20.5, -33.5], pl({ placedBy: 'matched' }))).toEqual([]);
+	});
+});
+
+describe('placementOf', () => {
+	it('keeps a dam’s marked position in the plan, and adds nothing for an unmarked one (194)', () => {
+		expect(placementOf({ placedBy: 'polygon', damPosition: 'off_channel' }, undefined)).toEqual({ placedBy: 'polygon', reach: null, larger: null, unmatched: false, damPosition: 'off_channel' });
+		expect(placementOf({ placedBy: 'polygon' }, undefined)).toEqual({ placedBy: 'polygon', reach: null, larger: null, unmatched: false });
 	});
 });

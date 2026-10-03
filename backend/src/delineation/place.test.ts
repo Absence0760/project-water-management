@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHANNEL_MIN_KM2 } from './channels.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, ON_LINE_M, onOwnChannel, place, WIDE_MATCH_M, type PlaceGrid } from './place.js';
+import { accumulate, OUT } from './flow.js';
+import { expectedOnGrid, GUARD_RADIUS_M, HEAD_STEM_M, headAreaKm2, LARGER_FACTOR, ON_CHANNEL_KM2, ON_LINE_M, onOwnChannel, place, WIDE_MATCH_M, type HeadHint, type PlaceGrid } from './place.js';
+import { HEAD_KM2 } from './reach.js';
 
 // Hand-made accumulation grids with 100 m cells (0.01 km² each): a river down
 // column 20 whose upstream cells grow southward, a gully beside the click, and
@@ -231,5 +233,69 @@ describe('place: a gully snap offers the reach’s channel further out (delineat
 		g.acc[g.at(35, 20)] = 1500; // 15 km² against 120
 		expect(place(g, 35.5, 20.5, { snapRadiusM: 150, expectedKm2: 120 })!.larger).toBeNull();
 		expect(place(grid(), 35.5, 20.5, { snapRadiusM: 150, expectedKm2: 5000 })!.larger).toBeNull();
+	});
+});
+
+describe('a head reach’s upper end read from the DEM (delineate-11, followups: a head reach’s upper-end area is a constant)', () => {
+	// A routed grid, 30 m cells: every cell flows sideways into column C, which runs south. Each row adds NX cells
+	// (0.27 km²), so the channel drains ~1.4 km² at row 5, where the head reach's mapped line starts, far under HEAD_KM2.
+	const NX = 301;
+	const NY = 300;
+	const C = 150;
+	const CELL = 30;
+	function routed(): PlaceGrid & { dir: Uint8Array; open?: Uint8Array; at: (x: number, y: number) => number; km2: (x: number, y: number) => number } {
+		const at = (x: number, y: number) => y * NX + x;
+		const dir = new Uint8Array(NX * NY);
+		for (let y = 0; y < NY; y++) for (let x = 0; x < NX; x++) dir[at(x, y)] = y === NY - 1 ? OUT : x < C ? 0 : x > C ? 4 : 2;
+		const acc = accumulate(NX, NY, dir);
+		return { nx: NX, ny: NY, acc, edge: new Uint8Array(NX * NY), cellSizeM: CELL, dir, at, km2: (x, y) => (acc[at(x, y)]! * CELL * CELL) / 1e6 };
+	}
+	// Positions are grid cells here (toGrid is the identity): the line from row 5 to row 295 down column C.
+	const toGrid = (p: readonly number[]) => [p[0]!, p[1]!] as const;
+	const g0 = routed();
+	const reachKm2 = g0.km2(C, 295);
+	const fraction = 3 / 290;
+	const head: HeadHint = { at: [C + 0.5, 5.5], fraction, reachKm2 };
+	// reach.ts areaAlong's figure at the click, row 8: HEAD_KM2 at the upper end.
+	const constant = HEAD_KM2 + (reachKm2 - HEAD_KM2) * fraction;
+	const opts = { snapRadiusM: 150, expectedKm2: constant, reachDistanceM: 0 };
+
+	it('reads the channel’s area at the upper end, climbing from a cell on it', () => {
+		const g = routed();
+		expect(headAreaKm2(g, g.at(C, 40), C + 0.5, 5.5, reachKm2)).toBeCloseTo(g.km2(C, 5), 6);
+		// The upper end 200 m off the channel: its nearest cell on the channel.
+		expect(headAreaKm2(g, g.at(C, 40), C + 7.5, 5.5, reachKm2)).toBeCloseTo(g.km2(C, 5), 6);
+	});
+
+	it('the regression: a click near the head is matched at itself, not slid down to where the DEM drains 10 km²', () => {
+		const g = routed();
+		// The click's own cell (row 8) drains ~2.4 km², under half the constant's ~10.7: the match slides down the channel.
+		const before = place(g, C + 0.5, 8.5, opts)!;
+		expect(before.how).toBe('matched');
+		const slid = Math.floor(before.cell / NX) - 8;
+		expect(slid * CELL).toBeGreaterThan(250);
+		// From the DEM's area at the upper end, the area at the click is the click's own, and it is matched there.
+		const km2 = expectedOnGrid(g, C + 0.5, 8.5, opts, head, toGrid)!;
+		expect(km2).toBeCloseTo(g.km2(C, 5) + (reachKm2 - g.km2(C, 5)) * fraction, 6);
+		expect(Math.abs(km2 / g.km2(C, 8) - 1)).toBeLessThan(0.1);
+		expect(place(g, C + 0.5, 8.5, { ...opts, expectedKm2: km2 })).toMatchObject({ how: 'matched', cell: g.at(C, 8) });
+	});
+
+	it('keeps the constant for a reach that isn’t a head reach, and where the DEM can’t say', () => {
+		const g = routed();
+		// Not a head reach.
+		expect(expectedOnGrid(g, C + 0.5, 8.5, opts, null, toGrid)).toBe(constant);
+		// The upper end outside the window: the climb never comes within HEAD_STEM_M of it.
+		expect(expectedOnGrid(g, C + 0.5, 8.5, opts, { ...head, at: [C + 0.5, -HEAD_STEM_M / CELL - 5] }, toGrid)).toBe(constant);
+		// The channel passes further than HEAD_STEM_M from it: not this reach's channel.
+		expect(expectedOnGrid(g, C + 0.5, 8.5, opts, { ...head, at: [C + HEAD_STEM_M / CELL + 2, 5.5] }, toGrid)).toBe(constant);
+		// That cell's catchment runs past the window: its area is only a floor.
+		const open = new Uint8Array(NX * NY);
+		open[g.at(C, 5)] = 1;
+		expect(expectedOnGrid({ ...g, open }, C + 0.5, 8.5, opts, head, toGrid)).toBe(constant);
+		// The channel there drains more than the whole reach: another, larger channel.
+		expect(expectedOnGrid(g, C + 0.5, 8.5, opts, { ...head, reachKm2: g.km2(C, 4) }, toGrid)).toBe(constant);
+		// Nothing matched the constant (no expected-area channel within reach): nothing to climb from.
+		expect(expectedOnGrid(g, C + 0.5, 8.5, { ...opts, expectedKm2: 5000 }, head, toGrid)).toBe(5000);
 	});
 });

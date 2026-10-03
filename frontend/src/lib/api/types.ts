@@ -2592,6 +2592,10 @@ export interface MapFeature {
 	properties: Record<string, string>;
 	/** Geodesic area of a polygon, m², computed on the server; null for points and lines. */
 	areaM2: number | null;
+	/** Of its area, what drains into pans (m²), when it was made from a delineation (195); null when unknown. Its effective area is areaM2 less it. */
+	nonContributingM2: number | null;
+	/** A dam polygon's position against its river, as an editor said (194); null = not said, its outline decides. Always null for anything else. */
+	damPosition: DamPosition | null;
 	/** A point at its middle (lon, lat). */
 	center: MapPosition;
 	sourceId: string | null;
@@ -2627,6 +2631,9 @@ export interface MapSource {
 	features: number;
 }
 
+/** Which of a delineated feature's areas a unit took (195): all of it, or without what drains into pans. */
+export type MapAreaBasis = 'gross' | 'effective';
+
 /** A node and where its area came from (152 node.area_source). */
 export interface MapNodeArea {
 	id: string;
@@ -2634,6 +2641,8 @@ export interface MapNodeArea {
 	kind: 'farm' | 'gauge' | 'user';
 	areaKm2: number;
 	areaSource: 'typed' | 'map';
+	/** With areaSource 'map': which of the feature's areas it took (195); null when typed. */
+	areaBasis: MapAreaBasis | null;
 	areaFeatureId: string | null;
 }
 
@@ -2650,11 +2659,19 @@ export interface MapLinkedNodes {
 	nodeIds: string[];
 }
 
+/**
+ * Where a dam stands against its river (194, backend subcatchments.ts DamPosition): on the watercourse (the river forms its
+ * reservoir), or an off-channel storage dam beside it, filled by a pump or a furrow. Start and Divide place the dam by it.
+ */
+export type DamPosition = 'on_channel' | 'off_channel';
+
 /** POST/PATCH …/map/features: a point from the coordinates form, or a geometry. */
 export interface MapFeatureInput {
 	kind?: MapFeatureKind;
 	name?: string;
 	nodeId?: string | null;
+	/** A dam polygon's position against its river; null clears it. PATCH only, and only for a dam polygon (else 400). */
+	damPosition?: DamPosition | null;
 	lon?: number;
 	lat?: number;
 	geometry?: MapGeometry;
@@ -3016,7 +3033,7 @@ export interface PanReport {
 	largest: { at: MapPosition; floorM2: number; depthM: number; drainsM2: number; storageMm: number }[];
 	/**
 	 * The depressions that hold as much as a pan but that a mapped river flows out of (at a wall) or a dam holds: storage on a
-	 * river, listed apart and not counted above (delineate-11, start-13). Absent when not checked.
+	 * river, listed apart and not counted above (delineate-12, start-14). Absent when not checked.
 	 */
 	onRiver?: {
 		count: number;
@@ -3041,6 +3058,8 @@ export interface PointPlacement {
 	larger: LargerChannel | null;
 	/** A reach was near but no channel near the point matched its area. */
 	unmatched: boolean;
+	/** A dam polygon placed by the position marked on the map (194), not by its outline; absent when unmarked. */
+	damPosition?: DamPosition;
 }
 
 /** A point's placement choices in a start or division request: the river picked at a confluence, the larger channel taken. */
@@ -3078,6 +3097,19 @@ export interface StartUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent without an elevation model or before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
+	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	damShares?: DamShares;
+}
+
+/**
+ * The shares a dam marked on or off its river proposes for its unit (194; docs/model.md §2.7 K and M): on the river 1 and 1;
+ * off-channel, Upstream inflow to dam 0 (the river passes it by; River to dam fills it) and runoff to the dam the share of the
+ * unit's area that drains to the dam's own outflow (`damCatchmentM2`).
+ */
+export interface DamShares {
+	pctUpstreamToDam: 0 | 1;
+	pctRunoffToDam: number;
+	damCatchmentM2: number | null;
 }
 
 /** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
@@ -3100,8 +3132,9 @@ export interface StartPlan {
 /** The ticks an editor sends to apply a start proposal: every unit once, each value ticked or not. */
 export interface StartTicks {
 	outletName: string;
-	units: { key: string; name: string; area: boolean; drainsInto: boolean; runoffToDam: boolean }[];
-	rest: { include: boolean; name: string; area: boolean };
+	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	units: { key: string; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean }[];
+	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis };
 }
 
 export interface StartProposal {
@@ -3128,6 +3161,8 @@ export interface DivideCurrent {
 	downstreamNodeId: string | null;
 	downstreamName: string | null;
 	pctRunoffToDam: number;
+	/** Absent on proposals before 194. */
+	pctUpstreamToDam?: number;
 }
 
 /** One point of a division: the node it stands for (null: a new gauge), its own piece, the point below it, and the node's values now. */
@@ -3149,6 +3184,8 @@ export interface DivideUnit {
 	/** Of its own area and its whole catchment, what drains into pans (m²; absent before start-11). */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
+	/** A dam marked on or off the river on the map (194): the dam shares proposed for its unit (backend start.ts damSharesOf). */
+	damShares?: DamShares;
 }
 
 /** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
@@ -3170,8 +3207,9 @@ export interface DividePlan {
 
 /** The ticks an editor sends to apply a division: every point once. */
 export interface DivideTicks {
-	units: { key: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
-	rest: { to: 'none' } | { to: 'node'; nodeId: string } | { to: 'new'; name: string };
+	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; add: boolean; name?: string }[];
+	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis };
 }
 
 export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {

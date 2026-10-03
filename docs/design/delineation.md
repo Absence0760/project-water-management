@@ -66,7 +66,11 @@ derived from the DEM on the server**, with depression filling.
   clone and CI download nothing.
 - `DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` (what
   `pnpm dev:tiles:env` prints, after `pnpm dev:tiles:terrain`): the local
-  MinIO copy of the operator-fetched DEM, read by ranged GETs.
+  MinIO copy of the operator-fetched DEM, read by ranged GETs. A GET whose
+  connection closes before any answer is sent once more: a large window
+  routes for tens of seconds with the event loop held, so the next read
+  can reuse a kept-alive socket the server closed meanwhile (the gauge
+  rerun's worker windows hit it on every large catchment).
 - `DEM_URL=backend/fixtures/dem/synthetic-dem.pmtiles` (or any file path,
   `file:` URL): the **committed synthetic fixture**, invented terrain (an
   elliptical valley with a river, a dam and its reservoir, a closed pit),
@@ -222,7 +226,14 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      `delineate-5`): its upper end's area (what flows in, or HydroRIVERS'
      10 km² threshold for a head reach) plus the rest in proportion to how
      far down the line the click lies, so a click near the top of a long
-     reach no longer slides down it to the lower end's area. A click on
+     reach no longer slides down it to the lower end's area. For a head
+     reach (since `delineate-11`) the routed window's own area at its
+     upper end replaces the 10 km²: climbing from the cell that figure
+     matches, up the channel (the larger branch at each fork), to its cell
+     nearest the reach's first vertex (within 1 km; not when that cell's
+     catchment is cut by the window or drains more than the whole reach),
+     the constant kept only where none qualifies (`place.ts`
+     `expectedOnGrid`). A click on
      the DEM's own channel (1 km² or more within a cell and a half) more
      than 150 m from the reach's line, whose own area is outside the 50 %
      band, is **not moved** past the snap radius by the match: it snaps,
@@ -288,7 +299,7 @@ river's side of the DEM's junction (issue #390), `delineate-6` for windows
 placed over the catchment, grown for a river they cut, and no data as the
 data's edge, `delineate-8` for 5 and 7 together, `delineate-9` for the pans
 reported beside the catchment (§ Pans), `delineate-10` for 6 and 9
-together, `delineate-11` for the pans' cross-check against the river
+together, `delineate-11` for a head reach's upper end read from the DEM, `delineate-12` for the pans' cross-check against the river
 network and the dams (§ Pans, storage on a river); bumped whenever the method changes what a click
 proposes), and the pans' report (193).
 
@@ -317,7 +328,7 @@ after it) and reports, beside the catchment:
   few millimetres over their catchments. A depression holding the outlet
   (or, in Start and Divide, a unit's point), or spilling into it within
   the snap radius, is that point's own basin, never a pan.
-- **Storage on a river** (delineate-11, start-13, migration 196; the
+- **Storage on a river** (delineate-12, start-14, migration 196; the
   measurements in [pans-research.md § Storage on a river](./pans-research.md#storage-on-a-river)).
   The storage test alone can pass a large dam low in a small catchment, so
   a depression passing every test is cross-checked against the rivers and
@@ -340,7 +351,10 @@ after it) and reports, beside the catchment:
     dams, or the catchment's own dam points and outlines).
   A river that ends in a depression leaves it a pan. Each is listed with
   what flagged it (`by`: `river` or `dam`); the facts say *Storage on a
-  river*, and Start and Divide's warning names it.
+  river*, and Start and Divide's warning names it. It is in no
+  non-contributing figure: not the proposal's, a piece's or a unit's whole
+  catchment's, so neither the effective area nor a feature's
+  `non_contributing_m2` (195) takes it out.
 - **The catchment is not changed.** It stays the gross one (as WR2012's
   quaternary areas are), routed through the filled pans as before, so the
   polygon and its area are what they were; the figure is reported, and the
@@ -352,6 +366,14 @@ after it) and reports, beside the catchment:
   `totalNonContributingM2`, `plan.rest.nonContributingM2`) and add a warning
   naming how much drains into pans and which pieces hold it. A saved
   sub-catchment from clicks says it in its description.
+- **Taking it into the model** (195): every feature made from a delineation
+  keeps its figure (`map_feature.non_contributing_m2`), and every path that
+  writes a unit's area from one (Use this area on an accepted proposal or a
+  saved sub-catchment, Start's and Divide's area ticks) asks gross (the
+  default) or effective, records it on the node (`area_basis`) and in the
+  revision reason (`backend/src/delineation/areaBasis.ts`;
+  [maps.md § Pans and the effective area](../maps.md#pans-and-the-effective-area)).
+  Gross stays the default for decision 1's reasons (pans-research.md).
 - **Cost** (the real DEM around Bultfontein, the whole window as the
   catchment, the worst case): 0.3 s at 2 048 cells, 0.8 s at the
   request's 3 072-cell cap, 2.7 s at the worker's 6 144 (against fills of
@@ -415,7 +437,7 @@ when the feature is deleted with the link cleared; superseded and rejected
 proposals pruned past the newest 50 a project). No other table changes.
 Migration **193_delineation_pans.sql** adds `delineation_proposal.pans`
 (jsonb: the non-contributing area, the pans' count, the largest five and
-the method; NULL before delineate-9; from delineate-11 also `onRiver`,
+the method; NULL before delineate-9; from delineate-12 also `onRiver`,
 the storage on a river, `{ count, largest[≤ 5] }`). Migration
 **196_river_endorheic.sql** adds `river_reference.endorheic` for the
 cross-check.

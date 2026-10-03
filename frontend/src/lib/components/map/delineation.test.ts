@@ -65,7 +65,7 @@ describe('delineation helpers', () => {
 		expect(provenanceFacts(proposal()).map(([k]) => k)).toEqual(['Dataset', 'Method']);
 	});
 
-	it('lists storage on a river apart from the pans (delineate-11), and says nothing when there is none or it wasn’t checked', () => {
+	it('lists storage on a river apart from the pans (delineate-12), and says nothing when there is none or it wasn’t checked', () => {
 		const at = [29.09, -28.58] as [number, number];
 		const pans = { nonContributingM2: 0, count: 0, largest: [], method: 'm' };
 		const one = { ...pans, onRiver: { count: 1, largest: [{ at, floorM2: 1_595_686, depthM: 8, drainsM2: 29_909_565, storageMm: 371, by: 'river' as const }] } };
