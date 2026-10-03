@@ -66,7 +66,8 @@ export function flowShares(
 	let sum = 0;
 	for (const { i } of farms) sum += share[i]!;
 	// Over 100 % is refused by the run (overAllocationError), so only a shortfall is a warning.
-	if (farms.length > 0 && 1 - sum >= SHARE_TOLERANCE) {
+	// A network of gauges alone allocates none of the natural flow either (engine ≥ 1.69.0: it warns too).
+	if (1 - sum >= SHARE_TOLERANCE) {
 		warnings.push(
 			`unit flow shares sum to ${(sum * 100).toFixed(2)}%, not 100% (tolerance ±${SHARE_TOLERANCE * 100}%): ` +
 				'natural flow and EWR are not fully allocated to units'

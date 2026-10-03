@@ -1,6 +1,6 @@
 import { defaultProjectSettings, PE_SOURCE_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { annualGr4jPeMm, apanSourceNote, peFormError, peOf, peText, withPeKind, type EditablePe } from './peInput';
+import { annualGr4jPeMm, apanSourceNote, peFormError, peOf, peText, withLakeMonthly, withPeKind, type EditablePe } from './peInput';
 
 const apanMm = [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110]; // Oct … Sep, 1 630 mm a year
 const panCoefficient = new Array<number>(12).fill(0.7);
@@ -80,5 +80,17 @@ describe('where A-pan comes from (issue #45)', () => {
 		const monthlyOnly = apanSourceNote(['rain_catchment_mm'])!;
 		expect(monthlyOnly.daily).toBe(false);
 		expect(monthlyOnly.text).toContain('monthly means on every day');
+	});
+});
+
+describe('the monthly dam evaporation factors', () => {
+	it('off is null; on brings back the twelve switched off, else the one factor in every month', () => {
+		expect(withLakeMonthly(false, 0.75, [0.8, ...new Array(11).fill(0.7)])).toBeNull();
+		expect(withLakeMonthly(true, 0.75, null)).toEqual(new Array(12).fill(0.75));
+		const kept = [0.8, ...new Array(11).fill(0.7)];
+		const back = withLakeMonthly(true, 0.75, kept);
+		expect(back).toEqual(kept);
+		// A copy: editing it leaves the kept row alone.
+		expect(back).not.toBe(kept);
 	});
 });

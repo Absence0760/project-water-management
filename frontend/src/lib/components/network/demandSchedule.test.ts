@@ -1,6 +1,6 @@
 import { DEMAND_SCHEDULE_SPANS, scheduleWindowProblem } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { moveWindow, newWindow, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
+import { moveWindow, newWindow, problemFields, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
 
 describe('newWindow', () => {
 	it('labels every span the engine knows', () => {
@@ -50,5 +50,14 @@ describe('moveWindow', () => {
 		expect(moveWindow(['a', 'b', 'c'], 1, 1)).toEqual(['a', 'c', 'b']);
 		expect(moveWindow(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
 		expect(moveWindow(['a', 'b'], 1, 1)).toEqual(['a', 'b']);
+	});
+});
+
+describe('problemFields', () => {
+	it("names the fields a window's problem is about", () => {
+		expect(problemFields(null)).toBeNull();
+		expect(problemFields('its factor 9 is not a number from 0 to 5')).toBe('factor');
+		expect(problemFields('its weekdays must be 1 (Monday) to 7 (Sunday), at least one')).toBe('weekdays');
+		expect(problemFields('its date range ends (2020-01-01) before it starts (2020-02-01)')).toBe('bounds');
 	});
 });

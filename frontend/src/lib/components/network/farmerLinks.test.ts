@@ -21,7 +21,7 @@ describe('linkedNote', () => {
 });
 
 describe('removeMessage', () => {
-	const base = { name: 'Farm A', isFarm: true, areas: 0, transfers: 0, cover: 0, farmers: 0 };
+	const base = { isFarm: true, areas: 0, transfers: 0, cover: 0, farmers: 0 };
 
 	it('asks nothing when nothing goes with the node', () => {
 		expect(removeMessage(base)).toBeNull();
@@ -37,22 +37,20 @@ describe('removeMessage', () => {
 		expect(removeMessage({ ...base, farmers: null })).toContain('Any farmers linked to it lose access');
 	});
 
-	it('keeps the existing crop area, transfer and land-cover wording', () => {
+	it('lists only the parts the node has, with real plurals, and never repeats the title', () => {
 		expect(removeMessage({ ...base, areas: 2, transfers: 1, cover: 3 })).toBe(
-			'Remove "Farm A"? Its 2 crop area(s), 1 transfer(s) and 3 land-cover patch(es) are removed too; nodes draining into it are re-routed downstream.'
+			'Its 2 crop areas, 1 transfer and 3 land-cover patches go with it. Until you save, Discard brings it back.'
 		);
-		expect(removeMessage({ ...base, areas: 1 })).toBe(
-			'Remove "Farm A"? Its 1 crop area(s) and 0 transfer(s) are removed too; nodes draining into it are re-routed downstream.'
-		);
+		expect(removeMessage({ ...base, areas: 1 })).toBe('Its 1 crop area goes with it. Until you save, Discard brings it back.');
+		expect(removeMessage({ ...base, isFarm: false, farmers: null, boreholes: 2 })).toBe('Its 2 boreholes go with it. Until you save, Discard brings it back.');
+		expect(removeMessage({ ...base, isFarm: false, farmers: null, demandObjects: 1 })).toMatch(/^Its 1 demand object goes with it\./);
+		expect(removeMessage({ ...base, areas: 2 })).not.toMatch(/Remove|\(s\)|\b0 /);
 	});
 
-	it('names the demand objects that go with the unit (engine 1.7.0)', () => {
-		expect(removeMessage({ ...base, isFarm: false, farmers: null, demandObjects: 1 })).toMatch(/1 demand object\(s\) are removed too/);
-	});
-
-	it('names the boreholes that go with the node (WP-3.9), even on a node with nothing else', () => {
-		expect(removeMessage({ ...base, isFarm: false, farmers: null, boreholes: 2 })).toBe(
-			'Remove "Farm A"? Its 0 crop area(s), 0 transfer(s) and 2 borehole(s) are removed too; nodes draining into it are re-routed downstream.'
+	it('asks when nodes drain into it, saying where they will drain', () => {
+		expect(removeMessage({ ...base, upstream: 2, into: 'Outflow gauge' })).toBe(
+			'The 2 nodes that drain into it will drain into “Outflow gauge”. Until you save, Discard brings it back.'
 		);
+		expect(removeMessage({ ...base, upstream: 1, into: null })).toMatch(/^The node that drains into it will have nowhere to drain/);
 	});
 });

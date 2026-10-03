@@ -1,11 +1,15 @@
 <script lang="ts">
-	// One node's fields as a labelled form with help text — the small-screen
-	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	// One node's fields as a labelled form with help text: the node sheet's
+	// form (NetworkTab.svelte). Its sections run in the order water moves
+	// through a unit (nodeSections.ts), each a fieldset the sheet's jump row
+	// can scroll to.
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, onRiverDam, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type FlowShareMethod, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtPct } from '$lib/format/number';
-	import { damHints, fieldScale, fieldUnused, GROUPS, hasDam, hasDamDevelopment, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { fmtNum, fmtPct } from '$lib/format/number';
+	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
+	import { damHints, fieldScale, fieldUnused, hasDam, hiLoHint, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { fieldShows, nodeSections, SECTION_TITLE, sectionId } from './nodeSections';
 	import DamStorageFields from './DamStorageFields.svelte';
 	import DevelopmentFields from './DevelopmentFields.svelte';
 	import UserFields from './UserFields.svelte';
@@ -15,7 +19,6 @@
 	import SupplyFields from './SupplyFields.svelte';
 	import RiverToDamFields from './RiverToDamFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { hasSupplySettings } from './supply';
 	import { ewrSiteIssue } from '$lib/model/validate';
 
 	let {
@@ -36,7 +39,12 @@
 		onremovedemand,
 		farmersNote = null,
 		previewHref = null,
-		mapHref = null
+		mapHref = null,
+		method = 'area',
+		planting = null,
+		plantedHref = null,
+		transfersLine = null,
+		transfersHref = null
 	}: {
 		node: NetworkNode;
 		nodes: NetworkNode[];
@@ -63,20 +71,29 @@
 		previewHref?: string | null;
 		/** This node on the Map tab (issue #326 A2); null when no map feature is linked to it. */
 		mapHref?: string | null;
+		/** The project's flow-share method (Settings & calibration): fields only another method reads show read-only. */
+		method?: FlowShareMethod;
+		/** A unit's planted areas (Crops), for the Irrigation section's pointer to them; null for other nodes. */
+		planting?: FarmPlanting | null;
+		/** Opens the unit's planted areas (the farm drawer). */
+		plantedHref?: string | null;
+		/** "2 transfers, from Dam A, to Dam B": the unit's transfers, for the same pointer; null with none. */
+		transfersLine?: string | null;
+		transfersHref?: string | null;
 	} = $props();
 
-	const groups = $derived.by(() => {
+	/** Each field group's fields that show on this kind of node. */
+	const groupFields = $derived.by(() => {
 		const out = new Map<NodeField['group'], NodeField[]>();
 		for (const f of NODE_FIELDS) {
-			if (f.farmOnly && node.kind !== 'farm') continue;
-			if (f.notGauge && node.kind === 'gauge') continue;
-			// An other water user has no land, dam or routing of its own (WP-1.33), but may have boreholes (WP-1.34).
-			if (node.kind === 'user' && f.group !== 'groundwater') continue;
+			if (!fieldShows(f, node.kind)) continue;
 			if (!out.has(f.group)) out.set(f.group, []);
 			out.get(f.group)!.push(f);
 		}
-		return [...out];
+		return out;
 	});
+	const sections = $derived(nodeSections(node, demandObjects.length));
+	const hiLo = $derived(method === 'hiLo' ? hiLoHint(node) : null);
 	const id = (k: string) => `nd-${k}-${node.id}`;
 	const BOREHOLE_RULE_LABEL: Record<BoreholeRule, string> = {
 		supplemental: 'Supplemental: after the dam and river',
@@ -175,138 +192,131 @@
 		</fieldset>
 	{/if}
 
-	{#each groups as [g, fields] (g)}
-		<fieldset>
-			<legend>{GROUPS[g]}</legend>
-			<div class="grid">
-				{#each fields as f (f.key)}
-					{@const unused = fieldUnused(f, node)}
-					<div class="field">
-						<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
-						<NumberInput
-							id={id(f.key)}
-							min={0}
-							max={isPct(f) ? 100 : undefined}
-							scale={fieldScale(f)}
-							nullable={f.nullable}
-							grouped={!isPct(f)}
-							placeholder={f.nullable ? 'not set' : undefined}
-							disabled={readonly || unused !== null || divertByMonth(f)}
-							aria-describedby="{id(f.key)}-h"
-							value={node[f.key] ?? null}
-							onchange={(v) => setNodeField(node, f.key, v)}
-						/>
-						<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
-						<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
-					</div>
-				{/each}
-				{#if g === 'irrigation'}
-					<div class="field">
-						<span class="lbl"><label for={id('system')}>Irrigation system</label><HelpTip key="node.irrigationEfficiency" /></span>
-						<select
-							id={id('system')}
-							disabled={readonly}
-							value={systemOf(node.irrigationEfficiency) ?? ''}
-							aria-describedby="{id('system')}-h"
-							onchange={(e) => {
-								const s = IRRIGATION_SYSTEMS.find((x) => x.id === e.currentTarget.value);
-								if (s) node.irrigationEfficiency = s.efficiency;
-							}}
-						>
-							<option value="">Other (efficiency as entered)</option>
-							{#each IRRIGATION_SYSTEMS as s (s.id)}
-								<option value={s.id}>{s.label}: {Math.round(s.efficiency * 100)} % (indicative)</option>
-							{/each}
-						</select>
-						<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
-					</div>
-				{/if}
+	{#each sections as sec (sec)}
+		<fieldset id={sectionId(node.id, sec)} tabindex="-1">
+			<legend>{SECTION_TITLE[sec]}</legend>
+			{#if sec === 'damSurvey'}
+				<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
+				{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
+				<DevelopmentFields {node} {readonly} part="dam" />
+			{:else if sec === 'supply'}
+				<SupplyFields {node} {readonly} />
+			{:else if sec === 'demand'}
+				<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
+				<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />
+			{:else if sec === 'boreholes'}
+				<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
+			{:else if sec === 'cover'}
+				<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
+			{:else}
+				{@const g = sec as NodeField['group']}
+				{@const fields = groupFields.get(g) ?? []}
 				{#if g === 'groundwater'}
-					<div class="field">
-						<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
-						<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
-							{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
-						</select>
-					</div>
-					<div class="field">
-						<span class="lbl"><label for={id('ga-rate')}>GN 538 rate <span class="u">(m³/ha/a)</span></label><HelpTip key="node.gaRateM3HaYear" /></span>
-						<select
-							id={id('ga-rate')}
-							disabled={readonly}
-							value={node.gaRateM3HaYear == null ? '' : String(node.gaRateM3HaYear)}
-							aria-describedby="{id('ga-rate')}-h"
-							onchange={(e) => (node.gaRateM3HaYear = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
-						>
-							<option value="">Not looked up</option>
-							{#each GA538_GROUNDWATER_RATES as r (r)}<option value={String(r)}>{r}</option>{/each}
-						</select>
-						<span class="hint" id="{id('ga-rate')}-h">
-							The abstraction rate GN 538 Table 2 (Appendix B) lists for the property’s quaternary catchment. Property area × rate, at most 40 000 m³/a, is its
-							general authorisation volume; without both the run shows the 40 000 ceiling.
-						</span>
-						<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
-					</div>
+					<p class="hint section-note">
+						One daily capacity for all of {node.name || 'this node'}’s boreholes, under one rule: use it when only the total is known. List
+						boreholes under Individual boreholes below when each has its own yield, annual cap or mode. If both are set, both run.
+					</p>
 				{/if}
-				{#if g === 'routing'}
-					<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />
-				{/if}
-				{#if g === 'irrigation'}
-					<DevelopmentFields {node} {readonly} part="abstraction" />
-				{/if}
-				{#if g === 'dam'}
-					{#each hints as h (h)}
-						<p class="hint dam-hint" role="note">{h}</p>
+				<div class="grid">
+					{#each fields as f (f.key)}
+						{@const unused = fieldUnused(f, node, method)}
+						<div class="field">
+							<span class="lbl"><label for={id(f.key)}>{f.label} <span class="u">({f.unit})</span></label><HelpTip key={`node.${f.key}`} /></span>
+							<NumberInput
+								id={id(f.key)}
+								min={0}
+								max={isPct(f) ? 100 : undefined}
+								scale={fieldScale(f)}
+								nullable={f.nullable}
+								grouped={!isPct(f)}
+								placeholder={f.nullable ? 'not set' : undefined}
+								disabled={readonly || unused !== null || divertByMonth(f)}
+								aria-describedby="{id(f.key)}-h"
+								value={node[f.key] ?? null}
+								onchange={(v) => setNodeField(node, f.key, v)}
+							/>
+							<span class="hint" id="{id(f.key)}-h">{unused ?? (divertByMonth(f) ? 'Not used: River to dam is set by month below.' : f.help)}</span>
+							<FieldHistoryLine field="node:{node.id}:{f.key}" {unit} />
+						</div>
 					{/each}
-				{/if}
-				{#if g === 'share' && share !== null}
-					<div class="field">
-						<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
-						<span class="computed">{fmtPct(share, 2)}</span>
-						<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
-					</div>
-				{/if}
-			</div>
+					{#if g === 'irrigation'}
+						<div class="field">
+							<span class="lbl"><label for={id('system')}>Irrigation system</label><HelpTip key="node.irrigationEfficiency" /></span>
+							<select
+								id={id('system')}
+								disabled={readonly}
+								value={systemOf(node.irrigationEfficiency) ?? ''}
+								aria-describedby="{id('system')}-h"
+								onchange={(e) => {
+									const s = IRRIGATION_SYSTEMS.find((x) => x.id === e.currentTarget.value);
+									if (s) node.irrigationEfficiency = s.efficiency;
+								}}
+							>
+								<option value="">Other (efficiency as entered)</option>
+								{#each IRRIGATION_SYSTEMS as s (s.id)}
+									<option value={s.id}>{s.label}: {Math.round(s.efficiency * 100)} % (indicative)</option>
+								{/each}
+							</select>
+							<span class="hint" id="{id('system')}-h">Sets an indicative efficiency for the system; a scheme's own measurement is better.</span>
+						</div>
+					{/if}
+					{#if g === 'groundwater'}
+						<div class="field">
+							<span class="lbl"><label for={id('bh-rule')}>Borehole rule</label><HelpTip key="node.boreholeRule" /></span>
+							<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
+								{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
+							</select>
+						</div>
+						<div class="field">
+							<span class="lbl"><label for={id('ga-rate')}>GN 538 rate <span class="u">(m³/ha/a)</span></label><HelpTip key="node.gaRateM3HaYear" /></span>
+							<select
+								id={id('ga-rate')}
+								disabled={readonly}
+								value={node.gaRateM3HaYear == null ? '' : String(node.gaRateM3HaYear)}
+								aria-describedby="{id('ga-rate')}-h"
+								onchange={(e) => (node.gaRateM3HaYear = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+							>
+								<option value="">Not looked up</option>
+								{#each GA538_GROUNDWATER_RATES as r (r)}<option value={String(r)}>{r}</option>{/each}
+							</select>
+							<span class="hint" id="{id('ga-rate')}-h">
+								The abstraction rate GN 538 Table 2 (Appendix B) lists for the property’s quaternary catchment. Property area × rate, at most 40 000 m³/a, is its
+								general authorisation volume; without both the run shows the 40 000 ceiling.
+							</span>
+							<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
+						</div>
+					{/if}
+					{#if g === 'area' && hiLo}
+						<p class="hint dam-hint" role="note" data-testid="hilo-hint">{hiLo}</p>
+					{/if}
+					{#if g === 'routing'}
+						<RiverToDamFields {node} readonly={readonly || onRiverDam(node)} />
+					{/if}
+					{#if g === 'irrigation'}
+						<DevelopmentFields {node} {readonly} part="abstraction" />
+						{#if node.kind === 'farm' && (plantedHref || transfersHref)}
+							<!-- Where the unit's demand and its transfers are set: Crops and Transfers, not this form. -->
+							<p class="hint elsewhere" data-testid="node-elsewhere">
+							Set elsewhere:{#if plantedHref}{' '}its crops, <a href={plantedHref} data-testid="node-planted-link">{planting?.planted ? `${fmtNum(planting.totalM2 / 10_000, 2)} ha planted, ${planting.planted} crop${planting.planted === 1 ? '' : 's'}` : 'nothing planted yet'}</a>{/if}{#if plantedHref && transfersHref};{/if}{#if transfersHref}{' '}its transfers, <a href={transfersHref} data-testid="node-transfers-link">{transfersLine ?? 'none yet'}</a>{/if}.
+						</p>
+						{/if}
+					{/if}
+					{#if g === 'dam'}
+						{#each hints as h (h)}
+							<p class="hint dam-hint" role="note">{h}</p>
+						{/each}
+					{/if}
+					{#if g === 'share' && share !== null}
+						<div class="field">
+							<span class="label">Share in use <HelpTip key="flow-share" label="About the flow share in use" /></span>
+							<span class="computed">{fmtPct(share, 2)}</span>
+							<span class="hint">With the current flow-share method (<a href="?tab=settings#set-share">Settings &amp; calibration</a>). Saved settings only.</span>
+						</div>
+					{/if}
+				</div>
+			{/if}
 		</fieldset>
 	{/each}
-
-	<!-- A farm's; a farm turned into a gauge or user keeps its settings, shown so they can be reset (WP-3.8). -->
-	<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
-	{#if node.kind === 'farm' || demandObjects.length}
-		<fieldset>
-			<legend>Demand objects</legend>
-			<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />
-		</fieldset>
-	{/if}
-
-	{#if node.kind === 'farm' || hasSupplySettings(node)}
-		<fieldset>
-			<legend>Supply</legend>
-			<SupplyFields {node} {readonly} />
-		</fieldset>
-	{/if}
-
-	<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
-	{#if hasDam(node) || hasDamDevelopment(node)}
-		<fieldset>
-			<legend>Dam survey and releases</legend>
-			{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
-			<DevelopmentFields {node} {readonly} part="dam" />
-		</fieldset>
-	{/if}
-
-	{#if node.kind !== 'gauge'}
-		<fieldset>
-			<legend>Individual boreholes</legend>
-			<BoreholeFields {node} {boreholes} {readonly} onadd={onaddborehole} onremove={onremoveborehole} />
-		</fieldset>
-	{/if}
-
-	{#if node.kind === 'farm'}
-		<fieldset>
-			<legend>Land cover</legend>
-			<LandCoverFields {node} patches={landCover} {readonly} onadd={onaddcover} onremove={onremovecover} />
-		</fieldset>
-	{/if}
 
 	{#if !readonly}
 		<div class="actions">
@@ -376,6 +386,20 @@
 	/* Read-only values sit under their label rather than at the far right. */
 	.detail :global(input:read-only) {
 		text-align: left;
+	}
+	/* A section the sheet's jump row moved to: the focus ring on the whole card. */
+	fieldset:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
+	.section-note {
+		margin: 0 0 0.5rem;
+		font-size: 0.85rem;
+	}
+	.elsewhere {
+		grid-column: 1 / -1;
+		margin: 0 0 0.5rem;
+		font-size: 0.85rem;
 	}
 	.computed {
 		padding: 0.35rem 0;

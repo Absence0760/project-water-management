@@ -7,6 +7,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { ungroup } from '../support/format.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -53,11 +54,17 @@ test('give a town weekends off and an Easter peak, save, reload, run, and see it
 	await second.getByLabel('Factor (0 = off)').fill('2');
 	await schedule.getByRole('button', { name: 'Move window 2 up' }).click();
 	await expect(schedule.getByTestId(/^demand-schedule-window-.*-0$/).getByLabel('Window 1')).toHaveValue('Easter weekend');
+	// The focus stays with the moved window (now first, so its button is the one down), and the move is read out.
+	await expect(schedule.getByRole('button', { name: 'Move window 1 down' })).toBeFocused();
+	await expect(schedule.getByTestId(/^demand-schedule-status-/)).toHaveText('Window 2 (Easter weekend) is now window 1.');
 
 	// A span that ends before it starts is flagged on the window, and fixed.
 	const easter = schedule.getByTestId(/^demand-schedule-window-.*-0$/);
 	await easter.getByLabel('To (days from Easter Sunday)').fill('-5');
 	await expect(easter.getByText(/^Not used: its Easter span ends/)).toBeVisible();
+	// The fields it is about are marked and point at it.
+	await expect(easter.getByLabel('To (days from Easter Sunday)')).toHaveAttribute('aria-invalid', 'true');
+	await expect(easter.getByLabel('To (days from Easter Sunday)')).toHaveAccessibleDescription(/its Easter span ends/);
 	await easter.getByLabel('To (days from Easter Sunday)').fill('1');
 	await expect(easter.getByText(/^Not used:/)).toHaveCount(0);
 
@@ -86,4 +93,29 @@ test('give a town weekends off and an Easter peak, save, reload, run, and see it
 	expect(off).toBeGreaterThan(0);
 	// Off on weekends, so the mean demand is below the 400 m³/day of a day on.
 	expect(ungroup(await row.getByRole('cell').nth(2).innerText())).toBeLessThan(400);
+});
+
+test('removing a changed window asks, Cancel keeps it, and the focus moves to the next window', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Demand schedule remove');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const group = await openUpperFarm(page);
+	await group.getByRole('button', { name: '+ Add demand' }).click();
+	const schedule = group.getByTestId(/^demand-schedule-/).first();
+	await schedule.getByLabel('Days the new window covers').selectOption('always');
+	await schedule.getByRole('button', { name: '+ Add window' }).click();
+	await schedule.getByLabel('Days the new window covers').selectOption('easter');
+	await schedule.getByRole('button', { name: '+ Add window' }).click();
+	await schedule.getByTestId(/^demand-schedule-window-.*-0$/).getByLabel('Factor (0 = off)').fill('0.5');
+	await schedule.getByRole('button', { name: 'Remove window 1' }).click();
+	await answerConfirm(page, false, 'Remove window 1 (Weekends)?');
+	await expect(schedule.getByTestId(/^demand-schedule-window-/)).toHaveCount(2);
+	await schedule.getByRole('button', { name: 'Remove window 1' }).click();
+	await answerConfirm(page, true);
+	await expect(schedule.getByTestId(/^demand-schedule-window-/)).toHaveCount(1);
+	await expect(schedule.getByLabel('Window 1')).toBeFocused();
+	// The Easter window as it was added asks nothing; with none left the focus goes to the add row.
+	await schedule.getByRole('button', { name: 'Remove window 1' }).click();
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await expect(schedule.getByLabel('Days the new window covers')).toBeFocused();
 });

@@ -5,7 +5,9 @@
 import { copyProject, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 
@@ -15,7 +17,7 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await page.goto(`/projects/${project.id}?tab=settings`);
 
 	const section = page.getByRole('region', { name: /^WR2012 check/ });
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveCount(0);
 	await section.getByLabel('Compare runs with WR2012 naturalised flow').check();
 
@@ -32,10 +34,14 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await section.getByLabel('Source').fill('Synthetic reference for tests');
 	// Monthly means typed as if they were m³/s: they don't add up to the MAR.
 	for (const m of MONTHS) await section.getByLabel(`WR2012 monthly mean, ${m}, Mm³`).fill('10');
-	await expect(section.getByRole('alert').filter({ hasText: 'The monthly means add up to 120 Mm³, more than 5 % away from the MAR (1\u202f200 Mm³/a).' })).toBeVisible();
+	const sumMessage = 'The monthly means add up to 120 Mm³, more than 5 % away from the MAR (1\u202f200 Mm³/a).';
+	await expect(section.getByText(sumMessage)).toBeVisible();
+	// Each month's field is described by it, and marked.
+	await expect(section.getByLabel('WR2012 monthly mean, Jan, Mm³')).toHaveAccessibleDescription(sumMessage);
+	await expect(section.getByLabel('WR2012 monthly mean, Jan, Mm³')).toHaveAttribute('aria-invalid', 'true');
 	await expect(save).toBeDisabled();
 	for (const m of MONTHS) await section.getByLabel(`WR2012 monthly mean, ${m}, Mm³`).fill('100');
-	await expect(section.getByRole('alert')).toHaveCount(0);
+	await expect(section.getByText(/^The monthly means add up to/)).toHaveCount(0);
 	await expect(section.getByRole('cell', { name: '1\u202f200.000' })).toBeVisible(); // the sum
 
 	// A MAR larger than the rain on the quaternary: 100 mm × 50 km² = 5 Mm³/a.
@@ -61,8 +67,7 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	await expect(section.getByText('The MAR band’s low bound can’t be above its high bound.')).toHaveCount(0);
 
 	await expect(save).toBeEnabled();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	await page.reload();
 	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
@@ -119,4 +124,57 @@ test('run comparison lists the WR2012 inputs that changed and compares the ratio
 	const table = page.getByRole('table', { name: 'WR2012 check for both runs' });
 	await expect(table.getByRole('rowheader', { name: 'MAR ratio, whole run' })).toBeVisible();
 	await expect(table.getByRole('rowheader', { name: 'Monthly pattern correlation' })).toBeVisible();
+});
+
+test('unticking the check or the MAR band and ticking it again keeps what was typed, until saved or discarded', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'WR2012 keep');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByRole('region', { name: /^WR2012 check/ });
+	const on = section.getByLabel('Compare runs with WR2012 naturalised flow');
+	await on.check();
+	await section.getByLabel(/^Quaternary catchment/).fill('Z99A');
+	await section.getByLabel(/^Quaternary area/).fill('50');
+	await section.getByLabel('WR2012 monthly mean, Mar, Mm³').fill('7');
+	await section.getByLabel('Add a soft penalty on the MAR when fitting automatically').check();
+	await section.getByLabel('Use a MAR band instead of one target').check();
+	await section.getByLabel(/^Band low/).fill('20');
+	await section.getByLabel(/^Band high/).fill('30');
+
+	// The band, off and on again: its bounds come back.
+	await section.getByLabel('Use a MAR band instead of one target').uncheck();
+	await section.getByLabel('Use a MAR band instead of one target').check();
+	await expect(section.getByLabel(/^Band low/)).toHaveValue('20');
+	await expect(section.getByLabel(/^Band high/)).toHaveValue('30');
+	// The check, off and on again: the reference and the penalty come back.
+	await on.uncheck();
+	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveCount(0);
+	await on.check();
+	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
+	await expect(section.getByLabel(/^Quaternary area/)).toHaveValue('50');
+	await expect(section.getByLabel('WR2012 monthly mean, Mar, Mm³')).toHaveValue('7');
+	await expect(section.getByLabel('Add a soft penalty on the MAR when fitting automatically')).toBeChecked();
+	// Another tab and back keeps the unsaved form too (the page holds it).
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Network', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('Z99A');
+
+	// Discard forgets what was kept: ticked again, the reference starts blank.
+	await page.getByRole('region', { name: /^Unsaved / }).getByRole('button', { name: 'Discard', exact: true }).click();
+	await answerConfirm(page, true);
+	await on.check();
+	await expect(section.getByLabel(/^Quaternary catchment/)).toHaveValue('');
+});
+
+test('Propose from the map can be closed again', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'WR2012 propose close');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const section = page.getByRole('region', { name: /^WR2012 check/ });
+	await section.getByLabel('Compare runs with WR2012 naturalised flow').check();
+	await section.getByRole('button', { name: 'Propose from the map' }).click();
+	await section.getByRole('button', { name: 'Close the proposal' }).click();
+	await expect(section.getByRole('button', { name: 'Close the proposal' })).toHaveCount(0);
+	await expect(section.getByRole('button', { name: 'Propose from the map' })).toBeFocused();
 });

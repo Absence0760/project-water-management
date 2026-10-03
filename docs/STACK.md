@@ -68,8 +68,8 @@ sides share.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
   so it never collides with `pnpm dev`; a git worktree gets its own slot
-  (ports + database, `e2e/support/env.ts`), so two checkouts can run it at
-  once. The site is a production build (`frontend/build-e2e/`, API URL baked
+  (ports, from a registry in the shared `.git`) and database
+  (`e2e/support/env.ts`), so two checkouts can run it at once. The site is a production build (`frontend/build-e2e/`, API URL baked
   in), not the Vite dev server. CI runs it as 14 shards on one shared build
   ([e2e/README.md](../e2e/README.md)).
 - **Mailpit**: docker-compose, catches all local email (SMTP **1026**, inbox
@@ -81,9 +81,9 @@ sides share.
 - **Postgres 17**: docker-compose, port **5434**. User/DB `water` owns the
   schema and runs migrations. The backend connects as `water_app`, which is
   bound by RLS. Each checkout has its own dev database: `water` in the main
-  checkout, `water_w<n>` in a git worktree (`backend/src/config/devEnv.ts`,
+  checkout, `water_w<tag>` in a git worktree (`<tag>`: 16 hex digits from its path, `backend/src/config/devEnv.ts`,
   created on first `pnpm dev`, empty until `pnpm seed:examples`), so a
-  branch's unmerged migrations never reach main's. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<n>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once).
+  branch's unmerged migrations never reach main's. The `water_test` database is for DB tests (a git worktree uses its own `water_test_w<tag>`, `backend/src/__tests__/test-db.ts`, so worktrees can run them at once; [testing.md § Several checkouts at once](./testing.md#several-checkouts-at-once)).
 - **scripts/wbt-import/**: Python 3.14 + openpyxl. Extracts a b023 workbook into
   `data/…/project.json` and regression fixtures. Output is gitignored, except
   the synthetic workbook fixture for the importer parity test and the
@@ -186,6 +186,7 @@ pnpm check:migrations       # every migration this branch adds sorts after origi
 pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
+                             # check:pins also holds every CI service image (ci.yml's Postgres) to the digest docker-compose.yml gives that image:tag (serviceImageProblems), so a Dependabot compose bump fails until ci.yml moves with it
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm test:verify            # independent cross-check: a Python model from the docs vs runModel (examples, probes, random networks) + mutation self-test (verify/README.md; ~2 min)
@@ -235,7 +236,8 @@ touched. Don't run the full `pnpm test:backend:db` or `pnpm test:e2e`
 locally, and never run the suites one after another; if you do need more
 than one locally, their parts are independent (unit tests use no database;
 the DB tests use this checkout's `water_test…`; e2e uses its own
-`water_e2e…` database and ports, `e2e/support/env.ts`), so start them as
+`water_e2e…` database and ports, `e2e/support/env.ts`; testing.md §
+Several checkouts at once), so start them as
 background commands in parallel. Run `pnpm build:frontend && pnpm
 check:bundle` when you added or moved frontend code. The DB project stays
 serial *inside* itself (its queue and feed tests claim jobs globally;

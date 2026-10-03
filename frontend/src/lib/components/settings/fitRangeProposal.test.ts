@@ -1,7 +1,7 @@
 // The double-mass proposal for the CHIRPS fit period (issue #40). Synthetic records only.
 import { describe, expect, it } from 'vitest';
 import { resolveChirpsFitPeriod, type DailySeries } from '@water-management/engine';
-import { proposalFrom } from './fitRangeProposal';
+import { proposalFrom, proposedNote } from './fitRangeProposal';
 
 /** `ratios[k]` × CHIRPS for water year 1990 + k; CHIRPS on every third day, wetter in winter. */
 function records(ratios: number[]): { c: DailySeries; h: DailySeries } {
@@ -43,5 +43,12 @@ describe('proposalFrom', () => {
 		const short = records(new Array(5).fill(2));
 		expect(proposalFrom(short.c, short.h, null)).toEqual({ reason: expect.stringMatching(/too short/) });
 		expect(proposalFrom(steady.c, null, null)).toEqual({ reason: expect.stringMatching(/needs a catchment rain series and a CHIRPS series/) });
+	});
+});
+
+describe('proposedNote', () => {
+	it('says one range in the singular and several in the plural', () => {
+		expect(proposedNote(1)).toBe('Proposed one range from the double-mass breaks. Check it against the station history and the CHIRPS version, and rewrite its reason, before saving.');
+		expect(proposedNote(3)).toMatch(/^Proposed 3 ranges from the double-mass breaks\. Check each /);
 	});
 });

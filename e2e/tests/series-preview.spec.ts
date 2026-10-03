@@ -1,5 +1,5 @@
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, putSeries } from '../support/api.ts';
+import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
 
@@ -343,4 +343,31 @@ test('the preview has a visible close button, and its number columns line up und
 	await close.click();
 	await expect(dialog).toBeHidden();
 	await expect(openButton).toBeFocused();
+});
+
+test('a flagged value names its check, Rain used its source and an excluded day its reason, on screen, not only to a screen reader', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series preview words');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: [1, null, 3] });
+	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2020-01-01', values: [2, 6, 4] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: '2020-01-01', values: [0.1, 0.2, 0.3] });
+	await updateSettings(page.request, project.id, { calibrationExclusions: [{ start: '2020-01-02', end: '2020-01-02', reason: 'Pump test' }] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	await page.getByRole('button', { name: 'Preview all data' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Input time series — daily preview' });
+	await expect(dialog).toContainText('3 of 3 days shown');
+
+	const day2 = dialog.getByRole('row').filter({ hasText: '2020-01-02' });
+	// The catchment rain is missing that day: the cell says which check flagged it.
+	await expect(day2.getByTestId('cell-flags').first()).toBeVisible();
+	await expect(day2.getByTestId('cell-flags').first()).toHaveText(/Missing/);
+	// Rain used came from CHIRPS that day, from the catchment the day before.
+	await expect(day2.getByTestId('rain-source')).toBeVisible();
+	await expect(day2.getByTestId('rain-source')).toHaveText(/CHIRPS/);
+	await expect(dialog.getByRole('row').filter({ hasText: '2020-01-01' }).getByTestId('rain-source')).toHaveText(/catchment/);
+	// Excluded, and why.
+	await expect(day2.getByTestId('exclusion-reason')).toBeVisible();
+	await expect(day2.getByTestId('exclusion-reason')).toHaveText(/Pump test/);
+	// Still one line a row.
+	expect((await day2.boundingBox())!.height).toBeLessThanOrEqual(29);
 });

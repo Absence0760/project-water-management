@@ -1,9 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { OPERATING_DEFAULTS } from '@water-management/engine';
 import { validateModel } from './validate';
-import { ModelEditor } from './editor.svelte';
+import { ModelEditor, newTransfer, nextFreeName, transferIsBlank } from './editor.svelte';
+
+describe('nextFreeName', () => {
+	it('skips numbers a node already has, case and spaces aside', () => {
+		expect(nextFreeName('Unit', [{ name: 'Outflow gauge' }], 1)).toBe('Unit 1');
+		expect(nextFreeName('Unit', [{ name: ' unit 2 ' }, { name: 'Unit 3' }], 2)).toBe('Unit 4');
+	});
+});
 
 describe('ModelEditor', () => {
+	it('names a new node after a removal without repeating a name the save would refuse', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode(); // Outflow gauge
+		const u1 = ed.addNode(); // Unit 1
+		ed.addNode(); // Unit 2
+		ed.removeNode(u1.id);
+		const added = ed.addNode();
+		expect(added.name).toBe('Unit 3');
+		expect(validateModel(ed.model).some((i) => /used 2 times/.test(i.message))).toBe(false);
+		ed.addUser();
+		ed.model.nodes.find((n) => n.name === 'Other user 1')!.name = 'Other user 2';
+		expect(ed.addUser().name).toBe('Other user 3');
+	});
+
 	it('is not dirty before anything is loaded', () => {
 		// A project page that 404s never calls load(); leaving it must not
 		// trigger the "unsaved changes" prompt.
@@ -220,5 +242,41 @@ describe('ModelEditor', () => {
 		expect(ed.model.boreholes).toHaveLength(1);
 		ed.removeNode(farm.id);
 		expect(ed.model.boreholes).toEqual([]);
+	});
+
+	it('addTransfer picks the first two hydrological units, never the outflow gauge or an other water user', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode(); // the outflow gauge, first in the list
+		ed.addUser();
+		const a = ed.addNode();
+		const b = ed.addNode();
+		const t = ed.addTransfer();
+		expect([t.fromNodeId, t.toNodeId]).toEqual([a.id, b.id]);
+		expect(validateModel(ed.model).filter((i) => i.area === 'transfers')).toEqual([]);
+		// The next rule is served after it (Q18).
+		expect(ed.addTransfer().priority).toBe(t.priority + 1);
+	});
+
+	it('transferIsBlank: only a rule as + Add transfer made it, whatever its ends and priority', () => {
+		const t = newTransfer('a', 'b');
+		expect(transferIsBlank({ ...t, priority: 4, fromNodeId: 'x' })).toBe(true);
+		// An older rule without the off-take fields is blank too.
+		const { source: _s, lossPct: _l, ...legacy } = t;
+		expect(transferIsBlank(legacy as typeof t)).toBe(true);
+		for (const changed of [
+			{ months: [1], maxRateM3s: 0.01 },
+			{ monthlyRateM3s: [0.01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], months: [10], maxRateM3s: 0.01 },
+			{ dailyCapM3: 400 },
+			{ minStoragePct: 0.2 },
+			{ enabled: false },
+			{ source: 'river' as const },
+			{ handsOffM3Day: 250 },
+			{ lossPct: 0.1 },
+			{ handsOffEwr: true }
+		])
+			expect(transferIsBlank({ ...t, ...changed }), JSON.stringify(changed)).toBe(false);
+		// Every month cleared again: blank.
+		expect(transferIsBlank({ ...t, monthlyRateM3s: new Array(12).fill(0) })).toBe(true);
 	});
 });

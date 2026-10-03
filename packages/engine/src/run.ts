@@ -17,14 +17,14 @@ import {
 	seriesChecks
 } from './quality';
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
-import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { hasRainInput, RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, chirpsQuantileMapper, type ChirpsCorrection, withChirpsGapMapLead, ZERO_RAIN_COLUMN } from './rain';
 import { FLOW_FILL_COLUMNS, GAP_FILL_KINDS, hasReadingBefore, type GapFillKind } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { flaggedDayMask, FLOW_QUALITY_COLUMN, hasFlaggedDay, recordFlowFlags } from './calibrate/dayFlags';
-import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
+import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, unitPartFactor, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -116,6 +116,8 @@ interface WarmRun {
 	captureDay?: number;
 	resume?: ModelState;
 	continued?: boolean;
+	/** A resumed run: the capture run's first epoch day (the snapshot's runStart). */
+	runStart?: number;
 	sink?: { state?: ModelState };
 }
 
@@ -164,7 +166,7 @@ export function runModelWithoutChecks(input: ModelInput): ModelOutput {
  * captured (runModelWith).
  */
 export function runModelCapturing(input: ModelInput, at: string): { output: ModelOutput; snapshot: ModelStateSnapshot } {
-	if (typeof at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(at) || fromEpochDay(toEpochDay(at)) !== at) throw new RangeError(`capture date "${String(at)}" is not an ISO date (YYYY-MM-DD)`);
+	if (!isRealDate(at)) throw new RangeError(`capture date "${String(at)}" is not an ISO date (YYYY-MM-DD)`);
 	const sink: WarmRun['sink'] = {};
 	const output = runNetwork(input, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx), null, null, { captureDay: toEpochDay(at), sink });
 	const state = sink.state!;
@@ -211,7 +213,7 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 	const end = settings.simulationEnd;
 	if (typeof end === 'string' && end < snapshot.date) throw new ModelStateMismatchError('window', `the run ends (${end}) before the snapshot's day ${snapshot.date}`);
 	const resumed: ModelInput = { ...input, settings };
-	const output = runNetwork(resumed, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart) });
+	const output = runNetwork(resumed, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart), runStart: toEpochDay(snapshot.runStart) });
 	if (output.startDate !== snapshot.date) throw new Error(`the resumed run starts on ${output.startDate}, not the snapshot's day ${snapshot.date}`);
 	for (const c of state.columns) {
 		const has = (nodeId: string | null, key: string) => output.series.findIndex((x) => x.nodeId === nodeId && x.key === key);
@@ -306,7 +308,7 @@ function runNetwork(
 	const areal = arealRainFactors(settings.arealRain);
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
-	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
+	const finalRain = runRain(aligned, hasRainInput(series, settings.rainSource), days);
 	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
@@ -326,7 +328,8 @@ function runNetwork(
 	// --- network ----------------------------------------------------------------
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
-		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {})
+		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {}),
+		...(resume && warm.runStart !== undefined ? { runStart: warm.runStart } : {})
 	}, historyDays);
 	const { plan, topo } = built;
 	const nodes = input.model.nodes;
@@ -827,7 +830,7 @@ function runNetwork(
 
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
-	missingRainWarning(input, aligned, start, days, window, warnings);
+	missingRainWarning(input, settings.rainSource, aligned, start, days, window, warnings);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -1078,7 +1081,8 @@ function runNetwork(
 				...(plan.nodes[i]!.river?.takes.some((x) => x.pool) ? { poolStorageM3: net.poolStorageM3[i]! } : {}),
 				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
 				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
-				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
+				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {}),
+				...(built.allocation.scaled.get(i)?.before !== undefined ? { allocationFactorBefore: built.allocation.scaled.get(i)!.before! } : {})
 			})),
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
@@ -1371,8 +1375,10 @@ export function buildNetworkPlan(
 	 * Capture / resume (engine ≥ 1.1.0, ./warmstart): report each node's
 	 * soil-water store (m³) at the start of run day `captureAt` as
 	 * soilStoreAtM3, or start each farm's store from `soilStoreM3` (node order).
+	 * `runStart`: a resumed run's capture run's first epoch day, which decides
+	 * whether a dam that came into service carries dam_capacity (§2.16).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[] } = {},
+	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[]; runStart?: number } = {},
 	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
 	historyDays: number = days
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array } {
@@ -1383,6 +1389,14 @@ export function buildNetworkPlan(
 	// A model saved by an older engine (returnFlowPct, …) runs as migration 006 would store it.
 	const model = upgradeLegacyModel(input.model);
 	const nodes = model.nodes;
+	// Shares of 0–1, as the API and the database hold them: 80 meant as a percent would start a dam at 80 × its
+	// capacity and spill water that never existed, with every self-check passing (engine ≥ 1.69.0: refused).
+	for (const n of nodes) {
+		for (const f of ['pctUpstreamToDam', 'pctRunoffToDam', 'damInitialPct', 'damMinPct', 'lossReturnFraction'] as const) {
+			const v = n[f];
+			if (v != null && !(v >= 0 && v <= 1)) throw new Error(`unit "${n.name}": ${f} is ${String(v)}, not a share from 0 to 1 (enter 80 % as 0.8)`);
+		}
+	}
 	const topo = buildTopology(nodes);
 	warnings.push(...topo.warnings);
 	const shares = flowShares(nodes, settings.flowShareMethod, settings.hiLoSplit);
@@ -1416,6 +1430,12 @@ export function buildNetworkPlan(
 		}
 		if (nodes[from]!.kind !== 'farm' || nodes[to]!.kind !== 'farm') {
 			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: transfers must be between units; skipped`);
+			continue;
+		}
+		// The API refuses one on save (modelRules.ts); a direct input's moved nothing yet drew a share of the dam from
+		// the source's other rules (engine ≥ 1.69.0: skipped, as a river off-take to itself is).
+		if (from === to) {
+			warnings.push(`transfer ${nodes[from]!.name} → ${nodes[to]!.name}: a transfer can't run from a unit to itself; skipped`);
 			continue;
 		}
 		if (tr.monthlyRateM3s != null && !validMonthlyRates(tr.monthlyRateM3s))
@@ -1460,7 +1480,7 @@ export function buildNetworkPlan(
 		if (open.length || pooled)
 			warnings.push('A-pan evaporation is 0 on every day, so the dams and river pools lose nothing to evaporation. Set the monthly A-pan (Settings) or load a daily A-pan series; an ET₀ row from the map feeds the runoff model only');
 	}
-	const rain = runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), days);
+	const rain = runRain(aligned, hasRainInput(input.series, settings.rainSource), days);
 	const damRainMm = rain ? Float64Array.from(rain, (v) => (v !== null && v > 0 ? v : 0)) : undefined;
 	// A dam with a survey curve (WP-3.5) takes its area from it; one the run can't use says why and runs on the power law.
 	for (const n of nodes) {
@@ -1491,6 +1511,8 @@ export function buildNetworkPlan(
 	if (abstractFrom.some((s) => s > 0)) allocation.abstractFrom = new Map(abstractFrom.flatMap((s, i) => (s > 0 ? [[i, s] as [number, number]] : [])));
 	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
+	// A capture run also fits the year in progress on its days before the snapshot's (engine ≥ 1.69.0): an outlook's members keep that.
+	if (warm.captureAt !== undefined) allocation.asOf = warm.captureAt;
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => {
 		d.fill(0, 0, abstractFrom[i]!);
@@ -1545,7 +1567,7 @@ export function buildNetworkPlan(
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
 			const u = users.byNode.get(i);
-			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings);
+			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings, warm.runStart ?? start);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -2007,7 +2029,8 @@ function runAllocations(
 				supplied: r.supplied,
 				groundwater: b ? (r.groundwater) : null,
 				groundwaterToDam: b?.units.some((u) => u.toDam) ? (r.groundwaterToDam) : null,
-				riverAbstraction: (r.riverAbstraction ?? null)
+				riverAbstraction: (r.riverAbstraction ?? null),
+				riverTakes: [sim.workings?.[i]?.offtakeUsed ?? null, ...(r.riverTakes?.got ?? [])]
 			};
 		})
 	});
@@ -2178,7 +2201,7 @@ function catchmentRunoffCoefficient(
 	month: ArrayLike<number>
 ): number | null {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!kinds.some((k) => input.series?.[k])) return null;
+	if (!hasRainInput(input.series, settings.rainSource)) return null;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	let rainMm = 0;
 	for (let t = 0; t < natural.length; t++) {
@@ -2238,8 +2261,16 @@ function assessEwrRules(
 	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null; history?: number[] }[] = [];
 	const siteOf = new Map(sites.map((s) => [s.node, s]));
 	const key = (id: string | null) => id ?? '';
-	const tables = [...settings.ewrRules].sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
-	const done = new Set<number>();
+	// A table keyed by the outlet node's own id is the outlet's table (null): the same site, listed
+	// first, and a second table beside one for "the outlet" is a duplicate, so neither is used (§2.9c).
+	const outletId = outflow >= 0 ? nodes[outflow]!.id : null;
+	const named = settings.ewrRules.map((t) => (outletId !== null && t.siteNodeId === outletId ? { ...t, siteNodeId: null } : t));
+	const perSite = new Map<string, number>();
+	for (const t of named) perSite.set(key(t.siteNodeId), (perSite.get(key(t.siteNodeId)) ?? 0) + 1);
+	for (const [site, n] of perSite) {
+		if (n > 1) warnings.push(`${n} EWR rule tables for ${site === '' ? 'the outlet' : `site ${site}`}: none is used, because each site has one`);
+	}
+	const tables = named.filter((t) => perSite.get(key(t.siteNodeId)) === 1).sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
 	for (const table of tables) {
 		const node = table.siteNodeId === null ? outflow : nodes.findIndex((n) => n.id === table.siteNodeId);
 		if (node < 0) {
@@ -2251,11 +2282,6 @@ function assessEwrRules(
 			continue;
 		}
 		const isOutlet = node === outflow;
-		if (done.has(node)) {
-			// A table keyed by the outlet node's id besides one for "the outlet" (null).
-			warnings.push(`a second EWR rule table for "${nodes[node]!.name}" is ignored: each site has one`);
-			continue;
-		}
 		if (!isOutlet && nodes[node]!.kind !== 'gauge') {
 			warnings.push(`EWR rule table for "${nodes[node]!.name}" skipped: an EWR site is the outlet or a gauge`);
 			continue;
@@ -2291,7 +2317,6 @@ function assessEwrRules(
 			historyDays
 		);
 		warnings.push(...assuranceWarnings(a.report));
-		done.add(node);
 		out.push({
 			report: a.report,
 			requiredM3Day: a.requiredM3Day,
@@ -2424,6 +2449,7 @@ export const MISSING_RAIN_RANGES_LISTED = 3;
  */
 function missingRainWarning(
 	input: ModelInput,
+	periods: ProjectSettings['rainSource'],
 	aligned: (k: SeriesKind) => (number | null)[],
 	start: number,
 	days: number,
@@ -2431,7 +2457,7 @@ function missingRainWarning(
 	warnings: string[]
 ): void {
 	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
-	if (!kinds.some((k) => input.series?.[k])) return;
+	if (!hasRainInput(input.series, periods)) return;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	const ranges: [number, number][] = [];
 	let missing = 0;
@@ -2471,7 +2497,12 @@ export function resolveReportWindow(
 	const runEnd = runStart + days - 1;
 	const parse = (v: string | null | undefined, name: string): number | null => {
 		if (v == null || v === '') return null;
-		const d = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? toEpochDay(v) : NaN;
+		let d = NaN;
+		try {
+			if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) d = toEpochDay(v);
+		} catch {
+			// An impossible date (2001-02-30, month 13): not a date, as the warning below says.
+		}
 		if (!Number.isFinite(d)) {
 			warnings.push(`${name} "${String(v)}" is not a date (YYYY-MM-DD); using the run's ${name === 'reportStart' ? 'start' : 'end'}`);
 			return null;

@@ -50,7 +50,7 @@ export function dataNavGroups(p: DataPanels): NavGroup[] {
 			]
 		},
 		{
-			label: 'Adding data',
+			label: 'Reference',
 			sections: [{ id: 'data-uses', label: 'What the model uses' }]
 		}
 	];

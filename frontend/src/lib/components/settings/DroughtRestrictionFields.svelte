@@ -10,8 +10,10 @@
 	(every farm dam, some dams, or each unit's own), which units it cuts, an
 	EWR-failure trigger, and a start from the WUA's published notice. Bind the
 	rule (null = off); `error` is set while it can't be saved, so the parent
-	can block saving. Its own chunk: the Settings tab chunk sits at its size
-	ceiling.
+	can block saving; its message sits in the group it is fixed in (a level, a
+	date list, the source), which names it (aria-describedby). A viewer's text
+	and number fields are read-only, not disabled, so they stay focusable. Its
+	own chunk: the Settings tab chunk sits at its size ceiling.
 -->
 <script lang="ts">
 	import {
@@ -33,7 +35,7 @@
 	import { api } from '$lib/api';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { monthName } from '$lib/format/months';
-	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+	import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 	let {
 		value = $bindable(),
@@ -62,6 +64,9 @@
 		const n = !e && value && nodes.length ? droughtRestrictionNodeIssues(value, nodes)[0] : undefined;
 		error = e ?? (n ? `${n.message.charAt(0).toUpperCase()}${n.message.slice(1)}.` : null);
 	});
+	/** Where the problem is shown (and which group names it): a node issue belongs to the rule as a whole. */
+	const at = $derived(error ? (restrictionProblemAt(value) ?? 'rule') : null);
+	const errId = `${uid}-err`;
 	function setBasis(basis: string) {
 		if (!value) return;
 		const { basis: _b, damNodeIds: _d, ...rest } = value;
@@ -179,7 +184,7 @@
 		{/if}
 		{#each ['reviewDates', 'liftDates'] as const as which (which)}
 			{@const list = rule[which] ?? []}
-			<fieldset class="plain dates" data-testid="restriction-{which}">
+			<fieldset class="plain dates" data-testid="restriction-{which}" aria-describedby={at === which ? errId : undefined}>
 				<legend>{which === 'reviewDates' ? 'Review dates (the level is decided)' : 'Lift dates (any restriction ends)'}</legend>
 				{#each list as md, i (i)}
 					{@const p = splitMonthDay(md)}
@@ -192,7 +197,7 @@
 							min="1"
 							max={DAYS[p.month - 1]}
 							aria-label="{which === 'reviewDates' ? 'Review' : 'Lift'} date {i + 1}: day"
-							disabled={readonly}
+							readonly={readonly}
 							value={p.day}
 							onchange={(e) => setDate(which, i, p.month, Math.max(1, Math.round(Number(e.currentTarget.value) || 1)))}
 						/>
@@ -204,6 +209,7 @@
 				{#if !readonly && list.length < RESTRICTION_DATES_MAX}
 					<button type="button" class="btn btn-sm" onclick={() => edit({ [which]: withDateAdded(list) })}>Add a {which === 'reviewDates' ? 'review' : 'lift'} date</button>
 				{/if}
+				{#if at === which}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
 			</fieldset>
 		{/each}
 
@@ -213,11 +219,11 @@
 		</p>
 		<div class="levels" data-testid="restriction-levels">
 			{#each rule.levels as l, i (i)}
-				<fieldset class="level" data-testid="restriction-level">
+				<fieldset class="level" data-testid="restriction-level" aria-describedby={at === `level-${i}` ? errId : undefined}>
 					<legend>{l.label?.trim() || `Level ${i + 1}`}</legend>
 					<div class="row">
 						<label for="{uid}-l{i}-name">Name</label>
-						<input id="{uid}-l{i}-name" type="text" maxlength={RESTRICTION_LABEL_MAX} aria-label="Level {i + 1}: name" disabled={readonly} value={l.label ?? ''} onchange={(e) => setLevel(i, { label: e.currentTarget.value })} />
+						<input id="{uid}-l{i}-name" type="text" maxlength={RESTRICTION_LABEL_MAX} aria-label="Level {i + 1}: name" readonly={readonly} value={l.label ?? ''} onchange={(e) => setLevel(i, { label: e.currentTarget.value })} />
 					</div>
 					<div class="row">
 						<span class="lbl" aria-hidden="true">Starts below (% of capacity)</span>
@@ -227,7 +233,7 @@
 						<div class="row">
 							<span class="lbl" aria-hidden="true">{PART_LABEL[part]} cut (%){#if floored(part)}<span class="muted"> (floor kept)</span>{/if}</span>
 							<NumberInput
-								label="Level {i + 1}: cut on {PART_LABEL[part]}, %"
+								label="Level {i + 1}: cut on {PART_LABEL[part]}, %{floored(part) ? ', basic-needs floor kept' : ''}"
 								nullable
 								min={0}
 								max={100}
@@ -239,6 +245,7 @@
 							/>
 						</div>
 					{/each}
+					{#if at === `level-${i}`}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
 				</fieldset>
 			{/each}
 		</div>
@@ -296,9 +303,19 @@
 		{/if}
 		<div class="field">
 			<label for="{uid}-source">Where the levels come from (optional)</label>
-			<input id="{uid}-source" type="text" maxlength={RESTRICTION_SOURCE_MAX} disabled={readonly} value={rule.source ?? ''} onchange={(e) => edit({ source: e.currentTarget.value })} />
+			<input
+				id="{uid}-source"
+				type="text"
+				maxlength={RESTRICTION_SOURCE_MAX}
+				readonly={readonly}
+				value={rule.source ?? ''}
+				onchange={(e) => edit({ source: e.currentTarget.value })}
+				aria-invalid={at === 'source' ? 'true' : undefined}
+				aria-describedby={at === 'source' ? errId : undefined}
+			/>
+			{#if at === 'source'}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
 		</div>
-		{#if error}<p class="err" role="status" data-testid="restriction-error">{error}</p>{/if}
+		{#if at === 'rule'}<p class="err" id={errId} data-testid="restriction-error">{error}</p>{/if}
 	{/if}
 </div>
 

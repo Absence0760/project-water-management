@@ -19,3 +19,8 @@ export function proposalFrom(catchment: DailySeries | null, chirps: DailySeries 
 	const ranges = proposeChirpsFitRanges(dm);
 	return ranges.length ? { ranges } : { reason: 'Nothing to propose: the double-mass check finds no break, so the whole record is one era.' };
 }
+
+/** What the form says after proposing `n` ranges (one range, or several). */
+export function proposedNote(n: number): string {
+	return `Proposed ${n === 1 ? 'one range' : `${n} ranges`} from the double-mass breaks. Check ${n === 1 ? 'it' : 'each'} against the station history and the CHIRPS version, and rewrite ${n === 1 ? 'its' : 'each'} reason, before saving.`;
+}

@@ -179,9 +179,9 @@ test('Discard returns to the points and changes nothing; with no units the catch
 	await startSheet(page).getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByTestId('section-header').getByTestId('map-start-open')).toHaveText('Start from the map');
 	// A tool started from the header, then cancelled, never brings the sheet back.
-	await page.getByTestId('section-header').getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await bar(page).getByRole('button', { name: 'Cancel' }).click();
-	await page.getByTestId('section-header').getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await bar(page).getByTestId('map-enter-coordinates').click();
 	const place = page.getByRole('dialog', { name: 'Place a point' });
 	await place.getByLabel('Latitude').fill(String(FIXTURE_DAM[1]));
@@ -208,6 +208,9 @@ test('a viewer is offered no start, and a link to it does nothing', async ({ pag
 test('a gauge inside the catchment becomes a gauge node; each piece has its number on the map and on its card', async ({ page, owner }) => {
 	void owner;
 	test.setTimeout(60_000);
+	// Picking the gauge frames the map on it; without reduced motion that is a 600 ms flight, and the hover below would
+	// aim at a badge still moving under the pointer (CI, #391). The animation isn't what this test checks.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
 	const project = await createProject(page.request, 'Start with a gauge');
 	const post = async (data: Record<string, unknown>) => {
 		const r = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data });

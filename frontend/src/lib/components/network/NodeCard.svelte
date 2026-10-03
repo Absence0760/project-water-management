@@ -6,7 +6,8 @@
 	import type { FarmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
-	import type { FarmSupply } from './supplyColour';
+	import { BAND_LABEL, type FarmSupply } from './supplyColour';
+	import { hasDam, KIND_WORD } from './fields';
 	import { describeUser } from './users';
 	import { damEndTile, type DamEnd } from '$lib/components/overview/damLevels';
 
@@ -47,7 +48,7 @@
 		mapHref?: string | null;
 	} = $props();
 
-	const KIND = { farm: 'hydrological unit', gauge: 'gauge', user: 'other water user' } as const;
+	const KIND = KIND_WORD;
 	const isOutlet = $derived(node.downstreamNodeId === null);
 	const downstream = $derived(nodes.find((n) => n.id === node.downstreamNodeId)?.name || '(unnamed)');
 	const name = $derived(node.name || '(unnamed)');
@@ -74,7 +75,8 @@
 			<div class="tile" data-band={supply?.band ?? 'none'}>
 				<span class="t-l">Supplied{runName ? `, ${runName}` : ''}</span>
 				<span class="t-v">{supply?.fraction != null ? fmtPct(supply.fraction, 0) : '–'}</span>
-				{#if supply && supply.fraction == null}<span class="t-s">{supply.text}</span>{/if}
+				<!-- The band in words as well as the tint (playbook § 3: a colour says what it means). -->
+				{#if supply && supply.fraction == null}<span class="t-s">{supply.text}</span>{:else if supply}<span class="t-s" data-testid="supply-band">{BAND_LABEL[supply.band]}</span>{/if}
 			</div>
 			<div class="tile">
 				<span class="t-l">Dam at end of run</span>
@@ -93,7 +95,7 @@
 		{/if}
 		{#if node.kind === 'farm'}
 			<div><dt>Flow share</dt><dd class="num">{share === null ? '–' : fmtPct(share, 1)}</dd></div>
-			<div><dt>Dam</dt><dd class="num">{node.damCapacityM3 > 0 ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
+			<div><dt>Dam</dt><dd class="num">{hasDam(node) ? `${fmtNum(node.damCapacityM3)} m³` : 'No dam'}</dd></div>
 			<div>
 				<dt>Irrigated</dt>
 				<dd>

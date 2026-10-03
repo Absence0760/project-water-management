@@ -10,7 +10,7 @@
 //   notes, engine version, time). It describes the parameters only while they
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
-import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearLabel, isIsoDate as isRealDate } from '../calendar';
 import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveChirpsQuantileMap, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type ChirpsQuantileMap, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
@@ -41,7 +41,7 @@ export const EXCLUSION_REASON_MAX = 500;
 export const EXCLUSIONS_MAX = 100;
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const isIsoDate = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && fromEpochDay(toEpochDay(v)) === v;
+const isIsoDate = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && isRealDate(v);
 
 /** The dates an exclusion covers: water year Y is 1 October Y to 30 September Y + 1. */
 export function exclusionRange(x: CalibrationExclusion): ExclusionRange {
@@ -396,6 +396,21 @@ export interface FitContext {
 	auto?: AutoFitRecord;
 }
 
+/** The settings exclude exactly the fit's exclusions and the water years its rule left out (date ranges compared). */
+function withRuleYears(settings: Partial<ProjectSettings>, record: FitRecord): boolean {
+	const rule = record.auto?.ruleExclusions ?? [];
+	if (!rule.length) return false;
+	const key = (xs: readonly CalibrationExclusion[]) => JSON.stringify(exclusionRanges(xs).map((r) => [r.start, r.end]).sort());
+	return key(settings.calibrationExclusions ?? []) === key([...(record.exclusions ?? []), ...rule]);
+}
+
+/** Whether any water year an automated fit's rule left out is still scored under these exclusions. */
+function ruleYearsScored(exclusions: readonly CalibrationExclusion[], ruleYears: readonly CalibrationExclusion[]): boolean {
+	if (!ruleYears.length) return false;
+	const kept = exclusionRanges(exclusions);
+	return exclusionRanges(ruleYears).some((r) => !kept.some((k) => k.start <= r.start && k.end >= r.end));
+}
+
 /** The fit record for a report, as Apply stores it. */
 export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitRecord {
 	return {
@@ -498,6 +513,12 @@ export interface FitRecordStatus {
 	/** The calibration window, exclusions or flow record differ from the fit's. */
 	windowChanged: boolean;
 	exclusionsChanged: boolean;
+	/**
+	 * An automated fit's rule left water years out (FitRecord.auto.ruleExclusions)
+	 * that the settings' exclusions don't: a run scores days the fit never saw,
+	 * so its statistics aren't in-sample (engine ≥ 1.69.0).
+	 */
+	ruleYearsScored?: boolean;
 	/**
 	 * The quality-flag settings (a gauged range, or how extrapolated, suspect
 	 * or infilled days are scored; engine ≥ 1.22.0) differ from the fit's, so
@@ -785,7 +806,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		editedParams: editedParams(settings, record),
 		otherModel: (record.model as string) !== 'gr4j',
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
-		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
+		// Settings that exclude the fit's exclusions and the years its rule left out (§2.10j) are the fit's own days too.
+		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []) && !withRuleYears(settings, record),
+		...(!withRuleYears(settings, record) && ruleYearsScored(settings.calibrationExclusions ?? [], record.auto?.ruleExclusions ?? []) ? { ruleYearsScored: true } : {}),
 		// Compared resolved on both sides, so a stored field left at its default is no change.
 		// A fit at a gauge (engine ≥ 1.41.0) read no gauged range, so a change of the outlet records' ratings is none to it.
 		qualityFlagsChanged: record.qualityFlags !== undefined && !sameJson(flagsAsScored(settings.qualityFlags, record), flagsAsScored(record.qualityFlags, record)),
@@ -824,6 +847,7 @@ export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKin
 	if (
 		status.windowChanged ||
 		status.exclusionsChanged ||
+		status.ruleYearsScored ||
 		status.qualityFlagsChanged ||
 		record.flowKind !== flowKind ||
 		(record.siteNodeId ?? null) !== siteNodeId ||
@@ -842,6 +866,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.windowChanged) out.push('The calibration window has changed since the fit.');
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
+	if (status.ruleYearsScored) out.push('The automated fit left some water years out by its rules, and the settings don’t exclude them, so the run’s statistics also score days the fit never saw: they are not all in-sample.');
 	if (status.qualityFlagsChanged) {
 		out.push('The quality-flag settings (a gauged range, or how extrapolated, suspect or infilled days are scored) have changed since the fit, so it was fitted on other days. Refit before relying on the parameters.');
 	}

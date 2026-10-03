@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "PR #392, engine 1.69.0's end-to-end fixes (the overview checklist, the series preview's date and limit checks, the calendar-date and non-negative monthly validation reaching the client). Measured locally: 1631 KB on the branch merged with main @ 6f3cd5859 against 1627 KB on main (+4 KB)."
+}

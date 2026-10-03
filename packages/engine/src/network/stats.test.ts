@@ -90,11 +90,21 @@ describe('calibrationStats — window', () => {
 		expect(c.windowStart).toBe('2020-10-01');
 		expect(c.windowEnd).toBe('2020-10-02');
 		expect(c.annualVolumes!.map((y) => y.waterYear)).toEqual([2020]);
-		// sim is constant inside the window: no correlation, so no KGE / R²
-		expect(c.kgeR).toBeNull();
-		expect(c.kge).toBeNull();
-		expect(c.r2).toBeNull();
+		// sim is constant inside the window: no correlation, r = 0 (engine ≥ 1.69.0), so KGE still scores it:
+		// α = 0, β = 4 / 3.5 = 8/7
+		expect(c.kgeR).toBe(0);
+		expect(c.kge).toBeCloseTo(1 - Math.sqrt(1 + 1 + (1 / 7) ** 2), 12);
+		expect(c.r2).toBe(0);
 		expect(c.kgeAlpha).toBe(0);
+	});
+
+	it('a large constant simulation is flat too: r = 0, not the float residue of its own mean', () => {
+		// o varies by a few m³/s; s is 1e6 m³/s every day, whose (s − s̄)² residue is ~(1e-10)² a day.
+		const o = [1, 3, 2, 5, 4, 2, 1, 3];
+		const big = m3day(new Array(o.length).fill(1e6));
+		const c = calibrationStats(big, o);
+		expect(c.kgeR).toBe(0);
+		expect(c.r2).toBe(0);
 	});
 
 	it('clamps the window to the run and flags part years', () => {

@@ -23,6 +23,28 @@ export function farmPlanting(model: ProjectModel, nodeId: string): FarmPlanting 
 	};
 }
 
+/**
+ * The drawer's row order: the crops planted here first, largest area first,
+ * then the rest in the model's order, as crop ids. Taken once as the drawer
+ * opens, so a row doesn't jump while its area is typed (playbook § 2: with
+ * 30 crops a unit's two planted ones mustn't sit at the bottom).
+ */
+export function plantedFirst(rows: FarmPlanting['rows']): string[] {
+	return rows
+		.map((r, i) => ({ r, i }))
+		.sort((a, b) => (b.r.areaM2 > 0 ? 1 : 0) - (a.r.areaM2 > 0 ? 1 : 0) || b.r.areaM2 - a.r.areaM2 || a.i - b.i)
+		.map(({ r }) => r.cropId);
+}
+
+/** `rows` in `order` (plantedFirst's), crops added since at the end in the model's order. */
+export function inOrder<T extends { cropId: string }>(rows: readonly T[], order: readonly string[]): T[] {
+	const at = new Map(order.map((id, i) => [id, i]));
+	return rows
+		.map((r, i) => ({ r, k: at.get(r.cropId) ?? order.length + i }))
+		.sort((a, b) => a.k - b.k)
+		.map(({ r }) => r);
+}
+
 /** The link that opens the drawer for a farm over `tab` (lib/workspace/overlays.ts). */
 export const farmDrawerHref = (tab: string | null, nodeId: string) => overlayHref(tab, 'farm', nodeId);
 

@@ -19,6 +19,7 @@ import type { Page } from '@playwright/test';
 import { PASSWORD, createProject, createRun, node, putModel, putSeries, seedRunnableProject, uniqueEmail, updateSettings } from '../support/api.ts';
 import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { addCrop } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
@@ -219,10 +220,10 @@ test('crops and a transfer, entered through the UI, feed a run and each unit’s
 	await tab(page, 'Transfers').click();
 	// The section header's main action (issue #17).
 	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await page.getByLabel('Source of transfer 1').selectOption({ label: 'Ridge farm' });
-	await page.getByLabel('Destination of transfer 1').selectOption({ label: 'River farm' });
+	await page.getByLabel('From, transfer 1', { exact: true }).selectOption({ label: 'Ridge farm' });
+	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'River farm' });
 	for (const m of ['Nov', 'Dec', 'Jan', 'Feb']) await page.getByLabel(`Max rate of transfer 1 in ${m}, m³/s`).fill('0.01');
-	await page.getByLabel('Minimum source storage for transfer 1, %').fill('25');
+	await page.getByLabel('Min source storage of transfer 1, %').fill('25');
 
 	// --- save the model ------------------------------------------------------------
 	const saveBar = page.getByRole('region', { name: 'Unsaved model changes' });
@@ -255,8 +256,7 @@ test('A-pan and EWR, entered in Settings, feed the run’s summary, and the run 
 		await page.getByLabel(`A-pan evaporation, ${m}, mm`).fill(APAN_MM[i]!);
 		await page.getByLabel(`Pragmatic EWR, ${m}, m³/day`).fill(EWR_M3_DAY[i]!);
 	}
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// --- run the model ---------------------------------------------------------------
 	await tab(page, 'Runs & results').click();

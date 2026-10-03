@@ -19,6 +19,7 @@
 	import WaterSourceFields from './WaterSourceFields.svelte';
 	import { handsOffPreview, handsOffTicked, noDamSupplyHint, sharedPumpHint, SUPPLY_RULE_HELP } from './supply';
 	import PumpCapacityField from './PumpCapacityField.svelte';
+	import { supplyProblemFields, type SupplyField } from './problemFields';
 
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
@@ -32,6 +33,10 @@
 	const noDam = $derived(noDamSupplyHint(node));
 	const shared = $derived(sharedPumpHint(node));
 
+	/** The problems' ids for one field's aria-describedby (the field is marked invalid while it has any); the pump's own NumberInput says when it is negative. */
+	const problemIds = (f: SupplyField) => problems.flatMap((p, k) => (supplyProblemFields(p).includes(f) ? [`${id('problem')}-${k}`] : []));
+	const ruleProblems = $derived(problemIds('rule'));
+	const levelProblems = $derived(problemIds('levels'));
 	const cap = (label: string) => label.charAt(0).toUpperCase() + label.slice(1);
 
 	// The hands-off flow by month (water-year order); null = no set flow.
@@ -43,7 +48,13 @@
 	<div class="grid">
 		<div class="field wide">
 			<span class="lbl"><label for={id('rule')}>Supply rule</label><HelpTip key="node.supplyRule" /></span>
-			<select id={id('rule')} disabled={readonly} value={rule} aria-describedby="{id('rule')}-h" onchange={(e) => (node.supplyRule = e.currentTarget.value as SupplyRule)}>
+			<select
+				id={id('rule')}
+				disabled={readonly}
+				value={rule}
+				aria-describedby={[`${id('rule')}-h`, ...ruleProblems].join(' ')}
+				aria-invalid={ruleProblems.length ? 'true' : undefined}
+				onchange={(e) => (node.supplyRule = e.currentTarget.value as SupplyRule)}>
 				{#each SUPPLY_RULES as r (r)}<option value={r}>{cap(SUPPLY_RULE_LABEL[r])}</option>{/each}
 			</select>
 			<span class="hint" id="{id('rule')}-h">{SUPPLY_RULE_HELP[rule]}</span>
@@ -67,12 +78,12 @@
 		{#if rule === 'trigger'}
 			<div class="field">
 				<span class="lbl"><label for={id('trigger')}>Switch to river below <span class="u">(% of dam)</span></label><HelpTip key="node.supplyTriggerPct" /></span>
-				<NumberInput id={id('trigger')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct} onchange={(v) => (node.supplyTriggerPct = v ?? 0)} />
+				<NumberInput id={id('trigger')} aria-invalid={levelProblems.length ? 'true' : undefined} aria-describedby={levelProblems.join(' ') || undefined} min={0} max={100} scale={100} disabled={readonly} value={node.supplyTriggerPct ?? SUPPLY_DEFAULTS.supplyTriggerPct} onchange={(v) => (node.supplyTriggerPct = v ?? 0)} />
 				<FieldHistoryLine field="node:{node.id}:supplyTriggerPct" {unit} />
 			</div>
 			<div class="field">
 				<span class="lbl"><label for={id('stop')}>Back to the dam at <span class="u">(% of dam)</span></label><HelpTip key="node.supplyStopPct" /></span>
-				<NumberInput id={id('stop')} min={0} max={100} scale={100} disabled={readonly} value={node.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct} onchange={(v) => (node.supplyStopPct = v ?? 0)} />
+				<NumberInput id={id('stop')} aria-invalid={levelProblems.length ? 'true' : undefined} aria-describedby={levelProblems.join(' ') || undefined} min={0} max={100} scale={100} disabled={readonly} value={node.supplyStopPct ?? SUPPLY_DEFAULTS.supplyStopPct} onchange={(v) => (node.supplyStopPct = v ?? 0)} />
 				<FieldHistoryLine field="node:{node.id}:supplyStopPct" {unit} />
 			</div>
 		{/if}
@@ -125,8 +136,8 @@
 		<FieldHistoryLine field="node:{node.id}:handsOffEwr" {unit} />
 		<p class="hint note" data-testid="hands-off-note">{handsOffPreview(node)}</p>
 	</div>
-	{#each problems as p (p)}
-		<p class="problem" role="alert">{cap(p)}</p>
+	{#each problems as p, k (p)}
+		<p class="problem" role="alert" id="{id('problem')}-{k}">{cap(p)}</p>
 	{/each}
 	{#each operating as p (p)}
 		<div class="problem-row">

@@ -16,7 +16,7 @@ import { API_URL } from '../support/env.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { whatChanged } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, damGeoJson, loadSyntheticQuaternaries, openMap, parcelsGeoJson, projectedGeoJson, seedBigMap, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, damGeoJson, loadSyntheticQuaternaries, openMap, parcelsGeoJson, projectedGeoJson, seedBigMap, showTab, uploadThroughSheet } from '../support/map.ts';
 import { expectNoSidewaysScroll, layoutSettled, resizeTo } from '../support/reflow.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
@@ -70,6 +70,9 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 
 	// Parcels, linked to the farms of the same name; the imported files sit in the upload sheet, hash cut to 12.
 	await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
+	// The import picked its first feature, so the side column shows its Details; the list is the next tab.
+	await expect(page.getByTestId('map-tab-details')).toHaveAttribute('aria-selected', 'true');
+	await showTab(page, 'features');
 	await expect(list(page).getByRole('group', { name: /Farm parcels/ })).toBeVisible();
 	await expect(row(page, 'Upper farm')).toContainText('linked · area typed');
 	await header(page).getByRole('link', { name: 'Upload GeoJSON' }).click();
@@ -90,6 +93,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(page.getByTestId('map-notice')).toContainText(/Upper farm’s area is now \d+\.\d{3} km², from the map\./);
 	await expect(card(page).getByRole('button', { name: 'In use' })).toBeDisabled();
 	await expect(card(page).getByTestId('map-card-area-source')).toContainText('From the map this farm parcel');
+	await showTab(page, 'features');
 	await expect(row(page, 'Upper farm')).toContainText('area from the map');
 	await expect(page.getByTestId('map-summary')).toContainText('1 of 2 unit areas from the map');
 
@@ -100,6 +104,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(card(page).getByRole('combobox', { name: /area$/ })).toHaveCount(0);
 
 	// The list puts parcels first, then dams, the boundary last; each parcel group largest first.
+	await showTab(page, 'features');
 	await expect(list(page).getByRole('heading', { level: 3 })).toHaveText([/^Farm parcels/, /^Dams/, /^Catchment boundary/]);
 	await expect(list(page).getByRole('group', { name: /Farm parcels/ }).locator('.nm')).toHaveText(['Upper farm', 'Lower farm']);
 
@@ -123,7 +128,7 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
 
 	// A gauge by typed coordinates (#326 D1: behind the draw bar's Enter coordinates), with the form's own checks first.
-	await header(page).getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await page.getByTestId('map-draw-bar').getByRole('button', { name: 'Enter coordinates' }).click();
 	await expect(page).toHaveURL(/[?&]place=1/);
 	const place = page.getByRole('dialog', { name: 'Place a point' });
@@ -137,15 +142,19 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await expect(place).toBeHidden();
 	await expect(page).not.toHaveURL(/place=/);
 	await expect(card(page).getByRole('heading', { name: 'Weir pin' })).toBeVisible();
+	await showTab(page, 'features');
 	await expect(row(page, 'Weir pin')).toContainText('33.6200° S, 21.3400° E');
 
-	// The list picks with the keyboard; Back undoes a pick.
+	// The list picks with the keyboard, which shows the pick's Details; Back undoes a pick.
 	await row(page, 'Upper farm').focus();
 	await page.keyboard.press('Enter');
-	await expect(row(page, 'Upper farm')).toHaveAttribute('aria-pressed', 'true');
 	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
+	await expect(page.getByTestId('map-tab-details')).toHaveAttribute('aria-selected', 'true');
+	await showTab(page, 'features');
+	await expect(row(page, 'Upper farm')).toHaveAttribute('aria-pressed', 'true');
 	await page.goBack();
 	await expect(card(page).getByRole('heading', { name: 'Weir pin' })).toBeVisible();
+	await showTab(page, 'features');
 	await expect(row(page, 'Upper farm')).toHaveAttribute('aria-pressed', 'false');
 
 	// Delete from the card asks first, then the pick goes.
@@ -154,6 +163,8 @@ test('an editor uploads a boundary and parcels, accepts an area from the card, a
 	await answerConfirm(page, true, 'Delete “Weir pin”?');
 	await expect(row(page, 'Weir pin')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/feature=/);
+	// With nothing picked the column goes back to the list; Details says how to pick.
+	await expect(page.getByTestId('map-tab-features')).toHaveAttribute('aria-selected', 'true');
 	await expect(card(page)).toContainText('Select a feature on the map or in the list to see it here.');
 	await expectNoViolations(page);
 
@@ -174,10 +185,12 @@ test('the URL picks: feature= and node= select, an unknown one picks nothing, ol
 	await uploadThroughSheet(page, 'dam', 'dams.geojson', damGeoJson());
 	// The dam stands for Upper farm too: node= takes the parcel, not the dam.
 	await page.getByRole('combobox', { name: 'What Upper dam stands for' }).selectOption({ label: 'Upper farm' });
+	await showTab(page, 'features');
 	await expect(row(page, 'Upper dam')).toContainText('Upper farm');
 
 	await openMap(page, project.id, `&node=${upper.id}`);
 	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
+	await showTab(page, 'features');
 	await expect(row(page, 'Upper farm')).toHaveAttribute('aria-pressed', 'true');
 	// A pick from there replaces node= with feature=, and Back goes back to the node's pick.
 	await row(page, 'Lower farm').click();
@@ -187,6 +200,7 @@ test('the URL picks: feature= and node= select, an unknown one picks nothing, ol
 	await expect(page).toHaveURL(new RegExp(`node=${upper.id}`));
 	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 
+	await showTab(page, 'features');
 	const damId = await list(page).locator('li', { has: page.getByRole('button', { name: /^Upper dam/ }) }).getAttribute('data-feature');
 	await openMap(page, project.id, `&feature=${damId}`);
 	await expect(card(page).getByRole('heading', { name: 'Upper dam' })).toBeVisible();
@@ -289,8 +303,8 @@ test('a viewer sees the map, its sidebar row, the list, the card and Every featu
 	await expect(row(v, 'Synthetic catchment')).toBeVisible();
 	await expect(v.getByTestId('map-show-everything')).toBeVisible();
 	await expect(header(v).getByRole('link', { name: 'Upload GeoJSON' })).toHaveCount(0);
-	await expect(header(v).getByRole('button', { name: 'Place a point' })).toHaveCount(0);
-	await expect(header(v).getByRole('button', { name: 'Draw a shape' })).toHaveCount(0);
+	await expect(v.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true })).toHaveCount(0);
+	await expect(v.getByTestId('map-tools').getByRole('button', { name: 'Draw a shape', exact: true })).toHaveCount(0);
 	await expect(v.getByTestId('map-no-tiles')).toHaveCount(0);
 	await row(v, 'Upper farm').click();
 	await expect(card(v).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
@@ -320,6 +334,7 @@ test('thirty units: the page fits the window, the list scrolls in its card, a li
 	await openMap(page, big.id, `&node=${big.farms[28]}`);
 	await expect(card(page).getByRole('heading', { name: 'Hydrological unit with a long name 29' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toHaveText(/^35 features · boundary [\d\s,.]+ km² · 0 of 30 unit areas from the map$/);
+	await showTab(page, 'features');
 	await layoutSettled(page);
 	const m = await page.evaluate(() => {
 		const scroller = document.querySelector('[data-testid="map-feature-list"]') as HTMLElement;
@@ -360,11 +375,13 @@ for (const scheme of ['light', 'dark'] as const) {
 			await openMap(page, project.id);
 			await uploadThroughSheet(page, null, 'boundary.geojson', boundaryGeoJson());
 			await uploadThroughSheet(page, 'farm_parcel', 'parcels.geojson', parcelsGeoJson());
+			await showTab(page, 'features');
 			await row(page, 'Upper farm').click();
 			await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 			await layoutSettled(page);
 			await expectNoSidewaysScroll(page);
 			await expectNoViolations(page);
+			await showTab(page, 'features');
 			await page.getByTestId('map-open-grid').click();
 			await expect(page.getByRole('dialog', { name: 'Every map feature' })).toBeVisible();
 			await expectNoViolations(page);

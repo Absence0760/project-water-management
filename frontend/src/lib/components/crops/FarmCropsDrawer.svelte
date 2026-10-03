@@ -7,6 +7,7 @@
 	// same save row: reason, Save changes (the page's save), and Done. Under the
 	// areas, "From land cover" proposes a crop's area from the unit's parcels on
 	// the map (issue #326 B-landcover, CroplandProposalsBox.svelte).
+	import { untrack } from 'svelte';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -17,7 +18,7 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import CroplandProposalsBox from './CroplandProposalsBox.svelte';
 	import { farmDemands } from './demand';
-	import { farmPlanting } from './farmDrawer';
+	import { farmPlanting, inOrder, plantedFirst } from './farmDrawer';
 
 	let {
 		open = $bindable(false),
@@ -49,6 +50,14 @@
 	const node = $derived(editor.model.nodes.find((n) => n.id === nodeId) ?? null);
 	const name = $derived(node?.name || '(unnamed)');
 	const planting = $derived(farmPlanting(editor.model, nodeId));
+	// The crops planted here first, largest first: ordered as the drawer opens (or moves to another unit), then
+	// kept, so a row doesn't jump while its area is typed (farmDrawer.ts plantedFirst).
+	const order = $derived.by(() => {
+		void open;
+		void nodeId;
+		return untrack(() => plantedFirst(planting.rows));
+	});
+	const rows = $derived(inOrder(planting.rows, order));
 	// Saved A-pan × the areas as edited, as the Crops tab's demand preview.
 	const demand = $derived(farmDemands(editor.model, settings.apanMm, settings.februaryDays, [nodeId])[0] ?? null);
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
@@ -67,18 +76,19 @@
 				<tr><th scope="col">Crop</th><th scope="col" class="num">Area <span class="u">ha</span></th></tr>
 			</thead>
 			<tbody>
-				{#each planting.rows as r (r.cropId)}
+				{#each rows as r (r.cropId)}
 					<tr>
 						<th scope="row">{r.name || '(unnamed)'}<FieldHistoryLine field="crop:{nodeId}:{r.cropId}" unit={nodeId} /></th>
 						<td>
+							<!-- Cleared, an area is 0: nothing planted (the editor drops the row), never an empty field over a value the model keeps. -->
 							<NumberInput
 								label="{r.name || 'crop'} on {name}, ha"
 								min={0}
 								step={0.1}
 								scale={1 / 10_000}
 								disabled={readonly}
-								value={editor.cropArea(nodeId, r.cropId)}
-								onchange={(n) => editor.setCropArea(nodeId, r.cropId, n ?? 0)}
+								nullable
+								bind:value={() => editor.cropArea(nodeId, r.cropId), (n) => editor.setCropArea(nodeId, r.cropId, n ?? 0)}
 							/>
 						</td>
 					</tr>
@@ -94,7 +104,7 @@
 			<a href="?tab=crops">Crops &amp; demand</a>, where the crop factors are set.
 		</p>
 		{#if !apanSet}
-			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings">Settings &amp; calibration</a>).</p>
+			<p class="muted small">A-pan evaporation isn't set yet, so this hydrological unit's demand is zero (<a href="?tab=settings#set-demand">Settings &amp; calibration, Demand</a>).</p>
 		{:else if demand && planting.totalM2 > 0}
 			<p class="small" data-testid="farm-demand">
 				Gross irrigation demand: <strong>{fmtNum(demand.meanM3Day)} m³/day</strong> on average,

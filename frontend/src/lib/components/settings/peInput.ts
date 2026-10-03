@@ -80,3 +80,14 @@ export function apanSourceNote(seriesKinds: readonly string[] | null): { daily: 
 			}
 		: { daily: false, text: 'A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.' };
 }
+
+/**
+ * The monthly dam evaporation factors (settings.lakeEvapFactorMonthly, WP-3.5)
+ * switched on or off: off is null (the one factor every month); on brings back
+ * the twelve switched off (`last`, kept until the form is saved or discarded),
+ * else the one factor in every month.
+ */
+export function withLakeMonthly(on: boolean, flat: number, last: readonly number[] | null): number[] | null {
+	if (!on) return null;
+	return last && last.length === 12 ? [...last] : new Array<number>(12).fill(flat);
+}

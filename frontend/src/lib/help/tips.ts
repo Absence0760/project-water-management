@@ -234,7 +234,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'borehole',
 		term: 'Boreholes (groundwater)',
-		short: 'Groundwater a hydrological unit or other user pumps up to a daily capacity and annual cap, by mode: supplemental, primary or emergency.',
+		short: 'Groundwater a hydrological unit or other user pumps up to a daily capacity and annual cap, by mode: supplemental, primary or drought.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day']

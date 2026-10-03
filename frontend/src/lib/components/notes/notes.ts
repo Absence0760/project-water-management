@@ -78,7 +78,11 @@ export const SETTING_NOTE_GROUPS = {
 	share: 'Flow share',
 	ewr: 'EWR',
 	period: 'Simulation period',
-	quality: 'Data quality'
+	quality: 'Data quality',
+	wr2012: 'WR2012 check',
+	reserve: 'Reserve rule tables',
+	restrict: 'Drought restrictions',
+	evidence: 'Evidence'
 } as const;
 export type SettingNoteGroup = keyof typeof SETTING_NOTE_GROUPS;
 

@@ -40,9 +40,9 @@ describe('dataQualityError', () => {
 		expect(dataQualityError(null)).toMatch(/lowest/);
 		expect(dataQualityError({ ...d, outlierFactorRain: 1 })).toMatch(/rain outlier factor/);
 		expect(dataQualityError({ ...d, outlierFactorFlow: 1001 })).toMatch(/flow outlier factor/);
-		expect(dataQualityError({ ...d, flatlineRainDays: 1 })).toMatch(/rain flat-line/);
-		expect(dataQualityError({ ...d, flatlineEvapDays: 7.5 })).toMatch(/A-pan flat-line/);
-		expect(dataQualityError({ ...d, flatlineFlowMinDays: 20, flatlineFlowMaxDays: 19 })).toMatch(/can’t be shorter/);
+		expect(dataQualityError({ ...d, flatlineRainDays: 1 })).toMatch(/^The rain flat stretch must be/);
+		expect(dataQualityError({ ...d, flatlineEvapDays: 7.5 })).toMatch(/^The A-pan flat stretch must be/);
+		expect(dataQualityError({ ...d, flatlineFlowMinDays: 20, flatlineFlowMaxDays: 19 })).toBe('The longest flow flat stretch can’t be shorter than the shortest.');
 		expect(dataQualityError({ ...d, zeroRunRule: 'weekly' as never })).toMatch(/how zero-rain runs are judged/);
 		expect(dataQualityError({ ...d, zeroRunMinWetDays: 0 })).toMatch(/wet-season days/);
 		expect(dataQualityError({ ...d, zeroRunUsualShare: 0 })).toMatch(/share of the usual annual rain/);

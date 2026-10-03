@@ -1,0 +1,4 @@
+{
+	"addKb": 7,
+	"why": "The Map tab's layout (tools on the map, the Getting started pill, Layers and Key panels over the map, the side column's tabs): MapToolPalette, MapSetupPill and the tab's new CSS, +5 KB; splitting DivideSheet into its own chunk to keep the tab under its 60 KB (62 -> 56 KB) costs +2 KB of chunk overhead. Measured locally: main @ d2821d8d6 1618 KB, this branch 1625 KB (+7 KB)."
+}

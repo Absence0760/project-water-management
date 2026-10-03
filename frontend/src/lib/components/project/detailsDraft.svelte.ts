@@ -50,6 +50,26 @@ export class ProjectDetailsDraft {
 		this.#saved = fieldsOf(p);
 	}
 
+	/** The fields as typed now (trimmed), to hand back to afterSave once the save they went with returns. */
+	typed(): Fields {
+		return { name: this.name.trim(), description: this.description.trim(), timeZone: this.timeZone.trim(), wuaName: this.wuaName.trim() };
+	}
+
+	/**
+	 * The save came back: `sent` is typed() as the save took it, `p` the project as saved. A field edited
+	 * while the save was in flight keeps its text (still unsaved); the others take the saved value.
+	 */
+	afterSave(sent: Fields, p: Project): void {
+		const now = this.typed();
+		const f = fieldsOf(p);
+		this.#saved = f;
+		if (now.name === sent.name) this.name = f.name;
+		if (now.description === sent.description) this.description = f.description;
+		if (now.timeZone === sent.timeZone) this.timeZone = f.timeZone;
+		if (now.wuaName === sent.wuaName) this.wuaName = f.wuaName;
+		this.saveError = null;
+	}
+
 	get dirty(): boolean {
 		const s = this.#saved;
 		return (

@@ -5,7 +5,9 @@
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
+/** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
+export { isIsoDate };
 import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';
 import {
 	ACCUMULATION_MODES,
@@ -147,16 +149,6 @@ const months: Check = (v) => {
 	if (!Array.isArray(v) || v.length > 12) return 'must be a list of at most 12 calendar months';
 	return v.every((m) => Number.isInteger(m) && m >= 1 && m <= 12) ? null : 'months must be whole numbers 1–12';
 };
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-/** An ISO calendar date that exists (not 2021-02-30). */
-export function isIsoDate(v: unknown): v is string {
-	if (typeof v !== 'string' || !ISO_DATE.test(v)) return false;
-	try {
-		return fromEpochDay(toEpochDay(v)) === v;
-	} catch {
-		return false;
-	}
-}
 const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
 /** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
 const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');
@@ -546,7 +538,7 @@ export function settingsValueError(path: string, value: unknown): string | null 
  * agreement, never the simulated water, so they are not scalable. The
  * reference gauge is never read by the engine.
  */
-export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'evap_apan_mm'] as const;
+export const SCALABLE_SERIES_KINDS = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'rain_catchment_alt_mm', 'rain_reanalysis_mm', 'evap_apan_mm'] as const;
 export type ScalableSeriesKind = (typeof SCALABLE_SERIES_KINDS)[number];
 /** Largest factor series.scale accepts: a scenario scales a driver, it doesn't replace it. */
 export const SERIES_SCALE_MAX = 10;

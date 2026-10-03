@@ -28,7 +28,7 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 	const users = (nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
 	const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 		`SELECT node_id AS "nodeId", key, "values" FROM run_series
-		 WHERE run_id = $1 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction') AND node_id = ANY($2::uuid[])`,
+		 WHERE run_id = $1 AND (key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction', 'offtake_used') OR key LIKE 'river\\_take@%') AND node_id = ANY($2::uuid[])`,
 		[runId, users.map((n) => n.id)]
 	);
 	const get = (nodeId: string, key: string) => {
@@ -45,6 +45,8 @@ export async function runUseNodes(db: Db, runId: string, startDate: string, fore
 			groundwater: get(n.id, 'groundwater_used') ?? null,
 			groundwaterToDam: get(n.id, 'groundwater_to_dam') ?? null,
 			riverAbstraction: get(n.id, 'river_abstraction') ?? null,
+			// The rest of the river water in supplied (engine ≥ 1.69.0): never netted as a dam draw (§2.12).
+			riverTakes: series.filter((s) => s.nodeId === n.id && (s.key === 'offtake_used' || s.key.startsWith('river_take@'))).map((s) => get(n.id, s.key) ?? null),
 			damCapacityM3: n.damCapacityM3 ?? null
 		}));
 }

@@ -43,18 +43,28 @@ export const chirpsFitChoice = (v: unknown): ChirpsFitChoice => (Array.isArray(v
 
 /** Why a list of CHIRPS fit ranges can't be saved, or null: the engine's rules (each a real range with a reason, none overlapping), one message. */
 export function chirpsFitRangesError(list: ChirpsFitRange[]): string | null {
-	if (!list.length) return 'List at least one water-year range, or fit on the whole record';
+	return chirpsFitRangesProblem(list)?.message ?? null;
+}
+
+/**
+ * chirpsFitRangesError with where it is fixed: the range (`index`) and its
+ * field, so the form puts the message beside that field (aria-describedby).
+ * A problem with no one range (none listed, an overlap) has index null.
+ */
+export function chirpsFitRangesProblem(list: ChirpsFitRange[]): { index: number | null; field: 'from' | 'to' | 'reason' | null; message: string } | null {
+	if (!list.length) return { index: null, field: null, message: 'List at least one water-year range, or fit on the whole record' };
 	for (const [i, r] of list.entries()) {
 		const n = `Fit range ${i + 1}`;
-		if (!Number.isInteger(r.fromWaterYear) || !Number.isInteger(r.toWaterYear)) return `${n}: enter both water years`;
-		if (r.fromWaterYear > r.toWaterYear) return `${n}: ends before it starts`;
-		if (!r.reason.trim()) return `${n}: needs a reason`;
+		if (!Number.isInteger(r.fromWaterYear)) return { index: i, field: 'from', message: `${n}: enter both water years` };
+		if (!Number.isInteger(r.toWaterYear)) return { index: i, field: 'to', message: `${n}: enter both water years` };
+		if (r.fromWaterYear > r.toWaterYear) return { index: i, field: 'to', message: `${n}: ends before it starts` };
+		if (!r.reason.trim()) return { index: i, field: 'reason', message: `${n}: needs a reason` };
 	}
 	const w: string[] = [];
 	const kept = resolveChirpsFitPeriod(list, w);
 	if (Array.isArray(kept) && kept.length === list.length && !w.length) return null;
 	const clash = w.find((x) => x.includes('overlaps'));
-	return clash ? `Fit ranges overlap: ${clash.replace(/^CHIRPS fit range /, '').replace(/; ignored$/, '')}` : (w[0] ?? 'Invalid fit ranges');
+	return { index: null, field: null, message: clash ? `Fit ranges overlap: ${clash.replace(/^CHIRPS fit range /, '').replace(/; ignored$/, '')}` : (w[0] ?? 'Invalid fit ranges') };
 }
 
 // Flagged zero-rain runs (settings.zeroRainRuns.mode, engine ≥ 0.15.0;

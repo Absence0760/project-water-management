@@ -51,22 +51,33 @@ pnpm -C e2e e2e:list      # list the tests without running them
 
 ### Several checkouts at once
 
-Each checkout of the repo gets its own **slot**, and the slot picks the ports
-and the database (`support/env.ts`), so two sessions can run `pnpm test:e2e`
+Each checkout of the repo gets its own **slot**, which picks the ports, and
+its own database (`support/env.ts`), so two sessions can run `pnpm test:e2e`
 in two worktrees at the same time:
 
 | Checkout | Slot | API | Site | Database |
 | --- | --- | --- | --- | --- |
 | Main checkout (`.git` is a directory), and CI | 0 | :3101 | :7801 | `water_e2e` |
-| A git worktree (`.git` is a file) | 1–98, from a hash of its path | :3101 + slot | :7801 + slot | `water_e2e_<slot>` |
+| A git worktree (`.git` is a file) | 1–98, from the slot registry | :3101 + slot | :7801 + slot | `water_e2e_w<tag>_<slot>` |
+
+A worktree's slot comes from a registry in the repo's shared git directory,
+the main checkout's `.git/water-e2e-slots/` (`support/slots.ts`): one file per
+held slot naming the worktree that holds it. A worktree keeps the slot it
+first took, no two live worktrees hold the same one (it is taken under a lock),
+and a removed worktree's slot is taken back by the next new one. The search
+starts at a hash of the path; when the registry can't be found, that hash is
+the slot. `<tag>` is 16 hex digits of a SHA-256 of the checkout's path, so a
+database is never shared between checkouts, whatever their slots
+([docs/testing.md § Several checkouts at once](../docs/testing.md#several-checkouts-at-once),
+which also says how to drop the `water_e2e_<n>` databases of the old scheme).
 
 `E2E_SLOT=<0–98> pnpm test:e2e` picks one by hand. Each slot also builds
 into its own folder (`frontend/build-e2e/` for slot 0, `frontend/build-e2e-<slot>/`
 otherwise, `env.ts` `buildDirsFor`), so parallel runs in one checkout on
-different slots never replace the site another is serving. If two checkouts ever land on the same
-slot, the second run stops at start-up on a port that is already in use,
-before it touches the database: Playwright starts its web servers before the
-global setup. Set `E2E_SLOT` in one of them. The two runs still share one
+different slots never replace the site another is serving. If `E2E_SLOT` puts
+two checkouts on the same slot, the second run stops at start-up on a port
+that is already in use (and their databases differ anyway): Playwright starts
+its web servers before the global setup. The two runs still share one
 docker Postgres, so on a loaded laptop both run slower.
 
 Locally it runs **6 workers** (`playwright.config.ts`; `E2E_WORKERS=n` for a
@@ -214,7 +225,10 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `tests/sharing.spec.ts` | Owner shares with a viewer (read-only everywhere, unshared project → not found); editor rights; inviting an address with no account (pending list, re-send throttle, revoke); signing up through an invite link lands in the project; a dead invite link falls back to plain sign-up; an invite link opened while signed in (another account: sign out and accept; own unconfirmed address: confirm first; dead link) |
 | `tests/model.spec.ts` | Build gauge + farms, crops, planted areas, a transfer; save; reload. Second outlet and loop block saving; unsaved-changes guard; thousands separators in the one-node form and the view-only table |
 | `tests/model-phone.spec.ts` | On a phone, crop factors, planted areas and a transfer rule render as cards with every field on screen; a desktop keeps the crop and transfer tables' column headers |
-| `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard; date validation |
+| `tests/settings.spec.ts` | Monthly A-pan and EWR save and reload; discard (asks first); date validation |
+| `tests/save-bar.spec.ts` | The one save bar for the model, project details and settings: problems listed as links to their fields, Discard asks and names what goes, Save and run, focus and the "Changes saved" announcement |
+| `tests/month-picker.spec.ts` | The month toggles: at least 24 px, two rows of six on a phone, All months / No months named for their picker |
+| `tests/viewer-drop.spec.ts` | A viewer dropping a file on the workspace is told it's view only, and the browser doesn't open the file |
 | `tests/settings-drought-restriction.spec.ts` | Settings › Drought restrictions (engine 1.54.0, WP-3.8): on from the template, a deeper level cutting less blocks Save, a level removed and a review date added saved whole, a viewer reads it disabled, off saves null; axe at desktop and phone, the level cards stacked with no sideways scroll |
 | `tests/drought-restrictions-run.spec.ts` | Drought restrictions in use (engine 1.54.0): a scenario's "Change a setting" sets the rule (a baseline assumption); Settings starts a rule from a published 25 % notice, on each unit's own dam with an EWR trigger; an outlook's review triggers replace it after the question, then the panel says it is the rule; a run under it shows the Units & supply tables and menu entry; axe, no sideways scroll at phone width |
 | `tests/auto-calibration.spec.ts` | Fitting GR4J fills the form and only Save stores it; turning on groundwater exchange offers X2 without resetting the other ticks; a fit can be cancelled; a viewer can fit but not apply; with a gauge and a logger record, the fit can be validated against the other one |

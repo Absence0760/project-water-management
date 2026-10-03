@@ -5,9 +5,12 @@
 	// year, a one-off date range or days around Easter, optionally on some
 	// weekdays only; the later of two windows covering a day wins. Set by date
 	// only. The object is the editor's own, so edits land in the model.
+	import { tick } from 'svelte';
 	import { DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_MAX_EASTER_OFFSET, scheduleWindowProblem, type DemandObject, type DemandScheduleSpan } from '@water-management/engine';
-	import { moveWindow, newWindow, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
+	import { moveWindow, newWindow, problemFields, SPAN_LABEL, toggleWeekday, withSpan } from './demandSchedule';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { focusAfter, windowQuestion } from './removeQuestions';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let { object: o, readonly }: { object: DemandObject; readonly: boolean } = $props();
@@ -16,11 +19,33 @@
 	const windows = $derived(o.schedule ?? []);
 
 	const add = (span: DemandScheduleSpan) => (o.schedule = [...windows, newWindow(span)]);
-	function remove(i: number) {
+	/** Asks first when the window was changed from a new one, then puts the focus on the next window (or the add row). */
+	async function remove(i: number) {
+		const q = windowQuestion(windows[i]!, i);
+		if (q && !(await confirmDialog(q))) return;
 		const next = windows.filter((_, k) => k !== i);
 		o.schedule = next.length ? next : null;
+		const at = focusAfter(i, next.length + 1);
+		await tick();
+		document.getElementById(at === null ? `ds-new-${o.id}` : `ds-label-${o.id}-${at}`)?.focus();
 	}
-	const move = (i: number, by: -1 | 1) => (o.schedule = moveWindow(windows, i, by));
+	/** The live line saying where a moved window went. */
+	let announce = $state('');
+	/**
+	 * Moves window i one place, then keeps the focus on the moved window's button (the rows are
+	 * keyed by place, so the pressed button now belongs to the other window): the same direction
+	 * where it still has one, else the other (as the node table's ↑/↓, refocusMover).
+	 */
+	async function move(i: number, by: -1 | 1) {
+		const w = windows[i]!;
+		o.schedule = moveWindow(windows, i, by);
+		const j = i + by;
+		announce = `Window ${i + 1}${w.label.trim() ? ` (${w.label.trim()})` : ''} is now window ${j + 1}.`;
+		await tick();
+		const dir = by < 0 ? 'up' : 'down';
+		const other = by < 0 ? 'down' : 'up';
+		(document.getElementById(`ds-${dir}-${o.id}-${j}`) ?? document.getElementById(`ds-${other}-${o.id}-${j}`))?.focus();
+	}
 	const setSpan = (i: number, span: DemandScheduleSpan) => (o.schedule = windows.map((w, k) => (k === i ? withSpan(w, span) : w)));
 	let newSpan = $state<DemandScheduleSpan>('always');
 </script>
@@ -37,6 +62,8 @@
 		<ol class="windows">
 			{#each windows as w, i (i)}
 				{@const bad = scheduleWindowProblem(w)}
+				{@const badAt = problemFields(bad)}
+				{@const badId = `ds-bad-${o.id}-${i}`}
 				<li data-testid="demand-schedule-window-{o.id}-{i}">
 					<div class="grid">
 						<div class="field">
@@ -52,47 +79,47 @@
 						{#if w.span === 'yearly'}
 							<div class="field">
 								<label for="ds-from-{o.id}-{i}">From <span class="u">(MM-DD)</span></label>
-								<input id="ds-from-{o.id}-{i}" maxlength="5" placeholder="12-15" readonly={readonly} value={w.from ?? ''} onchange={(e) => (w.from = e.currentTarget.value.trim())} />
+								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-from-{o.id}-{i}" maxlength="5" placeholder="12-15" readonly={readonly} value={w.from ?? ''} onchange={(e) => (w.from = e.currentTarget.value.trim())} />
 							</div>
 							<div class="field">
 								<label for="ds-to-{o.id}-{i}">To <span class="u">(MM-DD)</span></label>
-								<input id="ds-to-{o.id}-{i}" maxlength="5" placeholder="01-10" readonly={readonly} value={w.to ?? ''} onchange={(e) => (w.to = e.currentTarget.value.trim())} />
+								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-to-{o.id}-{i}" maxlength="5" placeholder="01-10" readonly={readonly} value={w.to ?? ''} onchange={(e) => (w.to = e.currentTarget.value.trim())} />
 							</div>
 						{:else if w.span === 'range'}
 							<div class="field">
 								<label for="ds-from-{o.id}-{i}">From</label>
-								<input id="ds-from-{o.id}-{i}" type="date" readonly={readonly} value={w.from ?? ''} onchange={(e) => (w.from = e.currentTarget.value)} />
+								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-from-{o.id}-{i}" type="date" readonly={readonly} value={w.from ?? ''} onchange={(e) => (w.from = e.currentTarget.value)} />
 							</div>
 							<div class="field">
 								<label for="ds-to-{o.id}-{i}">To</label>
-								<input id="ds-to-{o.id}-{i}" type="date" readonly={readonly} value={w.to ?? ''} onchange={(e) => (w.to = e.currentTarget.value)} />
+								<input aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-to-{o.id}-{i}" type="date" readonly={readonly} value={w.to ?? ''} onchange={(e) => (w.to = e.currentTarget.value)} />
 							</div>
 						{:else if w.span === 'easter'}
 							<div class="field">
 								<label for="ds-ef-{o.id}-{i}">From <span class="u">(days from Easter Sunday)</span></label>
-								<NumberInput id="ds-ef-{o.id}-{i}" min={-DEMAND_SCHEDULE_MAX_EASTER_OFFSET} max={DEMAND_SCHEDULE_MAX_EASTER_OFFSET} step={1} disabled={readonly} value={w.easterFrom} onchange={(v) => (w.easterFrom = v ?? 0)} />
+								<NumberInput aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-ef-{o.id}-{i}" min={-DEMAND_SCHEDULE_MAX_EASTER_OFFSET} max={DEMAND_SCHEDULE_MAX_EASTER_OFFSET} step={1} disabled={readonly} value={w.easterFrom} onchange={(v) => (w.easterFrom = v ?? 0)} />
 							</div>
 							<div class="field">
 								<label for="ds-et-{o.id}-{i}">To <span class="u">(days from Easter Sunday)</span></label>
-								<NumberInput id="ds-et-{o.id}-{i}" min={-DEMAND_SCHEDULE_MAX_EASTER_OFFSET} max={DEMAND_SCHEDULE_MAX_EASTER_OFFSET} step={1} disabled={readonly} value={w.easterTo} onchange={(v) => (w.easterTo = v ?? 0)} />
+								<NumberInput aria-invalid={badAt === 'bounds' ? 'true' : undefined} aria-describedby={badAt === 'bounds' ? badId : undefined} id="ds-et-{o.id}-{i}" min={-DEMAND_SCHEDULE_MAX_EASTER_OFFSET} max={DEMAND_SCHEDULE_MAX_EASTER_OFFSET} step={1} disabled={readonly} value={w.easterTo} onchange={(v) => (w.easterTo = v ?? 0)} />
 							</div>
 						{/if}
 						<div class="field">
 							<label for="ds-factor-{o.id}-{i}">Factor <span class="u">(0 = off)</span></label>
-							<NumberInput id="ds-factor-{o.id}-{i}" min={0} max={DEMAND_SCHEDULE_MAX_FACTOR} disabled={readonly} value={w.factor} onchange={(v) => (w.factor = v ?? 0)} />
+							<NumberInput aria-invalid={badAt === 'factor' ? 'true' : undefined} aria-describedby={badAt === 'factor' ? badId : undefined} id="ds-factor-{o.id}-{i}" min={0} max={DEMAND_SCHEDULE_MAX_FACTOR} disabled={readonly} value={w.factor} onchange={(v) => (w.factor = v ?? 0)} />
 						</div>
 					</div>
-					<fieldset class="days">
+					<fieldset class="days" aria-describedby={badAt === 'weekdays' ? badId : undefined}>
 						<legend>On</legend>
 						{#each WEEKDAYS as d, k (d)}
-							<label><input type="checkbox" disabled={readonly} checked={!w.weekdays || w.weekdays.includes(k + 1)} onchange={(e) => (w.weekdays = toggleWeekday(w.weekdays, k + 1, e.currentTarget.checked))} /> {d}</label>
+							<label><input type="checkbox" aria-invalid={badAt === 'weekdays' ? 'true' : undefined} disabled={readonly} checked={!w.weekdays || w.weekdays.includes(k + 1)} onchange={(e) => (w.weekdays = toggleWeekday(w.weekdays, k + 1, e.currentTarget.checked))} /> {d}</label>
 						{/each}
 					</fieldset>
-					{#if bad}<p class="bad small">Not used: {bad}.</p>{/if}
+					{#if bad}<p class="bad small" id={badId}>Not used: {bad}.</p>{/if}
 					{#if !readonly}
 						<div class="row-actions">
-							{#if i > 0}<button type="button" class="btn btn-sm" onclick={() => move(i, -1)}>Move window {i + 1} up</button>{/if}
-							{#if i < windows.length - 1}<button type="button" class="btn btn-sm" onclick={() => move(i, 1)}>Move window {i + 1} down</button>{/if}
+							{#if i > 0}<button type="button" class="btn btn-sm" id="ds-up-{o.id}-{i}" onclick={() => move(i, -1)}>Move window {i + 1} up</button>{/if}
+							{#if i < windows.length - 1}<button type="button" class="btn btn-sm" id="ds-down-{o.id}-{i}" onclick={() => move(i, 1)}>Move window {i + 1} down</button>{/if}
 							<button type="button" class="btn btn-sm" onclick={() => remove(i)}>Remove window {i + 1}</button>
 						</div>
 					{/if}
@@ -100,6 +127,7 @@
 			{/each}
 		</ol>
 	{/if}
+	<p class="visually-hidden" aria-live="polite" data-testid="demand-schedule-status-{o.id}">{announce}</p>
 	{#if !readonly && windows.length < DEMAND_SCHEDULE_MAX_WINDOWS}
 		<div class="add">
 			<label for="ds-new-{o.id}" class="visually-hidden">Days the new window covers</label>

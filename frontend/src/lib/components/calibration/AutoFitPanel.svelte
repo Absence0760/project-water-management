@@ -116,7 +116,7 @@
 </script>
 
 <section class="auto" aria-labelledby="{uid}-h">
-	<h3 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" /></h3>
+	<h3 id="{uid}-h">Automated calibration <HelpTip key="calibration-rules" label="About automated calibration" /></h3>
 	{#if !hasObserved}
 		<p class="muted small">Upload an observed or logger flow record (Data) to calibrate against it.</p>
 	{:else}

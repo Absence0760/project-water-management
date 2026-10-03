@@ -6,6 +6,7 @@ import type { APIRequestContext } from '@playwright/test';
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 /** One stored run series (the catchment's without `nodeId`). */
 async function runSeries(request: APIRequestContext, projectId: string, runId: string, key: string, nodeId?: string): Promise<number[]> {
@@ -41,10 +42,11 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 	await expect(page.getByLabel('Pan-coefficient preset', { exact: true })).toHaveCount(0);
 	await expect(group).toContainText('Irrigation demand and dam evaporation still use the A-pan row');
 	// The source is required before Save.
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	await expect(save).toBeDisabled();
-	const blockers = page.getByRole('status').filter({ hasText: 'to fix before saving' });
-	await expect(blockers.getByRole('link', { name: 'Flow calibration: Say where the monthly PE comes from: its source is required.' })).toBeVisible();
+	await expect(settingsBar(page).getByRole('link', { name: 'Flow calibration: Say where the monthly PE comes from: its source is required.' })).toBeVisible();
+	// The message is tied to the field it is fixed in.
+	await expect(page.getByLabel('Source', { exact: true })).toHaveAccessibleDescription(/Say where the monthly PE comes from: its source is required\.$/);
 
 	// A clearly lower PE: 40 mm every month, 480 mm a year.
 	for (const m of ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']) {
@@ -53,9 +55,8 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 	await expect(group.getByTestId('gr4j-pe-annual')).toHaveText('Annual GR4J PE: 480 mm (the monthly PE row below)');
 	await page.getByLabel('Source', { exact: true }).fill('Synthetic station ET₀ × 1.0, 2015–2020');
 	await expect(save).toBeEnabled();
-	await expect(blockers).toBeHidden();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await expect(settingsBar(page)).not.toContainText('to fix before saving');
+	await saveSettings(page);
 
 	await page.reload();
 	await expect(page.getByRole('radio', { name: 'Monthly PE, entered directly' })).toBeChecked();
@@ -99,7 +100,15 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 		await page.getByLabel(`Mean relative humidity, ${m}, %`).fill(i < 7 ? '55' : '80');
 		await page.getByLabel(`Mean wind speed at 2 m, ${m}, m/s`).fill('3');
 	}
-	await page.getByLabel('Where the RH and wind came from').fill('Synthetic station, 2010–2020 monthly means');
+	// The source is required, but not marked before it has been left.
+	const where = page.getByLabel('Where the RH and wind came from');
+	await expect(where).not.toHaveAttribute('aria-invalid', 'true');
+	await where.focus();
+	await where.blur();
+	await expect(where).toHaveAttribute('aria-invalid', 'true');
+	await where.fill('Synthetic station, 2010–2020 monthly means');
+	// The Table 5 class behind each suggestion is text a keyboard or touch user reaches, not only a title.
+	await expect(page.getByTestId('pan-helper-kp').first()).toContainText('RH');
 	await expect(fill).toBeEnabled();
 	await fill.click();
 	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveValue('0.7');
@@ -109,10 +118,8 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	const source = page.getByLabel('Pan coefficient source');
 	await expect(source).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
 	// It only fills the form: nothing is saved until Save; then the note is kept.
-	const save = page.getByRole('button', { name: 'Save settings' });
-	await expect(save).toBeEnabled();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await expect(saveChanges(page)).toBeEnabled();
+	await saveSettings(page);
 	await page.reload();
 	await expect(page.getByLabel('Pan coefficient source')).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
 	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');

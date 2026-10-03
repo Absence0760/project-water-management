@@ -6,13 +6,16 @@
 	and where its gaps fall through to; optionally a quantile map of its wet
 	days (engine ≥ 1.21.0). `error` is set while the list is
 	invalid (the engine's own check, which the API uses), so the parent form
-	can block saving.
+	can block saving. Each period's problem sits under the field it is fixed in,
+	which names it (aria-describedby); a missing reason is marked once the field
+	has been left. Removing a period with something written in it asks first.
 -->
 <script lang="ts">
 	import { HEAVY_DAY_MM, QM_MIN_WET_DAYS, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback, withQuantileMap } from './rainSource';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { newRainSourcePeriod, periodHasWork, rainSourceFormError, rainSourceProblems, withFactorMode, withFallback, withQuantileMap, type RainSourceField } from './rainSource';
 
 	let {
 		value = $bindable(),
@@ -35,6 +38,19 @@
 	$effect(() => {
 		error = rainSourceFormError(list);
 	});
+	const problems = $derived(rainSourceProblems(list));
+	// Reasons left blank are marked once the field has been left, not the moment a period is added.
+	let touched = $state<Record<number, boolean>>({});
+	/** The period's problem, when it is on this field (and, for the reason, once the field has been left). */
+	function on(i: number, field: RainSourceField): string | null {
+		const p = problems[i];
+		if (!p || p.field !== field) return null;
+		return field === 'reason' && !touched[i] ? null : p.message;
+	}
+	const errId = (i: number) => `${uid}-err${i}`;
+	/** aria-invalid and aria-describedby for a field, while its period's problem is on it. */
+	const invalidOn = (i: number, field: RainSourceField) =>
+		on(i, field) ? { 'aria-invalid': 'true' as const, 'aria-describedby': errId(i) } : {};
 
 	function set(i: number, p: RainSourcePeriod) {
 		value = list.map((x, j) => (j === i ? p : x));
@@ -43,8 +59,20 @@
 	function add() {
 		value = [...list, newRainSourcePeriod()];
 	}
-	function remove(i: number) {
+	async function remove(i: number) {
+		const p = list[i]!;
+		if (
+			periodHasWork(p) &&
+			!(await confirmDialog({
+				title: `Remove rain-source period ${i + 1}?`,
+				message: `${p.start} to ${p.end}${p.reason.trim() ? ` (“${p.reason.trim()}”)` : ''}: its dates, reason and factors, with where they came from, go with it.`,
+				confirmLabel: 'Remove the period',
+				danger: true
+			}))
+		)
+			return;
 		value = list.filter((_, j) => j !== i);
+		touched = {};
 	}
 	function setFactor(i: number, m: number, v: number) {
 		const p = list[i]!;
@@ -55,7 +83,7 @@
 
 <div class="rain-source" data-testid="rain-source">
 	<div class="head">
-		<span class="lbl"><span class="title">Rain source periods</span><HelpTip key="settings.rainSource" /></span>
+		<h3 class="title">Rain source periods <HelpTip key="settings.rainSource" /></h3>
 		<span class="hint">
 			Over each period, catchment rain comes from the alternative catchment gauge × its month’s factor instead of the catchment series, which then stays out
 			of every factor fit. A day the gauge has no reading falls through to the fallback, then forecast rain.
@@ -71,11 +99,11 @@
 						<div class="row">
 							<div class="field">
 								<label for="{uid}-s{i}">From</label>
-								<input id="{uid}-s{i}" type="date" readonly={readonly} value={p.start} onchange={(e) => patch(i, { start: e.currentTarget.value })} />
+								<input id="{uid}-s{i}" type="date" readonly={readonly} value={p.start} onchange={(e) => patch(i, { start: e.currentTarget.value })} {...invalidOn(i, 'start')} />
 							</div>
 							<div class="field">
 								<label for="{uid}-e{i}">To</label>
-								<input id="{uid}-e{i}" type="date" readonly={readonly} value={p.end} onchange={(e) => patch(i, { end: e.currentTarget.value })} />
+								<input id="{uid}-e{i}" type="date" readonly={readonly} value={p.end} onchange={(e) => patch(i, { end: e.currentTarget.value })} {...invalidOn(i, 'end')} />
 							</div>
 							<div class="field reason">
 								<label for="{uid}-r{i}">Reason</label>
@@ -85,10 +113,13 @@
 									readonly={readonly}
 									placeholder="e.g. gauges closed 2012; in-catchment automatic station from then"
 									value={p.reason}
-									aria-invalid={!p.reason.trim() || undefined}
-									class:invalid={!p.reason.trim()}
+									class:invalid={!!on(i, 'reason')}
 									oninput={(e) => patch(i, { reason: e.currentTarget.value })}
+									onblur={() => (touched[i] = true)}
+									aria-invalid={on(i, 'reason') ? 'true' : undefined}
+									aria-describedby={on(i, 'reason') ? errId(i) : `${uid}-r${i}-h`}
 								/>
+								<span class="hint" id="{uid}-r{i}-h">Required: why the gauge stands in for the catchment series here.</span>
 							</div>
 							{#if !readonly}
 								<button type="button" class="btn btn-icon" aria-label="Remove rain-source period {i + 1}" title="Remove" onclick={() => remove(i)}>✕</button>
@@ -116,19 +147,19 @@
 							<div class="row">
 								<div class="field grow">
 									<label for="{uid}-ps{i}">Fitted by</label>
-									<input id="{uid}-ps{i}" maxlength="200" readonly={readonly} placeholder="e.g. hydrologist, rain-forcing study" value={p.provenance?.source ?? ''} oninput={(e) => patch(i, { provenance: { ...p.provenance!, source: e.currentTarget.value } })} />
+									<input id="{uid}-ps{i}" maxlength="200" readonly={readonly} placeholder="e.g. hydrologist, rain-forcing study" value={p.provenance?.source ?? ''} oninput={(e) => patch(i, { provenance: { ...p.provenance!, source: e.currentTarget.value } })} {...invalidOn(i, 'source')} />
 								</div>
 								<div class="field">
 									<label for="{uid}-pf{i}">Fitted on, from</label>
-									<input id="{uid}-pf{i}" type="date" readonly={readonly} value={p.provenance?.fittedFrom ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedFrom: e.currentTarget.value } })} />
+									<input id="{uid}-pf{i}" type="date" readonly={readonly} value={p.provenance?.fittedFrom ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedFrom: e.currentTarget.value } })} {...invalidOn(i, 'fittedFrom')} />
 								</div>
 								<div class="field">
 									<label for="{uid}-pt{i}">to</label>
-									<input id="{uid}-pt{i}" type="date" readonly={readonly} value={p.provenance?.fittedTo ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedTo: e.currentTarget.value } })} />
+									<input id="{uid}-pt{i}" type="date" readonly={readonly} value={p.provenance?.fittedTo ?? ''} onchange={(e) => patch(i, { provenance: { ...p.provenance!, fittedTo: e.currentTarget.value } })} {...invalidOn(i, 'fittedTo')} />
 								</div>
 								<div class="field grow">
 									<label for="{uid}-pm{i}">Method</label>
-									<input id="{uid}-pm{i}" maxlength="200" readonly={readonly} placeholder="e.g. catchment ÷ ERA5 over the reference era, by month" value={p.provenance?.method ?? ''} oninput={(e) => patch(i, { provenance: { ...p.provenance!, method: e.currentTarget.value } })} />
+									<input id="{uid}-pm{i}" maxlength="200" readonly={readonly} placeholder="e.g. catchment ÷ ERA5 over the reference era, by month" value={p.provenance?.method ?? ''} oninput={(e) => patch(i, { provenance: { ...p.provenance!, method: e.currentTarget.value } })} {...invalidOn(i, 'method')} />
 								</div>
 							</div>
 						{:else}
@@ -208,6 +239,10 @@
 								doesn’t. Each run reports the share of rain on heavy days (≥ {HEAVY_DAY_MM} mm) either way.
 							</span>
 						{/if}
+						<!-- The period's problem: named by the field it is on (aria-describedby); one in no field in particular stands alone. -->
+						{#if problems[i] && (problems[i]!.field === 'period' || on(i, problems[i]!.field))}
+							<p class="err" id={errId(i)}>{problems[i]!.message}.</p>
+						{/if}
 					</fieldset>
 				</li>
 			{/each}
@@ -218,7 +253,8 @@
 	{#if !readonly}
 		<div class="add"><button type="button" class="btn btn-sm" onclick={add}>Add a rain-source period</button></div>
 	{/if}
-	{#if error}<p class="err" role="alert">{error}.</p>{/if}
+	<!-- A problem with the list as a whole (too many periods), which no period carries. -->
+	{#if error && !problems.some(Boolean)}<p class="err">{error}.</p>{/if}
 </div>
 
 <style>
@@ -237,7 +273,10 @@
 		align-items: center;
 		gap: 0.25rem;
 	}
-	.title,
+	.title {
+		font-size: 0.95rem;
+		margin: 0;
+	}
 	legend {
 		font-weight: 500;
 		font-size: 0.85rem;

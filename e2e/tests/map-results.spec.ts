@@ -14,7 +14,7 @@ import { addMember, createRun, putSeries, seedRunnableProject, syntheticFlow, sy
 import { API_URL } from '../support/env.ts';
 import { ANALYST, DEMO, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, openMap, parcelsGeoJson, seedBigMap, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, openKey, openMap, parcelsGeoJson, seedBigMap, showTab, uploadThroughSheet } from '../support/map.ts';
 import { expectNoSidewaysScroll, layoutSettled } from '../support/reflow.ts';
 
 const results = (page: Page) => page.getByTestId('map-results');
@@ -97,6 +97,7 @@ test.describe('the seeded Sandspruit', () => {
 		// The card gives the picked parcel's figure, and a gauge's EWR, met or missed.
 		await row(page, 'Vaalbank').click();
 		await expect(card(page).getByTestId('map-card-result')).toHaveText(/ days? short · (ok|watch|short)$/);
+		await showTab(page, 'features');
 		await row(page, 'Melkhout Gauge').click();
 		await expect(card(page).getByTestId('map-card-result')).toHaveText(/^(EWR (met every day|missed on [\d\s,]+ days?) \(gauge\) · (ok|short)|(Not an EWR site in this run|No EWR figures in this run) · no figure)$/);
 	});
@@ -129,6 +130,9 @@ test.describe('the seeded Sandspruit', () => {
 		await page.goto(`/projects/${id}?tab=map&measure=kind`);
 		await expect(results(page)).toHaveAttribute('data-view', 'kind');
 		await expect(legend(page)).toHaveCount(0);
+		// With the kinds' colours the Key starts folded (nothing a run says needs reading); it opens on its button.
+		await expect(page.getByTestId('map-key-toggle')).toHaveAttribute('aria-expanded', 'false');
+		await openKey(page);
 		await expect(page.getByTestId('map-key').getByText('parcel', { exact: true })).toBeVisible();
 		await page.getByTestId('map-open-grid').click();
 		await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByRole('columnheader', { name: 'Result' })).toHaveCount(0);
@@ -181,6 +185,7 @@ test('an editor sees the newest run until one is published, picks a run in the U
 	if ((await mapBox.getAttribute('data-status')) === 'ready') {
 		await expect(page.getByRole('button', { name: 'Gauge: Outflow gauge' })).toHaveAttribute('data-fill', /^(#|rgb)/);
 	}
+	await showTab(page, 'features');
 	await page.getByTestId('map-open-grid').click();
 	const grid = page.getByRole('dialog', { name: 'Every map feature' });
 	const gaugeRow = grid.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Outflow gauge' }) });
@@ -253,6 +258,7 @@ for (const [label, size] of [
 		await layoutSettled(page);
 		await expectNoSidewaysScroll(page);
 		await expectNoViolations(page);
+		await showTab(page, 'features');
 		await page.getByTestId('map-open-grid').click();
 		// On a phone the rows are labelled cards (no header row): read a band cell.
 		await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByTestId('map-grid-band').first()).toBeVisible();

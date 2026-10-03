@@ -36,7 +36,7 @@
 <div class="zero-rain" data-testid="zero-rain-settings">
 	<h3 class="sub">Zero-rain runs in the catchment rain</h3>
 	<div class="field mode">
-		<span class="lbl"><label for="st-zero-rain">Flagged zero runs</label><HelpTip key="settings.zeroRainRuns" /></span>
+		<span class="lbl"><label for="st-zero-rain">Flagged zero runs</label><HelpTip key="settings.zeroRainRuns" label="About how zero runs are treated" /></span>
 		<select id="st-zero-rain" disabled={readonly} bind:value={value.mode} aria-describedby="st-zero-rain-h">
 			{#each ZERO_RAIN_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
@@ -49,6 +49,7 @@
 			{readonly}
 			legend="Keep dry"
 			helpKey="settings.zeroRainRuns"
+			helpLabel="About keeping zero runs dry"
 			hint="Flagged zero runs you have confirmed as real dry spells. Days inside these periods stay 0 mm and count in the CHIRPS factor fit as readings; other flagged runs are still filled, and their days left out of the fit. If CHIRPS reads a lot of rain over a kept-dry run, each run warns and leaves that water year out of the fit."
 			empty="None: every flagged zero run is treated as missing."
 			addYearLabel="Keep a water year dry"
@@ -63,6 +64,7 @@
 		{readonly}
 		legend="Also treat as missing"
 		helpKey="settings.zeroRainRuns"
+		helpLabel="About other periods treated as missing"
 		hint="Other periods whose catchment rain is bad, whatever it reads: for example the gap days inside a year the Data tab flags as far below CHIRPS. CHIRPS fills them, and they are left out of the CHIRPS factor fit."
 		empty="None."
 		addYearLabel="Add a water year"
@@ -73,7 +75,7 @@
 
 	<h3 class="sub" id="st-acc-h">Multi-day accumulations</h3>
 	<div class="field mode" data-testid="accumulation-settings">
-		<span class="lbl"><label for="st-acc">Accumulated readings</label><HelpTip key="rain-accumulations" /></span>
+		<span class="lbl"><label for="st-acc">Accumulated readings</label><HelpTip key="rain-accumulations" label="About rain read as a multi-day total" /></span>
 		<select id="st-acc" disabled={readonly} bind:value={value.accumulationMode} aria-describedby="st-acc-h2">
 			{#each ACCUMULATION_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
@@ -86,6 +88,7 @@
 			{readonly}
 			legend="Keep as recorded"
 			helpKey="rain-accumulations"
+			helpLabel="About accumulations kept as recorded"
 			hint="Readings a run flags as accumulations that you know were one day's rain, such as a thunderstorm CHIRPS missed. A flagged reading whose day falls inside one of these periods stays on its day, and its days count in the CHIRPS factor fit."
 			empty="None: every flagged accumulation is spread."
 			addYearLabel="Keep a water year's readings"
@@ -100,6 +103,7 @@
 		{readonly}
 		legend="Also spread"
 		helpKey="rain-accumulations"
+		helpLabel="About other periods spread as accumulations"
 		hint="Accumulations the check misses, listed by hand: the period's last day is the reading day, and the catchment rain recorded over the period is spread over it by CHIRPS. A period listed as missing above wins over one listed here."
 		empty="None."
 		addYearLabel="Add a water year"

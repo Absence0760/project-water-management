@@ -3,20 +3,26 @@
 	whether a run fills the gaps of the observed gauge and logger records, and
 	how. Off for every record by default; whether filled days are scored is
 	the quality flags' infilled treatment (settings.qualityFlags.infilled). Each number is kept inside the engine's bounds by its input, so
-	the section never blocks Save.
+	the section never blocks Save. Bind `last` to the page's draft (settingsDraft
+	`kept`): a record's settings unticking it turned off, brought back when it
+	is ticked again until the form is saved or discarded.
 -->
 <script lang="ts">
 	import { DEFAULT_FLOW_GAP_SPEC, donorOptions, GAP_FILL_KINDS, GAP_FILL_LIMITS, gapFillRecordLabel, type FlowGapFillSettings, type GapFillDonor, type GapFillKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { keptOr } from './kept';
 
 	let {
 		value = $bindable(),
+		last = $bindable(),
 		readonly = false,
 		/** The series kinds the project holds (null = not known yet): a record without a series is still offered, a donor without one is marked. */
 		seriesKinds = null
 	}: {
 		value: FlowGapFillSettings;
+		/** What unticking each record turned off, by record (kept until saved or discarded). */
+		last?: unknown;
 		readonly?: boolean;
 		seriesKinds?: readonly string[] | null;
 	} = $props();
@@ -26,7 +32,9 @@
 	const shown = $derived(GAP_FILL_KINDS.filter((k) => has(k) || value[k]));
 
 	function setOn(kind: GapFillKind, on: boolean) {
-		value[kind] = on ? { ...DEFAULT_FLOW_GAP_SPEC } : null;
+		const kept = (last ?? {}) as Partial<FlowGapFillSettings>;
+		if (!on && value[kind]) last = { ...kept, [kind]: $state.snapshot(value[kind]) };
+		value[kind] = keptOr(on, kept[kind], () => ({ ...DEFAULT_FLOW_GAP_SPEC }), null);
 	}
 	function set(kind: GapFillKind, key: 'interpolateMaxDays' | 'donorMaxDays' | 'donorMinOverlapDays', v: number | null) {
 		const spec = value[kind];

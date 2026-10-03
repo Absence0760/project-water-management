@@ -8,7 +8,7 @@
 # worktree) drives the same containers: they have fixed container_names, so a
 # per-directory project name would make `up` from a worktree fail with a name
 # conflict while the main checkout's container runs. Per-worktree isolation
-# lives inside this one Postgres (water_test_w<n>, water_e2e…), not in
+# lives inside this one Postgres (water_w<tag>, water_test_w<tag>, water_e2e…), not in
 # separate containers.
 #
 # Each image is pinned by digest as well as tag (`pnpm check:pins`,

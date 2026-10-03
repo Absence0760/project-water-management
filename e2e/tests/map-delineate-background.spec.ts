@@ -21,7 +21,7 @@ test('a catchment sent to the background: the sheet waits for the worker, then t
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Delineate in the background');
 	await openMap(page, project.id);
-	await page.getByTestId('section-header').getByRole('button', { name: 'Delineate' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Delineate', exact: true }).click();
 	await page.getByTestId('map-enter-coordinates').click();
 	const s = sheet(page);
 	await expect(s).toBeVisible();

@@ -3,6 +3,7 @@
 // catchment rain throughout, so the pooled factor is exactly 2.
 import { putSeries, seedRunnableProject, syntheticRain } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 
 const START = '2021-10-01';
 const DAYS = 120;
@@ -35,8 +36,7 @@ test('a run lists the CHIRPS factors it applied, and Settings can turn the corre
 	await expect(mode).toHaveValue('monthly');
 	await mode.selectOption('none');
 	await expect(page.getByText(/^CHIRPS is used as stored/)).toBeVisible();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(mode).toHaveValue('none');
 
@@ -61,8 +61,7 @@ test('Settings turns the CHIRPS quantile map on with its wet-day threshold, and 
 	await expect(wet).toHaveValue('1');
 	await wet.fill('2.5');
 	await wet.blur();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(on).toBeChecked();
 	await expect(map.getByLabel(/Wet day from/)).toHaveValue('2.5');

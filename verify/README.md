@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 60 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 64 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -197,7 +197,7 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (60
+`test_verify.py` breaks `model.py` one documented rule at a time (64
 mutants). Phase 1's 24: the receiver's room ignored, or shared after the source's bands; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
@@ -205,14 +205,15 @@ accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's 36: a
+the return share; the exchange; no catchment area. Phase 2a's and later 40: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
 full allocation's sources, its tail years and no-demand rows; the floor, the
 per-unit losses, the last schedule window, the priority classes, ranks
 within a class; the canal
-loss, its gross-up and return unit, an off-take's hands-off flow, the dam
+loss, its gross-up and return unit, an off-take's hands-off flow, off-takes
+of one priority sharing in bands at their keeps (engine 1.69.0), the dam
 top-up; junior users, user returns, the seniors' pass; the trigger's stop
 level, the pump's capacity and what it must leave; the survey curve, the
 outlet on a pass-inflow release, dead storage and the room for transfers on
@@ -281,5 +282,8 @@ and written into docs/model.md:
 
 Coverage probes (rules the docs settle, which the random networks rarely
 reach in a way a mutant would show): `trigger-hysteresis` (the trigger rule
-keeps pumping until the stop level, §2.7e) and `junior-user` (a junior user
-leaves the seniors' requirement, §2.7c).
+keeps pumping until the stop level, §2.7e), `junior-user` (a junior user
+leaves the seniors' requirement, §2.7c) and `offtake-keep-bands` (off-takes
+of one priority share the flow in bands at their keeps, so a sibling without
+a hands-off flow doesn't let the others take below theirs, §2.6a, engine
+1.69.0).

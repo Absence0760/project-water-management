@@ -23,9 +23,10 @@ export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; 
 	const lakeK = typeof st.lakeEvapFactor === 'number' && Number.isFinite(st.lakeEvapFactor) && st.lakeEvapFactor >= 0 ? st.lakeEvapFactor : DEFAULT_LAKE_EVAP_FACTOR;
 	const lakeM = st.lakeEvapFactorMonthly;
 	const lakeMonthly = Array.isArray(lakeM) && lakeM.length === 12 && lakeM.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) ? lakeM : null;
-	const feb = typeof st.februaryDays === 'number' ? st.februaryDays : DEFAULT_FEBRUARY_DAYS;
+	// As mergeSettings holds them (engine ≥ 1.69.0): February 28–29 days, a negative A-pan month is 0.
+	const feb = typeof st.februaryDays === 'number' && st.februaryDays >= 28 && st.februaryDays <= 29 ? st.februaryDays : DEFAULT_FEBRUARY_DAYS;
 	// The default A-pan is 0 in every month.
-	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)) : new Array<number>(12).fill(0);
+	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : new Array<number>(12).fill(0);
 	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
 	const day0 = toEpochDay(startDate);
 	const apanSeries = input.series?.evap_apan_mm;
@@ -98,7 +99,7 @@ export function damWorkings(n: NetworkNode, engineVersion?: string): DamWorkings
 export function runEfficiency(input: Pick<ModelInput, 'settings' | 'model'>, n: NetworkNode): number {
 	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
 	const apan = input.settings?.apanMm;
-	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan : []);
+	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan.map((v) => (Number.isFinite(Number(v)) ? Math.max(Number(v), 0) : 0)) : []);
 }
 
 /**

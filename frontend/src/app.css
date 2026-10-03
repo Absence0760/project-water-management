@@ -229,7 +229,11 @@ p a:not(.btn),
 	font-family: var(--font-mono);
 	font-size: 0.9em;
 }
-.visually-hidden {
+/* Hidden on screen, read by screen readers. `.visually-hidden` is the app's
+   name; `.sr-only` is the same rule under the name markup copied from
+   elsewhere tends to use, so neither shows text meant to be hidden. */
+.visually-hidden,
+.sr-only {
 	position: absolute !important;
 	width: 1px;
 	height: 1px;

@@ -115,3 +115,76 @@ export function gaugeRecordsInUse(list: SeriesMeta[], gauges: readonly { id: str
 	}
 	return new Set([...first.values()].map((s) => s.id));
 }
+
+/** What a new series of `kind` named `name` does to the series a run reads (UploadForm's "Creates a new series"). */
+export interface NewSeriesEffect {
+	/**
+	 * `first`: the kind has no series yet. `replaces`: a run will read the new
+	 * one instead of `current`. `keeps`: a run keeps reading `current`.
+	 * `unread`: a run reads no series of the kind either way (a reference
+	 * gauge, a logger beside an observed gauge, a kind only a rain-source
+	 * period reads), so there is nothing to say about which.
+	 */
+	effect: 'first' | 'replaces' | 'keeps' | 'unread';
+	current: SeriesMeta | null;
+	/** A series of the kind whose name differs from `name` only in case or spacing, the likely meant one. */
+	didYouMean: SeriesMeta | null;
+}
+
+/**
+ * Whether a new upload's series takes over from the one a run reads: a run
+ * reads the first of each kind by name (seriesInUse), so "Aa station" beside
+ * "Station 0021" replaces it in runs, and "Zz station" doesn't. Uploads go to
+ * the outlet, so a gauge's records (siteNodeId) don't count. Rain-source
+ * periods aren't known here, so a period-only kind is `unread` unless it is
+ * read anyway (never, today).
+ */
+export function newSeriesEffect(list: readonly SeriesMeta[], kind: string, name: string): NewSeriesEffect {
+	const n = name.trim();
+	const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+	const same = list.filter((s) => s.kind === kind && !s.siteNodeId);
+	const didYouMean = (n && same.find((s) => s.name !== n && key(s.name) === key(n))) || null;
+	if (same.length === 0) return { effect: 'first', current: null, didYouMean };
+	const before = seriesInUse([...list]);
+	const current = same.find((s) => before.has(s.id)) ?? null;
+	const added: SeriesMeta = { id: '\0new', kind, name: n, unit: '', startDate: '2000-01-01', length: 0 };
+	const after = seriesInUse([...list, added]);
+	if (after.has(added.id)) return { effect: 'replaces', current, didYouMean };
+	return current && after.has(current.id) ? { effect: 'keeps', current, didYouMean } : { effect: 'unread', current: null, didYouMean };
+}
+
+/**
+ * A series row's role badge on the Data page, and the words that say why
+ * when the badge alone doesn't (a gauge record: where it is checked and
+ * scored). `why` shows on the page, not in a hover title, so keyboard, touch
+ * and screen-reader users get it too; the kind's own role is its HelpTip
+ * (`series.<kind>`).
+ */
+export function roleBadge(
+	s: SeriesMeta,
+	ctx: {
+		list: readonly SeriesMeta[];
+		inUse: ReadonlySet<string>;
+		gaugeInUse: ReadonlySet<string>;
+		gaugeIds: ReadonlySet<string>;
+		calibrationSite: string | null;
+	}
+): { label: string; unused: boolean; why: string | null } | null {
+	const role = KIND_ROLES[s.kind];
+	if (!role) return null;
+	const unused = !ctx.inUse.has(s.id) && !ctx.gaugeInUse.has(s.id);
+	const kindRead = (k: string) => ctx.list.some((x) => x.kind === k && ctx.inUse.has(x.id));
+	if (s.siteNodeId) {
+		if (!ctx.gaugeInUse.has(s.id))
+			return ctx.gaugeIds.has(s.siteNodeId)
+				? { label: 'Not used (another record of this kind is at this gauge)', unused, why: null }
+				: { label: 'Not used: its gauge is no longer in the model', unused, why: null };
+		return s.siteNodeId === ctx.calibrationSite
+			? { label: 'Gauge record (calibration site)', unused, why: 'Checked against the simulated flow at its gauge, and calibration scores it there; the EWR test uses the outlet’s records.' }
+			: { label: 'Gauge record (checks only)', unused, why: 'Checked against the simulated flow at its gauge; calibration scores it only if Settings → Calibration record picks this gauge.' };
+	}
+	if (ctx.inUse.has(s.id) || s.kind === 'flow_reference_m3s') return { label: role.role, unused, why: null };
+	if (s.kind === 'flow_logger_m3s' && !kindRead(s.kind)) return { label: 'Calibration if chosen in settings', unused, why: null };
+	if (isPeriodOnly(s.kind) && !kindRead(s.kind)) return { label: 'Not used: no rain-source period names it', unused, why: null };
+	return { label: 'Not used (another series of this kind is)', unused, why: null };
+}
