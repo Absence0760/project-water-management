@@ -3018,7 +3018,7 @@ only propose.
   row's `name` and the delineation accept's `name` refuse a line break, tab
   or other control character with `400` (`cannot contain line breaks or
   control characters`); the names read from a GeoJSON file and from the
-  river network are made one line instead (the engine's `cleanName`), so a
+  river network are made one line instead (the engine's `oneLineName`), so a
   file is never refused for them.
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,

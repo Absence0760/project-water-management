@@ -12,7 +12,7 @@
 	and e2e drives the form, never the canvas.
 -->
 <script lang="ts">
-	import { cleanName } from '@water-management/engine';
+	import { oneLineName } from '@water-management/engine';
 	import { api, type MapFeature, type MapFeatureKind, type MapNodeArea } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '$lib/api/types';
@@ -69,7 +69,7 @@
 		}
 		placing = true;
 		try {
-			const f = await api.map.create(projectId, { kind: pointKind, name: cleanName(pointName), lat: lat.value, lon: lon.value, nodeId: pointNode || null });
+			const f = await api.map.create(projectId, { kind: pointKind, name: oneLineName(pointName), lat: lat.value, lon: lon.value, nodeId: pointNode || null });
 			pointName = '';
 			latText = '';
 			lonText = '';

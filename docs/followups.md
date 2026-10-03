@@ -207,7 +207,7 @@ one line since migration 189 (api.md § Model data). Left, found on the way:
       feature routes' `Name` (create, rename, split, a reviewed import row)
       and the delineation accept refuse them; the GeoJSON reader, the river
       loader and a reach added to a project clean them (`featureNameOf`);
-      the map's sheets send `cleanName`d names; migration 192 cleans stored
+      the map's sheets send `oneLineName`d names; migration 192 cleans stored
       feature and reach names and adds `map_feature_name_one_line` and
       `river_reference_name_one_line` (`geo/featureNames.db.test.ts`). On
       the way: Divide named a unit's own sub-catchment parcel
