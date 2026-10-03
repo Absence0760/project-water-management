@@ -10,7 +10,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -53,7 +53,7 @@ const text = (max: number) => z.string().trim().max(max).refine(noNul, 'cannot c
 const isoDate = z
 	.string()
 	.regex(/^\d{4}-\d{2}-\d{2}$/, 'use YYYY-MM-DD')
-	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
+	.refine((s) => isIsoDate(s), 'not a date');
 const volume = z.number().finite().min(0).lt(1e12);
 
 /**

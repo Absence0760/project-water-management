@@ -127,6 +127,16 @@ describe('settings.outcomes', () => {
 		}
 		const site = (siteNodeId: string | null) => ({ settings: { outcomes: { siteNodeId } } });
 
+		it('refuses a rule table for "the outlet" beside one keyed by the outlet node, and keeps what was stored (engine ≥ 1.69.0)', async () => {
+			const u = await signUp('OutOutletTwice');
+			const c = await twoGauges(u);
+			const twice = await u.call('PATCH', `/projects/${c.projectId}`, { settings: { ewrRules: [c.table(null), c.table(c.outlet.id)] } });
+			expect(twice.status).toBe(400);
+			expect(JSON.stringify(twice.body)).toContain('two Reserve rule tables for the outlet');
+			// Positive control: the outlet keyed by its own id alone saves.
+			expect((await u.call('PATCH', `/projects/${c.projectId}`, { settings: { ewrRules: [c.table(c.outlet.id), c.table(c.upper.id)] } })).status).toBe(200);
+		});
+
 		it('an editor picks a gauge with a rule table; a viewer reads it but cannot change it; a non-member sees nothing', async () => {
 			const owner = await signUp('SiteOwner');
 			const editor = await signUp('SiteEditor');

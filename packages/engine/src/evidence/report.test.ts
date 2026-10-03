@@ -816,8 +816,9 @@ describe('errata', () => {
 		expect(ids16).toContain('ER-3');
 		expect(new Set(ids16).size).toBe(ids16.length);
 		// The fixture's runs are engine 1.30.0: inside ER-10 (engine-audit.md V1, 1.34.0), ER-11 (N6, 0.16.0 until
-		// 1.36.0) and ER-12 (a noise demand switching on a dam-target borehole, 1.8.0 until 1.57.0), and no other run erratum.
-		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run').map((e) => e.id)).toEqual(['ER-10', 'ER-11', 'ER-12']);
+		// 1.36.0), ER-12 (a noise demand switching on a dam-target borehole, 1.8.0 until 1.57.0) and ER-13 … ER-29
+		// (the engine end-to-end tests' findings, each from 1.30.0 or earlier until 1.69.0), and no other run erratum.
+		expect(evidenceReport(i).verification.errata.filter((e) => e.keyedOn === 'run').map((e) => e.id)).toEqual(Array.from({ length: 20 }, (_, k) => `ER-${k + 10}`));
 		// Runs by the current engine carry none.
 		const now = evidenceReport(input({ baseline: { ...i.baseline, engineVersion: ENGINE_VERSION }, application: { ...i.application!, engineVersion: ENGINE_VERSION } }));
 		expect(now.verification.errata.filter((e) => e.keyedOn === 'run')).toEqual([]);

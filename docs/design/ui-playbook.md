@@ -411,6 +411,27 @@ section it belongs to, with the example that taught it.
   `workspace-phone.spec.ts`). A popover anchored to the right edge (the
   rain pill's list) must open from the left once its trigger starts the
   row, or it runs off the screen.
+- **A map's tools go on the map; the header keeps the page's actions.**
+  The Map's header carried Measure, Draw a shape, Place a point, Delineate,
+  Trace a dam, Upload GeoJSON and Add data as seven identical buttons that
+  wrapped to two rows at 1280, with up to four full-width notices stacked
+  between them and the map, and a side column stacking the picked card, the
+  list, the layers and the checks so each got a sliver (2026-10-02). Now the
+  tools are a column on the map's left edge (an icon over a short word,
+  pressed while on, a strip over the map naming the tool that's on), Layers
+  and Key are panels over the map's corners, a one-off result is a toast
+  over the page's foot, the setup nags one header pill (the Summary's Setup
+  pill), and the side column one panel at a time under tabs
+  (`map/MapTab.svelte`, `map-layout.spec.ts`). The map starts right under
+  the header and keeps the window. **A panel open by default over a map
+  covers what's under it**: the Key, open on every wide map, sat on a gauge
+  a spec had to click; it opens by default only while its colours need
+  reading (a run's results), and the corners' boxes pass clicks through
+  between their controls (`pointer-events: none` on the box).
+- **A popover's controls aren't in the DOM while it's closed.** The Map's
+  Getting started pill kept its steps' buttons in a `hidden` box, and a check
+  that the header's controls share one row (`locator('button, a.btn')`) read
+  them at top 0. Render the content only while open (`MapSetupPill.svelte`).
 - **A title column sized by a fixed basis squeezes its text.** The section
   header's title took `flex: 1 1 16rem`, so whenever the controls fitted
   beside it a long context line wrapped to 3–4 short lines (River & reserve

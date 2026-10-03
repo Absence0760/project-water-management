@@ -71,10 +71,12 @@ function cropsStep(m: ProjectModel): ChecklistStep {
 	};
 }
 
-function seriesStep(series: SeriesMeta[] | null): ChecklistStep {
+function seriesStep(series: SeriesMeta[] | null, settings: ProjectSettings): ChecklistStep {
 	const base = { id: 'series', tab: 'series', title: 'Rainfall & flow data' } as const;
 	if (series === null) return { ...base, status: 'unknown', detail: 'Checking time series…' };
-	const rain = series.filter((x) => RAIN.includes(x.kind));
+	// A rain-source period's series or fallback is the catchment rain over its span (engine ≥ 1.69.0, hasRainInput).
+	const periodKinds = (settings.rainSource ?? []).flatMap((p) => [p.series, ...(p.fallback ? [p.fallback.series] : [])]);
+	const rain = series.filter((x) => RAIN.includes(x.kind) || (periodKinds as string[]).includes(x.kind));
 	// The outlet's record: a run's calibration statistics (NSE, PBIAS) read it; one attached to a gauge inside the network (084_gauge_records) is checked there, and fitted only at a calibration site.
 	const observed = series.some((x) => OBSERVED.includes(x.kind) && !x.siteNodeId);
 	if (!rain.length)
@@ -114,7 +116,7 @@ export function checklist(input: ChecklistInput): ChecklistStep[] {
 	return [
 		networkStep(input.model, input.settings),
 		cropsStep(input.model),
-		seriesStep(input.series),
+		seriesStep(input.series, input.settings),
 		settingsStep(input.settings),
 		runsStep(input.runs, input.updatedAt)
 	];

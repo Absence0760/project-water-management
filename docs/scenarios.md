@@ -414,7 +414,9 @@ requested volume in a full-allocation background, is one op.
   records one; the form's **Set a registered volume** does.
 
 **Which series scale.** The rain drivers, `rain_catchment_mm`,
-`rain_chirps_mm`, `rain_forecast_mm`, and the daily A-pan evaporation
+`rain_chirps_mm`, `rain_forecast_mm`, a rain-source period's
+`rain_catchment_alt_mm` and the reanalysis `rain_reanalysis_mm` (engine ≥
+1.69.0, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), and the daily A-pan evaporation
 `evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
 - The monthly A-pan means are the setting `apanMm` (and, for GR4J,
   `panCoefficient` or a monthly `pe` row), changed with `settings.set`. On a

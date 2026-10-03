@@ -51,22 +51,33 @@ pnpm -C e2e e2e:list      # list the tests without running them
 
 ### Several checkouts at once
 
-Each checkout of the repo gets its own **slot**, and the slot picks the ports
-and the database (`support/env.ts`), so two sessions can run `pnpm test:e2e`
+Each checkout of the repo gets its own **slot**, which picks the ports, and
+its own database (`support/env.ts`), so two sessions can run `pnpm test:e2e`
 in two worktrees at the same time:
 
 | Checkout | Slot | API | Site | Database |
 | --- | --- | --- | --- | --- |
 | Main checkout (`.git` is a directory), and CI | 0 | :3101 | :7801 | `water_e2e` |
-| A git worktree (`.git` is a file) | 1–98, from a hash of its path | :3101 + slot | :7801 + slot | `water_e2e_<slot>` |
+| A git worktree (`.git` is a file) | 1–98, from the slot registry | :3101 + slot | :7801 + slot | `water_e2e_w<tag>_<slot>` |
+
+A worktree's slot comes from a registry in the repo's shared git directory,
+the main checkout's `.git/water-e2e-slots/` (`support/slots.ts`): one file per
+held slot naming the worktree that holds it. A worktree keeps the slot it
+first took, no two live worktrees hold the same one (it is taken under a lock),
+and a removed worktree's slot is taken back by the next new one. The search
+starts at a hash of the path; when the registry can't be found, that hash is
+the slot. `<tag>` is 16 hex digits of a SHA-256 of the checkout's path, so a
+database is never shared between checkouts, whatever their slots
+([docs/testing.md § Several checkouts at once](../docs/testing.md#several-checkouts-at-once),
+which also says how to drop the `water_e2e_<n>` databases of the old scheme).
 
 `E2E_SLOT=<0–98> pnpm test:e2e` picks one by hand. Each slot also builds
 into its own folder (`frontend/build-e2e/` for slot 0, `frontend/build-e2e-<slot>/`
 otherwise, `env.ts` `buildDirsFor`), so parallel runs in one checkout on
-different slots never replace the site another is serving. If two checkouts ever land on the same
-slot, the second run stops at start-up on a port that is already in use,
-before it touches the database: Playwright starts its web servers before the
-global setup. Set `E2E_SLOT` in one of them. The two runs still share one
+different slots never replace the site another is serving. If `E2E_SLOT` puts
+two checkouts on the same slot, the second run stops at start-up on a port
+that is already in use (and their databases differ anyway): Playwright starts
+its web servers before the global setup. The two runs still share one
 docker Postgres, so on a loaded laptop both run slower.
 
 Locally it runs **6 workers** (`playwright.config.ts`; `E2E_WORKERS=n` for a

@@ -300,7 +300,11 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	const er = new Rng(seed ^ 0x9b05688c);
 	if (er.bool(0.3)) {
 		const gauges = nodes.filter((nd) => nd.kind === 'gauge').map((nd) => nd.id);
-		const sites = [null, ...gauges, ...(er.bool(0.1) ? ['n1', 'missing'] : [])].filter(() => er.bool(0.7));
+		const drawn = [null, ...gauges, ...(er.bool(0.1) ? ['n1', 'missing'] : [])].filter(() => er.bool(0.7));
+		// A gauge at the outlet keyed by its own id is the outlet's table (engine ≥ 1.69.0): beside one keyed null,
+		// neither is used. Keep that duplicate on one seed in ten (no draw, so the stream is unchanged).
+		const outletId = nodes.find((nd) => nd.downstreamNodeId === null)?.id;
+		const sites = drawn.includes(null) && seed % 10 !== 0 ? drawn.filter((id) => id !== outletId) : drawn;
 		settings.ewrRules = sites.map((siteNodeId) => {
 			const points = er.bool(0.7) ? [...DEFAULT_ASSURANCE_POINTS] : [...new Set(Array.from({ length: er.int(2, 12) }, () => er.int(1, 100)))].sort((a, b) => a - b);
 			const size = er.pick([0.001, 1, 100, 1e5]);

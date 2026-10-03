@@ -156,7 +156,10 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  * 4. supplemental units, then emergency units while triggered, for what is left.
  * Each unit pumps at most `unitRoom`. Writes each unit's volume to `pumped`
  * and adds it to `used`. `avail` is what the dam holds and receives today
- * before irrigation, `dead` its dead storage, `cap` its capacity (0 for a user).
+ * before irrigation, `dead` its dead storage, `cap` its capacity today (0 for a user).
+ * On a day with no capacity (a dam not in service yet, or silted full) a
+ * dam-target unit pumps straight to the crop in its mode's step, as on a node
+ * without a dam.
  * `river` is what a farm's river pump can take today (WP-3.8, ./supply.ts
  * riverRoom; 0 = no river pump) and `rule` its supply rule: the river is part
  * of the surface in step 3, before the dam under river first and trigger
@@ -188,6 +191,9 @@ export function groundwaterDay(
 	dayD = D
 ): [number, number, number, number, number] {
 	const { units } = b;
+	// A unit with no dam today (capacity 0: not in service yet, or silted full) has none to pump into, so a
+	// dam-target unit pumps straight to the crop or user that day, as on a node without a dam (§2.7d, §2.7g).
+	const noDam = !(cap > 0);
 	let dep = 0;
 	let gLeft = gRoom;
 	const take = (k: number, v: number) => {
@@ -199,7 +205,7 @@ export function groundwaterDay(
 	let g = 0;
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;
-		if (u.toDam || u.mode !== 1) continue;
+		if ((u.toDam && !noDam) || u.mode !== 1) continue;
 		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - g, gLeft));
 		take(k, v);
 		g += v;
@@ -213,7 +219,7 @@ export function groundwaterDay(
 	let topped = false;
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;
-		if (!u.toDam) continue;
+		if (!u.toDam || noDam) continue;
 		const head = cap - (avail + gd);
 		const want = u.mode === 1 ? (drawn ? head : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? head : 0) : rem - (avail + gd - dead);
 		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), want, head, gLeft));
@@ -232,7 +238,7 @@ export function groundwaterDay(
 	for (const pass of [0, 2] as const) {
 		for (let k = 0; k < units.length; k++) {
 			const u = units[k]!;
-			if (u.toDam || u.mode !== pass || (pass === 2 && !(qPrev < u.triggerM3))) continue;
+			if ((u.toDam && !noDam) || u.mode !== pass || (pass === 2 && !(qPrev < u.triggerM3))) continue;
 			const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - Gs - g - Gr, gLeft));
 			take(k, v);
 			g += v;

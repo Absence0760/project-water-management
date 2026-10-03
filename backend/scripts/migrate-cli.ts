@@ -1,5 +1,5 @@
 // `pnpm dev:db:migrate`: apply pending migrations (scripts/migrate.ts) to this
-// checkout's dev database (`water`, or a worktree's water_w<n>, created on
+// checkout's dev database (`water`, or a worktree's water_w<tag>, created on
 // first use; src/config/devEnv.ts). A file of its own so migrate.ts, which the
 // migrate Lambda bundles, never reaches the dev env loader or dotenv.
 //   MIGRATION_DATABASE_URL=… tsx scripts/migrate-cli.ts   — any other database

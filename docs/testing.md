@@ -20,6 +20,38 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:verify` | the independent cross-check of the engine (verify/README.md): a Python model written from the docs against `runModel` on the example catchments, the probes, 12 random and 12 dense networks (every phase-2a feature in most), and its 60-mutant self-test; Python 3.14, no DB (CI's `verify` job runs 200 of each with `VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200`). Run it when you change `packages/engine` or `verify/`, or the model's docs | ~2–3 min |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
+## Several checkouts at once
+
+Every checkout of the repo gets its own databases, so sessions in different
+git worktrees can run DB tests and e2e at the same time without touching each
+other's schema:
+
+| Checkout | DB tests | Dev | e2e ports | e2e database |
+| --- | --- | --- | --- | --- |
+| Main checkout (`.git` is a directory), and CI | `water_test` | `water` | :3101, :7801 | `water_e2e` |
+| A git worktree (`.git` is a file) | `water_test_w<tag>` | `water_w<tag>` | :3101 + slot, :7801 + slot | `water_e2e_w<tag>_<slot>` |
+
+`<tag>` is 16 hex digits of a SHA-256 of the checkout's real path
+(`backend/src/config/checkout.ts`; the e2e workspace computes the same in
+`e2e/support/env.ts`), so two paths sharing a database is negligible (64
+bits). The e2e slot (1–98) comes from a registry in the repo's shared git
+directory, `.git/water-e2e-slots/` of the main checkout
+(`e2e/support/slots.ts`): a worktree keeps the slot it first took, no two live
+worktrees hold the same one, and a removed worktree's slot is taken back.
+`E2E_SLOT` still overrides it ([e2e/README.md](../e2e/README.md#several-checkouts-at-once)).
+
+Until 2026-10-03 every name came from a hash of the path into 98 slots
+(`water_test_w<1–98>`, `water_w<1–98>`, `water_e2e_<1–98>`), and three
+worktrees once shared `water_test_w3`: each run dropped the others' schema
+mid-run (missing tables, 500s on sign-up). Those databases are no longer used
+by a checkout on the new names. Once no worktree still on an older main is
+running tests, drop them in one go (list them first by leaving out `\gexec`
+and the `format`):
+
+```bash
+echo "SELECT format('DROP DATABASE %I WITH (FORCE)', datname) FROM pg_database WHERE datname ~ '^water_(w|test_w|e2e_)[0-9]{1,2}(_migrate)?\$' \gexec" | docker exec -i water-management-db psql -U water -d water
+```
+
 ## Performance budgets
 
 The perf targets assert wall-clock ceilings, so they are **not** in
@@ -124,6 +156,21 @@ A new test of this kind follows the same rule and goes in the table; the
 MinIO check is `backend/src/__tests__/minio.ts` (`minioUp`).
 The only skips CI allows are for the gitignored client data (`data/`, the
 source workbooks), which CI never has (CLAUDE.md rule 10).
+
+## Engine end-to-end tests
+
+`packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per
+area (`demand`, `rain`, `network`, `balance`, `ewr`, `outputs`, `calibration`; then `cross` for
+features together, `edge` for long, tiny, huge and boundary-date runs, `deep` for the off-takes
+and allocations, `open` for questions the first round left):
+small invented catchments run through `runModel` (or `calibrate`, the outlook,
+a resumed run), checked against values worked by hand, or by a small
+re-derivation inside the test, from docs/model.md, never against what the
+engine returned before. The `*.differential.e2e.test.ts` files replay the
+documented formulas over a few hundred random networks. `*.regressions.e2e.test.ts`
+pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29). They run in
+`pnpm test` (a few seconds in all); run one area with
+`pnpm -C packages/engine exec vitest run src/e2e/<area>`.
 
 ## Why the slow ones are shaped the way they are
 

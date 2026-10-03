@@ -13,6 +13,7 @@
 // settings unrelated to this table, the other is model-private and applies a
 // threshold that is a natural-flow detail, not part of gap-fill itself).
 import {
+	hasRainInput,
 	chirpsFactorOn,
 	exclusionRanges,
 	fromEpochDay,
@@ -166,7 +167,8 @@ type DerivedByDate = Map<string, Omit<PreviewDerivedCell, 'excluded' | 'exclusio
 function buildDerivedByDate(list: readonly SeriesMeta[], valuesById: Readonly<Record<string, Daily>>, settings: ProjectSettings): DerivedByDate {
 	const out: DerivedByDate = new Map();
 	const series = firstByKind(list, valuesById);
-	if (!series.rain_catchment_mm && !series.rain_chirps_mm && !series.rain_forecast_mm) return out;
+	// A rain-source period's series counts as rain too (engine ≥ 1.69.0, hasRainInput).
+	if (!hasRainInput(series, settings.rainSource)) return out;
 
 	let prepared: ReturnType<typeof prepareRun>;
 	try {

@@ -2561,62 +2561,105 @@ core tab: owners, editors and viewers see it (it becomes a results view with
 A1); viewers get no edit tools. The Network's own picture (its "Catchment
 map" card) stays the schematic; this is the geography.
 
-- **Rain from the boundary** (editors; issue #326 B-rain,
-  `MapRainLink.svelte`): a slim line under the header while the map has a
-  boundary and no CHIRPS feed reads it ("No rain feed reads this catchment
-  boundary yet. **Set up the rain feed from the boundary**"), or one read it
-  before it was redrawn ("**Propose its cells again**"). The link opens
-  Settings → Data feeds with the proposal showing. Its wrapper's
-  `data-state` (`loading`, `current`, `changed`, `none`, `error`) says when
-  the feed list is in.
+- **Getting started** (editors; `MapSetupPill.svelte`, `mapSetup.ts`):
+  the map's setup steps, which until 2026-10-02 stacked as full-width lines
+  above the map, are one pill in the section header beside the rain pill,
+  "Getting started · 1 of 2", following the Summary's Setup pill
+  (`overview/SetupPill.svelte`): a button with `aria-expanded` whose popover
+  opens over the page (rightwards from the pill, never over the sidebar), so
+  opening it never moves the map; Escape closes it and gives the pill the
+  focus, a click outside closes it. Its steps: **Catchment boundary** ("No
+  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
+  (WGS84)." with **Draw the boundary** and **Upload a GeoJSON file**) and
+  **Rain from the boundary** (issue #326 B-rain: "No rain feed reads this
+  catchment boundary yet." with **Set up the rain feed from the boundary**,
+  or "The boundary changed since the rain feed took its cells." with
+  **Propose its cells again**; both open Settings → Data feeds with the
+  proposal showing). `MapRainLink.svelte` reads the feed list (its hidden
+  marker's `data-state`, `loading`, `current`, `changed`, `none`, `error`,
+  says when it is in). The pill goes once both are done, and doesn't show
+  while the feeds are still read or failed to load. Viewers don't get it (the
+  header's context line says "no boundary").
 - **Section header** (`fillHeader`; the header's "Map" is the page's only
   title): the context line "23 features · boundary 210.22 km² · 0 of 8 unit
   areas from the map" (`mapList.ts` `headerLine`; "Nothing on the map yet"
-  when empty, "no boundary" without one), and the actions **Measure**
-  (anyone, while the map draws; below), and for editors **Draw a shape**
-  and **Place a point** (each puts the map in a drawing mode, below; pressed
-  while it is on), **Delineate** (with a DEM on the server; its bar chooses
-  one catchment or sub-catchments, one per click; pressed in either; below),
-  **Trace
-  a dam** (with water occurrence data on the server; below) and
-  **Upload GeoJSON** (a link that opens its sheet); they fit one row at
-  1440 (issue #374: **Show everything** moved onto the map's bottom-left
-  corner, framing every feature, and **Download GeoJSON** beside the
-  Features list's **Every feature**: anyone, with features, the features as
-  a `.geojson` file named after the project and the day, built from the
-  list; the notice says "Downloaded 23 features as
-  example-sandspruit-map-2026-10-01.geojson."; [maps.md §
-  Download](./maps.md#download-geojson)). Slim
-  notices under it: what an upload, a placed point or a saved drawing did
-  (Dismiss), the no-basemap note (owners and editors only), and "No
-  catchment boundary yet. Draw it on the map, or upload it as a GeoJSON file
-  (WGS84)." with **Draw the boundary** when there are features but no
-  boundary.
+  when empty, "no boundary" without one), the Getting started pill, and the
+  page's actions only, for editors: **Upload GeoJSON** (a link that opens its
+  sheet), **Start from the map** while the model is empty (below) and
+  **Divide the model** once it has nodes and the server a DEM (below; it sat
+  at the end of the key row under the map until 2026-10-02); they fit one row
+  at 1440.
+- **Tools on the map** (`MapToolPalette.svelte`; until 2026-10-02 identical
+  buttons in the header): a column on the map's left edge, each tool an icon
+  drawn in the component over a short word, its accessible name the tool's
+  full name (which contains the word): **Measure** (anyone, while the map
+  draws; below), and for editors **Draw** (Draw a shape) and **Point** (Place
+  a point; each puts the map in a drawing mode, below), **Delineate** (with a
+  DEM on the server; its bar chooses one catchment or sub-catchments, one
+  per click; pressed in either; below) and **Trace** (Trace a dam, with water
+  occurrence data on the server; below). Pressed (`aria-pressed`) while on;
+  a group, so Tab goes through them in order after the header and before the
+  map; each at least 46 × 62 px. Viewers get Measure alone. While a tool is
+  on, a strip over the map's top middle names it and how to leave it
+  (`mapTools.ts` `toolStrip`: "Delineating · Esc to stop", "Drawing a shape
+  · Esc to cancel", "Editing “Upper farm” · Esc to cancel"; hidden from
+  assistive tech, since the bar's heading says the same), with the channels'
+  note or the busy line under it. The picked feature's name over the map's
+  top-left corner sits right of the column (CatchmentMap's
+  `--map-inset-left`). Over the map's corners too: **Layers** under the zoom
+  buttons (below), **Show everything** (issue #374: frames every feature)
+  and **Key** at the bottom left (below), and for owners and editors without
+  a basemap configured a small "No basemap configured (docs/maps.md)" under
+  Layers (until 2026-10-02 a full-width line above the map: it is an
+  operator's matter, and a deployed site has a basemap).
+- **What an action did** (an upload, a placed point, a saved drawing, a
+  split, a download, an area into the model): a toast over the page's foot,
+  centred in the content beside the sidebar and above the save bar while it
+  shows (`--dock-h`), its colours reversed, with **Dismiss**; it stays until
+  Dismiss, the next one or a tool starting, so it never pushes the map down.
+  The live region round it is always there, so each is announced. The
+  waiting proposals' lines (a delineated catchment, a proposed model or
+  division, each with **Review it**) stay as slim lines under the header:
+  they wait for a decision.
 - **Layout.** The map on the left and a side column on the right
   (`clamp(18rem, 30%, 24rem)`) once the page's container
   (`container: map-page`) is 56rem wide (784 px at the 14 px root);
-  narrower, everything stacks: the map, the card, the list. With the side
+  narrower, everything stacks: the map, then the column. With the side
   column and a window at least 620 px high the layout is a dashboard: exactly
   the height left below its measured top, less the 1rem gutter and the save
-  bar (`--dock-h`); the map fills its card, the list scrolls inside its own,
-  and the page doesn't scroll. In the side column the picked feature's card
-  (at most 55 %, at least 6rem while a feature is picked) and the layers box
-  (at most 35 %) each scroll in their box and give way, in proportion to
-  their size, before the list goes below 8rem; the checks line keeps its height (`map-layers.spec.ts` pins it at
-  1440×960 and 1280×800 with a feature and a reach picked; until
-  2026-10-02 the card held its full height and the column ran past a
-  1280×800 window). Without WebGL the map says it can't be drawn
-  and the list does everything; when the tiles can't be read the map drops
-  them and says so.
+  bar (`--dock-h`); the map fills its card and starts right under the header
+  (nothing stacks above it but a waiting proposal's line), and the page
+  doesn't scroll. The side column shows **one panel at a time** under three
+  tabs (until 2026-10-02 the picked feature's card, the list, the layers and
+  the checks line were stacked, each squeezing the others): **Details** (the
+  picked feature's card), **Features (n)** (the list) and **Checks** (with
+  the warnings' count); a tablist with the arrow keys, Home and End. A new
+  pick (on the map, in the list, from a check, a link, Back) shows Details;
+  the pick going (a delete) shows the list again; with nothing picked the
+  column opens on Features. The panel fills the column and scrolls in its
+  box (the list in its own). With nothing on the map there are no tabs, only
+  the empty state. While Sub-catchments is on, its click panel takes the
+  column over. Without WebGL the map says it can't be drawn and the list does
+  everything; when the tiles can't be read the map drops them and says so.
 - **Map** (`CatchmentMap.svelte`, its own chunk, then `maplibre.ts`): the
   boundary (long dashes), parcels, dams, rivers, other features (dotted),
   points as 28 px buttons told apart by shape; clicking a feature picks it.
-  Under it one key line grouped **Areas** (catchment boundary, parcel, dam,
-  other), **Lines** (river) and **Points** (gauge, dam, other), each swatch
-  drawn in the colour `mapStyle.ts` `overlayColours(dark)` gives the map
-  (`mapList.ts` `keyGroups`; no colour is written in the tab), following the
-  app's theme (`appTheme.ts`: `data-theme` and the OS preference, live).
-- **Results on the map** (#326 A1, the key row under the map,
+  The **Key** (a panel over the map's bottom-left corner, from its **Key**
+  button, "Key · Days short" while a measure shows; a row under the map until
+  2026-10-02) groups **Areas** (catchment boundary, parcel, dam, other),
+  **Lines** (river) and **Points** (gauge, dam, other), listing only the
+  entries a feature on the map stands for (`mapList.ts` `presentKey`; a
+  layer's own entry while the layer is on), each swatch drawn in the colour
+  `mapStyle.ts` `overlayColours(dark)` gives the map (`mapList.ts`
+  `keyGroups`; no colour is written in the tab), following the app's theme
+  (`appTheme.ts`: `data-theme` and the OS preference, live). It opens by
+  default while the areas show a run's results on a map beside the side
+  column (their colours need the legend), and starts folded otherwise (the
+  kinds' colours, a phone), the default taken once when the runs are in; its
+  box clears the tools above it and scrolls in itself (a focusable region,
+  "Map key"); Escape closes it and gives its button the focus. On a narrow map
+  opening Key folds Layers and the other way round.
+- **Results on the map** (#326 A1, at the top of the Key panel,
   `MapKeyRow.svelte`, state in `mapResults.svelte.ts`): **Colour areas by**
   (`measure=`: Days short, the default and so absent from the URL;
   `curtailment`, `dam-level`, `allocation`; `kind` is the off state, the kind
@@ -2638,7 +2681,7 @@ map" card) stays the schematic; this is the geography.
   is never the only way to read a colour. Loading and a failed load (with
   Retry) show beside the pickers; dam level loads the run's dam levels as the
   Network does. The page fits 1440×960 with thirty units and the legend.
-- **The picked feature's card** (top of the side column): its name, Kind,
+- **The picked feature's card** (the side column's Details): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
@@ -2724,10 +2767,10 @@ map" card) stays the schematic; this is the geography.
   later proposals; picking another outlet drops the outlet's. Divide's
   sheet does the same.
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
-  #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
-  Start from the map](./maps.md#start-from-the-map)). **Divide the model**
-  at the end of the key row's first line under the map (an open division
-  is reviewed from the line over the map) opens a side
+  #326 C3's follow-up, `DivideSheet.svelte`, its own chunk, `divideFlow.ts`,
+  [maps.md § Start from the map](./maps.md#start-from-the-map)). The
+  header's **Divide the model** (an open division is reviewed from the line
+  over the map) opens a side
   sheet (`divide=1`, "Divide the model from the map"), read from the
   server: **the points**: each dam, other point and gauge with a select
   (Not in the division / the nodes its kind may stand for / A new gauge
@@ -2752,7 +2795,7 @@ map" card) stays the schematic; this is the geography.
 - **Delineate** (editors, only when the server has a DEM: `GET
   …/map/delineation` says `available`; issue #326 B-delineate,
   `DelineateSheet.svelte`, `delineation.ts`, [maps.md §
-  Delineation](./maps.md#delineation)). The header's **Delineate** puts the
+  Delineation](./maps.md#delineation)). The map's **Delineate** tool puts the
   map in the point-placing mode with the draw bar headed "Delineating a
   catchment" ("Click the river at the catchment’s outlet, or just below a
   dam wall."); **Delineate…** (or the bar's **Enter coordinates**) opens
@@ -2927,7 +2970,12 @@ map" card) stays the schematic; this is the geography.
   the map or in the bar) ends it at once: a measurement has nothing to lose.
   Drawing, placing or editing ends a measurement; Measure is off while a
   drawing is open. Not in the URL.
-- **Layers** (#326 A6, a small box under the list): **Quaternary
+- **Layers** (#326 A6; a panel over the map's right edge from the
+  **Layers** button under the zoom buttons, which counts the layers on,
+  "Layers (2 on)"; a box in the side column until 2026-10-02; its open state
+  isn't in the URL, the layers are; it stays open through picks, a reach
+  clicked on the map opens it, Escape closes it and gives its button the
+  focus; it scrolls in its own box, inside the map): **Quaternary
   catchments**, a checkbox in the URL (`layers=quaternaries`; a history
   entry, so Back undoes it and a reload keeps it) with a dashed swatch in the
   layer's colour. On, the map draws the loaded quaternaries around the
@@ -2962,7 +3010,7 @@ map" card) stays the schematic; this is the geography.
   map as a river, from the river network.") or "On the map as a river." and
   **Show it**. The key's Lines gain "river network" while it is on
   ([maps.md § River network](./maps.md#river-network)).
-- **Features** (under the card): every feature grouped by kind, parcels
+- **Features** (the side column's Features tab): every feature grouped by kind, parcels
   first, then dams, gauges, rivers, other and the boundary, each group
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
   button (`aria-pressed`) with the name and, under it, the size or
@@ -2970,14 +3018,15 @@ map" card) stays the schematic; this is the geography.
   a parcel, its unit's area source ("area typed", "area from the map",
   "area from an earlier outline" when the parcel changed since). A
   pick far down is kept in view inside the list, never by scrolling the page;
-  stacked on a phone, a pick from the list brings the card into view. The
-  head's **Every feature** opens the grid.
-- **Checks** (A4, under the list, viewers too): one line, never growing, with
-  the count ("1 warning from the map’s checks") and **Show the checks**, or
-  "The map’s checks found no problems."; the warnings themselves open in a
-  side sheet, **Map checks** (`checks=1`), each with buttons that pick its
-  features and close the sheet ([maps.md § Checks](./maps.md#checks)). The
-  line keeps a thirty-unit catchment's list its room.
+  a pick from the list shows its Details (stacked on a phone, brought into
+  view). The head's **Download GeoJSON** and **Every feature** (the grid).
+- **Checks** (A4, the side column's Checks tab, viewers too; the tab counts
+  the warnings, "Checks (1 warning)"): the count ("1 warning from the map’s
+  checks", or "The map’s checks found no problems.") and the warnings, each
+  with buttons that pick its features and show their Details ([maps.md §
+  Checks](./maps.md#checks)). Until 2026-10-02 a line in the column with
+  **Show the checks** opening a side sheet, **Map checks** (`checks=1`); that
+  link now opens the Checks tab and the parameter goes in place.
 - **Every feature** (`grid=map-features`, a full modal drawn by the tab:
   `TAB_GRIDS` in `lib/workspace/overlays.ts`, since map features save one by
   one rather than through the model's save row): a table in the list's order
@@ -3040,6 +3089,15 @@ map" card) stays the schematic; this is the geography.
   points) and one deterministic mouse-drawn polygon read back from the list,
   with axe light and dark while drawing; the helpers in
   `lib/components/map/draw/*.test.ts`.
+- The layout is tested in `e2e/tests/map-layout.spec.ts`: the tools in the
+  map's box, in Tab order, pressed, the strip, the header's one row with no
+  tools; the toast leaving the map where it is; the Getting started pill
+  (over the page, Escape, Draw the boundary); the tabs (a pick, the keys,
+  Back, the old `checks=1`); Layers and Key inside the map, clear of the
+  tools, Escape; a viewer; thirty units (the map under the header, the panel
+  fits the column) and the phone; axe light and dark, wide and phone, with
+  the panels open and a tool on. `mapTools.test.ts`, `mapSetup.test.ts` and
+  `mapList.test.ts` (`presentKey`) cover the helpers.
 - Tested in `e2e/tests/catchment-map.spec.ts`: the golden path, the URL
   picks and Back, a viewer, thirty units (fits 1440×960, the list scrolls in
   its card, a linked pick in view, the phone stacks with no sideways
@@ -3051,7 +3109,7 @@ map" card) stays the schematic; this is the geography.
   Results: `e2e/tests/map-results.spec.ts` (the seeded Sandspruit as owner
   and viewer, every parcel's figure in the table, the measure and run in the
   URL with Back, published-only below editor, the fills re-read on a theme
-  switch through the key row's `data-fill-theme` and each band's
+  switch through the Key panel's `data-fill-theme` and each band's
   `data-colour` against its token, thirty units, axe wide and phone).
 
 ## Crops & demand

@@ -42,7 +42,7 @@
 // then has its wet days rescaled to the scaled wet total, so every month's
 // rain is exactly what the factor alone gives: the mapping moves rain
 // between days, never in or out of a month.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from './calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf, isIsoDate as isRealDate } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX } from './calibrate/provenance';
 import {
 	RAIN_SOURCE_FALLBACKS,
@@ -50,6 +50,7 @@ import {
 	RAIN_SOURCE_SERIES,
 	type DailySeries,
 	type DataQualitySettings,
+	type ModelInput,
 	type RainSourceFactorProvenance,
 	type RainSourcePeriod,
 	type RainSourceQuantileMap,
@@ -97,13 +98,26 @@ const KIND_NAME: Record<string, string> = {
 	rain_reanalysis_mm: 'reanalysis',
 	rain_chirps_mm: 'CHIRPS'
 };
+/**
+ * Does the run have a rain series at all: the catchment gauge, CHIRPS, a
+ * forecast, or a rain-source period's series or fallback (§2.4e: a period's
+ * series is the catchment rain over its span). Every reader that asks "is
+ * there rain?" (rain_final, rain on the dams, the runoff coefficient, the
+ * missing-rain warning, calibration) asks this, so a project whose only rain
+ * is a period's series isn't treated as rainless.
+ */
+export function hasRainInput(series: ModelInput['series'] | undefined, periods: readonly RainSourcePeriod[] | undefined): boolean {
+	if (series?.rain_catchment_mm || series?.rain_chirps_mm || series?.rain_forecast_mm) return true;
+	return (periods ?? []).some((p) => !!series?.[p.series] || (!!p.fallback && !!series?.[p.fallback.series]));
+}
+
 /** A rain-source series or reference in words. */
 export const rainSourceKindName = (k: string): string => KIND_NAME[k] ?? k;
 
 const isReading = (v: number | null | undefined): v is number => v != null && Number.isFinite(v) && v >= 0;
 const clamp = (f: number) => Math.min(CHIRPS_FACTOR_MAX, Math.max(CHIRPS_FACTOR_MIN, f));
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const isIsoDate = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && fromEpochDay(toEpochDay(v)) === v;
+const isIsoDate = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && isRealDate(v);
 const isYear = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1800 && v <= 2200;
 const plainObject = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
