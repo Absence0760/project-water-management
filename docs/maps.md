@@ -1122,7 +1122,9 @@ to a point on a river. The design, the method and its accuracy are in
   [design/delineation-snapping.md](./design/delineation-snapping.md)):
   near a loaded river reach (within 1 km), on the cell whose upstream area
   matches the reach's area at the click (its upper end's plus the rest in
-  proportion to how far down the line the click is); otherwise on the
+  proportion to how far down the line the click is; for a head reach, its
+  upper end's area as the elevation model drains it there, not
+  HydroRIVERS' 10 km² threshold); otherwise on the
   most-drained cell within about 150 m, and if a channel with 100× its
   upstream area runs within 1 km the sheet says so instead of proposing ("A
   much larger channel runs 504 m north of your point: …") with **Use that
