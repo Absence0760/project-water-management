@@ -64,6 +64,8 @@ test.describe('1440×960', () => {
 		await expect(summary).toBeDisabled();
 		for (const name of DEFAULT_HIDDEN) await expect(panel(page).getByRole('checkbox', { name })).not.toBeChecked();
 		await expect(panel(page).getByRole('checkbox', { name: 'Dams' })).toBeChecked();
+		// A section hidden by default says what it is for, so ticking it isn't a guess.
+		await expect(panel(page).getByRole('checkbox', { name: /^Applications water-use licence applications to assess and decide$/ })).toBeVisible();
 		// Nothing of their own to undo yet.
 		await expect(panel(page).getByRole('button', { name: 'Reset to default' })).toBeDisabled();
 		await expectNoViolations(page);

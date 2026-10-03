@@ -232,10 +232,15 @@ export function svelteRuntimeChunk(id: string): string | undefined {
  * still put both in one chunk (the same importers), so this group names the
  * second: the /help pages load the same bytes as two files, in parallel, each
  * well under the ceiling. Nothing outside /help imports either (content.ts
- * says so), so no other page gains a request.
+ * says so), so no other page gains a request. A third module, the
+ * "Scenarios and licensing" topic (articles-licensing.ts, 2026-10-02), is
+ * its own chunk for the same reason.
  */
 export function helpArticlesChunk(id: string): string | undefined {
-	return /\/src\/lib\/help\/articles-data\.ts$/.test(id) ? 'help-articles-data' : undefined;
+	if (/\/src\/lib\/help\/articles-data\.ts$/.test(id)) return 'help-articles-data';
+	// "Scenarios and licensing" (2026-10-02): articles.ts had grown past the ceiling again.
+	if (/\/src\/lib\/help\/articles-licensing\.ts$/.test(id)) return 'help-articles-licensing';
+	return undefined;
 }
 
 export default defineConfig({
