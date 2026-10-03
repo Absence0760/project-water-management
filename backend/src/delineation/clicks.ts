@@ -27,7 +27,7 @@ import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
-import { nearestReach, type NearReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach } from './reach.js';
 import { configuredDem } from './dem.js';
 import { delineateUnits, type Subcatchments } from './subcatchments.js';
 
@@ -36,7 +36,8 @@ export const CLICKS_MAX = 50;
 
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
-const Click = z.object({ lon: Lon, lat: Lat }).strict();
+/** A click; `reach` is the river reach it means at a confluence (one of a 422 `confluence`'s choices). */
+const Click = z.object({ lon: Lon, lat: Lat, reach: ReachChoiceBody.optional() }).strict();
 export const ClicksBody = z.object({ clicks: z.array(Click).min(1).max(CLICKS_MAX) }).strict();
 
 type Poly = Extract<Geometry, { type: 'Polygon' }>;
@@ -154,12 +155,21 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 export const pieceName = (click: number) => `Sub-catchment ${click + 1}`;
 
 /** Count the attempt (editor only), route the clicks, free the attempt. Refusals are 422 with the sentence. */
-async function route(userId: string, projectId: string, clicks: readonly { lon: number; lat: number }[]): Promise<ClickPieces> {
+async function route(userId: string, projectId: string, clicks: readonly z.infer<typeof Click>[]): Promise<ClickPieces> {
 	const { attempt, reaches } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
 		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
 		const reaches = [];
-		for (const c of clicks) reaches.push(await nearestReach(db, [c.lon, c.lat]));
+		for (const [i, c] of clicks.entries()) {
+			try {
+				reaches.push(await reachFor(db, [c.lon, c.lat], c.reach ?? null));
+			} catch (err) {
+				// At a confluence the editor picks the river (the click's reach), naming the click so the client asks about that one.
+				if (err instanceof ConfluenceAmbiguity) throw new ApiError(422, `Click ${i + 1}: ${err.message}`, { reason: 'confluence', click: i, choices: err.choices });
+				if (err instanceof ReachNotNear) throw new ApiError(400, `Click ${i + 1}: ${err.message}`);
+				throw err;
+			}
+		}
 		return { attempt: await beginDemAttempt(db, 'delineation'), reaches };
 	});
 	try {

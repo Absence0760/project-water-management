@@ -110,6 +110,58 @@ describe('the river-network check', () => {
 	});
 });
 
+describe('at a confluence (issue #374’s follow-up)', () => {
+	/** A small tributary reach ending at the click, from the hillside east of it: with the river's reach, the click is at a junction. */
+	async function plantTributary(km2: number) {
+		const line = [at(DAM_CELL.x + 25, DAM_CELL.y + 45), at(DAM_CELL.x + 4, DAM_CELL.y + 60)];
+		const lons = line.map((p) => p[0]);
+		const lats = line.map((p) => p[1]);
+		await asOwner(
+			`INSERT INTO river_reference (dataset, reach_id, strahler, upstream_km2, geometry, min_lon, min_lat, max_lon, max_lat, source)
+			 VALUES ($1, 99000002, 1, $2, $3, $4, $5, $6, $7, 'test tributary')`,
+			[DATASET, km2, JSON.stringify({ type: 'LineString', coordinates: line }), Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]
+		);
+	}
+
+	it('asks which river at a junction of different rivers, and matches the one chosen', async () => {
+		await plantReach(riverKm2);
+		await plantTributary(3);
+		const r = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: clon, lat: clat, from: 'outlet' });
+		expect(r.status).toBe(422);
+		expect(r.body.details.reason).toBe('confluence');
+		expect(r.body.error).toMatch(/^This point is at a confluence: .*Pick the river you mean\.$/);
+		const ids = r.body.details.choices.map((c: { reachId: number }) => c.reachId).sort();
+		expect(ids).toEqual([99000001, 99000002]);
+		expect(r.body.details.choices.find((c: { reachId: number }) => c.reachId === 99000002)).toMatchObject({ role: 'above', upstreamKm2: 3 });
+		// The river: matched to its area, the click moved onto it.
+		const river = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: clon, lat: clat, from: 'outlet', reach: { dataset: DATASET, reachId: 99000001 } });
+		expect(river.status, JSON.stringify(river.body)).toBe(201);
+		expect(Math.abs(river.body.proposal.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
+		expect(river.body.proposal.method).toMatch(/best matches reach 99000001 of snap-test/);
+		// A reach id from elsewhere: refused, never trusted.
+		const far = await editor.call('POST', `/projects/${projectId}/map/delineation`, { lon: clon, lat: clat, from: 'outlet', reach: { dataset: DATASET, reachId: 12345 } });
+		expect(far.status).toBe(400);
+		expect(far.body.error).toMatch(/isn’t within 1 km of the point/);
+	});
+
+	it('names the ambiguous click in Sub-catchments, and takes its chosen reach', async () => {
+		await plantReach(riverKm2);
+		await plantTributary(3);
+		const below = at(DAM_CELL.x, DAM_CELL.y + 120);
+		const ask = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, { clicks: [{ lon: below[0], lat: below[1] }, { lon: clon, lat: clat }] });
+		expect(ask.status).toBe(422);
+		expect(ask.body).toMatchObject({ error: expect.stringMatching(/^Click 2: This point is at a confluence/), details: { reason: 'confluence', click: 1 } });
+		const ok = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, {
+			clicks: [
+				{ lon: below[0], lat: below[1] },
+				{ lon: clon, lat: clat, reach: { dataset: DATASET, reachId: 99000001 } }
+			]
+		});
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect(ok.body.pieces.find((p: { click: number }) => p.click === 1)).toMatchObject({ placedBy: 'matched', reach: { reachId: 99000001 } });
+	});
+});
+
 describe('Sub-catchments', () => {
 	it('matches a click to its reach and says which; an unmatched click beside the river names the larger channel', async () => {
 		await plantReach(riverKm2);
