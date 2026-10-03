@@ -945,7 +945,7 @@ same way on every screen:
   page's body asks too). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
   date,value CSV (comma, semicolon or tab; decimal point or decimal comma,
-  decided per file) or a DWS hydrology export (fixed-width YYYYMMDD with a
+  decided per file; CRLF, LF or bare-CR line endings) or a DWS hydrology export (fixed-width YYYYMMDD with a
   quality code, gap codes and -999 read as gaps): see [Data](#data) below for the
   rules. The form's **File formats** note lists them.
 - The upload form (`series/UploadForm.svelte`) guesses the series a file
@@ -3650,7 +3650,9 @@ station's hourly log) is not refused: the form asks how to add it up into
 days, **08:00 to 08:00, booked to the day it starts** (the default, the
 manual-gauge day) or **midnight to midnight**, and its summary says how many
 readings, how many a day and how many days are short of that. Each
-timestamp closes its interval. The series records the choice
+timestamp closes its interval. A time is HH:MM (seconds optional) or a
+12-hour time with its AM/PM (7:00 PM is 19:00, 12:00 AM midnight); a time
+followed by anything else (a zone, `Z`) is refused, not trimmed. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card

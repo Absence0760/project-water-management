@@ -737,7 +737,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   entry listed twice; anything else is a `400`. The server sets `revision`:
   a save that changes a rule adds 1 and clears `signedOff` unless the same
   save records a new one; a sign-off alone keeps it. A new sign-off's `on` is
-  the server's date whatever is sent, and it (and a withdrawal) is recorded
+  today's date on the project's calendar (its `timeZone`, as `today`) whatever is sent, and it (and a withdrawal) is recorded
   in the history as `calibration_rules.signed_off` /
   `calibration_rules.sign_off_withdrawn` with the signed-in account. Settings stored before
   it read back with the defaults (revision 1, not signed off).
