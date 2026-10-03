@@ -1105,7 +1105,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		delineation: {
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
 			/** `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel). */
-			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean }) =>
+			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; reach?: { dataset: string; reachId: number } }) =>
 				request<{ proposal: DelineationProposal; check: string | null }>('POST', `${p(id)}/map/delineation`, body),
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
@@ -1116,8 +1116,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		},
 		/** Sub-catchments from clicks on the rivers: each click's incremental catchment; save routes them again and saves each as an area. */
 		subcatchments: {
-			pieces: (id: string, clicks: { lon: number; lat: number }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
-			save: (id: string, clicks: { lon: number; lat: number }[]) =>
+			pieces: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) => request<ClickPieces>('POST', `${p(id)}/map/subcatchments`, { clicks }),
+			save: (id: string, clicks: { lon: number; lat: number; reach?: { dataset: string; reachId: number } }[]) =>
 				request<{ features: MapFeature[]; dropped: ClickPieces['dropped']; summary: string }>('POST', `${p(id)}/map/subcatchments/save`, { clicks })
 		},
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */

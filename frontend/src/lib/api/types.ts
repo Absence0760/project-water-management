@@ -3154,6 +3154,18 @@ export interface ChannelTileAnswer {
 	cached: boolean;
 }
 
+/** One river at a confluence (a 422 `confluence`'s `details.choices`): pick it by sending its dataset and reach id back as `reach`. */
+export interface ConfluenceChoice {
+	dataset: string;
+	reachId: number;
+	upstreamKm2: number;
+	/** The point's distance from its line (m). */
+	distanceM: number;
+	role: 'above' | 'below' | 'along';
+	/** In words: "the river below the junction", "the tributary above the junction", … */
+	label: string;
+}
+
 /** A much larger channel near a point (a 422 `larger_channel`'s `details.larger`, or a click's piece). */
 export interface LargerChannel {
 	at: MapPosition;
