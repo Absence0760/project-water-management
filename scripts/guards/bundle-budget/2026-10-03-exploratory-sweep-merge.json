@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "After merging main (#389's confluence UI) into the exploratory sweep, CI measured 1626 KB against 1625 KB: the two branches' rounded entries summed 1 KB short of their combined gzip"
+}
