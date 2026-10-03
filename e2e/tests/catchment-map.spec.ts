@@ -253,6 +253,7 @@ test('an editor marks a dam outline off-channel in its card, kept across a reloa
 	const project = await seedRunnableProject(page.request, 'Catchment map dam siting');
 	await openMap(page, project.id);
 	await uploadThroughSheet(page, 'dam', 'dams.geojson', damGeoJson());
+	await showTab(page, 'features');
 	await row(page, 'Upper dam').click();
 	const siting = card(page).getByRole('combobox', { name: 'Where Upper dam stands against its river' });
 	await expect(siting).toHaveValue('');
@@ -283,6 +284,7 @@ test('an editor marks a dam outline off-channel in its card, kept across a reloa
 	expect(point.status()).toBe(201);
 	await page.reload();
 	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+	await showTab(page, 'features');
 	await row(page, 'Point dam').click();
 	await expect(card(page).getByRole('heading', { name: 'Point dam' })).toBeVisible();
 	await expect(card(page).getByTestId('map-dam-position')).toHaveCount(0);
