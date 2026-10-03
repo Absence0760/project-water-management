@@ -33,11 +33,16 @@ import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
+import { PlacementChoice, placementOf, placementWarnings, type PointPlacement, type PointReach } from './pointPlacement.js';
 import {
 	BOUNDARY_MISMATCH,
 	km2,
 	loadProposal,
 	nodeCount,
+	OUTLET_KEY,
+	outletHints,
+	pointOf,
+	readReaches,
 	START_POINTS_MAX,
 	START_PROPOSALS_KEPT,
 	START_PROPOSALS_PER_HOUR,
@@ -45,19 +50,24 @@ import {
 	toProposal,
 	upstreamFirst
 } from './start.js';
+import { panWarning, type PanReport } from './pans.js';
 import { delineateUnits, ownsLand, type UnitRole } from './subcatchments.js';
 
 export const DivideBody = z
 	.object({
 		/** A gauge on the map at the outflow; absent or null = the boundary's own outlet. */
 		outletFeatureId: z.string().uuid().nullable().optional(),
+		/** The outlet gauge's river at a confluence, and its larger channel chosen (pointPlacement.ts). */
+		outletReach: PlacementChoice.reach,
+		outletUseLarger: PlacementChoice.useLarger,
 		points: z
 			.array(
 				z
 					.object({
 						featureId: z.string().uuid(),
 						/** The node the point stands for; null = a new gauge node (a gauge point only). */
-						nodeId: z.string().uuid().nullable()
+						nodeId: z.string().uuid().nullable(),
+						...PlacementChoice
 					})
 					.strict()
 			)
@@ -134,22 +144,30 @@ export interface DivideUnit {
 	drainsInto: string | null;
 	/** The node's values now (null for a new gauge). */
 	current: DivideCurrent | null;
+	/** How its point was put on the channel (start-7). */
+	placement: PointPlacement;
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 export interface DividePlan {
 	mode: 'divide';
-	outlet: { featureId: string | null; nodeId: string; name: string; point: Position; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' };
+	outlet: { featureId: string | null; nodeId: string; name: string; point: Position; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary'; placement: PointPlacement };
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	/** What drains to the outflow through no point. */
-	rest: { areaM2: number; geometry: Polygonal | null };
+	rest: { areaM2: number; geometry: Polygonal | null; nonContributingM2?: number };
+	/** The catchment's pans (pans.ts, start-11): what of it drains into one, the largest, the method. Absent without a DEM or before start-11. */
+	pans?: PanReport;
 	/**
 	 * Units of the model with no point in the division: they keep their values,
 	 * and are the ones the rest of the catchment may go to (their area when
 	 * proposed, which apply checks before replacing it).
 	 */
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
-	dropped: { featureId: string; name: string; reason: string }[];
+	/** `placement`: how its point was put on the channel (start-7). */
+	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
 	cellSizeM: number;
 	zoom: number;
@@ -264,14 +282,17 @@ export const divideRoutes = new Hono<AuthEnv>()
 		const body = DivideBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const { inputs, attempt } = await withUser(userId, async (db) => {
+		const { inputs, reaches, attempt } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) === 0) throw new ApiError(409, NOT_EMPTY_NEEDED);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
 			if (rows[0]!.n >= START_PROPOSALS_PER_HOUR) throw new ApiError(429, `This catchment has asked for ${START_PROPOSALS_PER_HOUR} proposals in the last hour; try again later.`);
 			// Counted before any work, refused and failed attempts too (184_dem_attempt).
 			const attempt = await beginDemAttempt(db, 'divide');
-			return { inputs: await readInputs(db, id, body), attempt };
+			const inputs = await readInputs(db, id, body);
+			// Each point's river reach, with a DEM to place it on (without one the division is refused below).
+			const reaches = configuredDem() ? await readReaches(db, { name: inputs.outflow.name, point: inputs.outlet.point, foundIn: inputs.outlet.foundIn }, inputs.points, body) : new Map<string, PointReach>();
+			return { inputs, reaches, attempt };
 		});
 		try {
 			const dem = configuredDem();
@@ -280,8 +301,9 @@ export const divideRoutes = new Hono<AuthEnv>()
 			try {
 				r = await delineateUnits(dem, {
 					outlet: inputs.outlet.point,
+					outletHints: outletHints(inputs.outlet.foundIn, reaches),
 					boundary: inputs.boundary?.geometry ?? null,
-					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry }))
+					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
 				});
 			} catch (err) {
 				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
@@ -291,6 +313,9 @@ export const divideRoutes = new Hono<AuthEnv>()
 			const named = new Map(inputs.points.map((p) => [p.featureId, p]));
 			const nodes = new Map(inputs.model.nodes.map((n) => [n.id, n]));
 			const warnings: string[] = [];
+			const outletPlacement = placementOf(r.outlet, reaches.get(OUTLET_KEY));
+			// The outlet's placement first: every point is placed against it.
+			if (inputs.outlet.point) warnings.push(...placementWarnings(inputs.outflow.name, inputs.outlet.point, outletPlacement, true));
 			if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
 				warnings.push(
 					`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The areas follow the elevation model; check the outlet and the boundary.`
@@ -320,23 +345,36 @@ export const divideRoutes = new Hono<AuthEnv>()
 								downstreamName: n.downstreamNodeId ? (nodes.get(n.downstreamNodeId)?.name ?? null) : null,
 								pctRunoffToDam: n.pctRunoffToDam
 							}
-						: null
+						: null,
+					placement: placementOf(u, reaches.get(u.id)),
+					nonContributingM2: u.nonContributingM2,
+					totalNonContributingM2: u.totalNonContributingM2
 				};
 			});
+			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
+			// A dropped point snapped beside its river: the larger channel is how to bring it in.
+			for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), { ...d.placement, unmatched: false }));
 			for (const u of units) {
+				warnings.push(...placementWarnings(u.name, pointOf(named.get(u.key)!.geometry), u.placement));
 				if (u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another one’s?`);
 				if (u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
 			}
 			const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
 			const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
+			const panSentence = panWarning(r.pans, r.catchment.areaM2, [
+				...units.map((u) => ({ name: u.name, ncM2: u.nonContributingM2 ?? 0 })),
+				{ name: 'the rest of the catchment', ncM2: r.rest.nonContributingM2 }
+			]);
+			if (panSentence) warnings.push(panSentence);
 			const plan: DividePlan = {
 				mode: 'divide',
-				outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
+				outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
 				catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
 				units: upstreamFirst(units),
-				rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry },
+				rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
+				pans: r.pans,
 				untouched,
-				dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
+				dropped,
 				warnings,
 				cellSizeM: r.cellSizeM,
 				zoom: r.zoom,

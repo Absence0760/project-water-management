@@ -5,7 +5,11 @@
 //
 //   DEM_URL=http://localhost:9002/tiles/terrain.pmtiles \
 //   (MIGRATION_DATABASE_URL from .env.development: the reference tables are read as their owner) \
-//   tsx --env-file=.env.development scripts/research/snap-methods.ts <out.json> [--per-stratum 40] [--main 30] [--seed s]
+//   tsx --env-file=.env.development scripts/research/snap-methods.ts <out.json> [--per-stratum 40] [--main 30] [--seed s] [--no-mask]
+//
+// --no-mask skips M5 (the water mask, read through docker); the as-built rows
+// (AB4: delineate-4's rule; AB5: place.ts as it is now, matched to the
+// reach's area at the click, reach.ts areaAlong) don't need it.
 //
 // Samples HydroRIVERS reaches (the loaded `HydroRIVERS-v10` dataset) inside
 // South Africa by upstream area, clicks each one's vertex next to its
@@ -20,7 +24,9 @@ import { writeFileSync } from 'node:fs';
 import pg from 'pg';
 import { configuredDem } from '../../src/delineation/dem.js';
 import { EARTH_RADIUS_M, readWindow, TARGET_ZOOM, toLonLat, toPx, worldPx } from '../../src/delineation/delineate.js';
-import { accumulate, d8, edgeMask, fill, touchesEdge, upstream } from '../../src/delineation/flow.js';
+import { accumulate, d8, edgeMask, fill, snap, touchesEdge, upstream } from '../../src/delineation/flow.js';
+import { place } from '../../src/delineation/place.js';
+import { areaAlong } from '../../src/delineation/reach.js';
 
 const args = process.argv.slice(2);
 const out = args[0] ?? '';
@@ -32,6 +38,7 @@ const opt = (k: string, d: string) => {
 const PER = Number(opt('--per-stratum', '40'));
 const MAIN = Number(opt('--main', '30'));
 const SEED = opt('--seed', 'snap-1');
+const NO_MASK = args.includes('--no-mask');
 const WINDOW = 2048;
 const GDAL_IMAGE = process.env.GDAL_IMAGE ?? 'ghcr.io/osgeo/gdal:ubuntu-small-3.11.3';
 
@@ -48,6 +55,8 @@ interface Reach {
 	upstream_km2: number;
 	coords: [number, number][];
 	stratum: string;
+	/** What drains to its upper end (the reaches ending there), or null for a head reach. */
+	upper_km2: number | null;
 }
 
 async function sample(): Promise<Reach[]> {
@@ -57,8 +66,12 @@ async function sample(): Promise<Reach[]> {
 	for (const s of STRATA) {
 		// South Africa's box, the reach whole inside it; a stable pseudo-random order by md5 of the id and the seed.
 		const { rows } = await db.query(
-			`SELECT reach_id::text, strahler, upstream_km2, geometry->'coordinates' AS coords
-			   FROM river_reference
+			`SELECT reach_id::text, strahler, upstream_km2, geometry->'coordinates' AS coords,
+			        (SELECT sum(u.upstream_km2) FROM river_reference u WHERE u.dataset = r.dataset
+			            AND (r.geometry->'coordinates'->0->>0)::float8 BETWEEN u.min_lon AND u.max_lon AND (r.geometry->'coordinates'->0->>1)::float8 BETWEEN u.min_lat AND u.max_lat
+			            AND abs((u.geometry->'coordinates'->-1->>0)::float8 - (r.geometry->'coordinates'->0->>0)::float8) < 1e-6
+			            AND abs((u.geometry->'coordinates'->-1->>1)::float8 - (r.geometry->'coordinates'->0->>1)::float8) < 1e-6) AS upper_km2
+			   FROM river_reference r
 			  WHERE dataset = 'HydroRIVERS-v10' AND upstream_km2 >= $1 AND upstream_km2 < $2
 			    AND min_lat > -34.8 AND max_lat < -22.2 AND min_lon > 16.5 AND max_lon < 32.8
 			    AND jsonb_array_length(geometry->'coordinates') >= 2
@@ -122,8 +135,6 @@ async function main() {
 		const x0 = Math.floor(gx) - WINDOW / 2;
 		const y0 = Math.floor(gy) - WINDOW / 2;
 		const grid = await readWindow(dem, z, tile.size, x0, y0, WINDOW);
-		const noData = new Uint8Array(grid.z.length);
-		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
@@ -190,7 +201,19 @@ async function main() {
 		const big = maxAcc(in1000);
 		picks.push({ method: 'M4 today + 100× guard within 1 km', cell: m0, flagged: big >= 0 && m0 >= 0 && acc[big]! >= 100 * acc[m0]! });
 		// M5: the water mask: the most-drained cell holding a WBM river or lake pixel within 500 m; else today's snap.
-		const wbm = waterMask(click);
+		// AB4: delineate-4 as built (M3L within 1 km, else the snap with the guard, the snap measured from the exact click);
+		// AB5: place.ts now, matched to the reach's area at the click (the click is on the reach's line, so rule 3 is off).
+		const g = { nx: WINDOW, ny: WINDOW, acc, edge, cellSizeM: cellM };
+		{
+			const m3l = picks.find((pk) => pk.method === 'M3L Lehner OC=RA+2RD within 1 km')!;
+			const s = snap(WINDOW, WINDOW, acc, edge, cx, cy, 150 / cellM);
+			const guard = s !== null && big >= 0 && acc[big]! >= 100 * acc[s]!;
+			picks.push(m3l.cell !== null ? { method: 'AB4 as built, delineate-4', cell: m3l.cell } : { method: 'AB4 as built, delineate-4', cell: s, flagged: guard });
+			const expectedKm2 = areaAlong({ upstreamKm2: ref, line: r.coords }, click, r.upper_km2 === null ? null : Number(r.upper_km2));
+			const pl = place(g, cx, cy, { snapRadiusM: 150, expectedKm2, reachDistanceM: 0 });
+			picks.push({ method: 'AB5 as built, delineate-5', cell: pl?.cell ?? null, flagged: !!pl?.larger, note: pl?.larger?.reach ? 'offered the reach’s channel' : undefined });
+		}
+		const wbm = NO_MASK ? [] : waterMask(click);
 		const wbmCells = new Set<number>();
 		let wbmNearestM: number | null = null;
 		for (const [lon, lat] of wbm) {
@@ -210,7 +233,7 @@ async function main() {
 		const evalCell = (c: number) => {
 			if (!seen.has(c)) {
 				const up = upstream(WINDOW, WINDOW, dir, c);
-				const touch = touchesEdge(grid, edge, up, noData);
+				const touch = touchesEdge(grid, edge, up);
 				seen.set(c, { km2: km2(acc[c]!), edge: touch.edge || touch.noData });
 			}
 			return seen.get(c)!;

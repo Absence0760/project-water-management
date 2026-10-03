@@ -12,7 +12,7 @@ import { delineateUnits, type UnitPoint } from './subcatchments.js';
 
 const dem = openDem(fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url)));
 const at = (x: number, y: number) => fixtureLonLat(x + 0.5, y + 0.5);
-const click = (i: number, x: number, y: number): UnitPoint => ({ id: String(i), role: 'abstraction', geometry: { type: 'Point', coordinates: at(x, y) } });
+const click = (i: number, x: number, y: number, hints: Partial<UnitPoint> = {}): UnitPoint => ({ id: String(i), name: `click ${i + 1}`, role: 'abstraction', geometry: { type: 'Point', coordinates: at(x, y) }, ...hints });
 const near = (a: number, b: number, tol: number) => expect(Math.abs(a / b - 1)).toBeLessThan(tol);
 
 describe('delineateUnits with the lowest click as the outlet', () => {
@@ -33,6 +33,29 @@ describe('delineateUnits with the lowest click as the outlet', () => {
 		const big = await delineateUnits(dem, { outlet: 'lowest', boundary: null, points: [click(0, OUTLET_CELL.x, OUTLET_CELL.y)] }, { windows: [64] }).catch((e: unknown) => e);
 		expect((big as DelineationRefused).code).toBe('too_large');
 		expect((big as Error).message).toMatch(/^Every click’s catchment runs past the \d+ km the app routes around the clicks, so none is whole\. .*enters as an inflow\.$/);
+	});
+
+	it('names a lower click that missed the river, rather than blame the clicks’ layout (the hydrologist’s review, finding 11)', async () => {
+		// Click 1 on the river; click 2 meant below it, but on the slope beside the river's channel, so it drains to the river further down.
+		const big = await delineateUnits(dem, { outlet: 'lowest', boundary: null, points: [click(0, OUTLET_CELL.x, OUTLET_CELL.y - 10), click(1, OUTLET_CELL.x + 4, OUTLET_CELL.y + 6)] }, { windows: [96] }).catch(
+			(e: unknown) => e
+		);
+		expect((big as DelineationRefused).code).toBe('too_large');
+		expect((big as Error).message).toMatch(
+			/^Click 1 is the click most water drains through, and its catchment runs past the \d+ km the app routes around the clicks, so it can’t be a whole piece\. Click 2 landed on a channel draining [\d.]+ km²(, with a much larger channel \d+ m [a-z-]+ of it)?: it doesn’t drain to click 1, so it is on another river or missed this one\. If you meant it below click 1, Undo and click on the river itself: .*enters as an inflow\.$/
+		);
+	});
+
+	it('doesn’t call a click unmatched when its catchment runs past the window: no window could match its reach (finding 11)', async () => {
+		// Both clicks on the river with a reach far larger than any window (a main stem): the lower piece is whole, the upper an inflow.
+		const main = { expectedKm2: 300_000 };
+		const r = await delineateUnits(dem, { outlet: 'lowest', boundary: null, points: [click(0, OUTLET_CELL.x, OUTLET_CELL.y), click(1, OUTLET_CELL.x, OUTLET_CELL.y - 20, main)] }, { windows: [96] });
+		expect(r.units.find((u) => u.id === '1')).toMatchObject({ open: true });
+		expect(r.units.find((u) => u.id === '1')!.unmatched).toBeUndefined();
+		// The positive control: the same reach on a click whose catchment is whole is unmatched.
+		const whole = await delineateUnits(dem, { outlet: 'lowest', boundary: null, points: [click(0, OUTLET_CELL.x, OUTLET_CELL.y, main)] });
+		expect(whole.outlet).toMatchObject({ unmatched: true });
+		expect(whole.method).toMatch(/\(1 by an unmatched reach\)|placed on the channel: the outlet snapped/);
 	});
 });
 
@@ -114,7 +137,7 @@ describe('the request and the names', () => {
 
 	it('describes a saved piece and sums up a save, naming the inflow points it leaves out', () => {
 		const sq = { type: 'Polygon' as const, coordinates: [[[20, -33], [20.1, -33], [20.1, -33.1], [20, -33]]] as [number, number][][] };
-		const base = { snapDistanceM: 10, geometry: sq, open: false, placedBy: 'snapped' as const, reach: null, larger: null, unmatched: null };
+		const base = { snapDistanceM: 10, geometry: sq, open: false, placedBy: 'snapped' as const, reach: null, larger: null, unmatched: null, nonContributingM2: 0 };
 		const r: ClickPieces = {
 			pieces: [
 				{ ...base, click: 0, point: [20.123456, -33.5], drainsInto: 2, areaM2: null, totalAreaM2: null, geometry: null, open: true },
@@ -133,6 +156,10 @@ describe('the request and the names', () => {
 		);
 		expect(pieceDescription(r, r.pieces[2]!)).toBe(
 			'The land draining to 20.30000° E, 33.70000° S before any other click; the lowest click; more upstream than was routed; an inflow enters at sub-catchment 1. Delineated from Copernicus GLO-30 (start-2); check it against the map.'
+		);
+		// A piece part of which drains into pans says how much (start-11); one with none says nothing of it.
+		expect(pieceDescription(r, { ...r.pieces[1]!, nonContributingM2: 1.25e6 })).toBe(
+			'The land draining to 20.20000° E, 33.60000° S before any other click; drains into sub-catchment 3; 3.00 km² upstream in all. 1.25 km² of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). Delineated from Copernicus GLO-30 (start-2); check it against the map.'
 		);
 		expect(saveSummary(r, [r.pieces[1]!, r.pieces[2]!])).toBe('2 sub-catchments, 15.00 km² in all; 1 inflow point not saved (Sub-catchment 1)');
 		expect(saveSummary(r, [r.pieces[2]!])).toBe('1 sub-catchment, 12.00 km² in all; 1 inflow point not saved (Sub-catchment 1); 1 couldn’t be outlined and weren’t saved');

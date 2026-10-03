@@ -20,7 +20,10 @@
 	import { fmtNum } from '$lib/format/number';
 	import { featureName } from './mapList';
 	import PieceBadge from './PieceBadge.svelte';
+	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
+	import { confluencePointsOf, OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import type { ConfluencePoint } from '$lib/api/types';
 	import {
 		applySummary,
 		candidatePoints,
@@ -112,20 +115,39 @@
 		h.focus();
 	}
 
-	async function propose(e: SubmitEvent) {
-		e.preventDefault();
+	/** Points at confluences the last proposal asked about: each one's river is picked, then it proposes again. */
+	let asking = $state<ConfluencePoint[] | null>(null);
+	async function proposeNow() {
 		busy = 'propose';
 		error = null;
 		try {
-			const body = proposeBody(Object.fromEntries(candidates.map((f) => [f.id, choiceOf(f)])), outlet);
+			const body = withPlacement(proposeBody(Object.fromEntries(candidates.map((f) => [f.id, choiceOf(f)])), outlet), draft.placement);
 			const r = await api.start.propose(projectId, body);
+			asking = null;
 			await onproposed(r.proposal);
 			void focusTitle();
 		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
+			const points = confluencePointsOf(err);
+			if (points) asking = points;
+			else error = err instanceof Error ? err.message : String(err);
 		} finally {
 			busy = null;
 		}
+	}
+	function propose(e: SubmitEvent) {
+		e.preventDefault();
+		void proposeNow();
+	}
+	/** Use that channel: the point goes on the larger channel its card names, and the network is proposed again. */
+	function useLarger(key: string) {
+		draft.placement.useLarger[key] = true;
+		void proposeNow();
+	}
+	/** Another outlet: the old one's river and channel choices don't carry over. */
+	function setOutlet(id: string) {
+		draft.outlet = id;
+		delete draft.placement.reaches[OUTLET_KEY];
+		delete draft.placement.useLarger[OUTLET_KEY];
 	}
 
 	// --- the proposal: its ticks, kept in the draft by proposal id (a new proposal starts unticked) ---
@@ -259,7 +281,7 @@
 				<p><button type="button" class="btn btn-sm" onclick={onplace} data-testid="start-place">Place a point</button></p>
 				<div class="field">
 					<label for="{uid}-outlet">The outlet (the outflow gauge)</label>
-					<select id="{uid}-outlet" value={outlet} onchange={(e) => (draft.outlet = e.currentTarget.value)} data-testid="start-outlet">
+					<select id="{uid}-outlet" value={outlet} onchange={(e) => setOutlet(e.currentTarget.value)} data-testid="start-outlet">
 						{#if boundary}<option value="">The boundary’s own outlet</option>{:else if !outlet}<option value="" disabled>Choose a gauge…</option>{/if}
 						{#each gauges as g (g.id)}<option value={g.id}>{featureName(g)} (gauge)</option>{/each}
 					</select>
@@ -278,9 +300,16 @@
 				{#if p.warnings.length || p.dropped.length}
 					<ul class="warnings" data-testid="start-warnings">
 						{#each p.warnings as w (w)}<li>{w}</li>{/each}
-						{#each p.dropped as d (d.featureId)}<li>{d.name || featureNameOf(d.featureId)} isn’t a unit: it {d.reason}.</li>{/each}
+						{#each p.dropped as d (d.featureId)}<li>
+								{d.name || featureNameOf(d.featureId)} isn’t a unit: it {d.reason}.{#if d.placement?.larger}
+									<button type="button" class="link" disabled={!!busy} onclick={() => useLarger(d.featureId)} data-testid="start-dropped-use-larger">Use the larger channel beside it</button>{/if}
+							</li>{/each}
 					</ul>
 				{/if}
+				{#if p.outlet.placement?.larger}
+					<p><button type="button" class="btn btn-sm" disabled={!!busy} onclick={() => useLarger(OUTLET_KEY)} data-testid="start-outlet-use-larger">Use that channel for the outlet</button></p>
+				{/if}
+				{#if p.outlet.placement}<p class="hint" data-testid="start-outlet-placement">The outlet: {placementLine(p.outlet.placement, p.outlet.snapDistanceM)}</p>{/if}
 				<div class="field">
 					<label for="{uid}-outlet-name">Outflow gauge’s name</label>
 					<input id="{uid}-outlet-name" bind:value={ticks.outletName} maxlength="100" aria-invalid={bad(ticks.outletName) ? 'true' : undefined} aria-describedby={bad(ticks.outletName) ? `${uid}-names` : undefined} />
@@ -333,7 +362,10 @@
 									<span>All of its own runoff reaches the dam (its area ends at the wall)</span>
 								</label>
 							{/if}
-							{#if u.snapDistanceM !== null}<p class="hint">Moved {fmtNum(u.snapDistanceM, 0)} m onto the river.</p>{/if}
+							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="start-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}
+							{#if u.placement?.larger}
+								{#if u.placement.larger.outline}<p class="hint">If the dam is on that river, <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="start-use-outline-channel">use that channel</button>; if it is filled by a pump or a furrow, keep it.</p>{:else}<p class="hint">A much larger channel runs {fmtNum(u.placement.larger.distanceM, 0)} m away: <button type="button" class="link" disabled={!!busy} onclick={() => useLarger(u.key)} data-testid="start-use-larger">use that channel</button>, or keep the point if it is on the small stream.</p>{/if}
+							{/if}
 						</li>
 					{/each}
 					<li
@@ -372,6 +404,7 @@
 						<dt>Method</dt>
 						<dd>{pending.method} [{pending.methodVersion}]</dd>
 						{#if p.cellSizeM}<dt>Cell size</dt><dd>{fmtNum(p.cellSizeM, 0)} m</dd>{/if}
+						{#if p.pans}<dt>Pans</dt><dd>{p.pans.method}</dd>{/if}
 					</dl>
 					<p class="hint">A proposal from an elevation model, not a survey: check each area against the map before you tick it (design/delineation.md § Accuracy).</p>
 				</details>
@@ -389,6 +422,9 @@
 					<li><a href="?tab=runs" data-testid="start-run">Run the model</a> once rainfall is in (Runs &amp; results).</li>
 				</ol>
 			</div>
+		{/if}
+		{#if asking && (step === 'points' || step === 'review')}
+			<PlacementAsk points={asking} bind:picked={draft.placement.reaches} busy={!!busy} onsubmit={() => void proposeNow()} testid="start-confluence" />
 		{/if}
 		{#if error}<p class="err" role="alert" data-testid="start-error">{error}</p>{/if}
 	</div>

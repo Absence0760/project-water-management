@@ -70,7 +70,7 @@ async function main() {
 			[click[0] - dLon, click[1] - dLat, click[0] + dLon, click[1] + dLat]
 		);
 		const near: NearReachLine[] = rows
-			.map((r) => ({ dataset: 'HydroRIVERS-v10', reachId: Number(r.reach_id), upstreamKm2: r.upstream_km2, distanceM: lineDistM(click, r.geometry.coordinates), start: r.geometry.coordinates[0]!, end: r.geometry.coordinates.at(-1)! }))
+			.map((r) => ({ dataset: 'HydroRIVERS-v10', reachId: Number(r.reach_id), upstreamKm2: r.upstream_km2, distanceM: lineDistM(click, r.geometry.coordinates), start: r.geometry.coordinates[0]!, end: r.geometry.coordinates.at(-1)!, line: r.geometry.coordinates }))
 			.filter((r) => r.distanceM <= 1000)
 			.sort((a, b) => a.distanceM - b.distanceM);
 		const choices = confluenceChoices(click, near);
@@ -92,8 +92,9 @@ async function main() {
 		const g = { nx: WINDOW, ny: WINDOW, acc, edge, cellSizeM: cellM };
 		const topo = choices ? junctionOutlets({ ...g, dir }, gx - x0, gy - y0, choices.map((c) => ({ key: String(c.reachId), role: c.role, km2: c.upstreamKm2 })), 150) : null;
 		const matched = (choices ?? []).map((c) => {
-			const at = (matchRadiusM: number) => {
-				const pl = place(g, gx - x0, gy - y0, { snapRadiusM: 150, expectedKm2: c.upstreamKm2, matchRadiusM });
+			// 1000: as an unnamed click is placed; 2500: as the river picked at the confluence is (place.ts `chosen`).
+			const at = (radiusM: 1000 | 2500) => {
+				const pl = place(g, gx - x0, gy - y0, { snapRadiusM: 150, expectedKm2: c.upstreamKm2, chosen: radiusM === 2500 });
 				const a = pl ? km2(acc[pl.cell]!) : null;
 				return { how: pl?.how ?? null, km2: a, ratio: a === null ? null : a / c.upstreamKm2, guarded: !!pl?.larger };
 			};

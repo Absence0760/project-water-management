@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { GUARD_RADIUS_M, LARGER_FACTOR, place, type PlaceGrid } from './place.js';
+import { CHANNEL_MIN_KM2 } from './channels.js';
+import { GUARD_RADIUS_M, LARGER_FACTOR, ON_CHANNEL_KM2, ON_LINE_M, onOwnChannel, place, WIDE_MATCH_M, type PlaceGrid } from './place.js';
 
 // Hand-made accumulation grids with 100 m cells (0.01 km² each): a river down
 // column 20 whose upstream cells grow southward, a gully beside the click, and
@@ -139,5 +140,96 @@ describe('place: the snap distance never exceeds the stated radius (issue #387)'
 		expect(g.acc[p.cell]).toBe(1);
 		// Positive control: 1.4 cells (140 m) from it, the river is in reach and taken.
 		expect(place(g, 21.9, 20.5, { snapRadiusM: 150 })!.cell).toBe(g.at(20, 20));
+	});
+});
+
+describe('place: a click on a DEM channel of its own, off the mapped line (delineate-5, the hydrologist persona’s finding 4)', () => {
+	/** The river, and a 2 km² stream (200 cells) flowing down column 26, 600 m east of it, as a farm dam's stream beside a river. */
+	function withStream() {
+		const g = grid();
+		for (let y = 5; y < 30; y++) g.acc[g.at(26, y)] = 100 + 4 * y;
+		return g;
+	}
+
+	it('the red lines and "on a channel" use one threshold', () => {
+		expect(ON_CHANNEL_KM2).toBe(CHANNEL_MIN_KM2);
+	});
+
+	it('stays on the stream it was clicked on and offers the river’s matching channel, not moving there', () => {
+		const g = withStream();
+		const p = place(g, 26.5, 25.5, { snapRadiusM: 150, expectedKm2: 125, reachDistanceM: 600 })!;
+		expect(p.how).toBe('snapped');
+		// On the stream (the snap takes its most-drained cell within 150 m, one row down).
+		expect(p.cell % N).toBe(26);
+		expect(g.acc[p.cell]).toBeGreaterThan(190);
+		expect(p.larger).toMatchObject({ cell: g.at(20, 25), reach: { onChannel: true } });
+		expect(p.larger!.distanceM).toBeCloseTo(600, 0);
+	});
+
+	it('positive controls: on the mapped line, chosen at a confluence, or with the match inside the snap radius, it matches', () => {
+		const g = withStream();
+		// The click on the reach's line itself (a displaced line over a small channel): the match moves it, as rule 1 is for.
+		expect(place(g, 26.5, 25.5, { snapRadiusM: 150, expectedKm2: 125, reachDistanceM: ON_LINE_M })).toMatchObject({ how: 'matched', cell: g.at(20, 25) });
+		expect(place(g, 26.5, 25.5, { snapRadiusM: 150, expectedKm2: 125 })).toMatchObject({ how: 'matched' });
+		expect(place(g, 26.5, 25.5, { snapRadiusM: 150, expectedKm2: 125, reachDistanceM: 600, chosen: true })).toMatchObject({ how: 'matched', cell: g.at(20, 25) });
+		// A stream 100 m from the river: the snap would take the river too, so the match does.
+		const h = grid();
+		for (let y = 5; y < 30; y++) h.acc[h.at(21, y)] = 200;
+		expect(place(h, 21.5, 25.5, { snapRadiusM: 150, expectedKm2: 125, reachDistanceM: 400 })).toMatchObject({ how: 'matched', cell: h.at(20, 25), larger: null });
+	});
+
+	it('the other way round: a click on the big river, the nearest line a tributary’s 60 m off, stays on the river (offering the tributary)', () => {
+		// A 15 km² tributary (1 500 cells) down column 26, 600 m east; the click on the river at column 20.
+		const g = grid();
+		for (let y = 5; y < 30; y++) g.acc[g.at(26, y)] = 1400 + 4 * y;
+		const p = place(g, 20.5, 25.5, { snapRadiusM: 150, expectedKm2: 15, reachDistanceM: 60 })!;
+		expect(p.how).toBe('snapped');
+		expect(p.cell % N).toBe(20);
+		expect(p.larger).toMatchObject({ reach: { onChannel: true } });
+		expect(p.larger!.cell % N).toBe(26);
+		expect(g.acc[p.larger!.cell]!).toBeLessThan(g.acc[p.cell]!);
+		// Positive control: the editor picked the tributary at a confluence, so it is taken.
+		expect(place(g, 20.5, 25.5, { snapRadiusM: 150, expectedKm2: 15, reachDistanceM: 60, chosen: true })).toMatchObject({ how: 'matched' });
+	});
+
+	it('onOwnChannel, which also keeps such a click off an unpicked junction: smaller channels only off the line, larger ones anywhere', () => {
+		const g = withStream();
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 125, reachDistanceM: 600 })).toBe(true);
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 125, reachDistanceM: 100 })).toBe(false);
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: 3, reachDistanceM: 600 })).toBe(false); // in band
+		expect(onOwnChannel(g, 20.5, 25.5, { expectedKm2: 3, reachDistanceM: 60 })).toBe(true); // the river, under a 3 km² line
+		expect(onOwnChannel(g, 23.5, 25.5, { expectedKm2: 125, reachDistanceM: 600 })).toBe(false); // hillside
+		expect(onOwnChannel(g, 26.5, 25.5, { expectedKm2: null, reachDistanceM: 600 })).toBe(false);
+	});
+
+	it('a click off any channel (hillside under 1 km²) still matches', () => {
+		const g = grid();
+		const p = place(g, 24.5, 20.5, { snapRadiusM: 150, expectedKm2: 120, reachDistanceM: 400 })!;
+		expect(p).toMatchObject({ how: 'matched', cell: g.at(20, 20) });
+	});
+
+	it('a click on a channel already within the reach’s 50 % band matches', () => {
+		const g = withStream();
+		// The stream carries 2.0 km² at row 25: a reach of 3 km² has it in band.
+		expect(place(g, 26.5, 25.5, { snapRadiusM: 150, expectedKm2: 3, reachDistanceM: 600 })).toMatchObject({ how: 'matched', cell: g.at(26, 25) });
+	});
+});
+
+describe('place: a gully snap offers the reach’s channel further out (delineate-5, the hydrologist persona’s finding 7)', () => {
+	it('with no match within 1 km and the snap under a tenth of the reach, offers the matching channel within 2.5 km', () => {
+		const g = grid();
+		// 1.5 km east of the river: nothing within 1 km matches 120 km², and the guard sees nothing either.
+		const p = place(g, 35.5, 20.5, { snapRadiusM: 150, expectedKm2: 120 })!;
+		expect(p.how).toBe('snapped');
+		expect(p.larger).toMatchObject({ cell: g.at(20, 20), reach: { onChannel: false } });
+		expect(p.larger!.distanceM).toBeCloseTo(1500, 0);
+		expect(p.larger!.distanceM).toBeLessThanOrEqual(WIDE_MATCH_M);
+	});
+
+	it('offers nothing when the snap drains a tenth of the reach or more, or nothing within 2.5 km matches', () => {
+		const g = grid();
+		g.acc[g.at(35, 20)] = 1500; // 15 km² against 120
+		expect(place(g, 35.5, 20.5, { snapRadiusM: 150, expectedKm2: 120 })!.larger).toBeNull();
+		expect(place(grid(), 35.5, 20.5, { snapRadiusM: 150, expectedKm2: 5000 })!.larger).toBeNull();
 	});
 });
