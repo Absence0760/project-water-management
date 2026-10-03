@@ -180,6 +180,26 @@ MUTANTS = [
         'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
     ),
     (
+        "off-takes of one priority ask MIN(limit, the flow above their keep) (before engine 1.70.0)",
+        "                    v = lim\n",
+        "                    v = min(max(0.0, U0 - taken - keep_k), lim)\n",
+    ),
+    (
+        "dam rules of one priority ask MIN(limit, their source's free water) (before engine 1.70.0)",
+        'want[t["id"]] = lim',
+        'want[t["id"]] = min(lim, max(0.0, storage[src["id"]] - drawn[src["id"]] - res))',
+    ),
+    (
+        "an off-take's top-up counts only a fixed release's floor (before engine 1.70.0)",
+        'floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o))',
+        'floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o, max(held, 0.0) - e_c - sp_c - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))',
+    ),
+    (
+        "a dam rule's room counts only a fixed release's floor (before engine 1.70.0)",
+        'floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))',
+        'floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c, after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))',
+    ),
+    (
         "a fixed release makes no room for an off-take's top-up (before engine 1.70.0)",
         'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)',
         'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))',

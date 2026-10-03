@@ -1232,18 +1232,18 @@ def run(doc: dict) -> dict:
                 src = by_id[t["fromNodeId"]]
                 res = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
                 reserve[t["id"]] = res
-                free = max(0.0, storage[src["id"]] - drawn[src["id"]] - res)
-                want[t["id"]] = min(lim, free)
+                # Each rule asks its limit alone, never capped at its source's free water (engine >= 1.70.0,
+                # issue #90 Q25: proportional rationing); the bands below keep it above its reserve.
+                want[t["id"]] = lim
             for dst in sorted({t["toNodeId"] for t, _ in group}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
                 after = storage[dst] + pd - e_raw - sp_raw
                 floor_rel = 0.0
                 if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                    # A fixed release's MIN(amount, outlet), in full (engine >= 1.70.0, issue #90 Q26).
                     outlet_c = f.get("damOutletCapacityM3Day")
-                    floor_rel = min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c,
-                                    after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0))
-                    floor_rel = max(0.0, floor_rel)
+                    floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
                 rm = max(0.0, rm)
                 into = [t for t, _ in group if t["toNodeId"] == dst]
@@ -1297,13 +1297,11 @@ def run(doc: dict) -> dict:
             held = storage[dst] + pd + J[dst]
             e_c = min(e_raw, max(held, 0.0))
             sp_c = min(sp_raw, max(held - e_c, 0.0))
-            # A fixed release's floor (engine >= 1.70.0, issue #90 Q26), as a dam rule's room counts it:
-            # MIN(amount, outlet, held after the losses and the day's net dam-rule transfers - dead), never below 0.
+            # A fixed release's MIN(amount, outlet) in full (engine >= 1.70.0, issue #90 Q26), as a dam rule's room.
             floor_ot = 0.0
             if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
                 outlet_o = f.get("damOutletCapacityM3Day")
-                floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o,
-                                        max(held, 0.0) - e_c - sp_c - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))
+                floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o))
             rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)
             for t, c in caps:
                 need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
@@ -1723,7 +1721,9 @@ def run(doc: dict) -> dict:
                     keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
                     keeps[t["id"]] = keep_k
                     lim = rule_limit(t, o, m)
-                    v = min(max(0.0, U0 - taken - keep_k), lim)
+                    # Asks MIN(capacity, need share), never capped at the flow above its keep (engine >= 1.70.0,
+                    # issue #90 Q25); the bands keep it above its keep.
+                    v = lim
                     if t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
                     wants[t["id"]] = max(0.0, v)
