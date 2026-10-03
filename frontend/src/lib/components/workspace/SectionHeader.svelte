@@ -25,9 +25,12 @@
 		status,
 		actions,
 		main,
-		notices
+		notices,
+		guide
 	}: {
 		title: string;
+		/** The page's help guide (/help/guides/<id>, TAB_GUIDE), linked as "How this page works" beside the title. */
+		guide?: string | null;
 		/** Beside the title (the "Unsaved changes" badge). */
 		badge?: Snippet;
 		context?: Snippet | null;
@@ -47,6 +50,7 @@
 			<div class="title-line">
 				<h1>{title}</h1>
 				{@render badge?.()}
+				{#if guide}<a class="guide" href={guide} data-testid="section-guide">How this page works</a>{/if}
 			</div>
 			{#if context}<div class="context muted" data-testid="section-context">{@render context()}</div>{/if}
 		</div>
@@ -99,6 +103,10 @@
 		font-size: 1.75rem;
 		line-height: 1.2;
 		overflow-wrap: anywhere;
+	}
+	.guide {
+		font-size: 0.875rem;
+		white-space: nowrap;
 	}
 	.context {
 		display: flex;

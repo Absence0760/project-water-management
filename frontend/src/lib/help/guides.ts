@@ -11,16 +11,17 @@
 //   [[guide:add-data|label]] link to another guide
 // Every reference must resolve (guarded by guides.test.ts).
 
-import { TAB_LABELS } from '$lib/workspace/tabs';
+import { TAB_LABELS, type TabId as WorkspaceTabId } from '$lib/workspace/tabs';
 import { helpFor } from './content';
 import type { ShotId } from './pictures';
 
-export type GuideKind = 'start' | 'howto' | 'concept';
+export type GuideKind = 'start' | 'howto' | 'concept' | 'page';
 
 export const GUIDE_KIND_TITLES: Record<GuideKind, string> = {
 	start: 'Start here',
 	howto: 'How to',
-	concept: 'How it works'
+	concept: 'How it works',
+	page: 'Pages, one by one'
 };
 
 /** The workspace tabs the setup path walks, in the order a catchment is set up. */
@@ -33,13 +34,11 @@ export const SETUP_TABS = ['overview', 'network', 'crops', 'transfers', 'series'
  */
 export const OPTIONAL_MODEL_TABS: readonly string[] = ['map'];
 
-/** Project workspace tabs a guide can point at (`?tab=`). */
-export type TabId = (typeof SETUP_TABS)[number] | 'compare' | 'river' | 'supply';
+/** Project workspace tabs a guide can point at (`?tab=`): every one. */
+export type TabId = WorkspaceTabId;
 
 /** Their names, the workspace's own (lib/workspace/tabs.ts), so help can't drift from a rename. */
-export const TAB_TITLES: Record<TabId, string> = Object.fromEntries(
-	[...SETUP_TABS, 'compare', 'river', 'supply'].map((id) => [id, TAB_LABELS[id as TabId]])
-) as Record<TabId, string>;
+export const TAB_TITLES: Record<TabId, string> = TAB_LABELS;
 
 export const DIAGRAM_IDS = [
 	'workflow',
@@ -1167,6 +1166,369 @@ export const GUIDES: Guide[] = [
 		],
 		terms: ['irrigation-demand', 'irrigation-supplied', 'pragmatic-ewr', 'equitable-share', 'ewr-charge', 'ewr-charge-split', 'demand-left', 'basic-needs-floor'],
 		related: ['set-the-ewr', 'run-and-read-results']
+	},
+	// ---- Pages, one by one ----------------------------------------------------
+	// What each workspace page is for and how to work it; the page's section
+	// header links here ("How this page works", TAB_GUIDE in lib/workspace/tabs.ts).
+	{
+		id: 'scenarios-page',
+		title: 'Scenarios: try a change without copying the project',
+		summary: 'Make a named list of changes on a run (a bigger dam, a new crop, less rain), run it, and read it against the run it started from.',
+		kind: 'page',
+		tab: 'scenarios',
+		sections: [
+			{
+				heading: 'What a scenario is',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A [[scenario]] is a named list of changes on a **base run**: raise a dam by 20 %, replace a crop, remove a hydrological unit, add a transfer, scale the rain by −10 %. It runs and compares against its base without copying the project, and the model itself never changes: the base run stays as it was, and is kept while the scenario exists.'
+					},
+					{
+						type: 'p',
+						text: 'Use one to answer “what if”. Copying the project ([[guide:create-a-project]]) is the other way, for a change too large to describe as a list of edits.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Run the model at least once: a scenario needs a run to start from.',
+							'On **Scenarios**, press **+ New scenario**, name it and pick its base run (the [[published-baseline|published run]] by default, else the latest).',
+							'Under **Add a change**, add each change in turn. Each reads in words against the value it meets (“dam capacity 120 000 → 144 000 m³”), so a second change to the same value shows the first one’s result as “was”.',
+							'Read the label on each change: a **Proposal** is the change being assessed; a **Baseline assumption** changes what the river is like today (rain, a setting, a Reserve rule) and puts a red **Baseline assumptions changed** callout above the list.',
+							'Press **Run scenario**. The run joins Runs & results tagged **Scenario**, and **Scenario against its base** shows the headline water balance and each hydrological unit against the base run.',
+							'To bring an older scenario up to date, **Rebase onto another run**: **Check** lists any change that no longer applies, then **Rebase onto this run**.'
+						]
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'A change that doesn’t apply to its base (a hydrological unit removed since, say) says why, and **Run scenario** stays off until it is fixed or removed.'
+					}
+				]
+			},
+			{
+				heading: 'Scenarios and licence applications',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A licence [[application]] is a scenario too: one an applicant builds on the published baseline. It shows on the Scenarios list with its status, and its changes are frozen once submitted. [[guide:applications-page]] covers the rest.'
+					}
+				]
+			}
+		],
+		terms: ['scenario', 'run', 'published-baseline', 'application'],
+		related: ['compare-runs', 'applications-page']
+	},
+	{
+		id: 'applications-page',
+		title: 'Applications: licence applications, applied for and assessed',
+		summary: 'How a water-use licence applicant models their change on the published baseline, and how the project’s assessors read and decide it.',
+		kind: 'page',
+		tab: 'applications',
+		sections: [
+			{
+				heading: 'What an application is',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Someone applying for a water-use licence (to build or raise a dam, to abstract more, to irrigate more land) needs to show what their change does to the river and to the users around them. In this app their proposed change is a licence [[application]]: a [[scenario]] on the [[published-baseline|published baseline]], run by the same model as everything else.'
+					},
+					{
+						type: 'p',
+						text: 'Two sides use it. The **applicant** (the developer, the farmer or their consultant) builds and submits it. The **assessors** are the project’s owners and editors, who read it and record a decision.'
+					}
+				]
+			},
+			{
+				heading: 'Before anyone can apply',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Publish a run as the baseline: in **Runs & results**, **Publish this run**. Applications start from it; with nothing published an applicant can’t start one.',
+							'On the **Project** page, add the applicant as a member with the **Applicant** role, and link them to their own hydrological units if they already farm in the catchment.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'An applicant never sees the model. Their view is a page of their own applications, other farms show only by an anonymous name (“Farm 1”), and nothing unpublished reaches them.'
+					}
+				]
+			},
+			{
+				heading: 'What the applicant does',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Start a **New application** (a name; it starts on the published baseline).',
+							'Add the proposed change with the scenario editor: a new hydrological unit with its dam, a bigger dam, a river pump, more hectares of a crop.',
+							'Press **Run scenario**, then read **Your results against the baseline**: the Ecological Reserve, the catchment’s flow, their own hydrological units, and the farms downstream of them.',
+							'Fill in the notice’s **Address** and **Closing date** for written objections while it is a draft.',
+							'Press **Submit to the assessors**. Its changes are frozen; it can still be withdrawn, or reopened as a draft.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'While it is a draft only the applicant and the people they share it with can see it.'
+					}
+				]
+			},
+			{
+				heading: 'What the assessors do',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The **Applications** tab lists every submitted, withdrawn or decided application (never a draft), with its applicant, status, when it was submitted, its changes, runs and [[evidence-pack|evidence packs]]. It is hidden from the sidebar until you turn it on in **Choose sections**, and viewers never see it.'
+					},
+					{
+						type: 'list',
+						items: [
+							'**Decide the longest waiting** opens the application that has waited longest for a decision.',
+							'Open one to read its changes and runs in Scenarios, answer the applicant’s questions about rules they can’t see, and record the decision with its reasons.',
+							'**Assess together** runs several applications on one baseline, each on its own and all together, for their combined effect on the river.',
+							'Draft an evidence pack from a run’s evidence report, then sign and issue it: a frozen, versioned copy anyone can check with its short code.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['application', 'published-baseline', 'scenario', 'evidence-pack', 'roles'],
+		related: ['scenarios-page', 'project-page']
+	},
+	{
+		id: 'allocations-page',
+		title: 'Allocations: registered volumes against modelled use',
+		summary: 'Import the volumes each user is registered or licensed for, and see where a run’s modelled use is above or below them.',
+		kind: 'page',
+		tab: 'allocations',
+		sections: [
+			{
+				heading: 'What the page is for',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Each water user in the catchment is registered (WARMS) or licensed for a volume a year. This page sets those volumes beside what a run modelled each hydrological unit using, per water year, so you can see where modelled use runs above or below the registration.'
+					},
+					{
+						type: 'note',
+						tone: 'caution',
+						text: 'Modelled use is modelled, not metered: a difference is something to look into, not a finding. A registration is not an entitlement.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Turn the page on in **Choose sections** if it is hidden.',
+							'Press **Import** and upload a WARMS extract or a CSV (**Download the CSV template** shows the columns). A WARMS extract asks how you obtained it; the preview says how many rows matched a hydrological unit.',
+							'Or press **+ Add volume** for one at a time: a take from the river or a borehole, or a dam’s storage.',
+							'Match any volume the header counts as “not matched” to its hydrological unit.',
+							'Pick the run to compare with in the header’s run menu, and read each unit’s modelled use against its registered volume.'
+						]
+					},
+					{
+						type: 'p',
+						text: 'Under Settings, an [[allocation-mode]] can make a run cap each unit’s use at its registered volume, or take every registered volume in full; this page then says what the run did.'
+					}
+				]
+			},
+			{
+				heading: 'Who sees names',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Owners and editors see every volume. Viewers see only catchment totals per water source held by five or more users, until an owner ticks **Viewers see each farm’s registered volumes** under **What viewers see**.'
+					}
+				]
+			}
+		],
+		terms: ['allocation-mode', 'allocation-band', 'water-year'],
+		related: ['run-and-read-results', 'units-page']
+	},
+	{
+		id: 'map-page',
+		title: 'The Map: the catchment’s geography',
+		summary: 'Draw or upload the boundary, parcels, dams, gauges and rivers, and let the map propose areas and the catchment above a point.',
+		kind: 'page',
+		tab: 'map',
+		sections: [
+			{
+				heading: 'What the page is for',
+				blocks: [
+					{
+						type: 'p',
+						text: 'The Network is the model’s schematic: what drains into what. The [[map]] is the geography: the catchment boundary, each unit’s area, the farm parcels, dams, gauges and rivers. A model builds and runs without it; with it, areas come from the drawing instead of being typed, and results can be read on the map.'
+					}
+				]
+			},
+			{
+				heading: 'Steps',
+				blocks: [
+					{
+						type: 'steps',
+						items: [
+							'Draw the boundary with **Draw a shape**, or **Upload GeoJSON** (WGS84). The header counts the features and gives the boundary’s area.',
+							'Add dams, abstraction points and gauges with **Place a point**, and parcels with **Draw a shape**. **Snap to features** puts a corner on a neighbour’s corner or edge.',
+							'With an elevation model on the server, **Delineate** proposes the catchment above a point you click on a river, to accept or reject.',
+							'While the model is empty, **Start from the map** proposes the units, their areas and their order from the boundary and the points; each value is ticked to take it.',
+							'With water occurrence data on the server, **Trace a dam** proposes a dam’s outline from a click inside it.',
+							'**Measure** and **Download GeoJSON** are there for everyone, viewers too.'
+						]
+					}
+				]
+			}
+		],
+		terms: ['map', 'quaternary', 'catchment-area', 'farm-area'],
+		related: ['build-the-network']
+	},
+	{
+		id: 'dams-page',
+		title: 'Dams: every dam’s level in one run',
+		summary: 'How full each dam ran, how long it sat at its minimum, and how storage moved over the record.',
+		kind: 'page',
+		tab: 'dams',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Every hydrological unit with a [[dam-capacity|dam capacity]] of at least 1 m³, with its [[dam-storage|storage]] from the latest run: how full it is as a share of that day’s capacity, a sparkline of the record, and how many days it sat at its [[dam-min|minimum level]]. Pick a dam for its chart.'
+					},
+					{
+						type: 'p',
+						text: 'Levels are shares of the capacity on the day, so a dam losing capacity to [[dam-sediment|sediment]], or coming into service part way through the record, reads correctly. **Open in Runs** goes to the run the page shows.'
+					}
+				]
+			}
+		],
+		terms: ['dam-storage', 'dam-capacity', 'dam-min', 'dam-evaporation', 'spill'],
+		related: ['run-and-read-results', 'a-day-on-a-farm']
+	},
+	{
+		id: 'river-page',
+		title: 'River & reserve: is enough left in the river?',
+		summary: 'One run’s river against its Ecological Reserve: the days the EWR was not met, the water account and how this run differs from the one before.',
+		kind: 'page',
+		tab: 'river',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'One run’s river against its [[ewr]]: tiles for the share of days the EWR was not met at the outflow gauge ([[ewr-days-not-met]]), each with its change from the run before; the flow chart against the EWR; [[reserve-compliance|Reserve compliance]] at each EWR site; and the [[water-account]] of where the catchment’s water went.'
+					},
+					{
+						type: 'p',
+						text: 'The page shows the newest run; pick another with the **Run** menu in the header (Back returns to the one before). **Open in Runs & results** opens the same run there.'
+					}
+				]
+			}
+		],
+		terms: ['ewr', 'ewr-days-not-met', 'reserve-compliance', 'water-account', 'pragmatic-ewr'],
+		related: ['set-the-ewr', 'run-and-read-results']
+	},
+	{
+		id: 'units-page',
+		title: 'Hydrological units: how much demand each run supplied',
+		summary: 'Each unit’s irrigation demand against what a run supplied, who is short this week, and the curtailment and assurance of supply panels.',
+		kind: 'page',
+		tab: 'supply',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'One card per hydrological unit with the share of its [[irrigation-demand]] the run supplied, beside the picked unit’s chart. The header counts the units and how many were short this week. Tiles give the catchment’s [[irrigation-supplied]] and how many units fell below 95 %.'
+					},
+					{
+						type: 'p',
+						text: 'Below the cards: the curtailment panel with its reporting window and share-the-pain board ([[guide:curtailment-targets]]), and [[assurance-of-supply]]. Pick another run with **Run shown** in the header.'
+					}
+				]
+			}
+		],
+		terms: ['irrigation-demand', 'irrigation-supplied', 'irrigation-deficit', 'assurance-of-supply'],
+		related: ['curtailment-targets', 'run-and-read-results']
+	},
+	{
+		id: 'project-page',
+		title: 'Project: members, publishing and sharing',
+		summary: 'What the project holds, who can open it and with which role, and how a run reaches the people outside the model.',
+		kind: 'page',
+		tab: 'project',
+		sections: [
+			{
+				heading: 'What the page holds',
+				blocks: [
+					{
+						type: 'list',
+						items: [
+							'**The model**: headline facts (units, gauges, catchment area, dams, irrigated area, transfers, series, runs), each linking to where it is edited.',
+							'**Download** in the header: the whole project as one JSON file (model, settings and input series), for every member.',
+							'**Members**: who can open the project and with which [[roles|role]]. Owners add people and change roles.',
+							'**Farmers**: which hydrological units each farmer is linked to; a farmer reads only their own.',
+							'**Share links**: read-only links for people outside the project, to the published baseline.'
+						]
+					}
+				]
+			},
+			{
+				heading: 'Roles',
+				blocks: [
+					{
+						type: 'p',
+						text: 'A **viewer** reads everything; an **editor** also changes the model, uploads data and runs it; an **owner** also manages members. A **farmer** reads only the units linked to them. An **applicant** builds licence applications on the published baseline and never sees the model ([[guide:applications-page]]).'
+					}
+				]
+			},
+			{
+				heading: 'Publishing a run',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Nobody outside the model sees a run until an editor publishes it: in **Runs & results**, **Publish this run**, with the catchment’s restriction notice. That run is the [[published-baseline]]: farmers read their figures from it, share links show it, and applications start from it.'
+					}
+				]
+			}
+		],
+		terms: ['roles', 'published-baseline', 'project'],
+		related: ['create-a-project', 'applications-page']
+	},
+	{
+		id: 'history-page',
+		title: 'History: every change, who made it and when',
+		summary: 'The model’s change log: read any earlier version, see how it differs from now, and restore it as a new change.',
+		kind: 'page',
+		tab: 'history',
+		sections: [
+			{
+				heading: 'What the page shows',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Every saved change to the model and settings, every upload, run, publication and membership change, newest first and grouped by day, each with who made it, when, and the reason they gave. Filter by **Hydrological unit**, **Kind of change** or **Parameter**; a field’s own history line links here with those filters set.'
+					},
+					{
+						type: 'p',
+						text: 'Pick a saved version to see **Differences from now**. An editor can restore it; restoring saves it as a new change, so nothing is ever erased. It is hidden from the sidebar until you turn it on in **Choose sections**.'
+					}
+				]
+			}
+		],
+		terms: ['run', 'roles'],
+		related: ['project-page']
 	}
 ];
 

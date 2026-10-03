@@ -656,7 +656,10 @@ on the sidebar's "Catchment" line, in words at the foot of the phone's
 Sections menu; once some are hidden, a count on the corner of the sidebar's
 icon, kept within its 24 px button so the slot never scrolls sideways, and
 "Hidden (n)" in the phone's words) opens a dialog with a
-checkbox per section the role shows here, opening right beside the button
+checkbox per section the role shows here (each section hidden by default
+followed by what it is for, `TAB_HINTS`: "Applications water-use licence
+applications to assess and decide", since the name alone didn't say whether
+to turn it on), opening right beside the button
 (centred on a phone), grouped as the sidebar is (the groups side by side,
 one column on a phone), with **Reset to default** (back to those three hidden; off while the person
 has no choice of their own) and **Done**. Summary is always shown (its box is ticked and disabled). The
@@ -800,6 +803,10 @@ role, freshness, Add data) and each tab's own header:
 
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
   **Unsaved changes** shows beside it while the model or the project details have edits (editors).
+  After them, **How this page works** links to the page's guide on `/help`
+  (`TAB_GUIDE` in `lib/workspace/tabs.ts`, ids only so the workspace never
+  loads the guides; `guides.test.ts` checks every tab has one, about that
+  tab). The Applicant view's header links to the Applications guide.
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -6771,9 +6778,13 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   for 30 days"; "No applications submitted yet"), and **Decide the longest
   waiting**, a link to that application in the Scenarios tab (only while
   one awaits a decision). The counts and wording are `applications.ts`.
-- **Submitted applications** card: a one-line note (on the published
-  baseline; open one to see its changes and runs and decide it; drafts stay
-  with the applicant), a status filter (**All**, **Awaiting a decision**,
+- **Submitted applications** card: a note saying what an application is
+  (a water-use licence applicant's proposed change, such as a new or raised
+  dam, more abstraction or more land under irrigation, modelled on the
+  published baseline; open one to see its changes and runs and decide it;
+  drafts stay with the applicant) and an ⓘ beside the heading opening the
+  glossary's **Licence application** entry (with **Published baseline**,
+  **Scenario** and **Evidence pack** beside it in Basics), a status filter (**All**, **Awaiting a decision**,
   **Decided**, **Withdrawn**, each with its count; `&status=awaiting|decided|withdrawn`
   in the URL, so Back steps through the filters and a link keeps one; an
   unknown value shows all) and **Sort by** newest first or status (awaiting
@@ -7744,8 +7755,8 @@ Part of the workspace, so English, like the rest of the Applicant view
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, then four groups, *Start here*,
-*How it works*, *How to* and *Reference*, the last the glossary's index and
+(`help/HelpNav.svelte`: the overview, then five groups, *Start here*,
+*How it works*, *How to*, *Pages, one by one* and *Reference*, the last the glossary's index and
 one link per topic) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
 indented under a thin rule, so a group reads as a block (issue #162). One
@@ -7795,8 +7806,13 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   outlet, `lib/help/tour.ts`, every stop opens), the setup path (one step per
   setup tab, `SETUP_STEPS` over `SETUP_TABS` in `lib/help/guides.ts`, in the
   order of the workspace's *Build the model* section, which `tour.test.ts`
-  guards) and the model guides. Help names tabs with `TAB_TITLES`, picked from
-  the workspace's own `TAB_LABELS`, so a renamed tab can't leave help behind.
+  guards), the model guides and **What each page does**: the page guides
+  (kind `page`, 2026-10-02), one for each workspace page the setup path and
+  the model guides don't cover (Scenarios, Applications, Allocations, the Map,
+  Dams, River & reserve, Hydrological units, Project and History), each
+  saying what the page is for and how to work it. Help names tabs with
+  `TAB_TITLES`, the workspace's own `TAB_LABELS`, so a renamed tab can't
+  leave help behind.
   *The whole process* has a **Getting around a project** section (the three
   sections, the Project and Dams pages, where the sections sit in the app
   sidebar under the catchment's name, Projects / Teams / Help at its top, the

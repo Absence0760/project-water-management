@@ -8,7 +8,7 @@
 	import { api } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { session } from '$lib/auth/session.svelte';
-	import { ALWAYS_SHOWN, hiddenChoice, hiddenTabs, navSections, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
+	import { ALWAYS_SHOWN, hiddenChoice, hiddenTabs, navSections, TAB_HINTS, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
 
 	let {
 		roleTabs,
@@ -99,6 +99,7 @@
 							/>
 							{TAB_LABELS[id]}
 							{#if id === ALWAYS_SHOWN}<span class="muted">(always)</span>{/if}
+							{#if TAB_HINTS[id]}<span class="muted tab-hint">{TAB_HINTS[id]}</span>{/if}
 						</label>
 					{/each}
 				</fieldset>
@@ -204,6 +205,9 @@
 	}
 	label.fixed {
 		cursor: default;
+	}
+	.tab-hint {
+		font-size: 0.8125rem;
 	}
 	.hint {
 		margin: 0;

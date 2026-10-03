@@ -34,9 +34,9 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/ui.md § Evidence nomination; docs/data-model.md'
 	},
 	'roles': {
-		long: 'Each person has a role on each project. A viewer sees every input and result, can fit the runoff model to explore and download results, but can’t save or run; the workspace says “View only”. An editor changes settings and model data, uploads series, runs the model, writes run notes and nominates the evidence run. An owner also adds and removes members, changes roles and deletes the project.\n\nA project can belong to a team. Team roles use the same names: a team’s owners own every team project, its editors edit them and its viewers view them, and a team owner also manages the team. Someone who is both a direct member and a team member gets the higher of the two roles.',
-		aliases: ['permissions', 'members', 'team', 'view only', 'owner', 'editor', 'viewer', 'team admin'],
-		related: ['project', 'evidence-run'],
+		long: 'Each person has a role on each project. A viewer sees every input and result, can fit the runoff model to explore and download results, but can’t save or run; the workspace says “View only”. An editor changes settings and model data, uploads series, runs the model, writes run notes and nominates the evidence run. An owner also adds and removes members, changes roles and deletes the project.\n\nA project can belong to a team. Team roles use the same names: a team’s owners own every team project, its editors edit them and its viewers view them, and a team owner also manages the team. Someone who is both a direct member and a team member gets the higher of the two roles.\n\nTwo roles see far less. A **farmer** reads only the farms linked to them. An **applicant** (a licence applicant or their consultant) reads what a farmer with the same links reads, plus their own licence applications on the published baseline; they never see the model.',
+		aliases: ['permissions', 'members', 'team', 'view only', 'owner', 'editor', 'viewer', 'team admin', 'farmer', 'applicant'],
+		related: ['project', 'evidence-run', 'application'],
 		source: 'docs/data-model.md § Access control; docs/security.md'
 	},
 	'water-year': {

@@ -20,6 +20,7 @@ export const TOPIC_SLUGS: Record<HelpCategory, string> = {
 	data: 'input-data',
 	results: 'results',
 	fit: 'goodness-of-fit',
+	licensing: 'scenarios-and-licensing',
 	farmer: 'farm-page-words',
 };
 
