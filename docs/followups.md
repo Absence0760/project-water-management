@@ -3432,7 +3432,7 @@ role and not before it.
       `make-fetch-happen` in `backend/renderer-deps/`, used while `npm ci`
       builds the native addon, never at run time, and the flaw needs a cache
       shared between users. `osv-scanner.toml` records it (expires
-      2027-01-31) and the Dependabot alert is dismissed as not used. When a
+      2027-01-31) and the Dependabot alert is dismissed as a tolerable risk. When a
       fixed version ships: `npm install --package-lock-only` in
       `backend/renderer-deps/`, `pnpm check:renderer-image`, drop the
       `osv-scanner.toml` entry.
