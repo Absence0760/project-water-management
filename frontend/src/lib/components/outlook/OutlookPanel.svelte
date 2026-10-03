@@ -226,6 +226,10 @@
 	const busy = $derived(submitting || shown?.kind === 'pending');
 </script>
 
+{#snippet submit()}
+	<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error || !!planError}>{outlook ? 'Run a new outlook' : 'Run seasonal outlook'}</button>
+{/snippet}
+
 <section aria-labelledby="outlook-h" data-testid="seasonal-outlook" data-state={dataState}>
 	<h3 id="outlook-h">Seasonal outlook</h3>
 	<p class="muted small lead">
@@ -237,16 +241,21 @@
 		<p class="muted">An outlook is based on an ordinary run of the model, not a scenario or forecast run.</p>
 	{:else}
 		{#if canEdit}
-			<form class="start" onsubmit={start} novalidate>
-				<div class="field">
-					<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
-					<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
+			<form onsubmit={start} novalidate>
+				<!-- The checkbox and button sit level with the field's box; the hint goes under the row. With a
+				     monthly plan the button moves after it, so it stays last in the tab order. -->
+				<div class="start">
+					<div class="field">
+						<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
+						<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
+					</div>
+					<label class="check">
+						<input type="checkbox" bind:checked={withPlan} disabled={busy} />
+						Add a monthly plan
+					</label>
+					{#if !withPlan}{@render submit()}{/if}
 				</div>
-				<label class="check">
-					<input type="checkbox" bind:checked={withPlan} disabled={busy} />
-					Add a monthly plan
-				</label>
+				<p class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
 				{#if withPlan}
 					<fieldset class="plan">
 						<legend>Monthly plan <span class="u">(% of today’s hydrological unit demand, by month of the season)</span></legend>
@@ -263,8 +272,8 @@
 							{/each}
 						</div>
 					</fieldset>
+					{@render submit()}
 				{/if}
-				<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error || !!planError}>{outlook ? 'Run a new outlook' : 'Run seasonal outlook'}</button>
 			</form>
 			{#if parsed.error}<p class="err" role="alert">{parsed.error}</p>{/if}
 			{#if planError}<p class="err" role="alert">{planError}</p>{/if}
@@ -525,6 +534,18 @@
 		gap: 0.4rem;
 		align-items: center;
 	}
+	/* The checkbox's words on the same line as the text in the levels box; the button's box level with it. */
+	.start .field,
+	.start .check {
+		align-self: last baseline;
+	}
+	/* The button lines up with the box, not with the field's bottom margin. */
+	.start .field {
+		margin-bottom: 0;
+	}
+	.plan + :global(.btn) {
+		margin-top: 0.75rem;
+	}
 	.plan {
 		flex-basis: 100%;
 		border: 1px solid var(--border);
@@ -545,6 +566,7 @@
 		font-size: 0.8rem;
 		color: var(--text-muted);
 		max-width: 80ch;
+		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);

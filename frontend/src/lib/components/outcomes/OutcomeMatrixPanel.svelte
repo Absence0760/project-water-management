@@ -204,13 +204,16 @@
 		<p class="muted">This run has no catchment natural flow, so its water years can’t be classed. Run the model again.</p>
 	{:else}
 		{#if canEdit}
-			<form class="start" onsubmit={start} novalidate>
-				<div class="field">
-					<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
-					<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
+			<form onsubmit={start} novalidate>
+				<!-- The button sits level with the field's box; the hint goes under the row, not between them. -->
+				<div class="start">
+					<div class="field">
+						<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
+						<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
+					</div>
+					<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
 				</div>
-				<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
+				<p class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand; on a full-allocation run, its registered volume (80 means 80 % of it).</p>
 			</form>
 			{#if parsed.error}<p class="err" role="alert">{parsed.error}</p>{/if}
 		{/if}
@@ -328,6 +331,10 @@
 	.start input {
 		min-width: 14rem;
 	}
+	/* The button lines up with the box, not with the field's bottom margin. */
+	.start .field {
+		margin-bottom: 0;
+	}
 	.site {
 		margin: 0.75rem 0 0;
 		max-width: 60ch;
@@ -335,6 +342,8 @@
 	.hint {
 		font-size: 0.8rem;
 		color: var(--text-muted);
+		max-width: 80ch;
+		margin: 0.3rem 0 0;
 	}
 	.err {
 		color: var(--danger);

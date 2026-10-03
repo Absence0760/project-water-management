@@ -371,7 +371,8 @@
 					The server fixes the rule and draws the seed before anything runs, and keeps every ensemble started, so a band can't be chosen after the fact.
 					The browser then runs every member (a few hundred model runs; keep this tab open) and the server re-checks it before storing.
 				</p>
-				<div class="form-row">
+				<!-- Aligned at the top, so the labels and boxes line up and the low-flow checkbox hangs under its box. -->
+				<div class="form-row ensemble-row">
 					<div class="field">
 						<label for="{uid}-n">Parameter sets</label>
 						<input id="{uid}-n" type="number" min={ENSEMBLE_MEMBERS_MIN} max={ENSEMBLE_MEMBERS_MAX} step="1" bind:value={members} disabled={busy} />
@@ -491,6 +492,8 @@
 		align-items: center;
 		font-weight: 400;
 		font-size: 0.85rem;
-		margin-top: 0.25rem;
+	}
+	.ensemble-row {
+		align-items: flex-start;
 	}
 </style>

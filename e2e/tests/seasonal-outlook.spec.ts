@@ -105,6 +105,10 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(panel).toHaveAttribute('data-state', 'empty');
 	await expect(panel.getByTestId('outlook-empty')).toHaveText('No seasonal outlook on this run yet.');
 	await expect(panel.getByLabel(/^Demand levels/)).toHaveValue('100, 85, 70');
+	// The button sits level with the levels box (the hint goes under the row, not beside the button).
+	const box = (await panel.getByLabel(/^Demand levels/).boundingBox())!;
+	const btn = (await panel.getByRole('button', { name: 'Run seasonal outlook' }).boundingBox())!;
+	expect(Math.abs(btn.y + btn.height - (box.y + box.height))).toBeLessThan(2);
 	await panel.getByRole('checkbox', { name: 'Add a monthly plan' }).check();
 	await panel.getByLabel('Name', { exact: true }).fill('Taper');
 	for (const m of ['Jan', 'Feb', 'Mar', 'Apr']) await panel.getByLabel(`${m} (%)`).fill('80');

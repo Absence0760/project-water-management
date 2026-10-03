@@ -18,6 +18,9 @@ test('an ensemble is stored with its rule, reproduces, and pairs with another ru
 	await page.goto(`/projects/${project.id}?tab=river&run=${baseline}`);
 	const panel = page.getByTestId('uncertainty-panel');
 	await expect(panel.getByText('No uncertainty ensemble has been stored for this run.')).toBeVisible();
+	// The ensemble's boxes line up: the low-flow checkbox under its box doesn't lift that field's label.
+	const tops = await Promise.all(['Parameter sets', /^Lowest skill kept/, /^Largest low-flow bias kept/].map(async (l) => (await panel.getByLabel(l).boundingBox())!.y));
+	expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(2);
 
 	// A small, loose ensemble: 30 sets (the fewest that can show percentiles) on 120 synthetic days.
 	await panel.getByLabel('Parameter sets').fill('30');
