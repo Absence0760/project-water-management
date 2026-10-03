@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { helpFor } from './content';
 import { SHOTS } from './pictures';
 import { TOUR } from './tour';
+import { ALL_TABS, TAB_GUIDE } from '$lib/workspace/tabs';
 import {
 	DIAGRAM_IDS,
 	GUIDE_KIND_TITLES,
@@ -61,6 +62,17 @@ describe('guides', () => {
 			expect(g.summary.length, `${g.id} summary`).toBeLessThanOrEqual(160);
 			expect(g.sections.length, g.id).toBeGreaterThan(0);
 		}
+	});
+
+	it('give every workspace page a guide its header can link to, about that page', () => {
+		for (const tab of ALL_TABS) {
+			const g = guideFor(TAB_GUIDE[tab]);
+			expect(g, `${tab} → ${TAB_GUIDE[tab]}`).toBeDefined();
+			expect(g!.tab, `${tab} → ${g!.id}`).toBe(tab);
+		}
+		// Every page guide is some page's header link, so none is orphaned.
+		const linked = new Set(Object.values(TAB_GUIDE));
+		for (const g of GUIDES.filter((x) => x.kind === 'page')) expect(linked.has(g.id), g.id).toBe(true);
 	});
 
 	it('start with exactly one “start here” guide', () => {

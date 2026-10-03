@@ -152,8 +152,8 @@ test('the help contents: groups under headings, the glossary one link per topic 
 
 	// Each group's name is a heading, not a link, and names its list of links;
 	// the group holding the page you're on is the one open.
-	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Reference']);
-	await expect(nav.getByRole('link', { name: /^(Start here|How it works|How to|Reference)$/i })).toHaveCount(0);
+	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Pages, one by one', 'Reference']);
+	await expect(nav.getByRole('link', { name: /^(Start here|How it works|How to|Pages, one by one|Reference)$/i })).toHaveCount(0);
 	await expect(nav.getByRole('button', { name: 'Reference' })).toHaveAttribute('aria-expanded', 'true');
 	const reference = nav.getByRole('list', { name: 'Reference' });
 	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
@@ -218,7 +218,7 @@ for (const { path, heading, text } of [
 	});
 }
 
-// All four groups open made the sticky contents column ~1180 px tall, so it
+// All the groups open made the sticky contents column ~1180 px tall, so it
 // scrolled inside itself at 1440×960 and 1280×800. One group opens at a time
 // (the current page's), and the column fits both windows with any one open.
 for (const viewport of [
@@ -244,6 +244,7 @@ for (const viewport of [
 			['/help/guides/the-whole-process', 'Start here'],
 			['/help/guides/how-calibration-works', 'How it works'],
 			['/help/guides/add-a-transfer', 'How to'],
+			['/help/guides/applications-page', 'Pages, one by one'],
 			['/help/glossary/input-data', 'Reference']
 		] as const) {
 			await page.goto(path);
@@ -259,7 +260,7 @@ for (const viewport of [
 		await page.goto('/help');
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 		const seen = new Set<string>();
-		for (const group of ['Start here', 'How it works', 'How to', 'Reference']) {
+		for (const group of ['Start here', 'How it works', 'How to', 'Pages, one by one', 'Reference']) {
 			const button = nav.getByRole('button', { name: group });
 			await button.focus();
 			await page.keyboard.press('Enter');

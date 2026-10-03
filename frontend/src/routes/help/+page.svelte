@@ -13,6 +13,7 @@
 	import { TOUR } from '$lib/help/tour';
 
 	const concepts = GUIDES.filter((g) => g.kind === 'concept');
+	const pages = GUIDES.filter((g) => g.kind === 'page');
 	const start = GUIDES.find((g) => g.kind === 'start')!;
 
 	// The glossary used to live here: /help#<term> links (old help tips,
@@ -68,6 +69,21 @@
 	</div>
 	<ul class="concepts">
 		{#each concepts as g (g.id)}
+			<li>
+				<a href="{base}/help/guides/{g.id}">{g.title}</a>
+				<p>{g.summary}</p>
+			</li>
+		{/each}
+	</ul>
+</section>
+
+<section aria-labelledby="pages-h" class="block">
+	<div class="block-head">
+		<h2 id="pages-h">What each page does</h2>
+	</div>
+	<p class="muted intro">The rest of a project’s pages: what each is for and how to work it. Each page links here from its header, <strong>How this page works</strong>.</p>
+	<ul class="concepts" data-testid="help-pages">
+		{#each pages as g (g.id)}
 			<li>
 				<a href="{base}/help/guides/{g.id}">{g.title}</a>
 				<p>{g.summary}</p>
