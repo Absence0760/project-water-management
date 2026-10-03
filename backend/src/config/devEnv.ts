@@ -9,8 +9,9 @@
 // Each checkout gets its own dev database, so a branch's unmerged migrations
 // never reach the database another checkout's `pnpm dev` runs against:
 //   the main checkout (its `.git` is a directory)   water
-//   a git worktree (its `.git` is a file)           water_w<1–98>, from a hash of its path
-// (the same number as its DB tests' water_test_w<n>, src/__tests__/test-db.ts).
+//   a git worktree (its `.git` is a file)           water_w<tag>, 16 hex digits from its path
+// (the same tag as its DB tests' water_test_w<tag>, src/__tests__/test-db.ts;
+// config/checkout.ts says why 16 digits, not the 1–98 slot it once was).
 // When every worktree migrated the one `water` database, a branch that
 // renumbered its migration before merging left the main checkout's dev server
 // refusing to start ("applied but its file is missing").
@@ -20,18 +21,15 @@
 // DEV_DB_NAME overrides the name (DEV_DB_NAME=water shares the main checkout's).
 // DEV-ONLY docker credentials.
 import { config } from 'dotenv';
-import { createHash } from 'node:crypto';
-import { realpathSync, statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { checkoutTag, thisCheckout } from './checkout.js';
 
 export const DEV_DB_URL_VARS = ['DATABASE_URL', 'MIGRATION_DATABASE_URL'] as const;
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 const DB_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
 export function devDbName(checkout: string, isWorktree: boolean): string {
-	if (!isWorktree) return 'water';
-	return `water_w${1 + (createHash('sha256').update(checkout).digest().readUInt32BE(0) % 98)}`;
+	return isWorktree ? `water_w${checkoutTag(checkout)}` : 'water';
 }
 
 /** This checkout's dev database: DEV_DB_NAME, else by where it is (see above). */
@@ -41,14 +39,8 @@ export function checkoutDevDbName(env: NodeJS.ProcessEnv = process.env): string 
 		if (!DB_NAME.test(override)) throw new Error(`DEV_DB_NAME must be a lowercase database name, got ${JSON.stringify(override)}`);
 		return override;
 	}
-	const checkout = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
-	let isWorktree = false;
-	try {
-		isWorktree = statSync(`${checkout}/.git`).isFile();
-	} catch {
-		// No .git (an exported tree): the main checkout's name.
-	}
-	return devDbName(checkout, isWorktree);
+	const here = thisCheckout();
+	return devDbName(here.path, here.isWorktree);
 }
 
 /** `url` pointed at database `name` when it is a local URL naming the default `water`; otherwise unchanged. */
