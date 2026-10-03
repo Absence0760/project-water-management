@@ -151,6 +151,8 @@ the catchment's cells are visited), 2026-10-03:
 | 3 072 cells (request cap) | 1.7 s | 0.86 s | 0.79 s | 420 MB |
 | 6 144 cells (worker cap) | 13.3 s | 4.5 s | 2.7 s | 1.17 GB peak |
 
+The peaks are this run's whole process; measured again on the merged code (`delineate-10`) the worker's largest window peaks at 0.95–1.08 GB across four clicks, given as about 1.1 GB everywhere else ([delineation.md § Where it runs](./delineation.md#where-it-runs)).
+
 The pans need the elevations before the fill: a Float32 copy, 4 bytes a
 cell (38 MB at 3 072, 151 MB at 6 144), and a byte a cell of marks. The
 request stays far inside its 20 s budget and the API's 1 024 MB; the

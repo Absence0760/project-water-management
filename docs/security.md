@@ -2648,7 +2648,7 @@ placed points. The server never trusts the browser with geometry:
   `checkGeometry` as every map polygon before it is stored.
   A catchment too large for the request goes to the worker's `delineate`
   job (191_delineation_request, design/delineation.md § Where it runs):
-  larger windows (up to 6 144 cells, about 1.2 GB) in the worker's 300 s and
+  larger windows (up to 6 144 cells, about 1.1 GB) in the worker's 300 s and
   a 150 s budget, so not on an API slot. Each account may have one
   waiting or running at a time (`DELINEATE_JOBS_PER_USER`, counted under a
   per-account advisory lock; the job's dedupe key names the account): a

@@ -2964,7 +2964,7 @@ run "map_data_with_delineation" {
   }
   assert {
     condition     = aws_lambda_function.worker.memory_size >= 2048
-    error_message = "With delineation_dem the worker has at least 2048 MB: a delineate job's 6 144-cell window peaks near 1 GB."
+    error_message = "With delineation_dem the worker has at least 2048 MB: a delineate job's 6 144-cell window peaks at about 1.1 GB."
   }
 }
 
