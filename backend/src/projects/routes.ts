@@ -26,6 +26,7 @@ import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
 import { resolveResponsibleAuthority } from './authoritySettings.js';
 import { readJson } from '../http/body.js';
+import { projectName } from '../http/visibleName.js';
 import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
@@ -114,7 +115,8 @@ const SELECT_PROJECT = `
 			WHERE j.project_id = p.id AND j.dedupe_key = 'rerun' AND j.status IN ('queued', 'failed')) AS rerun_queued_for
 	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
 
-const name = z.string().trim().min(1).max(200);
+/** Cleaned and refused as a display name is (http/visibleName.ts): create, rename and copy. */
+const name = projectName;
 const CreateBody = z.object({ name, description: z.string().max(5000).optional(), teamId: z.string().uuid().nullable().optional() });
 const PatchBody = z.object({
 	name: name.optional(),

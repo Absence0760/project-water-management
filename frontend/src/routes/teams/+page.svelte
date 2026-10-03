@@ -9,6 +9,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { cleanName, workspaceNameProblem } from '$lib/format/visibleName';
 	import { api, roleLabel, roleTitle, type Portfolio, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -64,10 +65,11 @@
 
 	async function create(e: SubmitEvent) {
 		e.preventDefault();
+		createError = workspaceNameProblem(name, 'team');
+		if (createError) return;
 		creating = true;
-		createError = null;
 		try {
-			const t = await api.teams.create(name.trim());
+			const t = await api.teams.create(cleanName(name));
 			createOpen = false;
 			await goto(`${base}/teams/${t.id}`);
 		} catch (err) {

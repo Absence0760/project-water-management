@@ -8,6 +8,7 @@
 	import type { Team } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
+	import { workspaceNameProblem } from '$lib/format/visibleName';
 	import { summarizeImport, type ParsedImport } from './projectFile';
 
 	let {
@@ -34,6 +35,8 @@
 	} = $props();
 
 	const summary = $derived(summarizeImport(parsed.file));
+	// Said once something is typed (the empty field already disables Import): a name of only invisible or bidi characters (format/visibleName.ts).
+	const nameProblem = $derived(name === '' ? null : workspaceNameProblem(name, 'project'));
 	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	const nodeText = $derived(
 		[
@@ -55,7 +58,8 @@
 
 <div class="field">
 	<label for="imp-name">Name</label>
-	<input id="imp-name" required maxlength="200" bind:value={name} {disabled} />
+	<input id="imp-name" required maxlength="200" bind:value={name} {disabled} aria-invalid={nameProblem ? 'true' : undefined} aria-describedby={nameProblem ? 'imp-name-err' : undefined} />
+	{#if nameProblem}<p class="name-err" id="imp-name-err">{nameProblem}</p>{/if}
 </div>
 
 {#if teams.length}
@@ -108,6 +112,11 @@
 </p>
 
 <style>
+	.name-err {
+		margin: 0.25rem 0 0;
+		color: var(--danger);
+		font-size: 0.85rem;
+	}
 	.notes-head {
 		margin: 0;
 		font-weight: 600;

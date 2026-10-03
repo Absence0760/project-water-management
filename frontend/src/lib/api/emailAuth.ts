@@ -2,6 +2,7 @@
 // § Auth, § Members, § Teams). Kept beside client.ts rather than inside it so
 // it can land without touching the shared client; it goes through the same
 // `request`, so errors are the usual ApiError.
+import { nameProblemKind } from '$lib/format/visibleName';
 import { msg, type Msg } from '$lib/i18n/msg';
 import type { Api } from './client';
 import type { AddMemberResult, Invite, InviteInfo, Member, Role, TeamMember, TeamRole } from './types';
@@ -72,15 +73,16 @@ export function passwordProblem(password: string, confirm: string): Msg | null {
 }
 
 /**
- * Display-name rule shared with the server (backend/src/auth/displayName.ts):
- * 1–100 characters once whitespace runs are one space and the controls are
- * dropped, with at least one letter, digit, symbol or punctuation mark, so a
- * name of only invisible characters is refused here rather than as a bare 400.
+ * Display-name rule shared with the server (backend/src/http/visibleName.ts,
+ * format/visibleName.ts): 1–100 characters once whitespace runs are one space
+ * and the controls are dropped, with at least one letter, digit, symbol or
+ * punctuation mark, so a name of only invisible characters is refused here
+ * rather than as a bare 400.
  */
 export function displayNameProblem(name: string): Msg | null {
 	// i18n-section: account
-	const clean = name.replace(/\s+/g, ' ').replace(/[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu, '').trim();
-	if (!/[\p{L}\p{N}\p{S}\p{P}]/u.test(clean)) return msg('Enter a display name.');
-	if (clean.length > 100) return msg('Use at most 100 characters.');
+	const kind = nameProblemKind(name, 100);
+	if (kind === 'blank') return msg('Enter a display name.');
+	if (kind === 'long') return msg('Use at most 100 characters.');
 	return null;
 }

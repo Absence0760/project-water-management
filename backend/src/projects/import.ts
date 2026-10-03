@@ -12,6 +12,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { recordModelRevision } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
+import { projectName } from '../http/visibleName.js';
 import { saveModel } from '../model/store.js';
 import { modelProblems } from '../model/validate.js';
 import { runLiveModel } from '../runs/execute.js';
@@ -96,7 +97,7 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await db.query(
 		`INSERT INTO project (id, name, description, settings, created_by, team_id, time_zone)
 		 VALUES ($1, $2, $3, $4, app_current_user_id(), $5, $6)`,
-		[id, opts.name ?? data.name, data.description, JSON.stringify(importedSettings(data.settings, ids)), opts.teamId ?? null, data.timeZone]
+		[id, opts.name !== undefined ? projectName.parse(opts.name) : data.name, data.description, JSON.stringify(importedSettings(data.settings, ids)), opts.teamId ?? null, data.timeZone]
 	);
 	await saveModel(db, id, model);
 	for (const s of data.series) {

@@ -10,12 +10,12 @@ import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
 import { requireStepUp } from '../auth/stepUp.js';
 import { readJson } from '../http/body.js';
+import { teamName } from '../http/visibleName.js';
 import { recordTeamAudit } from '../history/record.js';
 import { applySettingsPatch, appliedThresholds, teamThresholds, TeamSettingsPatch } from './settings.js';
 import { PrivacyContactInput, toPrivacyContact } from './privacyContact.js';
 
 const RoleEnum = z.enum(TEAM_ROLES);
-const Name = z.string().trim().min(1).max(200);
 
 /**
  * Friendly 409 before the deferred team_member_keep_admin trigger would abort
@@ -74,7 +74,7 @@ async function getTeam(db: Db, id: string) {
 
 const TeamPatch = z
 	// privacyContact: the organisation's privacy contact (168, POPIA s18(1)(b)); null removes it.
-	.object({ name: Name.optional(), settings: TeamSettingsPatch.optional(), privacyContact: PrivacyContactInput.nullable().optional() })
+	.object({ name: teamName.optional(), settings: TeamSettingsPatch.optional(), privacyContact: PrivacyContactInput.nullable().optional() })
 	.strict()
 	.refine((b) => b.name !== undefined || b.settings !== undefined || b.privacyContact !== undefined, {
 		message: 'nothing to change: send name, settings or privacyContact'
@@ -111,7 +111,7 @@ export const teamRoutes = new Hono<AuthEnv>()
 		})
 	)
 	.post('/', async (c) => {
-		const body = z.object({ name: Name }).parse(await readJson(c));
+		const body = z.object({ name: teamName }).parse(await readJson(c));
 		return withUser(c.get('userId'), async (db) => {
 			// Id generated here: RETURNING would be checked against team_select
 			// before the AFTER trigger has made the creator a member.

@@ -215,7 +215,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (whitespace runs made one
   space, control and bidi embedding/override/isolate characters dropped, then
   trimmed; 1–100 characters with at least one visible one, as at sign-up,
-  `auth/displayName.ts`), `locale` (a code in the language table, e.g. `'en'` or
+  `http/visibleName.ts`), `locale` (a code in the language table, e.g. `'en'` or
   `'af'`, or `null` to go back to following the browser; any other value,
   including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`),
   and `preferences`, whose keys sent replace the account's (the others stay):
@@ -373,6 +373,12 @@ member reads). Their own farm routes come with WP-2.6.
 
 Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
 (members, delete, move between teams).
+
+A project's `name` (create, rename, copy, and a project document's on
+import) is cleaned as a display name is (`http/visibleName.ts`): whitespace
+runs made one space, control and bidi embedding/override/isolate characters
+dropped, then trimmed; it must be 1–200 characters with at least one
+visible one, else `400`. A team's `name` follows the same rule.
 
 Your effective role is the highest of your direct membership and your team
 membership: on a team's projects, a team **admin** is an `owner`, a team
@@ -1096,7 +1102,7 @@ email show them by the project role they give, viewer / editor / owner
 | Method | Path | Body | Response | Min team role |
 | --- | --- | --- | --- | --- |
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
-| POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
+| POST | `/teams` | `{ name }` | `201 { team }` (you become its admin); `400` a name that shows as nothing or is over 200 characters once cleaned ([§ Projects](#projects)) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below) | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
