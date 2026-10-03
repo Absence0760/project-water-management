@@ -420,7 +420,11 @@ under a dead-invitation warning).
   out asks for the **Email** and sends a fresh link from the page (**Send a new
   link**, the same request and answer), with **Sign in** beside it: an
   unconfirmed account can't sign in to reach the banner's *Resend email*.
-  Signed in, it offers **Send a new link** for the account's own address.
+  Signed in to an unconfirmed account, it offers **Send a new link** for that
+  account's own address; signed in to a confirmed one, nothing to send (the
+  footer leads back). A live link for another address than the signed-in
+  account's (`POST /auth/verify-email` answers the address it confirmed)
+  confirms it and says so without naming the signed-in account as confirmed.
 - **Display names** are checked as the server checks them
   (`lib/api/emailAuth.ts displayNameProblem`, `backend/src/auth/displayName.ts`):
   a name of only invisible characters (zero-width spaces, a lone bidi
@@ -8580,7 +8584,8 @@ signed in or out, for someone outside the project, on a phone first.
 - **The token** is in the fragment (`/share#t=…`). The page reads it once,
   strips it from the address bar (`replaceState`, as the reset pages strip
   `?token=`), and POSTs it to `/share/view`; a link pasted into the same tab
-  (only the fragment changes) is picked up the same way. The page sets
+  (only the fragment changes) is picked up the same way, and only the latest
+  link's answer is shown, however the two answers race (`share/load.ts latestOnly`). The page sets
   `noindex, nofollow` and `no-referrer`, and has its own header ("Water
   Management" with "Shared view" under it, and the EN | AF switch beside,
   one row on a 360 px phone; its content lined up over the page's), not
