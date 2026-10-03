@@ -8,7 +8,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { enqueueJob, JobCollisionError } from '../jobs/queue.js';
 import { runTick } from '../jobs/runner.js';
+import { YieldRequest, yieldDedupeKey } from './store.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -190,6 +192,30 @@ describe('an applicant’s yield on their own application', () => {
 		await tick();
 		expect(await job(mine.body.jobId)).toEqual({ status: 'done', last_error: null });
 		expect(await job(theirs.body.jobId)).toEqual({ status: 'done', last_error: null });
+	});
+
+	it('a collision with a pending job they can’t see is a 409 job_collision, not a 500 (issue #386)', async () => {
+		// The route keys an applicant's request per user, so it never collides with an assessor's. Enqueue
+		// directly with the assessor's key to stand for a future kind that forgets to: the insert meets the
+		// assessor's pending job, which RLS hides from the applicant, so there is nothing to return.
+		const s = await applicant.call('POST', `${P()}/scenarios`, {
+			name: 'Raise Rooikloof once more',
+			baseRunId: published,
+			ops: [{ op: 'node.set', nodeId: rooikloof.id, field: 'damCapacityM3', value: 80_000 }]
+		});
+		expect(s.status, JSON.stringify(s.body)).toBe(201);
+		expect((await applicant.call('POST', `${P()}/scenarios/${s.body.scenario.id}/submit`, {})).status).toBe(200);
+		const same = YieldRequest.parse({ kind: 'firm', scenarioId: s.body.scenario.id, nodeId: rooikloof.id });
+		const theirs = await ask(owner, same);
+		expect(theirs.status, JSON.stringify(theirs.body)).toBe(202);
+		const shared = yieldDedupeKey(same);
+		const err = await withUser(applicant.id, (db) => enqueueJob(db, { projectId, kind: 'yield', payload: same, dedupeKey: shared })).catch((e: unknown) => e);
+		expect(err, String(err)).toBeInstanceOf(JobCollisionError);
+		expect(err).toMatchObject({ status: 409, code: 'job_collision' });
+		// Positive control: the owner (an editor) sees the pending job and gets it back.
+		const again = await withUser(owner.id, (db) => enqueueJob(db, { projectId, kind: 'yield', payload: same, dedupeKey: shared }));
+		expect(again).toMatchObject({ created: false, job: { id: theirs.body.jobId } });
+		await tick();
 	});
 
 	it('doesn’t see a yield someone else stored on their application, even of their own dam', async () => {

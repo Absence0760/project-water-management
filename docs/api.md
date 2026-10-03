@@ -314,6 +314,14 @@ the frontend catalogue (same contract: add, never rename):
   (`163_licensing_authority`'s conflict guard; provisional position,
   pre-counsel research, 2026-10-01). Take them out of the party, or keep
   them below editor.
+- `job_collision` (`409` from a request that queues a job): the job met a
+  pending one with the same dedupe key that the caller can't see under RLS,
+  so there is none to return (`backend/src/jobs/queue.ts`
+  `JobCollisionError`, issue #386). Only a contributor (an applicant) can
+  meet it, and only if a kind they can queue isn't keyed per user; every
+  kind they can queue is (`backend/src/jobs/contributorKinds.ts`, which a
+  catalogue test holds to the job table's insert policies). Try again once
+  the pending job has run.
 
 | Code | Status | When |
 | --- | --- | --- |

@@ -1254,7 +1254,10 @@ licensing evidence pack: its frozen manifest and hash, and its lifecycle.
   queues one as themselves (`POST …/scenarios/:sid/packs/:packId/pdf`),
   deduplicated per pack and party (`applicant_copy:<pack>:<user>`); the
   production retry is `applicant_copy_retry:<pack>:<user>:<n>` and the
-  renderer's answer `applicant_copy_result:<pack>`. `job_insert_applicant_copy`
+  renderer's answer `applicant_copy_result:<pack>:<user>` (per party since
+  issue #386: they read only their own jobs, so a key shared with another
+  member's pending answer would leave them none to get back).
+  `job_insert_applicant_copy`
   lets a party insert one for an issued pack of their application
   (`app_applicant_copy_target`, through `app_applicant_pack_meta`);
   `job_select_applicant_copy` lets a contributor read the ones they
@@ -2817,7 +2820,7 @@ The background job queue's source of truth ([architecture.md § Background work]
 | --- | --- |
 | `project_id`, `kind` | The project, and one of `feed_fetch`, `feed_ingest`, `rerun`, `alert_eval`, `report_render` (every step-2 kind, so later work packages add a handler, not a CHECK change), and `yield` (040_yield, WP-3.6). Every kind has a handler since WP-2.13 added `alert_eval` ([§ Alerts](#alerts-051_alertssql)) |
 | `payload` | A JSON object, ≤ 256 KB (fits an SQS message). Validated by the kind's handler when it runs, as untrusted input |
-| `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running`; a running one that fails while a newer one with its key is pending is `dead` at once (the newer one does the work; `jobs/runner.ts` `recordFailure`) |
+| `dedupe_key` | Optional. At most one pending (`queued` or `failed`) job per `(project_id, dedupe_key)`: the partial unique index `job_dedupe_idx`. A pending job also waits while one with its key is `running`; a running one that fails while a newer one with its key is pending is `dead` at once (the newer one does the work; `jobs/runner.ts` `recordFailure`). A second enqueue gets the pending job back, so the key must name only jobs the enqueuer can read: a kind a contributor can queue (`yield`, `applicant_pack_render`) keys every pending job per user, which `jobs/contributorKinds.ts` lists and `jobs/contributorKinds.db.test.ts` holds to the insert policies; a collision with a job the caller can't read is `409 job_collision` (`JobCollisionError`, issue #386) |
 | `status`, `run_after`, `attempts`, `max_attempts` | `queued` → `running` → `done`; or `failed` (retry at `run_after` = failure + `2^attempts` minutes) → … → `dead`. `max_attempts` 1–10, default 5 |
 | `locked_until`, `lease_token` | A running job's lease and its fencing token (set together, only while `running`) |
 | `last_error` | ≤ 500 characters, written by the worker (`jobs/errors.ts`), never raw database text |
