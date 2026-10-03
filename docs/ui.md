@@ -955,7 +955,10 @@ same way on every screen:
   buttons sit in the dialog's action row, on the right: **Cancel** and the
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
-  `form` attribute). With a file read but not uploaded, **Cancel**, the close
+  `form` attribute). While the upload runs, **Cancel** is disabled and the
+  close button and Esc do nothing (the request would finish anyway). A
+  second file dropped on the page while one is read but not uploaded asks
+  "Replace the file?" first. With a file read but not uploaded, **Cancel**, the close
   button and Esc ask "Discard the file?" first (the confirmation dialog)
   (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
   question, on the window, so an Esc pressed after the focus fell to the
@@ -973,7 +976,22 @@ same way on every screen:
   days before anything is sent, and warns about **blank days** between the
   series' last value and the file's first day (`coverage.ts` `holeBefore`):
   the merge stores them as blanks, and a run treats a blank rain day as dry.
-  **Replace** overwrites the whole series.
+  If the stored values can't be read for that comparison, the summary says so
+  with **Try again** in place of *Comparing with the stored series…* (the
+  merge waits for it: without them it can't say what it overwrites).
+  **Replace** overwrites the whole series. A refused upload's reason shows
+  beside the action, the last thing above the action row, scrolled into
+  view, and goes when the file, kind, name, mode or unit changes.
+  A name that matches no series creates one; when the kind already has some,
+  the form says what a run will make of it (runs read the first of a kind by
+  name): *Creates a second … series. Runs read the first by name, so this one
+  **will replace “Station 0021” in runs*** or *… so they keep reading “Station
+  0021”* (`roles.ts` `newSeriesEffect`), and a name that differs from an
+  existing one only in case or spacing gets *Did you mean “Station 0021”?*
+  with a button that takes it. The **Kind** field has the kind's ⓘ tip. The
+  alternative gauge's and the reanalysis' **Product and version** are one
+  optional pair: one without the other says *Give both, or leave both blank*
+  and holds the upload (the server refuses a half label).
   **Overwrite confirm** (issue #54 item 3): an upload that would change
   stored days (a merge with changed days, or a Replace of a series holding
   values) asks first, in place of the submit button. It says how many days,
@@ -3536,10 +3554,17 @@ with the table the data needs).
   the series and those behind ("5 daily input series · 2 behind",
   `workspace/context.ts`), then the Rain up to pill, **Preview all data**
   (filled through `fillHeader`; absent with no series) and **Add data**, the
-  main (primary) action for editors. The tab's own notices (new data since
-  the latest run with its *Re-run the model* link, a feed rebuilding a
-  series, a failed delete or relabel) are slim lines under the header, like
-  the page's. The series table's panel has no summary line of its own: one
+  main (primary) action for editors. *New data since the last run* is the
+  page's own notice here as on every tab (`freshness.ts` `newDataSinceRun`:
+  a driver series updated after the run, a correction of old days
+  included, or with data past its end; **Re-run model**, or *An automatic
+  re-run is queued …* when one is), and the upload banner stands in for it
+  after an upload; until 2026-10-02 the tab had a second notice of its own,
+  on a different rule (the raw end date, no correction, no queued re-run)
+  with a *Re-run the model* link. The tab's own notices (a feed rebuilding
+  a series, a failed delete, a failed refresh of the list, which keeps the
+  table drawn and offers **Try again**) are slim lines under the header,
+  like the page's. The series table's panel has no summary line of its own: one
   that read "Daily values · 5 series · 2 behind (more than 7 days old) ·
   recorded rain up to …" repeated the context line and the pill, and was
   folded into the context (issue #174); the table's key says what *behind*
@@ -3574,7 +3599,7 @@ with the table the data needs).
   scrolls inside itself (the table grows with its rows rather than the
   global 70vh table box; it would still scroll sideways if it had to). With
   more than seven series the table shows the first six in its order (four
-  below 640 px, where each row is a card), then **Show all N series**
+  in a column 640 px or narrower, where each row is a card), then **Show all N series**
   (`aria-expanded`, `aria-controls="series-rows"`; open, **Show only the
   first 6 series**), which opens the rest in place (`common/fold.ts`
   `foldList`). The charted series' row always shows, after the first six
@@ -3586,7 +3611,11 @@ with the table the data needs).
   box and the chart filled the rest, so the panels below went unseen
   (`data-page.spec.ts` pins the flow, the fold and no inner scroller on
   desktop and phone). The gauge-vs-logger table, the double mass panel, Data checks and
-  *What the model uses* follow below. *What the model uses* spans the page;
+  *What the model uses* follow below. The gauge-vs-logger table flows too: the
+  flagged water years and the latest five, the rest behind **Show all N water
+  years** (`series/agreementFold.ts`; on Runs & results it keeps its 320 px
+  box, a focusable named region); its *choose the calibration flow series*
+  link lands on Settings → Calibration record (`#set-record`). *What the model uses* spans the page;
   its kinds (at least 22rem each, one column on a phone) are behind **Show
   what each kind of series is for** (a `<details>`, closed by default, issue
   #174), and its closing note, at a reading measure, shows either way.
@@ -3597,7 +3626,7 @@ with the table the data needs).
   (`#data-agreement`), **Double mass** (`#data-double-mass`), **Data checks**
   (`#data-checks`) and **What the model uses** (`#data-uses`), each only when
   the page draws it (`series/sections.ts`, `dataNavGroups`), in three groups
-  named for screen readers (Series, Checks, Adding data). A loaded
+  named for screen readers (Series, Checks, Reference). A loaded
   `?tab=series#data-…` link lands on its panel once it is drawn, held there
   (`holdAnchor`) with focus on its heading. The retired `#upload-csv` (the
   Upload CSV panel's id, `retiredDataAnchor`) opens Add data for an editor,
@@ -3608,14 +3637,22 @@ with the table the data needs).
   the table at once: the tab takes the page's new series list when it
   changes (before 2026-09-26 the table kept its own copy until the page was
   reloaded). With no series, the empty state says to upload with Add data,
-  and for editors its **Upload a CSV** button opens the same dialog; the
+  and for editors its **Add a data file** button opens the same dialog; the
   upload takes the button away with the empty state, so focus goes to the
   *Input time series* heading when the dialog closes.
 
 Each series shows its role in the model, its last date and age, its period,
 % missing, a typical value (mean annual rainfall in mm/a, or mean flow), and
 a strip showing coverage per year. Series a run won't read (not the first of
-their kind by name) are marked. Editors can **Delete** a series (after a
+their kind by name) are marked. The role badge carries its reason in its own
+words, and the kind's role is an ⓘ `HelpTip` beside it (`series.<kind>`); a
+gauge record adds a line saying where it is checked and scored
+(`roles.ts` `roleBadge`). None of it is a hover title any more, which
+keyboard, touch and screen-reader users never got. The CHIRPS label, where a
+flow record was measured and the charted series' source **save on change**:
+each says *Saving…*, then *Saved* or *Not saved: &lt;reason&gt;* beside itself
+(a polite live region the control is described by), and a failed save puts
+the control back to the stored value. Editors can **Delete** a series (after a
 confirm; runs already stored are not affected). A CHIRPS series shows which
 product and version it holds (issue #40 part c): editors get a select
 (*Version not recorded*, CHIRPS v2.0, CHIRPS sat v3.0, CHIRPS rnl v3.0) that
@@ -3684,9 +3721,16 @@ days, **08:00 to 08:00, booked to the day it starts** (the default, the
 manual-gauge day) or **midnight to midnight**, and its summary says how many
 readings, how many a day and how many days are short of that. Each
 timestamp closes its interval. The series records the choice
-(`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
+(`dayBoundary`), shown as *08:00–08:00 days, added up from sub-daily
+readings* on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
-Below 640px wide each row becomes a card
+The table's breakpoints are container queries on the page's column
+(`@container data-page`), not the viewport, since the sidebar takes 240 px.
+In a column up to 72rem (a 1024 px window beside the sidebar) the table fits
+without a sideways scroll: *From* folds under *Data up to* (the From column
+is hidden from sight, kept for screen readers), the row header and coverage
+narrow, and the row's buttons wrap two to a line. In a column 640 px or
+narrower each row becomes a card
 (series and role on top, then labelled Data up to / From / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
@@ -3773,10 +3817,13 @@ column (same label, unit and order as the table above, with its
 `checkSeries`/`seriesRowFlags` quality flags on the value) is a **column
 picker** grouped into *Series* and *How the model used it*: a m³/day column
 for every flow series; **Rain used (model)** and its source (catchment / CHIRPS /
-forecast / none) after gap-fill; the **CHIRPS bias factor** for that calendar
+forecast) after gap-fill, in words beside the value; the **CHIRPS bias factor** for that calendar
 month and the **CHIRPS (corrected)** value (respecting Settings → *CHIRPS bias
 correction*); and **Excluded from calibration**, with its reason, for any day
-inside a Settings → *Calibration exclusions* period. Every column header,
+inside a Settings → *Calibration exclusions* period. A flagged value says
+which check flagged it beside it (*12.4 · Outlier*), Rain used its source
+and Excluded its reason, in small text on screen, not only to a screen
+reader; the row stays 28 px. Every column header,
 Date included, carries an ⓘ `HelpTip` saying where that number comes from, how
 it is derived and what it tells you: a raw series column reuses its kind's
 `series.<SeriesKind>` entry, and each derived column has its own

@@ -7,14 +7,14 @@ const ALL = { chart: true, agreement: true, doubleMass: true, checks: true };
 describe('dataNavGroups', () => {
 	it('links every panel, in page order, when the page draws them all', () => {
 		expect(ids(ALL)).toEqual([...DATA_ANCHORS]);
-		expect(dataNavGroups(ALL).map((g) => g.label)).toEqual(['Series', 'Checks', 'Adding data']);
+		expect(dataNavGroups(ALL).map((g) => g.label)).toEqual(['Series', 'Checks', 'Reference']);
 	});
 
 	it('leaves out the panels the page does not draw, and a group with none left', () => {
 		// A new catchment: no chart yet, no checks.
 		const none = { chart: false, agreement: false, doubleMass: false, checks: false };
 		expect(ids(none)).toEqual(['data-series', 'data-uses']);
-		expect(dataNavGroups(none).map((g) => g.label)).toEqual(['Series', 'Adding data']);
+		expect(dataNavGroups(none).map((g) => g.label)).toEqual(['Series', 'Reference']);
 		expect(ids({ ...ALL, agreement: false })).toEqual(['data-series', 'data-chart', 'data-double-mass', 'data-checks', 'data-uses']);
 	});
 

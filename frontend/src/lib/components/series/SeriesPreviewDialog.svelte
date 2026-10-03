@@ -22,7 +22,7 @@
 	import { kindLabel } from '$lib/series/kinds';
 	import { fmtNum, fmtReading } from '$lib/format/number';
 	import type { Daily } from './coverage';
-	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag } from './preview';
+	import { buildPreviewColumns, buildPreviewRows, FLAG_LABEL, filterPreviewRows, headerUnit, seriesColumnId, type PreviewFlag, type RainSource } from './preview';
 
 	let {
 		open = $bindable(false),
@@ -125,6 +125,8 @@
 
 	const numText = fmtReading;
 	const flagList = (flags: PreviewFlag[]) => flags.map((f) => FLAG_LABEL[f]).join(', ');
+	// Where Rain used came from, in words beside the value (the colour is never the only cue).
+	const RAIN_SOURCE_LABEL: Record<Exclude<RainSource, 'none'>, string> = { catchment: 'catchment', chirps: 'CHIRPS', forecast: 'forecast' };
 
 	// Focus the search when it appears. `autofocus` alone only works if the
 	// search is there when the dialog opens: Svelte applies it only while focus
@@ -238,16 +240,14 @@
 								{#if col.group === 'series'}
 									{@const cell = row.series[col.seriesId!]}
 									<td class="num" class:flag={cell && cell.flags.length > 0} class:hl={col.seriesId === focusSeriesId}>
-										{numText(cell?.value ?? null)}
-										{#if cell && cell.flags.length}<span class="visually-hidden"> — {flagList(cell.flags)}</span>{/if}
+										{numText(cell?.value ?? null)}{#if cell && cell.flags.length}<span class="tag" data-testid="cell-flags"> · {flagList(cell.flags)}</span>{/if}
 									</td>
 								{:else if col.id.startsWith('m3day:')}
 									{@const cell = row.series[col.seriesId!]}
 									<td class="num" class:hl={col.seriesId === focusSeriesId}>{numText(cell?.m3Day ?? null)}</td>
 								{:else if col.id === 'rainUsed'}
 									<td class="num">
-										{numText(row.derived.rainUsedMm)}
-										{#if row.derived.rainSource}<span class="visually-hidden"> — {row.derived.rainSource}</span>{/if}
+										{numText(row.derived.rainUsedMm)}{#if row.derived.rainSource && row.derived.rainSource !== 'none'}<span class="tag" data-testid="rain-source"> · {RAIN_SOURCE_LABEL[row.derived.rainSource]}</span>{/if}
 									</td>
 								{:else if col.id === 'chirpsFactor'}
 									<td class="num">{row.derived.chirpsFactor == null ? '–' : `${fmtNum(row.derived.chirpsFactor, 2)}×`}</td>
@@ -255,8 +255,7 @@
 									<td class="num">{numText(row.derived.chirpsCorrectedMm)}</td>
 								{:else if col.id === 'excluded'}
 									<td class:flag={row.derived.excluded}>
-										{row.derived.excluded ? 'Excluded' : '–'}
-										{#if row.derived.exclusionReason}<span class="visually-hidden"> — {row.derived.exclusionReason}</span>{/if}
+										{row.derived.excluded ? 'Excluded' : '–'}{#if row.derived.exclusionReason}<span class="tag" data-testid="exclusion-reason"> · {row.derived.exclusionReason}</span>{/if}
 									</td>
 								{/if}
 							{/each}
@@ -391,6 +390,11 @@
 	}
 	table.data td.flag {
 		background: var(--row-flag);
+	}
+	/* Which check flagged a value, Rain used's source, an exclusion's reason: on screen, compact, the row still 28 px. */
+	.tag {
+		font-size: 0.75rem;
+		color: var(--text-2);
 	}
 	.hl {
 		background: var(--accent-soft);

@@ -3,7 +3,8 @@
 // the window's one scroll with a long table folded under "Show all", and Add data refreshing the list. Synthetic series only.
 import { fileURLToPath } from 'node:url';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject } from '../support/api.ts';
+import { addMember, createProject, createRun, putSeries, seedRunnableProject, syntheticRain, updateSettings } from '../support/api.ts';
+import { csv } from '../support/addData.ts';
 import { API_URL } from '../support/env.ts';
 import { chartReady, openData, putEnding, sections, seedFreshnessMix, seriesChart, seriesRow, seriesRows, seriesTable } from '../support/data.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -81,10 +82,14 @@ test('picking a series charts it through the URL: Back returns to the one before
 	await expect(seriesRow(page, 'Gauge R1').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-/** Elements on the Data tab that scroll vertically inside themselves (the page is the one scroll; issue #17, 2026-09-29). */
+/**
+ * Elements on the Data tab that scroll vertically inside themselves (the page is the one scroll; issue #17,
+ * 2026-09-29): the series and chart, and the panels below them (gauge vs logger, double mass, checks, reference).
+ */
 const innerScrollers = (page: import('@playwright/test').Page) =>
-	page.locator('.data-page').evaluate((root) =>
-		[root, ...root.querySelectorAll('*')]
+	page.evaluate(() =>
+		[...document.querySelectorAll('.data-page, #data-agreement, #data-double-mass, #data-checks, #data-uses')]
+			.flatMap((root) => [root, ...root.querySelectorAll('*')])
 			.filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
 			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
 	);
@@ -254,7 +259,7 @@ test('with no series the header offers only Add data, the empty state points at 
 	await expect(page.getByText('No time series yet.')).toContainText('as CSV files with Add data.');
 	await expect(page.getByLabel('CSV file')).toHaveCount(0);
 	// The empty state's own button opens the same dialog as the header's; Escape gives focus back to it.
-	const fromEmpty = page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Upload a CSV' });
+	const fromEmpty = page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Add a data file' });
 	const dialog = page.getByRole('dialog', { name: 'Add data' });
 	await fromEmpty.click();
 	await expect(dialog).toBeVisible();
@@ -275,4 +280,117 @@ test('with no series the header offers only Add data, the empty state points at 
 	await chartReady(page);
 	await expect(page).toHaveURL(/[?&]series=/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Input time series' })).toBeFocused();
+});
+
+test('gauge vs logger flows with the page: the flagged and latest water years, the rest under “Show all”, no inner scroll; its link lands on Calibration record', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Data agreement fold');
+	// About 30 water years of both records; the logger reads a third of the gauge in one year (2004/05).
+	const start = '1994-10-01';
+	const days = 30 * 365;
+	const gauge = Array.from({ length: days }, (_, d) => 1 + (d % 30) / 30);
+	const logger = gauge.map((v, d) => (d >= 10 * 365 && d < 11 * 365 ? v / 3 : v));
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Weir', unit: 'm³/s', startDate: start, values: gauge });
+	await putSeries(page.request, project.id, { kind: 'flow_logger_m3s', name: 'Logger', unit: 'm³/s', startDate: start, values: logger });
+	await openData(page, project.id);
+	const panel = page.locator('#data-agreement');
+	await expect(panel.getByRole('heading', { level: 2, name: 'Gauge vs logger agreement' })).toBeVisible();
+	const more = panel.getByRole('button', { name: /^Show all \d+ water years$/ });
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(panel.getByText('disagree', { exact: true })).toHaveCount(1);
+	expect(await innerScrollers(page)).toEqual([]);
+	await expectNoViolations(page);
+	await more.click();
+	await expect(panel.getByRole('button', { name: 'Show only the flagged and latest years' })).toHaveAttribute('aria-expanded', 'true');
+	expect(await innerScrollers(page)).toEqual([]);
+
+	await panel.getByRole('link', { name: 'choose the calibration flow series' }).click();
+	await expect(page).toHaveURL(/[?&]tab=settings#set-record$/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Calibration record' })).toBeFocused();
+});
+
+for (const size of [
+	{ width: 1024, height: 768 },
+	{ width: 1280, height: 800 }
+]) {
+	test(`with 30 series the table fits its column beside the sidebar at ${size.width} px: no sideways scroll, Delete in view`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize(size);
+		const project = await createProject(page.request, `Data fit ${size.width}`);
+		const kinds = ['rain_catchment_mm', 'rain_chirps_mm', 'flow_observed_m3s', 'flow_logger_m3s', 'evap_apan_mm', 'rain_catchment_alt_mm'];
+		for (let i = 0; i < 30; i++)
+			await putEnding(page.request, project.id, { kind: kinds[i % kinds.length]!, name: `Station ${String(i + 1).padStart(2, '0')} with a long descriptive name`, endAgo: 2, length: 800 });
+		await openData(page, project.id);
+		await chartReady(page);
+		const wrap = page.getByRole('region', { name: 'Input time series' }).locator('.table-wrap');
+		expect(await wrap.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+		const del = seriesRows(page).first().getByRole('button', { name: /^Delete/ });
+		await del.scrollIntoViewIfNeeded();
+		await expect(del).toBeInViewport();
+		// From folds under Data up to when the column is narrow; a screen reader still has the From column.
+		await expect(seriesTable(page).getByRole('columnheader', { name: 'From' })).toHaveCount(1);
+	});
+}
+
+test('a failed refresh of the series list keeps the table and says so', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data refresh fails');
+	await seedFreshnessMix(page.request, project.id);
+	// The page's own list load goes through; the tab's refresh on mount (the second list request) fails.
+	let lists = 0;
+	await page.route(/\/projects\/[^/]+\/series$/, async (route) => {
+		if (route.request().method() !== 'GET') return route.fallback();
+		lists++;
+		if (lists === 2) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) });
+		await route.fallback();
+	});
+	await openData(page, project.id);
+	await expect(page.getByTestId('refresh-error')).toBeVisible();
+	await expect(seriesRows(page)).toHaveCount(5);
+	await page.getByTestId('refresh-error').getByRole('button', { name: 'Try again' }).click();
+	await expect(page.getByTestId('refresh-error')).toHaveCount(0);
+	await expect(seriesRows(page)).toHaveCount(5);
+});
+
+test('new data since the latest run is one notice, the page’s: after an upload, after a correction of old days, and with an automatic re-run queued', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Data new since run');
+	await createRun(page.request, project.id, 'Baseline');
+	await openData(page, project.id);
+	const notices = page.getByTestId('notice-line').getByRole('status');
+	await expect(notices).toHaveCount(0);
+
+	// An upload of new days: the page's banner, with Re-run model; nothing repeats it.
+	await page.getByRole('button', { name: 'Add data', exact: true }).click();
+	const dialog = page.getByRole('dialog', { name: 'Add data' });
+	await dialog.getByLabel('Kind').selectOption('rain_catchment_mm');
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('rain.csv', 'date,value\n2022-01-29,4\n2022-01-30,0\n'));
+	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(page.getByRole('status').filter({ hasText: /New data since|Updated “/ })).toHaveCount(1);
+	await expect(page.getByRole('button', { name: 'Re-run model' })).toHaveCount(1);
+	await expect(page.getByRole('link', { name: 'Re-run the model' })).toHaveCount(0);
+
+	// After a reload (no banner), a correction that only changes old days still counts: it changed after the run.
+	const fresh = await seedRunnableProject(page.request, 'Data correction since run');
+	await createRun(page.request, fresh.id, 'Baseline');
+	await page.request.post(`${API_URL}/projects/${fresh.id}/series/merge`, { data: { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-02', values: [7] } });
+	await openData(page, fresh.id);
+	await expect(page.getByTestId('notice-line').getByRole('status')).toContainText('New data since the last run (Rainfall — catchment).');
+	await expect(page.getByTestId('notice-line').getByRole('button', { name: 'Re-run model' })).toBeVisible();
+
+	// Automatic runs on, a re-run queued: the notice says when, and offers no button.
+	const auto = await seedRunnableProject(page.request, 'Data queued rerun');
+	await createRun(page.request, auto.id, 'Baseline');
+	await updateSettings(page.request, auto.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		ewrPragmaticM3PerDay: [2000, 1500, 1000, 1000, 1000, 1500, 2500, 4000, 5000, 5000, 4000, 3000],
+		autoRun: { enabled: true, debounceMinutes: 60, publish: 'never' }
+	});
+	await page.request.post(`${API_URL}/projects/${auto.id}/series/merge`, { data: { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-01-29', values: [4, 0] } });
+	await openData(page, auto.id);
+	await expect(page.getByTestId('rerun-queued')).toContainText('An automatic re-run');
+	await expect(page.getByRole('button', { name: 'Re-run model' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Re-run the model' })).toHaveCount(0);
 });
