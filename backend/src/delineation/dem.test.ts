@@ -50,6 +50,37 @@ describe('byteSource', () => {
 		await expect(byteSource(`${url}/drops-always`)(0, 10)).rejects.toThrow(/fetch failed/);
 	});
 
+	it('does not send again when the connection was never made (refused)', async () => {
+		// A port nothing listens on: bound, then closed, so the connection is refused.
+		const probe = createServer();
+		await new Promise<void>((r) => probe.listen(0, '127.0.0.1', r));
+		const port = (probe.address() as { port: number }).port;
+		await new Promise<void>((r) => probe.close(() => r()));
+		const real = globalThis.fetch;
+		let calls = 0;
+		globalThis.fetch = ((...a: Parameters<typeof fetch>) => (calls++, real(...a))) as typeof fetch;
+		try {
+			const err = await byteSource(`http://127.0.0.1:${port}/dem.pmtiles`)(0, 10).catch((e: unknown) => e);
+			expect(err).toBeInstanceOf(TypeError);
+			expect(((err as TypeError).cause as { code?: string }).code).toBe('ECONNREFUSED');
+		} finally {
+			globalThis.fetch = real;
+		}
+		expect(calls).toBe(1);
+	});
+
+	it('sends a dropped request once more, and no more', async () => {
+		const real = globalThis.fetch;
+		let calls = 0;
+		globalThis.fetch = ((...a: Parameters<typeof fetch>) => (calls++, real(...a))) as typeof fetch;
+		try {
+			await expect(byteSource(`${url}/drops-always`)(0, 10)).rejects.toThrow(/fetch failed/);
+		} finally {
+			globalThis.fetch = real;
+		}
+		expect(calls).toBe(2);
+	});
+
 	it('fails on an HTTP error and a missing file', async () => {
 		await expect(byteSource(`${url}/missing`)(0, 10)).rejects.toThrow(/HTTP 404/);
 		await expect(byteSource('/nonexistent/dem.pmtiles')(0, 10)).rejects.toThrow();

@@ -70,7 +70,9 @@ derived from the DEM on the server**, with depression filling.
   connection closes before any answer is sent once more: a large window
   routes for tens of seconds with the event loop held, so the next read
   can reuse a kept-alive socket the server closed meanwhile (the gauge
-  rerun's worker windows hit it on every large catchment).
+  rerun's worker windows hit it on every large catchment). Only a socket
+  closed under the request is retried; a refused connection, a DNS failure
+  or a timeout fails at once.
 - `DEM_URL=backend/fixtures/dem/synthetic-dem.pmtiles` (or any file path,
   `file:` URL): the **committed synthetic fixture**, invented terrain (an
   elliptical valley with a river, a dam and its reservoir, a closed pit),
