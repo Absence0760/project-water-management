@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ClickPiece, ClickPieces } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
-import { ClickDivider, clickShape, pieceLine, savable } from './clickPieces.svelte';
+import { ClickDivider, clickShape, FAR_JUNCTION_M, pieceLine, savable } from './clickPieces.svelte';
 
 const sq = (x: number): ClickPiece['geometry'] => ({ type: 'Polygon', coordinates: [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 1], [x, 0]]] });
 const piece = (click: number, drainsInto: number | null, km2: number, totalKm2 = km2): ClickPiece => ({
@@ -73,9 +73,16 @@ describe('pieceLine', () => {
 		expect(pieceLine(r, 0)).toBe('410.00 km² · the lowest point: the rest drains out here · on the channel matching river reach 11492928 (412.50 km²)');
 	});
 
-	it('says a click picked at a confluence went on the elevation model’s junction', () => {
+	it('says a click at or beside a confluence went on its river’s side of the elevation model’s junction', () => {
 		const r = answer([{ ...piece(0, null, 250), placedBy: 'junction', reach: { dataset: 'HydroRIVERS-v10', reachId: 11491355, upstreamKm2: 497.3 } }], 0);
-		expect(pieceLine(r, 0)).toBe('250.00 km² · the lowest point: the rest drains out here · at the elevation model’s junction, on river reach 11491355 (497.30 km²)');
+		expect(pieceLine(r, 0)).toBe('250.00 km² · the lowest point: the rest drains out here · on river reach 11491355 (497.30 km²), on its side of the elevation model’s junction');
+	});
+
+	it('flags a junction placement that moved the click more than FAR_JUNCTION_M (issue #390), and not one that moved less', () => {
+		const at = (snapDistanceM: number) =>
+			pieceLine(answer([{ ...piece(0, null, 250), snapDistanceM, placedBy: 'junction', reach: { dataset: 'HydroRIVERS-v10', reachId: 11491355, upstreamKm2: 497.3 } }], 0), 0);
+		expect(at(FAR_JUNCTION_M + 1372)).toContain('moved 1872 m to the channel: the elevation model’s rivers meet away from the mapped junction, so check the point against the map');
+		expect(at(FAR_JUNCTION_M)).not.toContain('meet away');
 	});
 
 	it('names a much larger channel beside a click, instead of the missed-channel warning', () => {

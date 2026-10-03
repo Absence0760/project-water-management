@@ -5,7 +5,9 @@ about it, and what each way of moving a click onto the channel gets right on
 real South African rivers. Written for issue #374; the rules it led to are
 built in `backend/src/delineation/place.ts` (Delineate `delineate-2`,
 Sub-catchments `start-3`, and Start and Divide only since `start-7`: until
-then they snapped every point 150 m, the hydrologist's review finding 3) and described in
+then they snapped every point 150 m, the hydrologist's review finding 3;
+refined in `delineate-5`, § Clicks on the red lines, and `delineate-7`,
+§ Beside a confluence) and described in
 [maps.md § Delineation](../maps.md#delineation) and
 [delineation.md § Method](./delineation.md#method). Measured 2026-10-02.
 
@@ -378,6 +380,169 @@ km², and the area match's obedience to the nearest line (finding 4, in both
 directions) is the largest silent error. The fixes belong to that round;
 rerun this harness after them.
 
+## Beside a confluence (fifth experiment)
+
+**What the confluence run missed.** It clicked 30–50 m off each junction,
+where the server asks which river. A DWS weir is often a few hundred metres
+above or below a confluence: outside `CONFLUENCE_M` (200 m) nothing was
+asked, and the outlet was matched by area alone, which can't tell the main
+river above the junction from the river below it (the hydrologist persona's
+finding 5, issue #390). The persona's case: a gauge 350 m up a 73 km² main
+river (27.32109° E, 25.91276° S) came out at 81 km², the 12 km² tributary
+included.
+
+`backend/scripts/research/snap-junction-side.ts` (summary:
+`snap-junction-side-summary.ts`) takes 50 HydroRIVERS junctions of exactly
+two reaches in, areas differing 2× or more, the larger ≤ 800 km² (seed
+`side-1`), and clicks **on each river's line** 0–1 000 m from the junction
+(on into the next reach where the line is shorter): 1 192 clicks at the 40
+where the DEM's junction was found. The reference is the DEM's own junction
+(`junctionBranches` at the mapped junction), and a placement is judged by
+D8 topology: upstream of the main river's or the tributary's last cell, on
+the junction's path downhill, or elsewhere. The DEM's junction lay a median
+466 m from the mapped one, over 1.1 km at a quarter of junctions and over
+2.1 km at a tenth.
+
+Wrong-side placements, before (`delineate-4`: asked within 200 m, else the
+nearest reach's area matched within 1 km) → after (`delineate-7`):
+
+| Along the river (m) | asked | main river above | tributary | river below |
+| --- | --- | --- | --- | --- |
+| 0 | 120/120 | 0/40 → 0/40 | 0/40 → 0/40 | 0/40 → 0/40 |
+| 100 | 120/120 | 0/40 → 0/40 | 0/40 → 0/40 | 0/40 → 0/40 |
+| 200 | 93/120 | 2/40 → 0/40 | 0/40 → 0/40 | 9/40 → 3/40 |
+| 300 | 15/120 | 7/40 → 0/40 | 3/40 → 0/40 | 15/40 → 3/40 |
+| 350 | 1/120 | 10/40 → 1/40 | 3/40 → 0/40 | 15/40 → 2/40 |
+| 400 | 1/120 | 8/40 → 1/40 | 3/40 → 0/40 | 15/40 → 2/40 |
+| 500 | 5/120 | 8/40 → 1/40 | 2/40 → 0/40 | 14/40 → 2/40 |
+| 600 | 5/120 | 8/40 → 2/40 | 3/40 → 0/40 | 14/40 → 2/40 |
+| 800 | 5/116 | 6/40 → 2/40 | 3/36 → 0/36 | 12/40 → 3/40 |
+| 1 000 | 3/116 | 4/40 → 2/40 | 3/36 → 1/36 | 12/40 → 6/40 |
+
+- **Not asked (beyond 200 m): 168 of 824 on the wrong side before, 21
+  after.** The persona's 350 m clicks: main river 10/40 → 1/40, river below
+  15/40 → 2/40 (they measured 8/25 and 8/25 on their own sample).
+- **The rule (`delineate-7` / `start-8`):** when the nearest reach's lower
+  or upper end lies within `JUNCTION_SIDE_M` (1 km, the match radius: the
+  area match can't cross a junction further than it searches) and at least
+  two reaches flow in there, `reachFor` returns that junction's rivers with
+  the nearest reach chosen (`junctionBeside`), without asking: the click is
+  on one river's line, so which river is not in doubt, only which side.
+  `junctionOutlets` then puts it on that river's side of the DEM's junction.
+  Since `delineate-8` / `start-9` that is skipped for a click on a DEM
+  channel of its own (`place.ts` `onOwnChannel`, rule 3's test): the side
+  rule is for clicks on the river, and merged without it 2 of the 23
+  red-line clicks of § Clicks on the red lines were carried 1.6–2.2 km to a
+  junction's river.
+- **Asking further out was not needed:** the side rule fixed what a wider
+  question would, without a question on every click near a junction. The
+  remaining 21: 18 placed by the side rule, at junctions where the DEM's
+  rivers meet far from the mapped junction (the DEM's channel nearest the
+  click then belongs to the other side), and 3 at 1 km where the click's
+  reach had no junction found and the area match ran as before (16 clicks
+  in all fell back to it).
+
+**How far the click moves (finding 12).** Before, a junction placement went
+*at* the junction (each river above at its branch's last cell, the river
+below at the junction), so a gauge clicked 200 m from the mapped junction
+moved as far as the DEM's junction: the persona saw 1.4–2.1 km at P10C,
+F10A and D54C. Their "main river above" picks now move 372 m, 241 m and
+94 m (from 1 372, 2 087 and 1 892 m), the areas unchanged within 2 %
+(`--points` on the same harness). Now each river goes on its own channel at the cell nearest
+the click, on its side of the junction. On the asked clicks (0–200 m) the
+median move fell from 428 m to 195 m, the 90th percentile from 2.0 km to
+1.4 km. A large move remains where the DEM's rivers really do meet far from
+the mapped junction (the moves over 500 m sit at junctions a median 1.6 km
+apart): the river below has to start below the DEM's junction.
+
+Capping the move instead (falling back to the area match past it) was
+measured and rejected: a 500 m cap put 137 of the 824 not-asked clicks on
+the wrong side again (21 uncapped), 1 km 116, 1.5 km 90. So a junction
+placement that moved the click more than `JUNCTION_FLAG_M` (500 m) is
+**flagged**, not refused: Delineate's `check` note ("The outlet was moved
+2.1 km from the point to keep it on … side of a confluence: the elevation
+model's rivers meet away from where the river network joins them …") and
+Sub-catchments' piece line. The editor sees it before accepting; the gauge
+that far from its site is a decision for them.
+
+## Clicks on the red lines, gullies and the head of a reach (sixth experiment, `delineate-5`)
+
+The hydrologist persona (issue #390 part 2) found three ways the rules above
+still placed a click wrong without asking. Each was reproduced on GLO-30 and
+HydroRIVERS, fixed in `place.ts` / `reach.ts`, and measured before and after
+(2026-10-03, the same 2 048-cell window as above).
+
+- **A click on a red line beside a mapped river was moved onto the river.**
+  The area match was tuned on clicks *on* HydroRIVERS lines; the editor is
+  told to click the DEM's channels. `backend/scripts/research/snap-redline.ts`
+  clicks the middle vertex of 23 red lines of 1–8 km² lying 250–900 m from a
+  reach of 100–3 000 km² (that reach the nearest, no confluence; seed
+  `redline-1`) through the app's path (`reachFor`, `delineate`). Before: **7
+  moved onto the river silently** (e.g. 28.0002° E, 26.3336° S: a 2 km²
+  stream became 611 km² after a 480 m move), 1 asked, 14 stayed, 1 too large.
+  Now a click on a DEM channel of its own (≥ 1 km² within 1.5 cells), more
+  than 150 m from the reach's line, whose area is outside the reach's 50 %
+  band, snaps on its stream and the reach's matching channel is **offered**
+  (422 `larger_channel` with `reachKm2`; a click's piece offers it): **0
+  moved, 11 asked, 12 stayed**. A click on the mapped line itself still
+  matches (it is the displacement rule 1 is for) when its channel is
+  *smaller* than the band, as does a river picked at a confluence. The other
+  way round counts wherever the line is: the gauge validation (issue #390
+  part 1, 446 gauges) found 9 gauges on a river whose nearest line was a
+  tributary's moved silently onto the tributary (0.01–0.1× their area), all
+  within 1 km of a junction; at 26.74444° E, 33.50678° S (published 575 km²)
+  the 29 km² reach 59 m away pulled the outlet 511 m onto a 15.7 km²
+  channel. Now a click on a channel larger than the band stays on it and the
+  tributary's channel is offered: that gauge now asks, its point on the
+  river (370 km² inside the first window).
+- **A gully proposed beside a river whose channel lies 1–2.5 km off.** F20A's
+  outlet (17.23542° E, 29.24375° S; reach 1 169 km²) gave 3.4 km² with only the
+  *unmatched* note: the matching channel (1 161 km²) is 2.46 km away, past
+  the 1 km match and the guard. Widening the silent match to 2.5 km is ruled
+  out by the first experiment (5–8 % on another river), so the rule now
+  *offers* it: no match within 1 km and a snap under a tenth of the reach's
+  area tries Lehner's ranking out to 2.5 km and refuses with that channel
+  ("… that far off it can be another river, so check it on the map"). F20A
+  now asks, offering the 1 161 km² channel (at a 3 072-cell window; 1 032 km²
+  of it inside 2 048).
+- **A click near the head of a reach slid downstream.** The reach's area is
+  at its lower end; a click higher up was matched to it. On 30 clicks one
+  vertex below the top of HydroRIVERS head reaches of 10–50 km² (seed
+  `head-1`): before, 15 matched, of which **7 slid 266–781 m down the line**
+  (median slide +172 m), 8 fell into a gully and 7 asked. Now the reach's
+  area is taken **at the click** (`reach.ts` `areaAlong`): its upper end's
+  area (the reaches ending there, or HydroRIVERS' stated 10 km² threshold for
+  a head reach) plus the rest in proportion to the length down the line. 27
+  matched, 4 slid over 250 m (median slide −24 m, median |slide| 97 m), 0
+  gullies, 3 asked. The 4 left are where the DEM drains well under 10 km² at
+  the head, so a cell further down fits the band better.
+
+**Nothing else regressed** (the as-built rules on the first experiment's
+220 reaches, `snap-methods.ts --no-mask`, `AB4`/`AB5` rows of
+`snap-summary.ts`):
+
+| Class | delineate-4: right / flagged / wrong unflagged | delineate-5 |
+| --- | --- | --- |
+| small (60) | 87 % / 8 % / 5 % | 78 % / 18 % / 3 % |
+| medium (60) | 78 % / 7 % / 15 % | 78 % / 12 % / 10 % |
+| large (60) | 67 % / 13 % / 12 % (8 % inconclusive) | 67 % / 17 % / 8 % (8 %) |
+| main stems (40) | 48 % / 48 % / 5 % | 48 % / 48 % / 5 % |
+| **all (220)** | **72 % / 16 % / 10 %** | **70 % / 21 % / 7 %** |
+
+Silent wrong placements fall from 10 % to 7 %: 9 gullies are now offered the
+reach's channel. The small class's "right" falls by five reaches. One clicked
+vertex sits on a channel more than twice the reach's area, so it now asks
+(the gauge rule above); three are this experiment's clicking artefact, not a regression: on reaches
+of 2–3 vertices and 0.6–1.5 km the "vertex next to the downstream end" is
+the reach's *upper* end, and the reference is the lower end's area; the old
+rule scored right there only by sliding down to it (finding 13). The fourth
+(39 km², 8.5 km long) had matched a cell of exactly 2× the reference and now
+snaps with the guard's offer. The confluence experiment
+(`snap-confluence.ts`, 60 junctions, 180 river choices) is unchanged where
+the app uses it: the picked river within 2.5 km 161 of 180 right before and
+after, the junction rule untouched; an unpicked click there (never placed by
+the app, which asks) flags 24 instead of 16.
+
 ## What these samples can't show (check before trusting a number)
 
 Written after the confluence miss, so the next experiment states its blind
@@ -403,6 +568,13 @@ spots before it runs:
   was run at gauges.
 - **The editor.** An oracle answers the confluence question with the right
   river; a real editor may not know it.
+
+  the wrong side of a junction; the junction runs measure sides directly,
+  at the junction (third) and 0–1 000 m along each river (fifth). The fifth
+  takes the DEM's junction as the reference: where the DEM and HydroRIVERS
+  disagree on where rivers meet, it scores the DEM's version.
+- **Scale.** Reaches up to 1 500 km² and junctions of up to 1 500 km²; main
+  stems only for being on the trunk.
 
 ## Limits of this evidence
 

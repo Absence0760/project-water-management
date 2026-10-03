@@ -108,3 +108,25 @@ for (const st of strata) {
 	const right = today.filter((x) => x.c === 'ok');
 	console.log(`\nM4's guard: flags ${wrong.filter((x) => x.f).length} of today's ${wrong.length} short or gully snaps (${pct(wrong.filter((x) => x.f).length, wrong.length)}), and ${right.filter((x) => x.f).length} of its ${right.length} right ones (false alarms ${pct(right.filter((x) => x.f).length, right.length)}).\n`);
 }
+
+// The as-built rules (AB rows, when the run has them): placed right, flagged with a channel offered, wrong and not flagged.
+const asBuilt = methods.filter((meth) => meth.startsWith('AB'));
+if (asBuilt.length) {
+	console.log('### As built\n');
+	console.log('| Rule | Class | Placed right | Flagged, a channel offered | Wrong, not flagged | Inconclusive |');
+	console.log('| --- | --- | --- | --- | --- | --- |');
+	for (const meth of asBuilt) {
+		for (const st of [...strata, 'all']) {
+			const g = st === 'all' ? rs : rs.filter((r) => r.stratum === st);
+			if (!g.length) continue;
+			const cs = g.map((r) => {
+				const p = r.picks.find((x) => x.method === meth)!;
+				return { c: cat(r, p), f: p.flagged };
+			});
+			const right = cs.filter((x) => !x.f && x.c === 'ok').length;
+			const flagged = cs.filter((x) => x.f).length;
+			const inconclusive = cs.filter((x) => !x.f && x.c === 'inconclusive').length;
+			console.log(`| ${meth} | ${st} (${g.length}) | ${pct(right, g.length)} | ${pct(flagged, g.length)} | ${pct(g.length - right - flagged - inconclusive, g.length)} | ${pct(inconclusive, g.length)} |`);
+		}
+	}
+}

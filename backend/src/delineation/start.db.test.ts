@@ -400,6 +400,9 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 	it('matches the outlet gauge and the dam to the reach: the river’s catchment, the dam kept, the method saying so', async () => {
 		await clear();
 		await plant(99100001, riverKm2, LINE);
+		// The river flowing into the line's upper end, as HydroRIVERS joins reaches: the line's area at each point is then the river's
+		// (reach.ts areaAlong; with nothing flowing in, its upper end would count as a 10 km² head reach's).
+		await plant(99100002, 0.85 * riverKm2, [pos(DAM_CELL.x + 3, DAM_CELL.y - 30), LINE[0]!]);
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
