@@ -15,7 +15,7 @@ import { checkAll } from '../testing/invariants';
 import { FARMER_K } from '../views/farmView';
 import { MASKED_RULE, MASKED_RULE_AGGREGATE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
 import { structureIssues } from './structure';
-import { validateScenarioOps, type ScenarioOp } from './ops';
+import { storedControlTexts, validateScenarioOps, type ScenarioOp } from './ops';
 
 function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -2200,6 +2200,17 @@ describe('validateScenarioOps: names are one line (issue #385)', () => {
 			'ops[3].value: cannot contain line breaks or control characters',
 			'ops[4].value: window 1: label cannot contain line breaks or control characters'
 		]);
+	});
+
+	it('keeps a name byte-identical to one in the stored ops (a scenario from before #385), and only that one', () => {
+		const legacy = { op: 'node.set', nodeId: 'A', field: 'name', value: 'Golf\nFarm' };
+		const label = { op: 'demandObject.set', demandObjectId: 'do1', field: 'schedule', value: [{ label: 'Easter\tweek', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 2 }] };
+		const stored = [legacy, label];
+		expect(storedControlTexts(stored)).toEqual(new Set(['Golf\nFarm', 'Easter\tweek']));
+		expect(validateScenarioOps([legacy, label, { op: 'demand.scale', factor: 0.9 }], { stored }).errors).toEqual([]);
+		expect(validateScenarioOps([{ ...legacy, value: 'Golf\r\nFarm' }], { stored }).errors).toEqual(['ops[0].value: cannot contain line breaks or control characters']);
+		// Without stored ops, and in the next call, it is refused again.
+		expect(validateScenarioOps([legacy]).errors).toEqual(['ops[0].value: cannot contain line breaks or control characters']);
 	});
 
 	it('takes the same names on one line (positive control)', () => {

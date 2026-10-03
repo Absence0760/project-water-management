@@ -11,7 +11,7 @@
 --
 -- A name already stored with one would make its project unsaveable: the
 -- editor sends the whole model back on every save, and the API would refuse
--- it. So this cleans what is stored, as the engine's cleanName does: every
+-- it. So this cleans what is stored, as the engine's oneLineName does: every
 -- run of whitespace and control characters one space, trimmed. A node or
 -- crop name the cleaning makes equal (ignoring case) to another in its
 -- project gets " (2)", " (3)" … (names are unique per project, and the

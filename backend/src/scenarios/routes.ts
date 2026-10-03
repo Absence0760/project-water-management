@@ -44,7 +44,7 @@ import {
 } from './execute.js';
 import { loadApplicantResults, newestApplicationRun } from './results.js';
 import { applicantOpNames, baseNames, opNames, ownNames, type OpName } from './names.js';
-import { CreateScenarioBody, DecideBody, opsSha256, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
+import { CreateScenarioBody, DecideBody, opsSha256, parsePatchOps, PatchScenarioBody, RebaseBody, ScenarioRunBody, ShareBody, STATUS_MOVES, type ScenarioStatus } from './schema.js';
 
 /**
  * What the editor shows beside the ops: which applied, which don't, and how
@@ -272,16 +272,18 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			const userId = c.get('userId');
 			const s = await loadScenario(db, id, scenarioId(sid));
 			assertCanChange(s, role, userId);
+			// Checked against the stored ops: a name from before issue #385 they hold may stay (parsePatchOps).
+			const ops = body.ops === undefined ? undefined : parsePatchOps(body.ops, s.ops);
 			if (isApplication(s)) {
 				if (body.ownedNodeIds !== undefined) throw new ApiError(403, "an application's own nodes are its owner's farm links");
 				if (body.status !== undefined && body.status !== s.status)
 					throw new ApiError(409, 'an application moves through …/submit, …/withdraw, …/reopen and (for the assessor) …/decide');
 			}
-			if ((body.ops !== undefined || body.ownedNodeIds !== undefined) && s.status !== 'draft') throw frozen(s);
+			if ((ops !== undefined || body.ownedNodeIds !== undefined) && s.status !== 'draft') throw frozen(s);
 			if (body.status !== undefined && body.status !== s.status && !STATUS_MOVES[s.status].includes(body.status))
 				throw new ApiError(409, `a ${s.status} scenario can't become ${body.status}`);
 			// An application's own nodes follow its owner's farm links while it is a draft.
-			const owned = isApplication(s) && body.ops !== undefined ? await ownFarms(db, id) : body.ownedNodeIds;
+			const owned = isApplication(s) && ops !== undefined ? await ownFarms(db, id) : body.ownedNodeIds;
 			const set: [string, unknown][] = [];
 			if (body.name !== undefined) set.push(['name', body.name]);
 			if (body.description !== undefined) set.push(['description', body.description]);
@@ -296,12 +298,12 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				if (body.objectionAddress !== undefined) set.push(['objection_address', body.objectionAddress]);
 				if (body.objectionClosingDate !== undefined) set.push(['objection_closing_date', body.objectionClosingDate]);
 			}
-			if (body.ops !== undefined)
+			if (ops !== undefined)
 				set.push(
-					['ops', JSON.stringify(body.ops)],
-					['ops_sha256', opsSha256(body.ops)],
+					['ops', JSON.stringify(ops)],
+					['ops_sha256', opsSha256(ops)],
 					// The names the ops need, from the base as it is now, keeping those an earlier base gave (a node a rebase dropped).
-					['op_names', JSON.stringify(namesToStore(s, opNames(body.ops, await baseNames(db, id, s.baseRunId, role), s.opNames), owned ?? s.ownedNodeIds))]
+					['op_names', JSON.stringify(namesToStore(s, opNames(ops, await baseNames(db, id, s.baseRunId, role), s.opNames), owned ?? s.ownedNodeIds))]
 				);
 			if (owned !== undefined) set.push(['owned_node_ids', owned]);
 			if (body.status !== undefined) set.push(['status', body.status]);
@@ -333,7 +335,7 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				monitoring: body.monitoring,
 				objectionAddress: body.objectionAddress,
 				objectionClosingDate: body.objectionClosingDate,
-				ops: body.ops !== undefined ? opsSha256(body.ops) : undefined,
+				ops: ops !== undefined ? opsSha256(ops) : undefined,
 				owned_node_ids: owned !== undefined ? [...owned].sort().join(',') : undefined,
 				status: body.status
 			};

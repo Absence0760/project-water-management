@@ -627,3 +627,29 @@ describe('status', () => {
 		expect((await patch({ ops: [] })).body.scenario.ops).toEqual([]);
 	});
 });
+
+describe('a scenario saved before issue #385 with a name over two lines', () => {
+	it('saves again with an unrelated edit, keeping the stored name byte for byte; a new such name is still refused', async () => {
+		const u = await signUp('OneLineOps');
+		const c = await catchment(u, 'One-line ops');
+		const base = await run(u, c.projectId, 'Baseline');
+		const sid = await create(u, c.projectId, { name: 'Renamed', baseRunId: base, ops: [damRaise(c.farm.id, 120_000)] });
+		// As a save before #385 stored it (migration 189 leaves stored ops alone: ops_sha256 pins them).
+		const legacy: ScenarioOp = { op: 'node.set', nodeId: c.farm.id, field: 'name', value: 'Golf\nFarm' };
+		await asOwner('UPDATE scenario SET ops = $2 WHERE id = $1', [sid, JSON.stringify([legacy])]);
+		// The editor sends the whole list back with an unrelated edit: accepted, the old name kept as it was.
+		const edited = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ops: [legacy, damRaise(c.other.id, 60_000)] });
+		expect(edited.status, JSON.stringify(edited.body)).toBe(200);
+		const [row] = await asOwner('SELECT ops FROM scenario WHERE id = $1', [sid]);
+		expect(row.ops).toEqual([legacy, damRaise(c.other.id, 60_000)]);
+		// A new name with a control character is still refused (at path ops), and nothing changes.
+		for (const value of ['Golf\r\nFarm', 'Hill\u2028top']) {
+			const bad = await u.call('PATCH', `/projects/${c.projectId}/scenarios/${sid}`, { ops: [legacy, damRaise(c.other.id, 60_000), { ...legacy, nodeId: c.other.id, value }] });
+			expect(bad.status, value).toBe(400);
+			expect(bad.body.details).toEqual([expect.objectContaining({ path: ['ops'], message: 'ops[2].value: cannot contain line breaks or control characters' })]);
+		}
+		expect((await asOwner('SELECT ops FROM scenario WHERE id = $1', [sid]))[0].ops).toEqual(row.ops);
+		// A new scenario can't take the old name either.
+		expect((await u.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Copy', baseRunId: base, ops: [legacy] })).status).toBe(400);
+	});
+});

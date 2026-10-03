@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanModelNames, cleanName, hasNameControlChars } from './names';
+import { cleanModelNames, oneLineName, hasNameControlChars } from './names';
 
 describe('names are one line (issue #385)', () => {
 	it.each(['a\nb', 'a\rb', 'a\tb', 'a\u0000b', 'a\u001fb', 'a\u007fb', 'a\u0085b', 'a\u009fb', 'a\u2028b', 'a\u2029b'])('%j holds a control character', (s) => {
@@ -10,10 +10,10 @@ describe('names are one line (issue #385)', () => {
 		expect(hasNameControlChars(s)).toBe(false);
 	});
 
-	it('cleanName turns every run of whitespace and control characters into one space, trimmed', () => {
-		expect(cleanName('  Golf\r\n\tFarm\u009f ')).toBe('Golf Farm');
-		expect(cleanName('a\u2028b')).toBe('a b');
-		expect(cleanName('\n\u0001')).toBe('');
+	it('oneLineName turns every run of whitespace and control characters into one space, trimmed', () => {
+		expect(oneLineName('  Golf\r\n\tFarm\u009f ')).toBe('Golf Farm');
+		expect(oneLineName('a\u2028b')).toBe('a b');
+		expect(oneLineName('\n\u0001')).toBe('');
 	});
 
 	it('cleanModelNames cleans every name and schedule label, leaving the rest and the input alone', () => {

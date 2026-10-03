@@ -1370,9 +1370,13 @@ demand schedule window's `label` (0–200) may not hold a line break, a tab or
 any other control character (C0, DEL, C1, U+2028, U+2029; the engine's
 `NAME_CONTROL_CHARS`). `PUT` refuses one with `cannot contain line breaks or
 control characters`, as do the scenario ops that set a name or label and
-the map's Start and Divide apply. A demand object's `note` may still run
+the map's Start and Divide apply. A scenario saved before the rule keeps its
+ops byte for byte (`ops_sha256` and evidence packs pin them), so a `PATCH`
+of its `ops` may keep any such name that is byte-identical to one in the
+stored ops (the engine's `validateScenarioOps(raw, { stored })`); a new one
+is refused. A demand object's `note` may still run
 over lines. The bulk paths make a name one line instead (every run of
-whitespace and control characters one space, the engine's `cleanName`): a
+whitespace and control characters one space, the engine's `oneLineName`): a
 project document's import (`POST /projects/import`, `pnpm import:project`),
 a restore of a version saved before the rule, and the workbook importers.
 

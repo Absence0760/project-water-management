@@ -3,7 +3,8 @@
 import { blankEwrRuleTable, canonicalJson, type ScenarioOp } from '@water-management/engine';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { checkOps, CreateScenarioBody, opsSha256, PatchScenarioBody, STATUS_MOVES } from './schema.js';
+import type { ZodError } from 'zod';
+import { checkOps, CreateScenarioBody, opsSha256, parsePatchOps, PatchScenarioBody, STATUS_MOVES } from './schema.js';
 
 const a = crypto.randomUUID();
 const b = crypto.randomUUID();
@@ -125,7 +126,29 @@ describe('bodies', () => {
 	it('patches at least one field', () => {
 		expect(PatchScenarioBody.safeParse({}).success).toBe(false);
 		expect(PatchScenarioBody.parse({ ops: [] })).toEqual({ ops: [] });
-		expect(PatchScenarioBody.safeParse({ ops: [{ op: 'node.remove', nodeId: 'x' }] }).success).toBe(false);
+		// The ops are checked against the stored ones in the route (parsePatchOps).
+		expect(() => parsePatchOps([{ op: 'node.remove', nodeId: 'x' }], [])).toThrow(/must be a UUID/);
+	});
+
+	it('lets a resave keep a name with a control character its stored ops already hold, and refuses a new one (issue #385)', () => {
+		const n = crypto.randomUUID();
+		const legacy = { op: 'node.set', nodeId: n, field: 'name', value: 'Golf\nFarm' } as ScenarioOp;
+		const scale = { op: 'demand.scale', factor: 0.9 } as ScenarioOp;
+		// The stored list and an unrelated edit to it: saved as sent.
+		expect(parsePatchOps([legacy, scale], [legacy])).toEqual([legacy, scale]);
+		// A new control-character name, or a different one, is still refused, at path ops.
+		for (const value of ['Golf\rFarm', 'Hill\ntop']) {
+			const r = (() => {
+				try {
+					parsePatchOps([legacy, { ...legacy, value }], [legacy]);
+				} catch (e) {
+					return e as ZodError;
+				}
+			})();
+			expect(r?.issues.map((i) => [i.path.join('.'), i.message]), value).toEqual([['ops', 'ops[1].value: cannot contain line breaks or control characters']]);
+		}
+		// Without stored ops (a new scenario), the old name is refused too.
+		expect(checkOps([legacy]).errors).toEqual(['ops[0].value: cannot contain line breaks or control characters']);
 	});
 
 	it('allows only the documented status moves', () => {

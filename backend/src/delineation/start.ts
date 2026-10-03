@@ -14,7 +14,7 @@
 // what is ticked, and only into an empty model (409 once it has nodes), so
 // nothing typed is ever overwritten. The DEM is read between two short
 // transactions, never holding a connection while it routes flow.
-import { cleanName, newNetworkNode, type NetworkNode } from '@water-management/engine';
+import { oneLineName, newNetworkNode, type NetworkNode } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -215,7 +215,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 		if (!f) throw new ApiError(400, 'The outlet gauge is not on this catchment’s map.');
 		if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, 'The outlet must be a gauge point on the map.');
 		if (body.points.some((p) => p.featureId === f.id)) throw new ApiError(400, 'The outlet gauge can’t also be a unit.');
-		outlet = { featureId: f.id, name: cleanName(f.name) || OUTLET_NAME, point: f.geometry.coordinates, foundIn: 'gauge' };
+		outlet = { featureId: f.id, name: oneLineName(f.name) || OUTLET_NAME, point: f.geometry.coordinates, foundIn: 'gauge' };
 	} else {
 		if (!boundary) throw new ApiError(400, 'Put the catchment boundary on the map first (draw, delineate or upload it), or pick the outlet gauge.');
 		// A boundary that came from Delineate knows its outlet; any other finds it inside the boundary.
@@ -238,7 +238,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 		if (!['dam', 'gauge', 'other'].includes(f.kind)) throw new ApiError(400, `“${f.name || 'A feature'}” can’t be a unit.`);
 		// A gauge node stands for a gauge on the map (map_feature's KIND_NODES), so only a gauge point is one.
 		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge node.`);
-		return { featureId: f.id, name: cleanName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry };
+		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry };
 	});
 	return { boundary, outlet, points };
 }

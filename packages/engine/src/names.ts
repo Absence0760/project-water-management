@@ -4,7 +4,7 @@
 // and a line break or other control character there renders broken. The model
 // schema refuses them (backend/src/model/validate.ts, validateScenarioOps,
 // the frontend's validateModel); the workbook importers and clean-on-read of
-// older data turn them into spaces with cleanName.
+// older data turn them into spaces with oneLineName.
 
 /**
  * The characters a name may not hold: the C0 controls (tab, line feed and
@@ -28,18 +28,18 @@ const NAME_JUNK_RUN = /[\s\u0000-\u001f\u007f-\u009f]+/g;
  * clean(), the browser importer's clean()) and what migration 189 did to the
  * names already stored.
  */
-export const cleanName = (s: string): string => s.replace(NAME_JUNK_RUN, ' ').trim();
+export const oneLineName = (s: string): string => s.replace(NAME_JUNK_RUN, ' ').trim();
 
 type Loose = Record<string, unknown>;
 const isObj = (v: unknown): v is Loose => typeof v === 'object' && v !== null && !Array.isArray(v);
 const cleanField = (o: unknown, key: string): unknown =>
-	isObj(o) && typeof o[key] === 'string' ? { ...o, [key]: cleanName(o[key] as string) } : o;
+	isObj(o) && typeof o[key] === 'string' ? { ...o, [key]: oneLineName(o[key] as string) } : o;
 const cleanList = (v: unknown, each: (o: unknown) => unknown): unknown => (Array.isArray(v) ? v.map(each) : v);
 
 /**
  * A model written before names were checked (an older revision being
  * restored, a project document exported before issue #385) with every name
- * and schedule label passed through cleanName, so today's schema accepts it.
+ * and schedule label passed through oneLineName, so today's schema accepts it.
  * Anything not shaped like a model is returned as it is, for the schema to
  * refuse; the input is not changed.
  */
