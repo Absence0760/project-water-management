@@ -250,22 +250,158 @@ km², seed `confluence-1`):
   (the river having been named, the wider radius measured better): 85 % of
   river choices within ½–2×, 3 % flagged, 12 % not.
 
+## Gauges (fourth experiment)
+
+**Why.** The first three experiments clicked HydroRIVERS vertices and
+junctions and scored each result against HydroRIVERS' own area, so a rule
+that agrees with HydroRIVERS scored well even where both are wrong, and no
+click was where a gauge actually sits (issue #390). This one clicks real
+gauging stations at their published positions and scores against their
+published catchment areas, which come from neither HydroRIVERS nor GLO-30.
+Measured 2026-10-03.
+
+**The reference.** The DWS station catalogue (the issue's first choice)
+answers HTTP 403 outside South Africa. Candidates checked:
+
+- **GRDC station catalogue** (`GRDC_Stations.xlsx`, the 2025-07-24 edition,
+  from GRDC's public FTP): 451 South African stations, 446 with a catchment
+  area, coordinates to the second of arc for most. GRDC holds them "with
+  permission of the data owners, usually the National Hydrological
+  Services", so the area is DWS's published one. Terms
+  ([data policy](https://grdc.bafg.de/about/data_policy/)): no commercial
+  use, no redistribution, inform GRDC of publications. **Chosen.**
+- **GRDC-Caravan** (Färber et al. 2025, ESSD 17, CC BY 4.0) includes South
+  African stations, but its catchment areas come from GRDC's boundaries,
+  delineated on HydroSHEDS: not independent of HydroRIVERS.
+- **GSIM** metadata (CC BY 4.0) carries the reported area too, but its South
+  African stations come from GRDC, and its own estimate is HydroSHEDS-based.
+- **WRC reports** (WR2012) give quaternary areas, which the persona run
+  already used (reviews/persona-hydrologist.md); they aren't gauges.
+
+So the run is research use, offline: the catalogue and the per-station
+results stay in `~/.cache/water-management-gauges/` on the operator's
+machine, and only the aggregates below are committed (CLAUDE.md rule 11).
+The roadmap's decision D11 (docs/roadmap/international.md) keeps GRDC data
+out of the product ("validation only, offline, with permission"): the
+operator should tell GRDC about this use (grdc@bafg.de) as its policy asks.
+
+**The harness.** `backend/scripts/research/snap-gauges.ts` (run by hand; the
+header says how) clicks each station at its published position and runs the
+app's Delineate path: `reachFor` (the nearest HydroRIVERS reach within 1 km,
+or the confluence question) and `delineate` (the 1 024 → 2 048 → 3 072-cell
+ladder, `place`'s area match or snap with the guard, `junctionOutlets` at a
+confluence). At a confluence an oracle picks the river whose area is nearest
+the published one, the best an editor who knows the gauge's river can do. A
+`larger_channel` refusal is followed as "Use that channel" does. Delineate's
+20 s budget is lifted, so no refusal comes from this machine's clock. Every
+failure is routed again at the 3 072-cell window for a diagnosis, and
+`--shift` reroutes each `too_large` refusal with the window moved towards
+the cut catchment. All 446 stations lie inside the local GLO-30 extract.
+
+**Results** (½–2× of the published area counts as right):
+
+| Published area | n | ½–2× | accepted outside ½–2×: silent / with the caveat | refused (`too_large`) | asked a confluence | matched / junction / snapped | median ratio (accepted) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| < 100 km² | 96 | 84 (88 %) | 8 / 1 | 3 (1) | 6 | 68 / 4 / 21 | 0.99 |
+| 100–1 000 km² | 155 | 138 (89 %) | 7 / 1 | 9 (7) | 9 | 137 / 6 / 3 | 1.00 |
+| 1 000–10 000 km² | 129 | 18 (14 %) | 8 / 5 | 98 (94) | 4 | 23 / 1 / 7 | 0.99 |
+| ≥ 10 000 km² (main stems) | 66 | 0 | 2 / 2 | 62 (52) | 6 | 2 / 0 / 2 | 0.00 |
+
+By the published position's distance from the nearest HydroRIVERS line:
+285 within 150 m, 127 at 150–500 m, 17 at 500 m–1 km and 17 beyond 1 km
+(where the app has no reach and only snaps). Results get worse with
+distance: 55 %, 50 %, 35 % and 71 % right (the last are mostly small coastal
+catchments, where a snap within 150 m happens to be right). A reported
+coordinate rounded to two decimals (±0.6 km) is enough to leave the river.
+
+1. **Under 1 000 km², where the catchment fits the window, the app is right
+   88–89 % of the time**, and a matched point's area follows the
+   published one, not HydroRIVERS'. On the 228 matched points HydroRIVERS
+   runs 0.97–1.04–1.55× the published area (p10–p50–p90) and the app
+   0.92–1.00–1.02×. Where HydroRIVERS is 10–100 % off (64 stations, mostly
+   over: the reach's area is at its downstream end, the gauge part-way up),
+   the app is within 10 % at 51. The area match picks the cell at the gauge
+   (within 50 % of the reach's area), and the distance term keeps it from
+   sliding down to the reach's end: 6 of 58 slid past 1.1×. This mostly
+   answers persona finding 13 (a click mid-reach sliding downstream) for
+   these sizes.
+2. **The biggest failure is the window: 94 of 129 gauges of 1 000–10 000 km²
+   are refused `too_large`**, and 7 of 155 under 1 000 km². Every window is
+   centred on the click, so it reaches only half its side (~48 km) towards
+   the catchment (persona finding 6). Moving the 3 072-cell window towards
+   the cut catchment, up to three times, made 59 of the 102 refusals below
+   10 000 km² whole, all 59 within ½–2× (median 1.00×); 43 stay cut (longer
+   than the window, the durable-path follow-up for large catchments). 64 of
+   the 102 touched only one side of the click-centred window.
+3. **The nearest line is often the wrong stream, and the area match obeys
+   it silently** (18 of 380 below 10 000 km², 17 of them without a caveat):
+   - **9 gauges on a river, beside a smaller stream's line:** a cell within
+     150 m of the gauge drains the published area, but the nearest reach is
+     a tributary's, so the area match moves the point onto the tributary
+     (areas of 0.01–0.1× the published one, moved 30–900 m). 9 of 9 lie within 1 km of
+     a HydroRIVERS junction, beyond the 200 m that asks which river.
+   - **4 gauges on a small stream beside a larger river's line:** moved onto
+     the river (2.7–7.8×; persona finding 4).
+   - 5 more where another reach within 2 km matches the published area.
+4. **The first window is too small for some rivers** (persona finding 1):
+   3 gauges of 440–3 800 km² snapped to 4–164 km² with only the
+   *unmatched* caveat in the 1 024-cell window, where the 3 072-cell window
+   matches the reach within 200 m of the gauge; a fourth (2 359 km²) got a
+   600 km² side channel at 2 048 cells. The same mechanism accepted two
+   main-stem gauges (18 000 and 63 000 km²) as 195 and 268 km², caveat
+   only. 8 `larger_channel` refusals below 10 000 km² quote a window-local
+   "about" area (persona finding 10); "Use that channel" then gave ½–2×
+   for 3 of 18 (all sizes), the rest mostly `too_large`.
+5. **Off-river positions get a gully with no caveat at all**: 4 gauges more
+   than 1 km from any line snapped to 0.08–0.8 km² (published 1–2 400 km²),
+   with no reach to raise the *unmatched* caveat and no channel within the
+   guard's 1 km (persona finding 7, which assumed a reach was there).
+6. **Flat lower rivers**: 2 gauges (a Zululand coastal floodplain and a
+   wide Western Cape valley) have no GLO-30 channel within 2.5 km carrying
+   the river; the result (0.4 and 2 664 km² against 9 099 and 6 713 km²) is
+   accepted with the caveat only. New: no persona finding covers a DEM that
+   routes the river elsewhere.
+7. **Main stems are refused, as designed, but with the wrong advice**: 52 of
+   66 `too_large` ("pick an outlet further upstream", persona finding 11),
+   10 asked `larger_channel`, and "Use that channel" then ran into
+   `too_large`. 4 were accepted, all wrong: 2 silently (a nearby
+   tributary's reach matched, as in 3) and 2 with the caveat (as in 4).
+8. **The confluence question and the DEM's junction work at gauges**: 11
+   junction placements, all 11 within ½–2× (median 0.99×).
+
+**What it means.** For catchments that fit the window the placement rules
+hold up against an independent reference. The failures are classes the
+persona run named (findings 1, 4, 6, 7, 10, 11), and the gauges rank them:
+the outlet-centred window (finding 6) refuses most gauges of 1 000–10 000
+km², and the area match's obedience to the nearest line (finding 4, in both
+directions) is the largest silent error. The fixes belong to that round;
+rerun this harness after them.
+
 ## What these samples can't show (check before trusting a number)
 
 Written after the confluence miss, so the next experiment states its blind
 spots before it runs:
 
-- **Where the clicks are.** HydroRIVERS vertices, and now junctions; not OSM
-  waterways, not the middle of a long reach far from its vertices, not dam
-  walls, not gauging stations' published positions.
-- **What the reference is.** HydroRIVERS' own area: a method that agrees with
-  HydroRIVERS scores well even where both are wrong. An independent check
-  would be DWS gauging stations' published catchment areas (licence
-  unconfirmed, maps.md § Sources).
+- **Where the clicks are.** HydroRIVERS vertices, junctions and (fourth
+  experiment) gauging stations' published positions ✓; not OSM waterways,
+  not the middle of a long reach far from its vertices, not dam walls.
+- **What the reference is.** ✓ The fourth experiment scores against
+  published gauge areas (DWS's, through the GRDC catalogue), independent of
+  HydroRIVERS and GLO-30. Not ground truth either: a published area can be
+  stale or rounded, and the GRDC subset (446 stations) leans to long records
+  and larger rivers.
 - **Which river.** The ½–2× test can't see a wrong river of similar size, or
   the wrong side of a junction; the junction run measures sides directly.
-- **Scale.** Reaches up to 1 500 km² and junctions of up to 1 500 km²; main
-  stems only for being on the trunk.
+  The gauge run shows the nearest line choosing the wrong stream; a wrong
+  side of a junction within ½–2× still passes there unseen.
+- **Scale.** ✓ Gauges up to 10 000 km² and main stems. Most gauges of
+  1 000–10 000 km² are refused by the window, so their placement is
+  untested until finding 6 is fixed.
+- **Which path.** Only Delineate's. Start and Divide place points their own
+  way (persona finding 3) and Sub-catchments picks the lowest click; none
+  was run at gauges.
+- **The editor.** An oracle answers the confluence question with the right
+  river; a real editor may not know it.
 
 ## Limits of this evidence
 
