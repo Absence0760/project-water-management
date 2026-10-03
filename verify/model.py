@@ -1297,7 +1297,14 @@ def run(doc: dict) -> dict:
             held = storage[dst] + pd + J[dst]
             e_c = min(e_raw, max(held, 0.0))
             sp_c = min(sp_raw, max(held - e_c, 0.0))
-            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
+            # A fixed release's floor (engine >= 1.70.0, issue #90 Q26), as a dam rule's room counts it:
+            # MIN(amount, outlet, held after the losses and the day's net dam-rule transfers - dead), never below 0.
+            floor_ot = 0.0
+            if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                outlet_o = f.get("damOutletCapacityM3Day")
+                floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o,
+                                        max(held, 0.0) - e_c - sp_c - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)
             for t, c in caps:
                 need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
@@ -1712,7 +1719,8 @@ def run(doc: dict) -> dict:
                 keeps = {}
                 for t in grp:
                     hk = t.get("handsOffM3Day")
-                    keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
+                    # Engine >= 1.70.0 (issue #90 Q27): the source dam's pass-inflow target is kept too.
+                    keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
                     keeps[t["id"]] = keep_k
                     lim = rule_limit(t, o, m)
                     v = min(max(0.0, U0 - taken - keep_k), lim)

@@ -295,6 +295,30 @@ def offtake_keep_bands() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
 
 
+def offtake_release_keep_and_floor() -> dict:
+    """Engine 1.70.0 (issue #90 Q26, Q27; §2.6a): a demand-sized river
+    off-take tops up a full dam with a fixed release of 400 m³/day, from a
+    farm whose dam (off the river, nothing flows into it) has a pass-inflow
+    release targeting 1 500 m³/day. The off-take leaves the target in the
+    river (it takes only the flow above 1 500) and its top-up room counts the
+    release's floor (it brings the 400 the dam lets out, so the dam stays
+    full). The rain rises over the run, so the flow crosses the target on
+    some days and is well above it on others."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=3, damCapacityM3=1000, damInitialPct=1, damReleaseRule="passInflow", damReleaseM3Day=[1500] * 12),
+        _node("d", "farm", "o", areaKm2=0.1, damCapacityM3=5000, damInitialPct=1, damReleaseRule="fixed", damReleaseM3Day=[400] * 12),
+    ]
+    transfers = [{
+        "id": "t", "fromNodeId": "s", "toNodeId": "d", "months": list(range(1, 13)), "maxRateM3s": 20000 / 86400,
+        "dailyCapM3": None, "minStoragePct": 0, "enabled": True, "priority": 0, "source": "river",
+        "handsOffM3Day": None, "handsOffEwr": False, "lossPct": 0, "sizing": "demand", "topUpDam": True,
+    }]
+    days = 150
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.2 * k, 1) for k in range(days)]}}
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -309,4 +333,5 @@ PROBES = {
     "trigger-hysteresis": trigger_hysteresis(),
     "junior-user": junior_user(),
     "offtake-keep-bands": offtake_keep_bands(),
+    "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
 }

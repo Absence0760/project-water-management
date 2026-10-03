@@ -171,8 +171,18 @@ MUTANTS = [
     ),
     (
         "an off-take ignores its hands-off flow",
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0)',
+    ),
+    (
+        "an off-take takes its source's pass-inflow release target (before engine 1.70.0)",
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
         'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
-        "keep_k = zs",
+    ),
+    (
+        "a fixed release makes no room for an off-take's top-up (before engine 1.70.0)",
+        'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)',
+        'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))',
     ),
     (
         "off-takes of one priority share the flow above the lowest keep among them",
