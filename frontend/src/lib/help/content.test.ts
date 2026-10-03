@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPreviewColumns, PREVIEW_DATE_HELP_KEY } from '../components/series/preview';
 import { ARTICLES } from './articles';
 import { DATA_ARTICLES } from './articles-data';
+import { EWR_ARTICLES } from './articles-ewr';
 import { LICENSING_ARTICLES } from './articles-licensing';
 import { CATEGORY_TITLES, countryNames, HELP, helpFieldKeys, helpFor, searchHelp } from './content';
 import { FARMER_HELP } from './farmer';
@@ -265,12 +266,13 @@ describe('the help text split', () => {
 
 	it('gives every tip an article and every article a tip, in the same order', () => {
 		// Each module in the tips' order; articles-data.ts holds exactly the "Input data" topic and
-		// articles-licensing.ts exactly "Scenarios and licensing".
+		// articles-licensing.ts exactly "Scenarios and licensing", articles-ewr.ts exactly the EWR topic.
 		const ids = TIPS.map((t) => t.id);
 		const cat = (id: string) => TIPS.find((t) => t.id === id)!.category;
-		expect(Object.keys(ARTICLES)).toEqual(ids.filter((id) => cat(id) !== 'data' && cat(id) !== 'licensing'));
+		expect(Object.keys(ARTICLES)).toEqual(ids.filter((id) => cat(id) !== 'data' && cat(id) !== 'licensing' && cat(id) !== 'ewr'));
 		expect(Object.keys(DATA_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'data'));
 		expect(Object.keys(LICENSING_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'licensing'));
+		expect(Object.keys(EWR_ARTICLES)).toEqual(ids.filter((id) => cat(id) === 'ewr'));
 	});
 
 	it('keeps the farm words whole in farmer.ts, with no field keys (no HelpTip shows them)', () => {
@@ -293,11 +295,11 @@ describe('the help text split', () => {
 	it('has HelpTip load only the tips, never the glossary text', () => {
 		const from = imports(read('../components/help/HelpTip.svelte')).map((i) => i.from);
 		expect(from).toContain('$lib/help/tips');
-		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-licensing|farmer)\b/.test(f))).toEqual([]);
+		expect(from.filter((f) => /^\$lib\/help\/(content|articles|articles-data|articles-ewr|articles-licensing|farmer)\b/.test(f))).toEqual([]);
 	});
 
 	it('keeps the text modules free of run-time imports (their own chunks, loadable by Node)', () => {
-		for (const f of ['./tips.ts', './articles.ts', './articles-data.ts', './articles-licensing.ts', './farmer.ts', './types.ts']) {
+		for (const f of ['./tips.ts', './articles.ts', './articles-data.ts', './articles-licensing.ts', './articles-ewr.ts', './farmer.ts', './types.ts']) {
 			const src = read(f);
 			expect(imports(src).filter((i) => !i.type), f).toEqual([]);
 			expect(src, f).not.toMatch(/\bimport\s*\(/);

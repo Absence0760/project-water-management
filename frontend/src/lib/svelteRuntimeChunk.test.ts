@@ -30,6 +30,7 @@ describe('the Svelte runtime chunk', () => {
 	it('puts only the help glossary’s "Input data" articles in their own chunk (issue #66)', () => {
 		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-data.ts')).toBe('help-articles-data');
 		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-licensing.ts')).toBe('help-articles-licensing');
+		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-ewr.ts')).toBe('help-articles-ewr');
 		for (const id of ['/repo/frontend/src/lib/help/articles.ts', '/repo/frontend/src/lib/help/content.ts', '/repo/frontend/src/lib/help/tips.ts']) {
 			expect(helpArticlesChunk(id), id).toBeUndefined();
 		}
