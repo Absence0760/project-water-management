@@ -211,7 +211,7 @@ describe('dividing the valley', () => {
 		);
 		const revs = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND id > $2 AND source <> 'baseline'`, [v.id, rev]);
 		expect(revs).toHaveLength(1);
-		expect(revs[0]!.reason).toMatch(/^Divided from the map: 2 areas, 3 drains-into, 1 runoff to the dam, 1 gauge added from Synthetic DEM/);
+		expect(revs[0]!.reason).toMatch(/^Divided from the map: 2 areas \(gross\), 3 drains-into, 1 runoff to the dam, 1 gauge added from Synthetic DEM/);
 		expect(ok.body.proposal).toMatchObject({ status: 'applied', mode: 'divide' });
 		expect(ok.body.proposal.decision.rest).toMatchObject({ to: 'node', nodeId: v.nodes.hill.id, parcelId: expect.any(String) });
 		// Decided once.
@@ -230,6 +230,65 @@ describe('dividing the valley', () => {
 		const parcels = await asOwner(`SELECT count(*)::int AS n FROM map_feature WHERE node_id = $1 AND kind = 'farm_parcel'`, [v.nodes.pump.id]);
 		expect(parcels[0]!.n).toBe(1);
 		expect(pump2.current).toMatchObject({ areaSource: 'map' });
+	});
+
+	it('takes the dam’s effective area when asked (195), the pump’s gross, and redraws a parcel with its new pans figure', async () => {
+		const v = await valley('Divide, effective area');
+		const r = await owner.call('POST', v.at('/map/divide'), v.body);
+		const { id: spid, plan } = r.body.proposal;
+		const [pump, dam] = plan.units;
+		expect(dam.nonContributingM2).toBeGreaterThan(0);
+		const url = v.at(`/map/divide/${spid}/apply`);
+		// Effective needs the area ticked.
+		const unticked = await owner.call('POST', url, { units: ticks(plan, { [dam.key]: { areaBasis: 'effective' } }), rest: { to: 'none' } });
+		expect(unticked.status).toBe(400);
+		expect(unticked.body.error).toMatch(/Tick Valley dam’s area to take its effective area/);
+		const ok = await owner.call('POST', url, {
+			units: ticks(plan, { [pump.key]: { area: true }, [dam.key]: { area: true, areaBasis: 'effective' } }),
+			rest: { to: 'new', name: 'Rest of the valley', areaBasis: 'gross' }
+		});
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as ApiNode[]).map((n) => [n.name, n]));
+		// The pump took its whole piece (the default, gross: the positive control); the dam its piece less the pan's catchment.
+		expect(by['Top pump']!.areaKm2).toBeCloseTo(pump.areaM2 / 1e6, 9);
+		expect(by['Valley dam']!.areaKm2).toBeCloseTo((dam.areaM2 - dam.nonContributingM2) / 1e6, 9);
+		expect(by['Rest of the valley']!.areaKm2).toBeCloseTo(plan.rest.areaM2 / 1e6, 9);
+		const rows = await asOwner(
+			`SELECT n.name, n.area_basis, f.area_m2, f.non_contributing_m2 FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 ORDER BY n.name`,
+			[v.id]
+		);
+		expect(rows.map((x) => [x.name, x.area_basis])).toEqual([
+			['Rest of the valley', 'gross'],
+			['Top pump', 'gross'],
+			['Valley dam', 'effective']
+		]);
+		expect(rows[2]!.area_m2).toBeCloseTo(dam.areaM2, 3);
+		expect(rows[2]!.non_contributing_m2).toBeCloseTo(dam.nonContributingM2, 3);
+		expect(ok.body.proposal.decision.units.filter((u: { area: boolean }) => u.area).map((u: { key: string; areaBasis: string }) => [u.key, u.areaBasis])).toEqual([
+			[pump.key, 'gross'],
+			[dam.key, 'effective']
+		]);
+		expect(ok.body.proposal.decision.rest).toMatchObject({ to: 'new', areaBasis: 'gross' });
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [v.id]);
+		expect(rev!.reason).toMatch(/^Divided from the map: 3 areas \(gross; effective, without what drains into pans: Valley dam\), /);
+
+		// Dividing again and taking the dam gross: the parcel is redrawn in place, keeps its pans figure, and the node says gross now.
+		const [{ area_feature_id: damParcel }] = await asOwner('SELECT area_feature_id FROM node WHERE id = $1', [v.nodes.dam.id]);
+		const again = await owner.call('POST', v.at('/map/divide'), v.body);
+		expect(again.status, JSON.stringify(again.body)).toBe(201);
+		const plan2 = again.body.proposal.plan;
+		const dam2 = plan2.units.find((u: { key: string }) => u.key === dam.key);
+		const re = await owner.call('POST', v.at(`/map/divide/${again.body.proposal.id}/apply`), { units: ticks(plan2, { [dam.key]: { area: true } }), rest: { to: 'none' } });
+		expect(re.status, JSON.stringify(re.body)).toBe(200);
+		const [after] = await asOwner(
+			`SELECT n.area_km2, n.area_basis, f.id = $2 AS same, f.non_contributing_m2 FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.id = $1`,
+			[v.nodes.dam.id, damParcel]
+		);
+		expect(after).toMatchObject({ area_basis: 'gross', same: true });
+		expect(after!.area_km2).toBeCloseTo(dam2.areaM2 / 1e6, 9);
+		expect(after!.non_contributing_m2).toBeCloseTo(dam2.nonContributingM2, 3);
+		const [rev2] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [v.id]);
+		expect(rev2!.reason).toMatch(/^Divided from the map: 1 area \(gross\), /);
 	});
 
 	it('refuses a value changed since the proposal, and leaves the model as it was', async () => {

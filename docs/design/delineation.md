@@ -338,6 +338,14 @@ after it) and reports, beside the catchment:
   `totalNonContributingM2`, `plan.rest.nonContributingM2`) and add a warning
   naming how much drains into pans and which pieces hold it. A saved
   sub-catchment from clicks says it in its description.
+- **Taking it into the model** (195): every feature made from a delineation
+  keeps its figure (`map_feature.non_contributing_m2`), and every path that
+  writes a unit's area from one (Use this area on an accepted proposal or a
+  saved sub-catchment, Start's and Divide's area ticks) asks gross (the
+  default) or effective, records it on the node (`area_basis`) and in the
+  revision reason (`backend/src/delineation/areaBasis.ts`;
+  [maps.md § Pans and the effective area](../maps.md#pans-and-the-effective-area)).
+  Gross stays the default for decision 1's reasons (pans-research.md).
 - **Cost** (the real DEM around Bultfontein, the whole window as the
   catchment, the worst case): 0.3 s at 2 048 cells, 0.8 s at the
   request's 3 072-cell cap, 2.7 s at the worker's 6 144 (against fills of

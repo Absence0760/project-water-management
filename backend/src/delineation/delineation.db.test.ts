@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, signUp } from '../__tests__/helpers.js';
+import { asOwner, node, signUp } from '../__tests__/helpers.js';
 import { BASIN_AREA_M2, DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 import { DELINEATIONS_PER_HOUR } from './routes.js';
 
@@ -157,7 +157,38 @@ describe('with the synthetic DEM', () => {
 		expect(res.body.feature).toMatchObject({ kind: 'other', name: 'Catchment above the dam wall (delineated)' });
 		expect(res.body.feature.properties.description).toMatch(/Delineated from Synthetic DEM/);
 		expect(res.body.proposal.featureId).toBe(res.body.feature.id);
+		// What of it drains into the valley's pan goes with the feature (195), for Use this area's effective area.
+		expect(res.body.proposal.pans.nonContributingM2).toBeGreaterThan(0);
+		expect(res.body.feature.nonContributingM2).toBeCloseTo(res.body.proposal.pans.nonContributingM2, 6);
 		expect((await editor.call('POST', at(`/map/delineation/${secondId}/accept`), { as: 'other' })).status).toBe(409);
+	});
+
+	it('Use this area takes the accepted catchment gross by default, effective when asked, and records which (195)', async () => {
+		const list = (await viewer.call('GET', at('/map/delineation'))).body.proposals;
+		const p = list.find((x: { id: string }) => x.id === secondId);
+		const nc = p.pans.nonContributingM2 as number;
+		const weir = node('Weir', null);
+		const unit = node('Dam unit', weir.id, { areaKm2: 1 });
+		expect((await owner.call('PUT', at('/model'), { nodes: [weir, unit], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const url = at(`/nodes/${unit.id}/area-from-map`);
+		// A viewer can't, whichever area.
+		expect((await viewer.call('POST', url, { featureId: p.featureId, basis: 'effective' })).status).toBe(403);
+		// No basis: the gross area (the positive control: unchanged by 195).
+		const gross = await editor.call('POST', url, { featureId: p.featureId });
+		expect(gross.status, JSON.stringify(gross.body)).toBe(200);
+		expect(gross.body).toMatchObject({ areaBasis: 'gross', areaSource: 'map', areaFeatureId: p.featureId });
+		expect(gross.body.areaKm2).toBeCloseTo(p.areaM2 / 1e6, 9);
+		const eff = await editor.call('POST', url, { featureId: p.featureId, basis: 'effective' });
+		expect(eff.status, JSON.stringify(eff.body)).toBe(200);
+		expect(eff.body.areaBasis).toBe('effective');
+		expect(eff.body.areaKm2).toBeCloseTo((p.areaM2 - nc) / 1e6, 9);
+		const [n] = await asOwner('SELECT area_km2, area_source, area_basis, area_feature_id FROM node WHERE id = $1', [unit.id]);
+		expect(n).toMatchObject({ area_source: 'map', area_basis: 'effective', area_feature_id: p.featureId });
+		const reasons = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 2`, [projectId]);
+		expect(reasons[1]!.reason).toMatch(/^Area of Dam unit from the map: “Catchment above the dam wall \(delineated\)” \([\d.]+ km², the gross area, the [\d.]+ km² draining into pans included, /);
+		expect(reasons[0]!.reason).toMatch(/^Area of Dam unit from the map: “Catchment above the dam wall \(delineated\)” \([\d.]+ km², the effective area, without the [\d.]+ km² draining into pans, /);
+		// An unknown basis is refused by the schema.
+		expect((await editor.call('POST', url, { featureId: p.featureId, basis: 'net' })).status).toBe(400);
 	});
 
 	it('never replaces a boundary silently: 409 without the tick, replaced with it', async () => {

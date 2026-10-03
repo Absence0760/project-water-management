@@ -489,7 +489,40 @@ describe('accepting an area from the map', () => {
 		expect(await source()).toMatchObject({ areaSource: 'map', areaFeatureId: parcelId });
 		saved.nodes.find((n: { id: string }) => n.id === farmA.id).areaKm2 = 3.5;
 		expect((await editor.call('PUT', `/projects/${projectId}/model`, saved)).status).toBe(200);
-		expect(await source()).toMatchObject({ areaKm2: 3.5, areaSource: 'typed', areaFeatureId: null });
+		expect(await source()).toMatchObject({ areaKm2: 3.5, areaSource: 'typed', areaBasis: null, areaFeatureId: null });
+	});
+
+	it('takes a polygon’s effective area only when it has a pans figure, and a new outline drops the figure (195)', async () => {
+		const url = `/projects/${projectId}/nodes/${farmA.id}/area-from-map`;
+		const made = await editor.call('POST', at('/features'), { kind: 'other', name: 'Pan veld', geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.01)] } });
+		expect(made.status).toBe(201);
+		const f = made.body.feature as { id: string; areaM2: number; nonContributingM2: number | null };
+		// Drawn: no figure, so no effective area; the gross one is taken and says nothing of pans (the positive control).
+		expect(f.nonContributingM2).toBeNull();
+		const refused = await editor.call('POST', url, { featureId: f.id, basis: 'effective' });
+		expect(refused.status).toBe(400);
+		expect(refused.body.error).toMatch(/has no figure for what drains into pans, so it has no effective area to take: take the gross area\.$/);
+		const gross = await editor.call('POST', url, { featureId: f.id, basis: 'gross' });
+		expect(gross.status).toBe(200);
+		expect(gross.body.areaKm2).toBeCloseTo(f.areaM2 / 1e6, 9);
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1`, [projectId]);
+		expect(rev!.reason).toMatch(/^Area of Farm A from the map: “Pan veld” \([\d.]+ km², computed from its polygon\)$/);
+		// The schema never holds a figure over the area.
+		await expect(asOwner('UPDATE map_feature SET non_contributing_m2 = area_m2 * 2 WHERE id = $1', [f.id])).rejects.toThrow(/check constraint/);
+		// With a figure (as a delineated feature has), the effective area is the area less it.
+		await asOwner('UPDATE map_feature SET non_contributing_m2 = area_m2 * 0.25 WHERE id = $1', [f.id]);
+		const eff = await editor.call('POST', url, { featureId: f.id, basis: 'effective' });
+		expect(eff.status, JSON.stringify(eff.body)).toBe(200);
+		expect(eff.body.areaKm2).toBeCloseTo((0.75 * f.areaM2) / 1e6, 9);
+		const listed = (await editor.call('GET', at('/features'))).body;
+		expect(listed.nodes.find((n: { id: string }) => n.id === farmA.id)).toMatchObject({ areaSource: 'map', areaBasis: 'effective', areaFeatureId: f.id });
+		expect(listed.features.find((x: { id: string }) => x.id === f.id).nonContributingM2).toBeCloseTo(0.25 * f.areaM2, 3);
+		// Renamed only: the figure stays. Reshaped: it was the old outline's, so it goes.
+		expect((await editor.call('PATCH', at(`/features/${f.id}`), { name: 'Pan veld (renamed)' })).body.feature.nonContributingM2).toBeCloseTo(0.25 * f.areaM2, 3);
+		const moved = await editor.call('PATCH', at(`/features/${f.id}`), { geometry: { type: 'Polygon', coordinates: [box(21.32, -33.68, 0.012)] } });
+		expect(moved.status).toBe(200);
+		expect(moved.body.feature.nonContributingM2).toBeNull();
+		expect((await editor.call('DELETE', at(`/features/${f.id}`))).status).toBe(204);
 	});
 
 	it('keeps the area but forgets the feature when the feature is deleted', async () => {

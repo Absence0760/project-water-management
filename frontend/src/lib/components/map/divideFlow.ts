@@ -140,6 +140,14 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 	return null;
 }
 
+/** The body apply sends: an area's basis only with its area ticked (the server refuses an effective area not taken). */
+export function divideApplyTicks(t: DivideTicks): DivideTicks {
+	return {
+		units: t.units.map(({ areaBasis, ...u }) => ({ ...u, ...(u.area && areaBasis ? { areaBasis } : {}) })),
+		rest: t.rest
+	};
+}
+
 /** What the confirm says will happen: counts of the ticked values. */
 export function divideSummary(t: DivideTicks): string {
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -148,7 +156,8 @@ export function divideSummary(t: DivideTicks): string {
 	const runoff = t.units.filter((u) => u.runoffToDam).length;
 	const upstream = t.units.filter((u) => u.upstreamToDam).length;
 	const gauges = t.units.filter((u) => u.add).length;
-	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${upstream ? `, ${s(upstream, 'upstream inflow to a dam', 'upstream inflows to dams')}` : ''}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
+	const effective = t.units.filter((u) => u.area && u.areaBasis === 'effective').length + (t.rest.to !== 'none' && t.rest.areaBasis === 'effective' ? 1 : 0);
+	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel${effective ? `; ${effective} without what drains into pans` : ''}), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${upstream ? `, ${s(upstream, 'upstream inflow to a dam', 'upstream inflows to dams')}` : ''}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
 }
 
 /** How far over the catchment the units may add up before the sheet says so: the pieces' own rounding stays under it. */

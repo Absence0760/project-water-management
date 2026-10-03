@@ -29,12 +29,13 @@ const parcel = (id: string, name: string, nodeId: string | null, x: number): Map
 	properties: {},
 	areaM2: 4e6,
 	center: [x + 0.01, -33.99],
+	nonContributingM2: null,
 	sourceId: null,
 	createdBy: null,
 	createdAt: '2026-10-01T00:00:00Z',
 	updatedAt: '2026-10-01T00:00:00Z'
 });
-const unit = (id: string, name: string): MapNodeArea => ({ id, name, kind: 'farm', areaKm2: 4, areaSource: 'map', areaFeatureId: null });
+const unit = (id: string, name: string): MapNodeArea => ({ id, name, kind: 'farm', areaKm2: 4, areaSource: 'map', areaBasis: 'gross', areaFeatureId: null });
 
 describe('the Checks panel', () => {
 	it('says "No problems found" with nothing to flag', () => {

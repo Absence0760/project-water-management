@@ -151,6 +151,7 @@ const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geo
 	properties: {},
 	areaM2: 1,
 	center: [0, 0],
+	nonContributingM2: null,
 	sourceId: null,
 	createdBy: null,
 	createdAt: '',

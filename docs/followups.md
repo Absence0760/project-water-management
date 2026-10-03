@@ -4009,15 +4009,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       (per piece, per unit's whole catchment; start-11) and click piece (its
       line on the sheet and its saved description), with the effective area;
       the routed catchment is unchanged.
-- [ ] **Take the effective area into the model** (from finding 8's fix).
-      The proposal reports the effective area, but "Use this area", Start's
-      and Divide's area ticks and a saved piece all still take the gross
-      area, so a hydrologist who models the pans as non-contributing types
-      it in. Durable fix: an explicit choice beside each area tick ("the
-      gross area" / "the effective area, without the pans"), recorded in the
-      node's area source and the revision reason, never a silent default.
-      Trigger: the hydrologist asking for it after using the figure, or a
-      client catchment in the pan veld (C, D, the Molopo).
+- [x] **Take the effective area into the model** (from finding 8's fix;
+      branch wip/r5-effective-area, migration 195). Use this area (an
+      accepted proposal's feature, a saved sub-catchment, a parcel), Start's
+      and Divide's area ticks all ask gross (the default, as WR2012's
+      quaternary areas are) or effective (less what drains into pans) for a
+      piece holding pans; the feature keeps its figure
+      (`map_feature.non_contributing_m2`, dropped with a new outline), the
+      node records the basis (`node.area_basis`), and the revision reason
+      and the decision say which ([maps.md § Pans and the effective
+      area](./maps.md#pans-and-the-effective-area)). On the way, Divide
+      redraws a unit's own parcel in place even when the area taken changes
+      (it read the link after the model save had cleared it).
 - [ ] **Cross-check a pan against the river network** (from finding 8's
       fix). The storage rule keeps out a drawn-down dam and an embankment
       pond on the synthetic DEM and on the real one around Bultfontein, but a

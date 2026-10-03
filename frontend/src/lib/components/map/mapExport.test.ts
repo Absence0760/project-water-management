@@ -6,7 +6,7 @@ import type { MapFeature } from '$lib/api/types';
 import { HYDRORIVERS_MAP_ATTRIBUTION } from '$lib/components/legal/dataCredits';
 import { exportFileName, featuresGeoJson, geoJsonText } from './mapExport';
 
-const base = { nodeId: null, nodeName: null, damPosition: null, properties: { description: 'kept out' }, center: [0, 0] as [number, number], sourceId: 'src-1', createdBy: 'user-1', createdAt: '2026-10-01', updatedAt: '2026-10-01' };
+const base = { nodeId: null, nodeName: null, damPosition: null, properties: { description: 'kept out' }, center: [0, 0] as [number, number], sourceId: 'src-1', nonContributingM2: null, createdBy: 'user-1', createdAt: '2026-10-01', updatedAt: '2026-10-01' };
 const ring: [number, number][] = [[21.3, -33.7], [21.4, -33.7], [21.4, -33.6], [21.3, -33.7]];
 const fs: MapFeature[] = [
 	{ ...base, id: 'b', kind: 'catchment_boundary', name: 'Synthetic catchment', geometry: { type: 'Polygon', coordinates: [ring] }, areaM2: 61_234_567.891 },

@@ -8,6 +8,7 @@ import {
 	divideOffers,
 	divideOverlap,
 	divideProblem,
+	divideApplyTicks,
 	divideSummary,
 	doubleNode,
 	initialDivideTicks,
@@ -30,6 +31,7 @@ const feature = (id: string, kind: MapFeature['kind'], nodeId: string | null = n
 	properties: {},
 	areaM2: null,
 	center: [20, -33],
+	nonContributingM2: null,
 	sourceId: null,
 	createdBy: null,
 	createdAt: '',
@@ -175,6 +177,21 @@ describe('the ticks', () => {
 		expect(divideSummary(t)).toBe(
 			'The model takes 2 areas (each saved as its unit’s parcel), 2 drains-into and 0 runoffs to the dam, and 1 new gauge, and a new unit for the rest of the catchment. Every value not ticked stays as it is.'
 		);
+	});
+
+	it('sends an area’s basis only with its area ticked, and counts the effective areas (195)', () => {
+		const t = tickAllDivide(p, initialDivideTicks(p));
+		t.units[0]!.areaBasis = 'effective';
+		t.units[1]!.areaBasis = 'effective';
+		t.rest = { to: 'new', name: 'Rest', areaBasis: 'effective' };
+		const body = divideApplyTicks(t);
+		// The gauge's area isn't ticked (it owns no land), so its basis goes.
+		expect(body.units.map((u) => [u.key, u.areaBasis])).toEqual([
+			['top', 'effective'],
+			['gauge', undefined]
+		]);
+		expect(body.rest).toEqual({ to: 'new', name: 'Rest', areaBasis: 'effective' });
+		expect(divideSummary(t)).toMatch(/^The model takes 2 areas \(each saved as its unit’s parcel; 2 without what drains into pans\), /);
 	});
 });
 

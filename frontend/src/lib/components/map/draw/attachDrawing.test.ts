@@ -130,6 +130,7 @@ describe('attachDrawing: snapping (#326 C2)', () => {
 		properties: {},
 		areaM2: null,
 		center: [20.02, -33.02],
+		nonContributingM2: null,
 		sourceId: null,
 		createdBy: null,
 		createdAt: '',

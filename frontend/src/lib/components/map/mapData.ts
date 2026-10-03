@@ -3,8 +3,9 @@
 // import's refusal says. Pure, so the list, the table and the map agree and
 // vitest covers them (mapData.test.ts). No MapLibre here: this module ships
 // in the tab's chunk; the map library loads only when the map is drawn.
-import type { DamPosition, MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '$lib/api/types';
+import type { DamPosition, MapAreaBasis, MapFeature, MapFeatureKind, MapGeometry, MapImportProblem, MapNodeArea, MapPosition } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
+import { takenAreaM2 } from './areaBasis';
 
 export const KIND_LABEL: Record<MapFeatureKind, string> = {
 	catchment_boundary: 'Catchment boundary',
@@ -137,6 +138,13 @@ export const problemText = (p: MapImportProblem) => (p.feature === null ? p.mess
 /** The farm nodes an area can be accepted into, with where each area came from. */
 export const areaTargets = (nodes: readonly MapNodeArea[]) => nodes.filter((n) => n.kind === 'farm');
 
-/** Whether accepting `f`'s area into `n` would change nothing (the same feature already accepted, the same area). */
-export const alreadyAccepted = (n: MapNodeArea, f: MapFeature) =>
-	n.areaSource === 'map' && n.areaFeatureId === f.id && f.areaM2 !== null && Math.abs(n.areaKm2 - f.areaM2 / 1e6) < 1e-9;
+/**
+ * Whether accepting `f`'s area into `n` would change nothing: the same feature already accepted, the same area on
+ * the basis it was taken (gross, or effective: without what drains into pans, 195), and, given `basis`, that basis.
+ */
+export function alreadyAccepted(n: MapNodeArea, f: MapFeature, basis?: MapAreaBasis): boolean {
+	if (n.areaSource !== 'map' || n.areaFeatureId !== f.id || f.areaM2 === null) return false;
+	const took = n.areaBasis ?? 'gross';
+	if (basis !== undefined && basis !== took) return false;
+	return Math.abs(n.areaKm2 - takenAreaM2(f.areaM2, f.nonContributingM2, took) / 1e6) < 1e-9;
+}
