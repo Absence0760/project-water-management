@@ -739,7 +739,7 @@ runs and accumulations are real) can't be decided without the client.
       Trigger: the hydrologist's review of issue #2.
       **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
       **Blank outages (issue #90 Q31, issue #393), built in engine 1.70.0:** a blank stretch counts towards a run only up to 7 days (`ACC_MAX_BLANK_DAYS`); days listed as missing count as blank; a ≥ 20 mm reading straight after a longer outage that passes the CHIRPS tests is set aside as missing (CHIRPS fills it, out of the fit, warned). Provisional (operator, 2026-10-03), to be confirmed by the hydrologist with the limit itself (it rests on reasoning, not a source; model.md §2.4d).
-- [ ] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).**
+- [x] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).** *Done (issue #393): (1)–(3) and the probe are in `verify/` (`outage-reading-set-aside`, `short-blank-run-window`, three mutants); (4) stays out of scope while the harness refuses `keepReadings`/`addAccumulations`.*
       `verify/model.py` `detect_accumulations` counts every blank day back
       from a reading like a zero. It needs: (1) the run to stop at a stretch
       of more than 7 days blank or listed as missing (measured whole; the

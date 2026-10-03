@@ -372,11 +372,64 @@ def offtake_into_capped_unit() -> dict:
             "series": _steady(90, 6.0, "2020-10-01")}
 
 
+def outage_reading_set_aside() -> dict:
+    """A 30 mm reading after 150 blank days (a logger back from a fault,
+    issue #393 item 11 (b)). Bias-corrected CHIRPS rains 2 mm a day over the
+    outage and nothing on the reading day or either side of it. Engine
+    ≥ 1.70.0: more than 7 blank days end the run, so there is no window; the
+    reading passes the tests read over the outage's last 92 days and is set
+    aside: CHIRPS fills its day (0 mm) and the outage alike. Spreading it
+    (≤ 1.69.0) would put 30 mm over 93 days in place of ~184 mm of CHIRPS;
+    keeping it would put 30 mm on the reading day."""
+    days = 200
+    reading = 170
+    catch = [None] * days
+    for j in range(reading - 150):
+        catch[j] = 0.0
+    catch[reading] = 30.0
+    for j in range(reading + 1, days):
+        catch[j] = 1.0
+    ch = [0.0] * days
+    for j in range(reading - 150, reading - 1):
+        ch[j] = 2.0
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": catch},
+        "rain_chirps_mm": {"startDate": "2020-01-01", "values": ch},
+    }
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
+def short_blank_run_window() -> dict:
+    """A 40 mm reading after 4 zeros and 7 blank days (a holiday gauge): the
+    blank stretch is 7 days, not more, so it counts like zeros and the 11-day
+    run is a window; the total is spread by CHIRPS (2 mm a day over the run,
+    none on the reading day ± 1). With 8 blanks it would be an outage and the
+    reading would be set aside instead."""
+    days = 60
+    reading = 30
+    catch = [0.0] * days
+    for j in range(reading - 7, reading):
+        catch[j] = None
+    catch[reading] = 40.0
+    ch = [0.0] * days
+    for j in range(reading - 11, reading - 1):
+        ch[j] = 2.0
+    nodes = [_node("o", "gauge", None), _node("f", "farm", "o", areaKm2=5)]
+    series = {
+        "rain_catchment_mm": {"startDate": "2020-01-01", "values": catch},
+        "rain_chirps_mm": {"startDate": "2020-01-01", "values": ch},
+    }
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
     "room-while-sending": room_while_sending(),
     "accumulation-window-run": accumulation_window_run(),
+    "outage-reading-set-aside": outage_reading_set_aside(),
+    "short-blank-run-window": short_blank_run_window(),
     "low-vs-chirps-median": low_vs_chirps_median(),
     "negative-reading": negative_reading(),
     "zero-catchment-area": zero_catchment_area(),

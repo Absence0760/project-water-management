@@ -62,7 +62,9 @@ The core daily chain, with every setting of it the generator varies:
   runs (the wet-season 60-day rule, the plain 180-day rule, `'missing'` /
   `'asRecorded'`, listed missing periods as dates or water years);
   multi-day accumulations (detection, `'spread'` / `'asRecorded'`, and their
-  days left out of the fit); the run window from the rain record or the
+  days left out of the fit; engine ≥ 1.70.0, a blank or listed-missing stretch
+  of more than 7 days ending the run, and a reading straight after one set
+  aside); the run window from the rain record or the
   simulation settings; the demand threshold.
 - **GR4J** (§2.4a): the production and routing stores, both unit
   hydrographs, the exchange (X2 ≠ 0), the warm-up cycling the historical days
@@ -293,4 +295,7 @@ keeps pumping until the stop level, §2.7e), `junior-user` (a junior user
 leaves the seniors' requirement, §2.7c) and `offtake-keep-bands` (off-takes
 of one priority share the flow in bands at their keeps, so a sibling without
 a hands-off flow doesn't let the others take below theirs, §2.6a, engine
-1.69.0).
+1.69.0), `outage-reading-set-aside` (a 30 mm reading after 150 blank days
+is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
+and `short-blank-run-window` (7 blank days still count like zeros, so the
+reading is spread; its mutant moves the limit by one).

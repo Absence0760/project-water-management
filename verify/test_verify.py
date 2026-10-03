@@ -35,6 +35,21 @@ MUTANT_DENSE = 12
 # replacement), …) for a mutant of several edits, applied in order. Each
 # text must occur exactly once when its edit is applied.
 MUTANTS = [
+    (
+        "blank days count like zeros however many (before engine 1.70.0, Q31)",
+        "if j - s > ACC_MAX_BLANK_DAYS:",
+        "if False:",
+    ),
+    (
+        "a reading after a blank outage stays on its day (Q31)",
+        "set_aside |= set(outage_readings)",
+        "pass",
+    ),
+    (
+        "a blank stretch of exactly 7 days ends the run (Q31 limit off by one)",
+        "if j - s > ACC_MAX_BLANK_DAYS:",
+        "if j - s >= ACC_MAX_BLANK_DAYS:",
+    ),
     ("transfers ignore the receiver's room (N4)", "if tot > rm and tot > 0:", "if False:"),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
@@ -279,7 +294,7 @@ class CrossCheck(unittest.TestCase):
         # The cases reach the paths the mutants target.
         cov = r["coverage"]
         for k in (
-            "zero_run_days_set_aside", "accumulation_windows", "chirps_days", "band_split", "room_bound",
+            "zero_run_days_set_aside", "accumulation_windows", "accumulation_readings_set_aside", "chirps_days", "band_split", "room_bound",
             "multi_site_charge_days", "forecast_tail",
             # Phase 2a.
             "borehole_days", "borehole_to_dam_days", "borehole_annual_cap_days", "depletion_owed_days",

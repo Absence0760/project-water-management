@@ -188,6 +188,7 @@ ACC_MIN_RUN_DAYS = 3
 ACC_READING_DAY_SHARE = 0.25
 ACC_RUN_SHARE = 0.5
 ACC_MAX_RUN_DAYS = 92
+ACC_MAX_BLANK_DAYS = 7
 
 
 def flagged_zero_runs(c: Series, min_wet_days: int) -> list[list[int]]:
@@ -290,43 +291,71 @@ def corrected_chirps(h: Series, factors, o: int, apply: bool):
     return w * f if f is not None else w
 
 
-def detect_accumulations(c: Series, h: Series, factors, blocked: set[int]):
+def detect_accumulations(c: Series, h: Series, factors, blocked: set[int], missing: set[int]):
     """§2.4d: reading ≥ 20 mm after ≥ 3 days of 0 or blank; CHIRPS × the
     factors (raw where a month has none) little on the reading day ± 1 and a
-    lot over the window's run days (the day before the reading left out)."""
+    lot over the window's run days (the day before the reading left out).
+    Engine ≥ 1.70.0: a day listed as missing reads as blank, and a stretch of
+    more than 7 blank days in a row (measured whole) is an outage that ends
+    the run; a reading straight after one is judged over the outage's last
+    92 days instead and, when it passes, set aside. Returns (windows,
+    set-aside reading days)."""
     wins = []
+    set_aside = []
     if not c or not h:
-        return wins
+        return wins, set_aside
 
     def ch(o):
         v = corrected_chirps(h, factors, o, True)
         return 0.0 if v is None else v
 
+    def blank(j):
+        u = c.values[j]
+        return (c.start + j) in missing or u is None or (isinstance(u, float) and not math.isfinite(u))
+
     for i, v in enumerate(c.values):
-        if v is None or not math.isfinite(v) or v < ACC_MIN_MM:
+        if blank(i) or v < ACC_MIN_MM:
             continue
         r = c.start + i
         k = 0
+        outage = 0
         j = i - 1
         while j >= 0:
-            u = c.values[j]
-            if u is None or (isinstance(u, float) and not math.isfinite(u)) or u == 0:
+            if blank(j):
+                s = j
+                while s >= 0 and blank(s):
+                    s -= 1
+                if j - s > ACC_MAX_BLANK_DAYS:
+                    outage = j - s
+                    break
+                k += j - s
+                j = s
+            elif c.values[j] == 0:
                 k += 1
                 j -= 1
             else:
                 break
-        if k < ACC_MIN_RUN_DAYS or h.get(r) is None:
+        if h.get(r) is None:
             continue
-        run_days = list(range(r - min(k, ACC_MAX_RUN_DAYS), r))
+        if k >= ACC_MIN_RUN_DAYS:
+            run_days = list(range(r - min(k, ACC_MAX_RUN_DAYS), r))
+        elif k == 0 and outage > 0:
+            run_days = list(range(r - min(outage, ACC_MAX_RUN_DAYS), r))
+        else:
+            continue
         if ch(r - 1) + ch(r) + ch(r + 1) >= ACC_READING_DAY_SHARE * v:
             continue
         if sum(ch(o) for o in run_days if o != r - 1) < ACC_RUN_SHARE * v:
+            continue
+        if k == 0:
+            if r not in blocked:
+                set_aside.append(r)
             continue
         window = run_days + [r]
         if any(o in blocked for o in window):
             continue
         wins.append({"days": window, "reading": r, "total": v})
-    return wins
+    return wins, set_aside
 
 
 def prepare_rain(settings: dict, series: dict) -> dict:
@@ -352,12 +381,16 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     base_left_out = flagged_out | missing_days
     det_factors = fit_chirps_factors(c, h, base_left_out, low_years)
     blocked = missing_days | (keep_dry if mode == "missing" else set())
-    windows = detect_accumulations(c, h, det_factors, blocked)
+    windows, outage_readings = detect_accumulations(c, h, det_factors, blocked, missing_days)
     window_days = {o for w in windows for o in w["days"]}
-    factors = fit_chirps_factors(c, h, base_left_out | window_days, low_years)
+    # A reading after an outage is left out of the fit in either mode; in
+    # 'spread' mode its day is set aside (CHIRPS, then forecast, fill it).
+    factors = fit_chirps_factors(c, h, base_left_out | window_days | set(outage_readings), low_years)
 
     set_aside = ((flagged_days - kept_dry) if mode == "missing" else set()) | missing_days
     set_aside -= window_days - missing_days
+    if acc_mode != "asRecorded":
+        set_aside |= set(outage_readings)
 
     spread: dict[int, float] = {}
     if acc_mode == "spread":
@@ -404,8 +437,9 @@ def prepare_rain(settings: dict, series: dict) -> dict:
     first = min(a for a, _ in cands) if cands else None
     last = max(b for _, b in cands) if cands else None
     diag = {
-        "zero_run_days_set_aside": len(set_aside - missing_days),
+        "zero_run_days_set_aside": len(set_aside - missing_days - set(outage_readings)),
         "accumulation_windows": len(windows),
+        "accumulation_readings_set_aside": len(outage_readings),
         "low_vs_chirps_years": len(low_years),
     }
     return {
