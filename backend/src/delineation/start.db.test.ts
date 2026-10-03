@@ -73,7 +73,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-13' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-14' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -228,7 +228,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-13/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-14/);
 		// Gross, the default (195): the units took the parcels' whole areas, and say so.
 		const bases = await asOwner(`SELECT name, area_basis FROM node WHERE project_id = $1 ORDER BY sort_order`, [p.id]);
 		expect(bases.map((b) => [b.name, b.area_basis])).toEqual([
@@ -490,7 +490,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-13');
+		expect(methodVersion).toBe('start-14');
 		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
 		expect(plan.dropped).toEqual([]);
@@ -576,7 +576,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(unitOf(unset).totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
 		expect(unitOf(unset).placement).not.toHaveProperty('damPosition');
 		expect(unitOf(unset)).not.toHaveProperty('damShares');
-		expect(unset.body.proposal.methodVersion).toBe('start-13');
+		expect(unset.body.proposal.methodVersion).toBe('start-14');
 		const refused = await apply(unset, { upstreamToDam: true });
 		expect(refused.status).toBe(400);
 		expect(refused.body.error).toMatch(/has no proposed upstream inflow to its dam: mark the dam on or off the river/);

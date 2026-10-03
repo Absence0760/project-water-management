@@ -138,6 +138,6 @@ describe('delineate: a click near the head of a head reach (delineate-11)', () =
 		expect(d.method).toMatch(/best matches reach 1 of test \(5 km² at the point, from the DEM’s own area at the head reach’s upper end;/);
 		expect(d.snapDistanceM).toBeLessThan(150);
 		expect(d.areaM2).toBeCloseTo(own.areaM2, -3);
-		expect(d.methodVersion).toBe('delineate-11');
+		expect(d.methodVersion).toBe('delineate-12');
 	});
 });

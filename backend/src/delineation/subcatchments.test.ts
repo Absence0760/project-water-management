@@ -574,7 +574,7 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 		near(gauge.totalNonContributingM2, r.pans.nonContributingM2, 1e-6);
 		// Reported, not taken out: the areas are what they were.
 		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
-		expect(r.methodVersion).toBe('start-13');
+		expect(r.methodVersion).toBe('start-14');
 	});
 
 	it('never counts a depression a unit’s point is in: a dam put on the pan makes it that unit’s own basin', async () => {
@@ -584,6 +584,20 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 		expect(r.pans.count).toBe(0);
 		expect(r.pans.nonContributingM2).toBe(0);
 		expect(r.units[0]!.nonContributingM2).toBe(0);
+	});
+
+	it('counts storage on a river in no piece, unit’s catchment or rest (start-14): the figures the effective area takes leave it out', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		// A river drawn through the pan and out down the flank to the valley's river (delineate.test.ts does the same for a click).
+		const through = [at(PAN.x + 12, PAN.y - 2), at(PAN.x, PAN.y), at(OUTLET_CELL.x, PAN.y + 8)];
+		const points = [point('dam', DAM_CELL.x, DAM_CELL.y + 1), point('gauge', OUTLET_CELL.x, OUTLET_CELL.y - 10, 'gauge')];
+		const r = await delineateUnits(dem, { outlet, boundary: null, points }, { panReference: async () => ({ rivers: [{ line: through, directed: false }], dams: [] }) });
+		expect(r.pans).toMatchObject({ count: 0, nonContributingM2: 0, onRiver: { count: 1, largest: [{ by: 'river' }] } });
+		for (const u of r.units) {
+			expect(u.nonContributingM2 ?? 0).toBe(0);
+			expect(u.totalNonContributingM2 ?? 0).toBe(0);
+		}
+		expect(r.rest.nonContributingM2).toBe(0);
 	});
 });
 

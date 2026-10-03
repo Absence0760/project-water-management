@@ -37,7 +37,7 @@ import { JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver 
 import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, expectedOnGrid, onOwnChannel, place, WIDE_MATCH_M, type HeadHint } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, NO_DATA_EDGE, OUT, openFlags, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
-import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
+import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
 /**
@@ -56,11 +56,13 @@ import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
  * start-12 (issue #390, findings 1 and 6 reaching Start, Divide and Sub-catchments): a river the window cuts at the outlet grows the
  * window instead of leaving the outlet in a gully, each larger window is placed over the catchment (delineate.ts windowOrigin), and a
  * cut click keeps its `unmatched` unless its reach is larger than the routed square;
- * start-13 (delineate-11 reaching them): a head reach's area at the point from the DEM's own area at its upper end (place.ts expectedOnGrid).
+ * start-13 (delineate-11 reaching them): a head reach's area at the point from the DEM's own area at its upper end (place.ts expectedOnGrid);
+ * start-14 (delineate-12 reaching them): a depression passing the pan tests that a mapped river flows out of over a wall, or a dam
+ * holds, is storage on a river, listed apart and not counted as non-contributing.
  * Not bumped for the dam's position (194, map_feature.dam_position): an unset dam is placed exactly as before, and a set one is
  * named in the method (placementText) and its placement (`damPosition`).
  */
-export const START_METHOD_VERSION = 'start-13';
+export const START_METHOD_VERSION = 'start-14';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -560,7 +562,14 @@ export function allOpenText(
 export async function delineateUnits(
 	dem: Dem,
 	req: SubcatchmentRequest,
-	opts: { windows?: readonly number[]; snapRadiusM?: number; budgetMs?: number; now?: () => number } = {}
+	opts: {
+		windows?: readonly number[];
+		snapRadiusM?: number;
+		budgetMs?: number;
+		now?: () => number;
+		/** The rivers and dams a depression passing the pan tests is checked against (panReference.ts); without it, not checked. */
+		panReference?: PanReferenceLoader;
+	} = {}
 ): Promise<Subcatchments> {
 	const now = opts.now ?? (() => performance.now());
 	const started = now();
@@ -873,10 +882,11 @@ export async function delineateUnits(
 		);
 		// The pans: what drains into a closed depression (none at the outlet or a point), per owner.
 		const R = kept.length;
-		const found = findPans(
-			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask: catchment, rowM2, toPos: cellPos },
+		const found = await findPans(
+			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask: catchment, rowM2, toPos: cellPos, toGrid },
 			[outlet, ...kept.map((k) => k.cell)],
-			Math.ceil(snapRadiusM / cellSizeM) + 1
+			Math.ceil(snapRadiusM / cellSizeM) + 1,
+			opts.panReference
 		);
 		const ncOf = new Float64Array(R + 1);
 		for (let i = 0; i < found.nc.length; i++) if (found.nc[i] && part.owner[i]! >= 0) ncOf[part.owner[i]!]! += rowM2[(i - (i % nCells)) / nCells]!;
@@ -1036,7 +1046,7 @@ export async function delineateUnits(
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.
 			dropped: dropped.map((d) => ({ ...d, ...(how.get(d.id) ?? {}) })),
 			rest: open[R] ? { ...rest, nonContributingM2: 0, open: true } : { ...rest, nonContributingM2: ncOf[R]! },
-			pans: panReport(truncated ? Number.NaN : ncAreaM2(nCells, found.nc, rowM2), found.pans),
+			pans: panReport(truncated ? Number.NaN : ncAreaM2(nCells, found.nc, rowM2), found.pans, found.onRiver),
 			cellSizeM,
 			zoom: z,
 			windowCells: nCells,

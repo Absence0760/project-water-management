@@ -65,6 +65,21 @@ describe('delineation helpers', () => {
 		expect(provenanceFacts(proposal()).map(([k]) => k)).toEqual(['Dataset', 'Method']);
 	});
 
+	it('lists storage on a river apart from the pans (delineate-12), and says nothing when there is none or it wasn’t checked', () => {
+		const at = [29.09, -28.58] as [number, number];
+		const pans = { nonContributingM2: 0, count: 0, largest: [], method: 'm' };
+		const one = { ...pans, onRiver: { count: 1, largest: [{ at, floorM2: 1_595_686, depthM: 8, drainsM2: 29_909_565, storageMm: 371, by: 'river' as const }] } };
+		expect(panFacts({ areaM2: 61e6, pans: one })).toEqual([
+			['Into pans', 'none found (no closed depression deep and large enough)'],
+			['Storage on a river', 'A closed depression holds as much as a pan, but a mapped river flows out of it over a wall: storage on a river, so the 29.91 km² draining into it is not counted as non-contributing']
+		]);
+		const dams = { ...pans, onRiver: { count: 2, largest: [{ ...one.onRiver.largest[0]!, by: 'dam' as const }] } };
+		expect(Object.fromEntries(panFacts({ areaM2: 61e6, pans: dams }))['Storage on a river']).toBe(
+			'2 closed depressions hold as much as pans, but a mapped river flows out of each over a wall or a dam holds it: storage on a river, not counted as non-contributing (the largest has 29.91 km² draining into it)'
+		);
+		expect(panFacts({ areaM2: 61e6, pans: { ...pans, onRiver: { count: 0, largest: [] } } })).toHaveLength(1);
+	});
+
 	it('carries the Copernicus notice for the GLO-30 DEM only', () => {
 		expect(datasetNotice({ label: '© Mapterhorn', attribution: '© Mapterhorn' })).toBe(COPERNICUS_NOTICE);
 		expect(datasetNotice({ label: 'Synthetic DEM 1', attribution: 'synthetic' })).toBeNull();

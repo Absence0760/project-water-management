@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
+import { panReferenceLoader } from './panReference.js';
 import type { Geometry, Position } from '../geo/geojson.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -448,7 +449,7 @@ export const startRoutes = new Hono<AuthEnv>()
 						outletHints: outletHints(inputs.outlet.foundIn, reaches),
 						boundary: inputs.boundary?.geometry ?? null,
 						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, damPosition: p.damPosition, ...reaches.get(p.featureId)?.hints }))
-					});
+					}, { panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id) });
 				} catch (err) {
 					if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
 					logEvent('error', { event: 'start_proposal_failed', ...safeError(err) });

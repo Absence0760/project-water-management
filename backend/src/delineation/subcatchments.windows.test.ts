@@ -18,7 +18,7 @@ describe('delineateUnits: the windows (start-12)', () => {
 		const r = await delineateUnits(dem, { outlet: at(0, 0), boundary: null, points: [] }, { windows: [128, 256] });
 		expect(r.windowCells).toBe(256);
 		expect(Math.abs(r.catchment.areaM2 / whole.areaM2 - 1)).toBeLessThan(0.02);
-		expect(START_METHOD_VERSION).toBe('start-13');
+		expect(START_METHOD_VERSION).toBe('start-14');
 	});
 
 	it('grows for a river the window cuts at a gauge, instead of leaving the outlet in a gully (finding 1)', async () => {

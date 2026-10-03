@@ -3031,6 +3031,14 @@ export interface PanReport {
 	count: number;
 	/** The largest few by what drains into them: the floor's deepest point, its area, depth below the spill, catchment and storage over it. */
 	largest: { at: MapPosition; floorM2: number; depthM: number; drainsM2: number; storageMm: number }[];
+	/**
+	 * The depressions that hold as much as a pan but that a mapped river flows out of (at a wall) or a dam holds: storage on a
+	 * river, listed apart and not counted above (delineate-12, start-14). Absent when not checked.
+	 */
+	onRiver?: {
+		count: number;
+		largest: { at: MapPosition; floorM2: number; depthM: number; drainsM2: number; storageMm: number; by: 'river' | 'dam' }[];
+	};
 	method: string;
 }
 

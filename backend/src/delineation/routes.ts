@@ -22,6 +22,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
+import { panReferenceLoader } from './panReference.js';
 import { currentBoundary, loadFeature, removeBoundary, toFeature } from '../geo/routes.js';
 import { recordAudit } from '../history/record.js';
 import { wakeWorker } from '../jobs/wake.js';
@@ -144,7 +145,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 					capCells: delineationLimits.jobWindows[delineationLimits.jobWindows.length - 1],
 					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM, head: attempt.reach.head } : null,
 					junction: attempt.junction,
-					keepPoint: body.keepPoint
+					keepPoint: body.keepPoint,
+					panReference: panReferenceLoader((fn) => withUser(userId, fn, { readOnly: true }), id)
 				});
 			} catch (err) {
 				if (err instanceof DelineationRefused) {

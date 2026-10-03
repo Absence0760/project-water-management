@@ -1260,7 +1260,12 @@ to a point on a river. The design, the method and its accuracy are in
   looked and found none; a proposal from before delineate-9 says nothing.
   A dam drawn down below its spillway holds too little over its catchment
   to count, and the depression at the clicked point (a dam's basin behind
-  the wall) never counts.
+  the wall) never counts. A large dam low in a small catchment can hold
+  enough; since delineate-12 a depression a river-network reach that
+  reaches the sea (or the catchment's own drawn river) flows out of over a
+  wall, or that a dam of the register or the map holds, is listed as
+  **Storage on a river** and not counted ([§ River network
+  dataset](#river-network-dataset): it needs the network's `ENDORHEIC`).
 - **The DEM** (`DEM_URL`, backend env): empty (the committed default) turns
   delineation off; the Map shows no Delineate. Locally, after
   `pnpm dev:tiles:terrain` (§ Relief), put
@@ -1644,8 +1649,13 @@ reads it.
   Checksums](#checksums)), cuts it to `TILES_BBOX` (South Africa
   by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
   `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
-  `LENGTH_KM`, `DIS_AV_CMS` at five decimals, and loads it as dataset
-  `HydroRIVERS-v10` with the attribution as its source.
+  `LENGTH_KM`, `DIS_AV_CMS` and `ENDORHEIC` at five decimals, and loads it as dataset
+  `HydroRIVERS-v10` with the attribution as its source. `ENDORHEIC`
+  (`river_reference.endorheic`, migration 196) says whether a reach reaches
+  the sea; the delineation's pans are cross-checked against the reaches
+  that do ([design/delineation.md § Pans](./design/delineation.md#pans),
+  storage on a river). A network loaded before 196 has it NULL, which the
+  cross-check skips: run `pnpm dev:tiles:rivers` again to fill it.
   `RIVERS_MIN_ORDER` (a Strahler order; default 1, every reach) keeps a load
   to the bigger streams. HydroRIVERS holds rivers with at least 10 km² upstream
   or 0.1 m³/s mean flow, at 15 arc-seconds (about 500 m), so it misses the

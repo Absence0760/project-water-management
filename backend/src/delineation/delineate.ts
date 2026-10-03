@@ -16,7 +16,7 @@ import { JUNCTION_SIDE_M } from './reach.js';
 import { JUNCTION_FLAG_M, JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver } from './junction.js';
 import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, expectedOnGrid, onOwnChannel, place, WIDE_MATCH_M, type HeadHint, type PlaceGrid, type Placement } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
-import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
+import { findPans, ncAreaM2, panReport, type PanReferenceLoader, type PanReport } from './pans.js';
 import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
 
 /** Bump when the method changes what a click proposes; recorded on every proposal. */
@@ -37,8 +37,10 @@ import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
  * delineate-10: delineate-6's windows and data's edge with delineate-9's rules (one merge of the two).
  * delineate-11: a head reach's area at the click from the DEM's own area at its upper end, where the window reads it, rather than
  * HydroRIVERS' 10 km² threshold (place.ts expectedOnGrid).
+ * delineate-12 (the follow-up "Cross-check a pan against the river network"): a depression passing the pan tests that a mapped
+ * river flows out of over a wall, or a dam holds, is storage on a river, listed apart and not counted (pans.ts onRiverBy).
  */
-export const METHOD_VERSION = 'delineate-11';
+export const METHOD_VERSION = 'delineate-12';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
@@ -356,6 +358,8 @@ export async function delineate(
 		aim?: WindowAim | null;
 		/** Called before each window is read, with its place in `windows` (the worker reports it as the job's progress). */
 		onWindow?: (index: number, of: number) => Promise<void> | void;
+		/** The rivers and dams a depression passing the pan tests is checked against (panReference.ts); without it, not checked. */
+		panReference?: PanReferenceLoader;
 	} = {}
 ): Promise<Delineation> {
 	const now = opts.now ?? (() => performance.now());
@@ -486,8 +490,17 @@ export async function delineate(
 		const rowM2 = new Float64Array(nCells);
 		for (let y = 0; y < nCells; y++) rowM2[y] = cellRowAreaM2(mercatorLat(y0 + y, W), mercatorLat(y0 + y + 1, W), W);
 		const toCell = (c: number) => toLonLat(x0 + (c % nCells) + 0.5, y0 + Math.floor(c / nCells) + 0.5, W);
-		const found = findPans({ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask, rowM2, toPos: toCell }, [outlet], Math.ceil(snapRadiusM / cellSizeM) + 1);
-		const pans = panReport(ncAreaM2(nCells, found.nc, rowM2), found.pans);
+		const toGrid = (p: Position): [number, number] => {
+			const [px, py] = toPx(p[0], p[1], W);
+			return [px - x0, py - y0];
+		};
+		const found = await findPans(
+			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask, rowM2, toPos: toCell, toGrid },
+			[outlet],
+			Math.ceil(snapRadiusM / cellSizeM) + 1,
+			opts.panReference
+		);
+		const pans = panReport(ncAreaM2(nCells, found.nc, rowM2), found.pans, found.onRiver);
 		const ring = traceOutline(nCells, nCells, mask);
 		const { geometry, areaM2 } = outlinePolygon(ring, x0, y0, W);
 		const ox = outlet % nCells;
@@ -521,7 +534,8 @@ export async function delineate(
 						? `outlet snapped to the most-accumulating cell within ${snapRadiusM} m and kept there by the editor, though ${placed.larger.reach.onChannel ? `the point is on the DEM's own channel and` : `nothing within ${MATCH_RADIUS_M} m matched and`} the channel ${Math.round(placed.larger.distanceM)} m away matching ${expected!.reach} (${Math.round(expected!.km2)} km²) was offered; `
 						: `outlet snapped to the most-accumulating cell within ${snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept)${expected && !expected.chosen ? `; ${expected.reach} (${Math.round(expected.km2)} km²) matched no cell within ${MATCH_RADIUS_M} m${!placed.larger && cells * cellSizeM * cellSizeM < GULLY_SHARE * expected.km2 * 1e6 ? ` (nor within ${WIDE_MATCH_M} m, looked for since the point is in a gully)` : ''}` : ''}; `) +
 				`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${cellM} m); ` +
-				`the area draining into pans (closed depressions) reported beside it as non-contributing, not taken out`,
+				`the area draining into pans (closed depressions) reported beside it as non-contributing, not taken out` +
+				(opts.panReference ? ` (one a mapped river flows out of, or a dam holds, is storage on a river: not counted)` : ''),
 			methodVersion: METHOD_VERSION
 		};
 	}

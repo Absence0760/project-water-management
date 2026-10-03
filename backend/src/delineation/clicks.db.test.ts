@@ -76,7 +76,7 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 		near(low.totalAreaM2, dam.areaM2 + low.areaM2, 0.01);
 		expect(dam.geometry.type).toBe('Polygon');
 		expect(r.dataset.label).toMatch(/Synthetic DEM/);
-		expect(r.methodVersion).toBe('start-13');
+		expect(r.methodVersion).toBe('start-14');
 		const stored = await asOwner(`SELECT count(*)::integer AS n FROM map_feature WHERE project_id = $1`, [projectId]);
 		expect(stored[0]!.n).toBe(0);
 	});
@@ -103,11 +103,11 @@ describe('sub-catchments from clicks (synthetic DEM)', () => {
 			[projectId]
 		)) as { name: string; description: string; area_m2: number }[];
 		// The upper piece holds the valley's pan: its description says how much of it drains there (start-11).
-		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-13\)/);
+		expect(rows[0]!.description).toMatch(/drains into sub-catchment 2; .* km² upstream in all\. [\d.]+ km² of its own area drains into pans \(non-contributing in WR2012’s sense; still in its area\)\. Delineated from Synthetic DEM.*\(start-14\)/);
 		expect(rows[1]!.description).toMatch(/the lowest click/);
 		near(rows[0]!.area_m2 + rows[1]!.area_m2, BASIN_AREA_M2, 0.04);
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.subcatchments_saved'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-13', featureIds: res.body.features.map((f: { id: string }) => f.id) });
+		expect(audit[0]!.subject).toMatchObject({ pieces: 2, methodVersion: 'start-14', featureIds: res.body.features.map((f: { id: string }) => f.id) });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
 		// Each piece keeps what of it drains into pans (195): the upper one the pan's catchment, the lower none.
 		const [upper, lower] = res.body.features as { id: string; areaM2: number; nonContributingM2: number }[];

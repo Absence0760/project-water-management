@@ -6,8 +6,10 @@
 // Input: one or more GeoJSON FeatureCollections of LineStrings or
 // MultiLineStrings in WGS84, each feature a reach. HydroRIVERS' own fields
 // are read as they come out of `ogr2ogr -f GeoJSON` (HYRIV_ID, ORD_STRA,
-// UPLAND_SKM, LENGTH_KM, DIS_AV_CMS), or the same under readable names
-// (reachId, strahler, upstreamKm2, lengthKm, dischargeM3s), with an optional
+// UPLAND_SKM, LENGTH_KM, DIS_AV_CMS, ENDORHEIC), or the same under readable
+// names (reachId, strahler, upstreamKm2, lengthKm, dischargeM3s, endorheic:
+// 1/true in a basin draining to an inland sink, 0/false to the sea; 196, read
+// by the pans' cross-check, delineation/panReference.ts), with an optional
 // `name` and `source`. Reaches below `minOrder` (Strahler) are left out, so
 // a load can keep to the streams a catchment model cares about. A load
 // replaces every row of its dataset, in one transaction.
@@ -23,6 +25,8 @@ export interface RiverRecord {
 	upstreamKm2: number | null;
 	lengthKm: number | null;
 	dischargeM3s: number | null;
+	/** Drains to an inland sink (true) or the sea (false); null when the source doesn't say. */
+	endorheic: boolean | null;
 	geometry: Geometry;
 	bbox: [number, number, number, number];
 	source: string;
@@ -34,6 +38,9 @@ const UPSTREAM_KEYS = ['UPLAND_SKM', 'upstreamKm2', 'upstream_km2'];
 const LENGTH_KEYS = ['LENGTH_KM', 'lengthKm', 'length_km'];
 const DISCHARGE_KEYS = ['DIS_AV_CMS', 'dischargeM3s', 'discharge_m3s'];
 const NAME_KEYS = ['name', 'NAME', 'Name', 'RIVER_NAME'];
+const ENDORHEIC_KEYS = ['ENDORHEIC', 'endorheic'];
+/** 1/true or 0/false (HydroRIVERS' ENDORHEIC is 0 or 1); anything else is not given. */
+const flag = (v: unknown): boolean | null => (v === true || v === 1 || v === '1' ? true : v === false || v === 0 || v === '0' ? false : null);
 
 /** How many reaches one INSERT carries (the loader's batch). */
 const BATCH = 500;
@@ -103,6 +110,7 @@ export function riverRecords(
 				upstreamKm2: bounded(pick(p, UPSTREAM_KEYS), 1e8),
 				lengthKm: bounded(pick(p, LENGTH_KEYS), 1e5),
 				dischargeM3s: bounded(pick(p, DISCHARGE_KEYS), 1e6),
+				endorheic: flag(pick(p, ENDORHEIC_KEYS)),
 				geometry: checked.geometry,
 				bbox: bboxOf(checked.geometry),
 				source
@@ -126,9 +134,9 @@ export async function replaceRivers(client: pg.ClientBase, dataset: string, reco
 			const batch = records.slice(i, i + BATCH);
 			const col = <T>(f: (r: RiverRecord) => T) => batch.map(f);
 			await client.query(
-				`INSERT INTO river_reference (dataset, reach_id, name, strahler, upstream_km2, length_km, discharge_m3s, geometry, min_lon, min_lat, max_lon, max_lat, source)
+				`INSERT INTO river_reference (dataset, reach_id, name, strahler, upstream_km2, length_km, discharge_m3s, geometry, min_lon, min_lat, max_lon, max_lat, source, endorheic)
 				 SELECT $1, * FROM unnest($2::bigint[], $3::text[], $4::smallint[], $5::float8[], $6::float8[], $7::float8[], $8::jsonb[],
-					$9::float8[], $10::float8[], $11::float8[], $12::float8[], $13::text[])`,
+					$9::float8[], $10::float8[], $11::float8[], $12::float8[], $13::text[], $14::boolean[])`,
 				[
 					dataset,
 					col((r) => r.reachId),
@@ -142,7 +150,8 @@ export async function replaceRivers(client: pg.ClientBase, dataset: string, reco
 					col((r) => r.bbox[1]),
 					col((r) => r.bbox[2]),
 					col((r) => r.bbox[3]),
-					col((r) => r.source)
+					col((r) => r.source),
+					col((r) => r.endorheic)
 				]
 			);
 		}
