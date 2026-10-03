@@ -8,7 +8,7 @@ import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
 import { toEpochDay, waterYearIndex } from './calendar';
 import { zeroRainRuns } from './quality';
-import { ACC_MIN_MM } from './accumulation';
+import { ACC_MAX_BLANK_DAYS, ACC_MIN_MM } from './accumulation';
 import { buildTopology } from './network/topology';
 import { shortfall } from './network/simulate';
 import { checkTransferLimits } from './verify/checks';
@@ -2000,12 +2000,21 @@ describe.skipIf(!clientCatchmentFixture)(
 				if (w.daysInRun === to - from + 1) expect(sum).toBeCloseTo(w.totalMm, 9);
 			}
 			expect(Array.from(acc.mask)).toEqual(Array.from(inWindow));
-			// No window day is also set aside as a zero run (the 0.19 double count), and outside the windows
-			// and the zero-run days the catchment rain is as recorded.
+			// A reading set aside after a blank outage (engine ≥ 1.70.0, §2.4d) is blank in the run, so CHIRPS fills it.
+			const setAside = new Uint8Array(run.days);
+			for (const w of acc.info.windows) {
+				if (w.status !== 'setAside') continue;
+				const t = toEpochDay(w.end) - d0;
+				setAside[t] = 1;
+				expect(w.outageDays).toBeGreaterThan(ACC_MAX_BLANK_DAYS);
+				expect(a[t]).toBeNull();
+			}
+			// No window day is also set aside as a zero run (the 0.19 double count), and outside the windows,
+			// the set-aside readings and the zero-run days the catchment rain is as recorded.
 			const bad: number[] = [];
 			for (let t = 0; t < run.days; t++) {
 				if (inWindow[t] && run.zeroRain!.mask[t]) bad.push(t);
-				if (!inWindow[t] && !run.zeroRain!.mask[t] && a[t] !== b[t]) bad.push(t);
+				if (!inWindow[t] && !setAside[t] && !run.zeroRain!.mask[t] && a[t] !== b[t]) bad.push(t);
 			}
 			expect(bad.slice(0, 5)).toEqual([]);
 			// The windows are left out of the CHIRPS factor fit, day by day.
