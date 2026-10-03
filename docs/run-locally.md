@@ -344,7 +344,8 @@ pnpm dev:ingest:push --kind rain_catchment_mm --name Weir --unit mm --file my.cs
 
 A CSV is `date,value` rows (`YYYY-MM-DD`, a plain decimal or empty for no
 reading), a header row and `#` comments skipped, in any order; days it
-leaves out are sent as no reading. A day given twice, an impossible date
+leaves out are sent as no reading (`null`, which clears a value stored for
+that day: [api.md § Ingest](./api.md#ingest)). A day given twice, an impossible date
 (`2024-02-31`) or a value that isn't a decimal number stops the script
 before anything is sent.
 
