@@ -11,9 +11,9 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { boundaryGeoJson, openMap, uploadThroughSheet } from '../support/map.ts';
+import { boundaryGeoJson, loadRiverNetwork, openMap, uploadThroughSheet } from '../support/map.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
@@ -160,6 +160,30 @@ test('a point beside a much larger channel is not delineated quietly: the sheet 
 	await review(page).getByRole('button', { name: 'Delineate another point' }).click();
 	await sheet(page).getByTestId('delineate-submit').click();
 	await sheet(page).getByTestId('delineate-use-larger').click();
+	await expect(review(page)).toBeVisible();
+	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^[34]\d\d\.\d\d km²$/);
+});
+
+test('a point at a confluence asks which river, and delineates the one picked', async ({ page, owner }) => {
+	void owner;
+	// A river reach along the valley and a small tributary ending at the point: two rivers within 200 m.
+	await loadRiverNetwork('e2e-confluence', [
+		{ id: 99100001, upstreamKm2: 400, order: 4, line: FIXTURE_JUNCTION_RIVER },
+		{ id: 99100002, upstreamKm2: 3, order: 1, line: FIXTURE_JUNCTION_TRIBUTARY }
+	]);
+	const project = await seedRunnableProject(page.request, 'Delineate confluence');
+	await openMap(page, project.id);
+	await delineateAt(page, FIXTURE_JUNCTION);
+	const box = sheet(page).getByTestId('delineate-confluence');
+	await expect(box).toBeVisible();
+	await expect(box.getByTestId('delineate-choice')).toHaveText(['The river along the point, 400 km²', 'The river above the junction, 3.00 km²']);
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await expectNoViolations(page);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
+	// The river: the valley above the junction, hundreds of km², matched to the reach.
+	await box.getByTestId('delineate-choice').first().click();
 	await expect(review(page)).toBeVisible();
 	await expect(review(page).getByTestId('delineate-fact-area')).toHaveText(/^[34]\d\d\.\d\d km²$/);
 });
