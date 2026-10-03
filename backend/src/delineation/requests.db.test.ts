@@ -20,7 +20,7 @@ import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL, BASIN_AREA_M2 } from './fixture.js';
-import { delineationLimits, nextJobWindow, jobWindowsFrom } from './requests.js';
+import { cutShort, delineationLimits, jobBudget, jobWindowsFrom, nextJobWindow } from './requests.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -93,7 +93,7 @@ describe('a catchment too large for the request', () => {
 		const r = res.body.request;
 		expect(r).toMatchObject({ status: 'queued', from: 'outlet', click: [OUTLET.lon, OUTLET.lat], proposal: null, refusal: null, finishedAt: null });
 		const job = await jobOf(r.id);
-		expect(job).toMatchObject({ kind: 'delineate', status: 'queued', dedupe_key: `delineate:${editor.id}`, payload: { requestId: r.id }, max_attempts: 2 });
+		expect(job).toMatchObject({ kind: 'delineate', status: 'queued', dedupe_key: `delineate:${editor.id}`, payload: { requestId: r.id }, max_attempts: 3 });
 		expect((await asOwner('SELECT from_window FROM delineation_request WHERE id = $1', [r.id]))[0].from_window).toBe(1024);
 		// The Map picks a waiting request up from the GET.
 		expect((await viewer.call('GET', at('/map/delineation'))).body.request).toMatchObject({ id: r.id, status: 'queued' });
@@ -263,5 +263,26 @@ describe('the 30-day job clean-up', () => {
 		]);
 		expect((await viewer.call('GET', at(`/map/delineation/requests/${done.id}`))).body.request).toMatchObject({ status: 'proposed', proposal: { from: 'dam_wall' } });
 		expect((await viewer.call('GET', at(`/map/delineation/requests/${stuck.id}`))).body.request).toMatchObject({ status: 'failed', error: 'The background job that had it is gone.' });
+	});
+});
+
+describe('the worker’s time', () => {
+	it('fits the job inside the time left before the worker’s deadline, and calls a refusal cut short by it a retry', () => {
+		expect(jobBudget(null, 0, 150_000)).toBe(150_000);
+		expect(jobBudget(1_000_000, 900_000, 150_000)).toBe(95_000);
+		expect(jobBudget(10_000_000, 0, 150_000)).toBe(150_000);
+		// Cut short before the last window by a shorter budget: run again.
+		expect(cutShort(4096, [4096, 6144], 60_000, 150_000)).toBe(true);
+		// At the job's own cap, or on its full budget: a real refusal.
+		expect(cutShort(6144, [4096, 6144], 60_000, 150_000)).toBe(false);
+		expect(cutShort(4096, [4096, 6144], 150_000, 150_000)).toBe(false);
+	});
+
+	it('puts a job claimed with too little time left back in the queue (failed, to retry), the request still waiting', async () => {
+		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall', background: true });
+		expect(res.status).toBe(202);
+		await runTick({ feeds: false, reports: false, alerts: false, projectIds: [projectId], deadline: Date.now() + 5_000 });
+		expect(await jobOf(res.body.request.id)).toMatchObject({ status: 'failed', last_error: expect.stringMatching(/too little time left/) });
+		expect((await viewer.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request).toMatchObject({ status: 'queued' });
 	});
 });

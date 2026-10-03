@@ -65,6 +65,13 @@ export interface JobContext<P> {
 	 * (app_cancel_job) or the lease was lost. Optional to call.
 	 */
 	progress(pct: number): Promise<boolean>;
+	/**
+	 * When the worker must be done with this job (epoch ms): the worker
+	 * Lambda's own timeout less a margin (lambda-worker.ts), so a handler that
+	 * bounds its own work (delineate's time budget) can fit inside it. null
+	 * where there is no such limit (the local worker, tests).
+	 */
+	deadline?: number | null;
 }
 
 export interface JobHandler<P = unknown> {

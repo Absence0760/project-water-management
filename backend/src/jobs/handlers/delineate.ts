@@ -14,12 +14,15 @@
 // The DEM's tiles are read (ranged S3 reads in production) while this job's
 // transaction is open, as pack_reproduce reads its bundle: bounded by the
 // budget (delineate.ts JOB_TIME_BUDGET_MS), one job per account at a time.
+// The budget also fits the worker Lambda's remaining time (JobContext
+// deadline): a job claimed late in a tick, or one cut short by it, goes back
+// to the queue for the next tick instead of being killed or wrongly refused.
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
 import { delineate, DelineationRefused, type LargerChannel } from '../../delineation/delineate.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
-import { delineationLimits, jobWindowsFrom, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
+import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
 import { ApiError } from '../../http/errors.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
@@ -34,7 +37,7 @@ export const delineateHandler = defineHandler({
 	// Only editors delineate (POST …/map/delineation) and write proposals (175's policies).
 	role: 'editor',
 	payload: DelineatePayload,
-	async run({ db, job, payload, progress }) {
+	async run({ db, job, payload, progress, deadline }) {
 		// Scoped to the job's project: a payload naming another project's request finds nothing.
 		const { rows } = await db.query<RequestRow>(`SELECT ${REQUEST_COLS} FROM delineation_request r WHERE r.id = $1 AND r.project_id = $2`, [
 			payload.requestId,
@@ -68,11 +71,15 @@ export const delineateHandler = defineHandler({
 		if (windows.length === 0) {
 			return refuse('too_large', 'The catchment above that point is larger than the app delineates. Pick an outlet further upstream, or draw or import the boundary.');
 		}
+		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
+		const budgetMs = jobBudget(deadline, Date.now());
+		const later = () => new JobError('The worker had too little time left for it in this run; it runs again shortly.', { retry: true });
+		if (budgetMs < MIN_JOB_TIME_MS) throw later();
 		let result;
 		try {
 			result = await delineate(dem, click, {
 				windows,
-				budgetMs: delineationLimits.jobBudgetMs,
+				budgetMs,
 				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
@@ -82,7 +89,10 @@ export const delineateHandler = defineHandler({
 				}
 			});
 		} catch (err) {
-			if (err instanceof DelineationRefused) return refuse(err.code, err.message, err.larger);
+			if (err instanceof DelineationRefused) {
+				if (err.code === 'too_large' && cutShort(err.windowCells, windows, budgetMs)) throw later();
+				return refuse(err.code, err.message, err.larger);
+			}
 			if (err instanceof JobError) throw err;
 			logEvent('error', { event: 'delineation_failed', jobId: job.id, ...safeError(err) });
 			throw new JobError('The elevation model could not be read just now.', { retry: true });

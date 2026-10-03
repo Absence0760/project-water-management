@@ -35,8 +35,31 @@ export const delineationLimits: { requestWindows: readonly number[]; jobWindows:
 export const DELINEATE_JOBS_PER_USER = 1;
 /** Finished requests kept per project (the newest); waiting ones are all kept. */
 export const REQUESTS_KEPT = 20;
-/** Attempts a delineate job gets: one retry for a DEM read that failed. A refusal is an outcome, never retried. */
-export const DELINEATE_MAX_ATTEMPTS = 2;
+/**
+ * Attempts a delineate job gets: retries for a DEM read that failed, or a
+ * tick that had too little time left for it. A refusal is an outcome, never retried.
+ */
+export const DELINEATE_MAX_ATTEMPTS = 3;
+/** The least time worth starting a delineate job with (ms): less, and it goes back to the queue for the next tick. */
+export const MIN_JOB_TIME_MS = 20_000;
+
+/**
+ * The job's time budget: its own, or what is left before the worker's
+ * deadline (JobContext.deadline, less a margin for its writes) when that is
+ * sooner.
+ */
+export function jobBudget(deadline: number | null | undefined, now: number, full = delineationLimits.jobBudgetMs): number {
+	return deadline ? Math.min(full, deadline - now - 5_000) : full;
+}
+
+/**
+ * Whether a `too_large` refusal came from a budget cut short by the worker's
+ * deadline, before the job's own last window: then the catchment wasn't
+ * shown too large, and the job runs again rather than record it.
+ */
+export function cutShort(refusedAt: number | undefined, windows: readonly number[], budgetMs: number, full = delineationLimits.jobBudgetMs): boolean {
+	return budgetMs < full && refusedAt !== undefined && refusedAt !== windows[windows.length - 1];
+}
 
 /**
  * The first window the worker tries for a request refused `too_large` at
