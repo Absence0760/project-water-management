@@ -8,6 +8,7 @@
 	where and how it was traced, so the server records the method.
 -->
 <script lang="ts">
+	import { oneLineName } from '@water-management/engine';
 	import { api, type MapFeature, type MapFeatureInput, type MapFeatureKind, type MapGeometry, type MapNodeArea } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { KIND_LABEL, KIND_NODES } from '../mapData';
@@ -53,7 +54,7 @@
 		saving = true;
 		error = null;
 		try {
-			const f = await api.map.create(projectId, { kind, name: name.trim(), nodeId: nodeId || null, geometry, ...(traced ? { traced } : {}) });
+			const f = await api.map.create(projectId, { kind, name: oneLineName(name), nodeId: nodeId || null, geometry, ...(traced ? { traced } : {}) });
 			await onsaved(f);
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);

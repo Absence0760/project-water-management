@@ -356,8 +356,10 @@ registered volume is not an entitlement, and it doesn't say whether a use is
 lawful". No holder name, registration number or property, and nothing about
 another farm. This isn't blocked by D3, which is about other people's names
 and volumes; the farmer's own figures are theirs (and already in their
-data-subject export). The history (readable by viewers) records
-registration numbers and counts, never names.
+data-subject export). The history records registration numbers and
+counts, never names; a viewer reads the allocation events without the
+registration number and volume until an owner switches **What viewers see**
+on (`app_audit_subject`, 190), as they read the rows themselves.
 
 ## Still to build (WP-3.10)
 

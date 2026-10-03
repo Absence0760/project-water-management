@@ -17,7 +17,8 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { holeBefore, mergePreview, type Daily } from './coverage';
 	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
-	import { inStoredUnit, latestFileText, type UploadResult, type UploadSubmit } from './upload';
+	import { latestFileText } from '$lib/files/latest';
+	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
 	import { newSeriesEffect } from './roles';

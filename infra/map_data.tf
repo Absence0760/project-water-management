@@ -185,8 +185,10 @@ resource "aws_s3_bucket_policy" "tiles" {
 #
 # With delineation_dem on, the API's DEM_URL is s3://<tiles>/tiles/terrain.pmtiles
 # (lambda.tf) and its role may GetObject that one key (ranged reads; the
-# endpoint policy in packs.tf allows the same). Off (the default), DEM_URL is
-# empty, the Map offers no Delineate, and the role holds nothing here.
+# endpoint policy in packs.tf allows the same), and so do the worker's (its
+# DEM_URL and worker_dem below, for the `delineate` job). Off (the default),
+# DEM_URL is empty, the Map offers no Delineate, and neither role holds
+# anything here.
 
 data "aws_iam_policy_document" "api_dem" {
   statement {
@@ -200,6 +202,17 @@ resource "aws_iam_role_policy" "api_dem" {
   count  = var.delineation_dem ? 1 : 0
   name   = "delineation-dem"
   role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.api_dem.json
+}
+
+# The worker reads the same key for the `delineate` job: a catchment too large
+# for the request's window is delineated there, with larger windows in its
+# 300 s (191_delineation_request, docs/design/delineation.md § Where it runs).
+# The same one-key grant, on the worker's role, only when delineation_dem is on.
+resource "aws_iam_role_policy" "worker_dem" {
+  count  = var.delineation_dem ? 1 : 0
+  name   = "delineation-dem"
+  role   = aws_iam_role.worker_lambda.id
   policy = data.aws_iam_policy_document.api_dem.json
 }
 

@@ -2,6 +2,7 @@
 // for the status UI, and the worker's claim / finish / purge through the
 // SECURITY DEFINER functions.
 import type { Db } from '../db/tx.js';
+import { ApiError } from '../http/errors.js';
 import type { ClaimedJob, JobKind } from './registry.js';
 
 export const JOB_STATUSES = ['queued', 'running', 'done', 'failed', 'dead'] as const;
@@ -47,6 +48,22 @@ export interface EnqueueOptions {
 }
 
 /**
+ * The insert met a pending job with this dedupe key that the caller can't
+ * read (RLS: a contributor sees only their own jobs of the kinds they may
+ * queue, 096 and 165), so there is no job to hand back. A 409 with
+ * `job_collision`, never a 500 (issue #386). The kinds a contributor can
+ * queue key their pending jobs per user (jobs/contributorKinds.ts, guarded by
+ * jobs/contributorKinds.db.test.ts), so a route meets this only when a new
+ * kind forgets to.
+ */
+export class JobCollisionError extends ApiError {
+	constructor() {
+		super(409, 'the same work is already queued or just starting; try again once it has run');
+		this.code = 'job_collision';
+	}
+}
+
+/**
  * Queue a job as the transaction's user, who must be an editor of the project
  * (RLS) and becomes its acting user. Enqueue inside the same transaction as
  * the change that caused it, so both commit or neither does; wake the worker
@@ -73,7 +90,9 @@ export async function enqueueJob(db: Db, o: EnqueueOptions): Promise<{ job: JobM
 		);
 		if (job[0]) return { job: job[0], created };
 	}
-	throw new Error('enqueue: the pending job with this dedupe key kept changing');
+	// Both reads came back empty: the pending job is one this user can't see,
+	// or (rarer) it was claimed between insert and read twice running.
+	throw new JobCollisionError();
 }
 
 /** A project's jobs, newest first (RLS: viewer). */

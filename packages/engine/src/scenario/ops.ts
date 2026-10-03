@@ -8,6 +8,7 @@ import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/comp
 import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
 /** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
 export { isIsoDate };
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';
 import {
 	ACCUMULATION_MODES,
 	BOREHOLE_MODES,
@@ -151,7 +152,35 @@ const months: Check = (v) => {
 const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
 /** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
 const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');
-const name: Check = (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 100 ? null : 'must be a name of 1–100 characters');
+/**
+ * Texts with a control character that the op list being checked may keep: those already in the scenario's
+ * stored ops (validateScenarioOps' `stored`), set only while that call runs. A scenario saved before issue
+ * #385 keeps its ops byte for byte (ops_sha256 and any evidence pack pin them, so migration 189 left them),
+ * and the editor sends the whole list back with every edit: without this it could never be saved again.
+ */
+let keptTexts: ReadonlySet<string> | null = null;
+
+/** A name as the model schema takes one (backend/src/model/validate.ts nameText): trimmed `min`–`max` characters, one line (issue #385). */
+const nameOf =
+	(min: number, max: number, what = 'a name'): Check =>
+	(v) => {
+		if (typeof v !== 'string' || v.trim().length < min || v.trim().length > max) return min ? `must be ${what} of ${min}–${max} characters` : `must be ${what} of at most ${max} characters`;
+		return hasNameControlChars(v) && !keptTexts?.has(v) ? NAME_CONTROL_MESSAGE : null;
+	};
+
+/** Every string in a stored op list (any depth) that holds a control character: the texts validateScenarioOps' `stored` lets a resave keep. */
+export function storedControlTexts(stored: unknown): Set<string> {
+	const out = new Set<string>();
+	const walk = (v: unknown): void => {
+		if (typeof v === 'string') {
+			if (hasNameControlChars(v)) out.add(v);
+		} else if (Array.isArray(v)) v.forEach(walk);
+		else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+	};
+	walk(stored);
+	return out;
+}
+const name: Check = nameOf(1, 100);
 
 // ---------------------------------------------------------------------------
 // node.set: the editable fields, per node kind
@@ -758,7 +787,7 @@ export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
 
 const DEMAND_WINDOW_KEYS = ['label', 'span', 'from', 'to', 'easterFrom', 'easterTo', 'weekdays', 'factor'] as const;
 const DEMAND_WINDOW_CHECKS: Record<(typeof DEMAND_WINDOW_KEYS)[number], Check> = {
-	label: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be text of at most 200 characters'),
+	label: nameOf(0, 200, 'text'),
 	span: oneOf(DEMAND_SCHEDULE_SPANS),
 	from: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
 	to: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
@@ -794,7 +823,7 @@ const scheduleOf = (v: unknown): DemandScheduleWindow[] | null =>
 		: null;
 
 const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
-	name: (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 200 ? null : 'must be a name of 1–200 characters'),
+	name: nameOf(1, 200),
 	category: oneOf(DEMAND_OBJECT_CATEGORIES),
 	sizing: oneOf(DEMAND_OBJECT_SIZINGS),
 	monthlyM3Day: nullable(monthlyOf(nonNeg)),
@@ -1087,7 +1116,8 @@ const LAND_COVER_FIELDS: Record<string, Check> = {
 const BOREHOLE_FIELDS: Record<string, Check> = {
 	id,
 	nodeId: id,
-	name: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be a name of at most 200 characters'),
+	// 1–200, as PUT /model takes a borehole name (backend/src/model/validate.ts).
+	name: nameOf(1, 200),
 	capacityM3Day: nonNeg,
 	annualCapM3: nullable(nonNeg),
 	mode: oneOf(BOREHOLE_MODES),
@@ -1276,15 +1306,23 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
  * Callers reject the list when `errors` is non-empty; `ops` then holds only
  * the entries that passed. Existence of the ids an op targets is not checked
  * here: that depends on the base run, and `applyScenario` reports it.
+ * `stored`, the scenario's ops as saved, when the list replaces them: a name or
+ * label with a control character that is byte-identical to a text in them is
+ * kept (a scenario from before issue #385); a new one is refused.
  */
-export function validateScenarioOps(raw: unknown): { ops: ScenarioOp[]; errors: string[] } {
+export function validateScenarioOps(raw: unknown, opts: { stored?: unknown } = {}): { ops: ScenarioOp[]; errors: string[] } {
 	if (!Array.isArray(raw)) return { ops: [], errors: ['ops: must be a list'] };
 	if (raw.length > SCENARIO_OPS_MAX) return { ops: [], errors: [`ops: at most ${SCENARIO_OPS_MAX} ops`] };
 	const errors: string[] = [];
 	const ops: ScenarioOp[] = [];
-	raw.forEach((r, i) => {
-		const op = validateOne(r, `ops[${i}]`, errors);
-		if (op) ops.push(op);
-	});
+	keptTexts = opts.stored === undefined ? null : storedControlTexts(opts.stored);
+	try {
+		raw.forEach((r, i) => {
+			const op = validateOne(r, `ops[${i}]`, errors);
+			if (op) ops.push(op);
+		});
+	} finally {
+		keptTexts = null;
+	}
 	return { ops, errors };
 }

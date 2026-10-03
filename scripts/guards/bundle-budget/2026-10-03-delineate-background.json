@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "The Delineate sheet waiting on a background delineation (191): the waiting box, its 2 s poll with retries, the background tick and their texts. Measured 2026-10-03: the map tab chunk holding DelineateSheet 59.1 -> 59.9 KB gzip, total 1627 -> 1628 KB against origin/main 6f3cd5859."
+}

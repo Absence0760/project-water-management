@@ -153,3 +153,39 @@ describe('parseProjectFile: an automated fit must match the file’s own calibra
 		}
 	});
 });
+
+describe('a project document’s names are made one line (issue #385)', () => {
+	it('cleans a name over several lines, as the workbook importers do, where PUT /model refuses it', () => {
+		const out = u();
+		const farm = u();
+		const node = (id: string, name: string, downstreamNodeId: string | null) => ({
+			id,
+			name,
+			kind: 'farm',
+			downstreamNodeId,
+			sortOrder: 0,
+			areaKm2: 1,
+			areaHiKm2: 0,
+			areaLoKm2: 0,
+			flowShareManual: null,
+			pctUpstreamToDam: 1,
+			pctRunoffToDam: 0,
+			damCapacityM3: 0,
+			damInitialPct: 0,
+			damMinPct: 0,
+			divertCapacityM3Day: 0,
+			irrigationEfficiency: 1,
+			lossReturnFraction: 0,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0
+		});
+		const file = parseProjectFile({
+			name: 'P',
+			model: { nodes: [node(out, 'Outlet', null), node(farm, 'Golf\r\nFarm', out)], crops: [{ id: u(), name: 'Vines\u009fD', cropFactor: new Array(12).fill(0.5) }], cropAreas: [], transfers: [] },
+			series: []
+		});
+		expect(file.model.nodes.map((n) => n.name)).toEqual(['Outlet', 'Golf Farm']);
+		expect(file.model.crops.map((c) => c.name)).toEqual(['Vines D']);
+	});
+});

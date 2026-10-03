@@ -24,7 +24,9 @@ import { CITED_BY_SQL, citedMessage, loadModelInput, lockProjectRuns, PINNED_RUN
 // `pinned` keeps it past the storage cap (015_run_pinned); `published` says
 // the project's current publication holds it (022_publication). `scenarioId` /
 // `scenarioName`: the scenario that made the run (024_scenarios; the name the
-// run recorded once the scenario is gone); `citedBy`: what keeps it for good;
+// run recorded once the scenario is gone); `fromScenario`: a scenario made it,
+// also once that scenario is deleted and `scenarioId` is null (188: tell a
+// run of the model by this, never by `scenarioId`); `citedBy`: what keeps it for good;
 // `reproducible`: its input series are stored (021_series_blob), so
 // GET …/reproduce can re-run it. The same test loadRunInput makes: a run
 // with input series but no stored references is from before 021;
@@ -40,7 +42,7 @@ const RUN_META = `r.id, r.label, r.engine_version AS "engineVersion", r.start_da
 	r.notes, r.notes_updated_at AS "notesUpdatedAt", nu.display_name AS "notesUpdatedBy",
 	${EVIDENCE_STATUS_SQL} AS evidence, r.pinned,
 	EXISTS (SELECT 1 FROM run_publication p WHERE p.run_id = r.id AND p.superseded_at IS NULL) AS published,
-	r.scenario_id AS "scenarioId", COALESCE(sc.name, r.inputs->'scenario'->>'name') AS "scenarioName",
+	r.scenario_id AS "scenarioId", COALESCE(sc.name, r.inputs->'scenario'->>'name') AS "scenarioName", r.from_scenario AS "fromScenario",
 	${CITED_BY_SQL} AS "citedBy",
 	(EXISTS (SELECT 1 FROM run_input_series i WHERE i.run_id = r.id)
 		OR NOT EXISTS (SELECT 1 FROM jsonb_object_keys(COALESCE(r.inputs->'series', '{}'::jsonb)))) AS reproducible,

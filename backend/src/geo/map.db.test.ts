@@ -386,6 +386,20 @@ describe('accepting an area from the map', () => {
 		expect(JSON.stringify(rev!.changes)).toMatch(/Farm A/);
 	});
 
+	it('says so when the parcel’s area is a delineated piece’s, from the DEM’s cells rather than its simplified outline (start-6)', async () => {
+		await asOwner('UPDATE map_feature SET area_m2 = area_m2 * 1.004 WHERE id = $1', [parcelId]);
+		try {
+			const res = await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId: parcelId });
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			expect(res.body.areaKm2).toBeCloseTo(parcelAreaKm2 * 1.004, 9);
+			const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1`, [projectId]);
+			expect(rev!.reason).toMatch(/km², from the elevation model’s cells it was delineated from\)$/);
+		} finally {
+			await asOwner('UPDATE map_feature SET area_m2 = $2 WHERE id = $1', [parcelId, parcelAreaKm2 * 1e6]);
+			expect((await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId: parcelId })).status).toBe(200);
+		}
+	});
+
 	it('refuses a point, a gauge node and another project’s feature', async () => {
 		const gauge = (await editor.call('GET', at('/features'))).body.features.find((f: { kind: string }) => f.kind === 'gauge');
 		expect((await editor.call('POST', `/projects/${projectId}/nodes/${farmA.id}/area-from-map`, { featureId: gauge.id })).status).toBe(400);

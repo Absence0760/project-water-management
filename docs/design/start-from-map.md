@@ -79,7 +79,11 @@ the first build; `start-2` added gauges as nodes and their counted whole
 catchment, the partition of land-owning units unchanged; `start-3`, issue
 #374, places a point with a river reach nearby on the channel matching the
 reach's upstream area and names a much larger channel beside a snapped one,
-the same rules as Delineate's, [delineation.md § Method](./delineation.md#method).)
+the same rules as Delineate's, [delineation.md § Method](./delineation.md#method);
+`start-4` asks for the river at a confluence; `start-5`, issue #387,
+measures the snap radius from the exact point to each cell's centre, so a
+point is never moved more than 150 m; `start-6`
+takes every area from the cells instead of the simplified outline.)
 
 ## Sub-catchments: the method
 
@@ -114,8 +118,12 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
 6. **Outline**: each piece traced on the cells' edges as delineation does,
    **with its holes kept** (a tributary's unit wholly inside the unit below
    it is a hole in that unit's piece, not overlapping land), simplified
-   while it stays valid, checked by `checkGeometry`, and its area computed
-   on the ellipsoid. The rest of the catchment is the outlet's own piece.
+   while it stays valid and checked by `checkGeometry`, for the map only.
+   Its **area is its cells'** (`start-6`): each cell's own area on the
+   WGS84 ellipsoid (`cellRowAreaM2`, exact for a Web Mercator cell, the
+   measure `geo/area.ts` uses), summed, so the pieces and the rest add up
+   to the catchment exactly; the simplified outline's own area runs a
+   little off it. The parcel saved for a piece stores the cells' area. The rest of the catchment is the outlet's own piece.
 7. **Checks, as warnings**: the catchment above the outlet against the
    boundary's area (over 10 % apart: said, since a drawn boundary and the
    DEM disagree); a unit whose area is under one hectare; a dropped point.

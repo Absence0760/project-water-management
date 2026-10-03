@@ -60,6 +60,21 @@ describe('auth', () => {
 		expect((await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]))[0].password_hash).toMatch(/^\$argon2id\$/);
 	});
 
+	it('adding an authenticator upgrades a legacy bcrypt hash too, so its 72-byte twin stops working (issue #382)', async () => {
+		const u = await signUp('LegacyEnrol');
+		const shared = 'correct horse battery staple '.repeat(3);
+		await asOwner('UPDATE app_user SET password_hash = $2 WHERE id = $1', [u.id, await bcrypt.hash(`${shared}one`, 4)]);
+		const hashOf = async () => (await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]))[0].password_hash as string;
+		// A wrong password leaves it alone; the right one starts enrolment and replaces it.
+		expect((await u.call('POST', '/auth/mfa/totp/enrol', { password: 'wrong horse' })).status).toBe(403);
+		expect(await hashOf()).toMatch(/^\$2[aby]\$/);
+		expect((await u.call('POST', '/auth/mfa/totp/enrol', { password: `${shared}one` })).status).toBe(200);
+		expect(parseArgon2(await hashOf())?.params).toEqual(PASSWORD_PARAMS);
+		expect((await app.request('/auth/login', json({ email: u.email, password: `${shared}two` }))).status).toBe(401);
+		// The session it was enrolling from still works.
+		expect((await u.call('GET', '/auth/me')).status).toBe(200);
+	});
+
 	// Sign-up (issue #57): the account is made and a confirmation link mailed,
 	// but nobody is signed in until the address is confirmed.
 	it('a sign-up signs nobody in: it mails a confirmation link and answers 202', async () => {
@@ -439,7 +454,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
-		// A name that shows as nothing, or reorders the words around it, is refused or cleaned (auth/displayName.ts).
+		// A name that shows as nothing, or reorders the words around it, is refused or cleaned (http/visibleName.ts).
 		expect((await u.call('PATCH', '/auth/me', { displayName: '\u200b\u200d' })).status).toBe(400);
 		const spoof = await u.call('PATCH', '/auth/me', { displayName: 'Dr\u202E Renamed\nAgain' });
 		expect(spoof.status).toBe(200);

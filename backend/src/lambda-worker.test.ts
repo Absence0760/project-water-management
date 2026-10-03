@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import type { TickResult } from './jobs/runner.js';
 
-const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
+const tick: TickResult = { purged: 1, invitesPurged: 0, notesPurged: 0, erasuresPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, released: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
 	alerts: { scheduled: 0, purged: 0, sent: 7, skipped: 1, failed: 2, digests: 1 },
 	packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },
 	erratumNotices: { purged: 0, queued: 0, sent: 0, skipped: 0, failed: 0 },
@@ -45,7 +45,10 @@ describe('handler', () => {
 	it('runs a tick on the EventBridge schedule, within the time left', async () => {
 		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const res = await handler({ source: 'aws.events', 'detail-type': 'Scheduled Event' } as never, { getRemainingTimeInMillis: () => 300_000 });
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000 });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 240_000, deadline: expect.any(Number) });
+		// The deadline a job must fit: the Lambda's timeout, less 10 s.
+		const { deadline } = runTick.mock.calls[0]![0] as { deadline: number };
+		expect(Math.abs(deadline - (Date.now() + 290_000))).toBeLessThan(5_000);
 		expect(res).toEqual({ claimed: 3, done: 1, failed: 1, dead: 1 });
 	});
 
@@ -80,7 +83,7 @@ describe('handler', () => {
 		await handler({ Records: records } as never, { getRemainingTimeInMillis: () => 30_000 });
 		expect(runTick).toHaveBeenCalledTimes(1);
 		// Never less than 10 s of budget.
-		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000 });
+		expect(runTick).toHaveBeenCalledWith({ budgetMs: 10_000, deadline: expect.any(Number) });
 		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'job_message_ignored', messageId: 'm2' }));
 	});
 

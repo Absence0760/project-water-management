@@ -224,7 +224,8 @@ export async function loadReference(raw: unknown, context?: LogContext, read: Re
 		await client.connect();
 		try {
 			const result = await loadReferenceText(client, req, text, (line) => console.log(line));
-			console.log(`${req.kind}: ${result.written} row(s) loaded as "${req.dataset}" from ${req.key}`);
+			console.log(`${req.kind}: ${result.written} row(s) loaded as "${req.dataset}" from ${req.key} (SHA-256 ${req.sha256})`);
+			if (result.replaced) console.log(`replaced the file loaded ${result.replaced.loadedAt}: ${result.replaced.key} (SHA-256 ${result.replaced.sha256})`);
 			return result;
 		} finally {
 			await client.end();

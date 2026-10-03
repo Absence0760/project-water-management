@@ -15,6 +15,7 @@
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, node, signUp } from '../__tests__/helpers.js';
+import { geometryAreaM2 } from '../geo/area.js';
 import { loopIn, roleOf } from './divide.js';
 import { DAM_CELL, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
@@ -110,7 +111,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-4' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-6' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -123,7 +124,7 @@ describe('dividing the valley', () => {
 		expect(pump.current).toEqual({ areaKm2: 2, areaSource: 'typed', downstreamNodeId: v.nodes.weir.id, downstreamName: 'Valley weir', pctRunoffToDam: 0.5 });
 		expect(mid).toMatchObject({ nodeId: null, current: null, areaM2: null, geometry: null });
 		expect(mid.totalAreaM2).toBeGreaterThan(pump.areaM2 + dam.areaM2);
-		expect(Math.abs((pump.areaM2 + dam.areaM2 + plan.rest.areaM2) / plan.catchment.areaM2 - 1)).toBeLessThan(0.02);
+		expect(Math.abs((pump.areaM2 + dam.areaM2 + plan.rest.areaM2) / plan.catchment.areaM2 - 1)).toBeLessThan(1e-9);
 		expect(plan.untouched).toEqual([{ nodeId: v.nodes.hill.id, name: 'Hillside', areaKm2: 3 }]);
 		// The GET lists it with its mode; the model isn't empty.
 		const get = await viewer.call('GET', v.at('/map/start'));
@@ -184,7 +185,14 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-4/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-6/);
+		// The parcel stores its piece's area from the cells, the unit's area: the simplified outline's own area is a little off it.
+		const [parcel] = await asOwner(
+			`SELECT f.area_m2, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 AND n.name = 'Top pump'`,
+			[v.id]
+		);
+		expect(parcel!.area_m2).toBeCloseTo(pump.areaM2, 3);
+		expect(Math.abs(geometryAreaM2(parcel!.geometry)! / parcel!.area_m2 - 1)).toBeLessThan(0.01);
 		// The points stand for their nodes now: the pump, the new gauge and the outlet gauge.
 		const links = await asOwner('SELECT id, node_id FROM map_feature WHERE id = ANY($1::uuid[])', [[v.f.pump, v.f.mid, v.f.outlet, v.f.dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(
@@ -285,5 +293,23 @@ describe('dividing the valley', () => {
 		const spid = (await owner.call('POST', v.at('/map/divide'), v.body)).body.proposal.id;
 		await expect(asOwner(`UPDATE start_proposal SET mode = 'start' WHERE id = $1`, [spid])).rejects.toThrow(/mode stays as proposed/);
 		await expect(asOwner(`INSERT INTO start_proposal (project_id, mode, plan, from_dem, method, method_version) VALUES ($1, 'divide', '{}', false, 'm', 'start-2')`, [v.id])).rejects.toThrow(/start_proposal_divide_from_dem/);
+	});
+});
+
+describe('the own sub-catchment parcel’s name', () => {
+	it('fits the map’s 100 characters for a unit whose name is already near them', async () => {
+		const v = await valley('Divide, long name');
+		const long = `Top pump ${'x'.repeat(91)}`; // 100 characters, the most a node name takes
+		const model = (await owner.call('GET', v.at('/model'))).body;
+		model.nodes.find((n: ApiNode) => n.id === v.nodes.pump.id).name = long;
+		expect((await owner.call('PUT', v.at('/model'), model)).status).toBe(200);
+		const r = await owner.call('POST', v.at('/map/divide'), v.body);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const plan = r.body.proposal.plan;
+		const pump = plan.units.find((u: { nodeId: string | null }) => u.nodeId === v.nodes.pump.id);
+		const ok = await owner.call('POST', v.at(`/map/divide/${r.body.proposal.id}/apply`), { units: ticks(plan, { [pump.key]: { area: true } }), rest: { to: 'none' } });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const [parcel] = await asOwner(`SELECT name FROM map_feature WHERE node_id = $1 AND kind = 'farm_parcel'`, [v.nodes.pump.id]);
+		expect(parcel!.name).toBe(`${long}: own sub-catchment`.slice(0, 100));
 	});
 });

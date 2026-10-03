@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { DAM_AREA_EXPONENT_MAX, damCurveProblem, DEMAND_OBJECT_MAX_RANK, DEMAND_OBJECT_SOURCE_SIZING, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, hasNameControlChars, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, offtakeReturnAt, scheduleWindowProblem, SUPPLY_DEFAULTS, type DemandObject, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -31,6 +31,8 @@ export function issueHref(issue: Pick<ModelIssue, 'area' | 'itemId'>): string {
 export const transferAnchor = (id: string) => `tr-${id}-h`;
 
 const inRange = (v: number, lo: number, hi: number) => !Number.isNaN(v) && v >= lo && v <= hi;
+/** The API refuses a name or label holding a line break or other control character (issue #385, engine NAME_CONTROL_CHARS). */
+const ONE_LINE = "can't contain line breaks or control characters";
 
 /**
  * A node's supply rule and river pump problems (WP-3.8), as the API refuses
@@ -146,6 +148,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 	for (const n of nodes) {
 		const label = `"${nodeName(n.id)}"`;
 		if (n.name.trim().length > 100) issues.push({ area: 'network', itemId: n.id, message: `${label}: names are limited to 100 characters.` });
+		if (hasNameControlChars(n.name)) issues.push({ area: 'network', itemId: n.id, message: `${label}: names ${ONE_LINE}.` });
 		const badFrac = FRACTIONS.some((k) => !inRange(n[k], 0, 1)) || (n.flowShareManual !== null && !inRange(n.flowShareManual, 0, 1));
 		if (badFrac) issues.push({ area: 'network', itemId: n.id, message: `${label}: percentages must be between 0% and 100%.` });
 		else if (!(n.irrigationEfficiency > 0)) issues.push({ area: 'network', itemId: n.id, message: `${label}: irrigation efficiency must be above 0%.` });
@@ -245,6 +248,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		const key = c.name.trim().toLowerCase();
 		if (!key) issues.push({ area: 'crops', itemId: c.id, message: 'Every crop needs a name.' });
 		else cropNames.set(key, (cropNames.get(key) ?? 0) + 1);
+		if (hasNameControlChars(c.name)) issues.push({ area: 'crops', itemId: c.id, message: `Crop "${c.name}": names ${ONE_LINE}.` });
 		if (c.cropFactor.length !== 12 || c.cropFactor.some((f) => !inRange(f, 0, Infinity))) {
 			issues.push({ area: 'crops', itemId: c.id, message: `Crop "${c.name}" needs 12 non-negative monthly factors.` });
 		}
@@ -279,6 +283,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			if (b.target === 'dam') issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: it pumps into a dam, and there is none.` });
 		}
 		if (!b.name.trim()) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: 'Every borehole needs a name.' });
+		if (hasNameControlChars(b.name)) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: names ${ONE_LINE}.` });
 		if (!inRange(b.capacityM3Day, 0, Infinity) || (b.annualCapM3 !== null && !inRange(b.annualCapM3, 0, Infinity)) || !inRange(b.emergencyBelowPct, 0, 1) || !inRange(b.depletionFactor, 0, 1))
 			issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: capacity and annual cap can't be negative; the emergency level and depletion are 0–100%.` });
 	}
@@ -290,6 +295,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!n) issues.push({ area: 'network', message: 'A demand object refers to a deleted hydrological unit.' });
 		else if (n.kind !== 'farm') issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: only a hydrological unit has demand objects.` });
 		if (!o.name.trim()) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: 'Every demand object needs a name.' });
+		if (hasNameControlChars(o.name)) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: names ${ONE_LINE}.` });
 		if (o.sizing === 'monthly' && (!o.monthlyM3Day || o.monthlyM3Day.length !== 12 || o.monthlyM3Day.some((v) => !inRange(v, 0, Infinity))))
 			issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: a monthly demand needs 12 values, none negative.` });
 		if (o.sizing === 'perUnit' && (o.count === null || o.litresPerUnitDay === null || !inRange(o.count, 0, Infinity) || !inRange(o.litresPerUnitDay, 0, Infinity)))
@@ -316,7 +322,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		// Its schedule (engine ≥ 1.17.0): the engine's own window rule, as the API applies it.
 		if ((o.schedule?.length ?? 0) > DEMAND_SCHEDULE_MAX_WINDOWS) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: a schedule has at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows.` });
 		(o.schedule ?? []).forEach((w, i) => {
-			const bad = scheduleWindowProblem(w);
+			const bad = scheduleWindowProblem(w) ?? (hasNameControlChars(w.label ?? '') ? `labels ${ONE_LINE}` : null);
 			if (bad) issues.push({ area: 'network', ...(n ? { itemId: n.id } : {}), message: `${label}: schedule window ${i + 1}${w.label ? ` ("${w.label}")` : ''}: ${bad}.` });
 		});
 	}

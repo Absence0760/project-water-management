@@ -130,6 +130,11 @@ describe('importBody', () => {
 		expect(importTooLarge(IMPORT_MAX_BYTES + 1)).toMatch(/^The file is 5\.00 MB; a project file can be at most 5 MB\./);
 	});
 
+	it('sends the name as the server stores it: whitespace runs one space, bidi controls dropped (issue #383)', () => {
+		const file = parseProjectFileText(JSON.stringify(exported)).file;
+		expect(importBody(file, ' Upper\n Berg\u202e ').file.name).toBe('Upper Berg');
+	});
+
 	it("leaves an export's notes out of the body (the server ignores them)", () => {
 		const withNotes = { ...exported, notes: [{ body: 'x'.repeat(4000), target: 'project', visibility: 'team' }] };
 		const file = parseProjectFileText(JSON.stringify(withNotes)).file;

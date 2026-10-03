@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanDisplayName, displayName } from './displayName';
+import { cleanName, displayName, projectName, teamName } from './visibleName';
 
 describe('display names', () => {
 	it('keeps an ordinary name as typed, trimmed', () => {
@@ -12,8 +12,8 @@ describe('display names', () => {
 	});
 
 	it('makes every run of whitespace, line breaks included, one space', () => {
-		expect(cleanDisplayName('Ann\n\nSmith')).toBe('Ann Smith');
-		expect(cleanDisplayName('Ann\t  Smith')).toBe('Ann Smith');
+		expect(cleanName('Ann\n\nSmith')).toBe('Ann Smith');
+		expect(cleanName('Ann\t  Smith')).toBe('Ann Smith');
 	});
 
 	it('drops control characters and the bidi controls that reorder what is shown', () => {
@@ -32,5 +32,33 @@ describe('display names', () => {
 		expect(displayName.safeParse('a'.repeat(100)).success).toBe(true);
 		expect(displayName.safeParse('a'.repeat(101)).success).toBe(false);
 		expect(displayName.safeParse(`${'a'.repeat(100)}‮`).success).toBe(true);
+	});
+});
+
+describe('team and project names', () => {
+	it('clean and refuse as display names do', () => {
+		for (const schema of [teamName, projectName]) {
+			expect(schema.parse('  Upper\nBerg ')).toBe('Upper Berg');
+			expect(schema.parse('Berg‮tset')).toBe('Bergtset');
+			expect(schema.parse('Bergrivier 🌊')).toBe('Bergrivier 🌊');
+			for (const blank of ['', '   ', '​', '‮⁦⁩', '⁠﻿']) {
+				expect(schema.safeParse(blank).success, JSON.stringify(blank)).toBe(false);
+			}
+		}
+	});
+
+	it('allow 200 characters after cleaning (the column check), not 201', () => {
+		for (const schema of [teamName, projectName]) {
+			expect(schema.safeParse('a'.repeat(200)).success).toBe(true);
+			expect(schema.safeParse(`${'a'.repeat(200)}‮`).success).toBe(true);
+			expect(schema.safeParse('a'.repeat(201)).success).toBe(false);
+		}
+	});
+
+	it('names what was refused', () => {
+		const r = teamName.safeParse('​');
+		expect(r.success).toBe(false);
+		expect(r.error?.issues[0]?.message).toBe('a team name needs at least one visible character');
+		expect(projectName.safeParse('​').error?.issues[0]?.message).toBe('a project name needs at least one visible character');
 	});
 });

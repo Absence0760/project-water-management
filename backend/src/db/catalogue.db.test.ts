@@ -19,7 +19,7 @@ const NO_RLS = new Set(['schema_migrations']);
  * purge write it as SECURITY DEFINER functions, and only the operator, as the
  * schema owner, reads it (deployment.md § Restoring the database).
  */
-const OWNER_ONLY = new Set(['erasure_log']);
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -271,6 +271,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// A delineation proposal (175): who proposed and decided it is a pointer only; the acts are audited.
 	'delineation_proposal.created_by': 'set null',
 	'delineation_proposal.decided_by': 'set null',
+	// A click delineated on the worker (191): who queued it is a pointer only; the proposal it made is audited.
+	'delineation_request.created_by': 'set null',
 	// A start-from-the-map proposal (178): the same.
 	'start_proposal.created_by': 'set null',
 	'start_proposal.decided_by': 'set null',
@@ -342,11 +344,56 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
 	'assessment.job_id': { updateTrigger: true, purgeTest: 'src/assessments/assessments.db.test.ts' },
 	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
+	'delineation_request.job_id': { updateTrigger: true, purgeTest: 'src/delineation/requests.db.test.ts' },
 	'report.job_id': { updateTrigger: false },
 	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
 	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },
 	'yield_result.job_id': { updateTrigger: false }
 };
+
+/**
+ * Every `scenario_id IS [NOT] NULL` left in a function, policy, constraint,
+ * trigger or index, and why it isn't telling a run of the model from a
+ * scenario run (issues #380, #381). Deleting a scenario clears its runs'
+ * scenario_id (024: ON DELETE SET NULL) while each run's inputs.scenario
+ * stays, so that test takes an orphaned scenario run for a run of the model:
+ * use model_run.from_scenario (188_scenario_run_flag). What stays is another
+ * table's column, the live link to a scenario, or who may read a run (a run
+ * with no scenario left to gate on is its project's, 045). A new hit fails
+ * until it is fixed or listed here; a fixed one fails until its entry goes.
+ */
+const SCENARIO_ID_NULL_TESTS = new Map<string, string>([
+	['function app_applicant_pack_meta', 'evidence_pack.scenario_id: an application pack'],
+	['function app_own_new_scenario_run', 'link: a contributor reads their own run of a live application'],
+	['function app_purge_deleted_notes', 'note.scenario_id'],
+	['function app_run_brief', 'access: who reads the run (as the model_run_select policy)'],
+	['function app_run_digest', 'access: who reads the run (as the model_run_select policy)'],
+	['function app_run_digest_body', 'the stamp: a set scenario_id matches the inputs.scenario it ran (077); unchanged, so stamps hold'],
+	['function app_signoff_registration_check', 'evidence_pack.scenario_id'],
+	['function model_run_scenario_same_project', 'link: a set scenario is of the run’s project'],
+	['function yield_result_guard', 'yield_result.scenario_id'],
+	['policy evidence_pack.evidence_pack_select', 'evidence_pack.scenario_id'],
+	['policy model_run.model_run_insert_contributor', 'link: a contributor inserts only a run of a live application'],
+	['policy model_run.model_run_select', 'access: a run with no live scenario is its project’s viewers’ (045)'],
+	['policy note.note_insert', 'note.scenario_id'],
+	['policy note.note_select', 'note.scenario_id'],
+	['policy note.note_select_scenario', 'note.scenario_id'],
+	['policy yield_result.yield_result_delete_contributor', 'yield_result.scenario_id'],
+	['policy yield_result.yield_result_insert_contributor', 'yield_result.scenario_id'],
+	['policy yield_result.yield_result_select', 'yield_result.scenario_id'],
+	['policy yield_result.yield_result_select_contributor', 'yield_result.scenario_id'],
+	['constraint evidence_pack.evidence_pack_application', 'evidence_pack.scenario_id'],
+	['constraint note.note_participation_on_scenario', 'note.scenario_id'],
+	['constraint yield_result.yield_result_check', 'yield_result.scenario_id'],
+	['trigger note.note_write_revision', 'note.scenario_id'],
+	['index model_run_scenario_idx', 'link: covers the foreign key'],
+	['index yield_result_scenario_idx', 'yield_result.scenario_id']
+]);
+/**
+ * The bare test, the inline form of model_run.from_scenario, and a run's
+ * scenario_id read into a variable to test later (scenario_guard did, 163).
+ */
+const SCENARIO_ID_NULL_RE = String.raw`scenario_id\s+IS\s+(NOT\s+)?NULL|inputs\s*\?\s*'scenario'|SELECT[^;]*\mscenario_id\M[^;]*\mINTO\M[^;]*\mFROM\s+model_run\M`;
 
 let db: pg.Client;
 beforeAll(async () => {
@@ -558,6 +605,45 @@ describe('schema catalogue', () => {
 			   AND NOT EXISTS (SELECT 1 FROM unnest(coalesce(p.proconfig, '{}')) c WHERE c LIKE 'search_path=%')`
 		);
 		expect(rows.map((r) => r.proname)).toEqual([]);
+	});
+
+	it('tells a scenario run by model_run.from_scenario, never by scenario_id IS NULL alone (188)', async () => {
+		const { rows } = await db.query<{ what: string }>(
+			`SELECT 'function ' || p.proname AS what FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosrc ~* $1
+			 UNION ALL SELECT 'policy ' || pol.polrelid::regclass || '.' || pol.polname FROM pg_policy pol
+				WHERE coalesce(pg_get_expr(pol.polqual, pol.polrelid), '') || ' ' || coalesce(pg_get_expr(pol.polwithcheck, pol.polrelid), '') ~* $1
+			 UNION ALL SELECT 'constraint ' || c.conrelid::regclass || '.' || c.conname FROM pg_constraint c
+				WHERE c.connamespace = 'public'::regnamespace AND pg_get_constraintdef(c.oid) ~* $1
+			 UNION ALL SELECT 'trigger ' || t.tgrelid::regclass || '.' || t.tgname FROM pg_trigger t
+				WHERE NOT t.tgisinternal AND pg_get_triggerdef(t.oid) ~* $1
+			 UNION ALL SELECT 'index ' || i.indexrelid::regclass FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+				WHERE c.relnamespace = 'public'::regnamespace AND pg_get_indexdef(i.indexrelid) ~* $1
+			 UNION ALL SELECT 'view ' || c.relname FROM pg_class c
+				WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('v', 'm') AND pg_get_viewdef(c.oid) ~* $1
+			 ORDER BY 1`,
+			[SCENARIO_ID_NULL_RE]
+		);
+		expect(rows.map((r) => r.what)).toEqual([...SCENARIO_ID_NULL_TESTS.keys()].sort());
+		// The column itself: generated from the live link or the recorded scenario, so a deleted scenario's runs keep it.
+		const { rows: col } = await db.query<{ generated: string; expr: string; notnull: boolean }>(
+			`SELECT a.attgenerated AS generated, pg_get_expr(d.adbin, d.adrelid) AS expr, a.attnotnull AS notnull
+			 FROM pg_attribute a JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+			 WHERE a.attrelid = 'public.model_run'::regclass AND a.attname = 'from_scenario'`
+		);
+		expect(col).toEqual([{ generated: 's', expr: "((scenario_id IS NOT NULL) OR (inputs ? 'scenario'::text))", notnull: true }]);
+		// Positive control: the pattern finds each form (the old definitions' words), and passes the fixed functions (098, 163 → 188).
+		const { rows: probe } = await db.query<{ found: boolean[]; fixed: boolean[] }>(
+			`SELECT ARRAY[
+				'IF base.scenario_id IS NOT NULL OR' ~* $1,
+				'(scenario_id IS NOT NULL OR inputs ? ''scenario'')' ~* $1,
+				'SELECT project_id, scenario_id INTO run_project, run_scenario FROM model_run WHERE id = NEW.base_run_id;' ~* $1,
+				'SELECT version, status, scenario_id INTO pred FROM evidence_pack WHERE id = 1;' ~* $1
+			] AS found,
+			(SELECT array_agg(p.prosrc ~* $1 ORDER BY p.proname) FROM pg_proc p
+				WHERE p.oid IN ('public.run_nomination_stamp'::regproc, 'public.scenario_guard'::regproc) AND p.prosrc ~ 'from_scenario') AS fixed`,
+			[SCENARIO_ID_NULL_RE]
+		);
+		expect(probe).toEqual([{ found: [true, true, true, false], fixed: [false, false] }]);
 	});
 
 	// A project's rows go with it: nothing may keep a deleted project's data

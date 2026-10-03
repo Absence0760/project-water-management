@@ -15,12 +15,12 @@
 // runoff to the dam. Apply takes only the ticked values, and refuses (409) a
 // value whose current one changed since the proposal: what the editor saw
 // replaced is exactly what is replaced, never anything typed since.
-import { newNetworkNode, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { oneLineName, newNetworkNode, type NetworkNode, type ProjectModel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
-import type { Geometry, Position } from '../geo/geojson.js';
+import { featureNameOf, type Geometry, type Position } from '../geo/geojson.js';
 import { KIND_NODES } from '../geo/routes.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
@@ -29,7 +29,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { safeError } from '../logging/safeError.js';
 import { loadModel, saveModel } from '../model/store.js';
-import { ModelBody, modelProblems } from '../model/validate.js';
+import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
@@ -71,7 +71,8 @@ export const DivideBody = z
 	})
 	.strict();
 
-const Name = z.string().trim().min(1).max(100);
+// A node's name, as the model schema takes one (one line, issue #385).
+const Name = nameText(1, 100);
 export const DivideApplyBody = z
 	.object({
 		units: z
@@ -246,7 +247,7 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 		if (p.nodeId === null) {
 			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge node.`);
 			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a node'} already.`);
-			return { featureId: f.id, featureKind: f.kind, name: f.name || `Gauge ${++gauges}`, node: null, geometry: f.geometry };
+			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry };
 		}
 		const n = nodes.get(p.nodeId);
 		if (!n) throw new ApiError(400, `${label} is matched to a node that isn’t in the model (deleted since?). Reload and propose again.`);
@@ -498,7 +499,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 				const { rows } = await db.query<{ id: string }>(
 					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, created_by)
 					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-					[id, `${name}: own sub-catchment`.slice(0, 200), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
+					[id, featureNameOf(`${name}: own sub-catchment`), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
 				);
 				await db.query(`UPDATE node SET area_source = 'map', area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id]);
 				return rows[0]!.id;

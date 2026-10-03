@@ -211,7 +211,7 @@ export async function newestForecast(db: Db, projectId: string, timeZone: string
 		f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number; lastObserved?: string | null } | null;
 	}>(
 		`SELECT id, created_at, summary->'forecast' AS f
-		 FROM model_run WHERE project_id = $1 AND scenario_id IS NULL AND trigger = 'forecast'
+		 FROM model_run WHERE project_id = $1 AND NOT from_scenario AND trigger = 'forecast'
 		 ORDER BY created_at DESC LIMIT 1`,
 		[projectId]
 	);

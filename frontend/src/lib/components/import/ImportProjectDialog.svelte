@@ -18,6 +18,7 @@
 	import { version } from '$app/environment';
 	import { base } from '$app/paths';
 	import { api, ApiError, type ImportResult, type Team } from '$lib/api';
+	import { workspaceNameProblem } from '$lib/format/visibleName';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { WorkbookImportProgress } from '$lib/spreadsheet/import/messages';
@@ -144,9 +145,13 @@
 		fileName = f.name;
 		step = 'reading';
 		if (isWorkbookFile(f)) return pickWorkbook(f);
+		// reset() moved `attempt` on: a read the dialog was closed (or reopened) under is dropped.
+		const mine = attempt;
 		try {
-			preview(await readImportFile(f));
+			const p = await readImportFile(f);
+			if (mine === attempt) preview(p);
 		} catch (e) {
+			if (mine !== attempt) return;
 			pickError = e instanceof Error ? e.message : String(e);
 			step = 'pick';
 		}
@@ -223,7 +228,7 @@
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!parsed || !name.trim() || updating || optionsError) return;
+		if (!parsed || workspaceNameProblem(name, 'project') || updating || optionsError) return;
 		const source = report ? 'b023-workbook' : 'project-file';
 		const importReport = buildImportReport({
 			source,
@@ -398,7 +403,7 @@
 					type="submit"
 					form="import-form"
 					class="btn btn-primary"
-					disabled={step === 'importing' || !name.trim() || updating || optionsError !== null}
+					disabled={step === 'importing' || workspaceNameProblem(name, 'project') !== null || updating || optionsError !== null}
 				>
 					{step === 'importing' ? 'Importing…' : 'Import'}
 				</button>

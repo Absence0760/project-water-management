@@ -25,7 +25,7 @@ import { countSignup } from './signupThrottle.js';
 import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
-import { displayName } from './displayName.js';
+import { displayName } from '../http/visibleName.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -106,6 +106,28 @@ async function checkPasswordAgain(c: Context<AuthEnv>, route: LoginFailureRoute,
 		throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
 	}
 	return { email: row.email, locale: row.locale, passwordHash: row.password_hash };
+}
+
+/**
+ * After a correct password, the hash to replace `checked` with: a fresh
+ * Argon2id one when `checked` is a legacy bcrypt hash or has older
+ * parameters (auth/password.ts needsRehash), else null. Made outside the
+ * transaction, so the row isn't held while it hashes.
+ */
+export async function rehashFor(password: string, checked: string): Promise<string | null> {
+	return needsRehash(checked) ? hashPassword(password) : null;
+}
+
+/**
+ * Stores what rehashFor made, inside the caller's transaction as the account,
+ * only if the hash is still the one just checked, so a concurrent change or
+ * reset wins. Revokes nothing. Every route that checks the password and keeps
+ * the account (sign-in, adding an authenticator) upgrades through this pair;
+ * change-password and the reset replace the hash anyway, and deleting the
+ * account removes it.
+ */
+export async function storeRehash(db: Db, userId: string, checked: string, upgraded: string | null): Promise<void> {
+	if (upgraded) await db.query('UPDATE app_user SET password_hash = $3 WHERE id = $1 AND password_hash = $2', [userId, checked, upgraded]);
 }
 
 /**
@@ -330,10 +352,10 @@ export const authRoutes = new Hono<AuthEnv>()
 		// before Argon2id (bcrypt), or with older parameters, is replaced while
 		// the password is in hand (auth/password.ts); only if it is still the one
 		// just checked, so a concurrent change or reset wins. It revokes nothing.
-		const upgraded = needsRehash(row.password_hash) ? await hashPassword(body.password) : null;
+		const upgraded = await rehashFor(body.password, row.password_hash);
 		const found = await withUser(row.id, async (db) => {
 			await attemptSucceeded(db, body.email, device);
-			if (upgraded) await db.query('UPDATE app_user SET password_hash = $3 WHERE id = $1 AND password_hash = $2', [row.id, row.password_hash, upgraded]);
+			await storeRehash(db, row.id, row.password_hash, upgraded);
 			const user = (await db.query<UserRow>(`SELECT ${USER_COLS} FROM app_user WHERE id = $1`, [row.id])).rows[0];
 			return user ? { user, twoStep: await isEnrolled(db, row.id) } : undefined;
 		});

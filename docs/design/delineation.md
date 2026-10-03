@@ -104,17 +104,43 @@ polygon).
   CloudFront's 35 s); with `delineation_dem` on, Terraform refuses a plan
   that lowers them under 1 024 MB or 25 s. The request keeps a **20 s budget**: before growing
   the window it estimates the next window's cost from the last one and
-  refuses rather than run into the timeout. The cap (3 072 cells) keeps
+  hands the click to the worker (below) rather than run into the timeout.
+  The cap (3 072 cells) keeps
   memory near 0.5 GB. A request is one CPU-bound call per click; the
   project is limited to 30 delineations an hour (429 beyond), so a
   script can't keep a Lambda busy.
-- **Why not the job queue**: the background worker has 300 s and would
-  allow larger windows, but locally it only runs with `pnpm dev:full`,
-  and a click-and-wait tool that silently waits for a worker that isn't
-  running is worse than a bounded synchronous call. If catchments larger
-  than about 100 km across are ever needed, the durable path is a
-  `delineate` job kind on the worker (same code, a larger cap); the
-  trigger is a client asking for one.
+- **The worker, for a large catchment** (`191_delineation_request`,
+  `backend/src/delineation/requests.ts`, `jobs/handlers/delineate.ts`): a
+  catchment still at the edge of the request's 3 072-cell window, or one
+  whose next window would break the 20 s, is handed to a `delineate` job
+  instead of refused. The job runs the same `delineate()` with the
+  worker's windows (`JOB_WINDOWS`: 4 096 and 6 144 cells, about 135 and
+  200 km at zoom 11), from the one after where the request stopped, within
+  a 150 s budget under the worker's 300 s timeout. Measured on an invented
+  valley (this laptop, 2026-10-03): 4 096 cells about 4.5 s and 530 MB, 6 144
+  cells about 11 s and 1.05 GB peak (8 192 would be about 21 s and 1.8 GB,
+  hence the cap). With `delineation_dem` on, Terraform gives the worker at
+  least 2 048 MB (`infra/jobs.tf`), which also buys it more CPU.
+  **Why only then, not every click**: most catchments are proposed in a
+  few seconds by the request, and locally the worker runs only with `pnpm
+  dev:full`; a click that always waited on a worker would be slower and,
+  locally, wait for nothing. The editor can still send a point straight to
+  the worker (`background`) when they know it is large, which also spares
+  the API the 20 s it would spend first.
+  **Cost**: one waiting or running `delineate` job per account (under a
+  per-account lock; the job's dedupe key names the account), a new click
+  in the same project superseding the waiting one; each request still
+  counts against the account's hourly elevation-model cap, and the
+  worker's reserved concurrency bounds the rest. The DEM is read while the
+  job's transaction is open (as `pack_reproduce` reads its bundle), bounded
+  by the budget.
+  **The outcome** is a row of `delineation_request`: the proposal it made
+  (stored, superseding and audited exactly as the request's, so it is
+  accepted or rejected the same way) or the refusal in the request's own
+  words, which the Map polls for. A refusal is an outcome, not a job
+  failure; only a DEM read that fails twice kills the job.
+  No method version changes: the job proposes what a request with those
+  windows would.
 
 ## Method
 
@@ -128,8 +154,9 @@ All in `backend/src/delineation/`, pure functions over typed arrays
    projection, so D8's distances hold locally.
 2. **Window.** A square of 1 024 cells centred on the click. If the
    catchment reaches a cell beside the window's edge it may continue
-   beyond, so the window grows (2 048, then 3 072 cells). A catchment
-   still at the edge at the cap is **refused, never cut off**.
+   beyond, so the window grows (2 048, then 3 072 cells, and on the worker
+   4 096 and 6 144, § Where it runs). A catchment still at the edge at the
+   worker's cap is **refused, never cut off**.
 3. **Depression filling: Priority-Flood+ε** (Barnes, Lehman & Mulla 2014,
    *Computers & Geosciences* 62, Algorithm 3), seeded from the window's
    edge and any no-data cells. Every pit and flat is raised to just above
@@ -151,7 +178,12 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      cells within 50 % of the area, ranked by area misfit plus twice the
      scaled distance. None passing falls through to:
    - **Snapped**: the cell with the most upstream cells within **150 m**
-     (about five cells), the nearest of equals, and the **larger-channel
+     (about five cells) of the click, measured from the exact click to
+     each cell's centre, so the distance moved never exceeds it (since
+     `delineate-4`, issue #387: the radius used to be counted in whole cells
+     from the clicked cell, which reached up to 160–180 m on GLO-30's cells
+     and 200 m on the synthetic DEM's), the nearest of equals;
+     the clicked cell itself always counts; and the **larger-channel
      guard**: when a channel with 100× its upstream cells runs within 1 km,
      the click is refused (422 `larger_channel`) naming that channel's
      nearest cell, its distance and both areas, and the sheet offers **Use
@@ -180,7 +212,8 @@ cell size, zoom and window, the dataset label and the archive's
 **fingerprint** (SHA-256 of its header and root directory, so two extracts
 are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
-larger-channel guard, `delineate-3` for asking the river at a confluence; bumped whenever the method changes what a click
+larger-channel guard, `delineate-3` for asking the river at a confluence,
+`delineate-4` for the snap radius measured from the exact click; bumped whenever the method changes what a click
 proposes).
 
 ## Accuracy, as shown to the user

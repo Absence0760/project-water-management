@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	// One scenario (docs/ui.md § Scenarios): the "Based on run X" banner, its
 	// changes (ops) with their class and the server's check, the red
 	// "Baseline assumptions changed" callout, and for an editor on a draft the
@@ -281,7 +282,7 @@
 
 	// --- rebase ------------------------------------------------------------------------
 	/** Another run of the model to base the scenario on (a scenario run can't be a base). */
-	const rebaseChoices = $derived(runs.filter((r) => !r.scenarioId && r.id !== s.baseRunId));
+	const rebaseChoices = $derived(runs.filter((r) => !isScenarioRun(r) && r.id !== s.baseRunId));
 	let rebaseTo = $state('');
 	let rebaseCheck = $state<{ runId: string; problems: string[]; skipped: number } | null>(null);
 	let rebasing = $state(false);

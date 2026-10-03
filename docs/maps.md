@@ -436,7 +436,8 @@ Split / Save the shape as any drawing, through the server's checks
   "<boundary> part 1/2" unless renamed. The server
   (`POST …/map/features/:fid/split`) checks each part as any polygon, and
   that together they are the shape: their geodesic areas add up to its
-  area within 0.1 % (plus 1 m²) and each lies within the shape (every
+  outline's own geodesic area within 0.1 % (plus 1 m²; not its stored
+  area, which for a delineated piece is its cells', below) and each lies within the shape (every
   edge of a part that isn't the shape's own stays inside its outline,
   `geo/splitCheck.ts`; security.md § Map uploads), and they don't
   overlap (beyond `OVERLAP_SHARE`, 0.1 %; they may share the cut; the same half twice adds up too, and
@@ -450,11 +451,14 @@ Split / Save the shape as any drawing, through the server's checks
   non-pointer way), with the share of observations a cell must be water in
   to count (10, 25 (the default), 50 or 75 %). The server reads a window of
   the water occurrence raster round the point (256 cells, about 8 km, grown
-  once to 512), moves a click within about 60 m of water onto it, floods
+  once to 512), moves a click within 60 m of water onto it (the water cell
+  whose centre is nearest the click, measured from the click itself, so the
+  move is never more than 60 m; `trace-dam-2`, issue #387), floods
   the cells at or over the share that touch the clicked one by an edge
   (two dams meeting at a corner stay two), fills islands (an outline has no
   holes here), outlines the cells and simplifies the outline by half a cell
-  (`trace-dam-1`). Water that reaches the edge of the larger window ("isn't
+  (`trace-dam-2`; `trace-dam-1` counted the 60 m in whole cells from the
+  clicked cell, reaching up to about 80 m). Water that reaches the edge of the larger window ("isn't
   a dam this can trace"), or the edge of the data, dry land and a point
   outside the data are refused with a sentence. Nothing is stored: the
   outline comes back as the draft, a dam to adjust (snapping and all), and
@@ -464,7 +468,7 @@ Split / Save the shape as any drawing, through the server's checks
   with `traced` (the click, the share, and whether it was adjusted): the
   server traces the click again with its own raster, refuses an outline
   sent as unadjusted that isn't that trace, and writes the method in the
-  feature's description ("Traced from <dataset> (trace-dam-1): water in at
+  feature's description ("Traced from <dataset> (trace-dam-2): water in at
   least 25 % of the observations, clicked at …; then adjusted by hand.
   Check it against the map. Source: EC JRC/Google.") and the
   `map.feature_created` event (`from: 'dam_trace'`, the dataset, the share,
@@ -499,7 +503,9 @@ answer, with no database connection held.
   at zoom 12 (about 32 m a cell there; GSW is 0.00025°, about 25–28 m) with
   each cell the mean of the source cells in it, encodes them as Terrarium
   PNG tiles and uploads `tiles/water.pmtiles` to MinIO; GDAL comes from
-  PATH, else the pinned `ghcr.io/osgeo/gdal` image through docker. The
+  PATH, else the `ghcr.io/osgeo/gdal` image, pinned by digest (`pnpm
+  check:pins` holds it), through docker. Each tile is checked against its
+  SHA-256 ([§ Checksums](#checksums)). The
   archive's attribution is "Source: EC JRC/Google", carried into each
   traced feature's description. Then
   `WATER_URL=http://localhost:9002/tiles/water.pmtiles`. Production:
@@ -587,11 +593,19 @@ did, and refuses the whole file on any problem, listing them per feature:
   `geojson.ts` clips each pair of parts whose boxes meet to the box they
   share and sweeps it slab by slab, with its own budget
   (`GEO_MAX_SWEEP_STEPS`); a boundary of all 288 quaternaries of drainage
-  region D (173 000 vertices) checks in about 0.4 s.
+  region D (173 000 vertices) checks in about 0.4 s. Holes need no area
+  sweep, since they can't cross: `holesNested` compares only holes whose
+  boxes are open together in a sweep by longitude, and tests a point of a
+  hole against another only when the other's box holds it, against that
+  ring indexed into latitude strips (GEOS's nested-hole test), so 4 900
+  holes side by side check in about 50 ms where comparing every pair
+  refused them as too complex.
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
-  feature's name, and `description` and `ref`, trimmed and capped. Everything
+  feature's name (made one line, as every feature name is, since the map
+  draws it as a label: line breaks and control characters become spaces;
+  api.md § Catchment map), and `description` and `ref`, trimmed and capped. Everything
   else is dropped: an attribute table can carry owners' names or ID numbers,
   and the map has no use for them.
 - The file's SHA-256 is kept with its name (`geo_source`); the same file
@@ -660,8 +674,10 @@ published surface area.
 **Use … km²** on a farm parcel's (or an `other` polygon's) row sets a hydrological unit's area
 (`node.area_km2`) to it after a confirmation, and records a model revision
 whose reason names the feature ("Area of Upper farm from the map: “Upper
-farm” (9.257 km², computed from its polygon)"), which the History tab and the
-run comparison's input diff show. The unit's `area_source` is then `map`
+farm” (9.257 km², computed from its polygon)"; a delineated piece's
+parcel, whose stored area is its cells' rather than its simplified
+outline's, says "from the elevation model’s cells it was delineated
+from"), which the History tab and the run comparison's input diff show. The unit's `area_source` is then `map`
 (with the feature), until its area is typed over (back to `typed`) or the
 feature is deleted (the area stays; the link goes). The area is the farm's
 **catchment area** (runoff), so the polygon to use is the farm's
@@ -1124,9 +1140,22 @@ to a point on a river. The design, the method and its accuracy are in
   cells while the catchment reaches its edge), fills depressions
   (Priority-Flood+ε), routes flow with D8, collects every cell upstream of
   the outlet and outlines them as one polygon, simplified to about a cell.
-  A catchment still at the edge of the largest window, or reaching the edge
-  of the DEM's data, is refused rather than cut off; so is a point outside
-  the DEM or one almost nothing drains to.
+  A catchment reaching the edge of the DEM's data is refused rather than
+  cut off; so is a point outside the DEM or one almost nothing drains to.
+- **A large catchment** (still at the edge of the request's largest window,
+  about 100 km, or past its 20 s) goes to the **background worker** instead
+  (`requests.ts`, the `delineate` job, `191_delineation_request`): the same
+  code with larger windows (4 096 and 6 144 cells, up to about 200 km) from
+  the one after where the request stopped, within the worker's 300 s. The
+  sheet says it is queued, then how far it is, asks every 2 s, and shows
+  the proposal (or the refusal) as the request would have; a reloaded Map
+  picks it up. **A large catchment, over about 100 km across: work it out
+  in the background** sends a point straight there. One per editor at a
+  time: a new click in the same catchment replaces a waiting one, and one
+  running, or waiting in another catchment, is refused (429). Locally the
+  worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
+  under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
+  is refused, never cut off.
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, the dataset (with its fingerprint) and the method, and the
@@ -1147,13 +1176,16 @@ to a point on a river. The design, the method and its accuracy are in
   tests and e2e use it). Any PMTiles of Terrarium-encoded tiles works: WebP
   (lossless only) or PNG. `DEM_LABEL` names it on the proposals.
   Production: `delineation_dem = true` in the tfvars sets
-  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and lets
-  its role read that one key, read through the VPC's S3 interface endpoint
-  ([deployment.md § Map tiles](./deployment.md#map-tiles)); off by default.
+  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and the
+  worker and lets both roles read that one key, read through the VPC's S3
+  interface endpoint ([deployment.md § Map tiles](./deployment.md#map-tiles)),
+  and gives the worker at least 2 048 MB; off by default.
 - **Limits.** 30 delineations per project per hour (429 beyond); each takes
   one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
   460 MB at the largest window) and stops before 20 s, under the API's
-  30 s timeout.
+  30 s timeout. On the worker a 6 144-cell window takes about 11 s on a
+  laptop and peaks near 1 GB (an invented 6 144-cell valley, 2026-10-03),
+  and a job stops before 150 s.
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
@@ -1213,7 +1245,16 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   every point to the channel (a dam polygon: its most-drained cell), and
   gives each unit the cells whose flow meets it before any other unit: its
   own piece, outlined with its holes (a unit upstream lying wholly inside
-  it). Each unit drains into the first unit its flow path meets. A water
+  it). **Every area comes from the cells** (`start-6`): each cell's own
+  area on the WGS84 ellipsoid (a Web Mercator cell is a longitude ×
+  latitude rectangle, so `subcatchments.ts` `cellRowAreaM2` is exact, the
+  measure `geo/area.ts` uses), summed per piece, so the pieces and the
+  rest add up to the catchment exactly. The outlines are simplified for the
+  map (Douglas–Peucker, about a cell), and their own areas run a little off
+  the cells' (up to about 0.5 %, more on a small jagged piece; before
+  `start-6` the areas were the outlines' and fell 0.07–0.51 % short of the
+  catchment). A saved piece's parcel stores its cells' area as `area_m2`,
+  so the unit's area and its parcel's agree. Each unit drains into the first unit its flow path meets. A water
   user is in the order but owns no land. The rest of the catchment is the
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
@@ -1224,7 +1265,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-4)") and its area from it (*from the map*), the
+  delineated from … (start-6)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1295,7 +1336,9 @@ pick first.
   the channel the DEM routes along. A click within 1 km of a loaded river
   reach is put on the channel whose upstream area matches the reach's; its
   line says so ("on the channel matching river reach 11492928 (412.50
-  km²)"). Any other click snaps to the most-drained cell within 150 m, and
+  km²)"). Any other click snaps to the most-drained cell within 150 m
+  (measured from the click itself to each cell's centre, so the move is
+  never more than 150 m; since `start-5`, issue #387), and
   when a channel 100× larger runs within 1 km its line names it ("a much
   larger channel (620 km²) runs 504 m north: …") with **Use the larger
   channel**, which moves the click there and routes again (Undo moves it
@@ -1405,7 +1448,8 @@ reads it.
 - **Real data: HydroRIVERS v1.0** (WWF HydroSHEDS; § Sources: allowed).
   `pnpm dev:tiles:rivers` (`bin/tiles-dev.sh rivers`; operator-run, never in
   CI) downloads the Africa shapefile (about 110 MB, cached in
-  `~/.cache/water-management-tiles/`), cuts it to `TILES_BBOX` (South Africa
+  `~/.cache/water-management-tiles/`, its SHA-256 pinned, [§
+  Checksums](#checksums)), cuts it to `TILES_BBOX` (South Africa
   by default; every reach that meets the box, uncut) with `ogr2ogr` (GDAL:
   `sudo dnf install gdal`), keeping `HYRIV_ID`, `ORD_STRA`, `UPLAND_SKM`,
   `LENGTH_KM`, `DIS_AV_CMS` at five decimals, and loads it as dataset
@@ -1645,7 +1689,8 @@ only reads them.
   BY 4.0). `pnpm import:evaporation:fetch [first] [last]`
   (`bin/evaporation-fetch.sh`, default 1991 2020, a 30-year normal) downloads
   each year's `<year>_daily_pet.nc` (about 2.4 GB) from the University of
-  Bristol's data.bris, reduces it to that year's monthly totals inside the
+  Bristol's data.bris, checks its SHA-256 (recorded on the year's first
+  fetch, [§ Checksums](#checksums)), reduces it to that year's monthly totals inside the
   box (`import:evaporation --reduce`, a few MB, kept in
   `~/.cache/water-management-tiles/evaporation/` so a re-run skips it),
   deletes the year, then averages the years and loads them as
@@ -1707,3 +1752,28 @@ fixtures only.
 | Global Aridity Index and Potential Evapotranspiration (ET0) Database v3.1 (monthly ET₀ means, 1970–2000, 30″), considered | Zomer, R.J. & Trabucco, A., figshare ([10.6084/m9.figshare.7504448.v7](https://doi.org/10.6084/m9.figshare.7504448.v7)) | Contradictory: the figshare record says CC BY 4.0, but its own description says "The Global-AI_PET_v3 datasets are provided for non-commercial use" (figshare API, read 2026-10-02), and its climate inputs are WorldClim 2.1's, whose terms say "Redistribution or commercial use is not allowed without prior permission" ([worldclim.org/about](https://www.worldclim.org/about.html), read 2026-10-02) | – | v3.1 | none | **Rejected** (D-B): non-commercial in its own words |
 | FAO WaPOR v3 reference evapotranspiration (RET, about 30 km, monthly, 2018 onwards), considered | FAO ([WaPOR catalogue, mapset L1-RET-M](https://data.apps.fao.org/gismgr/api/v2/catalog/workspaces/WAPOR-3/mapsets/L1-RET-M)) | "FAO WaPOR database, License: CC BY-NC-SA 4.0" in the mapset's own citation (read 2026-10-02) | – | v3 | near real time | **Rejected** (D-B): non-commercial and share-alike |
 | WR2012 evaporation (S-pan per quaternary, the evaporation zones' monthly distribution) | WRC | as WR2012 above: redistribution terms unpublished | WR2012 (WRC 2015) | the operator's download | none | **Blocked**: licence unconfirmed, and S-pan would need the modeller's S-pan → A-pan factors (the loader refuses an S-pan grid) |
+
+### Checksums
+
+Whether each downloaded source publishes a checksum, and what the fetch
+scripts check (checked 2026-10-03). The scripts are HTTPS only (redirects
+too) either way.
+
+| Source | Publisher's checksum | What the script checks |
+| --- | --- | --- |
+| HydroRIVERS v1.0 zip (`pnpm dev:tiles:rivers`) | None: the product page lists only extent, size and format, and the file server (Backblaze B2) carries no content hash (`x-bz-content-sha1: none`). The URL is versioned by file name (`HydroRIVERS_v10_af_shp.zip`, a static v1 product) | SHA-256 pinned in `bin/source-checksums.sha256` (Africa zip, recorded 2026-10-03, matching a fetch the day before) |
+| JRC GSW v1.5 occurrence tiles (`pnpm dev:tiles:water`) | None: the download page lists none, and the object store's ETags are multipart upload hashes (`…-1`, `…-2`), not a hash of the file. Versioned file names (`…_v1_5_2024.tif`) | SHA-256 pinned for the six tiles over the default `TILES_BBOX`; any other tile is recorded on its first fetch |
+| dPET yearly files (`pnpm import:evaporation:fetch`) | None: no manifest in the dataset folder, and its README and scripts name none; the site's whole-dataset zip (2.7 TB, streamed) carries only CRC-32s, which are not a tamper check. The DOI-versioned dataset doesn't change | SHA-256 recorded on each year's first fetch (2.4 GB a year, so none is pinned in advance), checked on every later fetch |
+| Protomaps daily basemap build (`pnpm dev:tiles:fetch`) | Yes, an MD5 of each whole build in `build-metadata.protomaps.dev/builds.json` | None possible: `pmtiles extract` reads only the bbox's byte ranges of a ~140 GB archive, and a whole-file MD5 can't check a partial read. The extract pins one build by date (`TILES_BUILD`), and go-pmtiles holds every range read to the archive's ETag, so a build changed mid-extract fails rather than mixing |
+| Mapterhorn planet build (`pnpm dev:tiles:terrain`) | Yes, an MD5 of each archive in `download.mapterhorn.com/download_urls.json` (with its version, 0.0.13) | None possible, for the same reason (a ~355 GB archive read by range); ETag-consistent reads as above |
+| Label fonts (basemaps-assets, `pnpm dev:tiles:fonts`) | None: GitHub's codeload archive of a commit carries no published hash | Pinned by commit SHA (`FONTS_REF`), and the archive's SHA-256 pinned in `bin/source-checksums.sha256` (recorded 2026-10-03, matching a fetch on 2026-10-01); another `TILES_FONTS_REF` is recorded on its first fetch |
+
+How the check works (`scripts/guards/source_checksums.mjs`, from
+`bin/tiles-dev.sh` and `bin/evaporation-fetch.sh`): after a whole-file
+download, and on each use of a cached one, the file's SHA-256 is compared
+with its line in `bin/source-checksums.sha256` (keyed by file name). A
+mismatch stops the script, moves the file to `<file>.mismatch` so a re-run
+doesn't reuse it, and prints both hashes. A file not yet listed is trusted
+on first use: its line is appended and the operator commits it, holding
+every later fetch, on any machine, to it. Replace a line only when the
+publisher has confirmed a re-issue.

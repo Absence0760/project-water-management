@@ -79,6 +79,20 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 // Issue #286: a new user with no projects can start from the invented example
 // catchment (the frontend's exampleCatchment.generated.json, a lazy chunk),
 // imported as their own project through POST /projects/import with one run.
+test('a name that shows as nothing is refused in the form, and a bidi control is dropped (issue #383)', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/');
+	await page.getByRole('button', { name: 'New project' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'New project' });
+	await dialog.getByLabel('Name').fill('\u200b\u202e');
+	await dialog.getByRole('button', { name: 'Create project' }).click();
+	await expect(dialog.getByRole('alert')).toHaveText('The project needs a name.');
+	// "Berg\u202enimda" would show as "Bergadmin"; the override is dropped before it is sent.
+	await dialog.getByLabel('Name').fill('Berg\u202enimda');
+	await dialog.getByRole('button', { name: 'Create project' }).click();
+	await expect(page.getByTestId('project-name').filter({ hasText: /^Bergnimda$/ })).toBeVisible();
+});
+
 test('an empty list starts from the example catchment: imported, run and opened on its run', async ({ page, owner }) => {
 	void owner;
 	const EXAMPLE = 'Example · Kleinberg (winter rainfall)';

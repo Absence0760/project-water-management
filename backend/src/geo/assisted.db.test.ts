@@ -62,6 +62,19 @@ describe('splitting a polygon', () => {
 		expect(JSON.stringify(ev!.subject)).not.toMatch(/coordinates/);
 	});
 
+	it('checks the parts against the shape’s own area, not its stored one (a delineated piece stores its cells’ area, start-6)', async () => {
+		const made = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Delineated', geometry: square(21.3, -33.7, 0.02) });
+		// As divide stores a piece: its area from the DEM's cells, half a per cent off its simplified outline's.
+		await asOwner('UPDATE map_feature SET area_m2 = area_m2 * 1.005 WHERE id = $1', [made.body.feature.id]);
+		const res = await editor.call('POST', at(`/features/${made.body.feature.id}/split`), { parts: splitHalves(21.3, -33.7, 0.02) });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		// Positive control: parts that miss a strip of the shape are still refused.
+		const other = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Other', geometry: square(21.4, -33.7, 0.02) });
+		const short = splitHalves(21.4, -33.7, 0.02);
+		short[1]!.coordinates[0] = short[1]!.coordinates[0]!.map(([x, y]) => [x === 21.42 ? 21.419 : x!, y!]);
+		expect((await editor.call('POST', at(`/features/${other.body.feature.id}/split`), { parts: short })).status).toBe(400);
+	});
+
 	it('splits the boundary into areas and leaves it whole; names given are used', async () => {
 		const made = await editor.call('POST', at('/features'), { kind: 'catchment_boundary', name: 'Valley', geometry: square(21.3, -33.7, 0.1) });
 		const res = await editor.call('POST', at(`/features/${made.body.feature.id}/split`), { parts: splitHalves(21.3, -33.7, 0.1), names: ['West', 'East'], as: 'other' });
@@ -162,7 +175,7 @@ describe('tracing a dam', () => {
 		const [{ n: before }] = await asOwner('SELECT count(*)::int AS n FROM map_feature WHERE project_id = $1', [projectId]);
 		const res = await editor.call('POST', at('/dam-trace'), { lon, lat });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.trace).toMatchObject({ minOccurrence: 25, methodVersion: 'trace-dam-1', geometry: { type: 'Polygon' } });
+		expect(res.body.trace).toMatchObject({ minOccurrence: 25, methodVersion: 'trace-dam-2', geometry: { type: 'Polygon' } });
 		expect(res.body.trace.areaM2).toBeGreaterThan(20_000);
 		const [{ n: after }] = await asOwner('SELECT count(*)::int AS n FROM map_feature WHERE project_id = $1', [projectId]);
 		expect(after).toBe(before);
@@ -176,7 +189,7 @@ describe('tracing a dam', () => {
 		const trace = (await editor.call('POST', at('/dam-trace'), { lon, lat, minOccurrence: 50 })).body.trace;
 		const saved = await editor.call('POST', at('/features'), { kind: 'dam', name: 'Traced dam', geometry: trace.geometry, traced: { lon, lat, minOccurrence: 50, edited: false } });
 		expect(saved.status, JSON.stringify(saved.body)).toBe(201);
-		expect(saved.body.feature.properties.description).toMatch(/^Traced from Synthetic water occurrence .*\(trace-dam-1\): water in at least 50 % of the observations, clicked at 33\.\d{4}° S, 21\.\d{4}° E\. Check it against the map\.$/);
+		expect(saved.body.feature.properties.description).toMatch(/^Traced from Synthetic water occurrence .*\(trace-dam-2\): water in at least 50 % of the observations, clicked at 33\.\d{4}° S, 21\.\d{4}° E\. Check it against the map\.$/);
 		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.feature_created' AND subject->>'featureId' = $2`, [projectId, saved.body.feature.id]);
 		expect(ev!.subject).toMatchObject({ from: 'dam_trace', minOccurrence: 50, edited: false, dataset: expect.stringMatching(/Synthetic/) });
 

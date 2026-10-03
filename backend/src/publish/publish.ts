@@ -351,7 +351,7 @@ export async function publishRun(
 	// A scenario's run (or one whose scenario was deleted: its inputs still record it) is a what-if on a base run, never the
 	// season farmers are shown; an applicant's published baseline is a run of the model too (app_published_run_input, 045).
 	const { rows: scen } = await db.query<{ scenario: boolean }>(
-		`SELECT (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
+		`SELECT from_scenario AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, body.runId]
 	);
 	if (scen[0]?.scenario) throw new ApiError(409, SCENARIO_NOT_PUBLISHABLE);

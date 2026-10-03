@@ -191,6 +191,41 @@ The checklist for these is issue #62; the history scrub is #63.
       pack-share.db.test.ts (two pack notices) and alerts.db.test.ts (a
       digest-waiting delivery from the daily-cap test).
 
+## One-line names (issue #385, 2026-10-02)
+
+Model names (nodes, crops, boreholes, demand objects, schedule labels) are
+one line since migration 189 (api.md § Model data). Left, found on the way:
+
+- [x] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
+      `Name`, the GeoJSON upload's `featureName`, the river loader) still
+      takes line breaks and control characters, and the Map draws them as
+      labels. Start and Divide already propose such a name on one line
+      (`oneLineName`). Durable fix: the same `hasNameControlChars` refusal on
+      the feature routes, `oneLineName` in the GeoJSON and river readers (bulk
+      paths), and a migration cleaning stored feature names. Trigger: next
+      work on the map's feature routes. **Done 2026-10-03:** the
+      feature routes' `Name` (create, rename, split, a reviewed import row)
+      and the delineation accept refuse them; the GeoJSON reader, the river
+      loader and a reach added to a project clean them (`featureNameOf`);
+      the map's sheets send `oneLineName`d names; migration 192 cleans stored
+      feature and reach names and adds `map_feature_name_one_line` and
+      `river_reference_name_one_line` (`geo/featureNames.db.test.ts`). On
+      the way: Divide named a unit's own sub-catchment parcel
+      `<unit>: own sub-catchment` cut to 200 characters, past the column's
+      100, so a unit name over 82 characters made the apply fail with 409
+      "violates a data rule"; it is cut to 100 now (`divide.db.test.ts`).
+- [x] **A scenario's borehole may have a blank name.** The engine's
+      `borehole.add` check (`scenario/ops.ts` `BOREHOLE_FIELDS.name`) takes
+      0–200 characters where PUT /model needs 1–200, so a scenario can add a
+      borehole the model schema would refuse. Durable fix: `nameOf(1, 200)`
+      there, checking the stored scenarios first. Trigger: next work on
+      scenario ops. **Done 2026-10-03:** `nameOf(1, 200)`; the scenario
+      editor already refused a blank one (`ops.ts` `buildOp`), so only an
+      API caller could store it. Stored ops aren't re-checked when a
+      scenario runs (only on create and on an ops update), so a stored
+      scenario with a blank one still runs and stays as it was (its
+      `ops_sha256` pins those bytes); nothing is deployed yet.
+
 ## Two-step sign-in (issue #282)
 
 Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step
@@ -3612,12 +3647,17 @@ from the WP:
       say on a cap run's per-unit pages that its use is capped by a volume
       they can't see. Trigger: a project with outside viewers runs in cap
       mode, or counsel reads per-unit modelled use as personal information.
-- [ ] **Registration numbers in History** are readable by viewers
-      (`allocation.created/changed/deleted` carry `registrationNo`), and a
-      registration number is a "unique identifier" (POPIA s1). Durable fix:
-      leave `registrationNo` out of those events for a viewer in the History
-      route (as `allocation.viewer_units` is off). Trigger: with the share
-      views item above, or counsel's review (#92).
+- [x] **Registration numbers in History** (2026-10-03): viewers read
+      `allocation.created/changed/deleted` with `registrationNo` (a "unique
+      identifier", POPIA s1) and `allocation.created` with the volume. Done:
+      the History reads every event's subject through `app_audit_subject`
+      (190), which leaves both out for a reader who can't read the
+      allocation rows (a viewer while `allocations_viewer_units` is off);
+      `changes-since` gave that viewer the run's volumes as "removed" lines,
+      now it compares neither side's; the data-subject export leaves both out
+      of every allocation event (`withoutAllocationIdentifiers`). Share
+      views, packs and mail carry no audit event
+      (`allocations/history-viewer.db.test.ts`).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -3805,13 +3845,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `pnpm dev:tiles:channels` step and the production tiles bucket, as
       vector PMTiles) and draw them like the basemap. Trigger: the first
       production deploy with `delineation_dem = true`.
-- [ ] **Delineation of catchments larger than about 100 km across**
-      (design/delineation.md § Where it runs): the API refuses rather than
-      cut one off, within its 30 s Lambda. Durable path: a `delineate` job
-      kind on the worker (300 s) with a larger window cap, the same code.
-      Trigger: a client asking to delineate a large river's catchment.
-      (Sub-catchments from clicks don't wait on it: a click past the window
-      is an inflow point, maps.md § Sub-catchments from clicks.)
+- [x] **Delineation of catchments larger than about 100 km across**
+      (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
+      Where it runs): a click still at the edge of the request's window
+      goes to a `delineate` job on the worker (191_delineation_request), the
+      same code with windows up to 6 144 cells (about 200 km) in its 300 s,
+      the worker at 2 048 MB with `delineation_dem` on; the Map waits for it
+      and decides the proposal as any other. Past 200 km it is still
+      refused, not cut off. (Sub-catchments from clicks don't use it: a
+      click past the window is an inflow point, maps.md § Sub-catchments
+      from clicks.)
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on
@@ -3876,20 +3919,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       sources table. Trigger: the WR2012 decision, or a hydrologist asking
       for the A-pan row from the map.
 
-- [ ] **Divide and start: a piece's area from its cells, not its simplified
-      outline** (persona-hydrologist, round 4, 2026-10-02). The DEM
-      partition is exact in cells, but each piece's `areaM2`
-      (`backend/src/delineation/subcatchments.ts` `piece()`) is its
-      Douglas–Peucker-simplified outline's geodesic area, so the pieces and
-      the rest add up to −0.51 % of the catchment on the synthetic DEM, more
-      on small, jagged pieces. The cell area is already summed (`cellArea`,
-      used only when the outline fails). Durable fix: take each piece's area
-      from its cells and keep the outline for display, *and* decide what the
-      saved parcel's `area_m2` is (today the unit's area equals its parcel's
-      outline area, which "area from the map" relies on): either store the
-      cell area on the parcel too, with the outline marked simplified, or
-      simplify less. Trigger: a divide whose pieces fall more than 1 % short
-      of the catchment, or the first real DEM catchment with many small units.
+- [x] **Divide and start: a piece's area from its cells, not its simplified
+      outline** (2026-10-03, `start-6`). Every area in `delineateUnits`
+      (each piece, the rest, the catchment, a no-land unit's total) is now
+      summed from the partition's cells, each at its own area on the WGS84
+      ellipsoid (`cellRowAreaM2`: R_q² · Δλ · Δ sin β, exact for a Web
+      Mercator cell and the measure `geo/area.ts` uses), so the pieces and
+      the rest add up to the catchment exactly (they fell 0.07 % short on
+      the three-dam probe, 0.51 % on the persona's divide). The outline stays
+      simplified for the map; the saved parcel stores the cells' area as
+      `area_m2`, so the unit's area equals its parcel's. Splitting such a
+      parcel checks the parts against the outline's own area, and "area from
+      the map" names the cells in its revision reason.
 
 ## Crop factors (issue #54 item 1)
 
@@ -4767,7 +4808,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
-- [ ] **Record which file a reference load came from (round 4 infra audit,
+- [x] **Record which file a reference load came from (round 4 infra audit,
       data finding 4).** A load checks the uploaded file's SHA-256, then
       drops it: the dataset rows don't say which key and hash they came
       from, so once the Actions log expires nobody can tell which file is
@@ -4779,10 +4820,19 @@ assume, the questions for counsel); these are the actions, with triggers.
       `geo/referenceLoad.ts` and cleared by any other replace, and shown on
       `/data-sources`. **Trigger:** the
       first production load, or the next migration touching those tables.
+      **Done 2026-10-03** (migration 192): `reference_load`, written by
+      the replace functions in the dataset's transaction when a production
+      load names its file (`geo/referenceOrigin.ts`) and deleted by any
+      other replace; the load returns the file it replaced and
+      load-reference.yml prints both (deployment.md § Reference datasets,
+      Which file is loaded). Not on `/data-sources`: that page is the
+      public, static credits page (no API call), and no signed-in page lists
+      the loaded datasets with their metadata, so the record is the
+      operator's (the load log, or SQL as the owner).
 
 ## Housekeeping
 
-- [ ] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
+- [x] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
       (found 2026-10-01, issue #326 round 3). "loads the committed env file and
       points both URLs at the checkout database" fails on any machine whose
       `backend/.env.development.local` sets `DATABASE_URL` to another database
@@ -4791,7 +4841,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       give `loadDevEnv` the directory to read (or the file list) and point the
       test at a temp directory holding only a copy of the committed file.
       Trigger: the next change to `config/devEnv.ts`, or a second report of
-      the failure.
+      the failure. **Done 2026-10-03:** `loadDevEnv(env, dir)` reads the two
+      files from `dir` (default the working directory, as before), and the
+      test points it at a temp directory holding a copy of the committed
+      file, plus a case for a `.env.development.local` that wins.
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
@@ -5553,13 +5606,19 @@ own. Loop in the CISO or security analyst before acting on any of them.
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.
       Trigger: a WUA asks, or Step 3's licensing evidence needs it.
-- [ ] **One guard for views over a run's stored series.** Every view that
-      reads a run's daily series (not its summary) must cut a forecast run
-      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
-      that didn't, one at a time. A guard test listing each
-      `api.runs.series` / `run_series` consumer and how it treats a forecast
-      run would stop the next one. Trigger: the next view over stored
-      series.
+- [x] **One guard for views over a run's stored series** (2026-10-03).
+      `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
+      reader of a run's stored series (the frontend's `api.runs.series`, the
+      bulk route and a share link's series; the backend's `FROM run_series`;
+      every SQL function whose latest definition reads it), how each treats a
+      forecast run (cut, band, whole, never, …) and the code that shows it,
+      and fails on an unlisted reader, a changed count or lost evidence. It
+      caught five, now fixed: a share link's chart averaged a published
+      forecast run's forecast days into the river's months (190 cuts
+      `app_share_series`); River & reserve counted forecast days below the
+      EWR; Compare runs' overlay read out and differenced the forecast days,
+      with no band; the report's licence-impact board counted them; the
+      runoff stores chart and the printed report's two charts had no band.
 
 ## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
 
@@ -5587,32 +5646,56 @@ all of Africa. `GET …/map/stations` counts its datasets the same way.
 What the round-4 `sec-input` pass fixed is in docs/security.md (§ Input
 handling: Delineation, Map data files, Geometry cost). Left open:
 
-- [ ] **A work budget on summing a polygon over a grid.** `gridShares`
-      (land cover, evaporation; a viewer's read) clips every vertex to every
-      row it is summed over. Halving the rows and cells (the `sec-access`
-      round-4 branch, `eachBand`) fixes the ordinary case, but a comb whose
-      every edge runs the polygon's whole height keeps all its vertices in
-      every row: a valid 50 000-vertex one over 0.0025° × 178° is about
-      72 000 rows × 50 000 vertices, billions of steps, and `maxCells`
-      doesn't stop it (one column). The durable fix is a budget on the
-      vertices the clipping makes (`eachBand`'s `work` counter, refused past
-      a few million) with a test of that comb. Trigger: the halving lands on
-      main (it was left to that branch to avoid two rewrites of one file).
-- [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
-      outer ring or another hole, but not a hole wholly inside another hole
-      (its area is subtracted twice). A full check is a point-in-ring test
-      per pair of holes, quadratic in the number of holes, so it needs a
-      cap on holes first. Trigger: a real file with nested holes, or an area
-      found below a polygon's outer ring minus its holes.
-- [ ] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
+- [x] **A work budget on summing a polygon over a grid** (2026-10-03).
+      `eachBand` counts the vertices it clips and throws `GridWorkExceeded`
+      past `GRID_WORK_BUDGET` (8 million, about a second);
+      `gridShares` and the CHIRPS `boundaryCells` answer it as a problem
+      ("too detailed … simplify it"). Halving can't help a comb whose teeth
+      run its full height (every row holds every vertex: measured 15 s at
+      2 000 rows, so minutes at 20 000), so a budget is the fix, not a
+      cleverer order; the comb is refused in about 0.3 s
+      (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`).
+- [x] **Nested holes** (2026-10-03). Refused since 8e623dad4 through
+      `polygonsOverlap`, but pairwise: 4 900 holes side by side were
+      refused as too complex. `holesNested` (`geo/geojson.ts`) sweeps the
+      holes' boxes by longitude and tests a point-in-ring only where one box
+      holds another, against the ring indexed into latitude strips (GEOS's
+      IndexedNestedHoleTester), under `GEO_MAX_SWEEP_STEPS`; tested with
+      nested and side-by-side crafted holes, a 20 000-vertex C-shaped hole
+      round 3 600 small ones, and 4 900 holes (`geo/geojson.test.ts`).
+- [x] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
       `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
       gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it
       `@sha256:` and add it to the pins guard. Trigger: the next change to
-      that script.
-- [ ] **No published checksums for the downloaded sources.** HydroRIVERS'
+      that script. **Done 2026-10-03:** pinned to the tag's multi-arch index
+      digest, and `check:pins` (`scriptImageProblems`) refuses any
+      `*_IMAGE` default in `bin/*.sh` without one.
+- [x] **Pin the local-dev service images by digest** (round 2, 2026-10-03).
+      `docker-compose.yml` named Postgres, Mailpit and MinIO by tag only.
+      **Done:** each is `image:tag@sha256:…` (the tags' multi-arch index
+      digests from `docker buildx imagetools inspect`), and `check:pins`
+      (`composeImageProblems`) refuses an `image:` without one. Dependabot's
+      docker-compose entry moves tag and digest together. The label fonts'
+      archive (`bin/tiles-dev.sh fonts`) is held to a SHA-256 in
+      `bin/source-checksums.sha256` as well as its commit (maps.md §
+      Checksums).
+- [ ] **CI's Postgres service image floats.** `ci.yml`'s two `services:
+      postgres` (db-test, e2e) run `postgres:17-alpine` by tag, while
+      docker-compose.yml pins it by digest, and Dependabot's github-actions
+      ecosystem doesn't update service images. Durable fix: pin both to
+      compose's digest and have `check:pins` require they equal
+      docker-compose.yml's postgres image, so a Dependabot compose PR fails
+      until they move with it. Trigger: the next Postgres image bump, or the
+      next change to ci.yml's services.
+- [x] **No published checksums for the downloaded sources.** HydroRIVERS'
       zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
       builds have no checksum the scripts verify (whether each publisher
       offers one was not checked in this round); the scripts are HTTPS-only (redirects
       too) and the readers fail closed, and the production load hashes
       what the operator prepared. Trigger: any of them starts publishing
-      checksums.
+      checksums. **Done 2026-10-03:** checked per publisher (maps.md §
+      Checksums): HydroRIVERS, GSW and dPET publish none, so their whole
+      files are held to SHA-256s in `bin/source-checksums.sha256`
+      (HydroRIVERS and the six default GSW tiles pinned, dPET recorded on
+      first fetch); Protomaps and Mapterhorn publish whole-archive MD5s that
+      a ranged `pmtiles extract` can't use.

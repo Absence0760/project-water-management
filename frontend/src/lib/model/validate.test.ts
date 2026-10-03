@@ -52,6 +52,25 @@ describe('validateModel', () => {
 		expect(messages(m)).toEqual(['Node name "Farm" is used 2 times.']);
 	});
 
+	it('flags a line break or control character in a name or schedule label, as the API refuses it (issue #385)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = node('a', 'Golf\nFarm', 'g');
+		const crop = { id: 'c', name: 'Vines\u009fD', cropFactor: new Array(12).fill(0.5) };
+		const bh = { id: 'b', nodeId: 'g', name: 'BH\t1', capacityM3Day: 100, annualCapM3: null, mode: 'none' as const, emergencyBelowPct: 0.3, target: 'direct' as const, depletionFactor: 0 };
+		const one = { id: 'o', nodeId: 'a', name: 'Town\u2028water', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(1), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: 'may\nrun over lines', schedule: [{ label: 'Easter\rweek', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 1 }] } as never;
+		const m = model([g, a], { crops: [crop], boreholes: [bh], demandObjects: [one] });
+		expect(messages(m).filter((x) => /line breaks/.test(x))).toHaveLength(5);
+		expect(messages(m)).toContain('"Golf\nFarm": names can\'t contain line breaks or control characters.');
+		expect(messages(m)).toContain('Crop "Vines\u009fD": names can\'t contain line breaks or control characters.');
+		// The positive control: the same model on one line.
+		const fixed = model([g, { ...a, name: 'Golf Farm' }], {
+			crops: [{ ...crop, name: 'Vines D' }],
+			boreholes: [{ ...bh, name: 'BH 1' }],
+			demandObjects: [{ ...(one as object), name: 'Town water', schedule: [{ label: 'Easter week', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 1 }] } as never]
+		});
+		expect(messages(fixed).filter((x) => /line breaks/.test(x))).toEqual([]);
+	});
+
 	it('flags blank names', () => {
 		expect(messages(model([node('g', '  ', null)]))).toContain('Every node needs a name.');
 	});

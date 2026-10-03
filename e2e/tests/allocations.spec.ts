@@ -9,7 +9,8 @@
 // phone. Licence conditions entered in the sheet show in the list, and a run
 // capped at the registered volumes (settings.allocationMode, engine 1.18.0)
 // says so above its comparison (issue #72). The import sheet can't be closed
-// while the file is read or the import runs. Synthetic data only.
+// while the file is read or the import runs, and a file chosen while another
+// is read supersedes it (issue #384). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -127,6 +128,43 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(compare.locator('thead')).toBeHidden();
 	await expect(upper.getByText('2021/22')).toBeVisible();
 	await expectNoViolations(page);
+});
+
+test('a file chosen while another is read supersedes it, a refused one too (issue #384)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Allocations superseded read');
+	await page.goto(`/projects/${project.id}?tab=allocations`);
+	await expect(page.getByTestId('allocations-empty')).toBeVisible();
+	await page.getByTestId('section-header').getByRole('link', { name: 'Import', exact: true }).click();
+	const wizard = page.getByTestId('allocation-import');
+	await wizard.getByLabel('What the file is').selectOption('csv');
+	const picker = wizard.getByLabel('File (CSV, up to 2 MB)');
+
+	// The first file's preview is held, as a large file's would be.
+	let releaseFirst!: () => void;
+	const first = new Promise<void>((r) => (releaseFirst = r));
+	let held = true;
+	await page.route(/\/allocations\/import$/, async (route) => {
+		if (held) {
+			held = false;
+			await first;
+		}
+		await route.fallback();
+	});
+	const firstAnswered = page.waitForResponse(/\/allocations\/import$/);
+	await picker.setInputFiles({ name: 'first.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
+	await expect(wizard.getByRole('status')).toHaveText('Reading the file…');
+
+	// A second file, refused before it's read: the refusal is the answer now, and the sheet stops reading.
+	await picker.setInputFiles({ name: 'too-big.csv', mimeType: 'text/csv', buffer: Buffer.alloc(2 * 1024 * 1024 + 1, 'a') });
+	await expect(wizard.getByRole('alert')).toHaveText('The file is larger than 2 MB. Split it, or keep only the catchment’s rows.');
+	await expect(wizard.getByText('Reading the file…')).toHaveCount(0);
+
+	// The first file's preview lands late, and is dropped: the picker is still there for the next file.
+	releaseFirst();
+	await firstAnswered;
+	await picker.setInputFiles({ name: 'third.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) });
+	await expect(page.getByTestId('allocation-preview-summary')).toContainText('third.csv: 3 rows');
 });
 
 test('licence conditions entered by hand show with the volume, and a capped run says so', async ({ page, owner }) => {

@@ -455,7 +455,8 @@ under a dead-invitation warning).
   account's (`POST /auth/verify-email` answers the address it confirmed)
   confirms it and says so without naming the signed-in account as confirmed.
 - **Display names** are checked as the server checks them
-  (`lib/api/emailAuth.ts displayNameProblem`, `backend/src/auth/displayName.ts`):
+  (`lib/api/emailAuth.ts displayNameProblem`, `lib/format/visibleName.ts`,
+  `backend/src/http/visibleName.ts`):
   a name of only invisible characters (zero-width spaces, a lone bidi
   control) is *Enter a display name.* on the sign-up and account pages; the
   server also turns whitespace runs into one space and drops control and
@@ -1965,6 +1966,14 @@ Laid out for the app frame (issue #17): the layouts answer to the page's own
 width through container queries, not the window's, since the sidebar takes
 240 px.
 
+**Team and project names** (issue #383) are checked in the form as the
+server checks them (`lib/format/visibleName.ts workspaceNameProblem`,
+`backend/src/http/visibleName.ts`): a name of only invisible characters is
+*The team needs a name.* / *The project needs a name.* in the New team, team
+settings, New project, Copy and Project details forms, and the import
+preview says so under its Name field and holds Import back. What is sent is
+the name as stored, whitespace runs one space and bidi controls dropped.
+
 **Role names** (issue #162): the UI uses one set of names for team and
 project roles, **Viewer / Editor / Owner**. A team role is shown by the
 project role it gives on every team project, so the API's team `member`
@@ -3028,7 +3037,18 @@ map" card) stays the schematic; this is the geography.
   confluence shows "This point is at a confluence. Which river do you mean?
   The outlet goes on the channel whose area matches it." with one button
   per river ("The river below the junction, 497 km²", "The main river above
-  the junction, 422 km²", "The tributary above the junction, 67 km²"). The proposal is drawn dashed in teal
+  the junction, 422 km²", "The tributary above the junction, 67 km²").
+  A catchment too large for the request goes to the background worker
+  (191_delineation_request; maps.md § Delineation): the form shows a box
+  (`role="status"`) "The catchment is too large to work out at once, so it
+  is queued for the background. It takes a minute or two.", then "Working out the catchment in the background
+  (50 % through). …" with a progress bar while the worker has it; the
+  sheet asks every 2 s, and the outcome arrives as the request's would (the
+  proposal, or the refusal's sentence or warning box). The tick **A large
+  catchment, over about 100 km across: work it out in the background**
+  above the dataset line sends the point straight there. A reload shows a
+  waiting one again (the state's `request`); a sheet closed while it waits
+  shows the proposal once the Map's state reloads. The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
@@ -5529,13 +5549,21 @@ read it before.
   before the forecast only, and every "X of N days" beside them counts N
   over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
   EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
-  outflow, the hydrograph, dam storage, supply vs demand, the explorer)
+  outflow, the hydrograph, dam storage, supply vs demand, the explorer, the
+  runoff model's stores, the printed report's two charts, Compare runs'
+  overlay)
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
   option), so the band never rests on colour alone; the figure carries
   `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
   only the days before the forecast, and the caption says how many forecast
-  days it left out (issue #51).
+  days it left out (issue #51). The same for every figure read off the
+  stored series: River & reserve's shaded days below the EWR and their
+  count, the overlay's difference and read-out ("Run A is a forecast run: …
+  stop the day before"), the report's licence-impact board, and a share
+  link's chart. `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`)
+  lists every reader of a run's stored series and how it treats the
+  forecast days, and fails on a new one that doesn't say.
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &

@@ -5,6 +5,7 @@ import type { ScenarioOp, YieldPoint } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
 import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
+import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 
 /** Assurance choices: the firm yield, then the levels South African planning quotes (1 in 50, 1 in 20, 1 in 10, 1 in 5 years). */
 export const ASSURANCE_OPTIONS = [
@@ -24,7 +25,7 @@ export const HISTORICAL_NOTE =
  * history, and the API refuses a forecast run with 409).
  */
 export function modelRuns(runs: readonly RunMeta[] | null | undefined): RunMeta[] {
-	return (runs ?? []).filter((r) => !r.scenarioId && r.trigger !== 'forecast');
+	return (runs ?? []).filter((r) => !isScenarioRun(r) && r.trigger !== 'forecast');
 }
 
 /** The status line for a yield job; null once it is done (the results show instead). */

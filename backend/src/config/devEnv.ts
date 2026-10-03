@@ -21,6 +21,7 @@
 // DEV_DB_NAME overrides the name (DEV_DB_NAME=water shares the main checkout's).
 // DEV-ONLY docker credentials.
 import { config } from 'dotenv';
+import { join } from 'node:path';
 import pg from 'pg';
 import { checkoutTag, thisCheckout } from './checkout.js';
 
@@ -56,9 +57,14 @@ export function withDevDb(url: string, name: string): string {
 	return parsed.toString();
 }
 
-/** Load the dev env files, then point the database URLs at this checkout's dev database. */
-export function loadDevEnv(env: NodeJS.ProcessEnv = process.env): void {
-	config({ path: ['.env.development.local', '.env.development'], processEnv: env as Record<string, string> });
+/**
+ * Load the dev env files from `dir` (the working directory: every entry point
+ * runs from `backend/`), then point the database URLs at this checkout's dev
+ * database. Tests pass a temp `dir`, so a developer's own
+ * `.env.development.local` never reaches them.
+ */
+export function loadDevEnv(env: NodeJS.ProcessEnv = process.env, dir: string = process.cwd()): void {
+	config({ path: [join(dir, '.env.development.local'), join(dir, '.env.development')], processEnv: env as Record<string, string> });
 	const name = checkoutDevDbName(env);
 	for (const key of DEV_DB_URL_VARS) {
 		const url = env[key];

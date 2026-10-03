@@ -10,6 +10,7 @@
 // reference loads (geo/referenceLoad.ts, docs/deployment.md § Reference
 // datasets) carry no raster code: lambda-migrate.test.ts checks its bundle.
 import type pg from 'pg';
+import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
 
 export const WORLDCOVER_CROPLAND = 40;
 /** The cell size the operator's load uses unless told otherwise: 30 WorldCover pixels, about 250 m × 230 m in South Africa. */
@@ -155,9 +156,16 @@ const BATCH = 20_000;
  * Replace `meta.dataset` with the cells `parts` yields (one part per input
  * file, read only when its turn comes, so a country's tiles never sit in
  * memory together), in one transaction, as the schema owner. A cell two
- * parts both give keeps the larger share. Returns how many cells it wrote.
+ * parts both give keeps the larger share. `origin`: the reference-bucket file
+ * a production load read (recorded with the data; referenceOrigin.ts), null
+ * for any other replace. Returns how many cells it wrote.
  */
-export async function replaceCroplandDataset(client: pg.ClientBase, meta: CroplandDatasetMeta, parts: Iterable<readonly CroplandCell[]>): Promise<number> {
+export async function replaceCroplandDataset(
+	client: pg.ClientBase,
+	meta: CroplandDatasetMeta,
+	parts: Iterable<readonly CroplandCell[]>,
+	origin: ReferenceOrigin | null = null
+): Promise<number> {
 	await client.query('BEGIN');
 	try {
 		// The cells go with their dataset (ON DELETE CASCADE).
@@ -181,6 +189,7 @@ export async function replaceCroplandDataset(client: pg.ClientBase, meta: Cropla
 		const { rows } = await client.query<{ n: number }>('SELECT count(*)::integer AS n FROM cropland_cell_reference WHERE dataset = $1', [meta.dataset]);
 		// A product with no cropland at all is a wrong file or class, not a dataset to propose zeros from.
 		if (!rows[0]!.n) throw new Error('no cell has any cropland: check the files and --classes');
+		await recordReferenceOrigin(client, 'land-cover', meta.dataset, origin);
 		await client.query('COMMIT');
 		return rows[0]!.n;
 	} catch (e) {

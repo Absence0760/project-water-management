@@ -95,10 +95,11 @@ export function opIds(op: ScenarioOp): [string, unknown][] {
 /**
  * validateScenarioOps plus UUID ids. `errors` name each problem by path
  * (`ops[3].nodeId: must be a UUID`); the ops are rebuilt from their known
- * fields only, so unknown keys never reach the database.
+ * fields only, so unknown keys never reach the database. `stored`: the ops
+ * the list replaces, whose names from before issue #385 it may keep.
  */
-export function checkOps(raw: unknown): { ops: ScenarioOp[]; errors: string[] } {
-	const { ops, errors } = validateScenarioOps(raw);
+export function checkOps(raw: unknown, stored?: readonly ScenarioOp[]): { ops: ScenarioOp[]; errors: string[] } {
+	const { ops, errors } = validateScenarioOps(raw, { stored });
 	if (errors.length) return { ops, errors };
 	ops.forEach((op, i) => {
 		for (const [path, v] of opIds(op)) if (typeof v !== 'string' || !UUID_RE.test(v)) errors.push(`ops[${i}].${path}: must be a UUID`);
@@ -106,12 +107,14 @@ export function checkOps(raw: unknown): { ops: ScenarioOp[]; errors: string[] } 
 	return { ops, errors };
 }
 
-/** zod wrapper: the checked ops, or one issue per error. */
-export const Ops = z.unknown().transform((raw, ctx) => {
-	const { ops, errors } = checkOps(raw);
-	for (const message of errors) ctx.addIssue({ code: 'custom', message });
-	return errors.length ? z.NEVER : ops;
-});
+/** zod wrapper: the checked ops, or one issue per error. `stored`: the ops they replace (checkOps). */
+export const opsReplacing = (stored?: readonly ScenarioOp[]) =>
+	z.unknown().transform((raw, ctx) => {
+		const { ops, errors } = checkOps(raw, stored);
+		for (const message of errors) ctx.addIssue({ code: 'custom', message });
+		return errors.length ? z.NEVER : ops;
+	});
+export const Ops = opsReplacing();
 
 /** SHA-256 hex of the ops as RFC 8785 canonical JSON (engine canonicalJson): `scenario.ops_sha256` and the run snapshot's `opsSha256`. */
 export const opsSha256 = (ops: readonly ScenarioOp[]): string => createHash('sha256').update(canonicalJson(ops)).digest('hex');
@@ -183,7 +186,11 @@ export const objectionClosingDate = z
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s), 'must be a real date')
 	.nullable();
 
-/** PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft. */
+/**
+ * PATCH: `ops` replaces the whole list. Ops, owned nodes and the base change only while the scenario is a draft.
+ * `ops` is read here as it came; the route checks it against the scenario's stored ops (parsePatchOps), which a
+ * list may keep names from (issue #385).
+ */
 export const PatchScenarioBody = z
 	.object({
 		name: name.optional(),
@@ -194,7 +201,7 @@ export const PatchScenarioBody = z
 		/** An application's only, while it is a draft (scenario_objection_frozen). */
 		objectionAddress: objectionAddress.optional(),
 		objectionClosingDate: objectionClosingDate.optional(),
-		ops: Ops.optional(),
+		ops: z.unknown().optional(),
 		ownedNodeIds: ownedNodeIds.optional(),
 		status: z.enum(SCENARIO_STATUSES).optional()
 	})
@@ -203,6 +210,9 @@ export const PatchScenarioBody = z
 		(b) => Object.values(b).some((v) => v !== undefined),
 		'send at least one of name, description, purposeAndNeed, mitigation, monitoring, objectionAddress, objectionClosingDate, ops, ownedNodeIds, status'
 	);
+
+/** A PATCH's `ops`, checked as replacing `stored`; a ZodError at path `ops` like any body field. */
+export const parsePatchOps = (raw: unknown, stored: readonly ScenarioOp[]): ScenarioOp[] => z.object({ ops: opsReplacing(stored) }).parse({ ops: raw }).ops;
 
 export const RebaseBody = z.object({ baseRunId: z.string().uuid(), dryRun: z.boolean().default(false) }).strict();
 

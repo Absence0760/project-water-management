@@ -1,18 +1,34 @@
 <!--
 	The runoff model's water balance for a run (RunSummary.runoff; GR4J runs):
-	parameters, where the rain went over the run, and the stores through time.
+	parameters, where the rain went over the run, and the stores through time
+	(on a forecast run, the forecast days in their band, like every daily chart).
 -->
 <script lang="ts">
 	import type { DailySeries, RunoffBalance } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
+	import { forecastBand } from '$lib/components/forecast/forecast';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { cachedSeries } from './cache';
 	import { balanceRows, describeParams, runoffModelName } from './runoff';
 
-	let { balance, projectId, runId, refs }: { balance: RunoffBalance; projectId: string; runId: string; refs: RunSeriesRef[] } = $props();
+	let {
+		balance,
+		projectId,
+		runId,
+		refs,
+		forecastFrom = null
+	}: {
+		balance: RunoffBalance;
+		projectId: string;
+		runId: string;
+		refs: RunSeriesRef[];
+		/** A forecast run's first forecast day (WP-2.12): the stores chart shades the days from it. */
+		forecastFrom?: string | null;
+	} = $props();
+	const band = $derived(forecastBand(forecastFrom));
 
 	const uid = $props.id();
 	const rows = $derived(balanceRows(balance));
@@ -73,7 +89,7 @@
 			{#if error}
 				<div class="alert alert-error" role="alert">{error}</div>
 			{:else if stores.length}
-				<LineChart title="Model stores" unit="mm" height={220} series={stores} recentDays={3 * 365} recentLabel="Last 3 years" />
+				<LineChart title="Model stores" unit="mm" height={220} series={stores} recentDays={3 * 365} recentLabel="Last 3 years" {band} />
 			{:else}
 				<div class="chart-ph" role="status">Loading stores…</div>
 			{/if}

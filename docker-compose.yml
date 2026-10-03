@@ -10,6 +10,12 @@
 # conflict while the main checkout's container runs. Per-worktree isolation
 # lives inside this one Postgres (water_w<tag>, water_test_w<tag>, water_e2e…), not in
 # separate containers.
+#
+# Each image is pinned by digest as well as tag (`pnpm check:pins`,
+# scripts/guards/check_playwright_pins.mjs composeImageProblems), so a tag
+# re-pushed upstream can't change what runs. Dependabot's docker-compose
+# entry moves tag and digest together; by hand, `docker buildx imagetools
+# inspect <image:tag>` gives the digest (the index's, so every platform).
 name: project-water-management
 
 services:
@@ -41,7 +47,7 @@ services:
   # http://localhost:8026 (`pnpm dev:mail:open`). Published on 1026/8026 so it
   # doesn't collide with other projects' Mailpit on the default 1025/8025.
   mailpit:
-    image: axllent/mailpit:v1.31.2
+    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
     container_name: water-management-mail
     ports:
       - "127.0.0.1:1026:1025"
@@ -61,7 +67,7 @@ services:
   # minio/minio Docker Hub repository is gone), so this is the community
   # fork's build of the same server (github.com/pgsty/minio), pinned.
   minio:
-    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z@sha256:b6bfe7239bfc83fb90d31612d9704d86039dd714f7904b3f1ad68f211e602372
     container_name: water-management-s3
     command: ["server", "/data", "--console-address", ":9001"]
     ports:

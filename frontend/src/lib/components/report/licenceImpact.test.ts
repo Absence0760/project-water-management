@@ -155,6 +155,27 @@ describe('buildLicenceImpactBoard', () => {
 		expect(v.belowLabel).toBe('Days below the pragmatic EWR at the outlet');
 	});
 
+	it('counts a forecast run’s record only: its forecast days change nothing (issue #51)', () => {
+		// The application is a forecast run whose last water year (2008, wet) ran on forecast rain.
+		const forecast = (s: RunCompareResponse['a']) => ({ ...s, run: { ...s.run, summary: { ...s.run.summary, forecast: { from: '2008-10-01' } } } }) as RunCompareResponse['a'];
+		const board = (appBelow: (wy: number) => number) =>
+			buildLicenceImpactBoard({ data: { a: side('Baseline', 100), b: forecast(side('Forecast', 160)) }, series: series((wy) => (wy <= 2002 ? 5 : 0), appBelow), method: 'auto' });
+		const quiet = board((wy) => (wy <= 2002 ? 9 : 0));
+		const loud = board((wy) => (wy <= 2002 ? 9 : wy === 2008 ? 365 : 0));
+		if (quiet.status !== 'ok' || loud.status !== 'ok') throw new Error('unavailable');
+		expect(loud.columns.map((c) => c.below)).toEqual(quiet.columns.map((c) => c.below));
+		// Positive control: the same days in an ordinary run are counted.
+		const ordinary = buildLicenceImpactBoard({
+			data: { a: side('Baseline', 100), b: side('Ordinary', 160) },
+			series: series((wy) => (wy <= 2002 ? 5 : 0), (wy) => (wy <= 2002 ? 9 : wy === 2008 ? 365 : 0)),
+			method: 'auto'
+		});
+		if (ordinary.status !== 'ok') throw new Error(ordinary.reason);
+		expect(ordinary.columns.find((c) => c.label === 'Wet')).toMatchObject({ nYears: 3, below: { application: 365, change: '+365' } });
+		// The forecast year isn't one of the record's: the wet class has two years, too few to judge.
+		expect(quiet.columns.find((c) => c.label === 'Wet')).toMatchObject({ nYears: 2, below: null });
+	});
+
 	it('has a verdict label for every verdict of both metrics', () => {
 		for (const m of Object.values(VERDICT_LABEL)) expect(Object.keys(m).sort()).toEqual(['fewerBelow', 'moreBelow', 'noChange', 'notEnoughYears']);
 		expect(OUTLET_SITE.id).toBeNull();

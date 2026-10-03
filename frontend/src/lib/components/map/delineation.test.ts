@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DelineationProposal } from '$lib/api/types';
-import { COPERNICUS_NOTICE, datasetNotice, openProposal, proposalFacts, provenanceFacts } from './delineation';
+import type { DelineationProposal, DelineationRequest } from '$lib/api/types';
+import { afterPollError, COPERNICUS_NOTICE, datasetNotice, failedText, POLL_GIVE_UP, isWaiting, openProposal, proposalFacts, provenanceFacts, waitingText } from './delineation';
 
 const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal => ({
 	id: 'p1',
@@ -30,8 +30,8 @@ const proposal = (over: Partial<DelineationProposal> = {}): DelineationProposal 
 describe('delineation helpers', () => {
 	it('finds the one open proposal', () => {
 		expect(openProposal(null)).toBeNull();
-		expect(openProposal({ available: true, dataset: null, proposals: [proposal({ status: 'rejected' })] })).toBeNull();
-		expect(openProposal({ available: true, dataset: null, proposals: [proposal({ id: 'a', status: 'superseded' }), proposal({ id: 'b' })] })?.id).toBe('b');
+		expect(openProposal({ available: true, dataset: null, request: null, proposals: [proposal({ status: 'rejected' })] })).toBeNull();
+		expect(openProposal({ available: true, dataset: null, request: null, proposals: [proposal({ id: 'a', status: 'superseded' }), proposal({ id: 'b' })] })?.id).toBe('b');
 	});
 
 	it('words the facts: area, snap, cells, dataset with its fingerprint, method with its version', () => {
@@ -50,5 +50,53 @@ describe('delineation helpers', () => {
 		expect(datasetNotice({ label: '© Mapterhorn', attribution: '© Mapterhorn' })).toBe(COPERNICUS_NOTICE);
 		expect(datasetNotice({ label: 'Synthetic DEM 1', attribution: 'synthetic' })).toBeNull();
 		expect(datasetNotice(null)).toBeNull();
+	});
+});
+
+describe('a delineation the background worker has', () => {
+	const request = (over: Partial<DelineationRequest> = {}): DelineationRequest => ({
+		id: 'r1',
+		status: 'queued',
+		from: 'outlet',
+		click: [20.7, -33.5],
+		progress: null,
+		error: null,
+		proposal: null,
+		check: null,
+		refusal: null,
+		createdAt: '2026-10-03T00:00:00.000Z',
+		finishedAt: null,
+		...over
+	});
+
+	it('is waited for only while queued or running', () => {
+		expect(isWaiting(request())).toBe(true);
+		expect(isWaiting(request({ status: 'running' }))).toBe(true);
+		for (const status of ['failed', 'proposed', 'refused', 'superseded'] as const) expect(isWaiting(request({ status })), status).toBe(false);
+		expect(isWaiting(null)).toBe(false);
+	});
+
+	it('says it is queued, then how far it has run', () => {
+		expect(waitingText(request())).toMatch(/^The catchment is too large to work out at once, so it is queued for the background\./);
+		expect(waitingText(request({ status: 'running', progress: 0 }))).toMatch(/^Working out the catchment in the background\. A large/);
+		expect(waitingText(request({ status: 'running', progress: 50 }))).toMatch(/^Working out the catchment in the background \(50 % through\)\./);
+	});
+
+	it('says why it failed, without a stray full stop, and nothing for a cancel', () => {
+		expect(failedText(request({ status: 'failed', error: 'The elevation model could not be read just now.' }))).toBe(
+			'The background delineation failed: The elevation model could not be read just now. Try again, or draw or import the boundary.'
+		);
+		expect(failedText(request({ status: 'failed', error: 'cancelled' }))).toBe('The background delineation failed. Try again, or draw or import the boundary.');
+	});
+
+	it('keeps asking after a failed ask (the job runs on), giving up after five in a row or at once on a 404', () => {
+		expect(POLL_GIVE_UP).toBe(5);
+		for (let n = 1; n < 5; n++) {
+			expect(afterPollError(n, undefined), `network ${n}`).toBe('retry');
+			expect(afterPollError(n, 503), `503 ${n}`).toBe('retry');
+		}
+		expect(afterPollError(5, undefined)).toBe('give_up');
+		expect(afterPollError(5, 500)).toBe('give_up');
+		expect(afterPollError(1, 404)).toBe('give_up');
 	});
 });

@@ -35,21 +35,28 @@
 	async function choose(e: Event) {
 		const f = (e.currentTarget as HTMLInputElement).files?.[0];
 		if (!f) return;
+		// Any file chosen supersedes one still read, a refused one too: the
+		// earlier file's preview would land under the refusal (and over the
+		// later choice), and the sheet would stay "Reading" until it did.
+		const run = ++generation;
 		error = null;
 		// A WARMS extract says how it was obtained (162, D3; operator agreement 3A.1(d)).
 		if (kind === 'warms_extract' && !reference.trim()) {
 			error = 'Say how you obtained this extract (the DWS or CMA letter or terms) before choosing the file.';
+			phase = 'choose';
 			if (input) input.value = '';
 			return;
 		}
 		if (f.size > 2 * 1024 * 1024) {
 			error = 'The file is larger than 2 MB. Split it, or keep only the catchment’s rows.';
+			phase = 'choose';
 			return;
 		}
 		phase = 'reading';
-		const run = ++generation;
 		try {
 			const read = { name: f.name, text: await f.text() };
+			// A file chosen while this one was read: drop it before asking for its preview.
+			if (run !== generation) return;
 			const answer = await api.allocations.preview(projectId, { kind, fileName: read.name, text: read.text, reference });
 			if (run !== generation) return;
 			file = read;

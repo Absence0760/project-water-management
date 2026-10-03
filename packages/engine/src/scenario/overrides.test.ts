@@ -15,7 +15,7 @@ import { checkAll } from '../testing/invariants';
 import { FARMER_K } from '../views/farmView';
 import { MASKED_RULE, MASKED_RULE_AGGREGATE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
 import { structureIssues } from './structure';
-import { validateScenarioOps, type ScenarioOp } from './ops';
+import { storedControlTexts, validateScenarioOps, type ScenarioOp } from './ops';
 
 function node(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -2179,5 +2179,57 @@ describe('cloneData', () => {
 		expect(out.a).toEqual({ b: [1, { c: 2 }] });
 		expect(out.a).not.toBe(src.a);
 		expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+	});
+});
+
+describe('validateScenarioOps: names are one line (issue #385)', () => {
+	const bh = { id: 'bh1', nodeId: 'A', name: 'BH\n1', capacityM3Day: 500, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0.3, target: 'direct', depletionFactor: 0 };
+	it('refuses a line break or control character in a node, crop, borehole or demand object name, or a schedule label', () => {
+		const { ops, errors } = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: 'name', value: 'Golf\nFarm' },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: 'Vines\u009fD' },
+			{ op: 'borehole.add', borehole: bh },
+			{ op: 'demandObject.set', demandObjectId: 'do1', field: 'name', value: 'Town\u2028water' },
+			{ op: 'demandObject.set', demandObjectId: 'do1', field: 'schedule', value: [{ label: 'Easter\tweek', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 2 }] }
+		]);
+		expect(ops).toEqual([]);
+		expect(errors).toEqual([
+			'ops[0].value: cannot contain line breaks or control characters',
+			'ops[1].value: cannot contain line breaks or control characters',
+			'ops[2].borehole.name: cannot contain line breaks or control characters',
+			'ops[3].value: cannot contain line breaks or control characters',
+			'ops[4].value: window 1: label cannot contain line breaks or control characters'
+		]);
+	});
+
+	it('keeps a name byte-identical to one in the stored ops (a scenario from before #385), and only that one', () => {
+		const legacy = { op: 'node.set', nodeId: 'A', field: 'name', value: 'Golf\nFarm' };
+		const label = { op: 'demandObject.set', demandObjectId: 'do1', field: 'schedule', value: [{ label: 'Easter\tweek', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 2 }] };
+		const stored = [legacy, label];
+		expect(storedControlTexts(stored)).toEqual(new Set(['Golf\nFarm', 'Easter\tweek']));
+		expect(validateScenarioOps([legacy, label, { op: 'demand.scale', factor: 0.9 }], { stored }).errors).toEqual([]);
+		expect(validateScenarioOps([{ ...legacy, value: 'Golf\r\nFarm' }], { stored }).errors).toEqual(['ops[0].value: cannot contain line breaks or control characters']);
+		// Without stored ops, and in the next call, it is refused again.
+		expect(validateScenarioOps([legacy]).errors).toEqual(['ops[0].value: cannot contain line breaks or control characters']);
+	});
+
+	it('takes the same names on one line (positive control)', () => {
+		const { errors } = validateScenarioOps([
+			{ op: 'node.set', nodeId: 'A', field: 'name', value: 'Golf Farm' },
+			{ op: 'crop.set', cropId: 'c1', field: 'name', value: 'Vines D' },
+			{ op: 'borehole.add', borehole: { ...bh, name: 'BH 1' } },
+			{ op: 'demandObject.set', demandObjectId: 'do1', field: 'name', value: 'Town water' },
+			{ op: 'demandObject.set', demandObjectId: 'do1', field: 'schedule', value: [{ label: 'Easter week', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 2 }] }
+		]);
+		expect(errors).toEqual([]);
+	});
+
+	it("refuses a blank borehole name, as PUT /model does (1–200 characters)", () => {
+		for (const name of ['', '   ']) {
+			expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name } }]).errors, JSON.stringify(name)).toEqual(['ops[0].borehole.name: must be a name of 1–200 characters']);
+		}
+		expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name: 'x'.repeat(201) } }]).errors).toEqual(['ops[0].borehole.name: must be a name of 1–200 characters']);
+		// Positive control: one character and 200 pass.
+		for (const name of ['B', 'x'.repeat(200)]) expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name } }]).errors).toEqual([]);
 	});
 });

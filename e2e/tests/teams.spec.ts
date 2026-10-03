@@ -68,6 +68,19 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await expect(colleague.page.getByText(/No projects in Breede Hydrology match/)).toBeVisible();
 });
 
+test('a team name that shows as nothing is refused in the form, and a bidi control is dropped (issue #383)', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/teams');
+	await page.getByRole('button', { name: 'New team' }).first().click();
+	const dialog = page.getByRole('dialog', { name: 'New team' });
+	await dialog.getByLabel('Team name').fill('\u2066\u2069\u200b');
+	await dialog.getByRole('button', { name: 'Create team' }).click();
+	await expect(dialog.getByRole('alert')).toHaveText('The team needs a name.');
+	await dialog.getByLabel('Team name').fill('Berg\u202enimda');
+	await dialog.getByRole('button', { name: 'Create team' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Bergnimda' })).toBeVisible();
+});
+
 test('team pages have no WCAG 2.1 AA violations', async ({ page, owner }) => {
 	void owner;
 	const res = await page.request.post(`${API_URL}/teams`, { data: { name: 'Accessible team' } });

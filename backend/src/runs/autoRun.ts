@@ -173,7 +173,7 @@ export function forecastRunLabel(input: ModelInput): string {
  */
 export async function forecastRunBehindRain(db: Db, projectId: string): Promise<boolean> {
 	const { rows } = await db.query<{ behind: boolean | null }>(
-		`SELECT (SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.scenario_id IS NULL AND r.trigger = 'forecast')
+		`SELECT (SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND NOT r.from_scenario AND r.trigger = 'forecast')
 			< (SELECT max(ts.updated_at) FROM time_series ts WHERE ts.project_id = $1 AND ts.kind = ANY($2::text[])) AS behind`,
 		[projectId, RECORDED_RAIN_KINDS]
 	);

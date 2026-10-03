@@ -9,8 +9,9 @@ import bcrypt from 'bcryptjs';
 // every older hash checkable, and a sign-in upgrades it (needsRehash).
 //
 // Accounts made before this have a bcrypt hash ($2a$/$2b$/$2y$, bcryptjs cost
-// 12). It still checks, and the next successful sign-in replaces it with an
-// Argon2id one (auth/routes.ts /login). bcrypt reads only a password's first
+// 12). It still checks, and the next successful sign-in (or adding an
+// authenticator) replaces it with an Argon2id one (auth/routes.ts rehashFor,
+// storeRehash). bcrypt reads only a password's first
 // 72 bytes, so until then a long passphrase on such an account is checked by
 // its first 72 bytes; Argon2id reads all of it (a password may be 200
 // characters, up to 800 UTF-8 bytes).

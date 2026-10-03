@@ -215,7 +215,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **`PATCH /auth/me`** changes only the fields sent: `displayName` (whitespace runs made one
   space, control and bidi embedding/override/isolate characters dropped, then
   trimmed; 1–100 characters with at least one visible one, as at sign-up,
-  `auth/displayName.ts`), `locale` (a code in the language table, e.g. `'en'` or
+  `http/visibleName.ts`), `locale` (a code in the language table, e.g. `'en'` or
   `'af'`, or `null` to go back to following the browser; any other value,
   including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`),
   and `preferences`, whose keys sent replace the account's (the others stay):
@@ -314,6 +314,14 @@ the frontend catalogue (same contract: add, never rename):
   (`163_licensing_authority`'s conflict guard; provisional position,
   pre-counsel research, 2026-10-01). Take them out of the party, or keep
   them below editor.
+- `job_collision` (`409` from a request that queues a job): the job met a
+  pending one with the same dedupe key that the caller can't see under RLS,
+  so there is none to return (`backend/src/jobs/queue.ts`
+  `JobCollisionError`, issue #386). Only a contributor (an applicant) can
+  meet it, and only if a kind they can queue isn't keyed per user; every
+  kind they can queue is (`backend/src/jobs/contributorKinds.ts`, which a
+  catalogue test holds to the job table's insert policies). Try again once
+  the pending job has run.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -365,6 +373,12 @@ member reads). Their own farm routes come with WP-2.6.
 
 Roles: `viewer` (read) < `editor` (change model data, run the model) < `owner`
 (members, delete, move between teams).
+
+A project's `name` (create, rename, copy, and a project document's on
+import) is cleaned as a display name is (`http/visibleName.ts`): whitespace
+runs made one space, control and bidi embedding/override/isolate characters
+dropped, then trimmed; it must be 1–200 characters with at least one
+visible one, else `400`. A team's `name` follows the same rule.
 
 Your effective role is the highest of your direct membership and your team
 membership: on a team's projects, a team **admin** is an `owner`, a team
@@ -1090,7 +1104,7 @@ email show them by the project role they give, viewer / editor / owner
 | Method | Path | Body | Response | Min team role |
 | --- | --- | --- | --- | --- |
 | GET | `/teams` | – | `{ teams: Team[] }` (teams you're in, by name) | – |
-| POST | `/teams` | `{ name }` | `201 { team }` (you become its admin) | – |
+| POST | `/teams` | `{ name }` | `201 { team }` (you become its admin); `400` a name that shows as nothing or is over 200 characters once cleaned ([§ Projects](#projects)) | – |
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } }, privacyContact?: { name, email, postal? } \| null }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing. `privacyContact` sets or (`null`) removes the privacy contact (below) | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
@@ -1351,6 +1365,22 @@ Ids are client-generated UUIDs; rows missing from a `PUT` are deleted.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/model` | – | `ProjectModel` | viewer |
 | PUT | `/projects/:id/model` | `ProjectModel` | `ProjectModel` | editor |
+
+Names are one line (issue #385, migration 189): a node or crop name (1–100
+characters after trimming), a borehole or demand object name (1–200) and a
+demand schedule window's `label` (0–200) may not hold a line break, a tab or
+any other control character (C0, DEL, C1, U+2028, U+2029; the engine's
+`NAME_CONTROL_CHARS`). `PUT` refuses one with `cannot contain line breaks or
+control characters`, as do the scenario ops that set a name or label and
+the map's Start and Divide apply. A scenario saved before the rule keeps its
+ops byte for byte (`ops_sha256` and evidence packs pin them), so a `PATCH`
+of its `ops` may keep any such name that is byte-identical to one in the
+stored ops (the engine's `validateScenarioOps(raw, { stored })`); a new one
+is refused. A demand object's `note` may still run
+over lines. The bulk paths make a name one line instead (every run of
+whitespace and control characters one space, the engine's `oneLineName`): a
+project document's import (`POST /projects/import`, `pnpm import:project`),
+a restore of a version saved before the rule, and the workbook importers.
 
 Transfers carry `priority` (integer, lower moves first, engine ≥ 0.16.0) and
 `monthlyRateM3s` (engine ≥ 1.14.0, migration 090: twelve numbers ≥ 0, the max
@@ -1744,7 +1774,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
-- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
+- `RunMeta = { id, label, engineVersion, startDate, endDate, createdAt, createdBy, legacy, runoffModel, notes, notesUpdatedAt, notesUpdatedBy, evidence, pinned, published, scenarioId, scenarioName, fromScenario, citedBy, reproducible, trigger, forecastFrom, fitEngineVersion, errata }` —
   `createdBy` is the maker's display name, `null` once their account is
   deleted (138: the run stays, the name goes; the workspace says "a former
   member"). `trigger` is what made the run (042_auto_rerun): `manual`, `auto` (WP-2.11)
@@ -1774,7 +1804,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `scenarioId` is the [scenario](#scenarios) that made the run (`null` for a
   run of the live model, and once that scenario is deleted); `scenarioName`
   its name (the name the run recorded, once the scenario is gone; `null` for
-  a run of the model). `citedBy` is what keeps the run for good
+  a run of the model). `fromScenario` is whether a scenario made the run,
+  `true` also once that scenario is deleted (`model_run.from_scenario`, 188):
+  tell a run of the model by it, never by `scenarioId`. `citedBy` is what keeps the run for good
   (`{ kind: 'publication' | 'scenario' | 'signoff', id, name }[]`, oldest
   first, the citations you can see; a publication's `name` is the day it was
   published, `YYYY-MM-DD` in the project's time zone, a sign-off's the signer's name; `[]` when
@@ -2232,7 +2264,7 @@ model afterwards changes nothing about it. Its runs are ordinary runs with
 | POST | `/projects/:id/scenarios` | `{ name, baseRunId, description?, purposeAndNeed?, mitigation?, monitoring?, ops?, ownedNodeIds? }` | `201 { scenario, check, checkError }` (below). The base must be a run of this project that stored its inputs: `404 base run not found` otherwise; `409` with `loadRunInput`'s reason for a run saved before stored inputs (`this run is not reproducible from stored inputs: …`), and `409 that run is a scenario run; base a scenario on a run of the model itself`, and `409` for a forecast run (WP-2.12: a scenario is judged on history). `409 this project already has a scenario with that name` (a team scenario's name is unique among the project's team scenarios, ignoring case; an application's among its owner's applications: `409 you already have an application with that name`, 049) | editor |
 | GET | `/projects/:id/scenarios/:sid` | – | `{ scenario, check, checkError }` | viewer |
 | PATCH | `/projects/:id/scenarios/:sid` | `{ name?, description?, purposeAndNeed?, mitigation?, monitoring?, ops?, ownedNodeIds?, status? }` (at least one) | `200 { scenario, check, checkError }`. `ops` replaces the whole list. The three answers to the evidence report's Appendix C prompts change on the description's terms, in any status (a submission doesn't freeze them; an issued pack keeps what it printed). `ops` and `ownedNodeIds` change only while the scenario is a `draft`: `409 this scenario is submitted, so its ops, owned nodes and base run can't change`. `status` moves `draft → submitted → withdrawn \| decided`, `withdrawn → draft`; any other move is `409` | editor |
-| DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` (their snapshot keeps the ops), and its base run stops being cited. `409` for a `submitted` or `decided` scenario, and for one with a signed-off run (the signed run keeps its scenario; 072) | editor |
+| DELETE | `/projects/:id/scenarios/:sid` | – | `204`; its runs stay, with `scenarioId: null` but `fromScenario: true` (their snapshot keeps the ops: still scenario runs, never a base, the evidence or a publication; 188), and its base run stops being cited. `409` for a `submitted` or `decided` scenario, and for one with a signed-off run (the signed run keeps its scenario; 072) | editor |
 | POST | `/projects/:id/scenarios/:sid/runs` | `{ label? }` (default: the scenario's name) | `201 { run, removedRunIds, applied, classified }`, as `POST …/runs`: `run` is `RunMeta & { summary }` with `scenarioId`. `422 { error: "an op of this scenario doesn't apply to its base run", details: { problems: string[] } }` when any op doesn't apply (a result with an op silently skipped would not be the scenario); `409` when the base can't be rebuilt; `409 this scenario changed while it ran (its ops or base run); run it again` when its ops, base run or owned nodes changed while the engine ran, and `404` when it was deleted (nothing is stored in either case; a rename doesn't count); `400 model run failed: …` as for any run | editor |
 | POST | `/projects/:id/scenarios/:sid/rebase` | `{ baseRunId, dryRun? }` | `200 { scenario, applied, problems, classified }`: the ops re-applied to the other base; `problems` lists each op that no longer applies (`op 2 (node.set): node … not found`), or once for an edit group of `node.set` ops on one node that breaks a rule (`ops 2–4 (node.set, "Upper farm"): …`, [scenarios.md § Engine](./scenarios.md#engine-applyscenario)). Saves the new base (the ops are kept as they are, so a run is refused until they apply) unless `dryRun: true`. Same base checks as `POST`; `409` when the scenario isn't a draft (not for a dry run) | editor |
 
@@ -2761,7 +2793,12 @@ what](./allocations.md#who-sees-what)).
   run's per-unit daily series (`supplied`, `allocation_left_*`) still reach
   them ([followups.md § Allocations](./followups.md#allocations-wp-310)).
 - History: `allocation.created/changed/deleted/imported/import_deleted/viewer_units`; the
-  preview is exempt (it writes nothing).
+  preview is exempt (it writes nothing). `GET …/history` gives a viewer
+  `allocation.created/changed/deleted` without `registrationNo` and
+  `volumeM3PerYear` until an owner switches **What viewers see** on
+  (`app_audit_subject`, 190), and `GET …/runs/:runId/changes-since` lists
+  no registered-volume line to that viewer. The data-subject export carries
+  neither field in any allocation event.
 
 ## Publication
 
@@ -2890,6 +2927,9 @@ never a farm's row, name or id.
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
   key below `k` holders. A body without `token` (or `key`) is `400`.
+  When the published run is a forecast run, the series stops the day before
+  its first forecast day (190): the monthly means and the last 365 days are
+  the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
@@ -2982,11 +3022,20 @@ only propose.
 | GET | `/projects/:id/evaporation-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { dataset: EvaporationDataset \| null, datasets: { dataset, kind, version, synthetic }[], boundary: { featureId, name } \| null, target: 'pe' \| 'apan' \| null, proposal: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null, settings: { apanMm, peKind, peMm, dailyApan }, accepted: EvaporationAccepted[] }` (issue #326 B-evap, `geo/evaporationRoutes.ts`, [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)): the catchment boundary's 12 monthly means (Oct … Sep, mm, to 0.1) from the grid, area-weighted over the cells it covers, with the share of the boundary that has values; `target` is where the dataset's kind goes (`et0` → `pe`, GR4J's monthly PE; `apan` → `apan`, the A-pan row), never converted. `settings` is the saved settings' A-pan row, PE kind and monthly PE row (null under `pan`), and `dailyApan`, the days a daily A-pan record (`evap_apan_mm`) covers, `{ from, to }` to its last value, or null without one: it replaces the monthly A-pan row on those days, and the panel's confirmation says so. `proposal: null` without a dataset or a boundary; `{ problem }` when the grid can't stand for it (no value inside, under 50 % covered, too big). Writes nothing. `400` for an unknown dataset | viewer |
 | POST | `/projects/:id/evaporation-from-map` | `{ dataset }` | `200 { target, monthlyMm, dataset, revisionId }`: the 12 values, re-derived on the server from the boundary as it is, written into `settings.pe` (`{ kind: 'monthly', mm, source }`, the source naming the dataset; for a reference-ET grid) or `settings.apanMm` (for an A-pan grid), recorded as one settings revision whose reason cites the dataset, its version, period and method, and as an `evaporation_accepted` row (181). `400` for an unknown dataset, no catchment boundary, a boundary the grid can't summarise, or no evaporation in it | editor |
 
+- A feature's `name` (0–100 characters after trimming) is one line, as a
+  model name is (§ Model data; migration 192): the Map draws it as a label.
+  `POST`/`PATCH …/map/features`, the split's `names`, a reviewed import
+  row's `name` and the delineation accept's `name` refuse a line break, tab
+  or other control character with `400` (`cannot contain line breaks or
+  control characters`); the names read from a GeoJSON file and from the
+  river network are made one line instead (the engine's `oneLineName`), so a
+  file is never refused for them.
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
   areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
   `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
-  points and lines; `center` is a point itself, a polygon's centroid (its
+  points and lines (a parcel saved from a delineated piece: the piece's
+  area from the DEM's cells, its outline simplified); `center` is a point itself, a polygon's centroid (its
   largest part's), a line's middle vertex; `properties` holds only
   `description` and `ref` from a file. A boundary or parcel is a Polygon or
   MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
@@ -3035,10 +3084,11 @@ map feature like any other.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[] }`: the newest 10, any status. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
-| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId } }` | `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream; with this answer only, not stored). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included; security.md § Map uploads); `503` when the DEM can't be read | editor |
+| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[], request: DelineationRequest \| null }`: the newest 10 proposals, any status, and the project's newest delineation still with the background worker (queued or running), else null. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId }, background?: boolean }` | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km) or its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream; with this answer only, not stored). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
 | POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+| GET | `/projects/:id/map/delineation/requests/:rid` | – | `200 { request: DelineationRequest }`: a delineation the worker has, as it is now; `404` for one of another project | viewer |
 
 - `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
   'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
@@ -3046,9 +3096,21 @@ map feature like any other.
   dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
   createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
   `featureId` the accepted feature (`null` again once it is deleted).
+- `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
+  'proposed' | 'refused' | 'superseded', from, click, progress, error,
+  proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
+  `queued` / `running` while its job waits or runs (`progress` 0–100 while it
+  runs, a step a window); `proposed` with `proposal` (the project's open
+  proposal it made, decided by the routes above; `null` once pruned) and
+  `check`; `refused` with `refusal = { reason, message, larger? }`, the
+  reasons and sentences of the request's own 422 (and `off` when the DEM went
+  away first); `failed` when the job died (its `error`); `superseded` when the
+  same editor clicked again before it ran. The Map asks every 2 s while it
+  waits.
 - Each write is in the audit log (`map.delineation_proposed`,
   `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
-  kind, the area, the dataset; never the polygon). A stranger gets `404`.
+  kind, the area, the dataset; never the polygon; `background: true` on one
+  the worker made, as the editor who queued it). A stranger gets `404`.
 
 ### The elevation model's channels
 
@@ -3091,7 +3153,10 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-4`). `placedBy` is `matched` (on the channel matching
+  the map's (`start-6`; every `areaM2` and `totalAreaM2` is summed from
+  the DEM's cells, each at its own area on the ellipsoid, so the pieces add
+  up to the catchment exactly; `geometry` is simplified for the map and its
+  own area may differ a little). `placedBy` is `matched` (on the channel matching
   the river reach within 1 km of the click, `reach = { dataset, reachId,
   upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
   snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
@@ -3915,11 +3980,11 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event). An event's `subject` is read as the caller may see it (`app_audit_subject`, 190): an `allocation.created/changed/deleted` without `registrationNo` and `volumeM3PerYear` for a viewer until an owner lets viewers read each volume ([Allocations](#allocations)) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
-| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
+| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100). To a viewer who can't read each registered volume, neither side has the allocations (no registered-volume line) | viewer |
 | POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
 | GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length, …, siteNodeId }[] }` (kept: the newest 5, ≤ 180 days; `siteNodeId` = the flow record's gauge when the revision was kept, null = the outlet, 085) | viewer |
 | POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id; a flow record comes back at the site it had, `409` when that gauge is no longer in the model) | editor |

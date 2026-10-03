@@ -31,6 +31,13 @@ locals {
   worker_timeout_seconds  = 300
   jobs_visibility_seconds = 6 * local.worker_timeout_seconds
 
+  # A `delineate` job (a catchment too large for the request, up to 6 144
+  # cells a side) peaks near 1 GB (docs/design/delineation.md § Where it
+  # runs): with delineation_dem on, the worker gets at least this much,
+  # whatever worker_memory_mb says. More memory is also more CPU on Lambda.
+  delineation_worker_memory_mb = 2048
+  worker_memory_mb             = var.delineation_dem ? max(var.worker_memory_mb, local.delineation_worker_memory_mb) : var.worker_memory_mb
+
   # The worker runs jobs one at a time: a pool of 2 is plenty, and keeps
   # reserved concurrency x pool small against db.t4g.micro's ~80 connections.
   worker_database_url = "${local.database_url}&application_name=worker"
@@ -140,7 +147,7 @@ resource "aws_lambda_function" "worker" {
   runtime       = "nodejs24.x"
   architectures = ["arm64"]
   timeout       = local.worker_timeout_seconds
-  memory_size   = var.worker_memory_mb
+  memory_size   = local.worker_memory_mb
 
   # Bounds spend and DB connections (8 x a pool of 2), and how many jobs run at
   # once. At least the sum of the four SQS triggers' maximum_concurrency (jobs,
@@ -200,6 +207,9 @@ resource "aws_lambda_function" "worker" {
       # SES bounces and complaints (ses.tf): a record is read as one only
       # when it came from this queue (lambda-worker.ts fromMailEventsQueue).
       MAIL_EVENTS_QUEUE_ARN = aws_sqs_queue.mail_events.arn
+      # Catchment delineation's `delineate` job (map_data.tf worker_dem): the
+      # same DEM as the API's, empty while delineation_dem is off.
+      DEM_URL = var.delineation_dem ? "s3://${aws_s3_bucket.tiles.bucket}/${local.dem_key}" : ""
     }
   }
 
@@ -208,6 +218,7 @@ resource "aws_lambda_function" "worker" {
     aws_iam_role_policy.lambda_logs["worker"],
     aws_iam_role_policy.lambda_vpc_eni["worker"],
     aws_iam_role_policy.worker_lambda,
+    aws_iam_role_policy.worker_dem,
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
     aws_vpc_endpoint.secretsmanager,

@@ -3,6 +3,7 @@
 // translated pages word from their catalogue.
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { JobCollisionError } from '../jobs/queue.js';
 import { ApiError, ERROR_CODES, handleError, MACHINE_ERROR_CODES, mustChange } from './errors.js';
 
 function appThrowing(err: unknown) {
@@ -19,6 +20,12 @@ describe('handleError', () => {
 		const res = await appThrowing(ApiError.coded(429, 'signin_locked', 'too many sign-in attempts', { seconds: 60 })).request('/');
 		expect(res.status).toBe(429);
 		expect(await res.json()).toEqual({ error: 'too many sign-in attempts', code: 'signin_locked', params: { seconds: 60 } });
+	});
+
+	it('answers a job collision with a pending job the caller can’t see as 409 job_collision, not a 500 (issue #386)', async () => {
+		const res = await appThrowing(new JobCollisionError()).request('/');
+		expect(res.status).toBe(409);
+		expect(await res.json()).toEqual({ error: expect.stringMatching(/already queued or just starting/), code: 'job_collision' });
 	});
 
 	it('sends no code for an uncoded error (the client words it by status)', async () => {

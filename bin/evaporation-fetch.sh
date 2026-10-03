@@ -43,6 +43,8 @@ for ((y = FIRST; y <= LAST; y++)); do
 		curl --proto '=https' --proto-redir '=https' -fSL -C - -o "$nc.part" "$BASE/${y}_daily_pet.nc"
 		mv "$nc.part" "$nc"
 	fi
+	# No published checksum: held to bin/source-checksums.sha256, recorded on the first fetch (docs/maps.md § Checksums).
+	node "$ROOT/scripts/guards/source_checksums.mjs" "$nc"
 	(cd "$ROOT/backend" && pnpm exec tsx scripts/import-evaporation.ts --reduce "$CACHE" "$nc" --bbox "$BBOX")
 	rm -f "$nc"
 done

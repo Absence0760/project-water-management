@@ -42,6 +42,18 @@ describe('ProjectDetailsDraft', () => {
 		d.timeZone = '';
 		expect(d.problems).toHaveLength(2);
 	});
+	it('refuses a name that shows as nothing, and sends the name as the server stores it (issue #383)', () => {
+		const d = new ProjectDetailsDraft();
+		d.load(project());
+		d.name = '\u200b\u202e';
+		expect(d.problems).toEqual(['The project needs a name.']);
+		d.name = ' Vaal\u202e \n upper ';
+		expect(d.problems).toEqual([]);
+		expect(d.patch().name).toBe('Vaal upper');
+		// Only invisible characters added to the saved name change nothing.
+		d.name = 'Vaal\u2066';
+		expect(d.dirty).toBe(false);
+	});
 	it('a change made elsewhere keeps the edits, or follows the project when there are none', () => {
 		const d = new ProjectDetailsDraft();
 		d.load(project());

@@ -156,3 +156,23 @@ export function redactRunAllocations<T extends RunLike>(run: T): T {
 	if (out.summary?.allocations) out.summary = { ...out.summary, allocations: { ...out.summary.allocations, nodes: [] } };
 	return out;
 }
+
+/** The allocation events' fields about the registered user's allocation, not about whoever made the change. */
+export const ALLOCATION_EVENT_IDENTIFIERS = ['registrationNo', 'volumeM3PerYear'] as const;
+
+/**
+ * An audit event as the data-subject export carries it: an allocation event
+ * (allocation.created / changed / deleted) without the allocation's
+ * registration number, a unique identifier (POPIA s1), or its volume. They
+ * are the registered user's, not the exporting person's; what the person did
+ * stays. The History leaves them out for a viewer in the database
+ * (app_audit_subject, 190).
+ */
+export function withoutAllocationIdentifiers<T>(event: T): T {
+	if (!event || typeof event !== 'object') return event;
+	const e = event as { kind?: unknown; subject?: unknown };
+	if (typeof e.kind !== 'string' || !e.kind.startsWith('allocation.') || !e.subject || typeof e.subject !== 'object') return event;
+	const subject = { ...(e.subject as Record<string, unknown>) };
+	for (const k of ALLOCATION_EVENT_IDENTIFIERS) delete subject[k];
+	return { ...event, subject };
+}

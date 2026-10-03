@@ -1,11 +1,44 @@
 // The Map's delineation (issue #326 B-delineate; docs/design/delineation.md,
 // docs/ui.md § Map): what the sheet says about a proposal, pure so it is
 // tested without a browser.
-import type { DelineationProposal, DelineationState } from '$lib/api/types';
+import type { DelineationProposal, DelineationRequest, DelineationState } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 /** The proposal waiting for a decision, if any (at most one: a new one supersedes it). */
 export const openProposal = (s: DelineationState | null): DelineationProposal | null => s?.proposals.find((p) => p.status === 'proposed') ?? null;
+
+/** A delineation the background worker still has (queued or running): the sheet keeps asking for it. */
+export const isWaiting = (r: DelineationRequest | null | undefined): boolean => !!r && (r.status === 'queued' || r.status === 'running');
+
+/** How often the sheet asks the server about a waiting delineation (ms). */
+export const POLL_MS = 2000;
+
+/** Failed asks in a row before the sheet stops waiting for a delineation. */
+export const POLL_GIVE_UP = 5;
+
+/**
+ * After a failed ask about a waiting delineation (`failures` in a row,
+ * counting this one; `status` the HTTP status, if there was an answer): ask
+ * again, since a dropped connection or a 5xx says nothing about the job,
+ * which keeps running; give up after POLL_GIVE_UP in a row, or at once on a
+ * 404 (the request is gone, or another project's).
+ */
+export function afterPollError(failures: number, status: number | undefined): 'retry' | 'give_up' {
+	if (status === 404) return 'give_up';
+	return failures >= POLL_GIVE_UP ? 'give_up' : 'retry';
+}
+
+/** What the sheet says while the worker has it. */
+export function waitingText(r: DelineationRequest): string {
+	if (r.status === 'running') {
+		return `Working out the catchment in the background${r.progress ? ` (${Math.round(r.progress)} % through)` : ''}. A large catchment takes a minute or two.`;
+	}
+	return 'The catchment is too large to work out at once, so it is queued for the background. It takes a minute or two.';
+}
+
+/** The sentence for a background delineation that failed (its job died). */
+export const failedText = (r: DelineationRequest) =>
+	`The background delineation failed${r.error && r.error !== 'cancelled' ? `: ${r.error.replace(/\.$/, '')}` : ''}. Try again, or draw or import the boundary.`;
 
 /** The Copernicus licence's notice for adapted data (Art. 6(b)), plain text: a delineated polygon is adapted DEM data. */
 export const COPERNICUS_NOTICE =

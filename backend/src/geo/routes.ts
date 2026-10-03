@@ -18,6 +18,7 @@
 // the feature named), and the quaternary lookup only proposes values the
 // hydrologist accepts in Settings.
 import { createHash } from 'node:crypto';
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
@@ -27,11 +28,13 @@ import { beginModelChange, recordAudit, recordModelRevision } from '../history/r
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
+import { geometryAreaM2, polygonAreaM2 } from './area.js';
 import { partsWithin } from './splitCheck.js';
 import {
 	centerOf,
 	checkGeometry,
 	FEATURE_NAME_MAX,
+	featureNameOf,
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
@@ -86,7 +89,8 @@ const KIND_LABEL: Record<MapFeatureKind, string> = {
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
 const uuid = z.string().regex(UUID, 'not a valid id');
-const Name = z.string().trim().max(FEATURE_NAME_MAX);
+/** A feature name typed into a route: one line (issue #385; the Map draws it as a label), at most FEATURE_NAME_MAX characters. */
+const Name = z.string().trim().max(FEATURE_NAME_MAX).refine((s) => !hasNameControlChars(s), NAME_CONTROL_MESSAGE);
 const Lon = z.number().finite().min(-180).max(180);
 const Lat = z.number().finite().min(-90).max(90);
 
@@ -323,7 +327,7 @@ interface ImportRow {
 }
 type Made = { problems: GeoProblem[]; rows: ImportRow[] };
 
-const boundaryName = (name: string, fileName: string) => name || fileName.replace(/\.(geo)?json$/i, '').slice(0, FEATURE_NAME_MAX);
+const boundaryName = (name: string, fileName: string) => name || featureNameOf(fileName.replace(/\.(geo)?json$/i, ''));
 const mismatch = (f: ParsedFeature, kind: MapFeatureKind): GeoProblem => ({
 	feature: f.index,
 	message: `is a ${f.geometry.type}; ${KIND_LABEL[kind]} is a ${KIND_TYPES[kind].join(' or ')}`
@@ -556,7 +560,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 				if (checked.geometry.type !== 'Polygon' || checked.areaM2 === null) throw new ApiError(400, `Part ${i + 1} must be a polygon.`);
 				return { geometry: checked.geometry, areaM2: checked.areaM2 };
 			});
-			const whole = before.area_m2 ?? 0;
+			// The shape's own area, not its stored one: a delineated piece's area_m2 is its cells' (start-6), its outline simplified.
+			const whole = polygonAreaM2(ring ? [ring] : []);
 			const sum = parts[0]!.areaM2 + parts[1]!.areaM2;
 			const box = bboxOf(ring);
 			const inside = parts.every((p) => p.geometry.coordinates[0]!.every(([x, y]) => x >= box[0] - 1e-6 && x <= box[2] + 1e-6 && y >= box[1] - 1e-6 && y <= box[3] + 1e-6));
@@ -756,12 +761,15 @@ export const mapRoutes = new Hono<AuthEnv>()
 			if (!AREA_KINDS.includes(f.kind)) throw new ApiError(400, `${cap(KIND_LABEL[f.kind])}’s area is not a hydrological unit’s catchment area; use a farm parcel.`);
 			const change = await beginModelChange(db, id);
 			const areaKm2 = f.area_m2 / 1e6;
+			// A delineated piece's parcel stores its area from the DEM's cells (start-6), its outline simplified: say which.
+			const outlineM2 = geometryAreaM2(f.geometry) ?? 0;
+			const fromPolygon = Math.abs(outlineM2 - f.area_m2) <= 1e-6 * f.area_m2 + 0.01;
 			await db.query(`UPDATE node SET area_km2 = $3, area_source = 'map', area_feature_id = $4 WHERE id = $1 AND project_id = $2`, [nodeId, id, areaKm2, f.id]);
 			const label = f.name ? `“${f.name}”` : KIND_LABEL[f.kind];
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Area of ${n[0].name} from the map: ${label} (${areaKm2.toFixed(3)} km², computed from its polygon)`.slice(0, 500)
+				reason: `Area of ${n[0].name} from the map: ${label} (${areaKm2.toFixed(3)} km², ${fromPolygon ? 'computed from its polygon' : 'from the elevation model’s cells it was delineated from'})`.slice(0, 500)
 			});
 			return c.json({ nodeId, areaKm2, areaSource: 'map', areaFeatureId: f.id, revisionId: revision?.id ?? null });
 		});

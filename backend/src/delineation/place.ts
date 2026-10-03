@@ -14,8 +14,10 @@
 //     at the radius). 67–87 % placed right, none in a gully or on another
 //     river; no cell passing is "no match" and falls through to 2.
 //  2. Otherwise the most-drained cell within the snap radius (Snap Pour
-//     Point), and a warning when a channel with LARGER_FACTOR times its
-//     upstream cells runs within GUARD_RADIUS_M: it caught 61–100 % of that
+//     Point; the radius measured from the exact click to each cell's centre
+//     since delineate-4 / start-5, issue #387), and a warning when a channel
+//     with LARGER_FACTOR times its upstream cells runs within GUARD_RADIUS_M:
+//     it caught 61–100 % of that
 //     rule's wrong placements, with at most 5 % false alarms. The warning
 //     names that channel; the caller offers it, never moves there by itself
 //     (near a confluence it is the wrong river).
@@ -80,8 +82,8 @@ export function place(g: PlaceGrid, cx: number, cy: number, opts: { snapRadiusM:
 		});
 		if (best >= 0) return { cell: best, how: 'matched', larger: null };
 	}
-	const radius = Math.max(1, Math.round(opts.snapRadiusM / cellSizeM));
-	const cell = snap(nx, ny, acc, edge, Math.floor(cx), Math.floor(cy), radius);
+	// Measured from the exact click in metres, so the snap distance never exceeds snapRadiusM (issue #387).
+	const cell = snap(nx, ny, acc, edge, cx, cy, opts.snapRadiusM / cellSizeM);
 	if (cell === null) return null;
 	// The guard: the biggest channel within reach; if it has LARGER_FACTOR times the snapped cell's cells, offer its nearest
 	// cell (at least half the biggest's cells, so on that channel), not its most-drained one, which lies downstream at the disc's edge.

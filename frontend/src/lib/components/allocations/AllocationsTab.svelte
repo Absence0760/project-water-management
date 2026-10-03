@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	// Allocations (?tab=allocations, WP-3.10, issue #17 option A, docs/ui.md
 	// § Allocations): a run's modelled use against the registered volumes.
 	// The section header counts the volumes and the units above registered and
@@ -96,13 +97,13 @@
 	}
 
 	// --- which run: `run=`, else the published run (what members and farmers see), else the latest ---
-	const defaultRun = $derived(runList.find((r) => r.published && !r.scenarioId) ?? runList[0] ?? null);
+	const defaultRun = $derived(runList.find((r) => r.published && !isScenarioRun(r)) ?? runList[0] ?? null);
 	const runParam = $derived(url.searchParams.get('run'));
 	const named = $derived(runParam ? (runList.find((r) => r.id === runParam) ?? null) : null);
 	/** `run=` names a run that isn't in the list (deleted since): the default is shown, and said. */
 	const gone = $derived(!!runParam && !!runs && !named);
 	const run = $derived(named ?? defaultRun);
-	const runLabel = (r: RunMeta) => `${r.label || 'Untitled run'} · ${fmtDate(r.createdAt, true)}${r.published ? ' · published' : ''}${r.scenarioId ? ' · scenario' : ''}`;
+	const runLabel = (r: RunMeta) => `${r.label || 'Untitled run'} · ${fmtDate(r.createdAt, true)}${r.published ? ' · published' : ''}${isScenarioRun(r) ? ' · scenario' : ''}`;
 	function pickRun(id: string) {
 		void goto(withParam(url, 'run', id), { noScroll: true, keepFocus: true });
 	}
