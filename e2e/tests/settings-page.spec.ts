@@ -9,6 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { DEMO, KLEINBERG, seedExamplesOnce } from '../support/examples.ts';
+import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -233,6 +234,7 @@ test.describe('with a fitted example catchment', () => {
 
 test('a note or a quaternary lookup doesn’t save the settings: their forms aren’t nested in a settings form', async ({ page, owner }) => {
 	void owner;
+	await loadSyntheticQuaternaries();
 	const project = await createProject(page.request, 'Settings nested forms');
 	await openSettings(page, project.id);
 	const patches: string[] = [];
