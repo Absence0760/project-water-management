@@ -3231,6 +3231,36 @@ role and not before it.
         the projection (design §12: "compared with last season" from
         `lastSeason`, not `/history`); nothing on it calls them yet.
 
+## Tooling round 4 (2026-10-03)
+
+- [x] **Worktree databases collided.** `water_test_w<n>`, `water_w<n>` and
+      `water_e2e_<n>` hashed each worktree's path into 98 slots, and three
+      worktrees (`wm-r2-delineate-job`, `wm-r2-followups2`,
+      `wm-r3-licensing-authority`) all got `water_test_w3`: run at once, each
+      dropped the others' schema (missing tables, 500s on sign-up). **Done:**
+      a worktree's databases are named by 16 hex digits of a SHA-256 of its
+      real path (`water_test_w<tag>`, `water_w<tag>`,
+      `water_e2e_w<tag>_<slot>`; `backend/src/config/checkout.ts`), and its e2e
+      ports by a slot from a registry in the shared `.git`
+      (`e2e/support/slots.ts`, taken under a lock, a removed worktree's slot
+      taken back), so no two live worktrees share either. The main checkout
+      and CI keep `water`, `water_test`, `water_e2e`, :3101 and :7801. The old
+      databases are simply no longer used; testing.md § Several checkouts at
+      once has the command that drops them. This supersedes the 2026-09-25
+      e2e slot entry above (§ e2e runs from parallel worktrees).
+- [x] **CI's Postgres service image floated.** `ci.yml`'s two `services:
+      postgres` (db-test, e2e) ran `postgres:17-alpine` by tag, and
+      Dependabot updates neither a workflow's service images nor (on its own)
+      a digest it can't see. **Done:** both are pinned to the digest
+      docker-compose.yml gives the same image
+      (`postgres:17-alpine@sha256:b0f9560a…`, the tag's multi-arch index from
+      `docker buildx imagetools inspect`), and `pnpm check:pins`
+      (`serviceImageProblems` in `scripts/guards/check_playwright_pins.mjs`,
+      tests in `check_service_image_pins.test.mjs`) refuses a workflow
+      service image without a digest, one docker-compose.yml doesn't run, or
+      one whose digest differs from compose's, so a Dependabot compose bump
+      fails until ci.yml's services move with it.
+
 ## Pipelines
 
 - Releases are `web@X.Y.Z` / `backend@X.Y.Z` GitHub releases, run through a
