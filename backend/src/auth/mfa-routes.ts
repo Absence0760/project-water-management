@@ -18,7 +18,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { readJson } from '../http/body.js';
 import { requireUser, type AuthEnv } from './middleware.js';
-import { countAttempt, lockedMessage, toUser, USER_COLS, type UserRow } from './routes.js';
+import { countAttempt, lockedMessage, rehashFor, storeRehash, toUser, USER_COLS, type UserRow } from './routes.js';
 import { verifyPassword } from './password.js';
 import { mfaRequired } from './stepUp.js';
 import { trustedDevice, issueDevice } from './device.js';
@@ -97,8 +97,11 @@ export const mfaRoutes = new Hono<AuthEnv>()
 			logLoginFailed('/auth/mfa/totp/enrol', 'bad_password');
 			throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
 		}
+		// A legacy bcrypt hash is upgraded here too, while the password is in hand (auth/routes.ts storeRehash).
+		const upgraded = await rehashFor(body.password, row.password_hash);
 		const started = await withUser(userId, async (db) => {
 			await db.query('SELECT app_login_succeeded($1)', [row.email]);
+			await storeRehash(db, userId, row.password_hash, upgraded);
 			return startEnrolment(db, userId, row.email);
 		});
 		if (!started) throw ApiError.coded(409, 'mfa_already_enrolled', 'two-step sign-in is already on: turn it off first to set up another authenticator');

@@ -16,8 +16,11 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   and on the e2e API server (`PASSWORD_HASH_FAST=1`, an override Lambda
   refuses at startup) new hashes use the smallest parameters. An account
   hashed before 2026-10 has a **bcrypt** hash (`bcryptjs`, cost 12), which
-  still checks; its next successful sign-in replaces it with an Argon2id one
-  (only if it is still the hash just checked; it revokes no session). Until
+  still checks; its next successful sign-in, or adding an authenticator
+  (the other check that keeps the account; `rehashFor`/`storeRehash` in
+  `auth/routes.ts`), replaces it with an Argon2id one (only if it is still
+  the hash just checked; it revokes no session; issue #382). Changing or
+  resetting the password replaces it anyway. Until
   then bcrypt reads only the first 72 bytes of its password. A hash with
   other Argon2id parameters than new ones get is upgraded the same way, so
   raising them later needs no migration. Emails are `citext`, so lookups
