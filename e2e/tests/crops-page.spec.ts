@@ -467,7 +467,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				await region.focus();
 				await expect(region).toBeFocused();
 				if (await region.evaluate((el) => el.scrollWidth > el.clientWidth)) {
-					await page.keyboard.press('End');
+					await page.keyboard.press('ArrowRight');
 					await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
 				}
 				// The heat-shaded cells too: the scan runs with the table open.
@@ -493,9 +493,11 @@ test('in scenario override mode at 1024 px, the crop-factor grid fits its column
 	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
 	const mode = page.getByTestId('override-mode');
 	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
-	const factors = mode.locator('table.factors');
+	// The tables sit under the mode's banner (OverrideEditor's .tables), not inside it.
+	const factors = page.locator('table.factors');
+	await expect(factors).toHaveCount(1);
 	await expect(factors.getByLabel('Vines crop factor, Jan')).toBeVisible();
-	// Its wrap never scrolls sideways: the table fits, or (in a column under 44rem) its rows are cards.
+	// Its wrap never scrolls sideways: the table fits, or (in a column under 80rem) its rows are cards.
 	const wrap = factors.locator('xpath=..');
 	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

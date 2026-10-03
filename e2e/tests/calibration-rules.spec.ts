@@ -104,9 +104,15 @@ test('the flagged-days rule: its checkbox sits beside its words, and off and on 
 	const leaveOut = rules.getByRole('checkbox', { name: 'Leave out a water year by its flagged days' });
 	// Not stretched across its field: the box is box-sized and its words start right after it.
 	const box = (await leaveOut.boundingBox())!;
-	const words = (await rules.locator('label.check', { has: leaveOut }).getByText('Leave out a water year by its flagged days').boundingBox())!;
+	// The words are the label's own text node (no element of their own), so measure them with a range.
+	const wordsX = await rules.locator('label.check').filter({ has: page.getByRole('checkbox', { name: 'Leave out a water year by its flagged days' }) }).evaluate((label) => {
+		const text = [...label.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.includes('Leave out a water year by its flagged days'))!;
+		const range = document.createRange();
+		range.selectNodeContents(text);
+		return [...range.getClientRects()].find((r) => r.width > 0)!.x;
+	});
 	expect(box.width).toBeLessThanOrEqual(24);
-	expect(words.x - (box.x + box.width)).toBeLessThan(12);
+	expect(wordsX - (box.x + box.width)).toBeLessThan(12);
 
 	if (!(await leaveOut.isChecked())) await leaveOut.check();
 	const share = rules.getByLabel(/^When more than this share of its observed days are flagged/);

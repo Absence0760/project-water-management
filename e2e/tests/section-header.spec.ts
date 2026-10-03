@@ -50,14 +50,14 @@ test.describe('desktop', () => {
 		await expect(h.getByTestId('network-summary')).toContainText(/\d+ hydrological units? · \d+ dams? · \d+ gauges?/);
 		await expect(h.locator('details.grids-menu summary')).toHaveText(/Tables/);
 		const actions = h.getByRole('button');
-		await expect(actions).toHaveText(['+ Add node', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['+ Add node', '+ Add other user', 'Add data', 'Run model']);
 		await expectNoViolations(page);
 
 		// Crops: its summary line and Add crop.
 		await nav(page).getByRole('link', { name: 'Crops & demand' }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
 		await expect(h.getByTestId('crops-summary')).toContainText(/crops? · /);
-		await expect(actions).toHaveText(['+ Add crop', 'Add data', 'Run model']);
+		await expect(actions).toHaveText(['Load crop factors…', '+ Add crop', 'Add data', 'Run model']);
 
 		// Data: Add data is the section's main action, after the tab's Preview all data; no Run model here. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();

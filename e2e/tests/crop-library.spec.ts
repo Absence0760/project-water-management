@@ -196,7 +196,7 @@ test('Load crop factors opens from the Crops header and from a crop’s sheet', 
 	await page.getByRole('button', { name: 'Load crop factors…' }).click();
 	await expect(dialog(page)).toBeVisible();
 	await expect(dialog(page).getByLabel('Load factors for Orchard from')).toBeVisible();
-	await closeModal(page);
+	await dialog(page).getByRole('button', { name: 'Cancel' }).click();
 	await expect(dialog(page)).toHaveCount(0);
 
 	// From the sheet: the dialog opens over it, and closing it leaves the sheet open.

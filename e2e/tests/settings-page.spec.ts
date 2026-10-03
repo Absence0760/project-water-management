@@ -134,7 +134,7 @@ test('a dam evaporation preset fills the monthly factors and their source, needs
 	const project = await createProject(page.request, 'Lake preset');
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openSettings(page, project.id);
-	const preset = page.getByLabel('Dam evaporation preset');
+	const preset = page.getByLabel('Dam evaporation preset', { exact: true });
 	const source = page.getByLabel('Dam evaporation factor source');
 	// A new project has no A-pan: a WR90 preset can't convert its S-pan factors, and says so.
 	await preset.selectOption({ label: 'WR90 lake factors, WR90 pan conversion' });
@@ -357,7 +357,12 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	void owner;
 	const project = await createProject(page.request, 'Settings headings');
 	await openSettings(page, project.id);
-	const names = (id: string) => page.locator(`#${id}`).locator('h2, h3').evaluateAll((els) => els.map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
+	// The headings on the page: a closed notes drawer's title (a dialog, in the DOM while shut) is not one.
+	const names = (id: string) =>
+		page
+			.locator(`#${id}`)
+			.locator('h2, h3')
+			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
 	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
 	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
 	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
@@ -384,6 +389,8 @@ test('the long panels’ sub-groups are headings, in the order shown, and Fit th
 	expect(fit[0]).toBe('Fit the parameters');
 	expect(fit[1]).toBe('Fit automatically');
 
+	// A link from elsewhere (a fresh load: from this same page, a goto would only move to the fragment).
+	await page.goto('about:blank');
 	await page.goto(`/projects/${project.id}?tab=settings#set-fit`);
 	await expect(page.locator('#set-fit').getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
 });

@@ -178,9 +178,12 @@ test('the month fields show 12 345.5 and 0.0129 whole for an owner and a viewer,
 			// The previews write every figure as entered.
 			await expect(supply.getByTestId('hands-off-note')).toContainText('between 0.0129 and 12\u202f345.5 m³/day by month');
 			await expect(routing.getByTestId('river-to-dam-months-note')).toHaveText('River to dam takes between 0.0129 and 12\u202f345.5 m³/s by month. The one value above is not used.');
-			// Nothing in the sheet scrolls sideways.
+			// Nothing in the sheet scrolls sideways, but the jump row, which on a phone is one strip that does (ui.md § Node sheet).
 			const scrollers = await sheet.evaluate((d) =>
-				[d, ...d.querySelectorAll('*')].filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1).map((el) => el.className || el.tagName)
+				[d, ...d.querySelectorAll('*')]
+					.filter((el) => el.getAttribute('data-testid') !== 'node-sheet-jump')
+					.filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1)
+					.map((el) => el.className || el.tagName)
 			);
 			expect(scrollers).toEqual([]);
 			if (who === 'viewer') {

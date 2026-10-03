@@ -189,7 +189,7 @@ test('the node sheet’s save row lists its problems as links to where they are 
 	await answerConfirm(page, false, 'including any made on other pages');
 	await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Lower farm');
 	await sheet.getByRole('button', { name: 'Discard model changes' }).click();
-	await answerConfirm(page, true, 'Your unsaved changes to the network will be lost.');
+	await answerConfirm(page, true, 'Your unsaved changes to the network will be lost, including');
 	await expect(sheet).toContainText('Changes discarded. No unsaved changes');
 	await expect(sheet.getByRole('button', { name: 'Done' })).toBeFocused();
 });
