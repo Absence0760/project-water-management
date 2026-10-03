@@ -1603,6 +1603,26 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   and an insert's `created_by` is the signed-in user
   (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
+- **`delineation_request`** (`191_delineation_request.sql`,
+  [design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)):
+  a click handed to the background worker, too large for the request (or
+  sent there with `background`), and what came of it. `id`, `project_id`
+  (cascade), `job_id` (→ `job`, `SET NULL` when the 30-day purge takes it),
+  `status` (`queued` until the job writes the outcome, `proposed`,
+  `refused`, or `superseded` by the same editor's next click),
+  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
+  picked at a confluence, jsonb), `from_window` (the smallest window the
+  job tries), `proposal_id` (composite key → `delineation_proposal (id,
+  project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
+  `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
+  (the channel a `larger_channel` refusal offers), `check_note`,
+  `created_by` (→ `app_user`, `SET NULL`), `created_at`, `finished_at`
+  (set exactly when it leaves `queued`). RLS: viewers read, editors
+  insert (as themselves), update and delete; the job writes the outcome as
+  the editor who queued it. A finished request never changes but for its
+  two links clearing (`delineation_request_final`). The route keeps the
+  newest 20 finished a project. `job.kind` accepts `delineate`, and
+  `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.

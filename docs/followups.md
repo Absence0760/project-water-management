@@ -3774,13 +3774,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `pnpm dev:tiles:channels` step and the production tiles bucket, as
       vector PMTiles) and draw them like the basemap. Trigger: the first
       production deploy with `delineation_dem = true`.
-- [ ] **Delineation of catchments larger than about 100 km across**
-      (design/delineation.md § Where it runs): the API refuses rather than
-      cut one off, within its 30 s Lambda. Durable path: a `delineate` job
-      kind on the worker (300 s) with a larger window cap, the same code.
-      Trigger: a client asking to delineate a large river's catchment.
-      (Sub-catchments from clicks don't wait on it: a click past the window
-      is an inflow point, maps.md § Sub-catchments from clicks.)
+- [x] **Delineation of catchments larger than about 100 km across**
+      (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
+      Where it runs): a click still at the edge of the request's window
+      goes to a `delineate` job on the worker (191_delineation_request), the
+      same code with windows up to 6 144 cells (about 200 km) in its 300 s,
+      the worker at 2 048 MB with `delineation_dem` on; the Map waits for it
+      and decides the proposal as any other. Past 200 km it is still
+      refused, not cut off. (Sub-catchments from clicks don't use it: a
+      click past the window is an inflow point, maps.md § Sub-catchments
+      from clicks.)
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on
