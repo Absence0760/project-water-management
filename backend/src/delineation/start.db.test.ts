@@ -389,7 +389,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-7');
+		expect(methodVersion).toBe('start-8');
 		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
 		expect(plan.dropped).toEqual([]);

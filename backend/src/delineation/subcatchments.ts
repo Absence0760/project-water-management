@@ -26,8 +26,7 @@ import { simplifyRing, traceRings, type Pt } from './outline.js';
  * start-6: every area (each piece, the rest, the catchment, a no-land unit's total) summed from its cells, each cell's own area on the WGS84 ellipsoid, not the simplified outline's;
  * start-7 (the hydrologist's review, finding 3): Start and Divide place the outlet gauge and every point as Delineate does (each one's
  * nearby river reach looked up, its area matched, the river asked for at a confluence), keep each point's larger-channel warning and its
- * placement in the plan, take a delineated outlet's own cell (it was re-snapped up to 150 m downstream), and the method says what ran.
-;
+ * placement in the plan, take a delineated outlet's own cell (it was re-snapped up to 150 m downstream), and the method says what ran;
  * start-8 (issue #390): a point within JUNCTION_SIDE_M of a mapped junction kept on its river's side of the DEM's junction, and a junction placement on the river's own channel nearest the point, not at the junction.
  */
 export const START_METHOD_VERSION = 'start-8';
