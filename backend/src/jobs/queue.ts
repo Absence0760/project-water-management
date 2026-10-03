@@ -58,7 +58,7 @@ export interface EnqueueOptions {
  */
 export class JobCollisionError extends ApiError {
 	constructor() {
-		super(409, 'a pending job for the same work is waiting under someone else’s request; try again once it has run');
+		super(409, 'the same work is already queued or just starting; try again once it has run');
 		this.code = 'job_collision';
 	}
 }

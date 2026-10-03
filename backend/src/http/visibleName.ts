@@ -13,7 +13,7 @@
 //     the joiners some scripts need, are kept);
 //   - what is left, trimmed, must hold a letter, digit, symbol or punctuation
 //     mark, and fit the column's length (counted after cleaning).
-// The frontend checks the same rule before it sends (lib/text/visibleName.ts).
+// The frontend checks the same rule before it sends (frontend/src/lib/format/visibleName.ts).
 import { z } from 'zod';
 
 const INVISIBLE = /[\p{Cc}‪-‮⁦-⁩]/gu;
