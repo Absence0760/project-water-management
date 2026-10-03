@@ -22,6 +22,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { withParam } from '$lib/workspace/overlays';
 	import { holdAnchor } from '$lib/help/anchor';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
@@ -577,7 +578,7 @@
 				</div>
 			{/each}
 			<div class="field">
-				<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label></span>
+				<span class="lbl"><label for="gr4j-warmup">Warm-up <span class="u">(days)</span></label><HelpTip key="settings.gr4j" label="About the warm-up" /></span>
 				<NumberInput id="gr4j-warmup" min={0} max={3650} step={1} disabled={readonly} bind:value={s.gr4j.warmupDays} aria-describedby="gr4j-warmup-h" />
 				<span class="hint" id="gr4j-warmup-h">Days run before the first simulated day, repeating the start of the record, so the stores begin at a realistic level. Never shown or scored. Default 365.</span>
 				<FieldHistoryLine field="settings:gr4j.warmupDays" />
@@ -779,7 +780,7 @@
 			</div>
 		{:else}
 			<div class="field pan-preset">
-				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label></span>
+				<span class="lbl"><label for="st-pan-preset">Pan-coefficient preset</label><HelpTip key="settings.panCoefficient" label="About the pan-coefficient presets" /></span>
 				<select id="st-pan-preset" disabled={readonly} value={panPreset} onchange={(e) => {
 						applyPanPreset(e.currentTarget.value);
 						// Back to "Choose a preset…": panPreset was '' already, so setting it again doesn't touch the DOM.
@@ -1019,7 +1020,7 @@
 				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
-				<span class="hint" id="st-method-h">{method?.help} The resulting share per hydrological unit is shown on the Network tab.</span>
+				<span class="hint" id="st-method-h">{method?.help} Each hydrological unit's resulting share is in the <a href={withParam(page.url, 'grid', 'nodes')}>node table</a>'s In use column.</span>
 				<FieldHistoryLine field="settings:flowShareMethod" />
 			</div>
 			<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->

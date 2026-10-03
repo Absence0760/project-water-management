@@ -208,6 +208,65 @@ sometimes pulled a click onto the wrong channel; the placement rules above
 fix the cases it was meant to.
 
 
+## Confluences (third experiment)
+
+**What the first experiment missed.** It clicked each reach a cell above its
+lower end and scored the result against that same reach, so it never asked
+which of several rivers a click at a junction means; its "more than 1 km off
+the reach" check measured against the reach already chosen, so a wrong
+choice of reach could not fail it. The operator found it: a gauge on a
+junction (21.2608° E, 28.3262° S) was 32 m from a 67 km² tributary, 92 m
+from the 422 km² river above the junction and 102 m from the 497 km² river
+below it; the nearest line won, and Delineate gave a sound 66 km² catchment
+of the wrong river. WhiteboxTools' docs warned of exactly this ("outlet cells
+… near the confluence point of smaller tributary streams"); the warning was
+applied to the snap rule and not to the choice of reach.
+
+`backend/scripts/research/snap-confluence.ts` clicks 30–50 m off 60 real
+HydroRIVERS junctions where reaches of clearly different areas meet (≤ 1 500
+km², seed `confluence-1`):
+
+- **The nearest line is a coin toss:** it picked the river below the junction
+  at 25 junctions, the main river above it at 18 and the tributary at 17.
+- **The ambiguity is seen at all 60** (reaches within 200 m differing by
+  1.5×): the server now answers 422 `confluence` with each river, and the
+  editor picks.
+- **Matching the picked river by area isn't enough.** Within 1 km, 76 % of
+  the 180 river choices landed within ½–2× of their area (15 % wrong
+  unflagged); within 2.5 km, 89 % (7 %). But area can't tell the river below
+  from the main river above, which differ only by the tributary: matched by
+  area, the two landed on **the same cell at 29 of 60 junctions (48 %)**, so
+  for one of them the editor's pick was silently ignored.
+- **The DEM's own junction (`junction.ts`)**: match the tributary (its area is
+  distinct), follow it downhill to where an inflow of at least half the main
+  river's area joins (capped at a quarter of the window's area), and that is
+  the junction: the river below is that cell, each river above its own
+  branch's last cell before it. Found at 50 of 60 junctions; at **all 50**
+  the river below came out as the main river above plus the tributary
+  (within 5 %), i.e. on the right side. Its ½–2× score is lower (77 %) because
+  the DEM's and HydroRIVERS' areas disagree on large rivers, not because of
+  sides.
+- **As built:** the junction where found, else the area match within 2.5 km
+  (the river having been named, the wider radius measured better): 85 % of
+  river choices within ½–2×, 3 % flagged, 12 % not.
+
+## What these samples can't show (check before trusting a number)
+
+Written after the confluence miss, so the next experiment states its blind
+spots before it runs:
+
+- **Where the clicks are.** HydroRIVERS vertices, and now junctions; not OSM
+  waterways, not the middle of a long reach far from its vertices, not dam
+  walls, not gauging stations' published positions.
+- **What the reference is.** HydroRIVERS' own area: a method that agrees with
+  HydroRIVERS scores well even where both are wrong. An independent check
+  would be DWS gauging stations' published catchment areas (licence
+  unconfirmed, maps.md § Sources).
+- **Which river.** The ½–2× test can't see a wrong river of similar size, or
+  the wrong side of a junction; the junction run measures sides directly.
+- **Scale.** Reaches up to 1 500 km² and junctions of up to 1 500 km²; main
+  stems only for being on the trunk.
+
 ## Limits of this evidence
 
 - The reference is HydroRIVERS' own area, from 15″ HydroSHEDS: a 50 %

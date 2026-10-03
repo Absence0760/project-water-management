@@ -2277,7 +2277,12 @@ itself.
   every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
-  The flow share in use (with the Settings method) and its total are shown.
+  The flow share in use (with the Settings method) and its total are shown;
+  computed, it isn't a field, but it has its ⓘ (the Flow share glossary
+  entry) and a field-guide row like the fields, and the table's intro and the
+  one-node form link "Settings & calibration" to the method
+  (`?tab=settings#set-share`). The method's hint in Settings links back to
+  the node table.
   The one-node form and the view-only table show thousands separators
   (300 000, the app's usual `fmtNum` style, § Number style) on the non-% fields; a field
   switches to the plain number while it is being edited, and typed or pasted
@@ -2954,7 +2959,11 @@ map" card) stays the schematic; this is the geography.
   metres off the channel the elevation model sees. Use that channel, or
   keep your point if you meant the small one.", with **Use that channel**
   (primary: the coordinates move to it and it delineates there) and **Keep
-  my point** (delineates the point as asked, `keepPoint`). The proposal is drawn dashed in teal
+  my point** (delineates the point as asked, `keepPoint`). A point at a
+  confluence shows "This point is at a confluence. Which river do you mean?
+  The outlet goes on the channel whose area matches it." with one button
+  per river ("The river below the junction, 497 km²", "The main river above
+  the junction, 422 km²", "The tributary above the junction, 67 km²"). The proposal is drawn dashed in teal
   with its outlet over the features (`mapStyle.ts` `proposalLayers`, framed
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
@@ -3009,7 +3018,11 @@ map" card) stays the schematic; this is the geography.
   no channel near the click matches it: check it is the right stream"), or
   under 1 km² upstream ("very little drains here: it probably missed the
   channel; …"); or why it is not a piece (an inflow point, a click that
-  doesn't drain to the lowest). A line with the focus or the pointer lights
+  doesn't drain to the lowest). A click at a confluence waits in a warning
+  box ("Click 2 is at a confluence. Which river do you mean? …") with a
+  button per river and **Drop the click**; picked, it goes at the elevation
+  model's junction ("at the elevation model's junction, on river reach
+  …"). A line with the focus or the pointer lights
   its piece, and a piece under the pointer lights itself. Under the lines:
   the total ("546.66 km² in 3 sub-catchments. A proposal from …: check each
   piece against the map before you save."). **Enter coordinates** (folded,

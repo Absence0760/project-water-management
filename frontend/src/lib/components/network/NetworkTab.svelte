@@ -615,7 +615,7 @@
 			</div>
 		{:else}
 		<p class="muted small intro">
-				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
+				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (<a href="?tab=settings#set-share">Settings &amp; calibration</a>){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
 				<span class="wide-only">The ⓘ buttons and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<div class="table-wrap net-wrap">
@@ -639,9 +639,10 @@
 									<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
 								</th>
 							{/each}
-							<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each hydrological unit receives with the method in Settings & calibration.">
+							<!-- Computed, not a field, so it isn't in TABLE_FIELDS: its ⓘ is the flow-share glossary entry. -->
+							<th scope="col" class="num fh">
 								<span class="fh-l">In use</span>
-								<span class="fh-u"><span class="u">%</span></span>
+								<span class="fh-u"><span class="u">%</span><HelpTip key="flow-share" label="About the flow share in use" /></span>
 							</th>
 						</tr>
 					</thead>
@@ -780,6 +781,7 @@
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
 					{/each}
+					<div><dt>{GROUPS.share}: In use (%)</dt><dd>The hydrological unit's share of catchment natural flow and of the EWR with the method chosen in <a href="?tab=settings#set-share">Settings &amp; calibration</a> (by area, high/low MAP split or manual), from the saved settings. Computed, not edited; the shares should add up to 100 %.</dd></div>
 				</dl>
 			</details>
 			{#if !readonly}

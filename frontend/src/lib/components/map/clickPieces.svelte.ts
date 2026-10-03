@@ -11,7 +11,8 @@
 // (off the elevation model, a catchment too large) is taken back with the
 // reason, so the clicks before it keep working.
 import type { ClickPieces, MapFeature, MapPosition } from '$lib/api/types';
-import { largerLine } from './largerChannel';
+import { confluenceOf, largerLine } from './largerChannel';
+import type { ConfluenceChoice } from '$lib/api/types';
 import { interiorPoint, pieceTintsFor, type PiecesShape, type ProposalPiece } from './pieces';
 
 /** The map's shape for an answer: one piece per click, numbered by click, the lowest click as the outlet and every kept click marked. Pure. */
@@ -60,7 +61,11 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
-	const placed = p.reach ? ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})` : '';
+	const placed = !p.reach
+		? ''
+		: p.placedBy === 'junction'
+			? ` · at the elevation model’s junction, on river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`
+			: ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`;
 	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the channel` : '';
 	// A larger channel nearby explains a small piece better than the other warnings do.
 	const warn = p.larger
@@ -76,7 +81,8 @@ export function pieceLine(r: ClickPieces, click: number): string {
 /** The pieces Save keeps: whole and outlined. */
 export const savable = (r: ClickPieces | null) => (r ? r.pieces.filter((p) => !p.open && p.geometry && p.areaM2 !== null) : []);
 
-type Click = { lon: number; lat: number };
+/** A click; `reach` is the river it means, picked at a confluence. */
+type Click = { lon: number; lat: number; reach?: { dataset: string; reachId: number } };
 type Fetch = (clicks: Click[]) => Promise<ClickPieces>;
 type Save = (clicks: Click[]) => Promise<{ features: MapFeature[]; summary: string }>;
 
@@ -89,6 +95,8 @@ export class ClickDivider {
 	error = $state<string | null>(null);
 	/** The last change, for a polite live region. */
 	said = $state('');
+	/** A click held back at a confluence: the clicks it would make and which one it is, and the rivers to pick from. */
+	pendingChoice = $state.raw<{ clicks: Click[]; click: number; choices: ConfluenceChoice[] } | null>(null);
 	/** The answers before each click, for Undo without asking again. */
 	#history: { clicks: Click[]; result: ClickPieces | null }[] = [];
 	#seq = 0;
@@ -122,8 +130,26 @@ export class ClickDivider {
 		);
 	}
 
+	/** The river picked for the click held at a confluence: routed with it. */
+	async chooseReach(choice: Pick<ConfluenceChoice, 'dataset' | 'reachId'>) {
+		const p = this.pendingChoice;
+		if (!p || this.busy === 'save') return;
+		this.pendingChoice = null;
+		await this.#route(
+			p.clicks.map((c, k) => (k === p.click ? { ...c, reach: { dataset: choice.dataset, reachId: choice.reachId } } : c)),
+			p.click
+		);
+	}
+
+	/** Drop the click held at a confluence. */
+	cancelChoice() {
+		this.pendingChoice = null;
+		this.said = 'Dropped the click at the confluence.';
+	}
+
 	/** Route `clicks`, `changed` the index of the click that is new or moved (its piece is what the live line reports). */
 	async #route(clicks: Click[], changed: number) {
+		this.pendingChoice = null;
 		const before = { clicks: this.clicks, result: this.result };
 		this.clicks = clicks;
 		this.error = null;
@@ -151,6 +177,14 @@ export class ClickDivider {
 			// Taken back: the clicks before it still divide as they did.
 			this.clicks = before.clicks;
 			this.result = before.result;
+			// At a confluence the click waits for the editor to pick the river (chooseReach), not refused.
+			const junction = confluenceOf(err);
+			if (junction && junction.click !== null) {
+				this.pendingChoice = { clicks, click: junction.click, choices: junction.choices };
+				this.error = null;
+				this.said = `Click ${junction.click + 1} is at a confluence: pick the river you mean.`;
+				return;
+			}
 			this.error = `${changed === clicks.length - 1 && clicks.length > before.clicks.length ? 'Click not added' : `Click ${changed + 1} not moved`}: ${err instanceof Error ? err.message : String(err)}`;
 			this.said = this.error;
 		} finally {
@@ -159,6 +193,7 @@ export class ClickDivider {
 	}
 
 	undo() {
+		this.pendingChoice = null;
 		const prev = this.#history.pop();
 		if (!prev) return;
 		this.#seq++;
@@ -172,6 +207,7 @@ export class ClickDivider {
 
 	clear() {
 		this.#seq++;
+		this.pendingChoice = null;
 		this.#history = [];
 		this.clicks = [];
 		this.result = null;
