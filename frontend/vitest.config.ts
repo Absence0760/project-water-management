@@ -15,6 +15,17 @@ export default defineConfig({
 	},
 	test: {
 		environment: 'node',
+		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
+		// gate. No thresholds, on purpose: a number to hit invites tests written
+		// for the number. Read it for what no test reaches (docs/testing.md
+		// § Coverage).
+		// art.generated.ts: the landing page's generated art data.
+		coverage: {
+			provider: 'v8',
+			include: ['src/**/*.{ts,svelte}'],
+			exclude: ['src/**/*.test.ts', 'src/**/__fixtures__/**', 'src/lib/components/landing/art.generated.ts'],
+			reporter: ['text-summary', 'json-summary', 'html']
+		},
 		// Two projects. Under `environment: 'node'` vite-plugin-svelte compiles a
 		// `.svelte.ts` module for the server, where `$effect` and `$effect.root`
 		// are no-ops: a state class whose constructor starts an `$effect` (the

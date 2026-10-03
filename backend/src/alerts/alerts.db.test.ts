@@ -1036,4 +1036,57 @@ describe('a failed send is logged without personal data', () => {
 		await asOwner('DELETE FROM alert_delivery WHERE event_id = $1', [e.id]);
 		await reset();
 	});
+
+	it('a digest that fails to send keeps its lines for the next digest run, logged by code, and the next run sends it', async () => {
+		const { id: pid } = await makeProject(owner, 'Digest send fails');
+		const u = await signUp('Adigestfail');
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: u.email, role: 'editor' })).status).toBe(201);
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3) RETURNING id`, [pid]);
+		const [e] = await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'cleared', 5, '{"days":5,"of":14,"from":"2026-09-12","to":"2026-09-25","madeOn":"2026-09-11"}') RETURNING id`, [rule.id, pid]);
+		// Queued at 05:30 SAST on the 26th; 06:30 SAST is past that digest day's 06:00.
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode, status, created_at) VALUES ($1, $2, $3, 'daily_digest', 'digest', '2026-09-26T03:30:00Z')`, [e.id, u.id, pid]);
+		const row = async () => (await asOwner(`SELECT status, reason FROM alert_delivery WHERE event_id = $1 AND user_id = $2`, [e.id, u.id]))[0];
+		const rejected = Object.assign(new Error(`Email address is not verified: ${u.email}`), { name: 'MessageRejected' });
+		const push = vi.spyOn(outbox, 'push').mockImplementation(() => {
+			throw rejected;
+		});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			expect((await sendAlerts({ now: new Date('2026-09-26T04:30:00Z') })).failed).toBe(1);
+			const lines = error.mock.calls.map((c) => c.join(' '));
+			expect(JSON.parse(lines.find((l) => l.includes('alert_digest_send_failed'))!)).toEqual({ event: 'alert_digest_send_failed', userId: u.id, error: 'MessageRejected' });
+			for (const l of lines) expect(l).not.toContain(u.email);
+		} finally {
+			push.mockRestore();
+			error.mockRestore();
+		}
+		expect(await row()).toEqual({ status: 'digest', reason: 'send failed (MessageRejected)' });
+		expect(mailsTo(u)).toEqual([]);
+		// The next run, with the transport back, sends the same line.
+		await sendAlerts({ now: new Date('2026-09-26T04:45:00Z') });
+		expect(await row()).toMatchObject({ status: 'sent' });
+		expect(mailsTo(u).map((m) => m.subject)).toEqual(['Your alerts for Digest send fails — Water Management']);
+	});
+
+	it('without the token secret nothing is sent (no unsubscribe link can be signed) and the delivery waits', async () => {
+		await reset();
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'job_dead', 1) RETURNING id`, [projectId]);
+		const [e] = await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'firing', 1, '{"count":1}') RETURNING id`, [rule.id, projectId]);
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [e.id, owner.id, projectId]);
+		const before = outbox.length;
+		vi.stubEnv('ALERTS_TOKEN_SECRET', '');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			expect(await sendAlerts()).toMatchObject({ sent: 0, failed: 0 });
+			expect(error.mock.calls.map((c) => c.join(' ')).some((l) => l.includes('alerts_not_sent'))).toBe(true);
+		} finally {
+			vi.unstubAllEnvs();
+			error.mockRestore();
+		}
+		expect(outbox.length).toBe(before);
+		expect(await asOwner(`SELECT status FROM alert_delivery WHERE event_id = $1`, [e.id])).toEqual([{ status: 'pending' }]);
+		// Positive control: with the secret back, the same delivery goes.
+		expect((await sendAlerts()).sent).toBe(1);
+		await reset();
+	});
 });

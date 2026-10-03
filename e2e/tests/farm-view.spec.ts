@@ -305,6 +305,51 @@ test('“I understand” pressed without a signal shows the figures and is recor
 	await expect(title).toHaveCount(0);
 });
 
+// The same kept press, refused: the notice changed while the phone was
+// offline, so the press it carries is for a version the server no longer
+// holds (409 farm_notice_changed; the server side is auth.db.test.ts). The
+// page drops the press and shows the notice again, and the account records
+// nothing: the figures never stay up under a notice the farmer didn't see.
+// The browser's request names an older version, as a phone still holding the
+// previous release would; the server's refusal is real, not a stub.
+test('a press kept offline for a notice that has since changed is refused, and the notice shows again', async ({ page, context, signIn: signInAs }) => {
+	await page.setViewportSize(PHONE);
+	const wua = await signInAs('Changed notice WUA');
+	const project = await seedRunnableProject(wua.page.request, 'Changed notice catchment');
+	const runId = await createRun(wua.page.request, project.id, 'Baseline');
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	const farmer = await register(page.context().request, 'Changed Notice Farmer', { farmNotice: false });
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.email, project.id);
+	const current = async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { farmNoticeCurrent: boolean } }).user.farmNoticeCurrent;
+
+	await page.goto(`/farm/${project.id}`);
+	const title = page.getByRole('heading', { level: 1, name: 'Before you look at your farm' });
+	await expect(title).toBeVisible();
+
+	await context.setOffline(true);
+	await page.getByRole('button', { name: 'I understand' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toBeVisible();
+
+	await page.route('**/auth/me/farm-notice', (route) => route.continue({ postData: JSON.stringify({ version: '0' }) }));
+	const sent = page.waitForResponse((r) => r.url().endsWith('/auth/me/farm-notice') && r.request().method() === 'POST');
+	await context.setOffline(false);
+	const refused = await sent;
+	expect(refused.status()).toBe(409);
+	expect(await refused.json()).toMatchObject({ code: 'farm_notice_changed' });
+
+	await expect(title).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toHaveCount(0);
+	expect(await current()).toBe(false);
+
+	// The press is gone from the phone: a reload asks again rather than showing the figures.
+	await page.unroute('**/auth/me/farm-notice');
+	await page.reload();
+	await expect(title).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Water you received this season' })).toHaveCount(0);
+});
+
 test('WUA staff preview a farm as its farmer sees it, under a banner', async ({ page, browser }) => {
 	const farmerContext = await browser.newContext();
 	const farmer = await farmerContext.newPage();

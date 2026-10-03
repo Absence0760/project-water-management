@@ -1,6 +1,7 @@
 // GeoJSON checks (geo/geojson.ts): what the map refuses, and why, before
 // anything is stored.
 import { describe, expect, it } from 'vitest';
+import { circle, sawtooth } from '../__tests__/shapes.js';
 import {
 	centerOf,
 	checkGeometry,
@@ -232,30 +233,16 @@ describe('proposing each feature’s kind (issue #326 D2)', () => {
 	});
 });
 
-/** A sawtooth of `n` edges across [-1, 1] stacked northwards, closed round the west: a simple ring whose edges all overlap in longitude. */
-export const sawtooth = (n: number, x0 = -1, x1 = 1, dy = 1e-6): Position[] => {
-	const ring: Position[] = [];
-	for (let k = 0; k < n; k++) ring.push([k % 2 ? x1 : x0, k * dy]);
-	const top = ring[ring.length - 1]![1];
-	ring.push([x0 - 1, top], [x0 - 1, 0], ring[0]!);
-	return ring;
-};
-
 describe('the self-intersection sweep is bounded (round-4 hardening)', () => {
-	it('refuses a 50 000-vertex sawtooth (every edge overlapping in longitude) in well under a second; it used to take ~9 s', () => {
-		const t = performance.now();
-		const r = checkGeometry({ type: 'Polygon', coordinates: [sawtooth(GEO_MAX_VERTICES - 10)] });
-		expect(performance.now() - t).toBeLessThan(1_000);
-		expect(r).toEqual({ problem: expect.stringMatching(/too complex/) });
+	// The sweep's work is bounded by a count (GEO_MAX_PAIR_CHECKS), so a refusal
+	// as too complex is the proof the bound held. How long it takes is a
+	// wall-clock claim: geojson.perf.test.ts (the perf project).
+	it('refuses a 50 000-vertex sawtooth (every edge overlapping in longitude) as too complex; it used to take ~9 s', () => {
+		expect(checkGeometry({ type: 'Polygon', coordinates: [sawtooth(GEO_MAX_VERTICES - 10)] })).toEqual({ problem: expect.stringMatching(/too complex/) });
 	});
 
 	it('still takes a 50 000-vertex circle, and a short sawtooth', () => {
-		const n = GEO_MAX_VERTICES - 1;
-		const circle: Position[] = Array.from({ length: n }, (_, i) => [20 + 0.5 * Math.cos((2 * Math.PI * i) / n), -33 + 0.5 * Math.sin((2 * Math.PI * i) / n)]);
-		circle.push(circle[0]!);
-		const t = performance.now();
-		expect(checkGeometry({ type: 'Polygon', coordinates: [circle] })).toHaveProperty('geometry');
-		expect(performance.now() - t).toBeLessThan(2_000);
+		expect(checkGeometry({ type: 'Polygon', coordinates: [circle(GEO_MAX_VERTICES - 1)] })).toHaveProperty('geometry');
 		expect(checkGeometry({ type: 'Polygon', coordinates: [sawtooth(200)] })).toHaveProperty('geometry');
 	});
 

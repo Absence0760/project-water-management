@@ -6,11 +6,11 @@
 // The render itself (Chromium + MinIO) is reports/render.db.test.ts.
 import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, lastMailTo, monthly, node, retirePendingJobs, signUp } from '../__tests__/helpers.js';
 import { newToken } from '../auth/tokens.js';
 import { withUser } from '../db/tx.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
-import { SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
+import { acceptRenderResult, SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
 import { finishReport, loadReport, REPORTS_PER_HOUR } from './store.js';
 import { cannedPolicy } from './cloudfrontSign.js';
 import { issueRenderToken } from './tokens.js';
@@ -238,6 +238,49 @@ describe('the renderer’s answer (production)', () => {
 		expect(await requests(f)).toHaveLength(1);
 		expect((await report(f)).status).toBe('failed');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+});
+
+// The renderer Lambda's answer (REPORT_RENDERER=sqs): the worker hands each
+// render-results message to acceptRenderResult, which queues the result as a
+// job of the person who asked, so storing the PDF runs under their RLS
+// (lambda-worker.ts; the pack's twin is packs.db.test.ts).
+describe('acceptRenderResult (the renderer’s answer)', () => {
+	const ok = { ok: true as const, pages: 2, bytes: 1024, ms: 50 };
+	const answer = (reportId: string) => acceptRenderResult({ v: 1, type: 'rendered', reportId, result: ok });
+	const resultJobs = (reportId: string) =>
+		asOwner(`SELECT acting_user_id AS "actingUserId", dedupe_key AS "dedupeKey", payload->'result' AS result FROM job WHERE kind = 'report_render' AND payload->>'reportId' = $1 AND payload ? 'result'`, [reportId]);
+	async function requested(u: User, projectId: string) {
+		const res = await u.call('POST', `/projects/${projectId}/reports`, {});
+		expect(res.status).toBe(202);
+		return (await asOwner('SELECT id FROM report WHERE job_id = $1', [res.body.jobId]))[0].id as string;
+	}
+
+	it('queues the result as the requester’s job, once however often it is redelivered; an unknown report is not queued', async () => {
+		const owner = await signUp('RrOwner');
+		const viewer = await signUp('RrViewer');
+		const { projectId } = await withRun(owner, 'Render results');
+		await member(owner, projectId, viewer, 'viewer');
+		const reportId = await requested(viewer, projectId);
+		expect(await answer(reportId)).toBe('queued');
+		expect(await answer(reportId)).toBe('queued');
+		expect(await resultJobs(reportId)).toEqual([{ actingUserId: viewer.id, dedupeKey: `report_result:${reportId}`, result: ok }]);
+		expect(await answer(crypto.randomUUID())).toBe('unknown_report');
+		await retirePendingJobs(projectId);
+	});
+
+	it('refuses the result of someone who has since left the project, and queues nothing (positive control: a member’s is queued)', async () => {
+		const owner = await signUp('RrOwner2');
+		const leaver = await signUp('RrLeaver');
+		const { projectId } = await withRun(owner, 'Render results, left');
+		await member(owner, projectId, leaver, 'viewer');
+		const theirs = await requested(leaver, projectId);
+		const owners = await requested(owner, projectId);
+		expect((await owner.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBe(204);
+		expect(await answer(theirs)).toBe('refused');
+		expect(await resultJobs(theirs)).toEqual([]);
+		expect(await answer(owners)).toBe('queued');
+		await retirePendingJobs(projectId);
 	});
 });
 

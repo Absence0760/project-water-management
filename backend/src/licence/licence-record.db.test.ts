@@ -4,7 +4,7 @@
 // and a team that keeps public records (NARSSA): names stay in its projects'
 // history and its projects and the team are kept until the client confirms
 // their disposal. Synthetic data only.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { asOwner, mailCount, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { outbox } from '../mail/transport.js';
@@ -91,6 +91,38 @@ describe('the licence record', () => {
 		expect(res.body.licenceRecord.reviewDueOn).toBe(plusYears(today(), 5));
 		const events = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'licence.confirmed'`, [projectId]);
 		expect(events.at(-1)?.subject).toMatchObject({ previousDueOn: '2020-01-01', reviewDueOn: plusYears(today(), 5) });
+	});
+});
+
+describe('a licence-record notice that fails to send', () => {
+	it('is counted and logged as the line the mail-send-failed alarm counts, without the address, and the review is asked again a month later', async () => {
+		const u = await signUp('Lrfail');
+		const pid = (await u.call('POST', '/projects', { name: 'Failing record' })).body.project.id as string;
+		await asOwner(`UPDATE project SET record_review_due_on = current_date - 1 WHERE id = $1`, [pid]);
+		const mine = () => outbox.filter((m) => m.to === u.email && m.kind === 'licence_record');
+		const rejected = Object.assign(new Error(`Email address is not verified: ${u.email}`), { name: 'MessageRejected' });
+		const push = vi.spyOn(outbox, 'push').mockImplementation((...mails) => {
+			if (mails.some((m) => m.to === u.email)) throw rejected;
+			return Array.prototype.push.apply(outbox, mails);
+		});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			expect((await sendLicenceRecordNotices({ operatorEmail: '' })).failed).toBeGreaterThanOrEqual(1);
+			const lines = error.mock.calls.map((c) => c.join(' '));
+			// infra/alarms.tf's metric filter: { $.message.event = "mail_send_failed" }.
+			expect(lines.map((l) => JSON.parse(l))).toContainEqual({ event: 'mail_send_failed', kind: 'licence_record', error: 'MessageRejected' });
+			for (const l of lines) expect(l).not.toContain(u.email);
+		} finally {
+			push.mockRestore();
+			error.mockRestore();
+		}
+		expect(mine()).toEqual([]);
+		// Handed out once (app_licence_record_due): not again the same month, but the next month's reminder reaches them.
+		await sendLicenceRecordNotices({ operatorEmail: '' });
+		expect(mine()).toEqual([]);
+		await asOwner(`UPDATE project SET record_reminded_at = now() - interval '32 days' WHERE id = $1`, [pid]);
+		await sendLicenceRecordNotices({ operatorEmail: '' });
+		expect(mine()).toHaveLength(1);
 	});
 });
 

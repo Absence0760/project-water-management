@@ -16,6 +16,19 @@ import { defineConfig } from 'vitest/config';
 //          the same test database as `db`, so never run the two at once.
 export default defineConfig({
 	test: {
+		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
+		// gate. No thresholds, on purpose: a number to hit invites tests written
+		// for the number. Read it for what no test reaches (docs/testing.md
+		// § Coverage).
+		// The db project reaches the routes, so its run writes its own report
+		// (`test:db:coverage`, coverage/db); each run empties only its own folder.
+		coverage: {
+			provider: 'v8',
+			reportsDirectory: 'coverage/unit',
+			include: ['src/**/*.ts'],
+			exclude: ['src/**/*.test.ts', 'src/__tests__/**'],
+			reporter: ['text-summary', 'json-summary', 'html']
+		},
 		projects: [
 			{
 				test: {

@@ -22,12 +22,14 @@
 	"scripts": {
 		"check": "tsc -p tsconfig.json --noEmit",
 		"test": "vitest run --project unit",
+		"test:coverage": "vitest run --project unit --coverage",
 		"test:watch": "vitest",
 		"test:perf": "vitest run --project perf",
 		"gen:liability": "tsx scripts/gen-liability.ts"
 	},
 	"devDependencies": {
 		"@types/node": "24.19.0",
+		"@vitest/coverage-v8": "^5.0.2",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2",
 		"vitest": "^5.0.2"
