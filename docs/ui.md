@@ -2763,8 +2763,11 @@ map" card) stays the schematic; this is the geography.
   (“Delineating…”). A refusal shows its sentence in the sheet ("That point
   is outside the elevation model …"). A point beside a much larger channel
   (issue #374) shows a warning box instead: "A much larger channel runs
-  504 m north of your point: about 620 km² drains through it here, against
-  0.18 km² at your point. River lines on the map can sit a few hundred
+  504 m north of your point: at least 620 km² drains through it inside the
+  34 km routed around your point, and more from beyond (the mapped river
+  here, reach … of HydroRIVERS, drains 340 724 km²), against 0.18 km² at
+  your point." (a channel whose catchment fits the window gets its area
+  plainly: "620 km² drains through it"). River lines on the map can sit a few hundred
   metres off the channel the elevation model sees. Use that channel, or
   keep your point if you meant the small one.", with **Use that channel**
   (primary: the coordinates move to it and it delineates there) and **Keep

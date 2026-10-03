@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
 import { openDem } from './dem.js';
-import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M } from './delineate.js';
+import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M, tooLargeText } from './delineate.js';
 import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
 import { PAN_METHOD } from './pans.js';
@@ -93,9 +93,24 @@ describe('delineate (synthetic DEM)', () => {
 	it('refuses a catchment that runs past the largest window rather than cut it off', async () => {
 		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128] }));
 		expect(e.code).toBe('too_large');
-		expect(e.message).toMatch(/km the app delineates/);
+		expect(e.message).toMatch(/^The catchment above that point reaches beyond the \d+ km the app delineates around a click, so it can’t be proposed whole\. Click further upstream for a smaller catchment, divide the river with Sub-catchments, one per click/);
 		// The window it stopped at, so the background worker goes on from the next (requests.ts nextJobWindow).
 		expect(e.windowCells).toBe(128);
+	});
+
+	it('points a main stem at Sub-catchments, not "further upstream": its reach can’t fit the window anywhere (finding 11)', async () => {
+		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128], expected: { km2: 340_724, reach: 'reach 7' } }));
+		expect(e.code).toBe('too_large');
+		expect(e.message).toMatch(/^The river here drains about 340\s724 km² \(its mapped reach\), more than fits in the \d+ km the app delineates around a click, so it can’t be proposed in one piece\. Divide it with Sub-catchments, one per click/);
+		expect(e.message).not.toMatch(/further upstream/);
+	});
+
+	it('words too_large from the reach’s area and the routed side (tooLargeText)', () => {
+		expect(tooLargeText('click', 100, 9_000)).toMatch(/^The catchment above that point .* Click further upstream/);
+		expect(tooLargeText('click', 100, 10_001)).toMatch(/^The river here drains about 10\s001 km²/);
+		expect(tooLargeText('click', null, 1e6)).toMatch(/^The catchment above that point reaches beyond the area the app delineates around a click/);
+		expect(tooLargeText('outlet', 100, null)).toMatch(/^The catchment above the outlet .* Pick an outlet gauge further upstream, or type the units in\.$/);
+		expect(tooLargeText('outlet', 100, 340_724)).toMatch(/^The river at the outlet drains about 340\s724 km² .* Type the units in, or outline pieces of the river with Sub-catchments, one per click/);
 	});
 
 	it('says which window it stopped at when the next would break the budget, and reports each window it starts', async () => {
@@ -131,12 +146,23 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		expect(e).toBeInstanceOf(DelineationRefused);
 		const r = e as DelineationRefused;
 		expect(r.code).toBe('larger_channel');
-		expect(r.message).toMatch(/^A much larger channel runs \d+ m west of your point: about [\d ,]+ km² drains through it here, against [\d.]+ km² at your point\. .*Use that channel, or keep your point/);
+		// The channel's whole catchment is in the window: its area, not an "about" (finding 10).
+		expect(r.message).toMatch(/^A much larger channel runs \d+ m west of your point: [\d\s,]+ km² drains through it, against [\d.]+ km² at your point\. .*Use that channel, or keep your point/);
 		expect(r.larger!.distanceM).toBeGreaterThan(200);
 		expect(r.larger!.distanceM).toBeLessThan(1000);
 		// The channel it names is the river: delineating there gives the valley above it.
 		const river = await delineate(dem, r.larger!.at);
 		expect(river.areaM2 / 1e6).toBeGreaterThan(100 * r.larger!.pointKm2);
+	});
+
+	it('says "at least" when the channel runs past the window, and quotes the mapped river’s own area (the hydrologist’s review, finding 10)', async () => {
+		// A 128-cell window cuts the river: 619 km² was quoted for the Orange's 340 724 as "about".
+		const r = (await delineate(dem, off, { windows: [128], expected: { km2: 340_724, reach: 'reach 7 of HydroRIVERS' } }).catch((x: unknown) => x)) as DelineationRefused;
+		expect(r.code).toBe('larger_channel');
+		expect(r.message).toMatch(
+			/^A much larger channel runs \d+ m west of your point: at least [\d\s,]+ km² drains through it inside the \d+ km routed around your point, and more from beyond \(the mapped river here, reach 7 of HydroRIVERS, drains 340\s724 km²\), against [\d.]+ km² at your point\./
+		);
+		expect(r.message).not.toMatch(/about/);
 	});
 
 	it('keeps the point when asked: the small catchment it snaps to', async () => {

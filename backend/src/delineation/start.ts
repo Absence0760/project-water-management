@@ -328,10 +328,13 @@ export async function readReaches(
 ): Promise<Map<string, PointReach>> {
 	const by = new Map(choices.points.map((p) => [p.featureId, p]));
 	try {
-		return await pointReaches(db, [
+		const reaches = await pointReaches(db, [
 			...(outlet.foundIn === 'gauge' && outlet.point ? [{ key: OUTLET_KEY, name: outlet.name, at: outlet.point, reach: choices.outletReach ?? null, useLarger: choices.outletUseLarger }] : []),
 			...points.flatMap((p) => (p.geometry.type === 'Point' ? [{ key: p.featureId, name: p.name || 'A point', at: p.geometry.coordinates, reach: by.get(p.featureId)?.reach ?? null, useLarger: by.get(p.featureId)?.useLarger }] : []))
 		]);
+		// A dam polygon has no reach to look up, but "Use that channel" puts it on the channel its outline clips (damOutflow).
+		for (const p of points) if (p.geometry.type !== 'Point' && by.get(p.featureId)?.useLarger) reaches.set(p.featureId, { reach: null, chosen: false, hints: { useLarger: true } });
+		return reaches;
 	} catch (err) {
 		if (err instanceof PointsAtConfluence) throw new ApiError(422, err.message, { reason: 'confluence', points: err.points });
 		if (err instanceof ReachNotNearPoint) throw new ApiError(400, err.message);

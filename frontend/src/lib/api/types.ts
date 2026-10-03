@@ -3237,10 +3237,12 @@ export interface LargerChannel {
 	at: MapPosition;
 	/** From the point (m). */
 	distanceM: number;
-	/** What drains through it inside the routed window (km²). */
+	/** What drains through it inside the routed window (km²; a floor when its catchment runs past the window). */
 	km2: number;
 	/** What drains through the cell the point snapped to (km²). */
 	pointKm2: number;
+	/** A dam outline's: the channel its outline only clips, the dam's own outflow placed instead (backend damOutflow). */
+	outline?: boolean;
 	/** Offered because it matches a nearby river reach (not for being 100× larger): the reach's area at the point (km²). It can be smaller than the point's channel. */
 	reachKm2?: number;
 }

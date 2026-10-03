@@ -149,7 +149,7 @@ test('a point beside a much larger channel is not delineated quietly: the sheet 
 	await delineateAt(page, FIXTURE_OFF_CHANNEL);
 	const offer = sheet(page).getByTestId('delineate-larger');
 	await expect(offer).toBeVisible();
-	await expect(offer).toContainText(/^A much larger channel runs \d+ m west of your point: about [\d ,]+ km² drains through it here/);
+	await expect(offer).toContainText(/^A much larger channel runs \d+ m west of your point: [\d\s,]+ km² drains through it/);
 	await expect(sheet(page).getByTestId('delineate-error')).toHaveCount(0);
 	for (const scheme of ['light', 'dark'] as const) {
 		await page.emulateMedia({ colorScheme: scheme });
