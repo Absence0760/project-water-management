@@ -125,8 +125,8 @@ export interface ModelState {
 	restrictionEwrFailed?: boolean;
 	/**
 	 * The dams still filling (engine ≥ 1.70.0, docs/model.md §2.7i): 1 per node
-	 * (model order) for a dam the reviews still leave out, so a resumed run
-	 * goes on leaving it out until it fills, as the uninterrupted run does.
+	 * (model order) for a dam still filling, so a resumed run goes on reading
+	 * its reviews both ways until it fills, as the uninterrupted run does.
 	 * Absent when none is.
 	 */
 	restrictionFilling?: number[];

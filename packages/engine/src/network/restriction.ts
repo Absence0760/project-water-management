@@ -305,8 +305,10 @@ export interface PlanRestriction {
 	 * First filling (engine ≥ 1.70.0, issue #90 Q30, docs/model.md §2.7i): 1
 	 * for each dam still filling at the start of the first day, a dam that came
 	 * into service after the run's first day (or, resumed, the capture run's)
-	 * and hasn't yet started a day at `fillShare` of its capacity. A review
-	 * leaves its storage and its capacity out until it has. Absent = none.
+	 * and hasn't yet started a day at `fillShare` of its capacity. Until it
+	 * has, a review reads the level with every filling dam left out (storage
+	 * and capacity) and with every one counted, and applies the milder.
+	 * Absent = none.
 	 */
 	filling?: Uint8Array;
 	/**

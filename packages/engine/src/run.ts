@@ -362,11 +362,11 @@ function runNetwork(
 	// Land cover's low-flow threshold over the historical days only.
 	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
 	const sim = simulateNetwork(plan, { workings: true, ...(capturing ? { captureAt: captureAt! } : {}) });
-	// A new dam that never filled (engine ≥ 1.70.0, §2.7i): no review read it.
+	// A new dam that never filled (engine ≥ 1.70.0, §2.7i): every review took the milder of the readings without and with it.
 	if (sim.restrictionJoined) {
 		const pct = `${Math.round(plan.restriction!.fillShare * 1000) / 10} %`;
 		const never = nodes.flatMap((n, i) => (sim.restrictionJoined![i] === -1 ? [n] : [])).sort((a, b) => cmpStr(a.id, b.id));
-		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so no review read it while it was filling`);
+		for (const n of never) warnings.push(`drought restriction: the dam of "${n.name}" (in service from ${n.damInServiceFrom}) never reached ${pct} of its capacity in the run, so every review read the milder of the levels with and without it`);
 	}
 
 	// --- outputs -----------------------------------------------------------------
@@ -1541,7 +1541,7 @@ export function buildNetworkPlan(
 		? planRestriction(restrictionRule, nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, damCapacityM3: n.kind === 'farm' ? n.damCapacityM3 : 0, ewrSite: n.ewrSite })), start!, days, warnings, topo.outflow)
 		: null;
 	// First filling (engine ≥ 1.70.0, §2.7i): a dam that comes into service after the first day of the record (a
-	// resumed run's capture run's) starts out of the reviews; a resumed run takes the snapshot's state instead.
+	// resumed run's capture run's) starts filling; a resumed run takes the snapshot's state instead.
 	if (restriction) {
 		const filling = Uint8Array.from(nodes, (n) => (entersServiceAfter(n, warm.runStart ?? start!) ? 1 : 0));
 		if (filling.some((x) => x)) restriction.filling = filling;
@@ -1703,7 +1703,7 @@ function restrictionSummary(
 				daysByLevel: byLevel
 			};
 		});
-	// First filling (engine ≥ 1.70.0, §2.7i): each dam left out of the reviews at the start, and the day it joined.
+	// First filling (engine ≥ 1.70.0, §2.7i): each dam filling at the start, and the day it joined.
 	const joined = sim.restrictionJoined;
 	const filling = joined
 		? nodes

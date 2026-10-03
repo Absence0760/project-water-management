@@ -22,6 +22,7 @@ import { captureModelState, runModelFrom, runModelWith, runModelWithoutChecks, w
 import { checkDroughtRestriction, checkInvariants } from '../verify/checks';
 import { testCatchment } from '../outlook/testCatchment';
 import { checkResume } from '../testing/warmstartInvariants';
+import { randomInput, Rng } from '../testing/fuzz';
 
 const flat = (v: number) => new Array(12).fill(v);
 const START = '2021-10-01';
@@ -156,7 +157,7 @@ describe('the all-dams basis: a new empty dam no longer drags every unit into re
 	});
 });
 
-describe('the exemption ends exactly on the day the dam starts at its fill share', () => {
+describe('a part-filled dam’s water counts: each review reads the filling dams out and in, and takes the milder', () => {
 	// A existing at 20 % (200 of 1 000, its runoff passing by); B new from 4 October, catching its runoff;
 	// C no dam. Daily reviews 4 … 12 October. B's runoff: 500 m³ on 4 October, 400 on 9 October, else none
 	// (the catchment's flow is 3 × that, shared in thirds). So B starts 5 … 9 October at 500 (50 %, below
@@ -168,26 +169,19 @@ describe('the exemption ends exactly on the day the dam starts at its fill share
 	const input = build([A, B, unit('C')], rule, { objects: [irrigation('C', 90)], days: 12 });
 	const out = run(input, natural);
 
-	it('until 9 October A alone (20 %: level 2), though counting B’s 500 would read 35 %; from 10 October (200 + 900) ÷ 2 000 = 55 %: level 1', () => {
+	it('4 Oct: out 20 %, in 10 %, both level 2; 5–9 Oct: out 20 % (level 2), in (200 + 500) ÷ 2 000 = 35 % (level 1): the milder, 1; from 10 Oct B counts: 55 %, level 1', () => {
 		passes(input, out);
 		near(get(out, 'B', 'dam_storage'), [0, 0, 0, 500, 500, 500, 500, 500, 900, 900, 900, 900]);
-		expect(get(out, null, 'restriction_level')).toEqual([2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1]);
+		// The first day: A alone (B has no capacity), 20 %: level 2, held to 4 October.
+		expect(get(out, null, 'restriction_level')).toEqual([2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1]);
 		expect(out.summary.droughtRestriction!.filling).toEqual([{ nodeId: 'B', inServiceFrom: '2021-10-04', joinedOn: '2021-10-10' }]);
+		// C is cut in full on level 2, by half on level 1.
+		near(get(out, 'C', 'restricted_demand'), [0, 0, 0, 0, 45, 45, 45, 45, 45, 45, 45, 45]);
 	});
 
-	it('a dam exactly at the share joins (60.0 % is not below 60 %), one m³ under it doesn’t', () => {
-		for (const [v, joinedOn, lv] of [
-			[600, '2021-10-10', 1],
-			[599, null, 2]
-		] as const) {
-			// B: 500 on 4 October, then v − 500 on 9 October.
-			const n = [0, 0, 0, 1500, 0, 0, 0, 0, 3 * (v - 500), 0, 0, 0];
-			const o = run(input, n);
-			passes(input, o);
-			expect(o.summary.droughtRestriction!.filling![0]!.joinedOn).toBe(joinedOn);
-			// 10 October: (200 + 600) ÷ 2 000 = 40 %: level 1; with B still out, A alone: level 2.
-			expect(get(o, null, 'restriction_level')[9]).toBe(lv);
-		}
+	it('the self-check redoes both readings: a level read with B left out only (2 on 5 October) fails it', () => {
+		const tampered = { ...out, series: out.series.map((x) => (x.nodeId === null && x.key === 'restriction_level' ? { ...x, values: x.values.map((v, t) => (t === 4 ? 2 : v)) } : x)) };
+		expect(checkDroughtRestriction(input, tampered)).toMatch(/day 4: drought restriction level 2 ≠ 1/);
 	});
 
 	it('a rule with one level at 100 %: the dam joins only once full', () => {
@@ -198,6 +192,38 @@ describe('the exemption ends exactly on the day the dam starts at its fill share
 		passes(x, o);
 		near(get(o, 'B', 'dam_storage'), [0, 0, 0, 500, 500, 500, 500, 500, 900, 1000, 1000, 1000]);
 		expect(o.summary.droughtRestriction!.filling![0]!.joinedOn).toBe('2021-10-11');
+	});
+});
+
+describe('the exemption ends exactly on the day the dam starts at its fill share', () => {
+	// A existing at 70 % (700, runoff passing, no demand); B new from 4 October, catching v m³ of runoff on 4 October
+	// only, and drawing 100 m³/day for its irrigation. The rule cuts A only, so B's draw doesn't depend on the level.
+	// Daily reviews 4 … 12 October. With v = 700, B ends 4 October at 600 and starts 5 October at 60 %: it joins and
+	// from then counts alone, its fall included. With v = 699 it starts at 599: it never joins, and the milder of
+	// the two readings keeps A's 70 % (level 0) throughout.
+	const A = unit('A', { damCapacityM3: 1000, damInitialPct: 0.7 });
+	const B = unit('B', { damCapacityM3: 1000, pctRunoffToDam: 1, damInServiceFrom: '2021-10-04' });
+	const rule: DroughtRestrictionRule = { reviewDates: daily(4, 9), levels: LEVELS, nodeIds: ['A'] };
+	const make = () => build([A, B], rule, { objects: [irrigation('B', 100)], days: 12 });
+	const flow = (v: number) => [0, 0, 0, 2 * v, 0, 0, 0, 0, 0, 0, 0, 0];
+
+	it('v = 700: joins 5 October; 5–6 Oct 65 %, 60 %: none; 7 Oct (700 + 400) ÷ 2 000 = 55 %: level 1, as B drains', () => {
+		const input = make();
+		const out = run(input, flow(700));
+		passes(input, out);
+		near(get(out, 'B', 'dam_storage'), [0, 0, 0, 600, 500, 400, 300, 200, 100, 0, 0, 0]);
+		expect(out.summary.droughtRestriction!.filling).toEqual([{ nodeId: 'B', inServiceFrom: '2021-10-04', joinedOn: '2021-10-05' }]);
+		// 4 Oct: B filling at 0: out 70 % (none), in 35 % (level 1): the milder, none.
+		expect(get(out, null, 'restriction_level')).toEqual([0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+	});
+
+	it('v = 699: one m³ short of 60 %, it never joins; out 70 % is the milder on every review: no level, and the run warns', () => {
+		const input = make();
+		const out = run(input, flow(699));
+		passes(input, out);
+		expect(out.summary.droughtRestriction!.filling![0]!.joinedOn).toBeNull();
+		expect(get(out, null, 'restriction_level')).toEqual(new Array(12).fill(0));
+		expect(out.summary.warnings.join('\n')).toMatch(/never reached 60 % of its capacity/);
 	});
 });
 
@@ -367,4 +393,90 @@ describe('resumed runs carry the dams still filling (§2.16)', () => {
 			expect(resumed.summary.droughtRestriction!.filling ?? [], d).toEqual(filling ? [{ nodeId: 'b', inServiceFrom: '2004-03-01', joinedOn: join }] : []);
 		}
 	});
+});
+
+describe('property: with dams filling, a review is never deeper than with them counted, nor than with them left out', () => {
+	/**
+	 * For every review day of a shared-basis run, the level read from the run's own columns with the dams filling
+	 * that day all left out and all counted; a filling dam is one listed in `filling` that hasn't joined yet.
+	 */
+	function readings(input: ModelInput, out: ModelOutput): { t: number; level: number; out: number; in: number }[] {
+		const rule = input.settings.droughtRestriction!;
+		const thr = rule.levels.map((l) => l.belowPct);
+		const levelFor = (share: number) => {
+			let k = 0;
+			while (k < thr.length && share < thr[k]!) k++;
+			return k;
+		};
+		const d0 = toEpochDay(out.startDate);
+		const reviews = new Set(rule.reviewDates);
+		const dams = input.model.nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
+		const joinOf = new Map((out.summary.droughtRestriction!.filling ?? []).map((f) => [f.nodeId, f.joinedOn === null ? Infinity : toEpochDay(f.joinedOn) - d0]));
+		const LV = get(out, null, 'restriction_level');
+		const rows: { t: number; level: number; out: number; in: number }[] = [];
+		for (let t = 1; t < out.days; t++) {
+			if (!reviews.has(fromEpochDay(d0 + t).slice(5))) continue;
+			let q = 0, c = 0, qa = 0, ca = 0;
+			for (const n of dams) {
+				const capCol = out.series.find((x) => x.nodeId === n.id && x.key === 'dam_capacity')?.values;
+				const cap = capCol ? capCol[t]! : n.damCapacityM3;
+				if (!(cap > 0)) continue;
+				const s = get(out, n.id, 'dam_storage')[t - 1]!;
+				qa += s;
+				ca += cap;
+				if ((joinOf.get(n.id) ?? -1) > t) continue;
+				q += s;
+				c += cap;
+			}
+			rows.push({ t, level: LV[t]!, out: c > 0 ? levelFor(q / c) : 0, in: ca > 0 ? levelFor(qa / ca) : 0 });
+		}
+		return rows;
+	}
+
+	it('on a sweep of the hand network (A 0–100 %, B’s runoff 0–300 m³/day): the level is the milder of the two readings on every review', () => {
+		const B = unit('B', { damCapacityM3: 1000, pctRunoffToDam: 1, damInServiceFrom: '2021-10-04' });
+		const rule: DroughtRestrictionRule = { reviewDates: daily(2, 11), levels: LEVELS };
+		let deeperIfOut = 0;
+		let deeperIfIn = 0;
+		for (let p = 0; p <= 10; p++)
+			for (const r of [0, 30, 60, 100, 150, 300]) {
+				const input = build([unit('A', { damCapacityM3: 1000, damInitialPct: p / 10 }), B, unit('C', { pctRunoffToDam: 1 })], rule, { objects: [irrigation('C', 90)], days: 12 });
+				const out = run(input, new Array(12).fill(3 * r));
+				passes(input, out);
+				for (const x of readings(input, out)) {
+					expect(x.level, `A ${p * 10} %, B ${r}/day, day ${x.t}`).toBe(Math.min(x.out, x.in));
+					if (x.out > x.in) deeperIfOut++;
+					if (x.in > x.out) deeperIfIn++;
+				}
+			}
+		// Both ways bite somewhere in the sweep: the rule isn't just one of the two readings.
+		expect(deeperIfOut).toBeGreaterThan(0);
+		expect(deeperIfIn).toBeGreaterThan(0);
+	});
+
+	it('on random networks with dams coming into service and a shared-basis rule reviewed monthly', () => {
+		let checked = 0;
+		for (let seed = 1; seed <= 40; seed++) {
+			const x = randomInput(seed);
+			const span = runModelWithoutChecks(x);
+			const g = new Rng(seed ^ 0x77);
+			x.model.nodes = x.model.nodes.map((n) => (n.kind === 'farm' && n.damCapacityM3 > 0 && g.bool(0.6) ? { ...n, damInServiceFrom: fromEpochDay(toEpochDay(span.startDate) + 1 + g.int(0, Math.max(1, Math.floor(span.days / 2)))) } : n));
+			x.settings.droughtRestriction = {
+				reviewDates: ['01-01', '02-01', '03-01', '04-01', '05-01', '06-01', '07-01', '08-01', '09-01', '10-01', '11-01', '12-01'],
+				levels: [
+					{ label: 'L1', belowPct: g.float(0.5, 0.9), cuts: { crops: 0.3 } },
+					{ label: 'L2', belowPct: g.float(0.1, 0.45), cuts: { crops: 0.6 } }
+				]
+			};
+			const out = withVerification(x, runModelWithoutChecks(x));
+			expect(out.summary.verification!.passed, `seed ${seed}`).toBe(true);
+			if (!out.summary.droughtRestriction?.filling?.length) continue;
+			checked++;
+			for (const r of readings(x, out)) {
+				expect(r.level, `seed ${seed} day ${r.t}`).toBeLessThanOrEqual(r.in);
+				expect(r.level, `seed ${seed} day ${r.t}`).toBeLessThanOrEqual(r.out);
+			}
+		}
+		expect(checked).toBeGreaterThan(10);
+	}, 300_000);
 });

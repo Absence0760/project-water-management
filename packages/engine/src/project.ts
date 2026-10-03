@@ -3052,9 +3052,10 @@ export interface DroughtRestrictionSummary {
 	 */
 	start?: { levelsBefore: Record<string, number> | null; ewrFailedBefore: boolean; damStorageBeforeM3: Record<string, number>; fillingBefore?: string[] };
 	/**
-	 * First filling (engine ≥ 1.70.0, docs/model.md §2.7i): each dam the
-	 * reviews left out at the run's start because it came into service after
-	 * the first day of the record and hadn't yet filled (in node-id order), its
+	 * First filling (engine ≥ 1.70.0, docs/model.md §2.7i): each dam
+	 * filling at the run's start (the reviews took the milder of the levels
+	 * without and with it) because it came into service after the first day
+	 * of the record and hadn't yet filled (in node-id order), its
 	 * in-service date, and the first day it counted (it started the day at the
 	 * mildest level's share of its capacity, or full without a level); null
 	 * when it never did. Absent when no dam was filling.

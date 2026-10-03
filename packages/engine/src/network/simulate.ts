@@ -758,7 +758,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const rp = plan.restriction;
 	// The level each unit holds (0 for a unit the rule doesn't cut) and, under a shared basis, the one decided.
 	const lv = rp ? Uint8Array.from(nodes, (_, i) => (rp.initialLevels ? rp.initialLevels[i]! : 0)) : null;
-	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): the dams still left out of the reviews, and the day each joined.
+	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): the dams still filling (reviews read with and without them, the milder applies), and the day each joined.
 	const filling = rp?.filling?.some((x) => x) ? Uint8Array.from(rp.filling) : null;
 	const joined = filling ? Int32Array.from(filling, (f) => (f ? -1 : -2)) : null;
 	const firstIn = rp ? rp.inScope.indexOf(1) : -1;
@@ -773,16 +773,31 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const rDamObjs = rp ? nodes.map((n, i) => (n.river && rObjs![i] ? damView(n, rObjs![i]!) : null)) : null;
 	/** The level of the dams `dams` on day t: their storage at the start of the day as a share of their capacity that day. */
 	const storageLevel = (dams: ArrayLike<number>, t: number): number => {
+		// With dams still filling (engine ≥ 1.70.0, docs/model.md §2.7i) the level is read twice, the filling dams all
+		// left out and all counted, and the milder applies: a filling dam's empty capacity never deepens a review,
+		// and the water it already holds is never thrown away.
 		let q = 0;
 		let c = 0;
+		let qAll = 0;
+		let cAll = 0;
+		let any = false;
 		for (let k = 0; k < dams.length; k++) {
 			const i = dams[k]!;
 			const cap = nodes[i]!.damCapacityM3 * capacityK(nodes[i]!, t);
-			if (!(cap > 0) || filling?.[i]) continue;
-			q += startStorage(i, t);
+			if (!(cap > 0)) continue;
+			const s = startStorage(i, t);
+			qAll += s;
+			cAll += cap;
+			if (filling?.[i]) {
+				any = true;
+				continue;
+			}
+			q += s;
 			c += cap;
 		}
-		return c > 0 ? restrictionLevelFor(q / c, rp!.thresholds) : 0;
+		const out = c > 0 ? restrictionLevelFor(q / c, rp!.thresholds) : 0;
+		if (!any) return out;
+		return Math.min(out, restrictionLevelFor(qAll / cAll, rp!.thresholds));
 	};
 	/** Whether the EWR trigger's site failed on the day before t (known at the start of day t). */
 	const ewrFailedBefore = (t: number): boolean => {

@@ -2452,8 +2452,8 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	const qStart = ({ Q, SET, before0 }: ReturnType<typeof damOf>, t: number) => (t === 0 ? before0! : Q![t - 1]!) + (SET ? SET[t]! : 0);
 	const capOn = ({ n, ks }: ReturnType<typeof damOf>, t: number) => n.damCapacityM3 * (ks ? ks[t]! : 1);
 	// First filling (engine ≥ 1.70.0, docs/model.md §2.7i): a dam that comes into service after the record's first
-	// day is left out of the reviews until it starts a day at the mildest level's share of its capacity (full
-	// without a level). A fresh run works out which from the input; a resumed one starts from its summary's state.
+	// day is filling (each review the milder of the levels without and with the filling dams) until it starts a
+	// day at the mildest level's share of its capacity (full without a level). A fresh run works out which from the input; a resumed one starts from its summary's state.
 	const fillShare = thresholds.length ? thresholds[0]! : 1;
 	const filling = new Set(
 		resumed
@@ -2464,17 +2464,21 @@ export function checkDroughtRestriction(input: ModelInput, out: ModelOutput): st
 	const fillDams = nodes.filter((n) => filling.has(n.id)).map(damOf);
 	const unread = fillDams.find((x) => !x.Q || x.before0 === undefined);
 	if (unread) return `${unread.n.id}: dam_storage column or starting storage missing`;
-	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number => {
+	/** The level of `dams` on day t with the dams still filling left out, or with every dam counted. */
+	const levelWith = (dams: ReturnType<typeof damOf>[], t: number, leaveOut: boolean): number => {
 		let q = 0;
 		let c = 0;
 		for (const d of dams) {
 			const cap = capOn(d, t);
-			if (!(cap > 0) || filling.has(d.n.id)) continue;
+			if (!(cap > 0) || (leaveOut && filling.has(d.n.id))) continue;
 			q += qStart(d, t);
 			c += cap;
 		}
 		return c > 0 ? checkedLevel(q / c, thresholds) : 0;
 	};
+	// With a dam filling, the milder of the two readings (engine ≥ 1.70.0): its empty capacity never deepens a review.
+	const levelOf = (dams: ReturnType<typeof damOf>[], t: number): number =>
+		dams.some((d) => filling.has(d.n.id) && capOn(d, t) > 0) ? Math.min(levelWith(dams, t, true), levelWith(dams, t, false)) : levelWith(dams, t, true);
 	// The EWR trigger's site: null = the outlet (the node nothing drains into), else a gauge that is an EWR site.
 	// At the outlet the trigger reads the catchment's EWR column (the outflow against the whole EWR), not the
 	// outflow node's own share-weighted one.

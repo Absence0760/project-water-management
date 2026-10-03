@@ -72,8 +72,8 @@ export function damCapacityFactor(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' 
 /**
  * Whether a farm's dam comes into service after epoch day `runStart` (engine
  * ≥ 1.70.0, issue #90 Q30): a new dam that starts the day empty and fills
- * from then, which the drought restriction rule leaves out of its reviews
- * until it first fills (./restriction.ts, docs/model.md §2.7i). A dam in
+ * from then, which can only make the drought restriction rule's reviews
+ * milder until it first fills (./restriction.ts, docs/model.md §2.7i). A dam in
  * service on or before the run's first day is an existing dam; one whose
  * fields don't read runs at its entered capacity throughout, so is too.
  */
