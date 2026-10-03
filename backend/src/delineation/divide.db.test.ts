@@ -483,7 +483,9 @@ describe('a dam polygon marked on or off the river (194)', () => {
 		const n = nodeOf(eff.body.model);
 		expect(n.areaKm2).toBeCloseTo((u2.areaM2 - u2.nonContributingM2) / 1e6, 9);
 		expect(n.pctRunoffToDam).toBe(u2.damShares.pctRunoffToDamEffective);
-		expect(n.pctRunoffToDam).toBeGreaterThan(u2.damShares.pctRunoffToDam);
+		// Over a smaller area the same water is a larger share (here a small one: equal or larger once rounded to 0.1 %).
+		expect(n.pctRunoffToDam).toBeGreaterThanOrEqual(u2.damShares.pctRunoffToDam);
+		expect(u2.damShares.damCatchmentM2 / (u2.areaM2 - u2.nonContributingM2)).toBeGreaterThan(u2.damShares.damCatchmentM2 / u2.areaM2);
 		// Unticked area afterwards: the share follows the effective area the node keeps.
 		const p3 = await propose();
 		const again = await owner.call('POST', v.at(`/map/divide/${p3.id}/apply`), { units: ticks(p3.plan, { [longDam]: { runoffToDam: true } }), rest: { to: 'none' } });
