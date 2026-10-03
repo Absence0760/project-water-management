@@ -15,7 +15,7 @@ import { AUTHALIC_RADIUS_M, sinAuthalic } from '../geo/area.js';
 import type { Dem, DemInfo } from './dem.js';
 import { bearingWord, boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, tooLargeText, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
 import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place } from './place.js';
+import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 
@@ -28,11 +28,11 @@ import { simplifyRing, traceRings, type Pt } from './outline.js';
  * nearby river reach looked up, its area matched, the river asked for at a confluence), keep each point's larger-channel warning and its
  * placement in the plan, take a delineated outlet's own cell (it was re-snapped up to 150 m downstream), and the method says what ran;
  * start-8 (issue #390): a point within JUNCTION_SIDE_M of a mapped junction kept on its river's side of the DEM's junction, and a junction placement on the river's own channel nearest the point, not at the junction;
- * start-9 (the hydrologist's review, findings 9 and 11): a dam polygon whose outline only clips a much larger channel is placed at its
- * own footprint's outflow, that channel offered (damOutflow; it took the river's whole catchment), and a click whose catchment runs past
- * the routed window is no longer called unmatched (no window could match its reach).
+ * start-9 (delineate-5's rules reaching Start, Divide and Sub-catchments): a point on the DEM's own channel stays on it, the reach's
+ * matching channel offered; a gully snap offers the reach's channel out to 2.5 km; the reach's area is taken at the point;
+ * start-10 (the hydrologist's review, findings 9 and 11): a dam outline that only clips a much larger channel placed at its own outflow (damOutflow), and no `unmatched` on a click cut at the window.
  */
-export const START_METHOD_VERSION = 'start-9';
+export const START_METHOD_VERSION = 'start-10';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -49,8 +49,10 @@ export type PlacedBy = 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' |
 export interface PlacementHints {
 	/** A point's expected upstream area (km², a nearby river reach's): the point is matched to it (place.ts, issue #374). */
 	expectedKm2?: number | null;
-	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M. */
+	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M (place.ts `chosen`). */
 	chosen?: boolean;
+	/** How far the point is from that reach's line (m): off the line, a point on a DEM channel of its own stays there (place.ts rule 3). */
+	reachDistanceM?: number | null;
 	/** At a confluence: its rivers and the one picked; the point goes on the DEM's own junction (junction.ts), else by area. */
 	junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 	/** Snapped beside a much larger channel, the editor chose that channel: the point goes on it. */
@@ -379,7 +381,7 @@ export function placementText(placed: readonly PlacedBy[], unmatched: number, ou
 	const ran = new Set([...placed, ...(outletPlaced ? [outletPlaced] : [])]);
 	const defs: string[] = [];
 	if (ran.has('matched'))
-		defs.push(`matched: the cell within ${MATCH_RADIUS_M} m (${JUNCTION_MATCH_M} m at a picked confluence) best matching the river reach’s area (Lehner 2012, accordance ≥ ${MIN_ACCORDANCE} %)`);
+		defs.push(`matched: the cell within ${MATCH_RADIUS_M} m (${JUNCTION_MATCH_M} m at a picked confluence) best matching the reach’s area (Lehner 2012, ≥ ${MIN_ACCORDANCE} %)`);
 	// The default (the outline's most-accumulating cell) needs no words; the exception does (damOutflow).
 	if (ran.has('polygon')) defs.push('outflow: its own if a river only clips it');
 	if (ran.has('junction')) defs.push('at a junction: the DEM’s junction for the river picked');
@@ -394,7 +396,7 @@ export function startMethod(cellSizeM: number, zoom: number, placement: string):
 	return (
 		`D8 after Priority-Flood+ε filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${zoom}), routed once for the catchment; ` +
 		`${placement}; ` +
-		`each unit drains into the first unit its flow path meets and owns the cells whose path meets it first (a water user or a gauge owns none); areas summed from the cells, each on the WGS84 ellipsoid; outlines simplified for the map (Douglas–Peucker, about ${cellM} m)`
+		`each unit drains into the first unit its flow path meets and owns the cells reaching it first (a water user or a gauge owns none); areas summed from the cells, each on the WGS84 ellipsoid; outlines simplified for the map (Douglas–Peucker, about ${cellM} m)`
 	);
 }
 
@@ -520,14 +522,17 @@ export async function delineateUnits(
 				return c;
 			}
 			const g0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
-			const atJunction = hints.junction ? junctionOutlets({ ...g0, dir }, x, y, hints.junction.rivers, snapRadiusM)?.get(hints.junction.chosenKey) : undefined;
+			const placed = place(g0, x, y, { snapRadiusM, expectedKm2: hints.expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM });
+			// Beside a junction nobody picked a river at, a point on a DEM channel of its own stays there (place.ts rule 3), as in Delineate.
+			const ownChannel = !hints.chosen && onOwnChannel(g0, x, y, { expectedKm2: hints.expectedKm2, reachDistanceM: hints.reachDistanceM });
+			const atJunction = hints.junction && !ownChannel ? junctionOutlets({ ...g0, dir }, x, y, hints.junction.rivers, snapRadiusM)?.get(hints.junction.chosenKey) : undefined;
 			if (atJunction !== undefined) {
 				record({ placedBy: 'junction' });
 				return atJunction;
 			}
-			const placed = place(g0, x, y, { snapRadiusM, expectedKm2: hints.expectedKm2, matchRadiusM: hints.chosen ? JUNCTION_MATCH_M : undefined });
 			if (!placed) return null;
-			const unmatched = !!hints.expectedKm2 && placed.how === 'snapped';
+			// A channel matching the reach, offered (place.ts rules 3 and 4), says more than "unmatched" would.
+			const unmatched = !!hints.expectedKm2 && placed.how === 'snapped' && !placed.larger?.reach;
 			if (placed.larger && hints.useLarger) {
 				// The editor chose the channel the guard named: the point goes on it (found again here, never taken from the request).
 				record({ placedBy: 'larger', ...(unmatched ? { unmatched } : {}) });
@@ -536,7 +541,13 @@ export async function delineateUnits(
 			const larger = placed.larger
 				? (() => {
 						const lx = placed.larger.cell % nCells;
-						return { at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]), distanceM: placed.larger.distanceM, km2: km2(acc[placed.larger.cell]!), pointKm2: km2(acc[placed.cell]!) };
+						return {
+							at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]),
+							distanceM: placed.larger.distanceM,
+							km2: km2(acc[placed.larger.cell]!),
+							pointKm2: km2(acc[placed.cell]!),
+							...(placed.larger.reach && hints.expectedKm2 ? { reachKm2: hints.expectedKm2 } : {})
+						};
 					})()
 				: undefined;
 			record({ placedBy: placed.how, ...(larger ? { larger } : {}), ...(unmatched ? { unmatched } : {}) });

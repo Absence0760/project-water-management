@@ -3912,7 +3912,7 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refresh the section's numbers. Trigger: the round fixing those
       findings merging.
 - [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
-      review finding 9, fixed in `start-9` for the common cases). A dam
+      review finding 9, fixed in `start-10` for the common cases). A dam
       polygon whose outline only clips a much larger channel now goes at
       its own footprint's outflow with the river offered
       (`subcatchments.ts` `damOutflow`), but the geometry can't tell a long
@@ -5703,3 +5703,17 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       (HydroRIVERS and the six default GSW tiles pinned, dPET recorded on
       first fetch); Protomaps and Mapterhorn publish whole-archive MD5s that
       a ranged `pmtiles extract` can't use.
+
+## Placing a click on the DEM's channel (hydrologist persona findings 4, 7, 13; delineate-5)
+
+- [ ] **A head reach's upper-end area is a constant.** `reach.ts` takes
+      HydroRIVERS' stated 10 km² threshold (`HEAD_KM2`) for the upper end
+      of a reach nothing flows into. Where the DEM drains well under that at
+      the head (4 of 27 matched head-reach clicks, 2026-10-03,
+      [delineation-snapping.md § sixth experiment](./design/delineation-snapping.md#clicks-on-the-red-lines-gullies-and-the-head-of-a-reach-sixth-experiment-delineate-5)),
+      a cell 300–900 m down the line still fits the band better than the
+      click's own. Durable fix: read the head's area from the DEM at the
+      reach's first vertex (the matching cell there) instead of a constant,
+      or match head reaches only within the snap radius. Trigger: the next
+      Delineate accuracy round, or a client report of a dam wall placed
+      below itself.

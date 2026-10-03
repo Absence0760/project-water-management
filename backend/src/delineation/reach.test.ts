@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { confluenceChoices, ConfluenceAmbiguity, CONFLUENCE_M, junctionBeside, JUNCTION_SIDE_M, lineDistM, type NearReachLine } from './reach.js';
+import { areaAlong, confluenceChoices, ConfluenceAmbiguity, CONFLUENCE_M, fractionAlong, HEAD_KM2, junctionBeside, JUNCTION_SIDE_M, lineDistM, type NearReachLine } from './reach.js';
 
 // The junction behind issue #374's follow-up, rebuilt: a gauge 32 m from a
 // 67 km² tributary, 92 m from the 422 km² river above the junction, 102 m from
@@ -12,7 +12,8 @@ const reach = (reachId: number, upstreamKm2: number, line: [number, number][], c
 	upstreamKm2,
 	distanceM: lineDistM(click, line),
 	start: line[0]!,
-	end: line.at(-1)!
+	end: line.at(-1)!,
+	line
 });
 
 describe('confluenceChoices', () => {
@@ -53,6 +54,34 @@ describe('confluenceChoices', () => {
 			[1, 'along', 'the river along the point'],
 			[2, 'above', 'the river above the junction']
 		]);
+	});
+});
+
+describe('the reach’s area at the click (the hydrologist persona’s finding 13)', () => {
+	// A straight reach 4 km long running south, its upstream area (at its lower end) 50 km².
+	const line: [number, number][] = [m(0, 0), m(0, -1000), m(0, -4000)];
+	it('measures how far down the line a point lies, by length, from beside it too', () => {
+		expect(fractionAlong(m(0, 0), line)).toBe(0);
+		expect(fractionAlong(m(0, -4000), line)).toBe(1);
+		expect(fractionAlong(m(0, -1000), line)).toBeCloseTo(0.25, 3);
+		expect(fractionAlong(m(300, -2000), line)).toBeCloseTo(0.5, 3);
+		// Past either end: clamped.
+		expect(fractionAlong(m(0, 500), line)).toBe(0);
+		expect(fractionAlong(m(0, -4600), line)).toBe(1);
+	});
+	it('a head reach (nothing flowing in) starts at HydroRIVERS’ 10 km² and grows to its area down the line', () => {
+		expect(HEAD_KM2).toBe(10);
+		const r = { upstreamKm2: 50, line };
+		expect(areaAlong(r, m(0, -4000), null)).toBeCloseTo(50, 6);
+		expect(areaAlong(r, m(0, -1000), null)).toBeCloseTo(10 + 40 * 0.25, 3);
+		expect(areaAlong(r, m(0, 0), null)).toBeCloseTo(10, 6);
+		// A head reach smaller than the threshold: its own area throughout.
+		expect(areaAlong({ upstreamKm2: 6, line }, m(0, 0), null)).toBeCloseTo(6, 6);
+	});
+	it('a reach with inflows starts at what flows in', () => {
+		expect(areaAlong({ upstreamKm2: 50, line }, m(0, -2000), 30)).toBeCloseTo(40, 3);
+		// Inflows that (by the source's rounding) exceed the reach's own area never raise it past that.
+		expect(areaAlong({ upstreamKm2: 50, line }, m(0, 0), 51)).toBeCloseTo(50, 6);
 	});
 });
 

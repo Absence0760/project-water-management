@@ -380,7 +380,7 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 		expect(dam).toMatchObject({ id: 'dam', placedBy: 'matched', drainsInto: null });
 		near(dam.totalAreaM2, atDam.areaM2, 0.03);
 		// The method says what ran, and only that.
-		expect(r.method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the river reach’s area \(Lehner 2012/);
+		expect(r.method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the reach’s area \(Lehner 2012/);
 		expect(r.method).not.toMatch(/snapped/);
 		expect(r.methodVersion).toBe(START_METHOD_VERSION);
 	});
@@ -417,7 +417,7 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 describe('placementText and startMethod', () => {
 	it('names only the rules that ran, the outlet first, with counts, each defined once', () => {
 		expect(placementText(['matched', 'matched', 'polygon'], 0, 'exact', 150)).toBe(
-			'placed on the channel: the outlet on its delineated cell, 2 points matched, 1 point at a dam polygon’s outflow (matched: the cell within 1000 m (2500 m at a picked confluence) best matching the river reach’s area (Lehner 2012, accordance ≥ 50 %); outflow: its own if a river only clips it)'
+			'placed on the channel: the outlet on its delineated cell, 2 points matched, 1 point at a dam polygon’s outflow (matched: the cell within 1000 m (2500 m at a picked confluence) best matching the reach’s area (Lehner 2012, ≥ 50 %); outflow: its own if a river only clips it)'
 		);
 		const t = placementText(['snapped', 'snapped', 'junction'], 1, 'boundary', 150);
 		expect(t).toBe(

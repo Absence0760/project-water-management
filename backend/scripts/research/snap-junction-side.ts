@@ -102,7 +102,7 @@ async function main() {
 	};
 	const nearOf = (click: Pos, reaches: Reach[]): NearReachLine[] =>
 		reaches
-			.map((r) => ({ dataset: DATASET, reachId: r.id, upstreamKm2: r.km2, distanceM: lineDistM(click, r.line), start: r.line[0]!, end: r.line.at(-1)! }))
+			.map((r) => ({ dataset: DATASET, reachId: r.id, upstreamKm2: r.km2, distanceM: lineDistM(click, r.line), start: r.line[0]!, end: r.line.at(-1)!, line: r.line }))
 			.filter((r) => r.distanceM <= 1000)
 			.sort((a, b) => a.distanceM - b.distanceM);
 
@@ -242,7 +242,8 @@ async function main() {
 				// The editor, asked, picks the clicked river (the reach of that role at the click).
 				const pick = choices ? (choices.find((c) => c.reachId === arm.reach.id) ?? null) : null;
 				const askedRivers = choices ? choices.map((c) => ({ key: String(c.reachId), role: c.role, km2: c.upstreamKm2 })) : null;
-				const matchOf = (km: number, radius: number) => place(g, cx, cy, { snapRadiusM: 150, expectedKm2: km, matchRadiusM: radius });
+				// place() takes no radius since delineate-5: 1 km is an unnamed click as placed, 2.5 km a river named at the confluence.
+				const matchOf = (km: number, radius: number) => place(g, cx, cy, { snapRadiusM: 150, expectedKm2: km, chosen: radius > 1000 });
 				const nearest = near[0]!;
 				const match = matchOf(nearest.upstreamKm2, 1000);
 				let before: number | null | undefined;

@@ -167,7 +167,7 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		const d = await delineate(dem, off, { keepPoint: true });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
 		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe('delineate-7');
+		expect(d.methodVersion).toBe('delineate-8');
 	});
 
 	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {

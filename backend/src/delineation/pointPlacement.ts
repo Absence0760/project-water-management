@@ -14,7 +14,7 @@ import type { Db } from '../db/tx.js';
 import type { Position } from '../geo/geojson.js';
 import { bearingWord, type LargerChannel } from './delineate.js';
 import { MATCH_RADIUS_M } from './place.js';
-import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type ConfluenceChoice, type NearReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type ConfluenceChoice, type NearReach, type ReachAtClick } from './reach.js';
 import type { PlacedBy, PlacementHints, UnitPiece } from './subcatchments.js';
 
 /** A point's placement choices in a propose body: the river picked at a confluence, and the larger channel chosen over a snap. */
@@ -46,7 +46,7 @@ export class PointsAtConfluence extends Error {
 
 export interface PointReach {
 	/** The reach the point is matched to (its area the expected one), or null when none is within MATCH_RADIUS_M. */
-	reach: NearReach | null;
+	reach: ReachAtClick | null;
 	/** Picked by the editor at a confluence. */
 	chosen: boolean;
 	hints: PlacementHints;
@@ -65,7 +65,7 @@ export async function pointReaches(db: Db, points: readonly PointToPlace[]): Pro
 			out.set(p.key, {
 				reach: f.reach,
 				chosen: !!p.reach,
-				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, chosen: !!p.reach, junction: f.junction, useLarger: !!p.useLarger }
+				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, chosen: !!p.reach, reachDistanceM: f.reach?.distanceM ?? null, junction: f.junction, useLarger: !!p.useLarger }
 			});
 		} catch (err) {
 			if (err instanceof ConfluenceAmbiguity) ambiguous.push({ featureId: p.key, name: p.name, choices: err.choices });
@@ -99,7 +99,8 @@ export interface PointPlacement {
 export function placementOf(piece: Pick<UnitPiece, 'placedBy' | 'larger' | 'unmatched'>, r: PointReach | undefined): PointPlacement {
 	return {
 		placedBy: piece.placedBy ?? 'snapped',
-		reach: r?.reach ? { dataset: r.reach.dataset, reachId: r.reach.reachId, upstreamKm2: r.reach.upstreamKm2, chosen: r.chosen } : null,
+		// The reach's own area, as the River network layer shows it (its area at the point is what the point was matched to).
+		reach: r?.reach ? { dataset: r.reach.dataset, reachId: r.reach.reachId, upstreamKm2: r.reach.reachKm2, chosen: r.chosen } : null,
 		larger: piece.larger ?? null,
 		unmatched: !!piece.unmatched
 	};

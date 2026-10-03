@@ -81,7 +81,7 @@ export const delineateHandler = defineHandler({
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach } : null,
+				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
 				// One step a window; a cancel (or a lost lease) stops it before the next.

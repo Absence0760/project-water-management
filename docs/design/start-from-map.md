@@ -102,7 +102,10 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
 2. **The outlet.** A gauge is placed as a Delineate click is
    (`pointPlacement.ts`, since `start-7`): its nearest river reach within
    1 km looked up in the reading transaction, and the gauge put on the cell
-   whose upstream area matches the reach's (`place.ts`); at a confluence the
+   whose upstream area matches the reach's at the point (`place.ts`; since
+   `start-9` all of Delineate's `delineate-5` rules: a point on a DEM
+   channel of its own stays on it, the reach's channel offered, and a gully
+   snap offers the reach's channel out to 2.5 km); at a confluence the
    editor picks the river (422 `confluence`, every such point at once) and
    it goes at the DEM's junction (`junction.ts`); with no reach, the
    most-drained cell within 150 m. A delineated outlet is already on the
@@ -115,7 +118,7 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    outline that only clips a river (an off-channel dam filled by a pump or
    a furrow, or a traced outline taking in a cell of the river beside it)
    would give the dam the river's whole catchment, so `damOutflow`
-   (`start-9`, the hydrologist's review finding 9) follows the river's stem
+   (`start-10`, the hydrologist's review finding 9) follows the river's stem
    up from that cell while it stays inside the outline: a stem twice as
    long as the outline's longer side at most, carrying at least 100× the
    most-drained outline cell off the stem (the guard's LARGER_FACTOR; twice

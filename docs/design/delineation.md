@@ -176,7 +176,19 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      (`river_reference`, `reach.ts`), the cell within 1 km whose upstream
      area best matches the reach's, by Lehner's (2012) station allocation:
      cells within 50 % of the area, ranked by area misfit plus twice the
-     scaled distance. None passing falls through to:
+     scaled distance. The reach's area is taken **at the click** (since
+     `delineate-5`): its upper end's area (what flows in, or HydroRIVERS'
+     10 km² threshold for a head reach) plus the rest in proportion to how
+     far down the line the click lies, so a click near the top of a long
+     reach no longer slides down it to the lower end's area. A click on
+     the DEM's own channel (1 km² or more within a cell and a half) more
+     than 150 m from the reach's line, whose own area is outside the 50 %
+     band, is **not moved** past the snap radius by the match: it snaps,
+     and the reach's matching channel is offered as below (a farm dam's
+     stream beside a river stays the stream unless the editor says
+     otherwise). A click on a channel *larger* than the band stays on it
+     wherever the line is (a gauge on a river whose nearest mapped line is a
+     tributary's, beside a junction), the tributary's channel offered. None passing falls through to:
    - **Snapped**: the cell with the most upstream cells within **150 m**
      (about five cells) of the click, measured from the exact click to
      each cell's centre, so the distance moved never exceeds it (since
@@ -189,7 +201,11 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      nearest cell, its distance and both areas, and the sheet offers **Use
      that channel** or **Keep my point** (`keepPoint`). It is never moved
      there silently: near a confluence the bigger channel is the wrong
-     river.
+     river. When nothing within 1 km matched a nearby reach and the snap
+     landed in a gully (under a tenth of the reach's area), the match is
+     tried again out to 2.5 km and that channel offered the same way (since
+     `delineate-5`): that far off it can be another river, so it is never
+     taken silently.
    The distance moved is shown. Fewer than 9 upstream cells is refused
    ("click on the river itself").
 7. **Upstream cells**: every cell whose D8 path passes the snapped outlet.
@@ -213,7 +229,12 @@ cell size, zoom and window, the dataset label and the archive's
 are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
 larger-channel guard, `delineate-3` for asking the river at a confluence,
-`delineate-4` for the snap radius measured from the exact click, `delineate-7` for keeping a click beside a confluence on its river's side of the DEM's junction (issue #390); bumped whenever the method changes what a click
+`delineate-4` for the snap radius measured from the exact click,
+`delineate-5` for a click on the DEM's own channel staying on it, a gully
+snap offering the reach's channel out to 2.5 km and the reach's area taken
+at the click, `delineate-7` for keeping a click beside a confluence on its
+river's side of the DEM's junction (issue #390; `delineate-6` is reserved),
+`delineate-8` for the two together; bumped whenever the method changes what a click
 proposes).
 
 ## Accuracy, as shown to the user

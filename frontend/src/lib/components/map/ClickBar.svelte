@@ -128,7 +128,7 @@
 							class="btn btn-sm use"
 							disabled={!!divider.busy}
 							onclick={() => divider.replace(i, larger.at)}
-							data-testid="map-click-use-larger">Use the larger channel</button
+							data-testid="map-click-use-larger">{larger.reachKm2 !== undefined ? 'Use that channel' : 'Use the larger channel'}</button
 						>{/if}
 				</li>
 			{/each}

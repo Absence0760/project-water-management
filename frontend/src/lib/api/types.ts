@@ -3217,6 +3217,8 @@ export interface LargerChannel {
 	pointKm2: number;
 	/** A dam outline's: the channel its outline only clips, the dam's own outflow placed instead (backend damOutflow). */
 	outline?: boolean;
+	/** Offered because it matches a nearby river reach (not for being 100× larger): the reach's area at the point (km²). It can be smaller than the point's channel. */
+	reachKm2?: number;
 }
 
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */
