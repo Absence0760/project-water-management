@@ -2645,12 +2645,19 @@ map" card) stays the schematic; this is the geography.
   (its area *typed*, **From the map** this feature, or this feature's
   *earlier outline* once it was reshaped or split after the area was
   taken, or from another feature by name), **Area into the model** (editors; parcels and `other` polygons
-  only, never a dam or the boundary): a unit (the linked one by default; the
+  only, never a dam or the boundary): a unit (the linked one by default, else the one that took its area; the
   select stops at ~16rem) and **Use 9.257 km²**, which asks first ("Set
   Upper farm’s area from the map?", the old and new area) and then saves the
   area to the model, recorded in History with the feature named; disabled
   while the model has unsaved edits (a line says why) and reading **In use**
-  when that feature's area is the unit's. **From**: the file it came in.
+  when that feature's area is the unit's. A delineated polygon part of which
+  drains into pans (195) adds a select beside it, "Which of …’s areas":
+  **Gross, 276.508 km² (what drains into pans included)**, the default, or
+  **Effective, 270.112 km² (without the 6.396 km² draining into pans)**; the
+  button names the area chosen, the question says which ("…, its effective
+  area, without the 6.396 km² draining into pans"), **In use** holds only
+  for the area taken, and **Unit’s area** adds "(effective, without pans)"
+  ([maps.md § Pans and the effective area](./maps.md#pans-and-the-effective-area)). **From**: the file it came in.
   **Edit the shape** (a single line or one-ring polygon) or **Move the
   point** (editors) puts it in the drawing mode, **Split along a line**
   (editors, a polygon of one outline; #326 C2, below) draws the cut, and
@@ -2692,11 +2699,17 @@ map" card) stays the schematic; this is the geography.
   piece), its name, a gauge's "It measures … of the catchment above it",
   and a tick for each value proposed (Area … saved
   as its parcel; Drains into …; All of its own runoff reaches the dam),
-  every tick off at first; the rest of the catchment as a unit (a tick,
-  then its name and area); **Tick every value**; **How it was made**
+  every tick off at first; under a ticked area whose piece holds pans, a
+  **Which area** radio group (`AreaBasisChoice.svelte`, 195): **Gross, …
+  (what drains into pans included)**, checked, or **Effective, … (without
+  the … draining into pans)**, with "WR2012’s quaternary areas are gross;
+  take the effective area if you model the pans as not contributing runoff."
+  (unticking the area hides it and drops the choice from what is sent); the rest of the catchment as a unit (a tick,
+  then its name and area, and the same choice); **Tick every value**; **How it was made**
   (dataset, method, cell size); **Discard** (asks first) and **Apply the ticked values** (disabled, with
   the reason by the names, while a name is empty or used twice),
-  which asks first ("The empty model gets 3 nodes, with 2 areas … It is
+  which asks first ("The empty model gets 3 nodes, with 2 areas (each saved
+  as its unit’s parcel; Valley dam without what drains into pans) … It is
   saved now as one change in History."). **Data and the first run**: links
   to rain from the boundary, observed flow, evaporation (the A-pan the dams and pools lose, to Settings' Demand group), the dams' capacities, cultivated
   area, the Network and **Run the model**. With nodes typed in, the sheet
@@ -2744,9 +2757,11 @@ map" card) stays the schematic; this is the geography.
   model as a gauge node** and its name), and a tick for each value with the
   value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
   All of its own runoff reaches the dam. Now: 50 %), "(the same)" when
-  equal; the rest of the catchment ("Its area goes to": Nobody / a unit /
-  A new unit, with its name); **How it was made**; **Discard** and **Apply
-  the ticked values** (asks first: "The model takes 2 areas …, 3 drains-into
+  equal; under a ticked area whose piece holds pans, Start's **Which area**
+  choice; the rest of the catchment ("Its area goes to": Nobody / a unit /
+  A new unit, with its name, and the choice when it holds pans); **How it was made**; **Discard** and **Apply
+  the ticked values** (asks first: "The model takes 2 areas (each saved as
+  its unit’s parcel; 1 without what drains into pans), 3 drains-into
   … Every value not ticked stays as it is."). Without a DEM the sheet says
   dividing needs one; with no single outflow, that the Network must set it.
 - **Delineate** (editors, only when the server has a DEM: `GET

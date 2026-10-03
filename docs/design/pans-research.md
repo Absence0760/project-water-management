@@ -110,7 +110,8 @@ took from that (`backend/src/delineation/pans.ts`;
    area** (gross less non-contributing); the hydrologist chooses. Start and
    Divide carry it per piece, per unit's whole catchment and for the
    catchment, with a warning sentence; a saved click piece says it in its
-   description.
+   description. Taking a delineated area into the model asks which, gross by
+   default (migration 195, [maps.md § Pans and the effective area](../maps.md#pans-and-the-effective-area)).
 2. **A pan is a closed depression of the filled DEM that is**
    - at least **1 m** deep below its spill (about GLO-30's RMSE over flat
      land; shallower than that the depth is within the DEM's error);

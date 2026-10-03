@@ -1569,7 +1569,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
   geometry; CHECKs hold the type to the kind), `properties` (allowlisted
   strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
-  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  polygon), `non_contributing_m2` (195: of `area_m2`, what drains into
+  pans, when the feature was made from a delineation that looked: an
+  accepted proposal's `pans`, a saved sub-catchment's or a Start or Divide
+  parcel's piece; NULL when unknown, and set back to NULL by a new outline
+  or a split; a CHECK keeps it between 0 and `area_m2`; [maps.md § Pans and
+  the effective area](./maps.md#pans-and-the-effective-area)), `source_id` (composite key → `geo_source (id, project_id)`,
   cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the
@@ -1580,7 +1585,12 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   where a node's `area_km2` came from. `POST …/nodes/:nodeId/area-from-map`
   sets `map` and the feature; a model save that changes the area (or the
   node's kind) sets `typed` and clears the feature (`model/store.ts`).
-  Deleting the feature keeps the area. Not part of the engine's model.
+  Deleting the feature keeps the area. With them, **`node.area_basis`**
+  (195: `gross` | `effective`, NULL exactly when `area_source` is `typed`,
+  `node_area_basis_map`): which of the feature's areas was taken, all of it
+  or less its `non_contributing_m2`; the model save clears it with the
+  source. Every area from the map before 195 was gross. Not part of the
+  engine's model.
 - **`quaternary_reference`**: the dataset the quaternary lookup proposes
   from. `code` (primary key, `^[A-Z][0-9]{2}[A-Z]$`), `dataset` (the load's
   label; `synthetic` for the committed fixture, region Z), `geometry`
@@ -1692,8 +1702,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   (`start_proposal_final`, SECURITY DEFINER since 185). RLS: viewers read,
   editors insert, update and delete all but an applied one (the route
   prunes superseded and discarded rows past the newest 50 a project). What apply makes is
-  ordinary model data: nodes, `farm_parcel` features linked to them, and
-  `node.area_source = 'map'` for a ticked area. A division's plan
+  ordinary model data: nodes, `farm_parcel` features linked to them (with
+  the piece's `non_contributing_m2`), and `node.area_source = 'map'` with
+  its `area_basis` for a ticked area; the decision records each taken
+  area's `areaBasis` (195; absent on decisions before it, gross). A division's plan
   (`divide.ts` `DividePlan`) also keeps each node's values when proposed
   (`current`), which apply checks before replacing one. No node column, so
   farmers never read it.

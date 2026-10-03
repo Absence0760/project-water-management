@@ -684,6 +684,37 @@ feature is deleted (the area stays; the link goes). The area is the farm's
 sub-catchment, not its irrigated land. Only farm nodes take one, and only from a farm parcel or an `other` polygon: a dam's water surface and the catchment boundary are never offered, and the server refuses them (`AREA_KINDS`, `backend/src/geo/routes.ts`). While the
 model has unsaved edits the button waits: the change is saved straight away.
 
+### Pans and the effective area
+
+A polygon made from a delineation (an accepted proposal, a saved
+sub-catchment, a Start or Divide parcel) keeps what of it drains into pans
+(`map_feature.non_contributing_m2`, 195; [§ Delineation](#delineation)'s
+**Pans**). When some does, **Use** offers a choice beside it, and Start's
+and Divide's area ticks ask the same under the tick (`AreaBasisChoice.svelte`):
+
+- **Gross** (the default): the polygon's whole area, the pans' catchments
+  included, as WR2012's quaternary areas are.
+- **Effective**: the area less what drains into pans, for a hydrologist
+  who models the pans as non-contributing (WR2012's endoreic areas; the
+  PFRA's effective drainage area, [design/pans-research.md](./design/pans-research.md)).
+
+Gross is the default because it is what every reference figure quotes
+(WR2012's quaternary areas, a gauge's published catchment), so a unit's area
+can be checked against them, and because the pans are found from the DEM
+alone: a false pan taken out silently would remove real catchment
+(pans-research.md, Decision 1). The choice is never silent: the button and
+the confirmation name the area taken, and the unit records it
+(`node.area_basis`, `gross` or `effective`, cleared with `area_source` when
+the area is typed over), the revision reason says which ("Area of Dam unit
+from the map: “Sub-catchment 1” (11.100 km², the effective area, without the
+1.200 km² draining into pans, …)"; Start and Divide: "2 areas (gross;
+effective, without what drains into pans: Valley dam)"), and the card says
+"(effective, without pans)" beside the unit's area. The parcel itself keeps
+its gross outline and area. A feature with no pans figure (drawn,
+imported, split, or reshaped since: a new outline drops the figure, which
+was the old one's) offers no choice, and the server refuses an effective
+area for it (400).
+
 ## Checks
 
 The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
@@ -1222,7 +1253,8 @@ to a point on a river. The design, the method and its accuracy are in
   share that is, and what the largest holds; **Effective area** is the
   catchment less it, if the pans contribute nothing (WR2012's endoreic
   areas). Neither changes the polygon or its area: the figure is stored
-  with the proposal for the hydrologist to use. *None found* means it
+  with the proposal, and an accepted one's feature keeps it, so **Use**
+  offers the effective area ([§ Pans and the effective area](#pans-and-the-effective-area)). *None found* means it
   looked and found none; a proposal from before delineate-9 says nothing.
   A dam drawn down below its spillway holds too little over its catchment
   to count, and the depression at the clicked point (a dam's basin behind
@@ -1326,9 +1358,10 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   and whole catchment (`nonContributingM2`, `totalNonContributingM2`) and
   the rest, and a warning says how much (and what share) of the catchment
   drains into pans, where the largest is and which pieces hold it. The
-  areas themselves are unchanged (gross); a unit's area from the map is
-  its whole piece, pans included, so a hydrologist modelling them as
-  non-contributing types the effective area instead. A depression at a
+  areas themselves are unchanged (gross); each area tick whose piece holds
+  pans asks which area to take, gross (the default) or effective
+  ([§ Pans and the effective area](#pans-and-the-effective-area)), and the
+  parcel keeps the piece's figure. A depression at a
   unit's point (a dam's basin) is that unit's own, never a pan. A saved
   sub-catchment from clicks ([§ Sub-catchments from clicks](#sub-catchments-from-clicks))
   says the same in its description.
@@ -1475,7 +1508,8 @@ pick first.
 - **Pans** (`start-11`, [§ Delineation](#delineation)): a piece part of
   whose own area drains into pans says so on its line ("1.25 km² of it
   drains into pans (non-contributing)") and in its saved description; its
-  area still includes it.
+  area still includes it, and the saved area keeps the figure, so **Use**
+  offers its effective area ([§ Pans and the effective area](#pans-and-the-effective-area)).
 - **Every click is one request.** The map redraws all the pieces after each
   one; nothing is stored. Undo goes back to the answer before it without
   asking again. A click the server refuses (off the DEM, the lowest click's
