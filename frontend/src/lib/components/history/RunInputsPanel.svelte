@@ -5,6 +5,7 @@
 	run's settings and model back as a new change (docs/ui.md § Runs).
 -->
 <script lang="ts">
+	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	import type { InputChange } from '@water-management/engine';
 	import { api, type HistoryRevision, type Relink, type RunMeta } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
@@ -28,7 +29,7 @@
 	} = $props();
 
 	const uid = $props.id();
-	const scenarioRun = $derived(!!run.scenarioId || !!run.scenarioName);
+	const scenarioRun = $derived(isScenarioRun(run));
 
 	let changes = $state<InputChange[] | null>(null);
 	let revisions = $state<HistoryRevision[]>([]);

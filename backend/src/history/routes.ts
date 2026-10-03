@@ -260,9 +260,9 @@ const readRestoreBody = async (c: Context): Promise<{ reason?: string }> => Rest
 /** A run's settings and model (its input snapshot minus series), or null when the run isn't visible. */
 async function runInputs(db: Db, projectId: string, runId: string) {
 	if (!UUID.test(runId)) return null;
-	// A scenario run: scenario_id, or its snapshot's scenario once the scenario is deleted (024_scenarios).
+	// A scenario run, also once its scenario is deleted (model_run.from_scenario, 188).
 	const { rows } = await db.query<{ inputs: RunInputsSnapshot; created_at: Date; label: string; scenario: boolean }>(
-		`SELECT inputs, created_at, label, (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
+		`SELECT inputs, created_at, label, from_scenario AS scenario FROM model_run WHERE project_id = $1 AND id = $2`,
 		[projectId, runId]
 	);
 	return rows[0] ?? null;

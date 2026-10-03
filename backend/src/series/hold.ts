@@ -223,7 +223,7 @@ export async function heldSinceLastRun(db: Db, projectId: string): Promise<boole
 		`SELECT EXISTS (
 			SELECT 1 FROM audit_event e
 			WHERE e.project_id = $1 AND e.kind = 'series.held'
-				AND e.created_at > coalesce((SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.trigger = 'manual' AND r.scenario_id IS NULL), '-infinity')
+				AND e.created_at > coalesce((SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.trigger = 'manual' AND NOT r.from_scenario), '-infinity')
 		) AS held`,
 		[projectId]
 	);
@@ -242,7 +242,7 @@ export async function uncheckedSinceLastRun(db: Db, projectId: string): Promise<
 		`SELECT EXISTS (
 			SELECT 1 FROM audit_event e
 			WHERE e.project_id = $1 AND e.kind = 'series.unchecked'
-				AND e.created_at > coalesce((SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.trigger = 'manual' AND r.scenario_id IS NULL), '-infinity')
+				AND e.created_at > coalesce((SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.trigger = 'manual' AND NOT r.from_scenario), '-infinity')
 		) AS unchecked`,
 		[projectId]
 	);

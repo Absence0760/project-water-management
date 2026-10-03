@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { isScenarioRun } from '$lib/components/runs/scenarioRun';
 	// The workspace's Scenarios tab (?tab=scenarios, docs/ui.md § Scenarios,
 	// docs/scenarios.md): the project's scenarios, a form to start one on a
 	// run, and the chosen one (?scenario=<id>) in the editor. Viewers read
@@ -175,7 +176,7 @@
 
 	// --- a new scenario ------------------------------------------------------------------
 	/** Runs of the model a scenario can start from: a scenario run can't be a base. */
-	const bases = $derived((runs ?? []).filter((r) => !r.scenarioId));
+	const bases = $derived((runs ?? []).filter((r) => !isScenarioRun(r)));
 	/** The published run when there is one (what stakeholders see), else the latest. */
 	const defaultBase = $derived(bases.find((r) => r.published)?.id ?? bases[0]?.id ?? '');
 	let newName = $state('');

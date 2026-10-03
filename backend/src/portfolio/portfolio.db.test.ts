@@ -230,6 +230,13 @@ describe('the figures, and where they come from', () => {
 		expect((await admin.call('POST', `/projects/${pid}/runs`, { label: 'f', forecast: true })).status).toBe(201);
 		expect(byId((await portfolio(admin)).body.projects, pid)).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: false, lastRunAt });
 
+		// Nor is a scenario's run, also once the scenario is deleted (188, issue #381: its scenario_id is then null).
+		const sc = await admin.call('POST', `/projects/${pid}/scenarios`, { name: 'What-if', baseRunId: runId, ops: [{ op: 'demand.scale', factor: 2 }] });
+		expect(sc.status).toBe(201);
+		expect((await admin.call('POST', `/projects/${pid}/scenarios/${sc.body.scenario.id}/runs`, {})).status).toBe(201);
+		expect((await admin.call('DELETE', `/projects/${pid}/scenarios/${sc.body.scenario.id}`)).status).toBe(204);
+		expect(byId((await portfolio(admin)).body.projects, pid)).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: false, lastRunAt });
+
 		// A newer run leaves the published figures in place, and says there's a newer one (positive control).
 		await run(admin, pid);
 		const later = byId((await portfolio(admin)).body.projects, pid)!;

@@ -18,6 +18,7 @@
 	the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
+	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
 	import { onDestroy, untrack } from 'svelte';
 	import type { EwrRuleTable, NetworkNode, ProjectSettings } from '@water-management/engine';
 	import { api, type OutcomeSettings, type Project, type RunMeta, type Sweep } from '$lib/api';
@@ -49,7 +50,7 @@
 	}: {
 		projectId: string;
 		/** The shown run: the sweep's base. */
-		run: Pick<RunMeta, 'id' | 'startDate' | 'scenarioId' | 'forecastFrom'>;
+		run: Pick<RunMeta, 'id' | 'startDate' | 'forecastFrom'> & ScenarioRunFields;
 		/** The run stores a catchment natural_flow series (the year classes' input). */
 		hasNaturalFlow: boolean;
 		/** settings.outcomes (the method and the cut-offs); an older API sends none. */
@@ -70,7 +71,7 @@
 	let siteSaving = $state(false);
 	let siteError = $state<string | null>(null);
 	const chosen = $derived(chooseSite(pickedSite ? pickedSite.id : outcomes?.siteNodeId, sites));
-	const ordinary = $derived(!run.scenarioId && !run.forecastFrom);
+	const ordinary = $derived(!isScenarioRun(run) && !run.forecastFrom);
 	let sweep = $state<Sweep | null>(null);
 	let natural = $state.raw<(number | null)[] | null>(null);
 	let loading = $state(true);

@@ -167,12 +167,13 @@ export async function loadBaseInput(db: Db, projectId: string, runId: string, ro
 		if (base.trigger === 'forecast') throw new ApiError(409, 'the published run is a forecast run; an application needs an ordinary run of the model published');
 		return base.input;
 	}
-	const { rows } = await db.query<{ scenarioId: string | null; trigger: string }>(
-		'SELECT scenario_id AS "scenarioId", "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
+	// from_scenario (188): a scenario's run, also once its scenario is deleted.
+	const { rows } = await db.query<{ fromScenario: boolean; trigger: string }>(
+		'SELECT from_scenario AS "fromScenario", "trigger" FROM model_run WHERE project_id = $1 AND id = $2',
 		[projectId, runId]
 	);
 	if (!rows[0]) throw new ApiError(404, 'base run not found');
-	if (rows[0].scenarioId) throw new ApiError(409, 'that run is a scenario run; base a scenario on a run of the model itself');
+	if (rows[0].fromScenario) throw new ApiError(409, 'that run is a scenario run; base a scenario on a run of the model itself');
 	// A forecast run's input runs on past the record on forecast rain (WP-2.12); a scenario is judged on history.
 	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; base a scenario on an ordinary run of the model');
 	try {

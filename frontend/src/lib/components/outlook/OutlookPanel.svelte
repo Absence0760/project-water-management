@@ -19,6 +19,7 @@
 	and the panel's data-state attribute says which, for the e2e spec.
 -->
 <script lang="ts">
+	import { isScenarioRun, type ScenarioRunFields } from '$lib/components/runs/scenarioRun';
 	import { onDestroy, untrack } from 'svelte';
 	import { canonicalJson, describeDroughtRestriction, DISCLAIMER, DISCLAIMER_DRAFT_NOTE, type DroughtRestrictionRule } from '@water-management/engine';
 	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type Project, type RunMeta } from '$lib/api';
@@ -50,7 +51,7 @@
 	}: {
 		projectId: string;
 		/** The shown run: the outlook's base. */
-		run: Pick<RunMeta, 'id' | 'scenarioId' | 'forecastFrom'>;
+		run: Pick<RunMeta, 'id' | 'forecastFrom'> & ScenarioRunFields;
 		/** settings.outlook (the season and the planning share); an older API sends none. */
 		outlook: OutlookSettings | undefined;
 		canEdit: boolean;
@@ -61,7 +62,7 @@
 	} = $props();
 
 	const settings = $derived(resolveOutlook({ outlook: outlookSettings }));
-	const ordinary = $derived(!run.scenarioId && !run.forecastFrom);
+	const ordinary = $derived(!isScenarioRun(run) && !run.forecastFrom);
 	const months = $derived(seasonMonths(settings.season));
 	let outlook = $state<Outlook | null>(null);
 	let loading = $state(true);

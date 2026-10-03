@@ -113,7 +113,7 @@ export interface SignableRun {
 export async function loadSignableRun(db: Db, projectId: string, runId: string): Promise<SignableRun | null> {
 	if (!UUID.test(runId)) return null;
 	const { rows } = await db.query<{ engine_version: string; scenario: boolean; fit_engine_version: string | null; legacy: boolean; forecast: boolean }>(
-		`SELECT engine_version, scenario_id IS NOT NULL AS scenario, inputs->'settings'->'fitRecord'->>'engineVersion' AS fit_engine_version,
+		`SELECT engine_version, from_scenario AS scenario, inputs->'settings'->'fitRecord'->>'engineVersion' AS fit_engine_version,
 			COALESCE(inputs->'settings'->>'runoffModel', 'legacy') = 'legacy' AS legacy,
 			"trigger" = 'forecast' AS forecast
 		 FROM model_run WHERE project_id = $1 AND id = $2`,
