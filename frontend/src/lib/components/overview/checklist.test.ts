@@ -66,6 +66,14 @@ describe('checklist', () => {
 		expect(statuses(steps)).toMatchObject({ series: 'unknown', runs: 'unknown' });
 	});
 
+	it('a rain-source period’s series counts as rainfall, but only when a period uses it (engine ≥ 1.69.0)', () => {
+		const period = { start: '2000-01-01', end: '2009-12-31', series: 'rain_catchment_alt_mm', factors: Array(12).fill(1), reason: 'invented' };
+		const withPeriod = { ...settled(), rainSource: [period] } as unknown as ReturnType<typeof settled>;
+		const alt = [series('rain_catchment_alt_mm', 3653), series('flow_observed_m3s')];
+		expect(checklist({ model: full, settings: withPeriod, series: alt, runs: [] })[2]!.detail).toBe('Rainfall (10 years) and observed flow loaded.');
+		expect(checklist({ model: full, settings: settled(), series: alt, runs: [] })[2]!.status).toBe('todo');
+	});
+
 	it('a fully set-up, freshly run catchment is complete', () => {
 		const steps = checklist({
 			model: full,

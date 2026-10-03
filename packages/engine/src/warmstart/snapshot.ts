@@ -26,7 +26,7 @@
 //
 // Pure: no I/O. A snapshot is JSON-round-trippable (encodePlain turns NaN,
 // ±Infinity and −0 into tokens), so a backend can store one per base run.
-import { fromEpochDay, toEpochDay } from '../calendar';
+import { fromEpochDay, toEpochDay, isIsoDate as isRealDate } from '../calendar';
 import type { ModelInput } from '../project';
 import type { GapFillKind } from '../flowGapFill';
 import type { PreparedFits } from '../prepare';
@@ -60,6 +60,14 @@ export interface ModelNodeState {
 	allocationUsedM3?: [number, number];
 	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.18.0); absent without one. */
 	allocationFactor?: number;
+	/**
+	 * A full allocation's factor for the water year in progress fitted on its
+	 * days before the snapshot's only (engine ≥ 1.69.0); absent on the year's
+	 * first day or without one. withAllocationKnownBefore puts it in place of
+	 * allocationFactor for an outlook, whose members know nothing after the
+	 * decision date (docs/model.md §2.15).
+	 */
+	allocationFactorBefore?: number;
 	/**
 	 * The storage the day before left, when withDamStorage set another: only
 	 * sizes the float noise the EWR attribution ignores on the first day, as
@@ -161,7 +169,7 @@ export class ModelStateMismatchError extends Error {
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
-const isIso = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && fromEpochDay(toEpochDay(v)) === v;
+const isIso = (v: unknown): v is string => typeof v === 'string' && ISO.test(v) && isRealDate(v);
 
 /** Settings that never shape the state on a day: the window, the reporting window, provenance, and the two handled below. */
 const NOT_HISTORY = new Set(['simulationStart', 'simulationEnd', 'reportStart', 'reportEnd', 'fitRecord', 'demandFactorFrom', 'damStorageReset', 'rainSource']);
@@ -286,4 +294,28 @@ export function withDamStorage(snapshot: ModelStateSnapshot, input: ModelInput, 
 		node.storageM3 = Math.min(Math.max(v, 0), damCapacityOn(n, toEpochDay(snapshot.date)));
 	}
 	return { ...snapshot, state: encodePlain(state) };
+}
+
+/**
+ * The snapshot with each full allocation's factor for the water year in
+ * progress as the days before its day alone fit it (engine ≥ 1.69.0,
+ * docs/model.md §2.15, §2.16): allocationFactorBefore in place of
+ * allocationFactor, or none on a water year's first day, so a run resumed
+ * from it fits that year on its own days (a part year asks for its prorated
+ * volume). What an outlook or a review in a hindcast starts from, so no
+ * member's demand reads a day on or after the decision date; a plain resume
+ * (runModelFrom) keeps the capture run's factor, and equals the
+ * uninterrupted run. Unchanged without a full allocation.
+ */
+export function withAllocationKnownBefore(snapshot: ModelStateSnapshot, input: ModelInput): ModelStateSnapshot {
+	const state = openSnapshot(snapshot, input);
+	let changed = false;
+	for (const node of state.nodes) {
+		if (node.allocationFactor === undefined && node.allocationFactorBefore === undefined) continue;
+		if (node.allocationFactor === node.allocationFactorBefore) continue;
+		if (node.allocationFactorBefore === undefined) delete node.allocationFactor;
+		else node.allocationFactor = node.allocationFactorBefore;
+		changed = true;
+	}
+	return changed ? { ...snapshot, state: encodePlain(state) } : snapshot;
 }

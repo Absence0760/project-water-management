@@ -2757,7 +2757,8 @@ role and not before it.
   `checkWaterAccount` in the soak. Left open:
   - [ ] **The hydrologist signs off the definitions** (pending, decided from
         the persona review): demand days, not all days, for the time-based
-        measure; part water years counting for the annual one; the stress-class
+        measure; complete water years only for the annual one (part years stopped
+        counting in engine 1.11.0, model.md §2.11a); the stress-class
         thresholds as they stand; seepage as a memo rather than an out
         term. Trigger: the hydrologist's first review of a licensing run.
   - [x] **Dam releases in the water account** (done, engine 0.35.0: a memo

@@ -35,7 +35,7 @@
 // the volume, and its months and rate are what a cap run adds on top.
 //
 // Pure, like the rest of the engine.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf, isIsoDate as isRealDate } from '../calendar';
 import { isStorageOnly, type AllocationEntry, type AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 
@@ -57,7 +57,7 @@ export function resolveAllocationMode(v: unknown, warnings: string[]): Allocatio
 	return 'none';
 }
 
-const isIso = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && fromEpochDay(toEpochDay(v)) === v;
+const isIso = isRealDate;
 
 /**
  * The allocations a run can use, each checked: a finite volume ≥ 0, a known
@@ -243,6 +243,11 @@ export function outsideMonths(allocs: readonly AllocationEntry[], source: Alloca
  * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
  * it starts in asks for that part of the year's volume, a year wholly before
  * it for none (and isn't unscaled).
+ * `asOf` (a run day, engine ≥ 1.69.0, a snapshot's day): `before` is the
+ * factor of the water year that day falls in fitted on that year's days
+ * before it only (as a forecast tail starting that day would have it), or
+ * undefined when none of the year's days come before it, so an outlook in a
+ * hindcast reads nothing on or after its decision date (docs/model.md §2.15).
  */
 export function fullAllocationFactors(
 	allocs: readonly AllocationEntry[],
@@ -254,8 +259,10 @@ export function fullAllocationFactors(
 	/** The run's historical days (before a forecast tail); default every day. */
 	historyDays: number = days,
 	/** The first run day the unit abstracts on (engine ≥ 1.30.0); 0 = every day. */
-	from = 0
-): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[] } {
+	from = 0,
+	/** A snapshot's run day (0 … days): also fit its water year on the days before it (`before`). */
+	asOf?: number
+): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[]; before?: number } {
 	const factor = new Float64Array(days);
 	const years: { waterYear: number; demandM3: number; registeredM3: number }[] = [];
 	const unscaled: number[] = [];
@@ -282,7 +289,29 @@ export function fullAllocationFactors(
 		years.push({ waterYear: wy, demandM3: all, registeredM3: pinned || (fit < last && d > 0) ? f * all : reg });
 		t = last + 1;
 	}
-	return { factor, years, unscaled };
+	const before = asOf === undefined ? undefined : factorBefore(allocs, demand, start, asOf, pinnedFirst, historyDays, from);
+	return { factor, years, unscaled, ...(before !== undefined ? { before } : {}) };
+}
+
+/**
+ * fullAllocationFactors' `before`: the factor of the water year run day `at`
+ * falls in, fitted on that year's run days before `at` (and before the
+ * historical days' end, as the year a forecast tail starts in is), as
+ * fullAllocationFactors fits a year: the volume registered over them ÷ the
+ * demand over them, 0 without demand. undefined when no day of the year
+ * comes before `at` in the run.
+ */
+function factorBefore(allocs: readonly AllocationEntry[], demand: ArrayLike<number>, start: number, at: number, pinnedFirst: number | undefined, historyDays: number, from: number): number | undefined {
+	const wy = waterYearOf(start + at);
+	const t0 = Math.max(0, wyStart(wy) - start);
+	if (t0 >= at) return undefined;
+	if (t0 === 0 && pinnedFirst !== undefined) return pinnedFirst;
+	const fit = (t0 < historyDays ? Math.min(at, historyDays) : at) - 1;
+	const a = Math.max(t0, from);
+	let d = 0;
+	for (let k = a; k <= fit; k++) d += demand[k]!;
+	const reg = a > fit ? 0 : registeredOver(allocs, wy, start + a, start + fit);
+	return d > 0 ? reg / d : 0;
 }
 
 /** What a plan node needs for the modes (../network/simulate.ts PlanNode). */
@@ -316,7 +345,7 @@ export interface AllocationPlan {
 	/** Node index → its allocations (farms and water users only). */
 	byNode: Map<number, AllocationEntry[]>;
 	/** 'fullAllocation': node index → its demand's factor per day, and per water year the demand before and the volume after. */
-	scaled: Map<number, { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[] }>;
+	scaled: Map<number, { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; before?: number }>;
 	/** The run's historical days, when a forecast tail follows them (engine ≥ 1.28.0): full allocation fits its factors on these. */
 	historyDays?: number;
 	/** Node index → the first run day it abstracts on, for units with an abstraction date (engine ≥ 1.30.0). */
@@ -329,6 +358,8 @@ export interface AllocationPlan {
 	 * resumed run).
 	 */
 	pinned?: Map<number, number>;
+	/** A capture run (../warmstart, engine ≥ 1.69.0): the snapshot's run day, so each scaled unit also records `before` there. */
+	asOf?: number;
 }
 
 /** The usable allocations matched to the run's farms and water users (node index → its allocations). */
@@ -366,9 +397,9 @@ export function matchAllocations(
 export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Float64Array, start: number, days: number, name: string, warnings: string[]): Float64Array | null {
 	const allocs = plan.byNode.get(i);
 	if (plan.mode !== 'fullAllocation' || !allocs || days <= 0) return null;
-	const f = fullAllocationFactors(allocs, D, start, days, plan.pinned?.get(i), plan.historyDays ?? days, plan.abstractFrom?.get(i) ?? 0);
+	const f = fullAllocationFactors(allocs, D, start, days, plan.pinned?.get(i), plan.historyDays ?? days, plan.abstractFrom?.get(i) ?? 0, plan.asOf);
 	for (let t = 0; t < days; t++) D[t]! *= f.factor[t]!;
-	plan.scaled.set(i, { factor: f.factor, years: f.years });
+	plan.scaled.set(i, { factor: f.factor, years: f.years, ...(f.before !== undefined ? { before: f.before } : {}) });
 	if (f.unscaled.length) warnings.push(`full allocation: "${name}" has no demand in water year${f.unscaled.length === 1 ? '' : 's'} ${f.unscaled.join(', ')}, so it takes none of its registered volume there`);
 	return f.factor;
 }

@@ -271,7 +271,13 @@ describe('fit record', () => {
 		// Draft rules, the same as the settings': not evidence, but not stale.
 		const draft = fitRecordStatus({ ...s, calibrationRules: defaultCalibrationRules() }, rec);
 		expect(draft).toMatchObject({ draftRules: true, rulesChanged: false });
-		expect(fitRecordCaveats(draft)).toEqual([expect.stringMatching(/^Automated calibration picked this fit under draft rules/)]);
+		// The rule left 2013 out and the settings don't (engine ≥ 1.69.0): the run's statistics score it, so not in-sample.
+		expect(draft.ruleYearsScored).toBe(true);
+		expect(fitRecordCaveats(draft)).toEqual([expect.stringMatching(/^The automated fit left some water years out by its rules/), expect.stringMatching(/^Automated calibration picked this fit under draft rules/)]);
+		// Excluding 2013 in the settings too makes them the fit's own days: neither flag (positive control).
+		const kept = fitRecordStatus({ ...s, calibrationRules: defaultCalibrationRules(), calibrationExclusions: [...(s.calibrationExclusions ?? []), { waterYear: 2013, reason: 'as the rule' }] }, rec);
+		expect(kept).toMatchObject({ exclusionsChanged: false });
+		expect(kept.ruleYearsScored).toBeUndefined();
 		// Another selection now: the rules would pick another way.
 		const moved = fitRecordStatus({ ...s, calibrationRules: { ...defaultCalibrationRules(), selection: { test: 'split', score: 'kgePrime' } } }, rec);
 		expect(moved.rulesChanged).toBe(true);
@@ -281,7 +287,7 @@ describe('fit record', () => {
 		expect(signed).toMatchObject({ rulesChanged: false, draftRules: true });
 		// Signed-off rules at the fit: no caveat. A fit a person chose has neither flag.
 		const signedRec = fitRecordFromReport(report(), { ...ctx, auto: { ...auto, rules: { ...defaultCalibrationRules(), signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } } });
-		expect(fitRecordCaveats(fitRecordStatus(s, signedRec))).toEqual([]);
+		expect(fitRecordCaveats(fitRecordStatus({ ...s, calibrationExclusions: [...(s.calibrationExclusions ?? []), { waterYear: 2013, reason: 'as the rule' }] }, signedRec))).toEqual([]);
 		expect(fitRecordStatus(s, fitRecordFromReport(report(), ctx))).toMatchObject({ rulesChanged: false, draftRules: false });
 	});
 

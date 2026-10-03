@@ -1292,12 +1292,17 @@ def run(doc: dict) -> dict:
                 tot_cap += c
             f = by_id[dst]
             area, pd, e_raw, sp_raw = pre[dst]
-            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw))
+            # The room after today's step: losses clamped as the step clamps them, today's
+            # dam-rule receipts counted (engine >= 1.69.0); what it sends makes no room.
+            held = storage[dst] + pd + J[dst]
+            e_c = min(e_raw, max(held, 0.0))
+            sp_c = min(sp_raw, max(held - e_c, 0.0))
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
             for t, c in caps:
                 need = dam_dem(dst, i) + (rm_dst if t.get("topUpDam") else 0.0)
                 ot_need[t["id"]] = need * c / tot_cap if tot_cap > 0 else 0.0
         arrived: dict[str, list[float]] = {}
-        back_to: dict[str, float] = {}
+        back_to: dict[str, list[tuple[str, float]]] = {}
 
         # Nodes in network order (§2.7, §2.7c, §2.6a).
         U: dict[str, float] = {}
@@ -1475,7 +1480,8 @@ def run(doc: dict) -> dict:
             dead = cap * (x.get("damMinPct") or 0.0)
             # Off-take water arriving (§2.6a): used first for the demand.
             arr_up = arr_other = 0.0
-            for t, v in arrived.get(xid, []):
+            # Summed in the rules' id order, however the sources are ordered (§6, the ordering rule).
+            for t, v in sorted(arrived.get(xid, []), key=lambda tv: tv[0]["id"]):
                 if t.get("topUpDam"):
                     arr_up += v
                 else:
@@ -1702,22 +1708,39 @@ def run(doc: dict) -> dict:
             ots = [t for t in ot_from.get(xid, []) if rule_limit(t, o, m) > 0]
             for prio in sorted({t["priority"] for t in ots}):
                 grp = [t for t in ots if t["priority"] == prio]
-                vs = {}
-                frees = {}
+                wants = {}
+                keeps = {}
                 for t in grp:
                     hk = t.get("handsOffM3Day")
                     keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
-                    frees[t["id"]] = max(0.0, U0 - taken - keep_k)
+                    keeps[t["id"]] = keep_k
                     lim = rule_limit(t, o, m)
-                    v = min(frees[t["id"]], lim)
+                    v = min(max(0.0, U0 - taken - keep_k), lim)
                     if t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
-                    vs[t["id"]] = max(0.0, v)
-                tot = sum(vs.values())
-                mx = max(frees.values())
-                if tot > mx and tot > 0:
-                    for t in grp:
-                        vs[t["id"]] = vs[t["id"]] * mx / tot
+                    wants[t["id"]] = max(0.0, v)
+                # Shared in bands at the rules' keeps (§2.6a): the flow between two successive keeps, highest
+                # first, goes to the rules keeping that much or less, pro rata to what each still wants.
+                act = sorted((tid for tid in wants if wants[tid] > 0), key=lambda tid: (-keeps[tid], tid))
+                vs = {tid: 0.0 for tid in wants}
+                top = U0 - taken
+                jb = 0
+                while jb < len(act):
+                    floor = keeps[act[jb]]
+                    band = max(0.0, top - floor)
+                    tot = sum(wants[tid] for tid in act[jb:])
+                    if tot > band:
+                        for tid in act[jb:]:
+                            g_ = wants[tid] * band / tot
+                            vs[tid] += g_
+                            wants[tid] -= g_
+                    else:
+                        for tid in act[jb:]:
+                            vs[tid] += wants[tid]
+                        break
+                    top = min(top, floor)
+                    while jb < len(act) and keeps[act[jb]] == floor:
+                        jb += 1
                 for t in grp:
                     v = vs[t["id"]]
                     rule_vol[t["id"]][i] = v
@@ -1727,8 +1750,10 @@ def run(doc: dict) -> dict:
                     rp = t.get("lossReturnPct") or 0.0
                     if rp > 0:
                         rn = t.get("lossReturnNodeId") or xid
-                        back_to[rn] = back_to.get(rn, 0.0) + v * lp * rp
-            back = back_to.get(xid, 0.0)
+                        back_to.setdefault(rn, []).append((t["id"], v * lp * rp))
+            back = 0.0
+            for _, bv in sorted(back_to.get(xid, [])):
+                back += bv
             Uo = U0 - taken + back
             V = (H + I + j + pd + GW + GWd + arrives + back) - (G + g_riv - T) - E - (Q - s_prev) - Uo - dep - lost - taken - pool_chg
             aa = noise_short(z, Uo)

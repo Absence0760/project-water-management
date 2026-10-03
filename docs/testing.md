@@ -125,6 +125,21 @@ MinIO check is `backend/src/__tests__/minio.ts` (`minioUp`).
 The only skips CI allows are for the gitignored client data (`data/`, the
 source workbooks), which CI never has (CLAUDE.md rule 10).
 
+## Engine end-to-end tests
+
+`packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per
+area (`demand`, `rain`, `network`, `balance`, `ewr`, `outputs`, `calibration`; then `cross` for
+features together, `edge` for long, tiny, huge and boundary-date runs, `deep` for the off-takes
+and allocations, `open` for questions the first round left):
+small invented catchments run through `runModel` (or `calibrate`, the outlook,
+a resumed run), checked against values worked by hand, or by a small
+re-derivation inside the test, from docs/model.md, never against what the
+engine returned before. The `*.differential.e2e.test.ts` files replay the
+documented formulas over a few hundred random networks. `*.regressions.e2e.test.ts`
+pin the bugs the suite found (engine 1.69.0, errata ER-13 … ER-29). They run in
+`pnpm test` (a few seconds in all); run one area with
+`pnpm -C packages/engine exec vitest run src/e2e/<area>`.
+
 ## Why the slow ones are shaped the way they are
 
 - **Engine random soak** (`packages/engine/src/fuzz/`): checkAll on 400 seeds

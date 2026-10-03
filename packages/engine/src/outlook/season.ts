@@ -14,7 +14,7 @@
 // dropped), a season that crosses 1 October draws on two water years of the
 // record in order, and when only one of the season and the analogue spans a
 // 29 February the analogue's calendar drifts by one day by the season's end.
-import { fromEpochDay, toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearLabel, waterYearOf, isIsoDate as isRealDate } from '../calendar';
 
 /** A season: the decision date (its first day) to the season end, inclusive. */
 export interface OutlookSeason {
@@ -70,7 +70,7 @@ export function defaultOutlookSeason(asOf: string): OutlookSeason {
 export function resolveSeason(season: OutlookSeason): ResolvedSeason {
 	for (const k of ['decisionDate', 'seasonEnd'] as const) {
 		const v = season[k];
-		if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || fromEpochDay(toEpochDay(v)) !== v) throw new RangeError(`${k} "${String(v)}" is not an ISO date (YYYY-MM-DD)`);
+		if (!isRealDate(v)) throw new RangeError(`${k} "${String(v)}" is not an ISO date (YYYY-MM-DD)`);
 	}
 	const from = toEpochDay(season.decisionDate);
 	const to = toEpochDay(season.seasonEnd);

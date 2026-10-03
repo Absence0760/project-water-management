@@ -45,7 +45,9 @@ import {
 } from './sensitivityVerdict';
 
 const r6 = (v: number): number => (Number.isFinite(v) && v !== 0 ? Number(v.toPrecision(6)) : v === 0 ? 0 : v);
-const RAIN_KINDS: ScalableSeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+// Every rain series, a rain-source period's series and the reanalysis included (§2.10g: "so the whole
+// forcing moves"); a fitted period factor or reanalysis fallback re-fits to the same ratio under one factor.
+const RAIN_KINDS: ScalableSeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm', 'rain_catchment_alt_mm', 'rain_reanalysis_mm'];
 const fmtFactor = (f: number) => `× ${Number(f.toPrecision(4))}`;
 
 /** The EWR sites of a run and their values, from its summary (the curtailment table's sites, the Reserve rates). */

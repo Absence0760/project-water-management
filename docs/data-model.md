@@ -3177,6 +3177,18 @@ each farm's own figures, what the farm's farmers were shown.
   DESC)`, `outlook_id`, `published_by`, `ended_by`; on farms `node_id`,
   `project_id`.
 
+### No negative month in A-pan or the pragmatic EWR (187_settings_nonneg_monthly.sql)
+
+Engine 1.69.0 ([erratum ER-17](./engine-errata.md)): a negative monthly A-pan
+made a dam gain water from evaporation. The API now refuses a negative month
+in `settings.apanMm` and `settings.ewrPragmaticM3PerDay`, and the engine runs a
+negative A-pan month as 0 ([model.md §2.2](./model.md)). The Settings tab saves
+the whole settings object, so a stored negative month would have made every
+later settings save fail: 187 sets each negative month in those two rows to 0
+(what the engine already runs) and leaves every other value, key and row as it
+was. Stored runs keep the inputs they ran with. A project file that still
+carries a negative month is refused on import, as the routes refuse it.
+
 ### Legacy runoff settings removed (064_remove_legacy_runoff.sql)
 
 Engine 1.0.0 removed the legacy b023 recession runoff model (issue #16,
