@@ -140,7 +140,9 @@ describe('the allocations cap holds under a concurrent burst', () => {
 		const res = await burst((i) => owner.call('POST', `/projects/${c.projectId}/allocations`, hand(i)), 2, 201, 409);
 		expect(res.filter((r) => r.status === 409).every((r) => r.body.error === `this project has reached the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations`)).toBe(true);
 		expect((await asOwner('SELECT count(*)::int AS n FROM allocation WHERE project_id = $1', [c.projectId]))[0].n).toBe(ALLOCATIONS_PER_PROJECT_MAX);
-	});
+		// Filling the project to its cap is a 4 998-row import through the API (parse, match,
+		// insert, holders): seconds of real work on a CI runner, past vitest's 5 s default.
+	}, 60_000);
 });
 
 describe(`a report or schedule emails at most ${MAX_RECIPIENTS} people`, () => {
