@@ -66,6 +66,9 @@ CREATE TABLE delineation_request (
 	reach         jsonb CHECK (reach IS NULL OR (jsonb_typeof(reach) = 'object' AND octet_length(reach::text) <= 300)),
 	-- The smallest window (cells a side) the job tries: the one after the window the request stopped at.
 	from_window   integer NOT NULL CHECK (from_window BETWEEN 1 AND 65536),
+	-- Where the request's last window cut the catchment (delineate.ts WindowAim: the zoom, the cut catchment's box in global
+	-- pixels, the sides it reached), so the job's first window is placed over it rather than centred on the click again.
+	aim           jsonb CHECK (aim IS NULL OR (jsonb_typeof(aim) = 'object' AND octet_length(aim::text) <= 300)),
 	proposal_id   uuid,
 	refusal_code  text CHECK (refusal_code IN ('outside', 'no_data', 'too_large', 'too_small', 'outline', 'larger_channel', 'confluence', 'off')),
 	refusal       text CHECK (char_length(refusal) BETWEEN 1 AND 1000),
@@ -100,10 +103,10 @@ CREATE FUNCTION delineation_request_final() RETURNS trigger
 	BEGIN
 		IF OLD.status <> 'queued' AND (
 			(NEW.id, NEW.project_id, NEW.status, NEW.click_kind, NEW.click_lon, NEW.click_lat, NEW.keep_point, NEW.reach, NEW.from_window,
-				NEW.refusal_code, NEW.refusal, NEW.larger, NEW.check_note, NEW.created_at, NEW.finished_at)
+				NEW.aim, NEW.refusal_code, NEW.refusal, NEW.larger, NEW.check_note, NEW.created_at, NEW.finished_at)
 			IS DISTINCT FROM
 			(OLD.id, OLD.project_id, OLD.status, OLD.click_kind, OLD.click_lon, OLD.click_lat, OLD.keep_point, OLD.reach, OLD.from_window,
-				OLD.refusal_code, OLD.refusal, OLD.larger, OLD.check_note, OLD.created_at, OLD.finished_at)
+				OLD.aim, OLD.refusal_code, OLD.refusal, OLD.larger, OLD.check_note, OLD.created_at, OLD.finished_at)
 			OR (NEW.proposal_id IS DISTINCT FROM OLD.proposal_id AND NEW.proposal_id IS NOT NULL)
 			OR (NEW.job_id IS DISTINCT FROM OLD.job_id AND NEW.job_id IS NOT NULL)
 		) THEN

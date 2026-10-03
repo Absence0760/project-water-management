@@ -31,7 +31,9 @@ import { ModelBody, modelProblems, nameText } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
-import { delineateUnits, START_METHOD_VERSION, type UnitRole } from './subcatchments.js';
+import { PlacementChoice, placementOf, placementWarnings, pointReaches, PointsAtConfluence, ReachNotNearPoint, type PointPlacement, type PointReach } from './pointPlacement.js';
+import { panWarning, type PanReport } from './pans.js';
+import { delineateUnits, START_METHOD_VERSION, type PlacementHints, type UnitRole } from './subcatchments.js';
 import { pointInGeometry } from '../geo/geojson.js';
 
 /** Proposals one project may ask for in an hour: each routes the DEM (seconds of CPU on the API). */
@@ -52,8 +54,11 @@ export const ProposeBody = z
 	.object({
 		/** A gauge on the map to take as the outlet; absent or null = the boundary's own outlet. */
 		outletFeatureId: z.string().uuid().nullable().optional(),
+		/** The outlet gauge's river at a confluence, and its larger channel chosen (pointPlacement.ts). */
+		outletReach: PlacementChoice.reach,
+		outletUseLarger: PlacementChoice.useLarger,
 		points: z
-			.array(z.object({ featureId: z.string().uuid(), role: z.enum(ROLES) }).strict())
+			.array(z.object({ featureId: z.string().uuid(), role: z.enum(ROLES), ...PlacementChoice }).strict())
 			.max(START_POINTS_MAX)
 			.refine((ps) => new Set(ps.map((p) => p.featureId)).size === ps.length, 'a point is listed twice')
 	})
@@ -103,17 +108,25 @@ export interface StartUnit {
 	drainsInto: string | null;
 	/** Whether drainsInto is a proposal (from the DEM) or only the default (without one). */
 	drainsIntoProposed: boolean;
+	/** How its point was put on the channel (start-7); null without a DEM. */
+	placement: PointPlacement | null;
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 export interface StartPlan {
 	fromDem: boolean;
-	outlet: { featureId: string | null; name: string; point: Position | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null };
+	outlet: { featureId: string | null; name: string; point: Position | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null; placement: PointPlacement | null };
 	/** The catchment above the outlet (from the DEM) and the boundary on the map, m². */
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	/** What drains to the outlet through no unit: proposed as one more (natural) unit. */
-	rest: { name: string; areaM2: number | null; geometry: Polygonal | null };
-	dropped: { featureId: string; name: string; reason: string }[];
+	rest: { name: string; areaM2: number | null; geometry: Polygonal | null; nonContributingM2?: number };
+	/** The catchment's pans (pans.ts, start-11): what of it drains into one, the largest, the method. Absent without a DEM or before start-11. */
+	pans?: PanReport;
+	/** `placement`: how its point was put on the channel (start-7; absent without a DEM, or for a point never placed). */
+	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
 	cellSizeM: number | null;
 	zoom: number | null;
@@ -254,7 +267,7 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 	const outside = (p: MapInputs['points'][number]) => !!boundary && !pointInGeometry(pointOf(p.geometry), boundary);
 	return {
 		fromDem: false,
-		outlet: { ...inputs.outlet, point: inputs.outlet.point, snapDistanceM: null, foundIn: inputs.outlet.foundIn === 'boundary' ? null : inputs.outlet.foundIn },
+		outlet: { ...inputs.outlet, point: inputs.outlet.point, snapDistanceM: null, foundIn: inputs.outlet.foundIn === 'boundary' ? null : inputs.outlet.foundIn, placement: null },
 		catchment: { areaM2: null, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
 		units: inputs.points.filter((p) => !outside(p)).map((p) => ({
 			key: p.featureId,
@@ -267,7 +280,8 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 			totalAreaM2: null,
 			geometry: null,
 			drainsInto: null,
-			drainsIntoProposed: false
+			drainsIntoProposed: false,
+			placement: null
 		})),
 		rest: { name: REST_NAME, areaM2: inputs.boundary?.areaM2 ?? null, geometry: inputs.boundary?.geometry ?? null },
 		dropped: inputs.points.filter(outside).map((p) => ({ featureId: p.featureId, name: p.name, reason: 'is outside the catchment boundary' })),
@@ -299,6 +313,40 @@ export function upstreamFirst<T extends { key: string; drainsInto: string | null
 	return units.map((u, i) => ({ u, i, d: depth(u) })).sort((a, b) => b.d - a.d || a.i - b.i).map((x) => x.u);
 }
 
+/** The key the outlet's reach is kept under (no feature id is empty). */
+export const OUTLET_KEY = '';
+
+/**
+ * Each map point's river reach (and the outlet gauge's), for placing it as Delineate does (pointPlacement.ts). Inside the
+ * reading transaction; a point at a confluence without a pick is a 422 `confluence` naming every such point and its rivers.
+ */
+export async function readReaches(
+	db: Db,
+	outlet: { name: string; point: Position | null; foundIn: string | null },
+	points: readonly { featureId: string; name: string; geometry: Geometry }[],
+	choices: { outletReach?: { dataset: string; reachId: number }; outletUseLarger?: boolean; points: readonly { featureId: string; reach?: { dataset: string; reachId: number }; useLarger?: boolean }[] }
+): Promise<Map<string, PointReach>> {
+	const by = new Map(choices.points.map((p) => [p.featureId, p]));
+	try {
+		const reaches = await pointReaches(db, [
+			...(outlet.foundIn === 'gauge' && outlet.point ? [{ key: OUTLET_KEY, name: outlet.name, at: outlet.point, reach: choices.outletReach ?? null, useLarger: choices.outletUseLarger }] : []),
+			...points.flatMap((p) => (p.geometry.type === 'Point' ? [{ key: p.featureId, name: p.name || 'A point', at: p.geometry.coordinates, reach: by.get(p.featureId)?.reach ?? null, useLarger: by.get(p.featureId)?.useLarger }] : []))
+		]);
+		// A dam polygon has no reach to look up, but "Use that channel" puts it on the channel its outline clips (damOutflow).
+		for (const p of points) if (p.geometry.type !== 'Point' && by.get(p.featureId)?.useLarger) reaches.set(p.featureId, { reach: null, chosen: false, hints: { useLarger: true } });
+		return reaches;
+	} catch (err) {
+		if (err instanceof PointsAtConfluence) throw new ApiError(422, err.message, { reason: 'confluence', points: err.points });
+		if (err instanceof ReachNotNearPoint) throw new ApiError(400, err.message);
+		throw err;
+	}
+}
+
+/** The outlet's placement hints: a gauge's reach, a delineated outlet's own cell (already on the channel), else none. */
+export function outletHints(foundIn: string | null, reaches: ReadonlyMap<string, PointReach>): PlacementHints | undefined {
+	return foundIn === 'delineation' ? { exact: true } : reaches.get(OUTLET_KEY)?.hints;
+}
+
 export const startRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/start', async (c) => {
 		const id = c.req.param('id');
@@ -323,7 +371,7 @@ export const startRoutes = new Hono<AuthEnv>()
 		const body = ProposeBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const { inputs, attempt } = await withUser(userId, async (db) => {
+		const { inputs, reaches, attempt } = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			if ((await nodeCount(db, id)) > 0) throw new ApiError(409, NOT_EMPTY);
 			const { rows } = await db.query<{ n: number }>(`SELECT count(*)::integer AS n FROM start_proposal WHERE project_id = $1 AND created_at > now() - interval '1 hour'`, [id]);
@@ -332,7 +380,10 @@ export const startRoutes = new Hono<AuthEnv>()
 			}
 			// Counted before any work, refused and failed attempts too (184_dem_attempt).
 			const attempt = await beginDemAttempt(db, 'start');
-			return { inputs: await readMapInputs(db, id, body), attempt };
+			const inputs = await readMapInputs(db, id, body);
+			// Each point's river reach, with a DEM to place it on (without one nothing is placed, so nothing is asked).
+			const reaches = configuredDem() ? await readReaches(db, inputs.outlet, inputs.points, body) : new Map<string, PointReach>();
+			return { inputs, reaches, attempt };
 		});
 		try {
 			const dem = configuredDem();
@@ -357,8 +408,9 @@ export const startRoutes = new Hono<AuthEnv>()
 				try {
 					r = await delineateUnits(dem, {
 						outlet: inputs.outlet.point,
+						outletHints: outletHints(inputs.outlet.foundIn, reaches),
 						boundary: inputs.boundary?.geometry ?? null,
-						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry }))
+						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
 					});
 				} catch (err) {
 					if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
@@ -367,6 +419,9 @@ export const startRoutes = new Hono<AuthEnv>()
 				}
 				const named = new Map(inputs.points.map((p) => [p.featureId, p]));
 				const warnings: string[] = [];
+				const outletPlacement = placementOf(r.outlet, reaches.get(OUTLET_KEY));
+				// The outlet's placement first: every unit is placed against it.
+				if (inputs.outlet.point) warnings.push(...placementWarnings(inputs.outlet.name, inputs.outlet.point, outletPlacement, true));
 				if (inputs.boundary && Math.abs(r.catchment.areaM2 / inputs.boundary.areaM2 - 1) > BOUNDARY_MISMATCH) {
 					warnings.push(
 						`The catchment above the outlet is ${km2(r.catchment.areaM2)} on the elevation model, but the boundary on the map is ${km2(inputs.boundary.areaM2)}. The units’ areas follow the elevation model; check the outlet and the boundary.`
@@ -384,19 +439,32 @@ export const startRoutes = new Hono<AuthEnv>()
 					totalAreaM2: u.role === 'user' ? null : u.totalAreaM2,
 					geometry: u.geometry,
 					drainsInto: u.drainsInto,
-					drainsIntoProposed: true
+					drainsIntoProposed: true,
+					placement: placementOf(u, reaches.get(u.id)),
+					nonContributingM2: u.nonContributingM2,
+					totalNonContributingM2: u.totalNonContributingM2
 				}));
+				const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
+				// A dropped point snapped beside its river: the larger channel is how to bring it in.
+				for (const d of dropped) if (d.placement?.larger) warnings.push(...placementWarnings(d.name || 'A point', pointOf(named.get(d.featureId)!.geometry), { ...d.placement, unmatched: false }));
 				for (const u of units) {
+					if (u.placement) warnings.push(...placementWarnings(u.name, pointOf(named.get(u.key)!.geometry), u.placement));
 					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
 					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
 				}
+				const panSentence = panWarning(r.pans, r.catchment.areaM2, [
+					...units.map((u) => ({ name: u.name, ncM2: u.nonContributingM2 ?? 0 })),
+					{ name: REST_NAME, ncM2: r.rest.nonContributingM2 }
+				]);
+				if (panSentence) warnings.push(panSentence);
 				plan = {
 					fromDem: true,
-					outlet: { featureId: inputs.outlet.featureId, name: inputs.outlet.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn },
+					outlet: { featureId: inputs.outlet.featureId, name: inputs.outlet.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
 					catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
 					units: upstreamFirst(units),
-					rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry },
-					dropped: r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason })),
+					rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
+					pans: r.pans,
+					dropped,
 					warnings,
 					cellSizeM: r.cellSizeM,
 					zoom: r.zoom,

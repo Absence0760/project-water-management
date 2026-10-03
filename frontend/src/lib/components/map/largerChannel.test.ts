@@ -23,6 +23,13 @@ describe('bearingWord and largerLine', () => {
 	it('words the channel for a click’s line', () => {
 		expect(largerLine([21.465, -28.389], larger)).toBe('a much larger channel (620 km²) runs 504 m north: the river line may sit off the channel the elevation model sees');
 	});
+
+	it('words a channel offered for matching the mapped river (place.ts rules 3 and 4), which can be the smaller one', () => {
+		const matching = { at: [28.0002, -26.3292] as [number, number], distanceM: 480, km2: 610.6, pointKm2: 2.04, reachKm2: 623 };
+		expect(largerLine([28.0002, -26.3336], matching)).toBe(
+			'the channel matching the mapped river (about 623 km² there) runs 480 m north, 611 km² here: the point stays on the channel it is on unless you move it'
+		);
+	});
 });
 
 describe('confluenceOf and choiceText', () => {

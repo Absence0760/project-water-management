@@ -3824,6 +3824,25 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       refused, not cut off. (Sub-catchments from clicks don't use it: a
       click past the window is an inflow point, maps.md § Sub-catchments
       from clicks.)
+- [x] **Delineate's windows and the DEM's edge** (persona-hydrologist
+      findings 1, 2 and 6, issue #390; `delineate-6`, branch wip/r3-windows;
+      design/delineation.md § Method 2 and 9): a river the window cuts grows
+      the window instead of falling back to a gully, each larger window is
+      placed over the catchment rather than centred on the click, and
+      missing DEM data is the data's edge instead of a sink beside it.
+      Measured with `scripts/research/snap-outlets.ts`
+      (design/delineation-snapping.md § Outlets of quaternaries).
+- [x] **Start, Divide and Sub-catchments still routed centred windows that
+      never grew for a cut river** (finding 1's third bullet; `start-12`,
+      branch wip/r3-windows, design/start-from-map.md § step 1): once
+      `start-7` gave the gauge outlet its reach's area, `delineateUnits`
+      reuses `windowOrigin` and `cutChannel` for its outlet (a gauge or the
+      lowest click), and a cut click keeps `unmatched` unless its reach is
+      larger than the routed square.
+- [x] **The worker's first window lost the request's aim** (code review of
+      round 3): the request stores where its last window cut the
+      catchment (`delineation_request.aim`, 191) and the job's first window
+      is placed over it, rather than centred on the click again.
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on
@@ -3900,6 +3919,67 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `area_m2`, so the unit's area equals its parcel's. Splitting such a
       parcel checks the parts against the outline's own area, and "area from
       the map" names the cells in its revision reason.
+- [ ] **Rerun the gauge experiment after the persona's delineation fixes**
+      (issue #390 part 1, design/delineation-snapping.md § Gauges). At 446
+      published gauge positions the failures were persona-hydrologist
+      findings 1, 4 (in both directions: a gauge on a river moved onto a
+      tributary's nearer line, 9 cases, all within 1 km of a junction), 6
+      (94 of 129 gauges of 1 000–10 000 km² refused `too_large`), 7 (with no
+      reach, an off-river position gets a gully and no caveat at all), 10
+      and 11. Each fix gets its regression test in that round; then rerun
+      `backend/scripts/research/snap-gauges.ts` (the header says how) and
+      refresh the section's numbers. Trigger: the round fixing those
+      findings merging.
+- [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
+      review finding 9, fixed in `start-10` for the common cases). A dam
+      polygon whose outline only clips a much larger channel now goes at
+      its own footprint's outflow with the river offered
+      (`subcatchments.ts` `damOutflow`), but the geometry can't tell a long
+      off-channel dam lying along the river, overlapping it for most of its
+      length, from a narrow reservoir on it: that one is still taken as on
+      the river, its catchment the river's. Durable fix: an "off-channel
+      (filled by a pump or a furrow)" choice on a dam feature (Dams page
+      and map), which Start and Divide honour by placing the dam at its
+      own outflow whatever the geometry says. Trigger: a client with
+      off-channel storage dams, or a Start plan where a dam's area is
+      many times its neighbours'.
+- [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
+      gauge run). On 2 flat lower rivers GLO-30 has no channel within
+      2.5 km carrying the river, and Delineate accepts a catchment under
+      half the published area with only the *unmatched* caveat. Durable
+      fix: refuse, or ask, when the placed area is under ~10 % of the
+      reach's area and no matching channel lies within 2.5 km (the same
+      rule finding 7 asks for), and name the cause ("the elevation model
+      routes this river elsewhere here: draw or import the boundary").
+      Trigger: finding 7's fix, which should cover these with a test on a DEM whose
+      river is diverted.
+- [x] **Pans: the non-contributing area of a delineated catchment**
+      (persona-hydrologist finding 8, 2026-10-03, branch wip/r3-pans;
+      design/delineation.md § Pans, design/pans-research.md): the area
+      draining into pans (closed depressions at least 1 m deep, 0.1 km² in
+      floor, holding at least 100 mm of their catchment's runoff) is reported
+      beside every delineation (193, delineate-9), Start and Divide plan
+      (per piece, per unit's whole catchment; start-11) and click piece (its
+      line on the sheet and its saved description), with the effective area;
+      the routed catchment is unchanged.
+- [ ] **Take the effective area into the model** (from finding 8's fix).
+      The proposal reports the effective area, but "Use this area", Start's
+      and Divide's area ticks and a saved piece all still take the gross
+      area, so a hydrologist who models the pans as non-contributing types
+      it in. Durable fix: an explicit choice beside each area tick ("the
+      gross area" / "the effective area, without the pans"), recorded in the
+      node's area source and the revision reason, never a silent default.
+      Trigger: the hydrologist asking for it after using the figure, or a
+      client catchment in the pan veld (C, D, the Molopo).
+- [ ] **Cross-check a pan against the river network** (from finding 8's
+      fix). The storage rule keeps out a drawn-down dam and an embankment
+      pond on the synthetic DEM and on the real one around Bultfontein, but a
+      large storage dam low in its catchment could still pass it (a
+      depression holding over 100 mm of its catchment's runoff). Durable
+      fix: a depression a loaded HydroRIVERS reach flows out of is not a pan
+      (HydroSHEDS marks endorheic sinks itself), or WR2012's endoreic-area
+      polygons as reference data once their licence is known. Trigger: a
+      pan listed on a proposal that is a dam on a river.
 
 ## Crop factors (issue #54 item 1)
 
@@ -5668,3 +5748,17 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       (HydroRIVERS and the six default GSW tiles pinned, dPET recorded on
       first fetch); Protomaps and Mapterhorn publish whole-archive MD5s that
       a ranged `pmtiles extract` can't use.
+
+## Placing a click on the DEM's channel (hydrologist persona findings 4, 7, 13; delineate-5)
+
+- [ ] **A head reach's upper-end area is a constant.** `reach.ts` takes
+      HydroRIVERS' stated 10 km² threshold (`HEAD_KM2`) for the upper end
+      of a reach nothing flows into. Where the DEM drains well under that at
+      the head (4 of 27 matched head-reach clicks, 2026-10-03,
+      [delineation-snapping.md § sixth experiment](./design/delineation-snapping.md#clicks-on-the-red-lines-gullies-and-the-head-of-a-reach-sixth-experiment-delineate-5)),
+      a cell 300–900 m down the line still fits the band better than the
+      click's own. Durable fix: read the head's area from the DEM at the
+      reach's first vertex (the matching cell there) instead of a constant,
+      or match head reaches only within the snap radius. Trigger: the next
+      Delineate accuracy round, or a client report of a dam wall placed
+      below itself.

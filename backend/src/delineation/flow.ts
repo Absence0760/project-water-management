@@ -20,6 +20,10 @@ export const DY = [0, 1, 1, 1, 0, -1, -1, -1];
 const DIST = [1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2];
 /** A cell that drains out of the grid: the window's edge, or no data. */
 export const OUT = 255;
+/** edgeMask's codes: the window's border, where the terrain goes on beyond the window. */
+export const BORDER = 1;
+/** edgeMask's codes: a no-data cell, or a cell beside one, where what lies beyond is unknown. */
+export const NO_DATA_EDGE = 2;
 
 const f64 = new Float64Array(1);
 const u64 = new BigUint64Array(f64.buffer);
@@ -82,8 +86,15 @@ class Heap {
 }
 
 /**
- * Edge cells: the grid's border and every no-data cell. Water reaching one
- * leaves the grid, so the flood starts from them.
+ * Edge cells, where water leaves the grid and the flood starts: the grid's
+ * border (BORDER), and every no-data cell and every cell beside one
+ * (NO_DATA_EDGE; one beside both is NO_DATA_EDGE). The cells beside a hole
+ * are the data's border, as the window's border cells are the window's: an
+ * edge at its own elevation, where what lies beyond is unknown. A no-data
+ * cell has no elevation and seeds nothing (fill). RichDEM's Priority-Flood
+ * (Barnes 2014) instead floods no data as lower than any elevation, which
+ * suits a DEM whose no data is the sea; here the sea is data (elevation 0 or
+ * below) and no data is a missing tile, the extract's edge (delineate-6).
  */
 export function edgeMask(g: Grid): Uint8Array {
 	const { nx, ny, z } = g;
@@ -91,7 +102,14 @@ export function edgeMask(g: Grid): Uint8Array {
 	for (let y = 0; y < ny; y++) {
 		for (let x = 0; x < nx; x++) {
 			const i = y * nx + x;
-			if (x === 0 || y === 0 || x === nx - 1 || y === ny - 1 || Number.isNaN(z[i]!)) edge[i] = 1;
+			if (x === 0 || y === 0 || x === nx - 1 || y === ny - 1) edge[i] = BORDER;
+			if (!Number.isNaN(z[i]!)) continue;
+			edge[i] = NO_DATA_EDGE;
+			for (let d = 0; d < 8; d++) {
+				const xx = x + DX[d]!;
+				const yy = y + DY[d]!;
+				if (xx >= 0 && yy >= 0 && xx < nx && yy < ny) edge[yy * nx + xx] = NO_DATA_EDGE;
+			}
 		}
 	}
 	return edge;
@@ -114,17 +132,17 @@ export function fill(g: Grid, edge: Uint8Array): number {
 	for (let i = 0; i < n; i++) {
 		if (!edge[i]) continue;
 		closed[i] = 1;
-		// A no-data cell floods as if at sea level's floor: anything beside it drains into it.
-		if (Number.isNaN(z[i]!)) z[i] = -Infinity;
-		// Only edge cells beside a land cell need to be in the queue.
-		heap.push(i);
+		// A no-data cell has no elevation: it is never a spill point. The cells beside it are edges at their own elevation
+		// (edgeMask), so water leaves there only where the data's border is the lowest way out, as at the window's border.
+		// (Until delineate-6 it flooded at −∞, so every cell beside a hole drained into it and no catchment could reach one.)
+		if (!Number.isNaN(z[i]!)) heap.push(i);
 	}
 	let raised = 0;
 	while (heap.size > 0 || pitHead < pitTail) {
 		const c = pitHead < pitTail ? pit[pitHead++]! : heap.pop();
 		const cx = c % nx;
 		const cy = (c - cx) / nx;
-		const up = z[c] === -Infinity ? -Infinity : nextUp(z[c]!);
+		const up = nextUp(z[c]!);
 		for (let d = 0; d < 8; d++) {
 			const x = cx + DX[d]!;
 			const y = cy + DY[d]!;
@@ -133,10 +151,8 @@ export function fill(g: Grid, edge: Uint8Array): number {
 			if (closed[k]) continue;
 			closed[k] = 1;
 			if (z[k]! <= up) {
-				if (up !== -Infinity) {
-					z[k] = up;
-					raised++;
-				}
+				z[k] = up;
+				raised++;
 				pit[pitTail++] = k;
 			} else heap.push(k);
 		}
@@ -254,8 +270,8 @@ export function upstream(nx: number, ny: number, dir: Uint8Array, outlet: number
 	return mask;
 }
 
-/** Whether the catchment reaches a cell beside an edge (so it may continue past the window) and whether that edge is no data. */
-export function touchesEdge(g: Grid, edge: Uint8Array, mask: Uint8Array, noData: Uint8Array): { edge: boolean; noData: boolean } {
+/** Whether the catchment reaches a cell beside an edge (so it may continue past the window) and whether that edge is no data's. */
+export function touchesEdge(g: Grid, edge: Uint8Array, mask: Uint8Array): { edge: boolean; noData: boolean } {
 	const { nx, ny } = g;
 	let atEdge = false;
 	let atNoData = false;
@@ -269,10 +285,37 @@ export function touchesEdge(g: Grid, edge: Uint8Array, mask: Uint8Array, noData:
 				const k = yy * nx + xx;
 				if (edge[k]) {
 					atEdge = true;
-					if (noData[k]) atNoData = true;
+					if (edge[k] === NO_DATA_EDGE) atNoData = true;
 				}
 			}
 		}
 	}
 	return { edge: atEdge, noData: atNoData };
+}
+
+/**
+ * For every cell, whether its catchment reaches a cell beside the window's
+ * border (bit BORDER) or beside the data's (bit NO_DATA_EDGE): what
+ * touchesEdge says of `upstream(cell)`, for all cells at once. A catchment
+ * reaches an edge exactly when one of its cells is beside one, so each such
+ * cell's bits are carried down its D8 path, stopping where they already are:
+ * each cell is passed at most twice.
+ */
+export function openFlags(nx: number, ny: number, dir: Uint8Array, edge: Uint8Array): Uint8Array {
+	const flags = new Uint8Array(nx * ny);
+	for (let y = 1; y < ny - 1; y++) {
+		for (let x = 1; x < nx - 1; x++) {
+			const i = y * nx + x;
+			if (edge[i]) continue;
+			let bits = 0;
+			for (let d = 0; d < 8; d++) bits |= edge[i + DY[d]! * nx + DX[d]!]!;
+			if (!bits || (flags[i]! & bits) === bits) continue;
+			for (let c = i; c >= 0 && !edge[c] && (flags[c]! & bits) !== bits; ) {
+				flags[c] = flags[c]! | bits;
+				const dd = dir[c]!;
+				c = dd === OUT ? -1 : c + DY[dd]! * nx + DX[dd]!;
+			}
+		}
+	}
+	return flags;
 }

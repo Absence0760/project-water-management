@@ -117,8 +117,6 @@ async function main() {
 		const routed: Record<string, unknown> = {};
 		for (const burnt of [false, true]) {
 			const grid = await readWindow(dem!, z, tile.size, x0, y0, WINDOW);
-			const noData = new Uint8Array(grid.z.length);
-			for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 			let maskCells = 0;
 			if (burnt) {
 				const burn = new Float32Array(grid.z.length);
@@ -163,7 +161,7 @@ async function main() {
 			const m0 = maxAcc(within(150));
 			const big = maxAcc(within(1000));
 			const up = upstream(WINDOW, WINDOW, dir, m0);
-			const touch = touchesEdge(grid, edge, up, noData);
+			const touch = touchesEdge(grid, edge, up);
 			routed[burnt ? 'burnt' : 'plain'] = {
 				km2: km2(acc[m0]!),
 				ratio: km2(acc[m0]!) / s.refKm2,

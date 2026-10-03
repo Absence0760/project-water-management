@@ -19,7 +19,7 @@
 // to the queue for the next tick instead of being killed or wrongly refused.
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
-import { delineate, DelineationRefused, type LargerChannel } from '../../delineation/delineate.js';
+import { delineate, DelineationRefused, tooLargeText, type LargerChannel, type WindowAim } from '../../delineation/delineate.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
 import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
@@ -30,6 +30,19 @@ import { JobError, JobRelease } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const DelineatePayload = z.object({ requestId: z.string().uuid() }).strict();
+
+/** The request's stored aim, checked (it is jsonb): anything else is no aim, and the job's first window is centred again. */
+const AimShape = z
+	.object({
+		zoom: z.number().int().min(0).max(30),
+		box: z.tuple([z.number().int(), z.number().int(), z.number().int(), z.number().int()]),
+		cut: z.tuple([z.boolean(), z.boolean(), z.boolean(), z.boolean()])
+	})
+	.strict();
+export const parseAim = (v: unknown): WindowAim | null => {
+	const r = AimShape.safeParse(v);
+	return r.success && r.data.box[0] <= r.data.box[2] && r.data.box[1] <= r.data.box[3] ? r.data : null;
+};
 
 const CANCELLED = () => new JobError('cancelled', { retry: false });
 
@@ -69,7 +82,7 @@ export const delineateHandler = defineHandler({
 		}
 		const windows = jobWindowsFrom(req.from_window);
 		if (windows.length === 0) {
-			return refuse('too_large', 'The catchment above that point is larger than the app delineates. Pick an outlet further upstream, or draw or import the boundary.');
+			return refuse('too_large', tooLargeText('click', null, near.reach?.upstreamKm2));
 		}
 		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
 		const budgetMs = jobBudget(deadline, Date.now());
@@ -81,9 +94,11 @@ export const delineateHandler = defineHandler({
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach } : null,
+				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
+				// The request's last window cut the catchment here: the first window is placed over it, not centred on the click.
+				aim: parseAim(req.aim),
 				// One step a window; a cancel (or a lost lease) stops it before the next.
 				onWindow: async (i, of) => {
 					if (!(await progress((i / of) * 100))) throw CANCELLED();
