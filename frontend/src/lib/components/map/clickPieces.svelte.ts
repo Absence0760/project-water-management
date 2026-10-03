@@ -46,6 +46,8 @@ export function clickShape(r: ClickPieces | null, highlight: string | null = nul
  * river line can sit further off the channel the elevation model sees (HydroRIVERS by a few hundred metres, measured on the Orange).
  */
 export const MISSED_M2 = 1e6;
+/** A junction placement moved further than this (m) is flagged: the backend's JUNCTION_FLAG_M (delineation/junction.ts). */
+export const FAR_JUNCTION_M = 500;
 const MISSED = 'very little drains here: it probably missed the channel; Undo and click closer to the river (the Relief layer shows the valley)';
 const missed = (p: { open: boolean; totalAreaM2: number | null }) => !p.open && p.totalAreaM2 !== null && p.totalAreaM2 < MISSED_M2;
 
@@ -64,9 +66,14 @@ export function pieceLine(r: ClickPieces, click: number): string {
 	const placed = !p.reach
 		? ''
 		: p.placedBy === 'junction'
-			? ` · at the elevation model’s junction, on river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`
+			? ` · on river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)}), on its side of the elevation model’s junction`
 			: ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})`;
 	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the channel` : '';
+	// A junction placement that far: the elevation model's rivers meet away from the mapped junction (the server's JUNCTION_FLAG_M).
+	const farJunction =
+		p.placedBy === 'junction' && p.snapDistanceM !== null && p.snapDistanceM > FAR_JUNCTION_M
+			? ': the elevation model’s rivers meet away from the mapped junction, so check the point against the map'
+			: '';
 	// A larger channel nearby explains a small piece better than the other warnings do.
 	const warn = p.larger
 		? ` · ${largerLine(p.point, p.larger)}`
@@ -75,7 +82,7 @@ export function pieceLine(r: ClickPieces, click: number): string {
 			: missed(p)
 				? ` · ${MISSED}`
 				: '';
-	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${moved}${warn}`;
+	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${moved}${farJunction}${warn}`;
 }
 
 /** The pieces Save keeps: whole and outlined. */

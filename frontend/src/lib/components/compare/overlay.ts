@@ -3,6 +3,7 @@
 // the API so scenario comparison (issue #18) can reuse them for a base run
 // against a scenario run.
 import {
+	beforeForecast,
 	FARM_COLUMNS,
 	fromEpochDay,
 	GAUGE_COLUMNS,
@@ -229,6 +230,22 @@ export interface DeltaStats {
 	/** Days on which B is above / below A. */
 	daysHigher: number;
 	daysLower: number;
+}
+
+/**
+ * A run's series as the difference and the read-out take it: on a forecast
+ * run, the days before its first forecast day (issue #51; a forecast is shown
+ * in the overlay's band, never counted as the record). The series itself for
+ * an ordinary run.
+ */
+export function recordOf(d: DailySeries, forecastFrom: string | null | undefined): DailySeries {
+	return forecastFrom ? { startDate: d.startDate, values: Array.from(beforeForecast(d.values, d.startDate, forecastFrom)) } : d;
+}
+
+/** The overlay's forecast band starts at the earlier first forecast day of the two runs; null when neither is a forecast run. */
+export function overlayForecastFrom(a: string | null | undefined, b: string | null | undefined): string | null {
+	if (a && b) return a < b ? a : b;
+	return a || b || null;
 }
 
 /** A read-out of the overlay over the days both runs have a value (the text beside the canvas chart). */

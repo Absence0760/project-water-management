@@ -3616,12 +3616,17 @@ from the WP:
       say on a cap run's per-unit pages that its use is capped by a volume
       they can't see. Trigger: a project with outside viewers runs in cap
       mode, or counsel reads per-unit modelled use as personal information.
-- [ ] **Registration numbers in History** are readable by viewers
-      (`allocation.created/changed/deleted` carry `registrationNo`), and a
-      registration number is a "unique identifier" (POPIA s1). Durable fix:
-      leave `registrationNo` out of those events for a viewer in the History
-      route (as `allocation.viewer_units` is off). Trigger: with the share
-      views item above, or counsel's review (#92).
+- [x] **Registration numbers in History** (2026-10-03): viewers read
+      `allocation.created/changed/deleted` with `registrationNo` (a "unique
+      identifier", POPIA s1) and `allocation.created` with the volume. Done:
+      the History reads every event's subject through `app_audit_subject`
+      (190), which leaves both out for a reader who can't read the
+      allocation rows (a viewer while `allocations_viewer_units` is off);
+      `changes-since` gave that viewer the run's volumes as "removed" lines,
+      now it compares neither side's; the data-subject export leaves both out
+      of every allocation event (`withoutAllocationIdentifiers`). Share
+      views, packs and mail carry no audit event
+      (`allocations/history-viewer.db.test.ts`).
 - [x] **Dam capacity vs registered storage** (2026-09-30, issue #72): the
       comparison's `storage` carries the difference and a status banded like
       a year's use, and the Allocations page says it in words.
@@ -3809,13 +3814,16 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `pnpm dev:tiles:channels` step and the production tiles bucket, as
       vector PMTiles) and draw them like the basemap. Trigger: the first
       production deploy with `delineation_dem = true`.
-- [ ] **Delineation of catchments larger than about 100 km across**
-      (design/delineation.md § Where it runs): the API refuses rather than
-      cut one off, within its 30 s Lambda. Durable path: a `delineate` job
-      kind on the worker (300 s) with a larger window cap, the same code.
-      Trigger: a client asking to delineate a large river's catchment.
-      (Sub-catchments from clicks don't wait on it: a click past the window
-      is an inflow point, maps.md § Sub-catchments from clicks.)
+- [x] **Delineation of catchments larger than about 100 km across**
+      (2026-10-03, branch wip/r2-delineate-job; design/delineation.md §
+      Where it runs): a click still at the edge of the request's window
+      goes to a `delineate` job on the worker (191_delineation_request), the
+      same code with windows up to 6 144 cells (about 200 km) in its 300 s,
+      the worker at 2 048 MB with `delineation_dem` on; the Map waits for it
+      and decides the proposal as any other. Past 200 km it is still
+      refused, not cut off. (Sub-catchments from clicks don't use it: a
+      click past the window is an inflow point, maps.md § Sub-catchments
+      from clicks.)
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on
@@ -3892,6 +3900,28 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `area_m2`, so the unit's area equals its parcel's. Splitting such a
       parcel checks the parts against the outline's own area, and "area from
       the map" names the cells in its revision reason.
+- [ ] **Rerun the gauge experiment after the persona's delineation fixes**
+      (issue #390 part 1, design/delineation-snapping.md § Gauges). At 446
+      published gauge positions the failures were persona-hydrologist
+      findings 1, 4 (in both directions: a gauge on a river moved onto a
+      tributary's nearer line, 9 cases, all within 1 km of a junction), 6
+      (94 of 129 gauges of 1 000–10 000 km² refused `too_large`), 7 (with no
+      reach, an off-river position gets a gully and no caveat at all), 10
+      and 11. Each fix gets its regression test in that round; then rerun
+      `backend/scripts/research/snap-gauges.ts` (the header says how) and
+      refresh the section's numbers. Trigger: the round fixing those
+      findings merging.
+- [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
+      gauge run). On 2 flat lower rivers (a Zululand floodplain, a wide
+      Western Cape valley) GLO-30 has no channel within 2.5 km carrying the
+      river, and Delineate accepts a far smaller catchment (under 0.01× and 0.4×
+      the published area) with only the *unmatched* caveat. Durable fix:
+      refuse, or ask, when the placed area is under ~10 % of the reach's
+      area and no matching channel lies within 2.5 km (the same rule
+      finding 7 asks for), and name the cause ("the elevation model routes
+      this river elsewhere here: draw or import the boundary"). Trigger:
+      finding 7's fix, which should cover these with a test on a DEM whose
+      river is diverted.
 
 ## Crop factors (issue #54 item 1)
 
@@ -5567,13 +5597,19 @@ own. Loop in the CISO or security analyst before acting on any of them.
       the WUA published, when, and by whom, for members and the CMA. The
       publication history holds it; a page that lists it doesn't exist.
       Trigger: a WUA asks, or Step 3's licensing evidence needs it.
-- [ ] **One guard for views over a run's stored series.** Every view that
-      reads a run's daily series (not its summary) must cut a forecast run
-      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
-      that didn't, one at a time. A guard test listing each
-      `api.runs.series` / `run_series` consumer and how it treats a forecast
-      run would stop the next one. Trigger: the next view over stored
-      series.
+- [x] **One guard for views over a run's stored series** (2026-10-03).
+      `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`) lists every
+      reader of a run's stored series (the frontend's `api.runs.series`, the
+      bulk route and a share link's series; the backend's `FROM run_series`;
+      every SQL function whose latest definition reads it), how each treats a
+      forecast run (cut, band, whole, never, …) and the code that shows it,
+      and fails on an unlisted reader, a changed count or lost evidence. It
+      caught five, now fixed: a share link's chart averaged a published
+      forecast run's forecast days into the river's months (190 cuts
+      `app_share_series`); River & reserve counted forecast days below the
+      EWR; Compare runs' overlay read out and differenced the forecast days,
+      with no band; the report's licence-impact board counted them; the
+      runoff stores chart and the printed report's two charts had no band.
 
 ## River network layer at full HydroRIVERS scale (round 4 readiness, perf-hunt)
 
@@ -5661,7 +5697,7 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       HydroRIVERS' stated 10 km² threshold (`HEAD_KM2`) for the upper end
       of a reach nothing flows into. Where the DEM drains well under that at
       the head (4 of 27 matched head-reach clicks, 2026-10-03,
-      [delineation-snapping.md § fourth experiment](./design/delineation-snapping.md#clicks-on-the-red-lines-gullies-and-the-head-of-a-reach-fourth-experiment-delineate-5)),
+      [delineation-snapping.md § sixth experiment](./design/delineation-snapping.md#clicks-on-the-red-lines-gullies-and-the-head-of-a-reach-sixth-experiment-delineate-5)),
       a cell 300–900 m down the line still fits the band better than the
       click's own. Durable fix: read the head's area from the DEM at the
       reach's first vertex (the matching cell there) instead of a constant,

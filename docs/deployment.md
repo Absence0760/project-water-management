@@ -1113,13 +1113,19 @@ plan-only until the first deploy):
   `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
   setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
-  `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
+  `lambda-worker.handler`): in the private VPC, 1024 MB (2 048 with
+  `delineation_dem`, § The Map tab), 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
   SQS triggers' `maximum_concurrency`, 4 × 2, or throttled pollers burn
   receive counts into the DLQs), connecting as `water_app` (pool of 2) with
   verified TLS.
   Each invocation runs one tick within its remaining time (less a minute);
-  jobs lease for 6 minutes, longer than the function can run.
+  jobs lease for 6 minutes, longer than the function can run. A handler
+  that bounds its own work gets the function's deadline (less 10 s;
+  `JobContext.deadline`): a `delineate` job fits its budget inside it, and
+  one claimed with under 20 s left, or cut short by it before its last
+  window, goes back to the queue 120 s on without spending an attempt
+  (`app_release_job`, `job_released` in the log).
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.
@@ -1593,7 +1599,12 @@ role read that one key (`api_dem`), and the Map offers **Delineate**. It
 refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
 delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 ([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
-which the defaults (1 024 MB, 30 s) hold with room to spare.
+which the defaults (1 024 MB, 30 s) hold with room to spare. The worker
+gets the same `DEM_URL` and grant (`worker_dem`) for the `delineate` job (a
+catchment too large for the request, up to 6 144 cells), and at least
+2 048 MB whatever `worker_memory_mb` says, since that window peaks near
+1 GB (`infra/jobs.tf` `local.worker_memory_mb`; more memory is also more
+CPU, and a few cents a month at the 5-minute tick).
 
 **Tracing a dam** (#326 C2, [maps.md § Assisted
 drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API

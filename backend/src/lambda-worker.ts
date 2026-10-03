@@ -138,9 +138,11 @@ export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<C
 		// Fail the whole batch, as before partial failures were reported.
 		if (failures.length > 0 && failures.length === event.Records.length) throw firstError;
 	}
-	// Leave a minute for the job already running when the budget runs out.
-	const budgetMs = Math.max(10_000, (context?.getRemainingTimeInMillis() ?? 300_000) - 60_000);
-	const result = await runTick({ budgetMs });
+	// Leave a minute for the job already running when the budget runs out; a
+	// job that bounds its own work (delineate) fits it before the timeout, less 10 s.
+	const remaining = context?.getRemainingTimeInMillis() ?? 300_000;
+	const budgetMs = Math.max(10_000, remaining - 60_000);
+	const result = await runTick({ budgetMs, deadline: Date.now() + remaining - 10_000 });
 	emitMetricLine(metricLine(result));
 	// An SQS invocation answers with the records to retry (an empty list: none).
 	if (isSqs(event)) return { batchItemFailures: failures };

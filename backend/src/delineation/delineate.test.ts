@@ -92,6 +92,25 @@ describe('delineate (synthetic DEM)', () => {
 		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [64, 128] }));
 		expect(e.code).toBe('too_large');
 		expect(e.message).toMatch(/km the app delineates/);
+		// The window it stopped at, so the background worker goes on from the next (requests.ts nextJobWindow).
+		expect(e.windowCells).toBe(128);
+	});
+
+	it('says which window it stopped at when the next would break the budget, and reports each window it starts', async () => {
+		const started: [number, number][] = [];
+		let t = 0;
+		// Each window "takes" 10 s: after the first, the next (4× the cells) can't fit a 20 s budget.
+		const e = await refusal(delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [128, 256, 1024], budgetMs: 20_000, now: () => (t += 5_000), onWindow: (i, of) => void started.push([i, of]) }));
+		expect(e.code).toBe('too_large');
+		expect(e.windowCells).toBe(128);
+		expect(started).toEqual([[0, 3]]);
+		const steps: [number, number][] = [];
+		const r = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y), { windows: [128, 1024], onWindow: (i, of) => void steps.push([i, of]) });
+		expect(r.windowCells).toBe(1024);
+		expect(steps).toEqual([
+			[0, 2],
+			[1, 2]
+		]);
 	});
 
 	it('refuses a catchment that reaches where the DEM has no data', async () => {
@@ -122,7 +141,7 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		const d = await delineate(dem, off, { keepPoint: true });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
 		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe('delineate-5');
+		expect(d.methodVersion).toBe('delineate-8');
 	});
 
 	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {

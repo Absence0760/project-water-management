@@ -100,6 +100,7 @@ const PROD: Record<Role, Record<string, string>> = {
 		ALERTS_ENABLED: 'true',
 		ALERTS_DAILY_CAP: '5',
 		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events',
+		DEM_URL: 's3://water-management-tiles-000000000000/tiles/terrain.pmtiles',
 		OPERATOR_EMAIL: 'operator@water.example.org'
 	},
 	fetcher: { FEED_SOURCE: 'live', INGEST_RESULTS_QUEUE_URL: SQS('ingest-results') },
@@ -418,6 +419,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['api', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
 			['api', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
 			['api', 'DEM_URL', 'https://127.0.0.1/terrain.pmtiles'],
+			['worker', 'DEM_URL', 'fixtures/dem/synthetic-dem.pmtiles'],
+			['worker', 'DEM_URL', 'http://localhost:9002/tiles/terrain.pmtiles'],
 			['api', 'WATER_URL', 'fixtures/water/synthetic-water.pmtiles'],
 			['api', 'WATER_URL', 'http://localhost:9002/tiles/water.pmtiles']
 		];
@@ -425,7 +428,8 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 	});
 
 	it('lets the delineation DEM be off or an S3 object (positive control for the DEM_URL refusals)', () => {
-		for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames('api', prod('api', { DEM_URL: v })), String(v)).not.toContain('DEM_URL');
+		for (const role of ['api', 'worker'] as const)
+			for (const v of [undefined, '', 's3://water-tiles/tiles/terrain.pmtiles']) expect(problemNames(role, prod(role, { DEM_URL: v })), `${role} ${String(v)}`).not.toContain('DEM_URL');
 		for (const v of [undefined, '', 's3://water-tiles/tiles/water.pmtiles']) expect(problemNames('api', prod('api', { WATER_URL: v })), String(v)).not.toContain('WATER_URL');
 	});
 

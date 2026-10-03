@@ -3006,6 +3006,35 @@ export interface DelineationProposal {
 /** What a point on the map becomes in a model started from the map (issue #326 C3, docs/design/start-from-map.md). */
 export type StartRole = 'dam' | 'abstraction' | 'user' | 'gauge';
 
+/**
+ * How a point of a start or division was put on the elevation model's channel (start-7, backend delineation/pointPlacement.ts):
+ * matched to its nearby river reach's area, at the DEM's junction for the river picked at a confluence, snapped to the
+ * most-drained cell near it, on the much larger channel the editor chose, on its own cell (a delineated outlet), a dam
+ * polygon's most-drained cell, or the boundary's. Absent on proposals before start-7.
+ */
+export interface PointPlacement {
+	placedBy: 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' | 'polygon' | 'boundary';
+	reach: { dataset: string; reachId: number; upstreamKm2: number; chosen: boolean } | null;
+	/** Snapped beside a much larger channel: that channel (Use that channel puts the point on it). */
+	larger: LargerChannel | null;
+	/** A reach was near but no channel near the point matched its area. */
+	unmatched: boolean;
+}
+
+/** A point's placement choices in a start or division request: the river picked at a confluence, the larger channel taken. */
+export interface PlacementChoice {
+	reach?: { dataset: string; reachId: number };
+	useLarger?: boolean;
+}
+
+/** Points at confluences (a start's or division's 422 `confluence`, `details.points`): each one's rivers, picked as `reach`. */
+export interface ConfluencePoint {
+	/** The map feature's id; '' for the outlet gauge. */
+	featureId: string;
+	name: string;
+	choices: ConfluenceChoice[];
+}
+
 /** One unit a start-from-the-map proposal offers, keyed by the map feature it came from. */
 export interface StartUnit {
 	key: string;
@@ -3022,16 +3051,19 @@ export interface StartUnit {
 	drainsInto: string | null;
 	/** Whether drainsInto was proposed from the elevation model (false: only the default). */
 	drainsIntoProposed: boolean;
+	/** How its point was put on the channel; null without an elevation model (absent before start-7). */
+	placement?: PointPlacement | null;
 }
 
 /** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */
 export interface StartPlan {
 	fromDem: boolean;
-	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null };
+	outlet: { featureId: string | null; name: string; point: MapPosition | null; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' | null; placement?: PointPlacement | null };
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	rest: { name: string; areaM2: number | null; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
-	dropped: { featureId: string; name: string; reason: string }[];
+	/** `placement`: how a dropped point was put on the channel (start-7): one beside a larger channel can be moved there. */
+	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
 	cellSizeM: number | null;
 	zoom: number | null;
@@ -3085,17 +3117,19 @@ export interface DivideUnit {
 	geometry: Extract<MapGeometry, { type: 'Polygon' }> | null;
 	drainsInto: string | null;
 	current: DivideCurrent | null;
+	/** How its point was put on the channel (absent before start-7). */
+	placement?: PointPlacement;
 }
 
 /** What the server proposed to divide a model that has nodes (182; docs/api.md § Start from the map). */
 export interface DividePlan {
 	mode: 'divide';
-	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary' };
+	outlet: { featureId: string | null; nodeId: string; name: string; point: MapPosition; snapDistanceM: number | null; foundIn: 'gauge' | 'delineation' | 'boundary'; placement?: PointPlacement };
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	rest: { areaM2: number; geometry: Extract<MapGeometry, { type: 'Polygon' | 'MultiPolygon' }> | null };
 	untouched: { nodeId: string; name: string; areaKm2: number }[];
-	dropped: { featureId: string; name: string; reason: string }[];
+	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
 	cellSizeM: number;
 	zoom: number;
@@ -3202,4 +3236,28 @@ export interface DelineationState {
 	available: boolean;
 	dataset: { label: string; attribution: string; fingerprint: string; tileType: string; maxZoom: number; bounds: [number, number, number, number] } | null;
 	proposals: DelineationProposal[];
+	/** The project's newest delineation still with the background worker (queued or running), else null. */
+	request: DelineationRequest | null;
+}
+
+/**
+ * A click handed to the background worker: a catchment too large for the request, or one the editor sent there
+ * (191_delineation_request, docs/api.md § Delineation). `failed`: the job died, and `error` says why.
+ */
+export interface DelineationRequest {
+	id: string;
+	status: 'queued' | 'running' | 'failed' | 'proposed' | 'refused' | 'superseded';
+	from: DelineationProposal['from'];
+	click: MapPosition;
+	/** 0–100 while it runs (a step a window), else null. */
+	progress: number | null;
+	error: string | null;
+	/** With `proposed`: the proposal it made (null once pruned). */
+	proposal: DelineationProposal | null;
+	/** With `proposed`: the river-network check that came with it. */
+	check: string | null;
+	/** With `refused`: the reason and sentence the request would have answered with (and the larger channel to offer). */
+	refusal: { reason: string; message: string; larger?: LargerChannel } | null;
+	createdAt: string;
+	finishedAt: string | null;
 }

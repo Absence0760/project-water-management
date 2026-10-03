@@ -27,9 +27,9 @@ import { safeError } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { DelineationRefused, type LargerChannel } from './delineate.js';
-import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach } from './reach.js';
+import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear, type NearReach, type ReachAtClick } from './reach.js';
 import { configuredDem } from './dem.js';
-import { delineateUnits, type Subcatchments } from './subcatchments.js';
+import { delineateUnits, type PlacedBy, type Subcatchments } from './subcatchments.js';
 
 /** Clicks one request may carry: Start from the map's cap on points. */
 export const CLICKS_MAX = 50;
@@ -85,11 +85,15 @@ export interface ClickPieces {
 	methodVersion: string;
 }
 
+/** A click is a point, so only these three placements reach it (no polygon, no delineated outlet, no editor's choice of a larger channel). */
+const clickPlacedBy = (h: PlacedBy | undefined): ClickPiece['placedBy'] => (h === 'matched' || h === 'junction' ? h : 'snapped');
+
 /** The partition's answer in clicks: the lowest click's piece is its "rest". Pure. */
-export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | null)[] = []): ClickPieces {
+export function toClickPieces(r: Subcatchments, reaches: readonly ((NearReach & Partial<Pick<ReachAtClick, 'reachKm2'>>) | null)[] = []): ClickPieces {
 	const reachOf = (i: number) => {
 		const x = reaches[i];
-		return x ? { dataset: x.dataset, reachId: x.reachId, upstreamKm2: x.upstreamKm2 } : null;
+		// The reach's own area, as the River network layer shows it (not its area at the click, which the point was matched to).
+		return x ? { dataset: x.dataset, reachId: x.reachId, upstreamKm2: x.reachKm2 ?? x.upstreamKm2 } : null;
 	};
 	const lowest = Number(r.outlet.id);
 	const index = (id: string | null) => (id === null ? lowest : Number(id));
@@ -103,7 +107,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			areaM2: r.rest.areaM2,
 			totalAreaM2: r.catchment.areaM2,
 			open: !!r.rest.open,
-			placedBy: r.outlet.placedBy ?? 'snapped',
+			placedBy: clickPlacedBy(r.outlet.placedBy),
 			reach: r.outlet.placedBy === 'matched' || r.outlet.placedBy === 'junction' ? reachOf(lowest) : null,
 			larger: r.outlet.larger ?? null,
 			unmatched: r.outlet.unmatched ? reachOf(lowest) : null
@@ -117,7 +121,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			areaM2: u.areaM2,
 			totalAreaM2: u.totalAreaM2,
 			open: !!u.open,
-			placedBy: u.placedBy ?? ('snapped' as const),
+			placedBy: clickPlacedBy(u.placedBy),
 			reach: u.placedBy === 'matched' || u.placedBy === 'junction' ? reachOf(Number(u.id)) : null,
 			larger: u.larger ?? null,
 			unmatched: u.unmatched ? reachOf(Number(u.id)) : null
@@ -159,7 +163,7 @@ async function route(userId: string, projectId: string, clicks: readonly z.infer
 	const { attempt, reaches, junctions } = await withUser(userId, async (db) => {
 		await requireRole(db, projectId, 'editor');
 		// Each click's nearest river reach, for matching it to the reach's upstream area (issue #374).
-		const reaches: (NearReach | null)[] = [];
+		const reaches: (ReachAtClick | null)[] = [];
 		const junctions: (Awaited<ReturnType<typeof reachFor>>['junction'])[] = [];
 		for (const [i, c] of clicks.entries()) {
 			try {

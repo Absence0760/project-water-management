@@ -721,7 +721,10 @@ the result change?", and put back any earlier version.
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
-  registration numbers, file name and hash, counts; never a holder's name),
+  registration numbers, file name and hash, counts; never a holder's name;
+  a viewer reads `allocation.created/changed/deleted` without the
+  registration number and volume until an owner lets viewers read each
+  volume: the History reads every subject through `app_audit_subject`, 190),
   `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
   series, lifetime; never the key or its hash), `alert_rules.changed` (051:
   an editor switched alert kinds on or off or changed a threshold),
@@ -1630,7 +1633,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
   `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
   (16 hex: SHA-256 of the archive's header and root directory),
-  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387, `delineate-5` for clicks on the DEM's own channels, the wider offer from a gully and the reach's area at the click), `feature_id`
+  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387, `delineate-5` for clicks on the DEM's own channels, the wider offer from a gully and the reach's area at the click, `delineate-6` reserved, `delineate-7` for keeping a click beside a confluence on its river's side of the DEM's junction, issue #390, `delineate-8` for 5's and 7's rules together), `feature_id`
   (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
@@ -1642,6 +1645,29 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   and an insert's `created_by` is the signed-in user
   (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
+- **`delineation_request`** (`191_delineation_request.sql`,
+  [design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)):
+  a click handed to the background worker, too large for the request (or
+  sent there with `background`), and what came of it. `id`, `project_id`
+  (cascade), `job_id` (→ `job`, `SET NULL` when the 30-day purge takes it),
+  `status` (`queued` until the job writes the outcome, `proposed`,
+  `refused`, or `superseded` by the same editor's next click),
+  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
+  picked at a confluence, jsonb), `from_window` (the smallest window the
+  job tries), `proposal_id` (composite key → `delineation_proposal (id,
+  project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
+  `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
+  (the channel a `larger_channel` refusal offers), `check_note`,
+  `created_by` (→ `app_user`, `SET NULL`), `created_at`, `finished_at`
+  (set exactly when it leaves `queued`). RLS: viewers read, editors
+  insert (as themselves), update and delete; the job writes the outcome as
+  the editor who queued it. A finished request never changes but for its
+  two links clearing (`delineation_request_final`). The route keeps the
+  newest 20 finished a project. `job.kind` accepts `delineate`, and
+  `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
+  `app_release_job` (191, the worker's own call) puts a claimed job back to
+  `queued` 120 s on, giving back the attempt its claim counted: a delineate
+  job the tick had too little time left for (never a failure, no backoff).
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.
@@ -1651,7 +1677,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),

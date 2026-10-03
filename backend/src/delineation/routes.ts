@@ -3,7 +3,9 @@
 // docs/api.md § Delineation).
 //
 //   GET  /projects/:id/map/delineation                  on or off, the dataset, the latest proposals (viewer)
-//   POST /projects/:id/map/delineation                  delineate upstream of a point: a new proposal (editor)
+//   POST /projects/:id/map/delineation                  delineate upstream of a point: a new proposal (editor), or, for a
+//                                                        catchment too large for the request, a request the worker answers (202)
+//   GET  /projects/:id/map/delineation/requests/:rid    that request: waiting, running, or what came of it (viewer)
 //   POST /projects/:id/map/delineation/:pid/accept      save it as the catchment boundary or an "other" polygon (editor)
 //   POST /projects/:id/map/delineation/:pid/reject      (editor)
 //
@@ -11,29 +13,32 @@
 // through accept, and accepting as the boundary when the project has one
 // needs `replaceBoundary: true` (409 otherwise), the import review's rule.
 // The computation runs between two short transactions, never holding a
-// database connection while it reads tiles and routes flow.
+// database connection while it reads tiles and routes flow. A catchment still
+// at the edge of the request's largest window (or one the editor says is
+// large: `background`) goes to the worker's `delineate` job instead
+// (requests.ts, 191_delineation_request), the same code with larger windows.
 import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import { currentBoundary, loadFeature, removeBoundary, toFeature } from '../geo/routes.js';
-import type { Geometry } from '../geo/geojson.js';
 import { recordAudit } from '../history/record.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { readJson } from '../http/body.js';
-import { ApiError, notFound } from '../http/errors.js';
+import { ApiError } from '../http/errors.js';
 import { safeError } from '../logging/safeError.js';
 import { logEvent } from '../logging/logEvent.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
-import { requireRole, UUID } from '../projects/access.js';
+import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { delineate, DelineationRefused } from './delineate.js';
+import { checkNote, loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
+import { delineationLimits, jobWindowsFrom, loadRequest, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
 import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear } from './reach.js';
 
 /** Delineations one project may ask for in an hour: each is seconds of CPU on the API (docs/design/delineation.md § Where it runs). */
 export const DELINEATIONS_PER_HOUR = 30;
-/** Superseded and rejected proposals kept per project (accepted ones are all kept, as their features' provenance). */
-export const PROPOSALS_KEPT = 50;
 /** Proposals the GET lists. */
 const LISTED = 10;
 
@@ -47,7 +52,9 @@ export const DelineateBody = z
 		/** Keep the point even beside a much larger channel (otherwise 422 `larger_channel`, naming it; place.ts). */
 		keepPoint: z.boolean().optional(),
 		/** At a confluence, the river reach the editor means (one of the 422 `confluence` choices; its area is read from the database). */
-		reach: ReachChoiceBody.optional()
+		reach: ReachChoiceBody.optional(),
+		/** A catchment the editor knows is large: straight to the worker (202 with the request), skipping the request's own attempt. */
+		background: z.boolean().optional()
 	})
 	.strict();
 export const AcceptBody = z
@@ -59,83 +66,17 @@ export const AcceptBody = z
 	})
 	.strict();
 
-interface ProposalRow {
-	id: string;
-	status: 'proposed' | 'accepted' | 'rejected' | 'superseded';
-	click_kind: 'outlet' | 'dam_wall';
-	click_lon: number;
-	click_lat: number;
-	outlet_lon: number;
-	outlet_lat: number;
-	snap_distance_m: number;
-	geometry: Extract<Geometry, { type: 'Polygon' }>;
-	area_m2: number;
-	cells: number;
-	cell_size_m: number;
-	zoom: number;
-	window_cells: number;
-	dataset: string;
-	dataset_fingerprint: string;
-	method: string;
-	method_version: string;
-	feature_id: string | null;
-	created_by_name: string | null;
-	created_at: Date;
-	decided_by_name: string | null;
-	decided_at: Date | null;
-}
-
-const SELECT = `
-	SELECT p.id, p.status, p.click_kind, p.click_lon, p.click_lat, p.outlet_lon, p.outlet_lat, p.snap_distance_m, p.geometry,
-		p.area_m2, p.cells, p.cell_size_m, p.zoom, p.window_cells, p.dataset, p.dataset_fingerprint, p.method, p.method_version,
-		p.feature_id, cu.display_name AS created_by_name, p.created_at, du.display_name AS decided_by_name, p.decided_at
-	FROM delineation_proposal p
-	LEFT JOIN app_user cu ON cu.id = p.created_by
-	LEFT JOIN app_user du ON du.id = p.decided_by
-	WHERE p.project_id = $1`;
-
-const toProposal = (r: ProposalRow) => ({
-	id: r.id,
-	status: r.status,
-	from: r.click_kind,
-	click: [r.click_lon, r.click_lat] as [number, number],
-	outlet: [r.outlet_lon, r.outlet_lat] as [number, number],
-	snapDistanceM: r.snap_distance_m,
-	geometry: r.geometry,
-	areaM2: r.area_m2,
-	cells: r.cells,
-	cellSizeM: r.cell_size_m,
-	zoom: r.zoom,
-	windowCells: r.window_cells,
-	dataset: r.dataset,
-	datasetFingerprint: r.dataset_fingerprint,
-	method: r.method,
-	methodVersion: r.method_version,
-	featureId: r.feature_id,
-	createdBy: r.created_by_name,
-	createdAt: r.created_at.toISOString(),
-	decidedBy: r.decided_by_name,
-	decidedAt: r.decided_at?.toISOString() ?? null
-});
-export type DelineationProposal = ReturnType<typeof toProposal>;
-
-async function loadProposal(db: Db, projectId: string, pid: string): Promise<ProposalRow> {
-	if (!UUID.test(pid)) throw notFound();
-	const { rows } = await db.query<ProposalRow>(`${SELECT} AND p.id = $2`, [projectId, pid]);
-	if (!rows[0]) throw notFound();
-	return rows[0];
-}
-
 const DEFAULT_NAME = { outlet: 'Catchment above the outlet (delineated)', dam_wall: 'Catchment above the dam wall (delineated)' } as const;
 const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
 
 export const delineationRoutes = new Hono<AuthEnv>()
 	.get('/:id/map/delineation', async (c) => {
 		const id = c.req.param('id');
-		const proposals = await withUser(c.get('userId'), async (db) => {
+		const { proposals, request } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const { rows } = await db.query<ProposalRow>(`${SELECT} ORDER BY p.created_at DESC, p.id LIMIT ${LISTED}`, [id]);
-			return rows.map(toProposal);
+			// A delineation the worker still has: the Map shows it waiting, and picks up its outcome.
+			return { proposals: rows.map(toProposal), request: await waitingRequest(db, id) };
 		});
 		const dem = configuredDem();
 		let dataset = null;
@@ -147,12 +88,21 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			}
 		}
 		// On only when the DEM is configured *and* readable, so the Map never offers a tool that can only fail.
-		return c.json({ available: dataset !== null, dataset, proposals });
+		return c.json({ available: dataset !== null, dataset, proposals, request });
+	})
+	.get('/:id/map/delineation/requests/:rid', async (c) => {
+		const { id, rid } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			return c.json({ request: await loadRequest(db, id, rid) });
+		});
 	})
 	.post('/:id/map/delineation', async (c) => {
 		const body = DelineateBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
+		const queue = (db: Db, fromWindow: number) =>
+			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, reach: body.reach ?? null, fromWindow });
 		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const { rows } = await db.query<{ n: number }>(
@@ -173,80 +123,50 @@ export const delineationRoutes = new Hono<AuthEnv>()
 				if (err instanceof ReachNotNear) throw new ApiError(400, err.message);
 				throw err;
 			}
-			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt).
-			return { id: await beginDemAttempt(db, 'delineation'), reach, junction };
+			// Counted before the DEM work, refused and failed attempts too (184_dem_attempt); a request for the background as well.
+			const attemptId = await beginDemAttempt(db, 'delineation');
+			if (!body.background) return { id: attemptId, reach, junction, queued: null };
+			if (!configuredDem()) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
+			return { id: attemptId, reach, junction, queued: await queue(db, delineationLimits.jobWindows[0]!) };
 		});
 		try {
+			if (attempt.queued) {
+				await wakeWorker(attempt.queued.jobId);
+				return c.json({ request: attempt.queued.request }, 202);
+			}
 			const dem = configuredDem();
 			if (!dem) throw new ApiError(409, 'Delineation is off: the server has no elevation model (DEM_URL is empty).');
 			let result;
 			try {
 				result = await delineate(dem, [body.lon, body.lat], {
+					windows: delineationLimits.requestWindows,
 					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM } : null,
 					junction: attempt.junction,
 					keepPoint: body.keepPoint
 				});
 			} catch (err) {
-				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code, ...(err.larger ? { larger: err.larger } : {}) });
+				if (err instanceof DelineationRefused) {
+					// Still at the edge of the request's window (or out of its time): the worker goes on from the next window.
+					const next = err.code === 'too_large' ? nextJobWindow(err.windowCells) : null;
+					if (next !== null && jobWindowsFrom(next).length > 0) {
+						const queued = await withUser(userId, async (db) => {
+							await requireRole(db, id, 'editor');
+							return queue(db, next);
+						});
+						await wakeWorker(queued.jobId);
+						return c.json({ request: queued.request }, 202);
+					}
+					throw new ApiError(422, err.message, { reason: err.code, ...(err.larger ? { larger: err.larger } : {}) });
+				}
 				logEvent('error', { event: 'delineation_failed', ...safeError(err) });
 				throw new ApiError(503, 'The elevation model could not be read just now. Try again; if it keeps failing, the operator should check DEM_URL.');
 			}
 			const r = result;
 			return await withUser(userId, async (db) => {
 				await requireRole(db, id, 'editor');
-				// One open proposal per project: this one supersedes the last.
-				await db.query(`UPDATE delineation_proposal SET status = 'superseded' WHERE project_id = $1 AND status = 'proposed'`, [id]);
-				const { rows } = await db
-					.query<{ id: string }>(
-						`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry,
-							area_m2, cells, cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, created_by)
-						 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, app_current_user_id()) RETURNING id`,
-						[
-							id,
-							body.from,
-							body.lon,
-							body.lat,
-							r.outlet[0],
-							r.outlet[1],
-							r.snapDistanceM,
-							JSON.stringify(r.geometry),
-							r.areaM2,
-							r.cells,
-							r.cellSizeM,
-							r.zoom,
-							r.windowCells,
-							r.dataset.label,
-							r.dataset.fingerprint,
-							r.method,
-							r.methodVersion
-						]
-					)
-					.catch((err: unknown) => {
-						// Two delineations finishing at once: the unique open index keeps one; the other is told.
-						if ((err as { code?: string; constraint?: string }).constraint === 'delineation_proposal_one_open_idx') {
-							throw new ApiError(409, 'Another delineation for this catchment finished at the same moment; look at it, or click again.');
-						}
-						throw err;
-					});
-				// Keep the table bounded: superseded and rejected proposals beyond the newest PROPOSALS_KEPT go.
-				await db.query(
-					`DELETE FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') AND id NOT IN (
-						SELECT id FROM delineation_proposal WHERE project_id = $1 AND status IN ('superseded', 'rejected') ORDER BY created_at DESC, id LIMIT $2)`,
-					[id, PROPOSALS_KEPT]
-				);
-				const proposal = toProposal(await loadProposal(db, id, rows[0]!.id));
-				await recordAudit(db, id, 'map.delineation_proposed', {
-					proposalId: proposal.id,
-					from: body.from,
-					areaKm2: Math.round(r.areaM2 / 1e4) / 100,
-					dataset: r.dataset.label,
-					methodVersion: r.methodVersion
-				});
-				// The river-network check (issue #374): a reach nearby whose area no channel matched. With this answer only, not stored.
-				const check = r.unmatched
-					? `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km² there, but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`
-					: null;
-				return c.json({ proposal, check }, 201);
+				const proposal = await storeProposal(db, id, body.from, r);
+				// The river-network check (issue #374): with this answer only, not stored.
+				return c.json({ proposal, check: checkNote(r) }, 201);
 			});
 		} finally {
 			await finishDemAttempt(userId, attempt.id);

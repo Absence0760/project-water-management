@@ -2723,7 +2723,7 @@ run "packs" {
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[1].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[2].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[2].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/terrain.pmtiles"]) &&
-      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[2].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
+      toset(one(data.aws_iam_policy_document.s3_endpoint.statement[2].principals).identifiers) == toset([aws_iam_role.lambda.arn, aws_iam_role.worker_lambda.arn]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[3].actions) == toset(["s3:GetObject"]) &&
       toset(data.aws_iam_policy_document.s3_endpoint.statement[3].resources) == toset(["${aws_s3_bucket.tiles.arn}/tiles/water.pmtiles"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[3].principals).identifiers) == toset([aws_iam_role.lambda.arn]) &&
@@ -2731,7 +2731,7 @@ run "packs" {
       toset(data.aws_iam_policy_document.s3_endpoint.statement[4].resources) == toset(["${aws_s3_bucket.reference.arn}/reference/*"]) &&
       toset(one(data.aws_iam_policy_document.s3_endpoint.statement[4].principals).identifiers) == toset([aws_iam_role.migrate_lambda.arn])
     )
-    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's reads of the delineation DEM (tiles/terrain.pmtiles) and the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
+    error_message = "The worker, the API and migrate reach S3 through one interface endpoint whose policy allows only the worker's read of packs/, the API's put of a bundle (packs/*.zip), the API's and the worker's reads of the delineation DEM (tiles/terrain.pmtiles), the API's of the dam-trace water (tiles/water.pmtiles), and migrate's read of a reference file (reference/*)."
   }
   assert {
     condition = (
@@ -2841,7 +2841,7 @@ run "map_data" {
       data.aws_iam_policy_document.renderer_ecr_pull,
       data.aws_iam_policy_document.api_pack_bundles,
     ] : [for st in d.statement : coalesce(st.resources, [])]]) : r if startswith(r, aws_s3_bucket.tiles.arn) || startswith(r, aws_s3_bucket.reference.arn)]) == 0
-    error_message = "Only api_dem, api_water and migrate_reference may name the tiles or reference bucket; the deploy role and every other Lambda role touch neither."
+    error_message = "Only api_dem (on the API's and the worker's roles), api_water and migrate_reference may name the tiles or reference bucket; the deploy role and every other Lambda role touch neither."
   }
 
   # --- Tiles: CloudFront reads tiles/*, nothing else is granted in the bucket policy -----
@@ -2888,6 +2888,10 @@ run "map_data" {
   assert {
     condition     = !var.delineation_dem && aws_lambda_function.backend.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.api_dem) == 0
     error_message = "Delineation is off by default: DEM_URL empty and the API role holds no read of the tiles bucket."
+  }
+  assert {
+    condition     = aws_lambda_function.worker.environment[0].variables["DEM_URL"] == "" && length(aws_iam_role_policy.worker_dem) == 0 && aws_lambda_function.worker.memory_size == var.worker_memory_mb
+    error_message = "Delineation off: the worker has no DEM_URL, no read of the tiles bucket, and the memory worker_memory_mb says."
   }
   assert {
     condition = (
@@ -2948,6 +2952,19 @@ run "map_data_with_delineation" {
   assert {
     condition     = length(aws_iam_role_policy.api_dem) == 1 && aws_iam_role_policy.api_dem[0].role == aws_iam_role.lambda.id
     error_message = "With delineation_dem the API role gets the DEM read."
+  }
+  # The worker's `delineate` job (191_delineation_request): the same DEM, the same one-key grant, and the memory a 6 144-cell window needs.
+  assert {
+    condition = (
+      aws_lambda_function.worker.environment[0].variables["DEM_URL"] == aws_lambda_function.backend.environment[0].variables["DEM_URL"] &&
+      length(aws_iam_role_policy.worker_dem) == 1 && aws_iam_role_policy.worker_dem[0].role == aws_iam_role.worker_lambda.id &&
+      can(regex("policy\\s*=\\s*data\\.aws_iam_policy_document\\.api_dem\\.json", regex("(?s)resource \"aws_iam_role_policy\" \"worker_dem\" \\{.*?\\n\\}", file("map_data.tf"))))
+    )
+    error_message = "With delineation_dem the worker reads the same DEM through the same one-key grant (worker_dem, the api_dem document)."
+  }
+  assert {
+    condition     = aws_lambda_function.worker.memory_size >= 2048
+    error_message = "With delineation_dem the worker has at least 2048 MB: a delineate job's 6 144-cell window peaks near 1 GB."
   }
 }
 

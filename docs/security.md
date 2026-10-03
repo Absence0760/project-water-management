@@ -2480,7 +2480,12 @@ database:
 - The registered user's **name** is the only personal field kept, in
   `allocation_holder`, readable by editors and owners and by the linked farmer
   for their own farm; **viewers never read it** (RLS, decision D3). The
-  history records registration numbers, file names and counts, never names.
+  history records registration numbers, file names and counts, never names;
+  a viewer reads the allocation events without the registration number (a
+  unique identifier, POPIA s1) and volume until an owner lets viewers read
+  each volume (`app_audit_subject`, 190, the History's one read of an
+  event's subject), and the data-subject export leaves both out of every
+  allocation event (they are the registered user's, not the exporter's).
   The export's `holder` column is only in an editor's file.
 - **Decision D3** (provisional position, pre-counsel research, 2026-10-01).
   A per-farm volume beside a farm's name identifies its holder in a rural
@@ -2641,6 +2646,19 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed, within
   fixed bounds (§ Map data files below). The proposal's polygon passes the same
   `checkGeometry` as every map polygon before it is stored.
+  A catchment too large for the request goes to the worker's `delineate`
+  job (191_delineation_request, design/delineation.md § Where it runs):
+  larger windows (up to 6 144 cells, about 1 GB) in the worker's 300 s and
+  a 150 s budget, so not on an API slot. Each account may have one
+  waiting or running at a time (`DELINEATE_JOBS_PER_USER`, counted under a
+  per-account advisory lock; the job's dedupe key names the account): a
+  new click in the same project supersedes its waiting one (the job is
+  cancelled), and one running, or waiting in another project, is 429. The
+  request that queued it has already counted as an attempt (and a
+  `background` request counts as one too), the job runs as its editor
+  under RLS (it fails closed once they lose the role), and the worker's
+  reserved concurrency bounds the total. The request row holds only the
+  click, the outcome and who queued it (`SET NULL` with the account).
 - **Map data files** (round-4 hardening): the hand-written readers bound
   what a file can make them do, so a corrupt or hostile archive (a
   compromised upstream, a wrong upload) is refused with the reader's own

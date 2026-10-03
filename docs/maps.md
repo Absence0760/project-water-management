@@ -1141,20 +1141,46 @@ to a point on a river. The design, the method and its accuracy are in
   another river, so check it on the map"). **At a confluence** (reaches within 200 m whose areas differ by
   1.5×) the server doesn't choose: the sheet asks which river ("The river
   below the junction, 497 km²", "The main river above the junction, 422
-  km²", "The tributary above the junction, 67 km²"), and the outlet goes at
-  the DEM's own junction for the one picked (`junction.ts`: the tributary
-  followed downhill to where the main river joins it), else on the channel
-  within 2.5 km matching its area. Measured on 60 real junctions:
+  km²", "The tributary above the junction, 67 km²"), and the outlet goes on
+  the picked river's side of the DEM's own junction (`junction.ts`: the
+  tributary followed downhill to where the main river joins it), on that
+  river's channel nearest the point, else on the channel within 2.5 km
+  matching its area. Measured on 60 real junctions:
   [design/delineation-snapping.md § Confluences](./design/delineation-snapping.md#confluences-third-experiment).
-  It says how far the point moved.
+  **Beside a confluence** (a mapped junction of the nearest reach within
+  1 km, but no other river within 200 m) nothing is asked, and the outlet
+  is kept on the nearest reach's side of the DEM's junction the same way
+  (`delineate-7` / `start-8`): matched by area alone, a third of gauges a
+  few hundred metres up the main river or down the river below landed on
+  the other side ([§ Beside a
+  confluence](./design/delineation-snapping.md#beside-a-confluence-fifth-experiment)).
+  A click on a red line of its own there (off the mapped line, or on a
+  channel larger than the reach) isn't taken to the junction: it is placed
+  as any other red-line click (`delineate-8` / `start-9`).
+  It says how far the point moved; a junction placement that moved it
+  more than 500 m adds a note that the elevation model's rivers meet away
+  from the mapped junction, to check the outlet against the map.
 - **What it does.** On the API, never in the engine: reads the DEM around
   the point (a 1 024-cell window, about 34 km, grown to 2 048 and 3 072
   cells while the catchment reaches its edge), fills depressions
   (Priority-Flood+ε), routes flow with D8, collects every cell upstream of
   the outlet and outlines them as one polygon, simplified to about a cell.
-  A catchment still at the edge of the largest window, or reaching the edge
-  of the DEM's data, is refused rather than cut off; so is a point outside
-  the DEM or one almost nothing drains to.
+  A catchment reaching the edge of the DEM's data is refused rather than
+  cut off; so is a point outside the DEM or one almost nothing drains to.
+- **A large catchment** (still at the edge of the request's largest window,
+  about 100 km, or past its 20 s) goes to the **background worker** instead
+  (`requests.ts`, the `delineate` job, `191_delineation_request`): the same
+  code with larger windows (4 096 and 6 144 cells, up to about 200 km) from
+  the one after where the request stopped, within the worker's 300 s. The
+  sheet says it is queued, then how far it is, asks every 2 s, and shows
+  the proposal (or the refusal) as the request would have; a reloaded Map
+  picks it up. **A large catchment, over about 100 km across: work it out
+  in the background** sends a point straight there. One per editor at a
+  time: a new click in the same catchment replaces a waiting one, and one
+  running, or waiting in another catchment, is refused (429). Locally the
+  worker runs only with `pnpm dev:full` (or `pnpm dev:jobs:tick` once);
+  under plain `pnpm dev` the sheet waits. Still at the edge at 6 144 cells
+  is refused, never cut off.
 - **The proposal** is drawn dashed in teal over the features, with its
   outlet, until it is decided; the sheet lists its area, the snap distance,
   the cells, the dataset (with its fingerprint) and the method, and the
@@ -1175,13 +1201,16 @@ to a point on a river. The design, the method and its accuracy are in
   tests and e2e use it). Any PMTiles of Terrarium-encoded tiles works: WebP
   (lossless only) or PNG. `DEM_LABEL` names it on the proposals.
   Production: `delineation_dem = true` in the tfvars sets
-  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and lets
-  its role read that one key, read through the VPC's S3 interface endpoint
-  ([deployment.md § Map tiles](./deployment.md#map-tiles)); off by default.
+  `DEM_URL=s3://<tiles bucket>/tiles/terrain.pmtiles` on the API and the
+  worker and lets both roles read that one key, read through the VPC's S3
+  interface endpoint ([deployment.md § Map tiles](./deployment.md#map-tiles)),
+  and gives the worker at least 2 048 MB; off by default.
 - **Limits.** 30 delineations per project per hour (429 beyond); each takes
   one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
   460 MB at the largest window) and stops before 20 s, under the API's
-  30 s timeout.
+  30 s timeout. On the worker a 6 144-cell window takes about 11 s on a
+  laptop and peaks near 1 GB (an invented 6 144-cell valley, 2026-10-03),
+  and a job stops before 150 s.
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.
@@ -1237,8 +1266,8 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   cover, then Runs). Typing the model in on the Network stays the other
   way; upload works at every step.
 - **Sub-catchments.** With a DEM, the server routes one window around the
-  catchment once (the same fill and D8 as Delineation), snaps the outlet and
-  every point to the channel (a dam polygon: its most-drained cell), and
+  catchment once (the same fill and D8 as Delineation), puts the outlet and
+  every point on the channel (below), and
   gives each unit the cells whose flow meets it before any other unit: its
   own piece, outlined with its holes (a unit upstream lying wholly inside
   it). **Every area comes from the cells** (`start-6`): each cell's own
@@ -1255,13 +1284,40 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
   off the boundary's area is warned about.
+- **Placing the points: as Delineate does** (`start-7`, the hydrologist's
+  review finding 3; `delineation/pointPlacement.ts`). The outlet gauge and
+  each point are placed by Delineation's rules ([§ Delineation](#delineation)):
+  near a loaded river reach (within 1 km), on the cell whose upstream area
+  matches the reach's; otherwise on the most-drained cell within 150 m. A
+  point at a confluence is asked about in the sheet ("These points are at a
+  confluence …", each with its rivers to pick; every such point at once),
+  then goes at the DEM's junction for the river picked. Since `start-9` the
+  rest of Delineate's rules apply too: a point on a red line of its own
+  stays on it and a gully snap offers the reach's channel out to 2.5 km,
+  each as the same warning below, and the reach's area is taken at the
+  point. A point snapped
+  beside a channel with 100× its upstream area keeps that channel as a
+  warning ("A much larger channel runs 202 m west of the outlet …"), the
+  outlet's first, and its card offers **use that channel**, which proposes
+  again with the point on it (a point dropped as "not upstream" from a
+  gully beside its river offers it too). A dam polygon takes its most-drained cell; a
+  delineated outlet (a boundary from Delineate) stays on its own cell, where
+  Delineate put it. Each card says where its point went ("On the channel
+  matching river reach 11509680 (292 km²), 602 m from the point"), and the
+  method names only the rules that ran. Before `start-7` every point was
+  snapped 150 m with no reach and the guard's warning dropped: on 12
+  HydroRIVERS reaches of 100–600 km², 5 gauge outlets landed in gullies
+  (5.6, 1.4 and 0.1 km² for reaches of 292, 237 and 166 km²) and the dams
+  above them were dropped as "not upstream"; placed as Delineate does, the
+  same gauges give 428, 334 and 156 km², Delineate's own answers
+  (`backend/scripts/research/snap-start.ts`).
 - **Without a DEM** (`DEM_URL` empty): the units come from the points with
   no area and all drain into the outflow gauge; the rest of the catchment is
   the boundary.
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-6)") and its area from it (*from the map*), the
+  delineated from … (start-7)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units

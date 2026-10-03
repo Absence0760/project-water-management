@@ -17,6 +17,7 @@
 // captured: a fetch or render is then visible as the message it would send,
 // with no network and no Chromium.
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -260,6 +261,17 @@ async function issuedApplicationPack(projectId: string, runId: string, userId: s
 }
 
 const CROSS: Partial<Record<JobKind, CrossCase>> = {
+	delineate: {
+		// B's click handed to the worker (191), against the committed synthetic DEM (its valley's dam wall): B's job proposes it.
+		async queue(owner, b) {
+			vi.stubEnv('DEM_URL', fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url)));
+			const res = await owner.call('POST', `/projects/${b.projectId}/map/delineation`, { lon: 20.7428741, lat: -33.4262838, from: 'dam_wall', background: true });
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			const [r] = await asOwner('SELECT job_id FROM delineation_request WHERE id = $1', [res.body.request.id]);
+			return { jobId: r.job_id, ref: res.body.request.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status, proposal_id IS NOT NULL AS proposed FROM delineation_request WHERE id = $1', [id]))[0]
+	},
 	applicant_pack_render: {
 		// B's issued pack of an application its owner made, and that party's copy of it: with REPORT_RENDERER=sqs a render token and a render_pack message.
 		async queue(owner, b) {
