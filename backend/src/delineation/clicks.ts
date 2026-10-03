@@ -57,6 +57,8 @@ export interface ClickPiece {
 	areaM2: number | null;
 	/** Everything upstream of the click, its own piece included (m²); null when it, or a piece above it, is open. */
 	totalAreaM2: number | null;
+	/** Of its own area, what drains into pans (pans.ts, start-10; m²): reported, not taken out. Null when it is open. */
+	nonContributingM2: number | null;
 	/**
 	 * Its catchment runs past the window routed around the clicks (or the DEM's data), so it has no whole piece:
 	 * an inflow point, the water from above it entering the pieces below as an inflow.
@@ -105,6 +107,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			geometry: r.rest.geometry,
 			areaM2: r.rest.areaM2,
 			totalAreaM2: r.catchment.areaM2,
+			nonContributingM2: r.rest.nonContributingM2 as number | null,
 			open: !!r.rest.open,
 			placedBy: clickPlacedBy(r.outlet.placedBy),
 			reach: r.outlet.placedBy === 'matched' || r.outlet.placedBy === 'junction' ? reachOf(lowest) : null,
@@ -119,6 +122,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			geometry: u.geometry,
 			areaM2: u.areaM2,
 			totalAreaM2: u.totalAreaM2,
+			nonContributingM2: u.nonContributingM2 as number | null,
 			open: !!u.open,
 			placedBy: clickPlacedBy(u.placedBy),
 			reach: u.placedBy === 'matched' || u.placedBy === 'junction' ? reachOf(Number(u.id)) : null,
@@ -140,6 +144,7 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			...p,
 			geometry: p.open ? null : p.geometry,
 			areaM2: p.open ? null : p.areaM2,
+			nonContributingM2: p.open ? null : p.nonContributingM2,
 			totalAreaM2: unknown.has(p.click) ? null : p.totalAreaM2
 		}))
 		.sort((a, b) => a.click - b.click);
@@ -208,6 +213,7 @@ export function pieceDescription(r: ClickPieces, p: ClickPiece): string {
 		`The land draining to ${deg(p.point[0])}° E, ${deg(Math.abs(p.point[1]))}° ${p.point[1] < 0 ? 'S' : 'N'} before any other click; ` +
 		`${p.drainsInto === null ? 'the lowest click' : `drains into ${pieceName(p.drainsInto).toLowerCase()}`}; ` +
 		`${p.totalAreaM2 !== null ? `${km2(p.totalAreaM2)} upstream in all` : 'more upstream than was routed'}${inflows.length ? `; an inflow enters at ${inflows.join(' and ')}` : ''}. ` +
+		`${p.nonContributingM2 ? `${km2(p.nonContributingM2)} of its own area drains into pans (non-contributing in WR2012’s sense; still in its area). ` : ''}` +
 		`${p.reach ? `Placed on the channel whose upstream area best matches reach ${p.reach.reachId} of ${p.reach.dataset} (${Math.round(p.reach.upstreamKm2)} km²). ` : ''}` +
 		`Delineated from ${r.dataset.label} (${r.methodVersion}); check it against the map.`
 	).slice(0, 500);

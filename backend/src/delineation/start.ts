@@ -32,6 +32,7 @@ import { requireRole, UUID } from '../projects/access.js';
 import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { PlacementChoice, placementOf, placementWarnings, pointReaches, PointsAtConfluence, ReachNotNearPoint, type PointPlacement, type PointReach } from './pointPlacement.js';
+import { panWarning, type PanReport } from './pans.js';
 import { delineateUnits, START_METHOD_VERSION, type PlacementHints, type UnitRole } from './subcatchments.js';
 import { pointInGeometry } from '../geo/geojson.js';
 
@@ -109,6 +110,9 @@ export interface StartUnit {
 	drainsIntoProposed: boolean;
 	/** How its point was put on the channel (start-7); null without a DEM. */
 	placement: PointPlacement | null;
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-10): reported, not taken out. Absent without a DEM or before start-10. */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 export interface StartPlan {
@@ -118,7 +122,9 @@ export interface StartPlan {
 	catchment: { areaM2: number | null; boundaryAreaM2: number | null };
 	units: StartUnit[];
 	/** What drains to the outlet through no unit: proposed as one more (natural) unit. */
-	rest: { name: string; areaM2: number | null; geometry: Polygonal | null };
+	rest: { name: string; areaM2: number | null; geometry: Polygonal | null; nonContributingM2?: number };
+	/** The catchment's pans (pans.ts, start-10): what of it drains into one, the largest, the method. Absent without a DEM or before start-10. */
+	pans?: PanReport;
 	/** `placement`: how its point was put on the channel (start-7; absent without a DEM, or for a point never placed). */
 	dropped: { featureId: string; name: string; reason: string; placement?: PointPlacement }[];
 	warnings: string[];
@@ -431,7 +437,9 @@ export const startRoutes = new Hono<AuthEnv>()
 					geometry: u.geometry,
 					drainsInto: u.drainsInto,
 					drainsIntoProposed: true,
-					placement: placementOf(u, reaches.get(u.id))
+					placement: placementOf(u, reaches.get(u.id)),
+					nonContributingM2: u.nonContributingM2,
+					totalNonContributingM2: u.totalNonContributingM2
 				}));
 				const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
 				// A dropped point snapped beside its river: the larger channel is how to bring it in.
@@ -441,12 +449,18 @@ export const startRoutes = new Hono<AuthEnv>()
 					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && u.areaM2 < TINY_PIECE_M2) warnings.push(`${u.name}’s own area is under a hectare: is its point right on top of another unit’s?`);
 					if (u.role !== 'user' && u.role !== 'gauge' && u.areaM2 !== null && !u.geometry) warnings.push(`${u.name}’s outline couldn’t be made a valid polygon, so its area has no parcel to save; type it in instead.`);
 				}
+				const panSentence = panWarning(r.pans, r.catchment.areaM2, [
+					...units.map((u) => ({ name: u.name, ncM2: u.nonContributingM2 ?? 0 })),
+					{ name: REST_NAME, ncM2: r.rest.nonContributingM2 }
+				]);
+				if (panSentence) warnings.push(panSentence);
 				plan = {
 					fromDem: true,
 					outlet: { featureId: inputs.outlet.featureId, name: inputs.outlet.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
 					catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
 					units: upstreamFirst(units),
-					rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry },
+					rest: { name: REST_NAME, areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
+					pans: r.pans,
 					dropped,
 					warnings,
 					cellSizeM: r.cellSizeM,

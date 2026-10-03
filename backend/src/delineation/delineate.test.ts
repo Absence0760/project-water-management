@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
 import { openDem } from './dem.js';
 import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M } from './delineate.js';
-import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_ZOOM, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_CELLS, FIXTURE_ZOOM, fixtureElevation, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
+import { d8, DX, DY, edgeMask, fill, OUT } from './flow.js';
+import { PAN_METHOD } from './pans.js';
 
 // Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
-// valley in an elliptical ridge whose area is known, with a dam, a pit and a
+// valley in an elliptical ridge whose area is known, with a dam, a pan and a
 // flat reservoir.
 const dem = openDem(fileURLToPath(new URL('../../fixtures/dem/synthetic-dem.pmtiles', import.meta.url)));
 const at = (x: number, y: number) => fixtureLonLat(x + 0.5, y + 0.5);
@@ -141,7 +143,7 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		const d = await delineate(dem, off, { keepPoint: true });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
 		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe('delineate-4');
+		expect(d.methodVersion).toBe('delineate-9');
 	});
 
 	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {
@@ -169,5 +171,66 @@ describe('the e2e copy of the fixture’s points', () => {
 describe('boundsText', () => {
 	it('names each side east or west, north or south, to two decimals', () => {
 		expect(boundsText([-1.5, -2.25, 3, 4.125])).toBe('1.50° W to 3.00° E, 2.25° S to 4.13° N');
+	});
+});
+
+/** What drains into the fixture's pan (m², at the fixture's nominal cell size): every cell whose D8 path enters its disc, routed here from the terrain itself. */
+function panCatchmentM2(): number {
+	const n = FIXTURE_CELLS;
+	const z = new Float64Array(n * n);
+	for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) z[y * n + x] = fixtureElevation(x, y);
+	const g = { nx: n, ny: n, z };
+	const edge = edgeMask(g);
+	fill(g, edge);
+	const dir = d8(g, edge);
+	const inPan = (c: number) => Math.hypot((c % n) - PAN.x, Math.floor(c / n) - PAN.y) < PAN.radius;
+	let cells = 0;
+	for (let i = 0; i < n * n; i++) {
+		for (let c = i, k = 0; k < n * n; k++) {
+			if (inPan(c)) {
+				cells++;
+				break;
+			}
+			const d = dir[c]!;
+			if (d === OUT) break;
+			c += DY[d]! * n + DX[d]!;
+		}
+	}
+	return cells * FIXTURE_CELL_M * FIXTURE_CELL_M;
+}
+
+describe('delineate: pans (the hydrologist’s review, finding 8)', () => {
+	const expected = panCatchmentM2();
+
+	it('reports what drains into the valley’s pan as non-contributing, beside the catchment it leaves whole', async () => {
+		const r = await delineate(dem, at(OUTLET_CELL.x, OUTLET_CELL.y));
+		expect(r.pans.count).toBe(1);
+		// Ellipsoid row areas against the nominal cell: within 1 %.
+		expect(Math.abs(r.pans.nonContributingM2 / expected - 1)).toBeLessThan(0.01);
+		const [pan] = r.pans.largest;
+		expect(pan!.drainsM2).toBe(r.pans.nonContributingM2);
+		expect(pan!.depthM).toBeGreaterThanOrEqual(PAN.depthM);
+		expect(pan!.floorM2).toBeGreaterThan(0.9 * Math.PI * PAN.radius ** 2 * FIXTURE_CELL_M ** 2);
+		expect(pan!.storageMm).toBeGreaterThan(1000);
+		// Its deepest point is on the pan.
+		const [lon, lat] = fixtureLonLat(PAN.x + 0.5, PAN.y + 0.5);
+		expect(Math.hypot((pan!.at[0] - lon) * Math.cos((lat * Math.PI) / 180), pan!.at[1] - lat) * 111_320).toBeLessThan(PAN.radius * FIXTURE_CELL_M);
+		expect(r.pans.method).toBe(PAN_METHOD);
+		// The catchment is the gross one, as before: the pan's area is inside it, and named in the method.
+		expect(Math.abs(r.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
+		expect(pointInRing(at(PAN.x, PAN.y), r.geometry.coordinates[0]!)).toBe(true);
+		expect(r.method).toMatch(/pans \(closed depressions\) reported beside it as non-contributing, not taken out/);
+	});
+
+	it('counts the pan above a dam wall but never the dam’s own reservoir (it holds a few mm over its catchment, and is at the point)', async () => {
+		const r = await delineate(dem, at(DAM_CELL.x, DAM_CELL.y + 1));
+		expect(r.pans.count).toBe(1);
+		expect(Math.abs(r.pans.nonContributingM2 / expected - 1)).toBeLessThan(0.01);
+	});
+
+	it('finds no pan in a catchment without one (positive control above)', async () => {
+		// A slope west of the river, away from the pan on the east flank.
+		const side = await delineate(dem, at(OUTLET_CELL.x - 30, OUTLET_CELL.y - 60), { keepPoint: true });
+		expect(side.pans).toEqual({ nonContributingM2: 0, count: 0, largest: [], method: PAN_METHOD });
 	});
 });

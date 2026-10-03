@@ -50,6 +50,7 @@ import {
 	toProposal,
 	upstreamFirst
 } from './start.js';
+import { panWarning, type PanReport } from './pans.js';
 import { delineateUnits, ownsLand, type UnitRole } from './subcatchments.js';
 
 export const DivideBody = z
@@ -145,6 +146,9 @@ export interface DivideUnit {
 	current: DivideCurrent | null;
 	/** How its point was put on the channel (start-7). */
 	placement: PointPlacement;
+	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-10): reported, not taken out. Absent without a DEM or before start-10. */
+	nonContributingM2?: number;
+	totalNonContributingM2?: number;
 }
 
 export interface DividePlan {
@@ -153,7 +157,9 @@ export interface DividePlan {
 	catchment: { areaM2: number; boundaryAreaM2: number | null };
 	units: DivideUnit[];
 	/** What drains to the outflow through no point. */
-	rest: { areaM2: number; geometry: Polygonal | null };
+	rest: { areaM2: number; geometry: Polygonal | null; nonContributingM2?: number };
+	/** The catchment's pans (pans.ts, start-10): what of it drains into one, the largest, the method. Absent without a DEM or before start-10. */
+	pans?: PanReport;
 	/**
 	 * Units of the model with no point in the division: they keep their values,
 	 * and are the ones the rest of the catchment may go to (their area when
@@ -340,7 +346,9 @@ export const divideRoutes = new Hono<AuthEnv>()
 								pctRunoffToDam: n.pctRunoffToDam
 							}
 						: null,
-					placement: placementOf(u, reaches.get(u.id))
+					placement: placementOf(u, reaches.get(u.id)),
+					nonContributingM2: u.nonContributingM2,
+					totalNonContributingM2: u.totalNonContributingM2
 				};
 			});
 			const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
@@ -353,12 +361,18 @@ export const divideRoutes = new Hono<AuthEnv>()
 			}
 			const inDivision = new Set(units.flatMap((u) => (u.nodeId ? [u.nodeId] : [])));
 			const untouched = inputs.model.nodes.filter((n) => n.kind === 'farm' && !inDivision.has(n.id)).map((n) => ({ nodeId: n.id, name: n.name, areaKm2: n.areaKm2 }));
+			const panSentence = panWarning(r.pans, r.catchment.areaM2, [
+				...units.map((u) => ({ name: u.name, ncM2: u.nonContributingM2 ?? 0 })),
+				{ name: 'the rest of the catchment', ncM2: r.rest.nonContributingM2 }
+			]);
+			if (panSentence) warnings.push(panSentence);
 			const plan: DividePlan = {
 				mode: 'divide',
 				outlet: { featureId: inputs.outlet.featureId, nodeId: inputs.outflow.id, name: inputs.outflow.name, point: r.outlet.point, snapDistanceM: r.outlet.snapDistanceM, foundIn: inputs.outlet.foundIn, placement: outletPlacement },
 				catchment: { areaM2: r.catchment.areaM2, boundaryAreaM2: inputs.boundary?.areaM2 ?? null },
 				units: upstreamFirst(units),
-				rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry },
+				rest: { areaM2: r.rest.areaM2, geometry: r.rest.geometry, nonContributingM2: r.rest.nonContributingM2 },
+				pans: r.pans,
 				untouched,
 				dropped,
 				warnings,

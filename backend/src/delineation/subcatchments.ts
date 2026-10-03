@@ -11,13 +11,14 @@
 // It only proposes: start.ts stores the result as a proposal the editor
 // ticks value by value; nothing here writes anything.
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
-import { AUTHALIC_RADIUS_M, sinAuthalic } from '../geo/area.js';
+import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
 import type { Dem, DemInfo } from './dem.js';
 import { boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
 import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
 import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
+import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
 /**
@@ -27,8 +28,10 @@ import { simplifyRing, traceRings, type Pt } from './outline.js';
  * start-7 (the hydrologist's review, finding 3): Start and Divide place the outlet gauge and every point as Delineate does (each one's
  * nearby river reach looked up, its area matched, the river asked for at a confluence), keep each point's larger-channel warning and its
  * placement in the plan, take a delineated outlet's own cell (it was re-snapped up to 150 m downstream), and the method says what ran.
+ * start-10 (the hydrologist's review, finding 8): the area of the catchment, of each piece and of each unit's whole catchment that
+ * drains into pans (closed depressions the fill routes onward) reported as non-contributing beside the areas (pans.ts); the areas unchanged.
  */
-export const START_METHOD_VERSION = 'start-7';
+export const START_METHOD_VERSION = 'start-10';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -203,6 +206,9 @@ export interface UnitPiece {
 	 * just above it belongs to the unit below.
 	 */
 	totalAreaM2: number;
+	/** Of `areaM2` and of `totalAreaM2`, what drains into pans (pans.ts; m²): reported, not taken out. */
+	nonContributingM2: number;
+	totalNonContributingM2: number;
 	/** How the point was put on the channel (place.ts, PlacedBy). */
 	placedBy?: PlacedBy;
 	/** Snapped beside a much larger channel: that channel, to offer (the point stays where it snapped). */
@@ -225,7 +231,9 @@ export interface Subcatchments {
 	/** Points not proposed as units, with why. */
 	dropped: { id: string; reason: string; placedBy?: PlacedBy; larger?: LargerChannel; unmatched?: boolean }[];
 	/** The outlet's own piece: what drains to it through no unit. */
-	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number; open?: boolean };
+	rest: { geometry: Extract<Geometry, { type: 'Polygon' }> | null; areaM2: number; nonContributingM2: number; open?: boolean };
+	/** The catchment's pans (pans.ts): what of it drains into one (NaN when the catchment is cut at the window, as its area), and the largest. */
+	pans: PanReport;
 	cellSizeM: number;
 	zoom: number;
 	windowCells: number;
@@ -254,18 +262,8 @@ function segmentsCross(a: readonly Pt[], b: readonly Pt[]): boolean {
 	return false;
 }
 
-/** The latitude (degrees, unrounded) of row edge `y` of a Web Mercator grid `W` cells round the world. */
-export const mercatorLat = (y: number, W: number): number => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / W))) * 180) / Math.PI;
-
-/**
- * The area (m²) on the WGS84 ellipsoid of one cell of a Web Mercator grid `W` cells round the world whose row runs from
- * latitude `top` to `bottom`: R_q² · Δλ · |sin β(top) − sin β(bottom)|, with β the authalic latitude and R_q the authalic
- * radius (Snyder 1987, eq. 3-12; the measure geo/area.ts uses for every polygon). Not the cell's side squared at its centre,
- * which is a sphere's figure and drifts from the ellipsoid's by up to half a per cent.
- */
-export function cellRowAreaM2(top: number, bottom: number, W: number): number {
-	return AUTHALIC_RADIUS_M * AUTHALIC_RADIUS_M * ((2 * Math.PI) / W) * Math.abs(sinAuthalic(top) - sinAuthalic(bottom));
-}
+// The grid's row latitudes and cell areas live in geo/area.ts (delineate.ts's pans need them too); re-exported for the callers here.
+export { cellRowAreaM2, mercatorLat };
 
 /** A piece's rings as a checked GeoJSON polygon (holes kept), simplified as far as stays valid; null when it can't be made one. */
 function piecePolygon(outer: Pt[], holes: Pt[][], toPos: (p: Pt) => Position): { geometry: Poly; areaM2: number } | null {
@@ -404,6 +402,8 @@ export async function delineateUnits(
 		const noData = new Uint8Array(grid.z.length);
 		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
+		// The elevations before the fill, to tell its pans (pans.ts): 4 bytes a cell.
+		const before = new Float32Array(grid.z);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
@@ -558,8 +558,16 @@ export async function delineateUnits(
 			outlet,
 			kept.map((k) => ({ cell: k.cell, owns: ownsLand(k.p.role) }))
 		);
-		// Each owner's box, then its piece outlined inside the box only.
+		// The pans: what drains into a closed depression (none at the outlet or a point), per owner.
 		const R = kept.length;
+		const found = findPans(
+			{ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask: catchment, rowM2, toPos: cellPos },
+			[outlet, ...kept.map((k) => k.cell)],
+			Math.ceil(snapRadiusM / cellSizeM) + 1
+		);
+		const ncOf = new Float64Array(R + 1);
+		for (let i = 0; i < found.nc.length; i++) if (found.nc[i] && part.owner[i]! >= 0) ncOf[part.owner[i]!]! += rowM2[(i - (i % nCells)) / nCells]!;
+		// Each owner's box, then its piece outlined inside the box only.
 		const box = Array.from({ length: R + 1 }, () => [Infinity, Infinity, -Infinity, -Infinity]);
 		const count = new Int32Array(R + 1);
 		for (let i = 0; i < part.owner.length; i++) {
@@ -635,8 +643,10 @@ export async function delineateUnits(
 		const firstWhole = [...pieces, rest].find((p) => p.geometry)?.geometry;
 		const catchmentShape = whole ?? (truncated && firstWhole ? { geometry: firstWhole, areaM2: Number.NaN } : null);
 		if (!catchmentShape) throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Type the units in instead.');
-		// Totals: each unit's piece plus everything that drains into it, summed down the tree.
+		// Totals: each unit's piece plus everything that drains into it, summed down the tree (the pans' share too).
 		const total = pieces.map((p) => p.areaM2);
+		const ncPiece = kept.map((_, i) => (open[i] ? 0 : ncOf[i]!));
+		const ncTotal = [...ncPiece];
 		const order = kept.map((_, i) => i);
 		const depth = (i: number) => {
 			let d = 0;
@@ -646,7 +656,10 @@ export async function delineateUnits(
 		order.sort((a, b) => depth(b) - depth(a));
 		for (const i of order) {
 			const d = part.down[i]!;
-			if (d >= 0) total[d]! += total[i]!;
+			if (d >= 0) {
+				total[d]! += total[i]!;
+				ncTotal[d]! += ncTotal[i]!;
+			}
 		}
 		// A unit that owns no land: the cells above it, counted (the pieces above it would miss the land between).
 		kept.forEach((k, i) => {
@@ -659,6 +672,7 @@ export async function delineateUnits(
 				if (row) m2 += row * rowM2[y]!;
 			}
 			total[i] = m2;
+			ncTotal[i] = ncAreaM2(nCells, found.nc, rowM2, (c) => above[c] === 1);
 		});
 		return {
 			outlet: {
@@ -677,12 +691,15 @@ export async function delineateUnits(
 				geometry: pieces[i]!.geometry,
 				areaM2: pieces[i]!.areaM2,
 				totalAreaM2: total[i]!,
+				nonContributingM2: ownsLand(k.p.role) ? ncPiece[i]! : 0,
+				totalNonContributingM2: ncTotal[i]!,
 				...(how.get(k.p.id) ?? {}),
 				...(open[i] ? { open: true } : {})
 			})),
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.
 			dropped: dropped.map((d) => ({ ...d, ...(how.get(d.id) ?? {}) })),
-			rest: open[R] ? { ...rest, open: true } : rest,
+			rest: open[R] ? { ...rest, nonContributingM2: 0, open: true } : { ...rest, nonContributingM2: ncOf[R]! },
+			pans: panReport(truncated ? Number.NaN : ncAreaM2(nCells, found.nc, rowM2), found.pans),
 			cellSizeM,
 			zoom: z,
 			windowCells: nCells,

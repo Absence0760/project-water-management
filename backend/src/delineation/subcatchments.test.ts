@@ -4,7 +4,7 @@ import { geometryAreaM2, ringAreaM2 } from '../geo/area.js';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
 import { openDem } from './dem.js';
 import { delineate, DelineationRefused, worldPx } from './delineate.js';
-import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL } from './fixture.js';
+import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { OUT } from './flow.js';
 import { cellRowAreaM2, delineateUnits, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type UnitPoint } from './subcatchments.js';
 
@@ -307,7 +307,7 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 		// The method says what ran, and only that.
 		expect(r.method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the river reach’s area \(Lehner 2012/);
 		expect(r.method).not.toMatch(/snapped/);
-		expect(r.methodVersion).toBe('start-7');
+		expect(r.methodVersion).toBe('start-10');
 	});
 
 	it('says when a reach is near but no channel matches it (unmatched), and keeps the guard', async () => {
@@ -336,6 +336,43 @@ describe('delineateUnits: each point placed as Delineate places it (start-7, the
 		const snapped = await delineateUnits(dem, { outlet: d.outlet, boundary: null, points: [] });
 		expect(snapped.outlet.point).not.toEqual(d.outlet);
 		expect(snapped.catchment.areaM2).toBeGreaterThan(exact.catchment.areaM2);
+	});
+});
+
+describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
+	it('reports what drains into the pan in the piece that holds it, its unit’s whole catchment, the catchment, and nowhere else', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		const whole = await delineate(dem, outlet);
+		const r = await delineateUnits(dem, {
+			outlet,
+			boundary: null,
+			// The dam below the pan; a gauge on the river below the dam (it owns no land); the rest below them.
+			points: [point('dam', DAM_CELL.x, DAM_CELL.y + 1), point('gauge', OUTLET_CELL.x, OUTLET_CELL.y - 10, 'gauge')]
+		});
+		const dam = r.units.find((u) => u.id === 'dam')!;
+		const gauge = r.units.find((u) => u.id === 'gauge')!;
+		expect(r.pans.count).toBe(1);
+		near(r.pans.nonContributingM2, whole.pans.nonContributingM2, 1e-6);
+		// The pan lies above the dam: its piece holds it all, the rest none.
+		// (the report rounds to the square metre)
+		near(dam.nonContributingM2, r.pans.nonContributingM2, 1e-6);
+		near(dam.totalNonContributingM2, dam.nonContributingM2, 1e-9);
+		expect(r.rest.nonContributingM2).toBe(0);
+		// The gauge owns no land, but its whole catchment holds the pan's.
+		expect(gauge.nonContributingM2).toBe(0);
+		near(gauge.totalNonContributingM2, r.pans.nonContributingM2, 1e-6);
+		// Reported, not taken out: the areas are what they were.
+		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
+		expect(r.methodVersion).toBe('start-10');
+	});
+
+	it('never counts a depression a unit’s point is in: a dam put on the pan makes it that unit’s own basin', async () => {
+		const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
+		const r = await delineateUnits(dem, { outlet, boundary: null, points: [point('on-pan', PAN.x, PAN.y)] });
+		expect(r.units.map((u) => u.id)).toEqual(['on-pan']);
+		expect(r.pans.count).toBe(0);
+		expect(r.pans.nonContributingM2).toBe(0);
+		expect(r.units[0]!.nonContributingM2).toBe(0);
 	});
 });
 

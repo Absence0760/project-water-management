@@ -14,14 +14,18 @@ import { accumulate, d8, edgeMask, fill, touchesEdge, upstream, type Grid } from
 import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
 import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place, type Placement } from './place.js';
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
+import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
+import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
 
 /** Bump when the method changes what a click proposes; recorded on every proposal. */
 /**
  * delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept;
  * delineate-3: at a confluence the river is asked for and its outlet put at the DEM's own junction; delineate-4 (issue #387): the snap radius
  * measured from the exact click to each cell's centre, so the snap distance never exceeds it (it counted whole cells from the clicked cell).
+ * delineate-9 (the hydrologist's review, finding 8): the area draining into pans (closed depressions the fill routed onward) reported
+ * beside the catchment, as non-contributing, with its method (pans.ts); the catchment itself unchanged.
  */
-export const METHOD_VERSION = 'delineate-4';
+export const METHOD_VERSION = 'delineate-9';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
@@ -30,7 +34,7 @@ export const SNAP_RADIUS_M = 150;
 export const WINDOWS = [1024, 2048, 3072] as const;
 /**
  * The windows the background worker tries (the `delineate` job, docs/design/delineation.md § Where it runs), from the one after
- * where the request stopped: the same code, up to about 200 km at zoom 11. 6 144 cells peaks near 1 GB, which the worker's
+ * where the request stopped: the same code, up to about 200 km at zoom 11. 6 144 cells peaks at about 1.2 GB (the pans' copy of the elevations included), which the worker's
  * memory is sized for (infra/jobs.tf, at least 2 048 MB with delineation_dem on).
  */
 export const JOB_WINDOWS = [...WINDOWS, 4096, 6144] as const;
@@ -104,6 +108,8 @@ export interface Delineation {
 	dataset: DemInfo;
 	method: string;
 	methodVersion: string;
+	/** The part of it that drains into pans (pans.ts): reported, not taken out of `areaM2` or the polygon. */
+	pans: PanReport;
 	/**
 	 * A river reach was within reach of the click but no channel near it matched its upstream area (place.ts):
 	 * the result may be on another stream, or the reach's area is wrong. Shown with the proposal; not stored.
@@ -222,6 +228,8 @@ export async function delineate(
 		const noData = new Uint8Array(grid.z.length);
 		for (let i = 0; i < noData.length; i++) if (Number.isNaN(grid.z[i]!)) noData[i] = 1;
 		const edge = edgeMask(grid);
+		// The elevations before the fill, to tell its pans (pans.ts): 4 bytes a cell.
+		const before = new Float32Array(grid.z);
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
@@ -270,6 +278,11 @@ export async function delineate(
 		if (cells < MIN_CELLS) {
 			throw new DelineationRefused('too_small', 'Almost nothing drains to that point: click on the river or stream itself, at the outlet or the dam wall.');
 		}
+		const rowM2 = new Float64Array(nCells);
+		for (let y = 0; y < nCells; y++) rowM2[y] = cellRowAreaM2(mercatorLat(y0 + y, W), mercatorLat(y0 + y + 1, W), W);
+		const toCell = (c: number) => toLonLat(x0 + (c % nCells) + 0.5, y0 + Math.floor(c / nCells) + 0.5, W);
+		const found = findPans({ nx: nCells, ny: nCells, before, after: grid.z, dir, acc, mask, rowM2, toPos: toCell }, [outlet], Math.ceil(snapRadiusM / cellSizeM) + 1);
+		const pans = panReport(ncAreaM2(nCells, found.nc, rowM2), found.pans);
 		const ring = traceOutline(nCells, nCells, mask);
 		const { geometry, areaM2 } = outlinePolygon(ring, x0, y0, W);
 		const ox = outlet % nCells;
@@ -290,6 +303,7 @@ export async function delineate(
 			zoom: z,
 			windowCells: nCells,
 			dataset: info,
+			pans,
 			method:
 				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}); ` +
 				(placed.how === 'junction'
@@ -297,7 +311,8 @@ export async function delineate(
 					: placed.how === 'matched'
 					? `outlet placed on the cell within ${opts.expected?.chosen ? JUNCTION_MATCH_M : MATCH_RADIUS_M} m whose upstream area best matches ${opts.expected!.reach} (${Math.round(opts.expected!.km2)} km²; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `
 					: `outlet snapped to the most-accumulating cell within ${snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept); `) +
-				`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${cellM} m)`,
+				`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${cellM} m); ` +
+				`the area draining into pans (closed depressions) reported beside it as non-contributing, not taken out`,
 			methodVersion: METHOD_VERSION
 		};
 	}
