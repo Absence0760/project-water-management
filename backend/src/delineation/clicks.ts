@@ -67,6 +67,8 @@ export interface ClickPiece {
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead (the click stays where it snapped). */
 	larger: LargerChannel | null;
+	/** A river reach was near but no channel near the click matched its area: the reach (it may be on another stream). */
+	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
 }
 
 export interface ClickPieces {
@@ -102,7 +104,8 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			open: !!r.rest.open,
 			placedBy: r.outlet.placedBy ?? 'snapped',
 			reach: r.outlet.placedBy === 'matched' ? reachOf(lowest) : null,
-			larger: r.outlet.larger ?? null
+			larger: r.outlet.larger ?? null,
+			unmatched: r.outlet.unmatched ? reachOf(lowest) : null
 		},
 		...r.units.map((u) => ({
 			click: Number(u.id),
@@ -115,7 +118,8 @@ export function toClickPieces(r: Subcatchments, reaches: readonly (NearReach | n
 			open: !!u.open,
 			placedBy: u.placedBy ?? ('snapped' as const),
 			reach: u.placedBy === 'matched' ? reachOf(Number(u.id)) : null,
-			larger: u.larger ?? null
+			larger: u.larger ?? null,
+			unmatched: u.unmatched ? reachOf(Number(u.id)) : null
 		}))
 	];
 	// A total is known only when nothing above the click is open: the open pieces' areas count only what was routed.

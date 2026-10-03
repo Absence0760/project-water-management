@@ -38,7 +38,7 @@ describe('traceChannels', () => {
 		const cells = lines.map((l) => l.cells.map((c) => [c % g.nx, Math.floor(c / g.nx)]));
 		// Every line ends where the next begins or at the last channel cell above the edge.
 		expect(cells.some((l) => l[0]![0] === 4 && l.at(-1)![1] === 3)).toBe(true); // the river down to the confluence
-		expect(cells.some((l) => l.at(-1)![0] === 4 && l.at(-1)![1] === 3 && l[0]![0] > 4)).toBe(true); // the tributary into it
+		expect(cells.some((l) => l.at(-1)![0] === 4 && l.at(-1)![1] === 3 && l[0]![0]! > 4)).toBe(true); // the tributary into it
 		expect(cells.some((l) => l[0]![0] === 4 && l[0]![1] === 3 && l.at(-1)![1] === 6)).toBe(true); // below the confluence
 		// Each line carries the accumulation at its lower end; the line below the confluence carries the most.
 		const below = lines.find((l) => l.cells[0] === 3 * g.nx + 4)!;

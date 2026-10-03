@@ -179,6 +179,8 @@ export interface UnitPiece {
 	placedBy?: 'matched' | 'snapped';
 	/** Snapped beside a much larger channel: that channel, to offer (the point stays where it snapped). */
 	larger?: LargerChannel;
+	/** It had an expected area (a nearby river reach) but no channel near it matched (place.ts): it may be on another stream. */
+	unmatched?: boolean;
 	/**
 	 * Only with `outlet: 'lowest'`: its catchment runs past the routed window (or the DEM's data), so its piece is not whole.
 	 * Its outline is null and its areas count only the cells inside the window; the water from above it enters as an inflow.
@@ -188,7 +190,7 @@ export interface UnitPiece {
 
 export interface Subcatchments {
 	/** `id`: with `outlet: 'lowest'`, the point taken as the outlet (it owns the rest, and is not among the units). */
-	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: 'matched' | 'snapped'; larger?: LargerChannel };
+	outlet: { point: Position; snapDistanceM: number | null; foundIn: 'snapped' | 'boundary' | 'lowest'; id?: string; placedBy?: 'matched' | 'snapped'; larger?: LargerChannel; unmatched?: boolean };
 	/** The whole catchment above the outlet: its outline and geodesic area. */
 	catchment: { geometry: Extract<Geometry, { type: 'Polygon' }>; areaM2: number };
 	units: UnitPiece[];
@@ -318,7 +320,7 @@ export async function delineateUnits(
 		const acc = accumulate(nCells, nCells, dir);
 		const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
 		/** Each point's placement, by its key, for the pieces' facts. */
-		const how = new Map<string, { placedBy: 'matched' | 'snapped'; larger?: LargerChannel }>();
+		const how = new Map<string, { placedBy: 'matched' | 'snapped'; larger?: LargerChannel; unmatched?: boolean }>();
 		const snapAt = (p: Position, expectedKm2?: number | null, key?: string): number | null => {
 			const [x, y] = toGrid(p);
 			if (x < 0 || y < 0 || x >= nCells || y >= nCells) return null;
@@ -331,7 +333,7 @@ export async function delineateUnits(
 							return { at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]), distanceM: placed.larger.distanceM, km2: km2(acc[placed.larger.cell]!), pointKm2: km2(acc[placed.cell]!) };
 						})()
 					: undefined;
-				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}) });
+				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}), ...(expectedKm2 && placed.how === 'snapped' ? { unmatched: true } : {}) });
 			}
 			return placed.cell;
 		};
