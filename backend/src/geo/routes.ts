@@ -561,7 +561,13 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const box = bboxOf(ring);
 			const inside = parts.every((p) => p.geometry.coordinates[0]!.every(([x, y]) => x >= box[0] - 1e-6 && x <= box[2] + 1e-6 && y >= box[1] - 1e-6 && y <= box[3] + 1e-6));
 			// Within the bounds and adding up isn't enough: each part must lie within the shape (splitCheck.ts).
-			if (!inside || Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1 || partsWithin(ring, parts.map((p) => p.geometry.coordinates[0]!)) !== null) {
+			// Nor is each lying within it: the same half twice adds up too. The parts may share the cut, never overlap.
+			if (
+				!inside ||
+				Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1 ||
+				partsWithin(ring, parts.map((p) => p.geometry.coordinates[0]!)) !== null ||
+				overlapProblem(parts.map((p) => p.geometry.coordinates)) !== null
+			) {
 				throw new ApiError(400, 'The two parts are not this shape cut in two: together they must cover it exactly. Draw the line again.');
 			}
 			const label = before.name ? `“${before.name}”` : KIND_LABEL[before.kind];

@@ -438,7 +438,9 @@ Split / Save the shape as any drawing, through the server's checks
   that together they are the shape: their geodesic areas add up to its
   area within 0.1 % (plus 1 m²) and each lies within the shape (every
   edge of a part that isn't the shape's own stays inside its outline,
-  `geo/splitCheck.ts`; security.md § Map uploads); one
+  `geo/splitCheck.ts`; security.md § Map uploads), and they don't
+  overlap (they may share the cut; the same half twice adds up too, and
+  lost the other half); one
   `map.feature_split` event names both parts. A unit whose area was taken
   from the split shape keeps that area until **Use** is pressed again.
   Splitting into more than two is done a cut at a time.
