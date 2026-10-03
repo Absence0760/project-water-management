@@ -193,3 +193,12 @@ export function simplifyRing(ring: readonly Pt[], tol: number): Pt[] {
 	const outRing = ring.filter((_, i) => keep[i]).map((p) => [p[0], p[1]] as Pt);
 	return outRing.length >= 4 ? outRing : ring.map((p) => [p[0], p[1]]);
 }
+
+/** An open polyline simplified with Douglas–Peucker at `tol` grid units; its ends are always kept. */
+export function simplifyLine(line: readonly Pt[], tol: number): Pt[] {
+	if (line.length <= 2 || tol <= 0) return line.map((p) => [p[0], p[1]]);
+	const keep = new Uint8Array(line.length);
+	keep[0] = keep[line.length - 1] = 1;
+	dpKeep(line, 0, line.length - 1, tol * tol, keep);
+	return line.filter((_, i) => keep[i]).map((p) => [p[0], p[1]] as Pt);
+}
