@@ -29,7 +29,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
-| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
+| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true, email }` (the address the link confirmed) + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |

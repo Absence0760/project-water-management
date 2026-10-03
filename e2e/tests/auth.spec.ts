@@ -292,6 +292,25 @@ test('a dead confirmation link, signed out, asks for the address and sends a new
 	await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
 });
 
+// The page stays open to any session: a link for another address confirms
+// that address, and the page says so instead of naming the signed-in one.
+test('signed in, a confirmation link for another address doesn’t say the signed-in account is confirmed', async ({ page, playwright }) => {
+	const me = await register(page.context().request, 'Signed in here');
+	const api = await playwright.request.newContext();
+	const other = await register(api, 'Colleague', { verified: false });
+	await api.dispose();
+
+	await page.goto(`/verify-email?token=${await plantEmailToken(other.email, 'verify')}`);
+	// Not "Thanks — <me> is confirmed": the signed-in account isn't the one the link confirmed.
+	await expect(page.getByRole('status')).toHaveText('Thanks — your email address is confirmed. Sign in to see any projects or teams you were invited to.');
+	await expect(page.getByRole('status')).not.toContainText(me.email);
+	// The dead link signed in as a confirmed account: no "Send a new link" for an address that needs none.
+	await page.goto(`/verify-email?token=${'x'.repeat(43)}`);
+	await expect(page.getByRole('alert')).toHaveText('This confirmation link is invalid, already used, or older than 48 hours.');
+	await expect(page.getByRole('button', { name: 'Send a new link' })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Back to your projects' })).toBeVisible();
+});
+
 test('a confirmation link works signed out', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
 	const user = await register(api, 'Other device', { verified: false });
