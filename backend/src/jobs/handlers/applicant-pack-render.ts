@@ -33,7 +33,7 @@ import { enqueueJob } from '../queue.js';
 import { defineHandler } from '../registry.js';
 import { type PackRenderRequestMessage, PackRenderResult, reportRenderer, sendToQueue } from '../transport.js';
 import { sha256Hex } from './pack-render.js';
-import { applicantCopyDedupeKey } from '../../evidence/applicantCopy.js';
+import { applicantCopyDedupeKey, applicantCopyRetryDedupeKey } from '../../evidence/applicantCopy.js';
 
 
 export const ApplicantPackRenderPayload = z
@@ -58,7 +58,7 @@ export async function requestApplicantCopyAgain(db: Db, projectId: string, packI
 		projectId,
 		kind: 'applicant_pack_render',
 		payload: { packId },
-		dedupeKey: `applicant_copy_retry:${packId}:${userId}:${made}`,
+		dedupeKey: applicantCopyRetryDedupeKey(packId, userId, made),
 		delaySeconds: 60 * 2 ** made,
 		maxAttempts: REPORT_MAX_ATTEMPTS
 	});

@@ -111,8 +111,13 @@ export const ERROR_CODES = [
  *     applying party there: in a party, owning an application or shared
  *     one (163_licensing_authority's conflict guard). The member list and
  *     sharing are English workspace pages.
+ *   job_collision (409): queueing a job met a pending one with the same
+ *     dedupe key that the caller can't see (RLS), so there is no job to
+ *     return (jobs/queue.ts JobCollisionError, issue #386). Only a
+ *     contributor can meet it, and only if a kind they queue isn't keyed per
+ *     user (jobs/contributorKinds.ts); their pages are English workspace pages.
  */
-export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'registration_not_checked', 'mfa_fresh_code', 'role_conflict'] as const;
+export const MACHINE_ERROR_CODES = ['render_token_refused', 'pack_errata_since_draft', 'registration_not_checked', 'mfa_fresh_code', 'role_conflict', 'job_collision'] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number] | (typeof MACHINE_ERROR_CODES)[number];
 
 export const notFound = () => new ApiError(404, 'not found');

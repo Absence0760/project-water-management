@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
 import { openDem } from './dem.js';
-import { boundsText, delineate, DelineationRefused, METHOD_VERSION } from './delineate.js';
+import { boundsText, delineate, DelineationRefused, METHOD_VERSION, SNAP_RADIUS_M } from './delineate.js';
 import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_ZOOM, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
 // Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
@@ -60,6 +60,23 @@ describe('delineate (synthetic DEM)', () => {
 		expect(r.cells).toBeGreaterThan(100);
 	});
 
+	it('never snaps further than the stated radius (150 m), measured from the exact click (issue #387)', async () => {
+		// Clicks 0.6–1.49 cells (77–190 m) east of the river's centre line, between the dam and the outlet, some off their
+		// cell's middle. The old snap counted round(150 / 128) = 1 whole cell from the clicked cell, so it took the river from
+		// up to 200 m; now a click beyond 150 m keeps to its own side of the valley.
+		const river = DAM_CELL.x + 0.5;
+		const row = DAM_CELL.y + 60.5;
+		for (const dx of [0.6, 1.0, 1.1, 1.17, 1.2, 1.3, 1.49]) {
+			for (const dy of [0, 0.3]) {
+				const r = await delineate(dem, fixtureLonLat(river + dx, row + dy), { keepPoint: true });
+				expect(r.snapDistanceM, `${dx}, ${dy}`).toBeLessThanOrEqual(SNAP_RADIUS_M);
+				// The river's nearest cell centre is hypot(dx, dy) cells away: taken exactly when that is within 150 m.
+				const onRiver = Math.abs(r.outlet[0] - fixtureLonLat(river, row)[0]) < 1e-6;
+				expect(onRiver, `${dx}, ${dy}`).toBe(Math.hypot(dx, dy) * FIXTURE_CELL_M <= SNAP_RADIUS_M);
+			}
+		}
+	});
+
 	it('refuses a point outside the DEM', async () => {
 		const r = await refusal(delineate(dem, [25, -30]));
 		expect(r.code).toBe('outside');
@@ -105,7 +122,7 @@ describe('delineate: a click off the channel (issue #374)', () => {
 		const d = await delineate(dem, off, { keepPoint: true });
 		expect(d.areaM2).toBeLessThan(0.05 * BASIN_AREA_M2);
 		expect(d.method).toMatch(/is offered instead, unless the point is kept/);
-		expect(d.methodVersion).toBe('delineate-3');
+		expect(d.methodVersion).toBe('delineate-4');
 	});
 
 	it('matches the outlet to a nearby reach’s upstream area: the river, not the hillside', async () => {

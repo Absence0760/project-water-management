@@ -198,28 +198,32 @@ export function accumulate(nx: number, ny: number, dir: Uint8Array): Int32Array 
 }
 
 /**
- * The cell the outlet snaps to: the one with the most upstream cells within
- * `radius` cells of (cx, cy) (a disc), the nearest of equals; never an edge
- * cell. Null when every cell in reach is an edge.
+ * The cell the outlet snaps to: the one with the most upstream cells whose
+ * centre lies within `radius` cells of the click (cx, cy), measured from the
+ * exact click (fractional cell coordinates, not its cell's corner), so the
+ * distance a caller records never exceeds the radius it states (issue #387);
+ * the nearest of equals; never an edge cell. The click's own cell always
+ * counts, however small the radius. Null when every cell in reach is an edge.
  */
 export function snap(nx: number, ny: number, acc: Int32Array, edge: Uint8Array, cx: number, cy: number, radius: number): number | null {
 	let best = -1;
 	let bestAcc = -1;
-	let bestD2 = Infinity;
-	for (let dy = -radius; dy <= radius; dy++) {
-		for (let dx = -radius; dx <= radius; dx++) {
-			const d2 = dx * dx + dy * dy;
-			if (d2 > radius * radius) continue;
-			const x = cx + dx;
-			const y = cy + dy;
+	let bestD = Infinity;
+	const ix = Math.floor(cx);
+	const iy = Math.floor(cy);
+	const r = Math.ceil(radius);
+	for (let y = iy - r; y <= iy + r; y++) {
+		for (let x = ix - r; x <= ix + r; x++) {
 			if (x < 0 || y < 0 || x >= nx || y >= ny) continue;
+			const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+			if (d > radius && !(x === ix && y === iy)) continue;
 			const i = y * nx + x;
 			if (edge[i]) continue;
 			const a = acc[i]!;
-			if (a > bestAcc || (a === bestAcc && d2 < bestD2)) {
+			if (a > bestAcc || (a === bestAcc && d < bestD)) {
 				best = i;
 				bestAcc = a;
-				bestD2 = d2;
+				bestD = d;
 			}
 		}
 	}

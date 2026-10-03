@@ -20,6 +20,7 @@
 //   purgeReports         every tick: rows older than 8 days (a day past the
 //                        bucket's lifecycle); locally their PDFs too.
 import { withoutUser, withUser } from '../db/tx.js';
+import { applicantCopyResultDedupeKey } from '../evidence/applicantCopy.js';
 import { enqueueJob } from '../jobs/queue.js';
 import type { PackRenderResultMessage, RenderResultMessage } from '../jobs/transport.js';
 import { dueFireAt } from './due.js';
@@ -145,7 +146,8 @@ export async function acceptPackRenderResult(msg: PackRenderResultMessage): Prom
 				kind: applicant ? 'applicant_pack_render' : 'pack_render',
 				payload: { packId: msg.packId, result: msg.result },
 				// Redelivered answers collapse while one is pending; the first recorded stands anyway (app_record_pack_pdf, app_record_applicant_pack_pdf).
-				dedupeKey: `${applicant ? 'applicant_copy_result' : 'pack_result'}:${msg.packId}`
+				// A party's answer is keyed per party: they read only their own jobs (issue #386).
+				dedupeKey: applicant ? applicantCopyResultDedupeKey(msg.packId, target.actingUserId) : `pack_result:${msg.packId}`
 			})
 		);
 		return 'queued';

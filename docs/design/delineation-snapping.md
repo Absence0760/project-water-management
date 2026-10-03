@@ -280,6 +280,14 @@ spots before it runs:
   didn't.
 - 220 reaches, one seed: the percentages carry about ±6–13 points (a
   binomial 95 % interval on 40–60 samples).
+- The snap (M0, M1, and the fallback in the as-built rule) was measured
+  with its radius counted in whole cells from the clicked cell, which
+  reached up to 160–180 m against the stated 150 m on GLO-30's 31–38 m
+  cells (zoom 11, by latitude).
+  Since `delineate-4` / `start-5` (issue #387) it is measured from the exact
+  click to each cell's centre and never exceeds the radius; the matched
+  rule (M3L) always measured that way. The snap rows would come out a
+  little lower on a rerun, not differently in kind.
 
 ## Not done, and when
 

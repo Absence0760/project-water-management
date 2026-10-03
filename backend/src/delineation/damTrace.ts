@@ -22,7 +22,8 @@ import { openDem, type Dem, type DemInfo } from './dem.js';
 import { simplifyRing, traceOutline } from './outline.js';
 
 /** Bump when the method changes what a click proposes; recorded on every traced feature. */
-export const TRACE_METHOD_VERSION = 'trace-dam-1';
+/** trace-dam-2 (issue #387): the snap radius measured from the exact click to each cell's centre, so a seed is never more than TRACE_SNAP_M away. */
+export const TRACE_METHOD_VERSION = 'trace-dam-2';
 /** The shares of observations (%) a cell must be water in to count, offered in the draw bar; 25 is the default. */
 export const OCCURRENCE_CHOICES = [10, 25, 50, 75] as const;
 export type MinOccurrence = (typeof OCCURRENCE_CHOICES)[number];
@@ -95,7 +96,8 @@ export async function traceDam(water: Dem, click: Position, minOccurrence: MinOc
 	const W = worldPx(z, size);
 	const [gx, gy] = toPx(lon, lat, W);
 	const cellSizeM = (2 * Math.PI * EARTH_RADIUS_M * Math.cos((lat * Math.PI) / 180)) / W;
-	const radius = Math.max(1, Math.round(TRACE_SNAP_M / cellSizeM));
+	// In cells, measured from the exact click to each cell's centre (trace-dam-2, issue #387).
+	const radius = TRACE_SNAP_M / cellSizeM;
 	for (let wi = 0; wi < TRACE_WINDOWS.length; wi++) {
 		const nc = TRACE_WINDOWS[wi]!;
 		const x0 = Math.floor(gx) - nc / 2;
@@ -106,16 +108,18 @@ export async function traceDam(water: Dem, click: Position, minOccurrence: MinOc
 		const cy = Math.floor(gy) - y0;
 		if (Number.isNaN(v[cy * nc + cx]!)) throw new TraceRefused('no_data', 'The water occurrence data has nothing at that point.');
 		const wet = (i: number) => v[i]! >= minOccurrence;
-		// The seed: the clicked cell, else the nearest wet cell within the snap radius.
+		// The seed: the clicked cell, else the wet cell whose centre is nearest the exact click, within the snap radius.
 		let seed = wet(cy * nc + cx) ? cy * nc + cx : -1;
 		if (seed < 0) {
+			const fx = gx - x0;
+			const fy = gy - y0;
+			const r = Math.ceil(radius);
 			let best = Infinity;
-			for (let dy = -radius; dy <= radius; dy++) {
-				for (let dx = -radius; dx <= radius; dx++) {
-					const d = dx * dx + dy * dy;
-					const x = cx + dx;
-					const y = cy + dy;
-					if (d > radius * radius || d >= best || x < 0 || y < 0 || x >= nc || y >= nc || !wet(y * nc + x)) continue;
+			for (let y = cy - r; y <= cy + r; y++) {
+				for (let x = cx - r; x <= cx + r; x++) {
+					if (x < 0 || y < 0 || x >= nc || y >= nc || !wet(y * nc + x)) continue;
+					const d = Math.hypot(x + 0.5 - fx, y + 0.5 - fy);
+					if (d > radius || d >= best) continue;
 					best = d;
 					seed = y * nc + x;
 				}

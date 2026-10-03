@@ -16,8 +16,12 @@ import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, place, t
 import { simplifyRing, traceOutline, type Pt } from './outline.js';
 
 /** Bump when the method changes what a click proposes; recorded on every proposal. */
-/** delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept; delineate-3: at a confluence the river is asked for and its outlet put at the DEM's own junction. */
-export const METHOD_VERSION = 'delineate-3';
+/**
+ * delineate-2 (issue #374): the outlet matched to a nearby river reach's upstream area, and a much larger channel nearby refused unless kept;
+ * delineate-3: at a confluence the river is asked for and its outlet put at the DEM's own junction; delineate-4 (issue #387): the snap radius
+ * measured from the exact click to each cell's centre, so the snap distance never exceeds it (it counted whole cells from the clicked cell).
+ */
+export const METHOD_VERSION = 'delineate-4';
 /** Web Mercator zoom the DEM is read at: 512 px tiles at zoom 11 are about 33 m a cell over South Africa, GLO-30's own resolution. */
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */

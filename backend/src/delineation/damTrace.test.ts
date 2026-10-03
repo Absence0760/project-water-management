@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
-import { configuredWater, TRACE_METHOD_VERSION, traceDam, TraceRefused } from './damTrace.js';
+import { configuredWater, TRACE_METHOD_VERSION, TRACE_SNAP_M, traceDam, TraceRefused } from './damTrace.js';
 import { openDem } from './dem.js';
-import { DAM_CLICK, DAM_NEAR_CLICK, DRY_CLICK, fixtureOccurrence, LAKE_CLICK, WATER_FIXTURE_CELLS, WATER_FIXTURE_FILE, WATER_FIXTURE_ZOOM, waterLonLat } from './waterFixture.js';
+import { DAM_CLICK, DAM_NEAR_CLICK, DRY_CLICK, fixtureOccurrence, LAKE_CLICK, POND_CELL, WATER_FIXTURE_CELLS, WATER_FIXTURE_FILE, WATER_FIXTURE_ZOOM, waterLonLat } from './waterFixture.js';
 
 // Against the committed synthetic water occurrence raster (backend/fixtures/
 // water/, waterFixture.ts): a dam with a seldom-wet edge and an island, a
 // thin stream to a pond, and a lake the raster's edge cuts off.
 const water = openDem(fileURLToPath(WATER_FIXTURE_FILE));
+const POND_LAT = waterLonLat(POND_CELL.x + 0.5, POND_CELL.y + 0.5)[1];
 
 async function refusal(p: Promise<unknown>): Promise<TraceRefused> {
 	const e = await p.then(
@@ -87,8 +88,32 @@ describe('traceDam (synthetic water occurrence)', () => {
 		const t = await traceDam(water, DAM_NEAR_CLICK);
 		expect(t.cells).toBe(expectedCells(144, 330, 25));
 		expect(t.snapDistanceM).toBeGreaterThan(0);
-		// TRACE_SNAP_M in whole cells (60 m is two 32 m cells here).
-		expect(t.snapDistanceM).toBeLessThanOrEqual(2 * t.cellSizeM + 0.1);
+		expect(t.snapDistanceM).toBeCloseTo(t.cellSizeM, 1);
+		expect(t.methodVersion).toBe(TRACE_METHOD_VERSION);
+	});
+
+	it('never moves a click further than TRACE_SNAP_M (60 m), measured from the exact click (issue #387)', async () => {
+		// East of the pond (wet 70 %, its easternmost cell (154, 377)): from 1.5 to 2.49 cells (48–79 m) from that cell's centre.
+		// The old snap counted round(60 / 31.8) = 2 whole cells from the clicked cell, so it took the pond from up to 79 m.
+		const east = POND_CELL.x + POND_CELL.r + 0.5;
+		const results: { dx: number; d: number | null }[] = [];
+		for (const dx of [1.5, 1.8, 1.88, 1.9, 2.2, 2.49]) {
+			const t = await traceDam(water, waterLonLat(east + dx, POND_CELL.y + 0.5)).catch((e: unknown) => e);
+			if (t instanceof TraceRefused) {
+				expect(t.code).toBe('no_water');
+				results.push({ dx, d: null });
+			} else {
+				const trace = t as Awaited<ReturnType<typeof traceDam>>;
+				expect(trace.snapDistanceM).toBeLessThanOrEqual(TRACE_SNAP_M);
+				results.push({ dx, d: trace.snapDistanceM });
+			}
+		}
+		// Within 60 m (1.89 cells here) it reaches the pond; past it, it refuses.
+		const cell = (2 * Math.PI * 6378137 * Math.cos((POND_LAT * Math.PI) / 180)) / (2 ** WATER_FIXTURE_ZOOM * 256);
+		for (const { dx, d } of results) {
+			if (dx * cell <= TRACE_SNAP_M) expect(d, `${dx} cells`).toBeCloseTo(dx * cell, 1);
+			else expect(d, `${dx} cells`).toBeNull();
+		}
 	});
 
 	it('refuses dry land, a lake the data cuts off, and a point outside the data, each with its reason', async () => {

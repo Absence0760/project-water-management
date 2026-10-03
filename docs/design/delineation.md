@@ -151,7 +151,12 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      cells within 50 % of the area, ranked by area misfit plus twice the
      scaled distance. None passing falls through to:
    - **Snapped**: the cell with the most upstream cells within **150 m**
-     (about five cells), the nearest of equals, and the **larger-channel
+     (about five cells) of the click, measured from the exact click to
+     each cell's centre, so the distance moved never exceeds it (since
+     `delineate-4`, issue #387: the radius used to be counted in whole cells
+     from the clicked cell, which reached up to 160–180 m on GLO-30's cells
+     and 200 m on the synthetic DEM's), the nearest of equals;
+     the clicked cell itself always counts; and the **larger-channel
      guard**: when a channel with 100× its upstream cells runs within 1 km,
      the click is refused (422 `larger_channel`) naming that channel's
      nearest cell, its distance and both areas, and the sheet offers **Use
@@ -180,7 +185,8 @@ cell size, zoom and window, the dataset label and the archive's
 **fingerprint** (SHA-256 of its header and root directory, so two extracts
 are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
-larger-channel guard, `delineate-3` for asking the river at a confluence; bumped whenever the method changes what a click
+larger-channel guard, `delineate-3` for asking the river at a confluence,
+`delineate-4` for the snap radius measured from the exact click; bumped whenever the method changes what a click
 proposes).
 
 ## Accuracy, as shown to the user

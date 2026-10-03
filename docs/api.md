@@ -314,6 +314,14 @@ the frontend catalogue (same contract: add, never rename):
   (`163_licensing_authority`'s conflict guard; provisional position,
   pre-counsel research, 2026-10-01). Take them out of the party, or keep
   them below editor.
+- `job_collision` (`409` from a request that queues a job): the job met a
+  pending one with the same dedupe key that the caller can't see under RLS,
+  so there is none to return (`backend/src/jobs/queue.ts`
+  `JobCollisionError`, issue #386). Only a contributor (an applicant) can
+  meet it, and only if a kind they can queue isn't keyed per user; every
+  kind they can queue is (`backend/src/jobs/contributorKinds.ts`, which a
+  catalogue test holds to the job table's insert policies). Try again once
+  the pending job has run.
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -3089,7 +3097,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-4`). `placedBy` is `matched` (on the channel matching
+  the map's (`start-5`). `placedBy` is `matched` (on the channel matching
   the river reach within 1 km of the click, `reach = { dataset, reachId,
   upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
   snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
