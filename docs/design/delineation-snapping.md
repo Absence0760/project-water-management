@@ -380,6 +380,31 @@ km², and the area match's obedience to the nearest line (finding 4, in both
 directions) is the largest silent error. The fixes belong to that round;
 rerun this harness after them.
 
+**"Use that channel", followed through the worker** (findings 10 and 11,
+measured 2026-10-03 with a probe run by hand, not committed). The harness
+counted a `too_large` after "Use that channel" as the end, but the app sends
+a request still at its window's edge to the background worker (4 096 and
+6 144 cells). Followed that far, the 18 `larger_channel` refusals came out:
+6 within ½–2× (3 of them only in the worker's windows, 853–2 197 km²), 9
+main stems of 10 000–985 000 km² refused `too_large` by the worker too, 1
+the first window's side channel (finding 1: 54 km² with the *unmatched*
+caveat for a 5 068 km² gauge), 1 the river beside a gauge on a 25 km²
+stream (the editor's choice was wrong, not the channel), and 1 gully-sized
+gauge snapped at 2×. So "Use that channel" isn't failing; on a main stem
+nothing whole can come back. What changed is what the app says:
+- the refusal no longer calls the channel's window-local area "about": it
+  says "at least … inside the 34 km routed around your point, and more
+  from beyond" when the channel runs past the window, and quotes the
+  nearby reach's own area ("the mapped river here, reach …, drains 342 595
+  km²");
+- `too_large` on a reach larger than the routed square ("The river here
+  drains about 342 595 km² (its mapped reach), more than fits in the 207
+  km …") points at Sub-catchments, one per click, never "pick an outlet
+  further upstream"; below that size it offers both;
+- a click whose catchment runs past the window is no longer *unmatched*
+  (no window could match its reach), and the every-piece-open refusal names
+  a lower click that missed the river.
+
 ## Beside a confluence (fifth experiment)
 
 **What the confluence run missed.** It clicked 30–50 m off each junction,

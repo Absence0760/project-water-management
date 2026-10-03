@@ -70,7 +70,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-9' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-10' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -215,7 +215,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-9/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-10/);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));
@@ -392,14 +392,14 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const { plan, method, methodVersion } = r.body.proposal;
-		expect(methodVersion).toBe('start-9');
+		expect(methodVersion).toBe('start-10');
 		expect(Math.abs(plan.catchment.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(plan.outlet.placement).toMatchObject({ placedBy: 'matched', reach: { dataset: DATASET, reachId: 99100001, chosen: false }, larger: null, unmatched: false });
 		expect(plan.dropped).toEqual([]);
 		expect(plan.units).toHaveLength(1);
 		expect(plan.units[0].placement).toMatchObject({ placedBy: 'matched', reach: { reachId: 99100001 } });
 		expect(plan.warnings).toEqual([]);
-		expect(method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the river reach’s area/);
+		expect(method).toMatch(/placed on the channel: the outlet matched, 1 point matched \(matched: the cell within 1000 m .* best matching the reach’s area/);
 		expect(method).not.toMatch(/snapped/);
 	});
 
@@ -426,6 +426,30 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(p2.units.map((u: { key: string; placement: Placement }) => [u.key, u.placement.placedBy])).toEqual([[dam, 'larger']]);
 		expect(p2.warnings).toEqual([]);
 		expect(used.body.proposal.method).toMatch(/the outlet on the larger channel chosen/);
+	});
+
+	it('places a dam polygon that only clips the river at its own outflow, offers the river, and Use that channel puts it there (finding 9)', async () => {
+		await clear();
+		// An off-channel dam: a 4 × 4-cell block east of the river whose outline takes in one river cell at its corner.
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 40];
+		const ring = [c(X + 1, Y), c(X + 5, Y), c(X + 5, Y + 4), c(X, Y + 4), c(X, Y + 3), c(X + 1, Y + 3), c(X + 1, Y)];
+		const offDam = await feature(q.at, { kind: 'dam', name: 'Off-channel dam', geometry: { type: 'Polygon', coordinates: [ring] } });
+		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletUseLarger: true, points: [{ featureId: offDam, role: 'dam' }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const plan = r.body.proposal.plan;
+		const unit = plan.units.find((u: { key: string }) => u.key === offDam);
+		expect(unit.placement).toMatchObject({ placedBy: 'polygon', larger: { outline: true } });
+		expect(unit.totalAreaM2 / 1e6).toBeLessThan(0.02 * riverKm2);
+		expect(plan.warnings.some((w: string) => /^Off-channel dam’s outline also covers a much larger channel .* If the dam is on that river, use that channel; otherwise keep it\.$/.test(w))).toBe(true);
+		expect(r.body.proposal.method).toMatch(/1 point at a dam polygon’s outflow .*outflow: its own if a river only clips it/);
+
+		const used = await owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletUseLarger: true, points: [{ featureId: offDam, role: 'dam', useLarger: true }] });
+		expect(used.status, JSON.stringify(used.body)).toBe(201);
+		const onRiver = used.body.proposal.plan.units.find((u: { key: string }) => u.key === offDam);
+		expect(onRiver.placement).toMatchObject({ placedBy: 'larger', larger: null });
+		expect(onRiver.totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		await owner.call('DELETE', q.at(`/map/features/${offDam}`));
 	});
 
 	it('asks for the river at a confluence, every such point at once, and places it on the one picked', async () => {

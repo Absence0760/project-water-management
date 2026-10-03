@@ -3142,7 +3142,8 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   body does, and a click at a confluence without one answers 422
   `confluence` with `details.click` (its index) and the choices; `unmatched` is
   the river reach within 1 km of a snapped click whose area no channel near
-  it matched (`{ dataset, reachId, upstreamKm2 }`), else null. `click` and `drainsInto` are indexes into the request's
+  it matched (`{ dataset, reachId, upstreamKm2 }`), else null; never on a
+  click whose catchment runs past the routed window (`start-10`). `click` and `drainsInto` are indexes into the request's
   clicks (`drainsInto` null for the lowest); `point` is where the click
   snapped onto the channel; `totalAreaM2` everything upstream of it. `open`:
   an inflow point, its catchment past the routed window (about 100 km) or
@@ -3220,12 +3221,15 @@ values now, taken only when ticked.
   \| 'snapped' \| 'larger' \| 'exact' \| 'polygon' \| 'boundary', reach: {
   dataset, reachId, upstreamKm2, chosen } \| null, larger: { at, distanceM,
   km2, pointKm2 } \| null, unmatched }` (`exact`: a delineated outlet kept
-  on its own cell; `polygon`: a dam polygon's most-drained cell;
+  on its own cell; `polygon`: a dam polygon's outflow, its most-drained
+  cell, or, when the outline only clips a much larger channel, its own
+  footprint's, that channel in `larger` with `outline: true` (`start-10`);
   `boundary`: the boundary's; null without a DEM; absent on proposals
   before `start-7`). A snapped point beside a channel with 100× its
   upstream area carries it in `larger` and a sentence in `warnings` (the
   outlet's first); proposing again with that point's `useLarger: true`
-  (`outletUseLarger` for the outlet gauge) puts it on that channel, which
+  (`outletUseLarger` for the outlet gauge; for a dam polygon, the channel
+  its outline clips) puts it on that channel, which
   the server finds again (`placedBy: 'larger'`); a dropped point carries
   its `placement` too, so one snapped into a gully beside its river can be
   moved onto it the same way. A reach near a snapped

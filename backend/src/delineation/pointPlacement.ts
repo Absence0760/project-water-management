@@ -115,7 +115,11 @@ const km2Text = (v: number) => (v < 10 ? `${v.toFixed(2)} km²` : `${Math.round(
 export function placementWarnings(name: string, point: Position, pl: PointPlacement, outlet = false): string[] {
 	const out: string[] = [];
 	const whose = outlet ? `the outlet (${name})` : name;
-	if (pl.larger) {
+	if (pl.larger?.outline) {
+		out.push(
+			`${name}’s outline also covers a much larger channel ${Math.round(pl.larger.distanceM)} m ${bearingWord(point, pl.larger.at)} of its outflow: at least ${km2Text(pl.larger.km2)} drains through it, but only a cell or two of it lies inside the outline, so the dam was taken as off that channel (filled by a pump or a furrow) and its outflow put where its own water leaves it (${km2Text(pl.larger.pointKm2)}). If the dam is on that river, use that channel; otherwise keep it.`
+		);
+	} else if (pl.larger) {
 		out.push(
 			`A much larger channel runs ${Math.round(pl.larger.distanceM)} m ${bearingWord(point, pl.larger.at)} of ${whose}: at least ${km2Text(pl.larger.km2)} drains through it, against ${km2Text(pl.larger.pointKm2)} where the point was put. River lines can sit a few hundred metres off the channel the elevation model sees. ${outlet ? 'Every unit is placed against the outlet, so check it first: use' : 'Use'} that channel, or keep the point if it is on the small stream.`
 		);
