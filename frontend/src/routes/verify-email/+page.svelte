@@ -39,6 +39,27 @@
 		}
 	});
 
+	// Signed out, a dead link can't be swapped from the banner: an unconfirmed
+	// account can't sign in (POST /auth/login answers email_unconfirmed), so
+	// the page asks for the address and sends a fresh link itself, the same
+	// answer whether or not one goes out (POST /auth/resend-confirmation).
+	let resendEmail = $state('');
+	async function resendSignedOut(e: SubmitEvent) {
+		e.preventDefault();
+		const address = resendEmail.trim();
+		if (!address) return;
+		resending = true;
+		resendMsg = null;
+		try {
+			await emailAuth.resendConfirmation(address);
+			resendMsg = t('If {email} still needs confirming, a new link is on its way. Check your inbox and spam folder.', { email: address });
+		} catch (err) {
+			resendMsg = errorText(err);
+		} finally {
+			resending = false;
+		}
+	}
+
 	async function resend() {
 		resending = true;
 		resendMsg = null;
@@ -82,8 +103,17 @@
 			</button>
 			<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
 		{:else}
-			<p><Rich text={tRich('Sign in and use **Resend email** in the banner at the top of the page to get a new link.')} /></p>
-			<a class="btn btn-primary" href="{base}/login">{t('Sign in')}</a>
+			<form class="resend" onsubmit={resendSignedOut}>
+				<div class="field">
+					<label for="resend-email">{t('Email')}</label>
+					<input id="resend-email" type="email" autocomplete="email" inputmode="email" required bind:value={resendEmail} />
+				</div>
+				<button type="submit" class="btn btn-primary" disabled={resending}>
+					{resending ? t('Sending…') : t('Send a new link')}
+				</button>
+			</form>
+			<p class="muted resend" role="status" aria-live="polite">{resendMsg ?? ''}</p>
+			<a class="btn" href="{base}/login">{t('Sign in')}</a>
 		{/if}
 	{/if}
 	{#snippet footer()}

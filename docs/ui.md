@@ -416,7 +416,17 @@ under a dead-invitation warning).
   address, with **Send the link again** (`POST /auth/resend-confirmation`,
   the same answer for any address). A taken address gets exactly the same
   pages. Sign-up through a live invitation link is still confirmed, joined and
-  signed in at once.
+  signed in at once. A dead confirmation link (`/verify-email`) opened signed
+  out asks for the **Email** and sends a fresh link from the page (**Send a new
+  link**, the same request and answer), with **Sign in** beside it: an
+  unconfirmed account can't sign in to reach the banner's *Resend email*.
+  Signed in, it offers **Send a new link** for the account's own address.
+- **Display names** are checked as the server checks them
+  (`lib/api/emailAuth.ts displayNameProblem`, `backend/src/auth/displayName.ts`):
+  a name of only invisible characters (zero-width spaces, a lone bidi
+  control) is *Enter a display name.* on the sign-up and account pages; the
+  server also turns whitespace runs into one space and drops control and
+  bidi override characters before storing it.
 
 - **Two-step sign-in** (issue #282). For an account with an authenticator,
   a right password turns the form into its second step: a **Two-step

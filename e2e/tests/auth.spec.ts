@@ -276,6 +276,22 @@ test('dismissing the confirm-email banner moves focus to the page’s title', as
 	await expect(title).toBeFocused();
 });
 
+// Signed out, an unconfirmed account can't sign in to reach the banner's
+// Resend email: the dead-link page sends a new link itself.
+test('a dead confirmation link, signed out, asks for the address and sends a new link from the page', async ({ page }) => {
+	const email = uniqueEmail('dead-link');
+	await page.goto(`/verify-email?token=${'x'.repeat(43)}`);
+	await expect(page.getByRole('alert')).toHaveText('This confirmation link is invalid, already used, or older than 48 hours.');
+	await page.getByLabel('Email').fill(` ${email} `);
+	const sent = page.waitForResponse((r) => r.url().endsWith('/auth/resend-confirmation'));
+	await page.getByRole('button', { name: 'Send a new link' }).click();
+	const res = await sent;
+	expect(res.status()).toBe(202);
+	expect(res.request().postDataJSON()).toEqual({ email });
+	await expect(page.getByRole('status')).toHaveText(`If ${email} still needs confirming, a new link is on its way. Check your inbox and spam folder.`);
+	await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
+});
+
 test('a confirmation link works signed out', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
 	const user = await register(api, 'Other device', { verified: false });
