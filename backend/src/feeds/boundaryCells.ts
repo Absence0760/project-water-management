@@ -27,7 +27,7 @@
 // listed cell is read on every day (and must have data: a listed sea cell
 // fails the fetch).
 import { geometryAreaM2 } from '../geo/area.js';
-import { eachBand, openRing as open, signedArea2, type SignedPiece } from '../geo/clip.js';
+import { eachBand, GRID_WORK_BUDGET, GridWorkExceeded, openRing as open, signedArea2, type SignedPiece } from '../geo/clip.js';
 import type { Geometry, Position } from '../geo/geojson.js';
 import { BBOX_MAX_CELLS, BBOX_MAX_ROWS, CHIRPS_CELL_DEG, type WeightedCell } from './config.js';
 
@@ -109,23 +109,29 @@ export function boundaryCells(g: Geometry): BoundaryCellsResult {
 	// Each ring split into its rows, then each row's pieces into its cells, by halving (geo/clip.ts eachBand): the work
 	// grows with the vertices times log(cells), not vertices × cells, so a crafted many-vertex ring stays cheap.
 	const all: SignedPiece[] = polygons.flatMap((rings) => rings.map((ring, i) => ({ ring, sign: i === 0 ? 1 : -1 })));
-	eachBand(all, r0, r1, CHIRPS_CELL_DEG, 'y', (r, pieces) => {
-		const bottom = r * CHIRPS_CELL_DEG;
-		const lat = round((r + 0.5) * CHIRPS_CELL_DEG);
-		const cos = Math.cos((lat * Math.PI) / 180);
-		eachBand(pieces, c0, c1, CHIRPS_CELL_DEG, 'x', (c, inCell) => {
-			const left = c * CHIRPS_CELL_DEG;
-			let area = 0;
-			for (const p of inCell) area += (p.sign * Math.abs(signedArea2(p.ring))) / 2;
-			const share = Math.min(1, area / cellArea);
-			if (!(share >= MIN_SHARE)) return;
-			const km2 = cellKm2(left, bottom);
-			cellsKm2 += km2;
-			insideKm2 += km2 * share;
-			rows.add(r);
-			cells.push({ lat, lon: round((c + 0.5) * CHIRPS_CELL_DEG), weight: round(share * cos), share: round(share, 6) });
-		});
-	});
+	const work = { vertices: 0, limit: GRID_WORK_BUDGET };
+	try {
+		eachBand(all, r0, r1, CHIRPS_CELL_DEG, 'y', (r, pieces) => {
+			const bottom = r * CHIRPS_CELL_DEG;
+			const lat = round((r + 0.5) * CHIRPS_CELL_DEG);
+			const cos = Math.cos((lat * Math.PI) / 180);
+			eachBand(pieces, c0, c1, CHIRPS_CELL_DEG, 'x', (c, inCell) => {
+				const left = c * CHIRPS_CELL_DEG;
+				let area = 0;
+				for (const p of inCell) area += (p.sign * Math.abs(signedArea2(p.ring))) / 2;
+				const share = Math.min(1, area / cellArea);
+				if (!(share >= MIN_SHARE)) return;
+				const km2 = cellKm2(left, bottom);
+				cellsKm2 += km2;
+				insideKm2 += km2 * share;
+				rows.add(r);
+				cells.push({ lat, lon: round((c + 0.5) * CHIRPS_CELL_DEG), weight: round(share * cos), share: round(share, 6) });
+			}, work);
+		}, work);
+	} catch (err) {
+		if (err instanceof GridWorkExceeded) return { problem: `the catchment boundary’s outline is too detailed to read the CHIRPS cells under it (more than ${err.limit.toLocaleString('en-ZA')} vertex cuts); simplify it` };
+		throw err;
+	}
 	if (!cells.length) return { problem: 'the catchment boundary covers no 0.05° cell enough to read' };
 	if (cells.length > BBOX_MAX_CELLS || rows.size > BBOX_MAX_ROWS) {
 		return { problem: `the catchment boundary covers ${cells.length} of the 0.05° CHIRPS cells in ${rows.size} rows; ${LIMIT}` };

@@ -3865,20 +3865,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       sources table. Trigger: the WR2012 decision, or a hydrologist asking
       for the A-pan row from the map.
 
-- [ ] **Divide and start: a piece's area from its cells, not its simplified
-      outline** (persona-hydrologist, round 4, 2026-10-02). The DEM
-      partition is exact in cells, but each piece's `areaM2`
-      (`backend/src/delineation/subcatchments.ts` `piece()`) is its
-      Douglas–Peucker-simplified outline's geodesic area, so the pieces and
-      the rest add up to −0.51 % of the catchment on the synthetic DEM, more
-      on small, jagged pieces. The cell area is already summed (`cellArea`,
-      used only when the outline fails). Durable fix: take each piece's area
-      from its cells and keep the outline for display, *and* decide what the
-      saved parcel's `area_m2` is (today the unit's area equals its parcel's
-      outline area, which "area from the map" relies on): either store the
-      cell area on the parcel too, with the outline marked simplified, or
-      simplify less. Trigger: a divide whose pieces fall more than 1 % short
-      of the catchment, or the first real DEM catchment with many small units.
+- [x] **Divide and start: a piece's area from its cells, not its simplified
+      outline** (2026-10-03, `start-6`). Every area in `delineateUnits`
+      (each piece, the rest, the catchment, a no-land unit's total) is now
+      summed from the partition's cells, each at its own area on the WGS84
+      ellipsoid (`cellRowAreaM2`: R_q² · Δλ · Δ sin β, exact for a Web
+      Mercator cell and the measure `geo/area.ts` uses), so the pieces and
+      the rest add up to the catchment exactly (they fell 0.07 % short on
+      the three-dam probe, 0.51 % on the persona's divide). The outline stays
+      simplified for the map; the saved parcel stores the cells' area as
+      `area_m2`, so the unit's area equals its parcel's. Splitting such a
+      parcel checks the parts against the outline's own area, and "area from
+      the map" names the cells in its revision reason.
 
 ## Crop factors (issue #54 item 1)
 
@@ -5579,23 +5577,23 @@ all of Africa. `GET …/map/stations` counts its datasets the same way.
 What the round-4 `sec-input` pass fixed is in docs/security.md (§ Input
 handling: Delineation, Map data files, Geometry cost). Left open:
 
-- [ ] **A work budget on summing a polygon over a grid.** `gridShares`
-      (land cover, evaporation; a viewer's read) clips every vertex to every
-      row it is summed over. Halving the rows and cells (the `sec-access`
-      round-4 branch, `eachBand`) fixes the ordinary case, but a comb whose
-      every edge runs the polygon's whole height keeps all its vertices in
-      every row: a valid 50 000-vertex one over 0.0025° × 178° is about
-      72 000 rows × 50 000 vertices, billions of steps, and `maxCells`
-      doesn't stop it (one column). The durable fix is a budget on the
-      vertices the clipping makes (`eachBand`'s `work` counter, refused past
-      a few million) with a test of that comb. Trigger: the halving lands on
-      main (it was left to that branch to avoid two rewrites of one file).
-- [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
-      outer ring or another hole, but not a hole wholly inside another hole
-      (its area is subtracted twice). A full check is a point-in-ring test
-      per pair of holes, quadratic in the number of holes, so it needs a
-      cap on holes first. Trigger: a real file with nested holes, or an area
-      found below a polygon's outer ring minus its holes.
+- [x] **A work budget on summing a polygon over a grid** (2026-10-03).
+      `eachBand` counts the vertices it clips and throws `GridWorkExceeded`
+      past `GRID_WORK_BUDGET` (8 million, about a second);
+      `gridShares` and the CHIRPS `boundaryCells` answer it as a problem
+      ("too detailed … simplify it"). Halving can't help a comb whose teeth
+      run its full height (every row holds every vertex: measured 15 s at
+      2 000 rows, so minutes at 20 000), so a budget is the fix, not a
+      cleverer order; the comb is refused in about 0.3 s
+      (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`).
+- [x] **Nested holes** (2026-10-03). Refused since 8e623dad4 through
+      `polygonsOverlap`, but pairwise: 4 900 holes side by side were
+      refused as too complex. `holesNested` (`geo/geojson.ts`) sweeps the
+      holes' boxes by longitude and tests a point-in-ring only where one box
+      holds another, against the ring indexed into latitude strips (GEOS's
+      IndexedNestedHoleTester), under `GEO_MAX_SWEEP_STEPS`; tested with
+      nested and side-by-side crafted holes, a 20 000-vertex C-shaped hole
+      round 3 600 small ones, and 4 900 holes (`geo/geojson.test.ts`).
 - [x] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
       `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
       gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it

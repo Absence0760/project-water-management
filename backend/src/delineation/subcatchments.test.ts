@@ -1,11 +1,12 @@
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { geometryAreaM2, ringAreaM2 } from '../geo/area.js';
 import { pointInGeometry, type Geometry } from '../geo/geojson.js';
 import { openDem } from './dem.js';
-import { delineate, DelineationRefused } from './delineate.js';
+import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 import { OUT } from './flow.js';
-import { delineateUnits, mostDrained, ownsLand, partition, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
+import { cellRowAreaM2, delineateUnits, mercatorLat, mostDrained, ownsLand, partition, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -74,6 +75,20 @@ describe('partition', () => {
 	});
 });
 
+describe('cellRowAreaM2', () => {
+	it('is a Web Mercator cell’s area on the ellipsoid, as geo/area.ts measures the cell as a polygon, at the equator and in South Africa', () => {
+		const W = worldPx(13, 512);
+		const [w, e] = [20, 20 + 360 / W];
+		for (const y of [W / 2, Math.round(W * 0.58), Math.round(W * 0.6)]) {
+			const [n, s] = [mercatorLat(y, W), mercatorLat(y + 1, W)];
+			const area = cellRowAreaM2(n, s, W);
+			near(area, ringAreaM2([[w, s], [e, s], [e, n], [w, n], [w, s]]), 1e-9);
+			// A cell shrinks towards the pole on the map's own scale, about as its side at its centre squared.
+			near(area, ((2 * Math.PI * 6_378_137 * Math.cos((((n + s) / 2) * Math.PI) / 180)) / W) ** 2, 0.01);
+		}
+	});
+});
+
 describe('rasterize and mostDrained', () => {
 	it('fills the cells whose centres lie in the ring', () => {
 		const m = rasterize(6, 5, [
@@ -130,7 +145,8 @@ describe('delineateUnits (synthetic DEM)', () => {
 		near(dam!.totalAreaM2, dam!.areaM2, 1e-9);
 		near(r.catchment.areaM2, whole.areaM2, 0.01);
 		near(r.rest.areaM2, whole.areaM2 - above.areaM2, 0.03);
-		near(dam!.areaM2 + r.rest.areaM2, r.catchment.areaM2, 0.01);
+		// Every area is summed from the partition's cells, so the pieces add up to the catchment exactly.
+		near(dam!.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
 		// The pieces are where they should be: above the wall is the dam's, below it the rest's.
 		expect(pointInGeometry(at(DAM_CELL.x, DAM_CELL.y - 60), dam!.geometry as Geometry)).toBe(true);
 		expect(pointInGeometry(at(DAM_CELL.x, DAM_CELL.y + 50), dam!.geometry as Geometry)).toBe(false);
@@ -157,6 +173,22 @@ describe('delineateUnits (synthetic DEM)', () => {
 		expect(upper.areaM2).toBeGreaterThan(0);
 		near(lower.areaM2 + upper.areaM2, above.areaM2, 0.02);
 		near(lower.totalAreaM2, lower.areaM2 + upper.areaM2, 1e-9);
+	});
+
+	it('takes every area from the cells: three pieces and the rest add up to the catchment, each outline’s own area a little off its piece’s', async () => {
+		const r = await delineateUnits(dem, {
+			outlet: at(OUTLET_CELL.x, OUTLET_CELL.y),
+			boundary: null,
+			points: [point('a', DAM_CELL.x, DAM_CELL.y + 1), point('b', DAM_CELL.x, DAM_CELL.y - 40), point('c', DAM_CELL.x, DAM_CELL.y + 40)]
+		});
+		expect(r.units).toHaveLength(3);
+		const sum = r.units.reduce((s, u) => s + u.areaM2, 0) + r.rest.areaM2;
+		// The simplified outlines' areas fell 0.07 % short here, 0.51 % on other divides (start-4).
+		near(sum, r.catchment.areaM2, 1e-12);
+		expect(r.method).toMatch(/every area summed from its cells/);
+		// The outlines are simplified for the map: their own areas stay near the cells' but are not them.
+		for (const u of r.units) near(geometryAreaM2(u.geometry!)!, u.areaM2, 0.01);
+		near(geometryAreaM2(r.catchment.geometry)!, r.catchment.areaM2, 0.01);
 	});
 
 	it('finds the outlet inside a boundary when none is given', async () => {

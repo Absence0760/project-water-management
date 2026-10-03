@@ -436,7 +436,8 @@ Split / Save the shape as any drawing, through the server's checks
   "<boundary> part 1/2" unless renamed. The server
   (`POST …/map/features/:fid/split`) checks each part as any polygon, and
   that together they are the shape: their geodesic areas add up to its
-  area within 0.1 % (plus 1 m²) and each lies within the shape (every
+  outline's own geodesic area within 0.1 % (plus 1 m²; not its stored
+  area, which for a delineated piece is its cells', below) and each lies within the shape (every
   edge of a part that isn't the shape's own stays inside its outline,
   `geo/splitCheck.ts`; security.md § Map uploads), and they don't
   overlap (beyond `OVERLAP_SHARE`, 0.1 %; they may share the cut; the same half twice adds up too, and
@@ -592,7 +593,13 @@ did, and refuses the whole file on any problem, listing them per feature:
   `geojson.ts` clips each pair of parts whose boxes meet to the box they
   share and sweeps it slab by slab, with its own budget
   (`GEO_MAX_SWEEP_STEPS`); a boundary of all 288 quaternaries of drainage
-  region D (173 000 vertices) checks in about 0.4 s.
+  region D (173 000 vertices) checks in about 0.4 s. Holes need no area
+  sweep, since they can't cross: `holesNested` compares only holes whose
+  boxes are open together in a sweep by longitude, and tests a point of a
+  hole against another only when the other's box holds it, against that
+  ring indexed into latitude strips (GEOS's nested-hole test), so 4 900
+  holes side by side check in about 50 ms where comparing every pair
+  refused them as too complex.
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
@@ -665,8 +672,10 @@ published surface area.
 **Use … km²** on a farm parcel's (or an `other` polygon's) row sets a hydrological unit's area
 (`node.area_km2`) to it after a confirmation, and records a model revision
 whose reason names the feature ("Area of Upper farm from the map: “Upper
-farm” (9.257 km², computed from its polygon)"), which the History tab and the
-run comparison's input diff show. The unit's `area_source` is then `map`
+farm” (9.257 km², computed from its polygon)"; a delineated piece's
+parcel, whose stored area is its cells' rather than its simplified
+outline's, says "from the elevation model’s cells it was delineated
+from"), which the History tab and the run comparison's input diff show. The unit's `area_source` is then `map`
 (with the feature), until its area is typed over (back to `typed`) or the
 feature is deleted (the area stays; the link goes). The area is the farm's
 **catchment area** (runoff), so the polygon to use is the farm's
@@ -1217,7 +1226,16 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   every point to the channel (a dam polygon: its most-drained cell), and
   gives each unit the cells whose flow meets it before any other unit: its
   own piece, outlined with its holes (a unit upstream lying wholly inside
-  it). Each unit drains into the first unit its flow path meets. A water
+  it). **Every area comes from the cells** (`start-6`): each cell's own
+  area on the WGS84 ellipsoid (a Web Mercator cell is a longitude ×
+  latitude rectangle, so `subcatchments.ts` `cellRowAreaM2` is exact, the
+  measure `geo/area.ts` uses), summed per piece, so the pieces and the
+  rest add up to the catchment exactly. The outlines are simplified for the
+  map (Douglas–Peucker, about a cell), and their own areas run a little off
+  the cells' (up to about 0.5 %, more on a small jagged piece; before
+  `start-6` the areas were the outlines' and fell 0.07–0.51 % short of the
+  catchment). A saved piece's parcel stores its cells' area as `area_m2`,
+  so the unit's area and its parcel's agree. Each unit drains into the first unit its flow path meets. A water
   user is in the order but owns no land. The rest of the catchment is the
   outlet's own piece. A point that doesn't drain to the outlet, or snaps
   onto another, is dropped with the reason; a DEM catchment more than 10 %
@@ -1228,7 +1246,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-5)") and its area from it (*from the map*), the
+  delineated from … (start-6)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units

@@ -65,7 +65,7 @@ describe('without an elevation model', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const plan = r.body.proposal.plan;
 		expect(plan.dropped).toEqual([{ featureId: away, name: 'Far weir', reason: 'is outside the catchment boundary' }]);
-		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-5' });
+		expect(r.body.proposal).toMatchObject({ status: 'proposed', fromDem: false, dataset: null, methodVersion: 'start-6' });
 		expect(plan.units.map((u: { name: string; areaM2: null; drainsInto: null; drainsIntoProposed: boolean }) => [u.name, u.areaM2, u.drainsInto, u.drainsIntoProposed])).toEqual([
 			['Upper dam', null, null, false],
 			['Abstraction unit 1', null, null, false]
@@ -158,7 +158,8 @@ describe('with the synthetic DEM', () => {
 		expect(mid.drainsInto).toBeNull();
 		expect(top.geometry.type).toBe('Polygon');
 		const sum = top.areaM2 + mid.areaM2 + plan.rest.areaM2;
-		expect(Math.abs(sum / plan.catchment.areaM2 - 1)).toBeLessThan(0.02);
+		// Every area from the cells (start-6): the pieces add up to the catchment exactly.
+		expect(Math.abs(sum / plan.catchment.areaM2 - 1)).toBeLessThan(1e-9);
 		expect(mid.totalAreaM2).toBeCloseTo(top.areaM2 + mid.areaM2, 0);
 		// A second proposal supersedes the first.
 		const again = await owner.call('POST', p.at('/map/start'), body);
@@ -207,7 +208,7 @@ describe('with the synthetic DEM', () => {
 			['Valley dam', 'typed', null],
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
-		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-5/);
+		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-6/);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));

@@ -11,7 +11,7 @@
 // ellipsoidal share by far less than 1e-5. Overlapping parts of a
 // MultiPolygon are counted twice, as they are in its area (geo/area.ts).
 import { ringAreaM2 } from './area.js';
-import { eachBand, openRing, signedArea2, type SignedPiece } from './clip.js';
+import { eachBand, GRID_WORK_BUDGET, GridWorkExceeded, openRing, signedArea2, type SignedPiece } from './clip.js';
 import type { Geometry, Position } from './geojson.js';
 
 /** A cell the polygon covers: its indices, the share of it inside, and its whole area on the ellipsoid (m²). */
@@ -52,14 +52,17 @@ export const cellAreaM2 = (west: number, south: number, cellDeg: number): number
  * cells (a bound on the work, checked before any clipping). With `only`,
  * cells it rejects are never clipped (a land-cover grid lists the cells
  * with cropland; the rest add nothing). `grid` names the grid in the
- * too-many-cells problem.
+ * too-many-cells problem. An outline that would clip more than `workBudget`
+ * vertices (clip.ts GRID_WORK_BUDGET) is a problem too, found as the work
+ * passes it.
  */
 export function gridShares(
 	g: Geometry,
 	cellDeg: number,
 	maxCells: number,
 	only?: (row: number, col: number) => boolean,
-	grid = 'land-cover'
+	grid = 'land-cover',
+	workBudget = GRID_WORK_BUDGET
 ): GridSharesResult {
 	if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') return { problem: 'not a polygon' };
 	if (!(cellDeg > 0)) return { problem: 'the grid has no cell size' };
@@ -86,19 +89,25 @@ export function gridShares(
 	// Each ring split into its rows, then each row's pieces into its cells, by halving (clip.ts eachBand): the work
 	// grows with the vertices times log(cells), not vertices × cells, so a crafted many-vertex ring stays cheap.
 	const all: SignedPiece[] = polygons.flatMap((rings) => rings.map((ring, i) => ({ ring, sign: i === 0 ? 1 : -1 })));
-	eachBand(all, rows[0], rows[1], cellDeg, 'y', (r, pieces) => {
-		const bottom = r * cellDeg;
-		// Every cell in a row has the same area on the ellipsoid.
-		let rowCellM2: number | null = null;
-		eachBand(pieces, cols[0], cols[1], cellDeg, 'x', (c, inCell) => {
-			if (only && !only(r, c)) return;
-			let area = 0;
-			for (const p of inCell) area += (p.sign * Math.abs(signedArea2(p.ring))) / 2;
-			const share = area / cellArea;
-			if (!(share >= MIN_CELL_SHARE)) return;
-			rowCellM2 ??= cellAreaM2(c * cellDeg, bottom, cellDeg);
-			cells.push({ row: r, col: c, share, cellM2: rowCellM2 });
-		});
-	});
+	const work = { vertices: 0, limit: workBudget };
+	try {
+		eachBand(all, rows[0], rows[1], cellDeg, 'y', (r, pieces) => {
+			const bottom = r * cellDeg;
+			// Every cell in a row has the same area on the ellipsoid.
+			let rowCellM2: number | null = null;
+			eachBand(pieces, cols[0], cols[1], cellDeg, 'x', (c, inCell) => {
+				if (only && !only(r, c)) return;
+				let area = 0;
+				for (const p of inCell) area += (p.sign * Math.abs(signedArea2(p.ring))) / 2;
+				const share = area / cellArea;
+				if (!(share >= MIN_CELL_SHARE)) return;
+				rowCellM2 ??= cellAreaM2(c * cellDeg, bottom, cellDeg);
+				cells.push({ row: r, col: c, share, cellM2: rowCellM2 });
+			}, work);
+		}, work);
+	} catch (err) {
+		if (err instanceof GridWorkExceeded) return { problem: `the polygon’s outline is too detailed to summarise over ${grid} cells (more than ${err.limit.toLocaleString('en-ZA')} vertex cuts); simplify it` };
+		throw err;
+	}
 	return { cells, rows, cols };
 }
