@@ -106,6 +106,43 @@ export const VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT = false;
  */
 export const DEFAULT_HIDDEN_TABS: readonly TabId[] = ['allocations', 'applications', 'history'];
 
+/**
+ * Each page's guide on /help (lib/help/guides.ts), linked as "How this page
+ * works" from its section header. Ids only, so the workspace never loads the
+ * guides' text; guides.test.ts checks each id exists and points back here.
+ */
+export const TAB_GUIDE: Readonly<Record<TabId, string>> = {
+	overview: 'the-whole-process',
+	network: 'build-the-network',
+	map: 'map-page',
+	crops: 'set-up-crops-and-demand',
+	transfers: 'add-a-transfer',
+	series: 'add-data',
+	settings: 'fit-automatically',
+	runs: 'run-and-read-results',
+	river: 'river-page',
+	supply: 'units-page',
+	dams: 'dams-page',
+	compare: 'compare-runs',
+	scenarios: 'scenarios-page',
+	allocations: 'allocations-page',
+	project: 'project-page',
+	applications: 'applications-page',
+	history: 'history-page'
+};
+
+/**
+ * What a section hidden by default is for, shown beside its name in Choose
+ * sections: a hidden section's name alone doesn't say whether to turn it on
+ * (an "Applications" tick meant nothing to someone who had never met a
+ * licence application). tabs.test.ts keeps one for each DEFAULT_HIDDEN_TABS.
+ */
+export const TAB_HINTS: Readonly<Partial<Record<TabId, string>>> = {
+	allocations: 'registered water-use volumes against modelled use',
+	applications: 'water-use licence applications to assess and decide',
+	history: 'every change to the model, who made it and when'
+};
+
 /** The sections a person hides: their own choice, or the default when they never made one (null). */
 export function hiddenChoice(stored: readonly string[] | null | undefined): readonly string[] {
 	return stored ?? DEFAULT_HIDDEN_TABS;

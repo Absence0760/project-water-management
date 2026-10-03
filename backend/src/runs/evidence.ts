@@ -115,6 +115,10 @@ const WithdrawBody = z.object({ reason: reason('say why the nomination is withdr
 export const FORECAST_NOT_EVIDENCE =
 	'a forecast run cannot be nominated as evidence: evidence is judged on the record, and its last days are modelled on forecast rain; nominate an ordinary run of the model';
 
+/** Why a scenario run (024_scenarios: a scenario's changes on a base run) can't be nominated: it is a what-if, not the catchment as it is. */
+export const SCENARIO_NOT_EVIDENCE =
+	'a scenario run cannot be nominated as evidence: it is its scenario’s changes applied to a base run, not the catchment as it is; nominate a run of the model (an application’s run is assessed against the nominated run in its evidence report)';
+
 export const evidenceRoutes = new Hono<AuthEnv>()
 	.get('/:id/evidence', async (c) => {
 		const id = c.req.param('id');
@@ -129,12 +133,15 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// Friendly answers first; the stamp trigger enforces each of these again.
-			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null; trigger: string }>(
-				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings, "trigger"
+			const { rows: run } = await db.query<{ runoffModel: string; model: ModelInput['model'] | null; settings: ModelInput['settings'] | null; trigger: string; scenario: boolean }>(
+				`SELECT COALESCE(inputs->'settings'->>'runoffModel', 'legacy') AS "runoffModel", inputs->'model' AS model, inputs->'settings' AS settings, "trigger",
+				        (scenario_id IS NOT NULL OR inputs ? 'scenario') AS scenario
 				   FROM model_run WHERE project_id = $1 AND id = $2`,
 				[id, body.runId]
 			);
 			if (!run[0]) throw new ApiError(404, 'run not found');
+			// A scenario's run, or one whose scenario has since been deleted (its inputs still record the scenario).
+			if (run[0].scenario) throw new ApiError(409, SCENARIO_NOT_EVIDENCE);
 			// Evidence is judged on history; a forecast run's tail is modelled on forecast rain (WP-2.12).
 			if (run[0].trigger === 'forecast') throw new ApiError(409, FORECAST_NOT_EVIDENCE);
 			if (run[0].runoffModel === 'legacy')

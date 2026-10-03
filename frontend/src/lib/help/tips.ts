@@ -63,6 +63,30 @@ export const TIPS: HelpTipText[] = [
 		category: 'basics'
 	},
 	{
+		id: 'published-baseline',
+		term: 'Published baseline',
+		short: 'The run an editor publishes for the people outside the model: farmers read their figures from it, and licence applications start from it.',
+		category: 'licensing'
+	},
+	{
+		id: 'scenario',
+		term: 'Scenario',
+		short: 'A named list of changes to a run (a bigger dam, a new crop, less rain) that runs and compares against that run without copying the project.',
+		category: 'licensing'
+	},
+	{
+		id: 'application',
+		term: 'Licence application',
+		short: 'A licence applicant’s proposed change (a new dam, more abstraction), modelled on the published baseline for the assessors to decide.',
+		category: 'licensing'
+	},
+	{
+		id: 'evidence-pack',
+		term: 'Evidence pack',
+		short: 'An application’s evidence report frozen as a signed, versioned document with a short code anyone can check against the app.',
+		category: 'licensing'
+	},
+	{
 		id: 'water-year',
 		term: 'Water year',
 		short: 'October to September, the South African hydrological year. Monthly tables in this app run Oct … Sep.',

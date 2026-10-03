@@ -114,6 +114,7 @@ describe('guessSeries', () => {
 	it('reads the header line only when the first cell is not a date', () => {
 		expect(headerLine('﻿date,rain mm\n2025-01-01,3')).toBe('date,rain mm');
 		expect(headerLine('2025-01-01,3\n')).toBe('');
+		expect(headerLine('date,flow m3/s\r2025-01-01,3')).toBe('date,flow m3/s');
 	});
 });
 

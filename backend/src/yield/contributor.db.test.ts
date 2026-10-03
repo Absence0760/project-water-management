@@ -163,6 +163,35 @@ describe('an applicant’s yield on their own application', () => {
 		expect(after.status).toBe('dead');
 	});
 
+	it('queues their own job for the same request an assessor has waiting, and never learns of the assessor’s', async () => {
+		// A submitted application: the assessors (editors) may now read it and calculate on it too.
+		const s = await applicant.call('POST', `${P()}/scenarios`, {
+			name: 'Raise Rooikloof again',
+			baseRunId: published,
+			ops: [{ op: 'node.set', nodeId: rooikloof.id, field: 'damCapacityM3', value: 70_000 }]
+		});
+		expect(s.status, JSON.stringify(s.body)).toBe(201);
+		const submit = await applicant.call('POST', `${P()}/scenarios/${s.body.scenario.id}/submit`, {});
+		expect(submit.status, JSON.stringify(submit.body)).toBe(200);
+		const same = { scenarioId: s.body.scenario.id, nodeId: rooikloof.id };
+		const theirs = await ask(owner, same);
+		expect(theirs.status, JSON.stringify(theirs.body)).toBe(202);
+		// The assessor's pending job is hidden from the applicant (RLS), so it can't stand for their request:
+		// they get a job of their own, which they can follow, and asking again finds that one.
+		const mine = await ask(applicant, same);
+		expect(mine.status, JSON.stringify(mine.body)).toBe(202);
+		expect(mine.body).toMatchObject({ created: true });
+		expect(mine.body.jobId).not.toBe(theirs.body.jobId);
+		const again = await ask(applicant, same);
+		expect(again.status).toBe(200);
+		expect(again.body).toMatchObject({ created: false, jobId: mine.body.jobId });
+		// And an editor asking again finds the assessor's (positive control: editors share one pending job).
+		expect((await ask(owner, same)).body).toMatchObject({ created: false, jobId: theirs.body.jobId });
+		await tick();
+		expect(await job(mine.body.jobId)).toEqual({ status: 'done', last_error: null });
+		expect(await job(theirs.body.jobId)).toEqual({ status: 'done', last_error: null });
+	});
+
 	it('doesn’t see a yield someone else stored on their application, even of their own dam', async () => {
 		const y = (await asOwner(
 			`INSERT INTO yield_result (project_id, scenario_id, node_id, kind, params, points, engine_version) VALUES ($1, $2, $3, 'firm', '{}', '{}', '0') RETURNING id`,

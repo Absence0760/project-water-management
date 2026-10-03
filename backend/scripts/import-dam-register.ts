@@ -15,7 +15,7 @@
 // The real DWS list's licence for commercial reuse is unconfirmed (docs/maps.md
 // § Sources), so it is loaded only from the operator's own download, never
 // committed.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { readFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -81,7 +81,7 @@ export async function importDamRegister(url: string, args: DamArgs): Promise<{ w
 export const loadSyntheticDamRegister = (url: string) => importDamRegister(url, { files: [SYNTHETIC_DAM_FILE], dataset: SYNTHETIC_DAM_DATASET, source: '' });
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseDamArgs(process.argv.slice(2));
 	if (!url) {

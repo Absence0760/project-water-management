@@ -62,7 +62,7 @@ import {
 import { z } from 'zod';
 import { CalibrationExclusion as CalibrationExclusionSchema } from '../src/projects/settings.js';
 import { modelInputOf, type ProjectDocument } from './fit-project.js';
-import { cliPath, metricsOf, panSensitivityRefusal, withPanCoefficient } from './pan-sensitivity.js';
+import { cliPath, intOption, metricsOf, panSensitivityRefusal, withPanCoefficient } from './pan-sensitivity.js';
 
 /** Most cells a sweep runs unless --max-cells raises it: each is a full calibration with validation. */
 export const DEFAULT_MAX_CELLS = 24;
@@ -337,13 +337,8 @@ export function toJson(results: CellResult[], meta: SweepMeta): string {
 	return `${JSON.stringify({ engineVersion: ENGINE_VERSION, ...meta, cells: results }, null, '\t')}\n`;
 }
 
-/** A whole-number CLI option inside [min, max], or the fallback when absent. */
-export function intOption(name: string, raw: string | undefined, fallback: number | undefined, min: number, max: number): number | undefined {
-	if (raw === undefined) return fallback;
-	const n = Number(raw);
-	if (!Number.isInteger(n) || n < min || n > max) throw new Error(`--${name} must be a whole number from ${min} to ${max}, not "${raw}"`);
-	return n;
-}
+/** intOption lives beside pan-sensitivity's options, which read it too (that script can't import this one: this one imports it). */
+export { intOption };
 
 const USAGE =
 	'usage: fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]';

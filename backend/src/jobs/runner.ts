@@ -18,7 +18,7 @@ import { type LicenceRecordResult, sendLicenceRecordNotices } from '../licence/r
 import { safeError, stackFrames } from '../logging/safeError.js';
 import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
-import { describeFailure, JobError, LeaseLostError } from './errors.js';
+import { describeFailure, JOB_ERROR_MAX, JobError, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
 import type { ClaimedJob, HandlerRegistry } from './registry.js';
@@ -59,8 +59,11 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		// Name, code and stack frames only: an error's text can carry personal
 		// data (a pg error's detail holds row values, SES's names the recipient).
 		if (!failure.expected) logEvent('error', { event: 'job_failed', jobId: job.id, kind: job.kind, ...safeError(err), at: stackFrames(err) });
-		const status = await withoutUser((db) => finishJob(db, job, { ok: false, error: failure.message, retry: failure.retry }));
-		if (status === 'dead') {
+		const { status, superseded } = await recordFailure(job, failure);
+		if (superseded) {
+			// Not a dead letter: the newer job with its key does the work (no alarm, no job_dead alert).
+			logEvent('info', { event: 'job_superseded', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts });
+		} else if (status === 'dead') {
 			// The alarm hook (infra/jobs.tf metric filter), and the owners' job_dead alert
 			// when the project has it on (a check queued now; never for a dead alert check).
 			logEvent('error', { event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts });
@@ -68,6 +71,35 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
 	}
+}
+
+/** The unique index that allows one pending (queued, or failed and waiting to retry) job per dedupe key (016_jobs.sql). */
+const DEDUPE_INDEX = 'job_dedupe_idx';
+
+/**
+ * Record a failed attempt (app_finish_job). A job with a dedupe key that
+ * fails while a newer job with its key was queued (allowed while this one
+ * ran: running isn't pending) can't go back to pending for a retry, as that
+ * would be two pending jobs with one key, which the dedupe index refuses. The
+ * newer job does the same work, so this one is finished as dead instead,
+ * saying why, and `superseded`. Without this the finish threw, the job stayed
+ * running until its lease ran out, and every claim of it threw again, taking
+ * the rest of each tick with it.
+ */
+async function recordFailure(
+	job: ClaimedJob,
+	failure: { message: string; retry: boolean }
+): Promise<{ status: JobStatus | null; superseded: boolean }> {
+	try {
+		return { status: await withoutUser((db) => finishJob(db, job, { ok: false, error: failure.message, retry: failure.retry })), superseded: false };
+	} catch (err) {
+		const e = err as { code?: unknown; constraint?: unknown };
+		if (!failure.retry || e.code !== '23505' || e.constraint !== DEDUPE_INDEX) throw err;
+	}
+	const note = ' (a newer job with the same key is queued)';
+	const error = `${failure.message.slice(0, JOB_ERROR_MAX - note.length)}${note}`;
+	const status = await withoutUser((db) => finishJob(db, job, { ok: false, error, retry: false }));
+	return { status, superseded: status === 'dead' };
 }
 
 /**
@@ -81,7 +113,7 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 		const { rows } = await withoutUser((db) => db.query<{ go: boolean }>('SELECT app_job_progress($1, $2, $3) AS go', [job.id, job.leaseToken, v]));
 		return rows[0]?.go !== false;
 	} catch (err) {
-		logEvent('warn', { event: 'job_progress_failed', jobId: job.id, error: (err as Error).message });
+		logEvent('warn', { event: 'job_progress_failed', jobId: job.id, ...safeError(err) });
 		return true;
 	}
 }
@@ -106,7 +138,7 @@ async function scheduleAlertCheck(projectId: string): Promise<void> {
 	try {
 		await withoutUser((db) => db.query("SELECT app_alert_schedule($1, interval '0', 1)", [projectId]));
 	} catch (err) {
-		logEvent('error', { event: 'alert_schedule_failed', projectId, error: (err as Error).message });
+		logEvent('error', { event: 'alert_schedule_failed', projectId, ...safeError(err) });
 	}
 }
 

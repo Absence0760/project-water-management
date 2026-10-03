@@ -110,6 +110,20 @@ describe('importing a GeoJSON file', () => {
 		expect(n).toBe(1);
 	});
 
+	it('refuses a boundary file whose polygons overlap (their area would count twice), and takes neighbours sharing an edge as one MultiPolygon', async () => {
+		const polys = (...rings: number[][][]) => JSON.stringify({ type: 'FeatureCollection', features: rings.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [r] } })) });
+		const res = await editor.call('POST', at('/import'), { fileName: 'overlap.geojson', kind: 'catchment_boundary', text: polys(box(21.3, -33.7, 0.1), box(21.35, -33.7, 0.1)) });
+		expect(res.status).toBe(422);
+		expect(res.body.details).toEqual([{ feature: null, message: expect.stringMatching(/polygons overlap.*count twice/) }]);
+		const [{ n }] = await asOwner('SELECT count(*)::int AS n FROM geo_source WHERE project_id = $1', [projectId]);
+		expect(n).toBe(1);
+		// Positive control, in a project of its own so the boundary here stays: two quaternary-like neighbours.
+		const other = (await editor.call('POST', '/projects', { name: 'Map neighbours' })).body.project.id;
+		const ok = await editor.call('POST', `/projects/${other}/map/import`, { fileName: 'neighbours.geojson', kind: 'catchment_boundary', text: polys(box(21.3, -33.7, 0.1), box(21.4, -33.7, 0.1)) });
+		expect(ok.status).toBe(201);
+		expect(ok.body.features[0]).toMatchObject({ kind: 'catchment_boundary', geometry: { type: 'MultiPolygon' } });
+	});
+
 	it('replaces the boundary with a new one, removing the old import', async () => {
 		const res = await editor.call('POST', at('/import'), { fileName: 'boundary-v2.geojson', kind: 'catchment_boundary', text: boundaryFile('Revised catchment', 0.12) });
 		expect(res.status).toBe(201);

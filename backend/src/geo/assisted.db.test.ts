@@ -100,6 +100,13 @@ describe('splitting a polygon', () => {
 		const outside = await editor.call('POST', at(`/features/${l.body.feature.id}/split`), { parts: [box(x, y, x + 2 * d, y + d), box(x + d, y + d, x + 2 * d, y + 2 * d)] });
 		expect(outside.status).toBe(400);
 		expect(outside.body.error).toMatch(/not this shape cut in two/);
+		// The same half twice: each within the shape and their areas adding up, but they overlap and the other half is lost.
+		const sq = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Twice', geometry: square(21.44, -33.7, 0.02) });
+		const [west] = splitHalves(21.44, -33.7, 0.02);
+		const twice = await editor.call('POST', at(`/features/${sq.body.feature.id}/split`), { parts: [west, west] });
+		expect(twice.status).toBe(400);
+		expect(twice.body.error).toMatch(/not this shape cut in two/);
+		expect((await editor.call('POST', at(`/features/${sq.body.feature.id}/split`), { parts: splitHalves(21.44, -33.7, 0.02) })).status).toBe(201);
 		// Positive control: the same L cut into its two real rectangles splits.
 		const real = await editor.call('POST', at(`/features/${l.body.feature.id}/split`), { parts: [box(x, y, x + 2 * d, y + d), box(x, y + d, x + d, y + 2 * d)] });
 		expect(real.status, JSON.stringify(real.body)).toBe(201);

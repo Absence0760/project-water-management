@@ -34,6 +34,7 @@
 	import { BOUNDS_LABEL } from '$lib/calibration/fit';
 	import { pctToShare, rulesFieldsError, rulesStatusText, shareToPct, toggled } from './calibrationRules';
 	import { keptOr } from './kept';
+	import { localIsoDate } from '$lib/format/number';
 
 	let {
 		value = $bindable(),
@@ -205,7 +206,7 @@
 					<input id="{uid}-by" type="text" maxlength={SIGNED_OFF_BY_MAX} bind:value={signBy} placeholder="e.g. Dr A. Hydrologist" />
 				</div>
 				<!-- The server dates it and records your account in the project's history, whatever date is sent. -->
-				<button type="button" class="btn btn-sm" disabled={!signBy.trim()} onclick={() => (value.signedOff = { by: signBy.trim(), on: new Date().toISOString().slice(0, 10) })}>
+				<button type="button" class="btn btn-sm" disabled={!signBy.trim()} onclick={() => (value.signedOff = { by: signBy.trim(), on: localIsoDate() })}>
 					Sign off these rules
 				</button>
 			{/if}

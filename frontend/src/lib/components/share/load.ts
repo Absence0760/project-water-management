@@ -90,3 +90,18 @@ export async function loadPackShare(api: Pick<ShareApi, 'pack'>, token: string |
 		return { state: 'error', message: e instanceof Error ? e.message : String(e) };
 	}
 }
+
+/**
+ * Wraps a loader so only its latest call's answer counts: an earlier call that
+ * comes back later answers `{ current: false }`. The page loads again when a
+ * new link is pasted into the tab (hashchange) or on Try again, and an earlier
+ * link's slower answer must never replace the newer one's.
+ */
+export function latestOnly<A extends unknown[], R>(load: (...args: A) => Promise<R>): (...args: A) => Promise<{ current: true; value: R } | { current: false }> {
+	let seq = 0;
+	return async (...args: A) => {
+		const mine = ++seq;
+		const value = await load(...args);
+		return mine === seq ? { current: true, value } : { current: false };
+	};
+}

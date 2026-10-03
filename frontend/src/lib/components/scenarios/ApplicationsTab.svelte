@@ -21,6 +21,7 @@
 	import { page } from '$app/state';
 	import { api, type Pack, type Scenario } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import PackBadge from '$lib/components/packs/PackBadge.svelte';
 	import { packHref, packsByScenario } from '$lib/components/packs/pack';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
@@ -136,8 +137,12 @@
 		<div class="panel-head">
 			<div class="head-text">
 				<!-- Not "Applications": the page's h1 already says it, and the tab body is the region of that name. -->
-				<h2 id="applications-h">Submitted applications</h2>
-				<span class="muted small">On the published baseline. Open one to see its changes and runs, and to decide it. Drafts stay with the applicant.</span>
+				<h2 id="applications-h">Submitted applications <HelpTip key="application" /></h2>
+				<span class="muted small" data-testid="applications-intro">
+					Water-use licence applications: each is an applicant’s proposed change (a new or raised dam, more abstraction, more land under
+					irrigation) modelled on the published baseline. Open one to see its changes and runs, and to decide it. Drafts stay with the
+					applicant.
+				</span>
 			</div>
 			{#if items?.length}
 				<div class="tools">
@@ -169,7 +174,8 @@
 				<div class="empty-box">
 					<p class="empty" data-testid="applications-empty">No applications submitted.</p>
 					<p class="small">
-						An applicant (a member with the Applicant role) starts an application on the published baseline, and it shows here once they
+						Someone applying for a water-use licence, or their consultant, joins the project with the Applicant role. They model their
+						proposed change on the published baseline without seeing the rest of the model, and it shows here for you to decide once they
 						submit it. Add applicants on the <a href="?tab=project">Project page</a>; publish a run as the baseline in
 						<a href="?tab=runs">Runs &amp; results</a>.
 					</p>

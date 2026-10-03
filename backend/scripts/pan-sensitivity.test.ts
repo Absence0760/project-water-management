@@ -2,7 +2,7 @@ import { defaultProjectSettings, PAN_COEFFICIENT_PRESETS, panCoefficientOutOfRan
 import { existsSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { defaultCases, loadModelInput, meanAnnualMm3, panSensitivityRefusal, quantile, runCase, toMarkdown, type CaseResult } from './pan-sensitivity';
+import { defaultCases, intOption, loadModelInput, meanAnnualMm3, panSensitivityRefusal, quantile, runCase, toMarkdown, type CaseResult } from './pan-sensitivity';
 
 describe('quantile', () => {
 	it('is the ascending value at the given fraction, clamped to the array', () => {
@@ -120,4 +120,18 @@ describe.skipIf(!dataDir)('runCase (needs data/client-catchment, local only)', (
 		if (r.fixed.nse !== null) expect(r.fixed.nse).toBeLessThanOrEqual(1);
 		if (r.fixed.kge !== null) expect(r.fixed.kge).toBeLessThanOrEqual(1);
 	}, 120_000);
+});
+
+describe('intOption (the --seed, --starts and --budget of pan-sensitivity and fit-sweep)', () => {
+	it('takes a whole number in range, 0 included, and the fallback only when the option is absent', () => {
+		expect(intOption('seed', '0', 1, 0, 10)).toBe(0);
+		expect(intOption('starts', '3', 5, 1, 10)).toBe(3);
+		expect(intOption('seed', undefined, 1, 0, 10)).toBe(1);
+		expect(intOption('budget', undefined, undefined, 1, 10)).toBeUndefined();
+	});
+
+	it('refuses a typo, an empty value, a fraction and an out-of-range number instead of fitting with NaN', () => {
+		for (const raw of ['abc', '', ' ', '2.5', '0', '11', '1e9'])
+			expect(() => intOption('starts', raw, 5, 1, 10), raw).toThrow(/^--starts must be a whole number from 1 to 10/);
+	});
 });

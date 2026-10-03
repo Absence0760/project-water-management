@@ -1,7 +1,9 @@
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
+import bcrypt from 'bcryptjs';
 import { describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { parseArgon2, PASSWORD_PARAMS } from './password.js';
 import { SESSION_COOKIE, signSession } from './session.js';
 
 const json = (body: unknown) => ({
@@ -30,6 +32,32 @@ describe('auth', () => {
 		expect(cookie).toMatch(/wm_session=/);
 		expect(cookie).toMatch(/HttpOnly/i);
 		expect(cookie).toMatch(/SameSite=Lax/i);
+	});
+
+	it('a sign-in upgrades a legacy bcrypt hash to Argon2id, and after it the whole of a long password counts', async () => {
+		const u = await signUp('Legacy');
+		// An account from before Argon2id: bcrypt of a passphrase longer than its 72 bytes.
+		const shared = 'correct horse battery staple '.repeat(3);
+		await asOwner('UPDATE app_user SET password_hash = $2 WHERE id = $1', [u.id, await bcrypt.hash(`${shared}one`, 4)]);
+		// bcrypt truncates: the 72-byte twin would open it too (the reason for the upgrade).
+		const hashOf = async () => (await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]))[0].password_hash as string;
+		expect(await bcrypt.compare(`${shared}two`, await hashOf())).toBe(true);
+		expect((await app.request('/auth/login', json({ email: u.email, password: `${shared}one` }))).status).toBe(200);
+		expect(parseArgon2(await hashOf())?.params).toEqual(PASSWORD_PARAMS);
+		expect((await app.request('/auth/login', json({ email: u.email, password: `${shared}one` }))).status).toBe(200);
+		expect((await app.request('/auth/login', json({ email: u.email, password: `${shared}two` }))).status).toBe(401);
+		// The upgrade revokes nothing: the session the account already had still works.
+		expect((await u.call('GET', '/auth/me')).status).toBe(200);
+	});
+
+	it('a wrong password never touches a legacy hash (positive control: the right one does)', async () => {
+		const u = await signUp('LegacyWrong');
+		const legacy = await bcrypt.hash('correct horse', 4);
+		await asOwner('UPDATE app_user SET password_hash = $2 WHERE id = $1', [u.id, legacy]);
+		expect((await app.request('/auth/login', json({ email: u.email, password: 'wrong horse' }))).status).toBe(401);
+		expect((await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]))[0].password_hash).toBe(legacy);
+		expect((await app.request('/auth/login', json({ email: u.email, password: 'correct horse' }))).status).toBe(200);
+		expect((await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]))[0].password_hash).toMatch(/^\$argon2id\$/);
 	});
 
 	// Sign-up (issue #57): the account is made and a confirmation link mailed,
@@ -109,6 +137,13 @@ describe('auth', () => {
 		expect((await app.request('/projects')).status).toBe(401);
 		const res = await app.request('/projects', { headers: { cookie: 'wm_session=forged.token.here' } });
 		expect(res.status).toBe(401);
+	});
+
+	it('refuses a sign-up whose display name would show as nothing, and makes no account', async () => {
+		const email = `blank-${crypto.randomUUID()}@x.io`;
+		const res = await app.request('/auth/register', json({ email, password: 'longenough', displayName: '\u200b', acceptTerms: LEGAL_VERSION }));
+		expect(res.status).toBe(400);
+		expect(await asOwner('SELECT 1 FROM app_user WHERE email = $1', [email])).toEqual([]);
 	});
 
 	it('validates register input', async () => {
@@ -404,6 +439,11 @@ describe('account: display name and password change (WP-1.9)', () => {
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
+		// A name that shows as nothing, or reorders the words around it, is refused or cleaned (auth/displayName.ts).
+		expect((await u.call('PATCH', '/auth/me', { displayName: '\u200b\u200d' })).status).toBe(400);
+		const spoof = await u.call('PATCH', '/auth/me', { displayName: 'Dr\u202E Renamed\nAgain' });
+		expect(spoof.status).toBe(200);
+		expect(spoof.body.user.displayName).toBe('Dr Renamed Again');
 		// Unknown keys are ignored: the address isn't editable here.
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'Still me', email: 'hijack@example.com' })).status).toBe(200);
 		expect((await u.call('GET', '/auth/me')).body.user).toMatchObject({ email: u.email, displayName: 'Still me' });

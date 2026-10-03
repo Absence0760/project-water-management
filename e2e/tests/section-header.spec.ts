@@ -34,6 +34,8 @@ test.describe('desktop', () => {
 		const h = header(page);
 		await expect(h.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
 		await expect(h.getByTestId('section-context')).toHaveText('No runs yet');
+		// Every page links to its own guide, so what a page is for is one click away.
+		await expect(h.getByTestId('section-guide')).toHaveAttribute('href', '/help/guides/the-whole-process');
 		await expect(h.locator('summary', { hasText: 'Rain up to' })).toBeVisible();
 		await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
 		await expect(h.getByRole('button', { name: 'Run model' })).toBeEnabled();

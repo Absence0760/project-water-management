@@ -20,7 +20,7 @@
 	const path = $derived(page.url.pathname.slice(base.length).replace(/\/$/, '') || '/');
 	const here = (href: string) => (path === href ? 'page' : undefined);
 
-	const kinds: GuideKind[] = ['start', 'concept', 'howto'];
+	const kinds: GuideKind[] = ['start', 'concept', 'howto', 'page'];
 	const topics = (Object.keys(CATEGORY_TITLES) as HelpCategory[]).filter((c) => HELP.some((e) => e.category === c));
 
 	type Group = { id: string; title: string; links: { href: string; label: string }[] };

@@ -14,6 +14,7 @@ export type HelpCategory =
 	| 'data'
 	| 'results'
 	| 'fit'
+	| 'licensing'
 	| 'farmer';
 
 export interface HelpEntry {

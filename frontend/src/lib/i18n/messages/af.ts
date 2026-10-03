@@ -2027,8 +2027,6 @@ export const af: Catalogue = {
 	'43343d8b': 'Dankie — jou e-posadres is bevestig. Teken in om enige projekte of spanne te sien waarheen jy uitgenooi is.',
 	// This confirmation link is invalid, already used, or older than 48 hours.
 	'44951451': 'Hierdie bevestigingskakel is ongeldig, reeds gebruik of ouer as 48 uur.',
-	// Sign in and use **Resend email** in the banner at the top of the page to get a new link.
-	'b2820f54': 'Teken in en gebruik **Stuur e-pos weer** in die strook bo-aan die bladsy om ’n nuwe skakel te kry.',
 	// No account yet?
 	'd6cf81c0': 'Nog nie ’n rekening nie?',
 };

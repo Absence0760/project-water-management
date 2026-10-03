@@ -10,6 +10,8 @@ import {
 	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
+	OVERLAP_SHARE,
+	polygonsOverlap,
 	proposeKinds,
 	ringSelfIntersects,
 	ringsIntersect,
@@ -253,5 +255,61 @@ describe('the self-intersection sweep is bounded (round-4 hardening)', () => {
 		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(1.5, 1.5, 3, 3)] })).toEqual({ problem: expect.stringMatching(/cross/) });
 		expect(checkGeometry({ type: 'Polygon', coordinates: [outer, box(1, 1, 2, 2), box(2.5, 2.5, 3, 3)] })).toHaveProperty('geometry');
 		expect(ringsIntersect([box(0, 0, 1, 1), box(2, 2, 3, 3)])).toBe(false);
+	});
+});
+
+describe('overlapping parts and nested holes', () => {
+	const mp = (...polygons: Position[][][]) => ({ type: 'MultiPolygon', coordinates: polygons });
+
+	it('refuses MultiPolygon parts that overlap, or the same part twice, which counted the overlap twice in the area', () => {
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20.05, -30, 20.15, -29.9)]))).toEqual({ problem: expect.stringMatching(/parts that overlap/) });
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20, -30, 20.1, -29.9)]))).toEqual({ problem: expect.stringMatching(/parts that overlap/) });
+		// One part wholly inside the other, and two crossing like a plus sign (no vertex of either inside the other).
+		expect(checkGeometry(mp([box(0, 0, 4, 4)], [box(1, 1, 2, 2)]))).toEqual({ problem: expect.stringMatching(/overlap/) });
+		expect(checkGeometry(mp([box(0, 1, 3, 2)], [box(1, 0, 2, 3)]))).toEqual({ problem: expect.stringMatching(/overlap/) });
+	});
+
+	it('takes parts that share an edge or a corner, sit apart, or sit in another part’s hole, with the area of each once', () => {
+		const shared = checkGeometry(mp([box(0, 0, 1, 1)], [box(1, 0, 2, 1)], [box(2, 1, 3, 2)]));
+		expect(shared).toHaveProperty('geometry');
+		const one = checkGeometry(poly(box(0, 0, 1, 1)));
+		expect((shared as { areaM2: number }).areaM2).toBeCloseTo(2 * (one as { areaM2: number }).areaM2 + (checkGeometry(poly(box(2, 1, 3, 2))) as { areaM2: number }).areaM2, 0);
+		// Shared edges in opposite directions, the second part's edge split at a vertex of its own.
+		expect(checkGeometry(mp([box(0, 0, 1, 1)], [[[1, 0], [2, 0], [2, 1], [1, 1], [1, 0.5], [1, 0]]]))).toHaveProperty('geometry');
+		expect(checkGeometry(mp([box(0, 0, 4, 4), box(1, 1, 3, 3)], [box(1.5, 1.5, 2.5, 2.5)]))).toHaveProperty('geometry');
+		expect(checkGeometry(mp([box(0, 0, 1, 1)], [box(5, 5, 6, 6)]))).toHaveProperty('geometry');
+	});
+
+	it('takes neighbours digitised to overlap by a sliver along their shared edge (as the DWS quaternaries do), up to OVERLAP_SHARE of the area', () => {
+		// 0.1° boxes, the second reaching 0.00001° (about 1 m, 0.005 % of their area) into the first: passes; 0.001° (0.5 %): refused.
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20.09999, -30, 20.2, -29.9)]))).toHaveProperty('geometry');
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20.099, -30, 20.2, -29.9)]))).toEqual({ problem: expect.stringMatching(/parts that overlap/) });
+		expect(OVERLAP_SHARE).toBe(0.001);
+	});
+
+	it('refuses a hole inside another hole (its area was taken away twice), and takes holes side by side', () => {
+		const outer = box(20, -30, 20.1, -29.9);
+		expect(checkGeometry(poly(outer, box(20.01, -29.99, 20.09, -29.91), box(20.02, -29.98, 20.08, -29.92)))).toEqual({ problem: expect.stringMatching(/hole inside another hole/) });
+		expect(checkGeometry(poly(outer, box(20.01, -29.99, 20.04, -29.91), box(20.06, -29.99, 20.09, -29.91)))).toHaveProperty('geometry');
+	});
+
+	it('takes two 24 000-vertex neighbours along a winding shared edge (two quaternaries, say)', () => {
+		const m = 24_000;
+		// Running diagonally, so the self-intersection sweep (by longitude) sees a few edges at a time too.
+		const edge: Position[] = Array.from({ length: m }, (_, k) => [Math.round((k / m + 0.001 * Math.sin(k / 7)) * 1e7) / 1e7, Math.round((k / m) * 1e7) / 1e7]);
+		const top = edge[m - 1]!;
+		const east: Position[] = [...edge, [2, top[1]], [2, 0], edge[0]!];
+		const west: Position[] = [...[...edge].reverse(), [-1, 0], [-1, top[1]], top];
+		expect(polygonsOverlap([[east], [west]])).toBe(false);
+		expect(checkGeometry(mp([east], [west]))).toHaveProperty('geometry');
+	});
+
+	it('refuses a comb whose every edge spans every slab as too complex, rather than spending quadratic time on it', () => {
+		// A zigzag of long teeth at distinct heights, inside the hole of a second part: each slab holds every tooth.
+		const n = 20_000;
+		const comb: Position[] = Array.from({ length: n }, (_, i) => [i / n, i % 2 ? 1 - i * 1e-7 : i * 1e-7]);
+		comb.push([1, -1], [0, -1], comb[0]!);
+		const frame = [box(-2, -3, 3, 4), box(-1, -2, 2, 3)];
+		expect(checkGeometry(mp([comb], frame))).toEqual({ problem: expect.stringMatching(/too complex to check for overlaps/) });
 	});
 });

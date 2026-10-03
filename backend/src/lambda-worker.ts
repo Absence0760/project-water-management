@@ -40,6 +40,7 @@ import { acceptMailEvent } from './mail/suppression.js';
 import { acceptPackRenderResult, acceptRenderResult } from './reports/schedule.js';
 import { parseWorkerMessage } from './jobs/transport.js';
 import { emitMetricLine, logEvent } from './logging/logEvent.js';
+import { safeError } from './logging/safeError.js';
 
 /** CloudWatch namespace of the worker's embedded metrics (infra/jobs.tf alarm). */
 export const METRIC_NAMESPACE = 'water-management/Jobs';
@@ -129,7 +130,8 @@ export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<C
 			} catch (err) {
 				firstError ??= err;
 				failures.push({ itemIdentifier: record.messageId });
-				logEvent('error', { event: 'worker_record_failed', messageId: record.messageId, error: err instanceof Error ? err.message : String(err) });
+				// Name and code only (safeError): a pg error's text can quote a value, and a mail event's record names an address.
+				logEvent('error', { event: 'worker_record_failed', messageId: record.messageId, ...safeError(err) });
 			}
 		}
 		// Every record failed: the database is down, and so would the tick be.

@@ -228,17 +228,41 @@ export function detectDelimiter(text: string): ',' | ';' {
 	return count(';') > count(',') ? ';' : ',';
 }
 
+/** A number with no separators, its decimal mark a point: `1234.5`, `.5`, `1e3`. */
+const PLAIN_NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+/** The thousands separators of a `,` file and a `;` file: `\s` takes no-break and narrow no-break spaces too. */
+const GROUP_SEPARATORS = { ',': /[,\s]/, ';': /[.\s]/ } as const;
+
 /**
  * A number cell: spaces (and no-break spaces) are thousands separators; with
- * `;` files a comma is the decimal mark, with `,` files a comma inside a quoted
- * cell is a thousands separator. Null for an empty cell, NaN for anything else.
+ * `;` files a comma is the decimal mark and a point a thousands separator,
+ * with `,` files a point is the decimal mark and a comma inside a quoted cell
+ * a thousands separator. A thousands separator splits the whole part into
+ * groups of three (`1,234`, `12 000`, `12.000,5`): `12,5` in a `,` file or
+ * `1.5` in a `;` file is the other locale's decimal, so it is NaN (the row's
+ * error), never read as 125 or 15. Null for an empty cell, NaN for anything else.
  */
 export function parseNumber(cell: string, delimiter: ',' | ';'): number | null {
-	let v = cell.replace(/[\s  ]/g, '');
+	const v = cell.trim();
 	if (v === '') return null;
-	v = delimiter === ';' ? v.replace(/\./g, '').replace(',', '.') : v.replace(/,/g, '');
-	if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(v)) return NaN;
-	return Number(v);
+	const decimal = delimiter === ';' ? ',' : '.';
+	const at = v.indexOf(decimal);
+	const whole = at < 0 ? v : v.slice(0, at);
+	const fraction = at < 0 ? '' : `.${v.slice(at + 1)}`;
+	const parts = whole.split(GROUP_SEPARATORS[delimiter]);
+	// Grouped: a sign and one to three digits, then groups of exactly three.
+	if (parts.length > 1 && (!/^[+-]?\d{1,3}$/.test(parts[0]!) || parts.slice(1).some((g) => !/^\d{3}$/.test(g)))) return NaN;
+	const plain = parts.join('') + fraction;
+	return PLAIN_NUMBER.test(plain) ? Number(plain) : NaN;
+}
+
+/** Why a cell with the other locale's decimal mark isn't a number (parseNumber), for its row's error; '' otherwise. */
+export function separatorHint(cell: string, delimiter: ',' | ';'): string {
+	if (delimiter === ',' && /^[\s\d,+-]*,\d/.test(cell.trim()))
+		return ': in a comma-separated file a comma only groups thousands in threes (1,500); write a decimal with a point (1.5)';
+	if (delimiter === ';' && /^[\s\d.+-]*\.\d/.test(cell.trim()))
+		return ': in a semicolon-separated file a point only groups thousands in threes (1.500); write a decimal with a comma (1,5)';
+	return '';
 }
 
 /** YYYY-MM-DD or YYYY/MM/DD, a real calendar date; null for empty; undefined for anything else. */
@@ -530,8 +554,8 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 		const sto = parseNumber(get('storageM3'), delimiter);
 		const volBad = rawVol !== null && (!Number.isFinite(rawVol) || rawVol < 0 || rawVol * (factor ?? 1) >= 1e12);
 		const stoBad = sto !== null && (!Number.isFinite(sto) || sto < 0 || sto >= 1e12);
-		if (volBad) errors.push(`volume “${get('volumeM3PerYear')}” is not a number ≥ 0`);
-		if (stoBad) errors.push(`storage “${get('storageM3')}” is not a number of m³ ≥ 0`);
+		if (volBad) errors.push(`volume “${get('volumeM3PerYear')}” is not a number ≥ 0${separatorHint(get('volumeM3PerYear'), delimiter)}`);
+		if (stoBad) errors.push(`storage “${get('storageM3')}” is not a number of m³ ≥ 0${separatorHint(get('storageM3'), delimiter)}`);
 		const vol = rawVol === null || volBad || factor === null ? null : rawVol * factor;
 		if (storageRow) {
 			// A dam's registered storage: its volume cell is the storage (a 21(b) row registers no take).
@@ -561,7 +585,8 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 		if (months === undefined) errors.push(`${columns.months} “${get('months')}” are not months (e.g. “Oct-Mar” or “10 11 12 1 2 3”)`);
 		else row.months = months;
 		const rate = parseNumber(get('maxRateM3s'), delimiter);
-		if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate >= 1e6)) errors.push(`maximum rate “${get('maxRateM3s')}” is not a number of m³/s ≥ 0`);
+		if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate >= 1e6))
+			errors.push(`maximum rate “${get('maxRateM3s')}” is not a number of m³/s ≥ 0${separatorHint(get('maxRateM3s'), delimiter)}`);
 		else row.maxRateM3s = rate;
 		const conditions = get('conditions')
 			.split('|')
