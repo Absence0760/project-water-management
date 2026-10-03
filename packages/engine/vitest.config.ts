@@ -7,6 +7,16 @@ import { defineConfig } from 'vitest/config';
 //          flake (`pnpm test:perf`, root `pnpm test:engine:perf`).
 export default defineConfig({
 	test: {
+		// Coverage (`pnpm test:coverage`, CI's step summary): a report, not a
+		// gate. No thresholds, on purpose: a number to hit invites tests written
+		// for the number. Read it for what no test reaches (docs/testing.md
+		// § Coverage).
+		coverage: {
+			provider: 'v8',
+			include: ['src/**/*.ts'],
+			exclude: ['src/**/*.test.ts', 'src/testing/**'],
+			reporter: ['text-summary', 'json-summary', 'html']
+		},
 		projects: [
 			{
 				test: {

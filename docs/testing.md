@@ -157,6 +157,38 @@ MinIO check is `backend/src/__tests__/minio.ts` (`minioUp`).
 The only skips CI allows are for the gitignored client data (`data/`, the
 source workbooks), which CI never has (CLAUDE.md rule 10).
 
+## Coverage
+
+`pnpm test:coverage` runs the unit tests of the engine, backend and frontend
+with v8 coverage and prints a table: each workspace's lines, branches and
+functions, then the files with the most lines no test reaches
+(`scripts/coverage-report/summary.mjs`). `pnpm test:backend:db:coverage` does
+the same for the DB tests (needs `dev:db:up`; a full DB run, so the CI rule
+above applies: let the workflow run it). The HTML reports land in
+`packages/engine/coverage/`, `backend/coverage/unit/`, `backend/coverage/db/`
+and `frontend/coverage/` (gitignored).
+
+It is a report, never a gate: no thresholds, because a number to hit invites
+tests written for the number. Read it for code nothing reaches, then decide
+whether that code needs a test.
+
+The `Coverage` workflow (`.github/workflows/coverage.yml`) runs both every
+Monday, on demand, and on a PR that changes the coverage setup, and writes the
+table to the run's summary with the HTML as an artifact. It stays out of
+`ci.yml` because coverage costs about 27 % more wall clock (engine: 2 min 37 s
+→ 3 min 19 s) and the unit and DB jobs are already CI's slowest.
+
+What it can't see:
+
+- **e2e.** Playwright drives a production build with no coverage counters, so
+  the frontend's figure (about 42 % of lines) is its unit tests alone; most
+  components are tested by e2e specs instead.
+- **The backend's routes from the unit run.** They are reached by the DB tests
+  over HTTP, so read the `backend (db)` report for them, not `backend (unit)`
+  (about 52 %).
+- **Test helpers.** The engine's `src/testing/` and the backend's
+  `src/__tests__/` are left out.
+
 ## Engine end-to-end tests
 
 `packages/engine/src/e2e/` holds whole-run tests of the engine, one file set per

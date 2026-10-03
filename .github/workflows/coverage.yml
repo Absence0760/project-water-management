@@ -1,0 +1,142 @@
+name: Coverage
+
+# Which code no test reaches (docs/testing.md § Coverage). A report, never a
+# gate: no threshold, and it isn't in ci.yml, because v8 coverage costs ~27 %
+# more wall clock and the unit and DB jobs are CI's slowest (each ~10 min).
+# Weekly, by hand, and on a PR that changes the coverage setup itself. Each
+# job writes its table to the run's summary and uploads the HTML reports.
+# What it can't see: e2e (Playwright drives a production build, which carries
+# no coverage counters), so the frontend's figure is its unit tests alone.
+on:
+  schedule:
+    # 06:30 UTC every Monday, beside the dependency audit (audit.yml).
+    - cron: '30 6 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/coverage.yml
+      - scripts/coverage-report/**
+      - '**/vitest.config.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit coverage (engine, backend, frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The frontend's tsconfig extends the generated .svelte-kit one.
+      - name: Sync SvelteKit
+        run: pnpm -C frontend exec svelte-kit sync
+
+      - name: Unit tests with coverage
+        run: pnpm test:coverage
+
+      - name: Summary
+        run: node scripts/coverage-report/summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-unit
+          path: |
+            packages/engine/coverage/
+            backend/coverage/unit/
+            frontend/coverage/
+          retention-days: 14
+
+  db:
+    name: Backend DB coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # The image and digest docker-compose.yml runs (pnpm check:pins, serviceImageProblems).
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          # Throwaway CI-only credentials, same as docker-compose.yml.
+          POSTGRES_USER: water
+          POSTGRES_PASSWORD: water
+          POSTGRES_DB: water
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U water -d water"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create app role and test database
+        env:
+          PGPASSWORD: water
+        run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
+
+      # The report render tests fail, never skip, under CI without Chromium
+      # and MinIO (docs/testing.md § Tests that need a service or a browser):
+      # the same browser and store ci.yml's DB job sets up.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -C e2e exec playwright install-deps chromium
+          else
+            pnpm -C e2e exec playwright install --with-deps chromium
+          fi
+
+      - name: Start MinIO
+        run: docker compose up -d --wait minio
+
+      - name: DB tests with coverage
+        run: pnpm test:backend:db:coverage
+
+      - name: Summary
+        run: node scripts/coverage-report/summary.mjs >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-db
+          path: backend/coverage/db/
+          retention-days: 14
