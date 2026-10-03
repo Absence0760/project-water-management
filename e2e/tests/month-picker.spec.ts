@@ -29,10 +29,10 @@ test('the dry-season month toggles are at least 24 px and the All button names i
 
 	// Named for what it selects, and for the picker it belongs to; the visible words are in the name.
 	await picker.getByRole('button', { name: 'Dry-season months: all months' }).click();
-	await expect(toggles.filter({ checked: true })).toHaveCount(12);
+	await expect(picker.getByRole('checkbox', { checked: true })).toHaveCount(12);
 	await expect(picker.getByRole('button', { name: 'Dry-season months: no months' })).toHaveText('No months');
 	await picker.getByRole('button', { name: 'Dry-season months: no months' }).click();
-	await expect(toggles.filter({ checked: true })).toHaveCount(0);
+	await expect(picker.getByRole('checkbox', { checked: true })).toHaveCount(0);
 
 	// A phone: two rows of six, still at least 24 px, nothing scrolls sideways.
 	await resizeTo(page, { width: 360, height: 800 });
