@@ -204,12 +204,17 @@ one line since migration 189 (api.md § Model data). Left, found on the way:
       the feature routes, `cleanName` in the GeoJSON and river readers (bulk
       paths), and a migration cleaning stored feature names. Trigger: next
       work on the map's feature routes.
-- [ ] **A scenario's borehole may have a blank name.** The engine's
+- [x] **A scenario's borehole may have a blank name.** The engine's
       `borehole.add` check (`scenario/ops.ts` `BOREHOLE_FIELDS.name`) takes
       0–200 characters where PUT /model needs 1–200, so a scenario can add a
       borehole the model schema would refuse. Durable fix: `nameOf(1, 200)`
       there, checking the stored scenarios first. Trigger: next work on
-      scenario ops.
+      scenario ops. **Done 2026-10-03:** `nameOf(1, 200)`; the scenario
+      editor already refused a blank one (`ops.ts` `buildOp`), so only an
+      API caller could store it. Stored ops aren't re-checked when a
+      scenario runs (only on create and on an ops update), so a stored
+      scenario with a blank one still runs and stays as it was (its
+      `ops_sha256` pins those bytes); nothing is deployed yet.
 
 ## Two-step sign-in (issue #282)
 
