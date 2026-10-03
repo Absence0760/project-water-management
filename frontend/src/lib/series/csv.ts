@@ -303,7 +303,10 @@ export function denseDays(byDay: Map<number, number | null>): Pick<ParsedSeries,
 	}
 	const length = end - start + 1;
 	if (length > MAX_SERIES_VALUES) {
-		throw new CsvError(`series spans ${fmtNum(length)} days; the limit is ${fmtNum(MAX_SERIES_VALUES)}`);
+		// The dates name the culprit: one mistyped year (2002 for 2020, 1820) stretches the span.
+		throw new CsvError(
+			`series spans ${fmtNum(length)} days, from ${fromEpochDay(start)} to ${fromEpochDay(end)}; the limit is ${fmtNum(MAX_SERIES_VALUES)}. Check the earliest and latest dates for a mistyped year`
+		);
 	}
 	const values: (number | null)[] = new Array(length).fill(null);
 	let rowCount = 0;
