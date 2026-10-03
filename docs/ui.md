@@ -2708,6 +2708,21 @@ map" card) stays the schematic; this is the geography.
   as its card in the sheet (R: the rest of the catchment) …" with **Review
   it**) says what the pieces are. The points step counts gauges apart ("1
   unit and 1 gauge, plus the rest of the catchment.").
+  **Where each point went** (`start-7`, `placement.ts`,
+  `PlacementAsk.svelte`): the outlet's line under the warnings ("The
+  outlet: On the channel matching river reach 11509680 (292 km²), 602 m
+  from the point."), and each card's ("Snapped to the most-drained cell
+  nearby, 143 m from the point: no channel near it matches …"). A point
+  snapped beside a much larger channel has its warning in the list and
+  **use that channel** on its card (**Use that channel for the outlet**
+  under the warnings), which proposes again with the point on that
+  channel. A point at a confluence stops the proposal with a box above
+  the sheet's error line: "These points are at a confluence …", a radio
+  group per point (legend: its name, or "The outlet (Weir)") with its
+  rivers ("The river along the point, 400 km²"), and **Propose with these
+  rivers** once each has one. The choices stay in the sheet's draft for
+  later proposals; picking another outlet drops the outlet's. Divide's
+  sheet does the same.
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
   Start from the map](./maps.md#start-from-the-map)). **Divide the model**
