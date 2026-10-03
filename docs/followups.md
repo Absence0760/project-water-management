@@ -4771,7 +4771,7 @@ assume, the questions for counsel); these are the actions, with triggers.
 
 ## Housekeeping
 
-- [ ] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
+- [x] **`devEnv.test.ts` reads the developer's real `.env.development.local`**
       (found 2026-10-01, issue #326 round 3). "loads the committed env file and
       points both URLs at the checkout database" fails on any machine whose
       `backend/.env.development.local` sets `DATABASE_URL` to another database
@@ -4780,7 +4780,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       give `loadDevEnv` the directory to read (or the file list) and point the
       test at a temp directory holding only a copy of the committed file.
       Trigger: the next change to `config/devEnv.ts`, or a second report of
-      the failure.
+      the failure. **Done 2026-10-03:** `loadDevEnv(env, dir)` reads the two
+      files from `dir` (default the working directory, as before), and the
+      test points it at a temp directory holding a copy of the committed
+      file, plus a case for a `.env.development.local` that wins.
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
       since 2026-09-24, billing). Work since then was verified with targeted
@@ -5593,15 +5596,22 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       per pair of holes, quadratic in the number of holes, so it needs a
       cap on holes first. Trigger: a real file with nested holes, or an area
       found below a polygon's outer ring minus its holes.
-- [ ] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
+- [x] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
       `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
       gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it
       `@sha256:` and add it to the pins guard. Trigger: the next change to
-      that script.
-- [ ] **No published checksums for the downloaded sources.** HydroRIVERS'
+      that script. **Done 2026-10-03:** pinned to the tag's multi-arch index
+      digest, and `check:pins` (`scriptImageProblems`) refuses any
+      `*_IMAGE` default in `bin/*.sh` without one.
+- [x] **No published checksums for the downloaded sources.** HydroRIVERS'
       zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
       builds have no checksum the scripts verify (whether each publisher
       offers one was not checked in this round); the scripts are HTTPS-only (redirects
       too) and the readers fail closed, and the production load hashes
       what the operator prepared. Trigger: any of them starts publishing
-      checksums.
+      checksums. **Done 2026-10-03:** checked per publisher (maps.md §
+      Checksums): HydroRIVERS, GSW and dPET publish none, so their whole
+      files are held to SHA-256s in `bin/source-checksums.sha256`
+      (HydroRIVERS and the six default GSW tiles pinned, dPET recorded on
+      first fetch); Protomaps and Mapterhorn publish whole-archive MD5s that
+      a ranged `pmtiles extract` can't use.
