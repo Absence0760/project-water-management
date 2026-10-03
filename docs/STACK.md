@@ -183,7 +183,7 @@ pnpm gen:bundle-budget <slug> <kb> "<why>"  # raise the total ceiling: one new e
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:migrations       # every migration this branch adds sorts after origin/main's highest (git fetch first; data-model.md § Migrations)
-pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, and bin/tiles-dev.sh's GDAL image by digest; bump them together as backend/renderer.Dockerfile's header says
+pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned, bin/tiles-dev.sh's GDAL image and docker-compose.yml's images (Postgres, Mailpit, MinIO) by digest; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm check:apt-snapshot     # how old the renderer image's apt snapshot (APT_SNAPSHOT) is; a weekly workflow opens an issue past 90 days
 pnpm gen:renderer-apt [<id>] # move APT_SNAPSHOT (default today) and rewrite the pinned apt versions from it (docker); on every Dependabot docker PR

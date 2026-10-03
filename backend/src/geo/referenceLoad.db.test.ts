@@ -12,7 +12,10 @@
 //    direct load, with its dataset row; an A-pan grid is refused;
 //  - rivers: the synthetic network loads with the source given, minOrder
 //    leaves the small reaches out;
-//  - a file with nothing loadable fails and leaves the dataset as it was.
+//  - a file with nothing loadable fails and leaves the dataset as it was;
+//  - each load records the file's key and SHA-256 with the dataset
+//    (reference_load, 192), returns the one it replaced, keeps it on a failed
+//    load, and a local replace (no file) clears it.
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +27,7 @@ import { loadSyntheticEvaporation, parseEvaporationArgs, writeEvaporationJson } 
 import { loadSyntheticLandCover, parseLandCoverArgs, writeLandCoverJson } from '../../scripts/import-land-cover.js';
 import { SYNTHETIC_RIVERS_FILE } from '../../scripts/import-rivers.js';
 import { asOwner } from '../__tests__/helpers.js';
+import { replaceCroplandDataset } from './croplandGrid.js';
 import { LoadError, loadReferenceText, parseLoadRequest, readReferenceText, type ReadObject } from './referenceLoad.js';
 
 const LC = 'test-reference-load-lc';
@@ -40,6 +44,10 @@ async function load(load: Record<string, unknown>, bytes: Uint8Array) {
 	return loadReferenceText(client, req, await readReferenceText(req, object(bytes)));
 }
 
+/** The file reference_load records for a dataset, or undefined. */
+const recorded = async (kind: string, dataset: string) =>
+	(await asOwner('SELECT source_key AS key, source_sha256 AS sha256 FROM reference_load WHERE kind = $1 AND dataset = $2', [kind, dataset]))[0];
+
 beforeAll(async () => {
 	dir = mkdtempSync(join(tmpdir(), 'reference-load-'));
 	await loadSyntheticLandCover(process.env.TEST_MIGRATION_DATABASE_URL!);
@@ -52,6 +60,7 @@ afterAll(async () => {
 	await client.query('DELETE FROM cropland_dataset WHERE dataset = $1', [LC]);
 	await client.query('DELETE FROM river_reference WHERE dataset = $1', [RV]);
 	await client.query('DELETE FROM evaporation_dataset WHERE dataset = $1', [EV]);
+	await client.query('DELETE FROM reference_load WHERE dataset = ANY($1::text[])', [[LC, `${LC}-other`, RV, EV]]);
 	await client.end();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -64,7 +73,8 @@ describe('land cover, from the file `import:land-cover --out` writes', () => {
 		const { written: wrote } = writeLandCoverJson({ ...args, out });
 		const bytes = readFileSync(out);
 		const result = await load({ kind: 'land-cover', key: 'reference/land-cover/grid.json.gz', dataset: LC }, bytes);
-		expect(result).toEqual({ kind: 'land-cover', dataset: LC, written: wrote, skipped: 0, belowOrder: 0 });
+		expect(result).toEqual({ kind: 'land-cover', dataset: LC, written: wrote, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('land-cover', LC)).toEqual({ key: 'reference/land-cover/grid.json.gz', sha256: sha(bytes) });
 
 		const cells = async (dataset: string) =>
 			(await asOwner('SELECT row_idx, col_idx, round(fraction::numeric, 4) AS f FROM cropland_cell_reference WHERE dataset = $1 ORDER BY row_idx, col_idx', [dataset])).map((r) => `${r.row_idx}:${r.col_idx}:${r.f}`);
@@ -78,7 +88,12 @@ describe('land cover, from the file `import:land-cover --out` writes', () => {
 
 	it('a second load replaces the dataset', async () => {
 		const bytes = gzipSync(JSON.stringify({ cellDeg: 0.005, source: 'Second', cells: [[21.3025, -33.6575, 0.25]] }));
-		expect((await load({ kind: 'land-cover', key: 'reference/land-cover/second.json.gz', dataset: LC }, bytes)).written).toBe(1);
+		const first = await recorded('land-cover', LC);
+		const second = await load({ kind: 'land-cover', key: 'reference/land-cover/second.json.gz', dataset: LC }, bytes);
+		expect(second.written).toBe(1);
+		// The file it replaced, to restore for an undo; the record now names the new one.
+		expect(second.replaced).toEqual({ ...first, loadedAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) });
+		expect(await recorded('land-cover', LC)).toEqual({ key: 'reference/land-cover/second.json.gz', sha256: sha(bytes) });
 		expect(await asOwner('SELECT fraction FROM cropland_cell_reference WHERE dataset = $1', [LC])).toEqual([{ fraction: 0.25 }]);
 		expect((await asOwner('SELECT source FROM cropland_dataset WHERE dataset = $1', [LC]))[0]!.source).toBe('Second');
 	});
@@ -89,6 +104,20 @@ describe('land cover, from the file `import:land-cover --out` writes', () => {
 		expect(err).toBeInstanceOf(LoadError);
 		expect((err as LoadError).code).toBe('empty');
 		expect(await asOwner('SELECT count(*)::int AS n FROM cropland_cell_reference WHERE dataset = $1', [LC])).toEqual([{ n: 1 }]);
+		// The record stays with the data it describes.
+		expect(await recorded('land-cover', LC)).toMatchObject({ key: 'reference/land-cover/second.json.gz' });
+	});
+
+	it('a replace that names no file (a local import) clears the record, so it never outlives its data', async () => {
+		expect(await recorded('land-cover', LC)).toBeDefined();
+		const [meta] = await asOwner('SELECT dataset, source, version, method, attribution, cell_deg AS "cellDeg", classes FROM cropland_dataset WHERE dataset = $1', [LC]);
+		// Positive control: another dataset's record, and the same label's under another kind, are left alone.
+		const other = { key: 'reference/land-cover/other.json.gz', sha256: 'c'.repeat(64) };
+		await asOwner('INSERT INTO reference_load (kind, dataset, source_key, source_sha256) VALUES ($1, $2, $3, $4), ($5, $6, $3, $4)', ['land-cover', `${LC}-other`, other.key, other.sha256, 'rivers', LC]);
+		await replaceCroplandDataset(client, meta as never, [[{ row: 1, col: 1, fraction: 0.5 }]]);
+		expect(await recorded('land-cover', LC)).toBeUndefined();
+		expect(await recorded('land-cover', `${LC}-other`)).toEqual(other);
+		expect(await recorded('rivers', LC)).toEqual(other);
 	});
 });
 
@@ -102,7 +131,8 @@ describe('evaporation, from the file `import:evaporation --out` writes', () => {
 		const out = join(dir, 'evap.json.gz');
 		const { written: wrote } = await writeEvaporationJson({ ...args, out });
 		const result = await load({ kind: 'evaporation', key: 'reference/evaporation/evap.json.gz', dataset: EV }, readFileSync(out));
-		expect(result).toEqual({ kind: 'evaporation', dataset: EV, written: wrote, skipped: 0, belowOrder: 0 });
+		expect(result).toEqual({ kind: 'evaporation', dataset: EV, written: wrote, skipped: 0, belowOrder: 0, replaced: null });
+		expect(await recorded('evaporation', EV)).toEqual({ key: 'reference/evaporation/evap.json.gz', sha256: sha(readFileSync(out)) });
 
 		const cells = async (dataset: string) =>
 			(await asOwner('SELECT row_idx, col_idx, monthly_mm FROM evaporation_cell_reference WHERE dataset = $1 ORDER BY row_idx, col_idx', [dataset])).map(
@@ -145,10 +175,14 @@ describe('rivers', () => {
 		const all = await load({ kind: 'rivers', key: 'reference/rivers/net.geojson', dataset: RV, source: 'Test source line' }, network);
 		expect(all).toMatchObject({ kind: 'rivers', dataset: RV, skipped: 0, belowOrder: 0 });
 		expect(all.written).toBe(11);
+		expect(all.replaced).toBeNull();
+		expect(await recorded('rivers', RV)).toEqual({ key: 'reference/rivers/net.geojson', sha256: sha(network) });
 		expect(await asOwner('SELECT DISTINCT source FROM river_reference WHERE dataset = $1', [RV])).toEqual([{ source: 'Test source line' }]);
 
 		const big = await load({ kind: 'rivers', key: 'reference/rivers/net.geojson.gz', dataset: RV, source: 'Test source line', minOrder: 2 }, gzipSync(network));
 		expect(big.belowOrder).toBeGreaterThan(0);
+		expect(big.replaced).toMatchObject({ key: 'reference/rivers/net.geojson', sha256: sha(network) });
+		expect(await recorded('rivers', RV)).toEqual({ key: 'reference/rivers/net.geojson.gz', sha256: sha(gzipSync(network)) });
 		expect(big.written + big.belowOrder).toBe(11);
 		expect(await asOwner('SELECT count(*)::int AS n FROM river_reference WHERE dataset = $1', [RV])).toEqual([{ n: big.written }]);
 	});

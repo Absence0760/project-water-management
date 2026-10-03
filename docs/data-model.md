@@ -1558,7 +1558,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   Unique `(project_id, sha256)`. Deleting it deletes its features; the API
   deletes it with its last feature.
 - **`map_feature`**: `id`, `project_id`, `kind` (`catchment_boundary` |
-  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100),
+  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100, one
+  line: `map_feature_name_one_line` refuses the engine's
+  `NAME_CONTROL_CHARS`, migration 192),
   `node_id` (→ `node`, `SET NULL`; same project by `assert_same_project`; a
   parcel or dam stands for a farm or water user, a gauge for a gauge, a
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
@@ -1671,7 +1673,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   the Map tab's River network layer draws and proposes rivers from. Primary
   key `(dataset, reach_id)` (the load's label, `synthetic` for the committed
   fixture; the source's own reach id, HydroRIVERS' `HYRIV_ID`), `name` (''
-  when the source names none), `strahler` (1–15), `upstream_km2`,
+  when the source names none; one line, `river_reference_name_one_line`,
+  migration 192, since a reach added to a project carries it), `strahler` (1–15), `upstream_km2`,
   `length_km`, `discharge_m3s` (each NULL when not given), `geometry`
   (LineString or MultiLineString), its bounding box (`min_lon`, `min_lat`,
   `max_lon`, `max_lat`, indexed for the layer's bbox query), `source`
@@ -3273,6 +3276,22 @@ job tick deletes entries older than 40 days (`app_purge_erasure_log`,
 runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the-database),
 step 6a), which reads it on the old instance and deletes each row again on
 the restored one.
+
+### Reference loads (192_feature_names_reference_load.sql)
+
+`reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
+keyed by `(kind, dataset)`: the reference-bucket object a production load
+of a map dataset read (`land-cover`, `evaporation`, `rivers`) and the
+SHA-256 it was checked against. Written in the same transaction as the
+dataset by the replace functions (`replaceCroplandDataset`,
+`replaceEvaporationDataset`, `replaceRivers`, through
+`geo/referenceOrigin.ts`), and deleted by any other replace of that
+dataset (a local `pnpm import:*`), so it never outlives the data it
+describes. No foreign key: rivers have no dataset table. Owner-only like
+`erasure_log` (RLS on, no policy, no grant; `catalogue.db.test.ts`
+`OWNER_ONLY`): the migrate Lambda and the import scripts write it as the
+schema owner and the app never reads it
+([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 

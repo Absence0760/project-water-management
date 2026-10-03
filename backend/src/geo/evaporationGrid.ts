@@ -12,6 +12,7 @@
 // Reference datasets) carry no HDF5 code: lambda-migrate.test.ts checks its
 // bundle.
 import type pg from 'pg';
+import { recordReferenceOrigin, type ReferenceOrigin } from './referenceOrigin.js';
 import type { EvaporationKind } from './evaporation.js';
 
 /** The product the operator's dPET load defaults to (each can be overridden on the command line). */
@@ -154,8 +155,13 @@ export interface EvaporationDatasetMeta {
 
 const BATCH = 5_000;
 
-/** Replace `meta.dataset` with `clim`'s cells, in one transaction, as the schema owner. Returns how many cells it wrote. */
-export async function replaceEvaporationDataset(client: pg.ClientBase, meta: EvaporationDatasetMeta, clim: Climatology): Promise<number> {
+/**
+ * Replace `meta.dataset` with `clim`'s cells, in one transaction, as the
+ * schema owner. `origin`: the reference-bucket file a production load read
+ * (recorded with the data; referenceOrigin.ts), null for any other replace.
+ * Returns how many cells it wrote.
+ */
+export async function replaceEvaporationDataset(client: pg.ClientBase, meta: EvaporationDatasetMeta, clim: Climatology, origin: ReferenceOrigin | null = null): Promise<number> {
 	// A dataset with no cell is a wrong box or file, not a dataset to propose from.
 	if (!clim.cells.length) throw new Error('no cell has a value for every month of every year: check the files and --bbox');
 	await client.query('BEGIN');
@@ -176,6 +182,7 @@ export async function replaceEvaporationDataset(client: pg.ClientBase, meta: Eva
 				[meta.dataset, part.map((c) => c.row), part.map((c) => c.col), part.map((c) => JSON.stringify(c.monthlyMm))]
 			);
 		}
+		await recordReferenceOrigin(client, 'evaporation', meta.dataset, origin);
 		await client.query('COMMIT');
 		return clim.cells.length;
 	} catch (e) {

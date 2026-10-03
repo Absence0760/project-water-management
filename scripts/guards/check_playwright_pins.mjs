@@ -30,6 +30,11 @@
 // gdalwarp isn't installed). An override in the environment is the operator's
 // choice and isn't checked.
 //
+// And the local-dev services (composeImageProblems): every `image:` in
+// docker-compose.yml (Postgres, Mailpit, MinIO; CI starts MinIO and Mailpit
+// from it too) names its image as tag@sha256 digest, so a re-pushed tag can't
+// change what runs. Dependabot's docker-compose entry moves both.
+//
 // The image's digest can't be checked offline; a digest left on the old
 // version keeps the old browser under a new tag, and the renderer image smoke
 // (infra/scripts/smoke-renderer-image.sh, step 1) fails because the image's
@@ -151,6 +156,21 @@ export function scriptImageProblems(script, where) {
 	return problems;
 }
 
+const COMPOSE_IMAGE = /^\s*image:\s*["']?([^"'\s#]+)["']?/gm;
+
+/**
+ * The docker-compose file's images that aren't pinned by digest: one line
+ * each. `where` names the file. A file with no `image:` at all is a problem
+ * too: the guard would otherwise pass on a layout it can't read.
+ */
+export function composeImageProblems(compose, where) {
+	const images = [...compose.matchAll(COMPOSE_IMAGE)].map((m) => m[1]);
+	if (!images.length) return [`${where}: no image: line found`];
+	return images
+		.filter((image) => !/^[^\s@]+:[^\s@]+@sha256:[0-9a-f]{64}$/.test(image))
+		.map((image) => `${where}: image "${image}" is not pinned by digest (image:tag@sha256:…; docker buildx imagetools inspect <image:tag> gives it)`);
+}
+
 /** What is wrong with the pins: one line each, empty when they agree. */
 export function pinProblems(pins) {
 	const problems = [];
@@ -177,9 +197,11 @@ function main() {
 		.filter((f) => f.endsWith('.sh'))
 		.flatMap((f) => scriptImageProblems(readFileSync(join(root, 'bin', f), 'utf8'), `bin/${f}`));
 	if (scripts.length) console.error(`::error::Operator script images:\n${scripts.join('\n')}`);
-	if (problems.length || image.length || scripts.length) process.exit(1);
+	const compose = composeImageProblems(readFileSync(join(root, 'docker-compose.yml'), 'utf8'), 'docker-compose.yml');
+	if (compose.length) console.error(`::error::Local-dev service images:\n${compose.join('\n')}`);
+	if (problems.length || image.length || scripts.length || compose.length) process.exit(1);
 	console.log(
-		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images: by digest.`
+		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images and docker-compose.yml's: by digest.`
 	);
 }
 

@@ -59,9 +59,9 @@ describe('the import review', () => {
 		expect(reviewProblems(two)).toEqual([{ feature: null, message: 'A file holds at most one catchment boundary; features 1, 5 are each marked as one.' }]);
 	});
 
-	it('sends each row’s kind, trimmed name and node, never a node for a kind that stands for none', () => {
+	it('sends each row’s kind, name (one line, as the API takes it) and node, never a node for a kind that stands for none', () => {
 		const rows = reviewRows(preview);
-		rows[0] = { ...rows[0]!, name: '  Upper farm north ' };
+		rows[0] = { ...rows[0]!, name: '  Upper\tfarm  \u2028north ' };
 		rows[2] = { ...rows[2]!, nodeId: 'g' };
 		expect(reviewedFeatures(rows)).toEqual([
 			{ index: 1, kind: 'farm_parcel', name: 'Upper farm north', nodeId: 'f' },

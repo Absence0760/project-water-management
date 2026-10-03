@@ -19,7 +19,7 @@ const NO_RLS = new Set(['schema_migrations']);
  * purge write it as SECURITY DEFINER functions, and only the operator, as the
  * schema owner, reads it (deployment.md § Restoring the database).
  */
-const OWNER_ONLY = new Set(['erasure_log']);
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS

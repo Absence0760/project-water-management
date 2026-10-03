@@ -46,6 +46,15 @@ describe('parseGeoJson', () => {
 		expect(features[0]!.areaM2).toBeGreaterThan(9e7);
 	});
 
+	it('makes a name one line (the Map draws it as a label; issue #385), trimmed to 100 characters, and falls to the next key when nothing is left', () => {
+		const pt = { type: 'Point', coordinates: [21, -33] };
+		const names = (props: Record<string, unknown>) => parseGeoJson(fc(feature(pt, props))).features[0]!.name;
+		expect(names({ name: 'Lower\r\nweir\tB' })).toBe('Lower weir B');
+		expect(names({ name: 'Weir\u2028\u0085A' })).toBe('Weir A');
+		expect(names({ name: '\n\u0007', label: 'From the label' })).toBe('From the label');
+		expect(names({ name: `${'x'.repeat(99)}\n${'y'.repeat(10)}` })).toBe('x'.repeat(99));
+	});
+
 	it('takes one Feature or a bare geometry too', () => {
 		expect(parseGeoJson(JSON.stringify(feature({ type: 'Point', coordinates: [21, -33] }))).features).toHaveLength(1);
 		expect(parseGeoJson(JSON.stringify({ type: 'Point', coordinates: [21, -33] })).features[0]!.geometry.type).toBe('Point');

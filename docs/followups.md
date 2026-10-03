@@ -196,20 +196,35 @@ The checklist for these is issue #62; the history scrub is #63.
 Model names (nodes, crops, boreholes, demand objects, schedule labels) are
 one line since migration 189 (api.md § Model data). Left, found on the way:
 
-- [ ] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
+- [x] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
       `Name`, the GeoJSON upload's `featureName`, the river loader) still
       takes line breaks and control characters, and the Map draws them as
       labels. Start and Divide already propose such a name on one line
       (`oneLineName`). Durable fix: the same `hasNameControlChars` refusal on
       the feature routes, `oneLineName` in the GeoJSON and river readers (bulk
       paths), and a migration cleaning stored feature names. Trigger: next
-      work on the map's feature routes.
-- [ ] **A scenario's borehole may have a blank name.** The engine's
+      work on the map's feature routes. **Done 2026-10-03:** the
+      feature routes' `Name` (create, rename, split, a reviewed import row)
+      and the delineation accept refuse them; the GeoJSON reader, the river
+      loader and a reach added to a project clean them (`featureNameOf`);
+      the map's sheets send `cleanName`d names; migration 192 cleans stored
+      feature and reach names and adds `map_feature_name_one_line` and
+      `river_reference_name_one_line` (`geo/featureNames.db.test.ts`). On
+      the way: Divide named a unit's own sub-catchment parcel
+      `<unit>: own sub-catchment` cut to 200 characters, past the column's
+      100, so a unit name over 82 characters made the apply fail with 409
+      "violates a data rule"; it is cut to 100 now (`divide.db.test.ts`).
+- [x] **A scenario's borehole may have a blank name.** The engine's
       `borehole.add` check (`scenario/ops.ts` `BOREHOLE_FIELDS.name`) takes
       0–200 characters where PUT /model needs 1–200, so a scenario can add a
       borehole the model schema would refuse. Durable fix: `nameOf(1, 200)`
       there, checking the stored scenarios first. Trigger: next work on
-      scenario ops.
+      scenario ops. **Done 2026-10-03:** `nameOf(1, 200)`; the scenario
+      editor already refused a blank one (`ops.ts` `buildOp`), so only an
+      API caller could store it. Stored ops aren't re-checked when a
+      scenario runs (only on create and on an ops update), so a stored
+      scenario with a blank one still runs and stays as it was (its
+      `ops_sha256` pins those bytes); nothing is deployed yet.
 
 ## Two-step sign-in (issue #282)
 
@@ -4754,7 +4769,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       (`infra/tests/edge.tftest.hcl`,
       `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
       real behaviour.
-- [ ] **Record which file a reference load came from (round 4 infra audit,
+- [x] **Record which file a reference load came from (round 4 infra audit,
       data finding 4).** A load checks the uploaded file's SHA-256, then
       drops it: the dataset rows don't say which key and hash they came
       from, so once the Actions log expires nobody can tell which file is
@@ -4766,6 +4781,15 @@ assume, the questions for counsel); these are the actions, with triggers.
       `geo/referenceLoad.ts` and cleared by any other replace, and shown on
       `/data-sources`. **Trigger:** the
       first production load, or the next migration touching those tables.
+      **Done 2026-10-03** (migration 192): `reference_load`, written by
+      the replace functions in the dataset's transaction when a production
+      load names its file (`geo/referenceOrigin.ts`) and deleted by any
+      other replace; the load returns the file it replaced and
+      load-reference.yml prints both (deployment.md § Reference datasets,
+      Which file is loaded). Not on `/data-sources`: that page is the
+      public, static credits page (no API call), and no signed-in page lists
+      the loaded datasets with their metadata, so the record is the
+      operator's (the load log, or SQL as the owner).
 
 ## Housekeeping
 
@@ -5601,6 +5625,23 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       that script. **Done 2026-10-03:** pinned to the tag's multi-arch index
       digest, and `check:pins` (`scriptImageProblems`) refuses any
       `*_IMAGE` default in `bin/*.sh` without one.
+- [x] **Pin the local-dev service images by digest** (round 2, 2026-10-03).
+      `docker-compose.yml` named Postgres, Mailpit and MinIO by tag only.
+      **Done:** each is `image:tag@sha256:…` (the tags' multi-arch index
+      digests from `docker buildx imagetools inspect`), and `check:pins`
+      (`composeImageProblems`) refuses an `image:` without one. Dependabot's
+      docker-compose entry moves tag and digest together. The label fonts'
+      archive (`bin/tiles-dev.sh fonts`) is held to a SHA-256 in
+      `bin/source-checksums.sha256` as well as its commit (maps.md §
+      Checksums).
+- [ ] **CI's Postgres service image floats.** `ci.yml`'s two `services:
+      postgres` (db-test, e2e) run `postgres:17-alpine` by tag, while
+      docker-compose.yml pins it by digest, and Dependabot's github-actions
+      ecosystem doesn't update service images. Durable fix: pin both to
+      compose's digest and have `check:pins` require they equal
+      docker-compose.yml's postgres image, so a Dependabot compose PR fails
+      until they move with it. Trigger: the next Postgres image bump, or the
+      next change to ci.yml's services.
 - [x] **No published checksums for the downloaded sources.** HydroRIVERS'
       zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
       builds have no checksum the scripts verify (whether each publisher

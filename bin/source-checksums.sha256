@@ -17,5 +17,9 @@ dd5fe4108d93952f0bc00857707a24903a8277e84fdf8454562e75cef9e0e2d2  occurrence_10E
 b77d0b921d60813b5625d7a2a1f0ba5e033c809ad6b9730e59e61e20f287cb46  occurrence_20E_30S_v1_5_2024.tif
 c4187d4cdfc26f79190547e766e64f55d9cb97fa1181b5ca82884db30dad0708  occurrence_30E_20S_v1_5_2024.tif
 c583f29418d666373beb10e1f984a11406314ebe266f6d0d9b4ba63cbb972e9f  occurrence_30E_30S_v1_5_2024.tif
+# The map labels' fonts: protomaps/basemaps-assets at the commit bin/tiles-dev.sh
+# pins (FONTS_REF), as GitHub's codeload serves it; recorded 2026-10-03, and
+# the same as a fetch on 2026-10-01. Another TILES_FONTS_REF is recorded on first use.
+57e40e8c512bd8042d0a3a251f19d0d1c8523ad963c666c3c6643bada4dc92d0  basemaps-assets-028c18f713baecad011301ff7a69acc39bcc2ae7.tar.gz
 # dPET (hPET daily, Singer et al. 2021; data.bris.ac.uk qb8ujazzda0s2aykkv0oq0ctp):
 # about 2.4 GB a year, so recorded by the first bin/evaporation-fetch.sh run.
