@@ -2984,7 +2984,8 @@ only propose.
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
   areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
   `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
-  points and lines; `center` is a point itself, a polygon's centroid (its
+  points and lines (a parcel saved from a delineated piece: the piece's
+  area from the DEM's cells, its outline simplified); `center` is a point itself, a polygon's centroid (its
   largest part's), a line's middle vertex; `properties` holds only
   `description` and `ref` from a file. A boundary or parcel is a Polygon or
   MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
@@ -3089,7 +3090,10 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-4`). `placedBy` is `matched` (on the channel matching
+  the map's (`start-6`; every `areaM2` and `totalAreaM2` is summed from
+  the DEM's cells, each at its own area on the ellipsoid, so the pieces add
+  up to the catchment exactly; `geometry` is simplified for the map and its
+  own area may differ a little). `placedBy` is `matched` (on the channel matching
   the river reach within 1 km of the click, `reach = { dataset, reachId,
   upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
   snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's

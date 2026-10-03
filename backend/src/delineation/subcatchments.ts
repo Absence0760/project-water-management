@@ -11,6 +11,7 @@
 // It only proposes: start.ts stores the result as a proposal the editor
 // ticks value by value; nothing here writes anything.
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
+import { AUTHALIC_RADIUS_M, sinAuthalic } from '../geo/area.js';
 import type { Dem, DemInfo } from './dem.js';
 import { boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
 import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
@@ -19,8 +20,11 @@ import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } fr
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
-/** start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named; start-4: a click at a confluence asks for the river and goes at the DEM's own junction. */
-export const START_METHOD_VERSION = 'start-4';
+/**
+ * start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named; start-4: a click at a confluence asks for the river and goes at the DEM's own junction;
+ * start-6: every area (each piece, the rest, the catchment, a no-land unit's total) summed from its cells, each cell's own area on the WGS84 ellipsoid, not the simplified outline's (start-5 is another change's).
+ */
+export const START_METHOD_VERSION = 'start-6';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -231,6 +235,19 @@ function segmentsCross(a: readonly Pt[], b: readonly Pt[]): boolean {
 	return false;
 }
 
+/** The latitude (degrees, unrounded) of row edge `y` of a Web Mercator grid `W` cells round the world. */
+export const mercatorLat = (y: number, W: number): number => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / W))) * 180) / Math.PI;
+
+/**
+ * The area (m²) on the WGS84 ellipsoid of one cell of a Web Mercator grid `W` cells round the world whose row runs from
+ * latitude `top` to `bottom`: R_q² · Δλ · |sin β(top) − sin β(bottom)|, with β the authalic latitude and R_q the authalic
+ * radius (Snyder 1987, eq. 3-12; the measure geo/area.ts uses for every polygon). Not the cell's side squared at its centre,
+ * which is a sphere's figure and drifts from the ellipsoid's by up to half a per cent.
+ */
+export function cellRowAreaM2(top: number, bottom: number, W: number): number {
+	return AUTHALIC_RADIUS_M * AUTHALIC_RADIUS_M * ((2 * Math.PI) / W) * Math.abs(sinAuthalic(top) - sinAuthalic(bottom));
+}
+
 /** A piece's rings as a checked GeoJSON polygon (holes kept), simplified as far as stays valid; null when it can't be made one. */
 function piecePolygon(outer: Pt[], holes: Pt[][], toPos: (p: Pt) => Position): { geometry: Poly; areaM2: number } | null {
 	for (const tol of [1, 0.5, 0]) {
@@ -324,6 +341,11 @@ export async function delineateUnits(
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
 		const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
+		// Each window row's cell area (m²): a Web Mercator cell is a longitude × latitude rectangle, so its area on the ellipsoid
+		// is exact in (λ, sin β), as geo/area.ts measures every polygon: the area of an unsimplified outline is its cells' sum.
+		const rowM2 = new Float64Array(nCells);
+		// The rows' latitudes unrounded (toLonLat keeps 7 decimals, a few parts in ten thousand of a 10 m cell).
+		for (let y = 0; y < nCells; y++) rowM2[y] = cellRowAreaM2(mercatorLat(y0 + y, W), mercatorLat(y0 + y + 1, W), W);
 		/** Each point's placement, by its key, for the pieces' facts. */
 		const how = new Map<string, { placedBy: 'matched' | 'snapped' | 'junction'; larger?: LargerChannel; unmatched?: boolean }>();
 		const snapAt = (p: Position, expectedKm2?: number | null, key?: string, pt?: UnitPoint): number | null => {
@@ -477,7 +499,7 @@ export async function delineateUnits(
 			const m = new Uint8Array(bw * bh);
 			let cellArea = 0;
 			for (let y = by0; y <= by1; y++) {
-				const rowArea = cellAt(toPos([0, y + 0.5])[1]) ** 2;
+				const rowArea = rowM2[y]!;
 				for (let x = bx0; x <= bx1; x++) {
 					if (part.owner[y * nCells + x] === o) {
 						m[(y - by0) * bw + (x - bx0)] = 1;
@@ -488,8 +510,9 @@ export async function delineateUnits(
 			const { outer, holes } = traceRings(bw, bh, m);
 			const shift = (p: Pt): Pt => [p[0] + bx0, p[1] + by0];
 			const poly = outer.length ? piecePolygon(outer.map(shift), holes.map((h) => h.map(shift)), toPos) : null;
-			// A piece that can't be made a valid polygon keeps its area from the cells and offers no outline.
-			return poly ?? { geometry: null, areaM2: cellArea };
+			// The area is the cells' (the partition is exact in cells); the outline, simplified, is for the map only and its own
+			// area runs short of the cells' on a jagged piece. A piece that can't be made a valid polygon offers no outline.
+			return { geometry: poly?.geometry ?? null, areaM2: cellArea };
 		};
 		// Open owners: any of their cells beside the window's edge or the DEM's no-data (only when the catchment was cut).
 		const open = new Uint8Array(R + 1);
@@ -522,7 +545,10 @@ export async function delineateUnits(
 		const outer = truncated ? [] : traceRings(nCells, nCells, catchment).outer;
 		// Cut at the window (clicks with open pieces), the catchment is not whole: it isn't outlined, and its area is unknown
 		// (NaN; every total below an open piece is unknown too, clicks.ts). Its geometry is then a whole piece's, never shown.
-		const whole = truncated ? null : piecePolygon(outer, [], toPos);
+		const outline = truncated ? null : piecePolygon(outer, [], toPos);
+		let catchmentM2 = 0;
+		for (let i = 0; i < catchment.length; i++) if (catchment[i]) catchmentM2 += rowM2[(i - (i % nCells)) / nCells]!;
+		const whole = outline ? { geometry: outline.geometry, areaM2: catchmentM2 } : null;
 		const firstWhole = [...pieces, rest].find((p) => p.geometry)?.geometry;
 		const catchmentShape = whole ?? (truncated && firstWhole ? { geometry: firstWhole, areaM2: Number.NaN } : null);
 		if (!catchmentShape) throw new DelineationRefused('outline', 'The catchment’s outline could not be made into a valid polygon. Type the units in instead.');
@@ -547,7 +573,7 @@ export async function delineateUnits(
 			for (let y = 0; y < nCells; y++) {
 				let row = 0;
 				for (let x = 0; x < nCells; x++) row += above[y * nCells + x]!;
-				if (row) m2 += row * cellAt(toPos([0, y + 0.5])[1]) ** 2;
+				if (row) m2 += row * rowM2[y]!;
 			}
 			total[i] = m2;
 		});
@@ -576,7 +602,7 @@ export async function delineateUnits(
 			method:
 				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}), routed once for the whole catchment; ` +
 				`the outlet and each point put on the channel: a point with a nearby river reach on the cell within 1000 m whose upstream area best matches the reach's (Lehner 2012: area accordance at least 50 %, ranked by area and distance), any other on the most-accumulating cell within ${snapRadiusM} m (a dam polygon: its most-accumulating cell); ` +
-				`each unit drains into the first unit its flow path meets, and owns the cells whose path meets it before any other unit (a water user or a gauge owns none); outlines traced on the cells’ edges with their holes, simplified (Douglas–Peucker, about ${cellM} m)`,
+				`each unit drains into the first unit its flow path meets, and owns the cells whose path meets it before any other unit (a water user or a gauge owns none); every area summed from its cells (each cell’s own area on the WGS84 ellipsoid); outlines traced on the cells’ edges with their holes and simplified for the map (Douglas–Peucker, about ${cellM} m), so an outline’s own area can differ a little from its piece’s`,
 			methodVersion: START_METHOD_VERSION
 		};
 	}

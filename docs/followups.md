@@ -3845,20 +3845,18 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       sources table. Trigger: the WR2012 decision, or a hydrologist asking
       for the A-pan row from the map.
 
-- [ ] **Divide and start: a piece's area from its cells, not its simplified
-      outline** (persona-hydrologist, round 4, 2026-10-02). The DEM
-      partition is exact in cells, but each piece's `areaM2`
-      (`backend/src/delineation/subcatchments.ts` `piece()`) is its
-      Douglas–Peucker-simplified outline's geodesic area, so the pieces and
-      the rest add up to −0.51 % of the catchment on the synthetic DEM, more
-      on small, jagged pieces. The cell area is already summed (`cellArea`,
-      used only when the outline fails). Durable fix: take each piece's area
-      from its cells and keep the outline for display, *and* decide what the
-      saved parcel's `area_m2` is (today the unit's area equals its parcel's
-      outline area, which "area from the map" relies on): either store the
-      cell area on the parcel too, with the outline marked simplified, or
-      simplify less. Trigger: a divide whose pieces fall more than 1 % short
-      of the catchment, or the first real DEM catchment with many small units.
+- [x] **Divide and start: a piece's area from its cells, not its simplified
+      outline** (2026-10-03, `start-6`). Every area in `delineateUnits`
+      (each piece, the rest, the catchment, a no-land unit's total) is now
+      summed from the partition's cells, each at its own area on the WGS84
+      ellipsoid (`cellRowAreaM2`: R_q² · Δλ · Δ sin β, exact for a Web
+      Mercator cell and the measure `geo/area.ts` uses), so the pieces and
+      the rest add up to the catchment exactly (they fell 0.07 % short on
+      the three-dam probe, 0.51 % on the persona's divide). The outline stays
+      simplified for the map; the saved parcel stores the cells' area as
+      `area_m2`, so the unit's area equals its parcel's. Splitting such a
+      parcel checks the parts against the outline's own area, and "area from
+      the map" names the cells in its revision reason.
 
 ## Crop factors (issue #54 item 1)
 
