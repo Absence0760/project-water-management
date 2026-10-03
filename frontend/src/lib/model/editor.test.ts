@@ -1,9 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { OPERATING_DEFAULTS } from '@water-management/engine';
 import { validateModel } from './validate';
-import { ModelEditor, newTransfer, transferIsBlank } from './editor.svelte';
+import { ModelEditor, newTransfer, nextFreeName, transferIsBlank } from './editor.svelte';
+
+describe('nextFreeName', () => {
+	it('skips numbers a node already has, case and spaces aside', () => {
+		expect(nextFreeName('Unit', [{ name: 'Outflow gauge' }], 1)).toBe('Unit 1');
+		expect(nextFreeName('Unit', [{ name: ' unit 2 ' }, { name: 'Unit 3' }], 2)).toBe('Unit 4');
+	});
+});
 
 describe('ModelEditor', () => {
+	it('names a new node after a removal without repeating a name the save would refuse', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode(); // Outflow gauge
+		const u1 = ed.addNode(); // Unit 1
+		ed.addNode(); // Unit 2
+		ed.removeNode(u1.id);
+		const added = ed.addNode();
+		expect(added.name).toBe('Unit 3');
+		expect(validateModel(ed.model).some((i) => /used 2 times/.test(i.message))).toBe(false);
+		ed.addUser();
+		ed.model.nodes.find((n) => n.name === 'Other user 1')!.name = 'Other user 2';
+		expect(ed.addUser().name).toBe('Other user 3');
+	});
+
 	it('is not dirty before anything is loaded', () => {
 		// A project page that 404s never calls load(); leaving it must not
 		// trigger the "unsaved changes" prompt.

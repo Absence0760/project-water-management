@@ -7,6 +7,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -73,4 +74,28 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });
 	await expect(balance.getByRole('columnheader', { name: 'Seepage lost', exact: true })).toBeVisible();
 	await expect(balance).toContainText('= consumptive use + dam evaporation + seepage lost + outflow + end storage.');
+});
+
+test('the survey paste keeps the focus with it, and removing the curve asks', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dam survey focus');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const dam = await openUpperFarm(page);
+	await dam.getByRole('button', { name: 'Paste survey rows' }).click();
+	const box = dam.getByLabel(/Level \(m\), area \(m²\), volume \(m³\)/);
+	await expect(box).toBeFocused();
+	await dam.getByRole('button', { name: 'Cancel' }).click();
+	await expect(dam.getByRole('button', { name: 'Paste survey rows' })).toBeFocused();
+	await dam.getByRole('button', { name: 'Paste survey rows' }).click();
+	await box.fill('100, 0, 0\n106, 55000, 150000');
+	await dam.getByRole('button', { name: 'Use these rows' }).click();
+	await expect(dam.getByRole('button', { name: 'Edit the survey rows' })).toBeFocused();
+
+	await dam.getByRole('button', { name: 'Remove the curve' }).click();
+	await answerConfirm(page, false, 'Its 2 survey rows go with it');
+	await expect(dam.getByRole('table', { name: 'Survey rows of Upper farm' })).toBeVisible();
+	await dam.getByRole('button', { name: 'Remove the curve' }).click();
+	await answerConfirm(page, true);
+	await expect(dam.getByRole('table', { name: 'Survey rows of Upper farm' })).toHaveCount(0);
+	await expect(dam.getByRole('button', { name: 'Paste survey rows' })).toBeFocused();
 });

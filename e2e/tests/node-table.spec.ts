@@ -8,6 +8,7 @@ import { addMember, createProject, putModel, sampleModel } from '../support/api.
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
@@ -232,4 +233,17 @@ test.describe('phone', () => {
 		await expectNoSidewaysScroll(v);
 		await expectNoViolations(v);
 	});
+});
+
+test('removing a row asks when something goes with it, then puts the focus on the next row', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Node table remove');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
+	const grid = page.getByRole('dialog', { name: 'Node table' });
+	await grid.getByRole('button', { name: 'Remove Upper farm' }).click();
+	await answerConfirm(page, true, 'Its 1 crop area and 1 transfer go with it.');
+	await expect(grid.getByRole('textbox', { name: 'Name' })).toHaveCount(2);
+	await expect(grid.getByRole('textbox', { name: 'Name' }).nth(1)).toHaveValue('Lower farm');
+	await expect(grid.getByRole('textbox', { name: 'Name' }).nth(1)).toBeFocused();
 });

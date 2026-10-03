@@ -2010,8 +2010,14 @@ the **node table** is a grid (**Tables → Node table**, `grid=nodes`, the
 [grid modal](#grid-modal) showing `NetworkTab` with `only="table"`), and a
 node's **full form** opens in a sheet over the map from its card's **Edit**
 (`edit=<id>`). Old links still land: `view=table` becomes `grid=nodes`,
-`view=node` becomes `edit=<node or the first>`. `node=<id>` picks a node (a
-note's link on the Summary, `notes.ts` `noteHref`).
+`view=node` becomes `edit=<node or the first>`. `node=<id>` is the picked
+node: a pick in the All nodes list or on the drawing writes it (a new
+history entry, so Back steps back through the picks; a reload or a shared
+link keeps it, playbook § 2), opening a node's sheet writes it with `edit=`
+(so closing the sheet leaves the map on that node), removing the node drops
+it, and a note's link on the Summary lands on it (`notes.ts` `noteHref`).
+With none, nothing is picked. The grid modal's node table keeps its pick to
+itself.
 
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
@@ -2019,9 +2025,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
     "No nodes yet"); on the right a **Tables** menu (a disclosure named "Open
     as a table": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
-    it) and, for editors, **+ Add node**, which opens the new node's form in
-    the sheet. With no nodes the map card is an empty panel with **Add
-    outflow gauge**.
+    it) and, for editors, **+ Add node** and (once there is one outlet)
+    **+ Add other user**, each opening the new node's form in the sheet with
+    the focus on its name. A new unit is named "Unit N" with the first N no
+    node has (`nextFreeName` in `model/editor.svelte.ts`), so a removal never
+    leaves the next new unit a name the save refuses. With no nodes the map
+    card is an empty panel: for an editor, **Add outflow gauge** and **Start
+    from the map** (`?tab=map&start=1`, [maps.md § Start from the
+    map](./maps.md#start-from-the-map), with a line on what it does); a viewer
+    reads "No nodes yet. An editor builds the network here or from the Map."
+    and no buttons.
   - **Catchment map** card: *Colour farms by* in its header, the schematic
     filling the card, and the map key under it. Colouring by supply is
     **on by default** once the project has a run.
@@ -2083,8 +2096,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
       **Edit** (**Details** for a viewer), which opens its form in the node sheet. A farm has two tiles:
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
-      tints for the short and low bands, and "no demand" / "not in this run"
-      are written) and **Dam at end of run** (it was "Dam now", but it is the
+      tints for the short and low bands, the band in words under the % ("Under
+      70% supplied", `BAND_LABEL`), and "no demand" / "not in this run" are
+      written) and **Dam at end of run** (it was "Dam now", but it is the
       latest run's last day, the record's last day on a forecast run, not
       today), its storage then as a % of the capacity the run modelled (from
       the run's own model, `damInRun`, as the map's colour by dam level reads
@@ -2104,21 +2118,41 @@ note's link on the Summary, `notes.ts` `noteHref`).
       and "→ downstream" (or "outlet"). The name wraps between words; the
       downstream name takes at most 45 % of the row on one line, cut with an
       ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
-      on the schematic); picking on the schematic marks it here.
+      on the schematic); picking on the schematic marks it here. The picked
+      row is kept in view inside the list's card, and the picked node inside
+      the drawing's box (both scroll themselves by the two bounding boxes,
+      `inViewDelta` in `network/scroll.ts`), on a pick, a `node=` link, and
+      whenever the box changes size: on a 30-unit network the last row's
+      node is scrolled onto the drawing. After a node is removed from its
+      sheet the focus goes to the **All nodes** heading.
 
   - **Node sheet** (`edit=<id>`, the `Dialog` `side extraWide` variant, 920 px,
     three fields to a row, the whole width on a phone): "Edit *name*" ("*name*: details" for a
-    viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
-    the dialog's sub-header above the scrolling form (so no control scrolls
-    under it), then the one-node form (`NodeDetail`: every field with its help
+    viewer), the node picker (‹ select ›, labelled "Node to edit") and under it
+    a jump row of the form's sections ("Sections of the form": Catchment
+    area, Flow share, Dam, …, Land cover; one press scrolls the form to the
+    section and focuses its card), both fixed in the dialog's sub-header
+    above the scrolling form (so no control scrolls under it, and the row
+    never scrolls away; on a phone it is one strip that scrolls sideways),
+    then the one-node form (`NodeDetail`: every field with its help
     text, land cover, boreholes, the farmers note, Show on map (as the card's),
     Preview as farmer, make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
     Move down (removed, issue #174): row order is for display only and the
     list isn't visible from the sheet; the node table reorders (drag, ↑/↓,
     Sort by flow path). The save row
-    (`ModelSaveRow`: status, reason, Discard, Done, Save changes) is pinned
-    under the form. ‹ ›, the picker and a tap on the map move it to another
-    node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.
+    (`ModelSaveRow`: status, the problems as links, reason, Discard model
+    changes, Done, Save changes) is pinned under the form. ‹ › and the
+    picker move it to another node (replacing `edit=` in place; the sheet
+    is modal, so the map behind it can't be tapped); Done, Esc, the ✕ or
+    Back close it. **Remove** asks when something goes with the node
+    (`removeMessage` in `network/farmerLinks.ts`: only the parts it has,
+    with real plurals, "Its 1 crop area and 1 transfer go with it."; the
+    nodes that drain into it and where they will drain; its farmers; and
+    that Discard brings it back until the save), confirmed with **Remove
+    hydrological unit** / **Remove gauge** / **Remove other water user**.
+    After a removal the focus goes to the All nodes heading (the sheet and
+    the card's Edit it opened from are gone); in the node table, to the next
+    row's name (else **+ Add node**).
 
   Every field of the old Table and One node layouts is a click away (Edit,
   Tables → Node table), so nothing was removed.
@@ -2143,7 +2177,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
   the per-character estimate (`measuredWidths`). Names are cut to 17 characters so that no two read the same
   (`distinctShortNames`): "Kliprivier Estat…", but "North Sandvlak… 2" and
   "… 7" keep the ending that tells them apart; the full name is the node's
-  tooltip, the list and the drainage tree. Editors can drag a node onto
+  tooltip, the list and the drainage tree, which name each node's kind in
+  the workspace's words (hydrological unit, gauge, other water user;
+  `KIND_WORD` in `fields.ts`), never "farm". Transfers are drawn in the
+  palette's violet (`--series-8`, with its own dark value; no raw hex in the
+  component). Editors can drag a node onto
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
@@ -2244,12 +2282,35 @@ note's link on the Summary, `notes.ts` `noteHref`).
   in a box of their own, so **+ Add node** and the field guide follow the
   last card. The ⓘ tips sat in the column headers, so the intro sends a
   phone to the field guide instead (`node-table.spec.ts`).
-- **The one-node form** (the node sheet): the picker (‹ select ›) stays in
-  reach above the scrolling form in the sheet's fixed sub-header. Each
-  section (Catchment area, Dam, Routing, …, Supply, Individual boreholes,
-  Land cover) is a bordered card with its title in a tinted header band, so
-  one section's fields don't run into the next's; the card itself stays
-  `--surface`, since read-only inputs are `--surface-2`.
+- **The one-node form** (the node sheet): the picker (‹ select ›) and the
+  jump row stay in reach above the scrolling form in the sheet's fixed
+  sub-header. The sections run in the order water moves through a unit
+  (`network/nodeSections.ts`, which the jump row reads too): **Catchment
+  area**, **Flow share**, **Dam**, **Dam survey and releases** (next to the
+  Dam fields whose outlet capacity its release rule uses), **Routing**,
+  **Supply** (with Water for the crops and the hands-off flow), **Irrigation**,
+  **Demand objects** (after the supply their "Water for" names), **Combined
+  boreholes (one capacity)** and **Individual boreholes** side by side, and
+  **Land cover**. Each is a bordered card with its title in a tinted header
+  band, so one section's fields don't run into the next's; the card itself
+  stays `--surface`, since read-only inputs are `--surface-2`.
+- **Fields that don't apply** show read-only with the reason as their hint,
+  their stored value kept (`fieldUnused` in `fields.ts`, given the
+  project's flow-share method): on a unit with no dam (capacity 0, as the
+  engine reads it), the Dam fields other than Capacity ("Not used: no dam
+  (capacity 0). Enter a capacity to use it."), which come alive once a
+  capacity is typed; **High-MAP** and **Low-MAP** unless the method is the
+  high/low MAP split, and **Manual** unless it is Manual (Settings &
+  calibration). Routing to the dam stays live with no dam: what is routed to
+  it is irrigated straight from the river. The node table keeps them all
+  editable, so a pasted or typed row lands whole. With the high/low MAP
+  method, a line under the areas says when High-MAP + Low-MAP is more than
+  1 % off the area (`hiLoHint`, the run's own `areaMismatches` rule), so it
+  is caught while typing.
+- **Set elsewhere** (a unit's Irrigation section): its crops ("20.00 ha
+  planted, 1 crop", a link to the farm drawer over the map, in place of the
+  sheet) and its transfers ("1 transfer, to Lower farm", a link to
+  Transfers), since its irrigation demand and transfers aren't on this form.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
   **Irrigation system** select that sets the system's SABI 2021 efficiency
@@ -2280,7 +2341,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   the 7.2 × capacity^0.77 m² estimate the run will use (N2, warning W6;
   engine ≥ 1.63.0). The area exponent's field takes 0 < b ≤ 1.
 - **Other water users** (engine ≥ 0.22.0, WP-1.33, [model.md §2.7c](./model.md)):
-  **+ Add other user** (next to + Add node, in both layouts) adds a node of
+  **+ Add other user** (next to + Add node, in the page header and the node
+  table's toolbar, once there is one outlet) adds a node of
   kind *Other user* draining into the outlet, with no demand yet; any node's
   Kind can also be switched to it. In the table a user's row shows "–" in
   every farm column ("not used for an other water user"), and below the
@@ -2301,12 +2363,15 @@ note's link on the Summary, `notes.ts` `noteHref`).
   user as an open diamond (legend "Other water user"). The client check
   mirrors the API: no crop areas or transfers on a user, 12 demands ≥ 0, a
   return share in 0–100 %.
-- **Groundwater (boreholes)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
-  one-node form only (`detailOnly`), on farms and other users: borehole
-  capacity (m³/day, empty = none), **Borehole rule** (supplemental / primary /
-  drought), drought trigger (%), stream depletion (%) and depletion lag
-  (days). The client check refuses boreholes on a gauge and the drought rule
-  without a farm dam.
+- **Combined boreholes (one capacity)** group (engine ≥ 0.23.0, WP-1.34, [model.md §2.7d](./model.md)),
+  one-node form only (`detailOnly`), on farms and other users, just above
+  Individual boreholes: a line says to use it when only the total is known,
+  to list boreholes below when each has its own yield, cap or mode, and that
+  both run if both are set. **Combined borehole capacity** (m³/day, empty =
+  none), **Borehole rule** (supplemental / primary / drought), drought
+  trigger (%), **Combined stream depletion** (%) and **Combined depletion
+  lag** (days), so no two fields of the form share a name. The client check
+  refuses boreholes on a gauge and the drought rule without a farm dam.
 - **Dam survey and releases** (engine ≥ 0.35.0, WP-3.5, [model.md §2.7a](./model.md)),
   one-node form, farms with a dam (`DamStorageFields.svelte`, `damCurve.ts`):
   without a curve it says the power-law area is in use; **Paste survey rows**
@@ -2321,7 +2386,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   *Use October's amount for every month*); under pass inflow a checkbox
   keeps the EWR required at the node as the target. The Dam group gains
   **Seepage returning** (%) and **Outlet capacity** (m³/day, empty = no
-  limit), one-node form only. Viewers see the values read-only (no paste
+  limit), one-node form only. **Paste survey rows** moves the focus into the
+  box, and **Use these rows** / **Cancel** (which remove themselves) hand it
+  to the button that opened it. **Remove the curve** asks first ("Its 4
+  survey rows go with it; …"). Viewers see the values read-only (no paste
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
@@ -2335,7 +2403,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (`developmentIssue` in `model/validate.ts`, the engine's
   `developmentProblem`) mirrors the API and shows its message beside the
   fields: a rate needs a survey date, the dam fields only on a farm, no
-  abstraction start on a gauge. A node without a dam, or turned into a user or
+  abstraction start on a gauge. The fields it is about are marked
+  `aria-invalid` and point at it (`aria-describedby`,
+  `network/problemFields.ts`), as the Supply rules' fields are. A node without a dam, or turned into a user or
   gauge, that still carries them shows them so they can be cleared
   (`hasDamDevelopment` in `fields.ts`). Not in the table.
 - **Supply** (engine ≥ 0.42.0, WP-3.8, issue #54 item 2c, [model.md §2.7e](./model.md)),
@@ -2355,7 +2425,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   API refuses them (`supplyIssues` in `lib/model/validate.ts`, a test holds it
   to the engine's `modelRuleIssues`): dam, river when low needs a dam; run of
   river with a dam says to set the dam capacity to 0 or pick another rule; the
-  switch-back level must be at least the switch-to-river level. A farm with no
+  switch-back level must be at least the switch-to-river level. The field
+  each is about (the rule's select, or both switch levels) is marked
+  `aria-invalid` and names the message in its description
+  (`supplyProblemFields`). A farm with no
   dam on dam only that has anything routed to its dam gets the run's hint: it
   irrigates straight from the river with no limit; pick run of river with a
   pump capacity. A farm on river first or dam, river when low that also has
@@ -2412,7 +2485,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   show whole for owners and viewers alike (`supply.spec.ts` checks
   `scrollWidth ≤ clientWidth`, ui-playbook § 2). What an edit and the fill
   button write (`withMonth`, `fillFromFirst`, a cleared field as 0, or 1 for
-  a profile) is in the `.ts` neighbour, unit-tested.
+  a profile) is in the `.ts` neighbour, unit-tested. After the fill a polite
+  line says what changed ("Copied October’s 150 to every month of Demand,
+  m³/day, per month.", `fillMessage`).
 - **River to dam in m³/s, for an off-channel dam** (2026-10-02). River to
   dam is entered in m³/s, as b023 enters it (0.2 m³/s is 17 280 m³ a day),
   in the node table, the one-node form, its months, the paste and the
@@ -2445,11 +2520,17 @@ note's link on the Summary, `notes.ts` `noteHref`).
   one-node form, farms and other users: always the note **Low confidence:
   Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology
   report.** **+ Add borehole** adds one (supplemental, straight to the crop, no
-  capacity or cap yet); each has a **Name**, **Capacity** (m³/day), **Annual
-  cap** (m³/a, empty = none), **Mode** (supplemental / primary / emergency /
-  none; emergency only with a dam), **Runs below** (% of dam, emergency only),
-  **Pumps into** (the crop or the farm dam; farms only, the dam only with one)
-  and **Stream depletion** (% of pumping). Below them: the caps' total and the
+  capacity or cap yet); a line on top says to use them when each borehole has
+  its own yield, cap, mode or depletion, and that the combined boreholes
+  above run as well. Each has a **Name**, **Capacity** (m³/day, with a help
+  tip), **Annual cap** (m³/a, empty = none), **Mode** (supplemental / primary
+  / drought / none, with a help tip; "Drought", the combined rule's word, is
+  the engine's `emergency` mode, offered only with a dam of 1 m³ or more, as
+  the map counts one), **Runs below** (% of dam, drought only), **Pumps
+  into** (the crop or the farm dam; farms only, the dam only with one) and
+  **Stream depletion** (% of pumping, with a help tip). **Remove *name***
+  asks first once it has a capacity, cap or depletion, and the focus goes to
+  the next borehole's name, or **+ Add borehole** when none is left. Below them: the caps' total and the
   GN 538 context: this property's volume (area × Table 2 rate, at most 40 000
   m³/a, in any 12 months) once the groundwater group's **Property area (GN
   538)** (ha) and **GN 538 rate** (a select of the six Table 2 rates, or "Not
@@ -2479,7 +2560,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   **Water for** the object (engine ≥ 1.65.0, issue #344, the same
   `WaterSourceFields` as the crops': from the dam under the supply rule, or
   its own river abstraction with its pump calculator, capacity and pool),
-  **Modelled** (off keeps it on record only), a 12-month row (the demand in
+  **Modelled** (with the hint "Untick to keep it on record without running
+  it."), a 12-month row (the demand in
   m³/day, or the per-unit profile, blank = 1), and **Source details** (the
   note: which meter and years, which strategy, which norm). With two or more
   objects on the unit (engine ≥ 1.64.0, issue #343, `demandObjectOrder.ts`)
@@ -2493,7 +2575,16 @@ note's link on the Summary, `notes.ts` `noteHref`).
   places are stored as each object's priority and its rank within it, and
   renumber from 1 without gaps; removing a demand closes the ranks up, and a
   lone one keeps none. Per unit: **Number of** people / head / units, **Litres per** person
-  / head / unit **a day** and **Distribution losses** (%). A domestic or
+  / head / unit **a day** and **Distribution losses** (%, with a help tip). Each object is a
+  small card of its own, a group titled "Demand object 2: Town B" (just
+  "Demand object 1" while it has no name), and its month fields fall back
+  to "demand 1" for their names ("Demand of demand 1 in Oct, m³/day").
+  **Remove *name*** asks first when the object holds a demand, a count, a
+  schedule, a note or a source ("Its monthly demand and 2 schedule windows
+  go with it. Until you save, Discard brings it back, with every other
+  unsaved change."), confirmed with **Remove demand object**; an object as
+  + Add demand made it goes at once. The focus then goes to the next
+  object's name, or **+ Add demand**. A domestic or
   municipal object has **People served** (engine ≥ 1.44.0, issue #123, blank =
   the number of people when it is sized per person, "none" when it is m³/day
   by month) for its basic-needs floor, with a hint under it saying which
@@ -2515,9 +2606,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   its bounds (**From** / **To**: MM-DD each year, date pickers once, days
   from Easter Sunday), **Factor** (0 = off, up to 10), **On** Mon–Sun
   checkboxes (all ticked = every day), **Move window n up / down** (order
-  matters: the later window wins a day two cover) and **Remove window n**. A
-  window the run couldn't use says why under it ("Not used: …"), and the
-  save refuses it. Read-only for viewers; removing the unit asks
+  matters: the later window wins a day two cover; the focus stays with the
+  moved window's button and a polite line says "Window 2 (Easter weekend) is
+  now window 1.") and **Remove window n** (it asks once the window differs
+  from a new one; the focus goes to the next window's label, or the add
+  row). A window the run couldn't use says why under it ("Not used: …"),
+  the fields it is about are marked `aria-invalid` and point at it
+  (`problemFields` in `demandSchedule.ts`), and the save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
   objects**: per object its unit, priority (with ", rank n" when it has a
@@ -2544,9 +2639,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
   each patch has a **Cover class**, **Area** (km²), **Condensed cover** (%)
   and **Own reductions**, which replaces the class's indicative reductions
   (shown otherwise) with two editable %s. Below the patches: the condensed
-  share of the farm, flagged when above 100 % (the run scales it down). The
-  field guide points table users to the one-node layout. Removing a farm
-  removes its patches (the confirm says how many).
+  share of the farm ("… of the hydrological unit's 12.00 km²"), flagged when
+  above 100 % (the run scales it down). **Condensed cover** has a help tip.
+  **Remove land-cover patch n (class)** asks first once the patch has an
+  area or its own reductions, and the focus goes to the next patch's class,
+  or **+ Add land cover**. The field guide points table users to the
+  one-node layout. Removing a farm removes its patches (the confirm says how
+  many).
 - **Order**: rows reorder by drag handle or ↑/↓ buttons (focus stays on the
   moved row, and the new position is announced). **Sort by flow path** lists
   each tributary from its headwater down, with the outflow gauge last. The

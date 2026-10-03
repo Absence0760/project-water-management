@@ -4,10 +4,14 @@
 	// reducing the farm's runoff by its class's (or its own) reductions times
 	// its area × condensed cover. The patches are the editor's own objects, so
 	// edits land in the model directly.
+	import { tick } from 'svelte';
 	import { LAND_COVER_CLASSES, LAND_COVER_DEFAULTS_SOURCE, type LandCoverClass, type LandCoverPatch, type NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import { fmtNum } from '$lib/format/number';
 	import { classDefaults, coverShare } from './landcover';
+	import { focusAfter, patchQuestion } from './removeQuestions';
 
 	let {
 		node,
@@ -26,6 +30,19 @@
 
 	const share = $derived(coverShare(node, patches));
 	const label = $derived(node.name || 'this hydrological unit');
+	const classLabel = (c: LandCoverClass) => LAND_COVER_CLASSES.find((x) => x.id === c)?.label ?? c;
+	let addBtn: HTMLButtonElement | undefined = $state();
+
+	/** Asks first when the patch has an area, then puts the focus on the next one (or + Add land cover). */
+	async function remove(p: LandCoverPatch, i: number) {
+		const q = patchQuestion(p, i, classLabel(p.coverClass));
+		if (q && !(await confirmDialog(q))) return;
+		const at = focusAfter(i, patches.length);
+		const nextId = at === null ? null : patches.filter((x) => x.id !== p.id)[at]?.id;
+		onremove?.(p.id);
+		await tick();
+		(nextId ? document.getElementById(`lc-class-${nextId}`) : addBtn)?.focus();
+	}
 </script>
 
 <div class="cover" data-testid="land-cover-{node.id}">
@@ -53,7 +70,7 @@
 							<NumberInput id="lc-area-{p.id}" min={0} disabled={readonly} value={p.areaKm2} onchange={(v) => (p.areaKm2 = v ?? 0)} />
 						</div>
 						<div class="field">
-							<label for="lc-density-{p.id}">Condensed cover <span class="u">(%)</span></label>
+							<span class="lbl"><label for="lc-density-{p.id}">Condensed cover <span class="u">(%)</span></label><HelpTip key="land-cover" label="About condensed cover" /></span>
 							<NumberInput id="lc-density-{p.id}" min={0} max={100} scale={100} disabled={readonly} value={p.densityPct} onchange={(v) => (p.densityPct = v ?? 0)} />
 						</div>
 						<div class="field check">
@@ -81,17 +98,17 @@
 						{/if}
 					</div>
 					{#if !readonly && onremove}
-						<button type="button" class="btn btn-sm" onclick={() => onremove(p.id)}>Remove patch {i + 1}</button>
+						<button type="button" class="btn btn-sm" onclick={() => remove(p, i)}>Remove land-cover patch {i + 1} ({classLabel(p.coverClass)})</button>
 					{/if}
 				</li>
 			{/each}
 		</ul>
 		<p class="muted small" class:warn={share > 1}>
-			Condensed cover {Math.round(share * 100)} % of the hydrological unit's {node.areaKm2} km²{share > 1 ? ': more than the hydrological unit; the run scales it down' : ''}.
+			Condensed cover {Math.round(share * 100)} % of the hydrological unit's {fmtNum(node.areaKm2 || 0, 2)} km²{share > 1 ? ': more than the hydrological unit; the run scales it down' : ''}.
 		</p>
 	{/if}
 	{#if !readonly && onadd}
-		<button type="button" class="btn" onclick={onadd}>+ Add land cover</button>
+		<button type="button" class="btn" onclick={onadd} bind:this={addBtn}>+ Add land cover</button>
 	{/if}
 </div>
 
@@ -119,6 +136,11 @@
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	.check label {
 		display: inline-flex;

@@ -27,7 +27,8 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	const card = page.getByTestId('node-card');
 	await expect(card.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await card.getByRole('link', { name: '20.00 ha, 1 crop' }).click();
-	await expect(page).toHaveURL(/\?tab=network&farm=/);
+	// The pick is in the URL (node=), and the drawer opens over it.
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+&farm=/);
 	const d = drawer(page, 'Upper farm');
 	await expect(d).toBeVisible();
 	await expect(d.getByLabel('Orchard on Upper farm, ha')).toHaveValue('20');
@@ -43,7 +44,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	// Done keeps the edit (unsaved), closes the drawer and drops it from the URL; Crops & demand shows it.
 	await d.getByRole('button', { name: 'Done' }).click();
 	await expect(d).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network$/);
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeVisible();
 	const nav = page.getByRole('navigation', { name: 'Project sections' });
 	await nav.getByRole('link', { name: 'Crops & demand' }).click();
@@ -62,7 +63,7 @@ test('from a farm on the Network: edit its planted areas, see them on Crops & de
 	expect(await savedArea(page, project.id, 'Upper farm')).toBe(350_000);
 	await page.keyboard.press('Escape');
 	await expect(again).toHaveCount(0);
-	await expect(page).toHaveURL(/\?tab=network$/);
+	await expect(page).toHaveURL(/\?tab=network&node=[^&]+$/);
 	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toHaveCount(0);
 });
 

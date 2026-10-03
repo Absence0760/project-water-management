@@ -10,7 +10,8 @@
 	import type { NetworkNode, Transfer } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { drainageTree } from '$lib/model/tree';
-	import { fmtVolume, hasDam } from './fields';
+	import { fmtVolume, hasDam, KIND_WORD } from './fields';
+	import { keepInView } from './scroll';
 	import { canDrainInto, validDropTargets } from './reorder';
 	import {
 		bandCrossings,
@@ -79,6 +80,20 @@
 	const wide = new MediaQuery('min-width: 900px');
 	let boxW = $state(0);
 	let boxH = $state(0);
+	let scrollerEl: HTMLDivElement | undefined = $state();
+	// A node picked in the list, by a link (node=) or on a big network sits wherever the layout put it:
+	// scroll the drawing so it is in view, on a pick and again whenever the box changes size
+	// (playbook § 4, "Keep a picked row in view when the list's box changes").
+	$effect(() => {
+		const id = selectedId;
+		void boxW;
+		void boxH;
+		void nodes.length;
+		const el = scrollerEl;
+		if (!fill || !id || !el) return;
+		const frame = requestAnimationFrame(() => keepInView(el, el.querySelector('g.node.selected'), 24));
+		return () => cancelAnimationFrame(frame);
+	});
 
 	const supplyOf = (id: string) => colouring?.byNode.get(id);
 	const legend = $derived(colouring?.legend ?? []);
@@ -436,7 +451,7 @@
 				onpointerup={onUp}
 				onpointercancel={() => (drag = null)}
 			>
-				<title>{name(n)} ({n.kind === 'user' ? 'other water user' : n.kind}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
+				<title>{name(n)} ({KIND_WORD[n.kind]}{isOutlet(n) ? ', outflow gauge' : ''}){n.kind === 'user' ? '' : ` · ${fmtNum(n.areaKm2, 2)} km²`}{dam ? ` · dam ${fmtVolume(n.damCapacityM3)}` : ''}{sup ? ` · ${sup.text}` : ''}</title>
 				<circle class="halo" r="17" />
 				{#if n.kind === 'user'}
 					<!-- An other water user (WP-1.33): a diamond, a tap on the river. -->
@@ -480,6 +495,7 @@
 		data-scroll-region
 		data-scroll-label="Schematic drawing"
 		data-fit="{boxW}x{boxH}{wide.current ? ' wide' : ''}"
+		bind:this={scrollerEl}
 		bind:clientWidth={boxW}
 		bind:clientHeight={boxH}
 	>
@@ -570,7 +586,7 @@
 		{#each tree.rows as row (row.node.id)}
 			{@const sup = supplyOf(row.node.id)}
 			<li>
-				{name(row.node)}, {row.node.kind}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}{sup ? `, ${sup.text}` : ''}
+				{name(row.node)}, {KIND_WORD[row.node.kind]}{row.depth === 0 && row.node.downstreamNodeId === null ? ', outlet' : ''}, level {row.depth + 1}{sup ? `, ${sup.text}` : ''}
 			</li>
 		{/each}
 	</ul>
@@ -596,17 +612,10 @@
 		--sch-river: var(--brand-outlet);
 		--sch-node: var(--text);
 		--sch-fill: var(--surface);
-		--sch-transfer: #7a4fc4;
+		/* The palette's violet, which has its own dark value (app.css; no raw hex here, playbook § 3). */
+		--sch-transfer: var(--series-8);
 		/* What the labels' halo is drawn in: the drawing's own ground. */
 		--sch-ground: var(--surface-sunken);
-	}
-	@media (prefers-color-scheme: dark) {
-		:global(:root:not([data-theme='light'])) .sch {
-			--sch-transfer: #b79cf0;
-		}
-	}
-	:global(:root[data-theme='dark']) .sch {
-		--sch-transfer: #b79cf0;
 	}
 	.schematic {
 		display: block;

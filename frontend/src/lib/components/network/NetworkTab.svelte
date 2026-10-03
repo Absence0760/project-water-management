@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { onMount, untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
@@ -20,7 +20,9 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { divertMonthsCell } from './supply';
-	import { cardLabel, fieldScale, fieldUnused, GROUPS, isPct, isVolume, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
+	import { cardLabel, fieldScale, fieldUnused, GROUPS, hasDam, isPct, isVolume, KIND_WORD, NODE_FIELDS, setNodeField, TABLE_FIELDS, type NodeField } from './fields';
+	import { nodeSections, SECTION_SHORT, sectionId, type NodeSection } from './nodeSections';
+	import { keepInView } from './scroll';
 	import NetworkSchematic from './NetworkSchematic.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
@@ -209,7 +211,11 @@
 	});
 	/** Opens a node's form; `replace` switches the open sheet to another node (‹ ›, the picker). */
 	function openEdit(id: string, replace = false) {
-		return goto(withParam(page.url, 'edit', id), { replaceState: replace, noScroll: true, keepFocus: true });
+		// The node edited is the one picked (node=), so closing the sheet leaves the map on it.
+		const q = new URLSearchParams(page.url.search);
+		q.set('edit', id);
+		if (!only) q.set('node', id);
+		return goto(`?${q}`, { replaceState: replace, noScroll: true, keepFocus: true });
 	}
 	// Which nodes have a map feature, for their "Show on map" links (issue #326 A2): fetched after the
 	// tab has drawn, so the map's list never delays it (workspace/mapLinks.ts).
@@ -234,16 +240,27 @@
 	}
 
 	let selectedId = $state<string | null>(null);
-	// `node=<id>` picks a node (a note's link, notes.ts noteHref).
-	const nodeParam = $derived(page.url.searchParams.get('node'));
+	// `node=<id>` is the node picked on the map (a note's link, notes.ts noteHref, lands on it too):
+	// a pick from the list or the drawing writes it, so a reload, a shared link and Back keep the
+	// pick (playbook § 2, as Dams' `dam=`). With none, nothing is picked. The grid modal's table
+	// keeps its pick to itself.
+	const nodeParam = $derived(only ? null : page.url.searchParams.get('node'));
 	$effect(() => {
-		if (nodeParam) selectedId = nodeParam;
+		const id = nodeParam;
+		// A link with only `edit=` (the Dams page's Edit dam) picks the node it edits.
+		untrack(() => (selectedId = id ?? editing?.id ?? null));
 	});
 
+	/** Picks a node on the map: a new history entry, so Back steps back through the picks. */
+	function pick(id: string) {
+		selectedId = id;
+		if (only || nodeParam === id) return;
+		void goto(withParam(page.url, 'node', id), { noScroll: true, keepFocus: true });
+	}
 
 	function select(id: string) {
+		if (view === 'map') return pick(id);
 		selectedId = id;
-		if (view === 'map') return;
 		{
 			queueMicrotask(() => {
 				const row = document.getElementById(`node-row-${id}`);
@@ -270,17 +287,33 @@
 	}
 
 	async function remove(id: string, name: string) {
+		const node = nodes.find((n) => n.id === id);
 		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
 		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
 		const boreholes = (editor.model.boreholes ?? []).filter((b) => b.nodeId === id).length;
 		const demandObjects = (editor.model.demandObjects ?? []).filter((o) => o.nodeId === id).length;
-		const isFarm = nodes.find((n) => n.id === id)?.kind === 'farm';
-		const question = removeMessage({ name, isFarm, areas, transfers: refs, cover, boreholes, demandObjects, farmers: farmerCount ? (farmerCount[id] ?? 0) : null });
-		if (question && !(await confirmDialog({ title: `Remove “${name}”?`, message: question, confirmLabel: 'Remove', danger: true }))) return;
+		const upstream = nodes.filter((n) => n.downstreamNodeId === id).length;
+		const into = node?.downstreamNodeId ? labelOf(node.downstreamNodeId) : null;
+		const isFarm = node?.kind === 'farm';
+		const question = removeMessage({ isFarm, areas, transfers: refs, cover, boreholes, demandObjects, farmers: farmerCount ? (farmerCount[id] ?? 0) : null, upstream, into });
+		const kind = node ? KIND_WORD[node.kind] : 'node';
+		if (question && !(await confirmDialog({ title: `Remove “${name}”?`, message: question, confirmLabel: `Remove ${kind}`, danger: true }))) return;
+		// The row after it in the table (else the one before) takes the focus once it is gone.
+		const at = nodes.findIndex((n) => n.id === id);
+		const next = nodes[at + 1] ?? nodes[at - 1] ?? null;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 		if (editParam === id) sheetOpen = false;
+		if (nodeParam === id) void goto(withoutParam(page.url, 'node'), { replaceState: true, noScroll: true, keepFocus: true });
+		// The button that was pressed has gone (the row's ✕, or the sheet with its Remove and the
+		// card's Edit it would hand the focus back to): put the focus somewhere that still is.
+		await tick();
+		const target =
+			view === 'table'
+				? (next && document.getElementById(`node-name-${next.id}`)) || document.getElementById('net-add-node')
+				: document.getElementById('all-nodes-h') ?? document.getElementById('net-empty-add');
+		target?.focus();
 	}
 
 	// --- reordering (display order only; the model runs in topological order) ---
@@ -355,6 +388,18 @@
 	});
 	// --- the Map layout: the picked node's card and the list of every node ---
 	const picked = $derived(nodes.find((n) => n.id === selectedId) ?? null);
+	// The picked node's row in All nodes stays in view inside its card: on a pick (from the drawing
+	// or a node= link too) and whenever the list's box changes size (playbook § 4).
+	let listEl: HTMLUListElement | undefined = $state();
+	let listH = $state(0);
+	$effect(() => {
+		const id = selectedId;
+		void listH;
+		const el = listEl;
+		if (!id || !el) return;
+		const frame = requestAnimationFrame(() => keepInView(el, el.querySelector('[aria-pressed="true"]'), 4));
+		return () => cancelAnimationFrame(frame);
+	});
 	const latestSupply = $derived(latestRun && supplyRun?.id === latestRun.id ? supplyByNode(nodes, supplyRun.summary) : null);
 	const latestName = $derived(latestRun ? latestRun.label || fmtDate(latestRun.createdAt, true) : null);
 	const GRID_LINKS: [GridId, string][] = [
@@ -404,7 +449,7 @@
 		document.addEventListener('pointerdown', onDoc);
 		return () => document.removeEventListener('pointerdown', onDoc);
 	});
-	const dams = $derived(farms.filter((n) => n.damCapacityM3 >= 1).length);
+	const dams = $derived(farms.filter(hasDam).length);
 	const outletName = $derived(nodes.find((n) => n.downstreamNodeId === null)?.name || null);
 	/** The Map header's one line: what the network is. */
 	const summaryLine = $derived(
@@ -452,6 +497,30 @@
 				if (picked?.id === id) damEnd = null;
 			});
 	});
+	// --- the node sheet's extras: its sections for the jump row, and where its crops and transfers are set ---
+	const sheetSections = $derived(editing ? nodeSections(editing, (editor.model.demandObjects ?? []).filter((o) => o.nodeId === editing.id).length) : []);
+	/** Scrolls the sheet's form to a section and puts the focus on it (its fieldset, named by its legend). */
+	function jumpTo(s: NodeSection) {
+		if (!editing) return;
+		const el = document.getElementById(sectionId(editing.id, s));
+		el?.scrollIntoView({ block: 'start' });
+		el?.focus({ preventScroll: true });
+	}
+	const editingTransfers = $derived.by(() => {
+		if (!editing) return null;
+		const id = editing.id;
+		const mine = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id);
+		if (!mine.length) return null;
+		const ends = mine.map((t) => (t.fromNodeId === id ? `to ${labelOf(t.toNodeId)}` : `from ${labelOf(t.fromNodeId)}`));
+		return `${mine.length} transfer${mine.length === 1 ? '' : 's'}, ${ends.join(', ')}`;
+	});
+	/** The farm drawer over the map, in place of the sheet. */
+	function plantedHref(id: string): string {
+		const q = new URLSearchParams(page.url.search);
+		q.delete('edit');
+		q.set('farm', id);
+		return `?${q}`;
+	}
 	const totalArea = $derived(nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 	const farmArea = $derived(farms.reduce((s, n) => s + (n.areaKm2 || 0), 0));
 	// The page's section header shows the map's summary line and actions (not the grid modal's table).
@@ -470,7 +539,11 @@
 			{#each GRID_ALL as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
-	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add node</button>{/if}
+	{#if !readonly}
+		<button type="button" class="btn" onclick={add}>+ Add node</button>
+		<!-- A town, industry or unlisted user, once there is one outlet for it to drain into (as the node table's toolbar). -->
+		{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
+	{/if}
 {/snippet}
 
 {#snippet colourByControl()}
@@ -531,8 +604,12 @@
 		{#if nodes.length === 0}
 			<div class="empty">
 				<p>
-					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
-					and the EWR applies), then add the hydrological units and gauges that drain into it.
+					{#if readonly}
+						No nodes yet. An editor builds the network here or from the Map.
+					{:else}
+						No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+						and the EWR applies), then add the hydrological units and gauges that drain into it.
+					{/if}
 				</p>
 				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
 			</div>
@@ -685,7 +762,7 @@
 			</div>
 			{#if !readonly}
 				<div class="toolbar after">
-					<button type="button" class="btn" onclick={add}>+ Add node</button>
+					<button type="button" class="btn" id="net-add-node" onclick={add}>+ Add node</button>
 					{#if outletCount === 1}<button type="button" class="btn" onclick={addUser}>+ Add other user</button>{/if}
 					<button type="button" class="btn" onclick={sortByFlowPath} title="Order rows headwater → outlet, one tributary at a time">
 						Sort by flow path
@@ -748,12 +825,20 @@
 	     picked node and the node list. -->
 	{#if nodes.length === 0}
 		<section class="panel" aria-label="No nodes yet">
-			<div class="empty">
-				<p>
-					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
-					and the EWR applies), then add the hydrological units and gauges that drain into it.
-				</p>
-				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
+			<div class="empty" data-testid="network-empty">
+				{#if readonly}
+					<p>No nodes yet. An editor builds the network here or from the Map.</p>
+				{:else}
+					<p>
+						No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
+						and the EWR applies), then add the hydrological units and gauges that drain into it. Or start from the map: click the
+						outlet on the Map and the app delineates the units, their areas and what drains into what.
+					</p>
+					<div class="empty-actions">
+						<button type="button" class="btn btn-primary" id="net-empty-add" onclick={add}>Add outflow gauge</button>
+						<a class="btn" href="?tab=map&start=1" data-testid="network-start-from-map">Start from the map</a>
+					</div>
+				{/if}
 			</div>
 		</section>
 	{:else}
@@ -790,12 +875,13 @@
 				{/if}
 			</section>
 			<section class="panel side-box nodes-box" aria-labelledby="all-nodes-h">
-				<h3 class="list-h" id="all-nodes-h">All nodes</h3>
-				<ul class="node-list" aria-labelledby="all-nodes-h">
+				<!-- tabindex: where the focus lands after a node is removed from its sheet. -->
+				<h3 class="list-h" id="all-nodes-h" tabindex="-1">All nodes</h3>
+				<ul class="node-list" aria-labelledby="all-nodes-h" bind:this={listEl} bind:clientHeight={listH}>
 					{#each nodes as n (n.id)}
 						{@const band = dotBand(n.id)}
 						<li>
-							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => (selectedId = n.id)}>
+							<button type="button" class="node-row" aria-pressed={n.id === selectedId} onclick={() => pick(n.id)}>
 								<span class="dot {n.kind}" data-band={band} aria-hidden="true"></span>
 								<span class="nm">{n.name || '(unnamed)'}</span>
 								<span class="meta muted">{n.downstreamNodeId === null ? 'outlet' : `→ ${labelOf(n.downstreamNodeId)}`}</span>
@@ -818,11 +904,17 @@
 					<button type="button" class="btn" aria-label="Previous node" disabled={editIndex <= 0} onclick={() => openEdit(nodes[editIndex - 1]!.id, true)}>‹</button>
 					<select id="node-pick" value={editing.id} onchange={(e) => openEdit(e.currentTarget.value, true)}>
 						{#each nodes as n, i (n.id)}
-							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {n.kind === 'farm' ? 'hydrological unit' : n.kind}</option>
+							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {KIND_WORD[n.kind]}</option>
 						{/each}
 					</select>
 					<button type="button" class="btn" aria-label="Next node" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>
 				</div>
+				<!-- The form's sections, fixed above it: one press scrolls to a section and focuses it. -->
+				{#if sheetSections.length > 1}
+					<nav class="jump" aria-label="Sections of the form" data-testid="node-sheet-jump">
+						{#each sheetSections as sec (sec)}<button type="button" class="jump-link" onclick={() => jumpTo(sec)}>{SECTION_SHORT[sec]}</button>{/each}
+					</nav>
+				{/if}
 			{/snippet}
 			<div class="sheet one-node">
 		{#key editing.id}
@@ -845,11 +937,16 @@
 					demandObjects={(editor.model.demandObjects ?? []).filter((o) => o.nodeId === editing.id)}
 					onadddemand={(category) => editor.addDemandObject(editing.id, category)}
 					onremovedemand={(id) => editor.removeDemandObject(id)}
+					{method}
+					planting={editing.kind === 'farm' ? farmPlanting(editor.model, editing.id) : null}
+					plantedHref={editing.kind === 'farm' ? plantedHref(editing.id) : null}
+					transfersLine={editingTransfers}
+					transfersHref={editing.kind === 'farm' ? '?tab=transfers' : null}
 				/>
 				{#if editing.kind === 'farm' && projectId}
 					<Lazy load={loadYield}>
 						{#snippet children(YieldPanel)}
-							<YieldPanel {projectId} nodeId={editing.id} nodeName={editing.name} {runs} canEdit={!readonly} hasDam={editing.damCapacityM3 > 0} />
+							<YieldPanel {projectId} nodeId={editing.id} nodeName={editing.name} {runs} canEdit={!readonly} hasDam={hasDam(editing)} />
 						{/snippet}
 					</Lazy>
 				{/if}
@@ -966,17 +1063,6 @@
 		width: 100%;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
-	}
-	/* No spin buttons in the dense table: Chrome keeps room for them even when
-	   hidden, which pushed right-aligned digits off the edge (arrow keys still step). */
-	.net td :global(input[type='number']) {
-		appearance: textfield;
-		-moz-appearance: textfield;
-	}
-	.net td :global(input[type='number']::-webkit-inner-spin-button),
-	.net td :global(input[type='number']::-webkit-outer-spin-button) {
-		-webkit-appearance: none;
-		margin: 0;
 	}
 	.net tfoot td.num {
 		text-align: right;
@@ -1115,6 +1201,48 @@
 	}
 	.add-one {
 		margin: 0 0 0.75rem;
+	}
+	/* The sheet's jump row: the sections as small links, wrapping onto a second row at most on a
+	   laptop (11 short names at 920 px); one strip that scrolls sideways on a phone (SectionNav's pattern). */
+	.jump {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.15rem 0.35rem;
+		padding: 0 0 0.4rem;
+		font-size: 0.85rem;
+	}
+	.jump-link {
+		background: none;
+		border: 0;
+		padding: 0.15rem 0.35rem;
+		border-radius: var(--radius-sm);
+		color: var(--accent);
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.jump-link:hover {
+		background: var(--row-hover);
+	}
+	.empty-actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+	}
+	.list-h:focus-visible {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
+	}
+	@media (max-width: 640px) {
+		.jump {
+			flex-wrap: nowrap;
+			overflow-x: auto;
+		}
+		.jump-link {
+			min-height: 44px;
+		}
 	}
 	/* A control scrolled to by Tab stops below the sticky picker too, not
 	   just below the app header (WCAG 2.4.11, focus not obscured). */

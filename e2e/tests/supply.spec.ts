@@ -71,6 +71,9 @@ test('river first with 2 pumps × 25 m³/h saves 1,200 m³/day; run of river wit
 	// Run of river has no dam: with Upper farm's 150 000 m³ dam the form says so and Save stays off.
 	await again.getByLabel('Supply rule', { exact: true }).selectOption({ label: 'Run of river' });
 	await expect(again.getByRole('alert')).toHaveText('Run of river has no dam; set the dam capacity to 0 or pick another supply rule.');
+	// The field it is about is marked and points at it.
+	await expect(again.getByLabel('Supply rule', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+	await expect(again.getByLabel('Supply rule', { exact: true })).toHaveAccessibleDescription(/Run of river has no dam/);
 	await expect(sheet.getByText('1 problem to fix before saving')).toBeVisible();
 	await expect(sheet.getByRole('button', { name: 'Save changes' })).toBeDisabled();
 
@@ -79,6 +82,10 @@ test('river first with 2 pumps × 25 m³/h saves 1,200 m³/day; run of river wit
 	await expect(again.getByRole('alert')).toHaveCount(0);
 	await again.getByLabel('Back to the dam at (% of dam)').fill('30');
 	await expect(again.getByRole('alert')).toHaveText('The switch-back level must be at least the switch-to-river level.');
+	for (const level of ['Back to the dam at (% of dam)', 'Switch to river below (% of dam)']) {
+		await expect(again.getByLabel(level)).toHaveAttribute('aria-invalid', 'true');
+		await expect(again.getByLabel(level)).toHaveAccessibleDescription('The switch-back level must be at least the switch-to-river level.');
+	}
 	await expect(sheet.getByRole('button', { name: 'Save changes' })).toBeDisabled();
 });
 

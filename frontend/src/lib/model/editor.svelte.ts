@@ -50,6 +50,19 @@ export function transferIsBlank(t: Transfer): boolean {
 	return transferRatesM3s(t).every((r) => !(r > 0)) && Object.keys(d).every((k) => (rec[k] ?? d[k]) === d[k]);
 }
 
+/**
+ * `<base> <n>` for a new node, from `from` up to the first number no node's
+ * name has (case and spaces aside, as the save's duplicate check compares
+ * them): after a removal, `Unit ${nodes.length}` could already be taken, and
+ * the save would refuse the new node at once.
+ */
+export function nextFreeName(base: string, nodes: readonly { name: string }[], from: number): string {
+	const taken = new Set(nodes.map((n) => n.name.trim().toLowerCase()));
+	let i = Math.max(1, from);
+	while (taken.has(`${base} ${i}`.toLowerCase())) i++;
+	return `${base} ${i}`;
+}
+
 export class ModelEditor {
 	model = $state<ProjectModel>(emptyModel());
 	// Starts equal to the empty model: an editor that never loaded (the project
@@ -103,7 +116,7 @@ export class ModelEditor {
 		const outlet = nodes.find((n) => n.downstreamNodeId === null);
 		const sort = nodes.reduce((m, n) => Math.max(m, n.sortOrder), 0) + 1;
 		const node = newNode(sort, nodes.length === 0 ? null : (outlet?.id ?? nodes[0]!.id));
-		node.name = nodes.length === 0 ? 'Outflow gauge' : `Unit ${nodes.length}`;
+		node.name = nodes.length === 0 ? 'Outflow gauge' : nextFreeName('Unit', nodes, nodes.length);
 		nodes.push(node);
 		return node;
 	}
@@ -121,7 +134,7 @@ export class ModelEditor {
 		node.userDemandM3Day = new Array(12).fill(0);
 		node.userReturnPct = 0;
 		node.userPriority = 'senior';
-		node.name = `Other user ${nodes.filter((n) => n.kind === 'user').length + 1}`;
+		node.name = nextFreeName('Other user', nodes, nodes.filter((n) => n.kind === 'user').length + 1);
 		nodes.push(node);
 		return node;
 	}
