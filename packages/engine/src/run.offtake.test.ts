@@ -282,6 +282,27 @@ describe('river off-takes (engine 1.14.0)', () => {
 		expect(checkInvariants(input, edit('S', 'offtake_out', (v) => (v[0] = 0)))).toMatch(/balance|off-take/);
 	});
 
+	it('the self-check holds an off-take to its source’s pass-inflow target too (engine ≥ 1.70.0, issue #90 Q27)', () => {
+		// S has a dam off the river (no inflow into it) with a pass-inflow release of 950 a day: of 1 000 below it the
+		// off-take (capacity 100) may take only 50, as the unit's own pump could.
+		const nodes = [
+			node('G', { kind: 'gauge', downstreamNodeId: null, sortOrder: 9 }),
+			node('S', { areaKm2: 1, sortOrder: 1, damCapacityM3: 500, damInitialPct: 1, damReleaseRule: 'passInflow', damReleaseM3Day: flat(950) }),
+			node('C', { downstreamNodeId: 'T', sortOrder: 2 }),
+			node('T', { sortOrder: 3, supplyRule: 'runOfRiver', pumpCapacityM3Day: null })
+		];
+		const input = model([offtake()], { nodes });
+		const out = run(input);
+		near(get(out, 'S', 'transfer_rule@o1'), [50, 50]);
+		passes(input, out);
+		// Before 1.70.0 it took its full 100, leaving 900 below S: the self-check now refuses that.
+		const greedy = structuredClone(out);
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'transfer_rule@o1')!.values[0] = 100;
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'offtake_out')!.values[0] = 100;
+		greedy.series.find((x) => x.nodeId === 'S' && x.key === 'outflow')!.values[0] = 900;
+		expect(checkTransferLimits(input, greedy)).toMatch(/more than the flow above what it must leave \(950\)/);
+	});
+
 	it('changes nothing when off, or with a dam transfer of the same fields', () => {
 		const none = run(model([]));
 		const off = run(model([offtake({ enabled: false })]));

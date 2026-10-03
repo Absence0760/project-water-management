@@ -111,6 +111,21 @@ export function releaseToday(r: PlanRelease, calendarMonth: number, inflow: numb
 }
 
 /**
+ * The flow a pass-inflow release is there to keep below the dam today (m³):
+ * the month's amount, or the EWR required at the node (`ewrRequired`, its
+ * cumulative Z) when the rule has no amounts; 0 for a fixed release or none.
+ * What must pass below the dam holds against everything that takes from the
+ * river there: the unit's river pump (§2.7e), its river abstractions (§2.7j)
+ * and, engine ≥ 1.70.0, the river off-takes from the unit (§2.6a), so none of
+ * them takes the water the release passes on. `r` is the release in force
+ * today (none on a day the dam has no capacity, §2.7g).
+ */
+export function passInflowTarget(r: PlanRelease | null | undefined, calendarMonth: number, ewrRequired: number): number {
+	if (!r || r.rule !== 1) return 0;
+	return r.m3DayByMonth ? r.m3DayByMonth[calendarMonth]! : ewrRequired;
+}
+
+/**
  * A fixed release's floor before the day's inflow and transfers are known
  * (engine ≥ 1.29.0): releaseToday with `held` (the dam after the day's
  * rain, evaporation and seepage, less what it has sent so far) as all it

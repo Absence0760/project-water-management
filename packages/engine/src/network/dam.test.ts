@@ -8,7 +8,7 @@ import { checkInvariants, checkTransferLimits } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
 import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
-import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
+import { curveAreaAt, fixedReleaseFloor, passInflowTarget, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
 import { damCurveProblem } from './damCurve';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -127,6 +127,28 @@ describe('survey curve helpers', () => {
 		expect(seepageReturnOf({})).toBe(1);
 		expect(seepageReturnOf({ damSeepageReturnPct: 0.25 })).toBe(0.25);
 		expect(seepageReturnOf({ damSeepageReturnPct: 7 })).toBe(1);
+	});
+});
+
+describe('passInflowTarget and fixedReleaseFloor (docs/model.md §2.6, §2.6a, §2.7e)', () => {
+	const farm = node('A', 'farm', 'G', { damCapacityM3: 1000 });
+	it('a pass-inflow release keeps the month’s amount, or the EWR required here without amounts; anything else keeps nothing', () => {
+		const monthly = resolveRelease({ ...farm, damReleaseRule: 'passInflow', damReleaseM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }, [])!;
+		// Water-year month 3 is January (calendar 1).
+		expect(passInflowTarget(monthly, 1, 999)).toBe(4);
+		expect(passInflowTarget(resolveRelease({ ...farm, damReleaseRule: 'passInflow' }, [])!, 1, 640)).toBe(640);
+		expect(passInflowTarget(resolveRelease({ ...farm, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(300) }, [])!, 1, 640)).toBe(0);
+		// No release (none entered, or no dam today).
+		expect(passInflowTarget(null, 1, 640)).toBe(0);
+		expect(passInflowTarget(undefined, 1, 640)).toBe(0);
+	});
+	it('a fixed release’s floor is MIN(amount, outlet, held − dead), never below 0; a pass-inflow release has none', () => {
+		const rel = resolveRelease({ ...farm, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(300), damOutletCapacityM3Day: 250 }, [])!;
+		expect(fixedReleaseFloor(rel, 1, 900, 0)).toBe(250);
+		expect(fixedReleaseFloor(rel, 1, 500, 400)).toBe(100);
+		expect(fixedReleaseFloor(rel, 1, 300, 400)).toBe(0);
+		expect(fixedReleaseFloor(rel, 1, -5, 0)).toBe(0);
+		expect(fixedReleaseFloor(resolveRelease({ ...farm, damReleaseRule: 'passInflow' }, [])!, 1, 900, 0)).toBe(0);
 	});
 });
 

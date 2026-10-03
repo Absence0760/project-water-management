@@ -11,7 +11,7 @@ import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations
 import { ALLOCATION_SERIES, dailyLimits, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease } from '../network/dam';
+import { curveAreaAt, fixedReleaseFloor, passInflowTarget, resolveDamCurve, resolveRelease } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -869,8 +869,9 @@ function transferDrawBound(n: NetworkNode, own: NonNullable<ModelInput['model'][
  *   daily cap; 0 in a month it is off), so never more than capacity;
  * - at the source, Σ v = offtake_out, and the flow there before the off-takes
  *   (outflow + Σ v) gave each rule at most what lay above what it must leave
- *   (the senior users' requirement passing, its hands-off flow, the EWR here
- *   when asked), so never more than the river there; the outflow is what was
+ *   (the senior users' requirement passing, a pass-inflow release's target
+ *   there on a day its dam has capacity (engine ≥ 1.70.0), its hands-off
+ *   flow, the EWR here when asked), so never more than the river there; the outflow is what was
  *   left, reduced by exactly Σ v;
  * - no rule takes the river below its own keep (audit N6's rule for dam
  *   rules, applied to off-takes): of a rule's priority, the rules keeping at
@@ -900,6 +901,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 	for (const [k, at] of returnAt.entries()) if (at >= 0 && rules[k]!.volume && !returnUnits.has(input.model.nodes[at]!.id)) return `river off-take ${rules[k]!.tr.id}: no offtake_loss_return series on ${input.model.nodes[at]!.id}, where its seepage rejoins`;
 	const d0 = toEpochDay(out.startDate);
 	const sources = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.fromNodeId))];
+	// Each source's release rule (a pass-inflow target is kept, engine ≥ 1.70.0), in force on a day its dam has capacity.
+	const srcRelease = new Map(sources.map((id) => [id, resolveRelease(byId.get(id)!, [])]));
 	const dests = [...new Set(rules.filter((r) => r.volume).map((r) => r.tr.toNodeId))];
 	// A rule without a stored volume moved nothing: it can never take water, or the run skipped it (its
 	// destination drains into its source); a planned rule's missing series shows in offtake_out / offtake_in.
@@ -912,6 +915,8 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			const taken = get.get(`${src}|offtake_out`)?.[t];
 			const Zs = get.get(`${src}|senior_requirement`)?.[t] ?? 0;
 			const Z = get.get(`${src}|ewr_cumulative`)![t]!;
+			const capNow = get.get(`${src}|${DAM_CAPACITY_SERIES.key}`)?.[t] ?? byId.get(src)!.damCapacityM3;
+			const rt = passInflowTarget(capNow > 0 ? srcRelease.get(src) : null, month, Z);
 			const where = `${src} day ${t}`;
 			let sum = 0;
 			let caps = 0;
@@ -922,7 +927,7 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 				if (!(v >= -tol(0)) || v > cap + tol(cap)) return `${where}: river off-take ${r.tr.id} took ${v}, outside [0, its capacity today ${cap}]`;
 				sum += v;
 				caps += cap;
-				const keep = Math.max(Zs, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
+				const keep = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				keepMax = Math.max(keepMax, cap > 0 ? keep : 0);
 				if (v > 0 && v > Math.max(0, U + sumAll(mine, t) - keep) + tol(Math.max(U, keep))) return `${where}: river off-take ${r.tr.id} took ${v}, more than the flow above what it must leave (${keep})`;
 			}
@@ -931,11 +936,11 @@ function checkOfftakes(input: ModelInput, out: ModelOutput, get: SeriesMap): str
 			const U0 = U + sum;
 			for (const r of mine) {
 				if (!(r.volume![t]! > 0)) continue;
-				const k = Math.max(Zs, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
+				const k = Math.max(Zs, rt, r.o.handsOffM3Day, r.o.handsOffEwr ? Z : 0);
 				let earlier = 0;
 				let above = 0;
 				for (const x of mine) {
-					const kx = Math.max(Zs, x.o.handsOffM3Day, x.o.handsOffEwr ? Z : 0);
+					const kx = Math.max(Zs, rt, x.o.handsOffM3Day, x.o.handsOffEwr ? Z : 0);
 					if (x.o.priority < r.o.priority) earlier += x.volume![t]!;
 					else if (x.o.priority === r.o.priority && kx >= k) above += x.volume![t]!;
 				}
@@ -1589,7 +1594,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
 				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
-				keep = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				keep = Math.max(ZS?.[t] ?? 0, passInflowTarget(relNow, month, Zc[t]!), ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
 				if (gRiv < 0 || gRiv > sup.pumpM3Day + tol(gRiv)) return `${where}: pumped ${gRiv} from the river, outside [0, pump capacity ${sup.pumpM3Day}]`;
 				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
@@ -1642,7 +1647,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (riv) {
 				flowTaken = gRivT + poolChg;
 				const month = monthOfEpochDay(day0 + t);
-				const keepR = Math.max(ZS?.[t] ?? 0, relNow && relNow.rule === 1 ? (relNow.m3DayByMonth ? relNow.m3DayByMonth[month]! : Zc[t]!) : 0, ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
+				const keepR = Math.max(ZS?.[t] ?? 0, passInflowTarget(relNow, month, Zc[t]!), ops.handsOff ? handsOffToday(ops.handsOff, month, Zc[t]!) : 0);
 				const past = r + (ss - gRiv) + (sp - spl) + x + xpass;
 				const free = Math.max(0, past - keepR);
 				const sc = Math.max(past, keepR, gRivT);
