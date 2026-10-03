@@ -12,9 +12,9 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
-import { FIXTURE_DAM, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
+import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { openMap, uploadThroughSheet } from '../support/map.ts';
+import { loadRiverNetwork, openMap, uploadThroughSheet } from '../support/map.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const bar = (page: Page) => page.getByTestId('map-click-bar');
@@ -164,6 +164,29 @@ test('a click beside a much larger channel names it, and Use the larger channel 
 	await bar(page).getByTestId('map-click-undo').click();
 	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Moved the click back.');
 	await expect(lines(page).nth(1)).toContainText('larger channel');
+});
+
+test('a click at a confluence waits for the river to be picked, then goes on that river’s channel', async ({ page, owner }) => {
+	void owner;
+	await loadRiverNetwork('e2e-confluence', [
+		{ id: 99100001, upstreamKm2: 400, order: 4, line: FIXTURE_JUNCTION_RIVER },
+		{ id: 99100002, upstreamKm2: 3, order: 1, line: FIXTURE_JUNCTION_TRIBUTARY }
+	]);
+	const project = await seedRunnableProject(page.request, 'Sub-catchments confluence');
+	await openMap(page, project.id);
+	await startClicks(page);
+	await typeOutlet(page, FIXTURE_OUTLET);
+	await typeOutlet(page, FIXTURE_JUNCTION);
+	const box = bar(page).getByTestId('map-click-confluence');
+	await expect(box).toContainText('Click 2 is at a confluence. Which river do you mean?');
+	await expect(bar(page).getByTestId('map-click-said')).toHaveText('Click 2 is at a confluence: pick the river you mean.');
+	await expect(lines(page)).toHaveCount(1);
+	await expectNoViolations(page);
+	await box.getByTestId('map-click-choice').first().click();
+	await expect(bar(page)).not.toHaveAttribute('data-busy');
+	await expect(box).toHaveCount(0);
+	await expect(lines(page)).toHaveCount(2);
+	await expect(line(page, 1)).toContainText('on the channel matching river reach 99100001 (400.00 km²)');
 });
 
 test('a click off the elevation model is taken back with the reason; Done asks before dropping clicks; a viewer gets no Sub-catchments', async ({ page, owner, signIn }) => {

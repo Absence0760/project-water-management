@@ -102,6 +102,9 @@ test('desktop: the node table edits, validates and saves every kind of cell', as
 	// Still a table: the column headers show, the fields sit side by side in one row.
 	await expect(grid.getByRole('columnheader', { name: /In use/ })).toBeVisible();
 	await expect(grid.getByRole('columnheader', { name: /^Kind/ })).toBeVisible();
+	// The computed In use column has its ⓘ like the field columns, and the intro links to the method's setting.
+	await expect(grid.getByRole('columnheader', { name: /In use/ }).getByRole('button', { name: 'About the flow share in use' })).toBeVisible();
+	await expect(grid.getByRole('link', { name: 'Settings & calibration' })).toHaveAttribute('href', '?tab=settings#set-share');
 	const row = nodeRow(grid, model, 'Upper farm');
 	const [a, b] = await Promise.all([
 		row.getByLabel('Area of Upper farm, km²', { exact: true }).boundingBox(),
