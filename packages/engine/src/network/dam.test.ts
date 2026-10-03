@@ -8,7 +8,7 @@ import { checkInvariants, checkTransferLimits } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
 import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
-import { curveAreaAt, fixedReleaseFloor, passInflowTarget, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
+import { curveAreaAt, fixedReleaseRoom, passInflowTarget, resolveDamCurve, resolveRelease, seepageReturnOf } from './dam';
 import { damCurveProblem } from './damCurve';
 
 function node(id: string, kind: NetworkNode['kind'], down: string | null, over: Partial<NetworkNode> = {}): NetworkNode {
@@ -130,7 +130,7 @@ describe('survey curve helpers', () => {
 	});
 });
 
-describe('passInflowTarget and fixedReleaseFloor (docs/model.md §2.6, §2.6a, §2.7e)', () => {
+describe('passInflowTarget and fixedReleaseRoom (docs/model.md §2.6, §2.6a, §2.7e)', () => {
 	const farm = node('A', 'farm', 'G', { damCapacityM3: 1000 });
 	it('a pass-inflow release keeps the month’s amount, or the EWR required here without amounts; anything else keeps nothing', () => {
 		const monthly = resolveRelease({ ...farm, damReleaseRule: 'passInflow', damReleaseM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }, [])!;
@@ -142,13 +142,14 @@ describe('passInflowTarget and fixedReleaseFloor (docs/model.md §2.6, §2.6a, �
 		expect(passInflowTarget(null, 1, 640)).toBe(0);
 		expect(passInflowTarget(undefined, 1, 640)).toBe(0);
 	});
-	it('a fixed release’s floor is MIN(amount, outlet, held − dead), never below 0; a pass-inflow release has none', () => {
+	it('a fixed release makes room for MIN(amount, outlet) in full (engine ≥ 1.70.0); a pass-inflow release or none for nothing', () => {
 		const rel = resolveRelease({ ...farm, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(300), damOutletCapacityM3Day: 250 }, [])!;
-		expect(fixedReleaseFloor(rel, 1, 900, 0)).toBe(250);
-		expect(fixedReleaseFloor(rel, 1, 500, 400)).toBe(100);
-		expect(fixedReleaseFloor(rel, 1, 300, 400)).toBe(0);
-		expect(fixedReleaseFloor(rel, 1, -5, 0)).toBe(0);
-		expect(fixedReleaseFloor(resolveRelease({ ...farm, damReleaseRule: 'passInflow' }, [])!, 1, 900, 0)).toBe(0);
+		expect(fixedReleaseRoom(rel, 1)).toBe(250);
+		expect(fixedReleaseRoom(resolveRelease({ ...farm, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(300) }, [])!, 1)).toBe(300);
+		// An outlet of 0 lets nothing out, so it makes no room.
+		expect(fixedReleaseRoom(resolveRelease({ ...farm, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(300), damOutletCapacityM3Day: 0 }, [])!, 1)).toBe(0);
+		expect(fixedReleaseRoom(resolveRelease({ ...farm, damReleaseRule: 'passInflow' }, [])!, 1)).toBe(0);
+		expect(fixedReleaseRoom(null, 1)).toBe(0);
 	});
 });
 
@@ -334,7 +335,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(sum(col(pass, 'A', 'transfer')!)).toBe(0);
 	});
 
-	it('a dam that also sends later the same day releases less than the floor only down to dead storage, and never overfills', () => {
+	it('a dam that also sends later the same day releases less than the room counted for it only down to dead storage, and never overfills', () => {
 		// A: full, fixed release 400, dead storage 0. U → A up to 300 m³/day at priority 0, then A → B uncapped at priority 1.
 		const i = input({ damInitialPct: 1, damReleaseRule: 'fixed', damReleaseM3Day: flat(400) }, { settings: { lakeEvapFactor: 0 } });
 		i.model.nodes = [
@@ -350,7 +351,7 @@ describe('dam storage (WP-3.5)', () => {
 		passed(o);
 		const q = col(o, 'A', 'dam_storage')!;
 		const rel = col(o, 'A', 'dam_release')!;
-		// Day 0: A takes 300 (its room counted the 400 floor), sends all it holds to B, and releases only the 300 left.
+		// Day 0: A takes 300 (its room counted the 400 release, MIN(amount, outlet)), sends all it holds to B, and releases only the 300 left.
 		expect(col(o, 'A', 'transfer')![0]).toBeCloseTo(300 - 100_000, 6);
 		expect(rel[0]).toBeCloseTo(300, 6);
 		expect(q[0]).toBeCloseTo(0, 6);

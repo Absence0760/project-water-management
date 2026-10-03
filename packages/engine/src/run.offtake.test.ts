@@ -222,13 +222,14 @@ describe('river off-takes (engine 1.14.0)', () => {
 		near(get(r, 'S', 'transfer_rule@o1'), [600, 600]);
 		near(get(r, 'S', 'transfer_rule@o2'), [400, 400]);
 		passes(ranked, r);
-		// Equal priority, capacities 900 and 300: 1000 shared 3 : 1 (750 and 250); on 700 each limit is
-		// MIN(flow, capacity), 700 and 300, so 490 and 210. Whatever the list order.
+		// Equal priority, capacities 900 and 300: 1000 shared 3 : 1 (750 and 250), and 700 too (525 and 175):
+		// each asks its capacity, never capped at the flow (engine ≥ 1.70.0, issue #90 Q25; before, 490 and 210).
+		// Whatever the list order.
 		for (const order of [1, -1]) {
 			const tied = model([offtake({ maxRateM3s: 900 / 86_400 }), offtake({ id: 'o2', toNodeId: 'E', maxRateM3s: 300 / 86_400 })].sort(() => order), { nodes, objects: [] });
 			const o = run(tied, [1000, 700]);
-			near(get(o, 'S', 'transfer_rule@o1'), [750, 490]);
-			near(get(o, 'S', 'transfer_rule@o2'), [250, 210]);
+			near(get(o, 'S', 'transfer_rule@o1'), [750, 525]);
+			near(get(o, 'S', 'transfer_rule@o2'), [250, 175]);
 			passes(tied, o);
 		}
 	});

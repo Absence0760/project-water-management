@@ -133,16 +133,20 @@ irrigates (the source included). The workbook's `fGetTrfVolCapped` is
 per rule on its own. The engine (≥ 0.16.0, audit N4 / Q3 / Q18) moves, in an
 active month,
 
-    v = MAX(0, MIN(srcFree, dstRoom, maxDaily))
+    v = MAX(0, MIN(srcFree, dstRoom, maxDaily))      (one rule alone)
     srcFree = source storage yesterday − drawn from it today − reserve
     reserve = capacity × MAX(minStoragePct, the source dam's damMinPct)   (Q5)
     dstRoom = capacity_dst − (storage_dst yesterday + rain on the dam − evaporation − seepage)
-              + D_dst today − already scheduled into it today              (dam terms from 0.19.0)
+              + D_dst today (from 1.31.0 the most its dam is drawn) + a fixed release's
+              MIN(amount, outlet) (1.29.0; in full from 1.70.0) − already scheduled into it today
 
 with `maxDaily` = `maxRateM3s` × 86 400, lowered by `dailyCapM3` when set.
 Rules run by `priority`, lowest first; within a priority, rules into one
 destination share its room and rules from one source share its free water,
 each pro rata to its own limit, so the list order never matters. From engine
+1.70.0 (issue #90 Q25) that limit is `maxDaily` alone, never capped at the
+source's free water first (the bands below bound it): proportional rationing,
+so a rule split into several gets the same total. From engine
 1.36.0 (audit N6) each rule draws only above its own reserve: the source's
 water is split into bands at its rules' reserves, and each band is shared, pro
 rata to what each still wants, by the rules whose reserve is at or below it,

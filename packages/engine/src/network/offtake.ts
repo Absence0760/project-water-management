@@ -210,17 +210,17 @@ export function planOfftakes(
 }
 
 /**
- * Warn about what looks like one licence split into several rules (engine ≥
+ * Warn about rules that may be one licence entered more than once (engine ≥
  * 1.70.0, issue #90 Q25): two or more planned river off-takes with the same
  * source, the same destination and the same priority, of which at least two
  * run in a common calendar month (capacity above 0 in it). Rules of one
- * priority share a short river pro rata to what each can take, MIN(its
- * capacity, its share of the need, the flow above its keep), and each piece
- * of a split licence is held to that flow on its own, so the pieces together
- * can get more than the one rule would beside the other rules of that
- * priority at the source. One warning per group, its rules in id order (the
- * order planOfftakes accepted them in). Pure; `offtakes` as planOfftakes
- * returns them.
+ * priority share a short river in proportion to what each asks, MIN(its
+ * capacity, its share of the need), so a licence split into several rules
+ * gets what it would as one rule; but one licence entered twice at its full
+ * size asks, and takes, twice its licence, and the run can't tell that from
+ * two licences on one canal. One warning per group, its rules in id order
+ * (the order planOfftakes accepted them in). Pure; `offtakes` as
+ * planOfftakes returns them.
  */
 export function splitLicenceWarnings(offtakes: readonly PlanOfftake[], nodes: readonly Pick<NetworkNode, 'name'>[], warnings: string[]): void {
 	const groups = new Map<string, PlanOfftake[]>();
@@ -238,7 +238,7 @@ export function splitLicenceWarnings(offtakes: readonly PlanOfftake[], nodes: re
 		const o = meet[0]!;
 		warnings.push(
 			`river off-take ${nodes[o.from]!.name} → ${nodes[o.to]!.name}: ${meet.length} rules of priority ${o.priority} (${meet.map((x) => x.id).join(', ')}) take from the same river for the same unit. ` +
-				'If they are one licence split up, enter it as one rule: rules of one priority share a short river pro rata to what each can take, so a licence split into several rules gets a larger share than the same licence as one rule'
+				'If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once (a licence split into parts runs the same as one rule)'
 		);
 	}
 }

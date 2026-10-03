@@ -4,7 +4,7 @@
 // see ./README.md for the full mapping and the workbook quirks we mirror.
 // Unlike the workbook nothing is rounded: every split conserves water exactly
 // (docs/engine-audit.md R1).
-import { curveAreaAt, fixedReleaseFloor, passInflowTarget, releaseToday, type DamCurve, type PlanRelease } from './dam';
+import { curveAreaAt, fixedReleaseRoom, passInflowTarget, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, unitRoom, type PlanBorehole } from './boreholes';
 import { divertCapacityToday, handsOffToday, pumpsRiverToday, riverRoom, surfaceSplit, type PlanHandsOff, type PlanSupply } from './supply';
@@ -973,16 +973,13 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const prevQ = (n: number) => startStorage(n, t);
 		for (let li = 0; li < levels.length; li++) {
 			const level = levels[li]!;
-			// 1. Each active rule's own limit: its daily cap and its source's free water above its own
-			// reserve. A rule with no rate this month is not active (engine 1.36.0).
+			// 1. Each active rule's own limit: its daily cap (engine ≥ 1.70.0, issue #90 Q25: not capped at its
+			// source's free water, which step 3's bands bound, so a rule split into several gets the same
+			// total as the one rule: proportional rationing). A rule with no rate this month is not active
+			// (engine 1.36.0).
 			for (const k of level) {
 				const tr = transfers[k]!;
-				if (!tr.activeMonth[month[t]!] || !(tr.maxDailyM3[month[t]!]! > 0)) {
-					want[k] = 0;
-					continue;
-				}
-				const free = prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3 * capacityK(nodes[tr.from]!, t);
-				want[k] = Math.max(0, Math.min(free, tr.maxDailyM3[month[t]!]!));
+				want[k] = tr.activeMonth[month[t]!] && tr.maxDailyM3[month[t]!]! > 0 ? tr.maxDailyM3[month[t]!]! : 0;
 			}
 			// 2. Rules into one destination share its room, pro rata to their limits.
 			sumBy.fill(0);
@@ -999,15 +996,14 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const dstD = dst.river ? damD![tr.to]! : rD ? rD[tr.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
 				const draw = damDrawBound(dst, dstD, bhUsed[tr.to]!, allocUsed[tr.to]!, t);
-				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the
-				// room counts it as it would be with no inflow and nothing transferred in. For a dam that
-				// only receives, that is a lower bound of the day's release. One that also sends later
-				// today can release less, but only when the release is cut to the water above dead
-				// storage, and then the dam ends at dead storage: either way it isn't overfilled.
-				// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date).
-				// A dam with no capacity today (not in service yet, or silted full) is no dam: it releases nothing.
+				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the room
+				// counts MIN(amount, outlet) in full (engine ≥ 1.70.0, issue #90 Q26; ./dam.ts fixedReleaseRoom).
+				// The water moved in arrives before the release, so either the release is all of it and its
+				// room leaves again, or it is cut to the water above dead storage and the dam ends there:
+				// either way the dam isn't overfilled. The day's capacity (engine ≥ 1.30.0: sediment, an
+				// in-service date); a dam with no capacity today is no dam: it releases nothing.
 				const kd = capacityK(dst, t);
-				const rel = dst.release && dst.release.rule === 2 && dst.damCapacityM3 * kd > 0 ? fixedReleaseFloor(dst.release, month[t]!, qStart - drawnToday[tr.to]!, kd === 1 ? dst.deadStorageM3 : dst.deadStorageM3 * kd) : 0;
+				const rel = dst.damCapacityM3 * kd > 0 ? fixedReleaseRoom(dst.release, month[t]!) : 0;
 				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + draw + rel - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
@@ -1090,8 +1086,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const dst = nodes[o.to]!;
 				// Off-take water meets the dam side's demand (engine ≥ 1.65.0): a river abstraction has its own pump.
 				let need = dst.river ? damD![o.to]! : rD ? rD[o.to]! : dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
-				const kd = capacityK(dst, t);
-				const dstCap = dst.damCapacityM3 * kd;
+				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
 				if (o.topUpDam && dstCap > 0) {
 					// The dam's room after today's step (§2.7a): its losses clamped as the step clamps them (it can't
 					// lose more than it holds with today's rain and transfers), and what dam rules already moved in
@@ -1102,13 +1097,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					const held = q + g.Pd + jToday[o.to]!;
 					const E = Math.min(g.E, Math.max(held, 0));
 					const Sp = Math.min(g.Sp, Math.max(held - E, 0));
-					// A fixed release's floor (engine ≥ 1.70.0), as a dam rule's room counts it (§2.6, engine ≥ 1.29.0): the
-					// release with no inflow and no off-take water, from the dam as the step holds it before both (yesterday's
-					// storage, rain, the clamped losses and the day's net dam-rule transfers, all settled by now). The day's
-					// release is at least this, since inflow and the off-take water only add to what it releases from, so
-					// counting it never overfills the dam. The dam's own inflow (K, M, O) is left out: it follows the day's
-					// river flow, which isn't known until the network runs, after the off-takes are sized.
-					const rel = dst.release && dst.release.rule === 2 ? fixedReleaseFloor(dst.release, month[t]!, held - E - Sp, dst.deadStorageM3 * kd) : 0;
+					// A fixed release (engine ≥ 1.70.0, issue #90 Q26), as a dam rule's room counts it (§2.6): MIN(amount,
+					// outlet) in full, since the off-take water arrives before the release, so the dam is never overfilled
+					// (./dam.ts fixedReleaseRoom). The dam's own inflow (K, M, O) is left out: it follows the day's river
+					// flow, which isn't known until the network runs, after the off-takes are sized.
+					const rel = fixedReleaseRoom(dst.release, month[t]!);
 					need += Math.max(0, dstCap - (q + g.Pd + intoToday[o.to]! - E - Sp) + rel);
 				}
 				otShare[k] = (need * cap) / otCapInto[o.to]!;
@@ -1508,9 +1501,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 						const cap = o.capM3Day[month[t]!]!;
 						if (!(cap > 0)) continue;
 						const keep = Math.max(Zs, relTarget, o.handsOffM3Day, o.handsOffEwr ? Z : 0);
-						const free = Math.max(0, U0 - Xout - keep);
-						const lim = o.sizing === 0 ? Math.min(cap, otShare[k]! / (1 - o.loss)) : cap;
-						const w = Math.max(0, Math.min(free, lim));
+						// What it asks: MIN(capacity, its share of the need), never capped at the flow above its keep
+						// (engine ≥ 1.70.0, issue #90 Q25): the bands below keep it above its keep, and sharing in
+						// proportion to the asks alone gives a licence split into several rules the same total.
+						const w = o.sizing === 0 ? Math.min(cap, otShare[k]! / (1 - o.loss)) : cap;
 						if (!(w > 0)) continue;
 						// Insert into the active rules, highest keep first, ties in id order (a level lists its rules in id order).
 						otKeep[k] = keep;

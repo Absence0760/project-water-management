@@ -11,7 +11,7 @@ import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations
 import { ALLOCATION_SERIES, dailyLimits, limitBoundKind, matchAllocations, outsideMonths, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { curveAreaAt, fixedReleaseFloor, passInflowTarget, resolveDamCurve, resolveRelease } from '../network/dam';
+import { curveAreaAt, fixedReleaseRoom, passInflowTarget, resolveDamCurve, resolveRelease } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -704,9 +704,8 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
 	 * + rain on the dam − evaporation − seepage) + the most its dam is drawn
 	 * today (engine ≥ 1.31.0: D less its primary boreholes, within its
-	 * allocation rooms; engine ≥ 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
-	 * (engine ≥ 1.29.0: the release with no inflow and nothing transferred
-	 * in, fixedReleaseFloor). The reported evaporation
+	 * allocation rooms; engine ≥ 0.19.0 counts the dam's gains and losses, N2) + a fixed release
+	 * (engine ≥ 1.29.0; engine ≥ 1.70.0 MIN(amount, outlet) in full, fixedReleaseRoom). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
 	 * days that cap bites the room read here is smaller than the engine's but
 	 * still at least capacity + the volume that moved + D, so neither check
@@ -718,7 +717,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		const cap = capOn(f.id, t);
 		const held = storage(f.id, t) + pd! - e! - sp!;
 		// A dam with no capacity today (not in service yet, or silted full) releases nothing (docs/model.md §2.7g).
-		const rel = farmRelease[fi] && cap > 0 ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
+		const rel = cap > 0 ? fixedReleaseRoom(farmRelease[fi], monthOfEpochDay(d0 + t)) : 0;
 		return cap - held + (farmDraw[fi]?.[t] ?? farmD[fi]![t]!) + rel;
 	};
 	for (let t = 0; t < out.days; t++) {

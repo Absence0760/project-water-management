@@ -63,7 +63,7 @@ describe('splitLicenceWarnings (engine ≥ 1.70.0, issue #90 Q25)', () => {
 	it('warns once per group of rules with one source, one destination and one priority that share a month, in id order', () => {
 		const w = warn([t('2', 'a', 'c'), t('1', 'a', 'c'), t('3', 'a', 'c', { priority: 4 }), t('4', 'a', 'c', { priority: 4 })]);
 		expect(w).toHaveLength(2);
-		expect(w[0]).toMatch(/^river off-take a → c: 2 rules of priority 0 \(1, 2\) take from the same river for the same unit\. If they are one licence split up, enter it as one rule/);
+		expect(w[0]).toMatch(/^river off-take a → c: 2 rules of priority 0 \(1, 2\) take from the same river for the same unit\. If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once/);
 		expect(w[1]).toMatch(/2 rules of priority 4 \(3, 4\)/);
 	});
 	it('no warning across sources, destinations or priorities, for one rule, or for rules that never run in one month', () => {

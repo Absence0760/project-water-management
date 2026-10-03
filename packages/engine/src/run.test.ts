@@ -825,10 +825,11 @@ describe('runModel — transfers', () => {
 		});
 
 		it('three reserves: each band is shared by the rules allowed to reach it, pro rata to what each still wants', () => {
-			// a keeps 800, b 500, c 0; limits 400, so a wants MIN(400, 1000 − 800) = 200, b and c 400.
-			// Band 1000–800 (200): a, b, c, pro rata 200:400:400 → 40, 80, 80.
-			// Band 800–500 (300): b and c, each still wanting 320 → 150 each.
-			// Band 500–0: c alone, its remaining 170. The dam ends at 330.
+			// a keeps 800, b 500, c 0; limits 400, each asking its 400 (engine ≥ 1.70.0: not capped at the water
+			// above its own reserve, issue #90 Q25; before, a asked MIN(400, 1000 − 800) = 200 → 40, 230, 400, 330).
+			// Band 1000–800 (200): a, b, c, pro rata 400:400:400 → 66.67 each.
+			// Band 800–500 (300): b and c, each still wanting 333.33 → 150 each.
+			// Band 500–0: c alone, its remaining 183.33. The dam ends at 1000 − 683.33 = 316.67.
 			for (const order of [1, -1] as const) {
 				const out = go(
 					[
@@ -838,10 +839,10 @@ describe('runModel — transfers', () => {
 					],
 					order
 				);
-				expect(get(out, 'R', 'transfer')[0]).toBeCloseTo(40, 9);
-				expect(get(out, 'R2', 'transfer')[0]).toBeCloseTo(230, 9);
+				expect(get(out, 'R', 'transfer')[0]).toBeCloseTo(200 / 3, 9);
+				expect(get(out, 'R2', 'transfer')[0]).toBeCloseTo(650 / 3, 9);
 				expect(get(out, 'R3', 'transfer')[0]).toBeCloseTo(400, 9);
-				expect(get(out, 'S', 'dam_storage')[0]).toBeCloseTo(330, 9);
+				expect(get(out, 'S', 'dam_storage')[0]).toBeCloseTo(950 / 3, 9);
 			}
 		});
 	});
