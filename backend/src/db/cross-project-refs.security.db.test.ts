@@ -50,6 +50,7 @@ interface World {
 	publicationId: string;
 	inviteId: string;
 	reportJobId: string;
+	delineateJobId: string;
 	sweepJobId: string;
 	outlookJobId: string;
 	yieldJobId: string;
@@ -153,6 +154,7 @@ async function world(name: string): Promise<World> {
 				randomBytes(32)
 			]),
 			reportJobId: await job('report_render'),
+			delineateJobId: await job('delineate'),
 			sweepJobId: await job('sweep'),
 			outlookJobId: await job('outlook'),
 			yieldJobId: await job('yield'),
@@ -526,6 +528,14 @@ const CASES: Record<string, Case> = {
 	'render_token.pack_id': {
 		ref: (w) => w.issuedPackId,
 		insert: (h, ref) => [`INSERT INTO render_token (token_hash, user_id, project_id, pack_id, expires_at) VALUES ($1, $2, $3, $4, now())`, [nonce(), u(), h.projectId, ref]]
+	},
+	// A large delineation's request (191_delineation_request): delineation_request_job checks its job is a delineate job of its project.
+	'delineation_request.job_id': {
+		ref: (w) => w.delineateJobId,
+		insert: (h, ref) => [
+			`INSERT INTO delineation_request (project_id, click_kind, click_lon, click_lat, from_window, job_id, created_by) VALUES ($1, 'outlet', 20.7, -33.4, 4096, $2, $3)`,
+			[h.projectId, ref, u()]
+		]
 	},
 	'report.job_id': { ref: (w) => w.reportJobId, insert: (h, ref) => ['INSERT INTO report (project_id, requested_by, job_id) VALUES ($1, $2, $3)', [h.projectId, u(), ref]] },
 	'report.run_id': { ref: (w) => w.runId, insert: (h, ref) => ['INSERT INTO report (project_id, requested_by, run_id) VALUES ($1, $2, $3)', [h.projectId, u(), ref]] },
@@ -1098,6 +1108,7 @@ const FIELDS: Record<string, string[] | string> = {
 	'jobs/handlers/feed-ingest.ts:fetchJobId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/report-render.ts:reportId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
+	'jobs/handlers/delineate.ts:requestId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/pack-reproduce.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/handlers/applicant-pack-render.ts:packId': 'a job payload: jobs/trust.security.db.test.ts',
 	'jobs/transport.ts:fetchJobId': 'a queue envelope between the app’s own Lambdas, not a request',

@@ -104,11 +104,11 @@ describe('without an elevation model', () => {
 });
 
 describe('names over several lines (issue #385)', () => {
-	it('proposes a map point’s name on one line, and refuses a unit name with a line break at apply', async () => {
+	it('refuses a unit name with a line break at apply (a stored point’s name is one line already, 192)', async () => {
 		process.env.DEM_URL = '';
 		const p = await newProject('Start, one line');
 		await feature(p.at, { kind: 'catchment_boundary', name: 'Drawn', geometry: { type: 'Polygon', coordinates: SQUARE } });
-		const dam = await feature(p.at, { kind: 'dam', name: 'Upper\r\ndam', lon: 20.74, lat: -33.45 });
+		const dam = await feature(p.at, { kind: 'dam', name: 'Upper dam', lon: 20.74, lat: -33.45 });
 		const r = await owner.call('POST', p.at('/map/start'), { points: [{ featureId: dam, role: 'dam' }] });
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		const [unit] = r.body.proposal.plan.units as { key: string; name: string }[];

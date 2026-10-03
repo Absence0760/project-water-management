@@ -141,7 +141,7 @@ describe('the data-subject export', () => {
 			(await db.query(`SELECT app_audit_subject($1, 'allocation.changed', $2::jsonb) AS s`, [projectId, JSON.stringify(subject)])).rows
 		);
 		expect(row.s).toEqual({ allocationId: 'kept' });
-		expect(withoutAllocationIdentifiers({ kind: 'allocation.changed', subject } as never).subject).toEqual(row.s);
+		expect(withoutAllocationIdentifiers({ kind: 'allocation.changed', subject }).subject).toEqual(row.s);
 	});
 });
 
