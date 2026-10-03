@@ -948,6 +948,8 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 >
 > **Preview of unsaved edits built (issue #284):** a **Preview** on the
 > model save bar (Network, Crops, Transfers) and on Settings opens a dialog
+> (since the input-pages polish, one save bar serves every tab, Settings
+> included: [ui.md § Project workspace](../ui.md#project-workspace), Preview unsaved edits)
 > with the last run's figures against the same run with the unsaved edits
 > (the worker's `effect` request). It departs from the plan below on
 > purpose: no `buildModelInput` and no series from the browser's caches; the
