@@ -34,6 +34,8 @@ export const GEO_MAX_VERTICES = 50_000;
 export const GEO_MAX_FEATURES = 500;
 /** Segment pairs the self-intersection check may compare per ring before it gives up and refuses the ring as too complex. */
 export const GEO_MAX_PAIR_CHECKS = 5_000_000;
+/** Edge visits the overlap sweep (polygonsOverlap) may make before it gives up and refuses the shape as too complex. */
+export const GEO_MAX_SWEEP_STEPS = 10_000_000;
 /** Coordinates are kept to 7 decimals (about 1 cm). */
 const DECIMALS = 1e7;
 
@@ -246,6 +248,77 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
 	return inside;
 }
 
+/**
+ * Whether the interiors of two of `groups` overlap (by an area, not just a
+ * shared edge or corner). Each group is one region of closed rings read
+ * even-odd, rings that don't cross each other (a polygon's outer ring and
+ * holes, or one hole alone). Parts of a MultiPolygon that overlap, or a hole
+ * inside another hole, make the area count twice (or take away twice), so
+ * the checks refuse them; parts that share an edge, as neighbouring
+ * quaternaries do, pass.
+ *
+ * A sweep over the horizontal slabs between successive vertex latitudes:
+ * inside a slab no ring has a vertex, so each edge crossing it is straight
+ * and their order can change only where two cross. In each slab the edges
+ * are put in order of longitude at its middle; two groups overlap there if
+ * some stretch of positive width lies inside both, or if two edges of
+ * different groups swap order between the slab's bottom and top (they cross
+ * inside it). Only groups whose boxes meet another group's take part. Every
+ * edge visited counts against GEO_MAX_SWEEP_STEPS; past it the shape is
+ * refused as too complex, so a hostile file can't cost quadratic time.
+ */
+export function polygonsOverlap(groups: readonly (readonly (readonly Position[])[])[]): boolean {
+	const boxes = groups.map((rings) => {
+		let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+		for (const r of rings) for (const [x, y] of r) (w = Math.min(w, x)), (e = Math.max(e, x)), (s = Math.min(s, y)), (n = Math.max(n, y));
+		return { w, s, e, n };
+	});
+	const meets = (a: (typeof boxes)[number], b: (typeof boxes)[number]) => a.w < b.e && b.w < a.e && a.s < b.n && b.s < a.n;
+	const taking = groups.map((_, g) => boxes.some((b, h) => h !== g && meets(boxes[g]!, b)));
+	// Each edge from its lower end to its upper (so an edge two groups share is computed identically for both); flat edges cross no slab.
+	const edges: { g: number; x0: number; y0: number; x1: number; y1: number }[] = [];
+	groups.forEach((rings, g) => {
+		if (!taking[g]) return;
+		for (const r of rings) {
+			for (let i = 0; i < r.length - 1; i++) {
+				const [a, b] = r[i]![1] <= r[i + 1]![1] ? [r[i]!, r[i + 1]!] : [r[i + 1]!, r[i]!];
+				if (a[1] !== b[1]) edges.push({ g, x0: a[0], y0: a[1], x1: b[0], y1: b[1] });
+			}
+		}
+	});
+	if (!edges.length) return false;
+	edges.sort((a, b) => a.y0 - b.y0);
+	const ys = [...new Set(edges.flatMap((e) => [e.y0, e.y1]))].sort((a, b) => a - b);
+	const xAt = (e: (typeof edges)[number], y: number) => (y === e.y0 ? e.x0 : y === e.y1 ? e.x1 : e.x0 + ((e.x1 - e.x0) * (y - e.y0)) / (e.y1 - e.y0));
+	const inside = new Uint8Array(groups.length);
+	let active: (typeof edges)[number][] = [];
+	let next = 0;
+	let steps = 0;
+	for (let k = 0; k < ys.length - 1; k++) {
+		const lo = ys[k]!;
+		const hi = ys[k + 1]!;
+		active = active.filter((e) => e.y1 > lo);
+		while (next < edges.length && edges[next]!.y0 <= lo) active.push(edges[next++]!);
+		steps += active.length;
+		if (steps > GEO_MAX_SWEEP_STEPS) throw new Refused('has parts too complex to check for overlaps; simplify it');
+		const mid = (lo + hi) / 2;
+		const row = active.map((e) => ({ g: e.g, x: xAt(e, mid), b: xAt(e, lo), t: xAt(e, hi) })).sort((a, b) => a.x - b.x);
+		let open = 0;
+		for (let i = 0; i < row.length; i++) {
+			const c = row[i]!;
+			inside[c.g] ^= 1;
+			open += inside[c.g] ? 1 : -1;
+			const after = row[i + 1];
+			if (!after) continue;
+			if (after.x > c.x && open > 1) return true;
+			// Ordered at the middle, a swap at the bottom or top is two edges crossing within the slab.
+			if (after.g !== c.g && (after.b < c.b || after.t < c.t)) return true;
+		}
+		inside.fill(0);
+	}
+	return false;
+}
+
 function ring(a: unknown, count: { n: number }): Position[] {
 	// A position repeated in a row (common in digitised files) is one vertex.
 	const r = positions(a, 4, 'polygon ring', count).filter((p, i, all) => i === 0 || p[0] !== all[i - 1]![0] || p[1] !== all[i - 1]![1]);
@@ -264,6 +337,8 @@ function polygon(a: unknown, count: { n: number }): Position[][] {
 	for (const hole of rings.slice(1)) {
 		if (!pointInRing(hole[0]!, rings[0]!)) throw new Refused('has a hole outside its polygon');
 	}
+	// The rings don't cross, so a hole can still lie inside another: its area would be taken away twice.
+	if (rings.length > 2 && polygonsOverlap(rings.slice(1).map((h) => [h]))) throw new Refused('has a hole inside another hole');
 	const xs = rings[0]!.map((p) => p[0]);
 	if (Math.max(...xs) - Math.min(...xs) > 180) throw new Refused('crosses the antimeridian, which isn’t supported');
 	return rings;
@@ -286,7 +361,10 @@ function geometry(g: unknown): Geometry {
 			return { type, coordinates: polygon(coordinates, count) };
 		case 'MultiPolygon':
 			if (!Array.isArray(coordinates) || coordinates.length === 0) throw new Refused('a MultiPolygon has no polygons');
-			return { type, coordinates: coordinates.map((p) => polygon(p, count)) };
+			const polygons = coordinates.map((p) => polygon(p, count));
+			// Overlapping parts would count the overlap twice in the area (and in every share taken from it).
+			if (polygons.length > 1 && polygonsOverlap(polygons)) throw new Refused('has MultiPolygon parts that overlap; merge them into one polygon');
+			return { type, coordinates: polygons };
 		default:
 			throw new Refused(
 				`has a ${typeof type === 'string' ? type : 'missing'} geometry; the map takes Point, LineString, MultiLineString, Polygon and MultiPolygon`
@@ -301,6 +379,16 @@ export function checkGeometry(g: unknown): { geometry: Geometry; areaM2: number 
 		return { geometry: out, areaM2: geometryAreaM2(out) };
 	} catch (e) {
 		if (e instanceof Refused) return { problem: e.message };
+		throw e;
+	}
+}
+
+/** Whether polygons from several features can be one MultiPolygon: the check checkGeometry makes of a MultiPolygon's parts ('complex' past its budget). */
+export function overlapProblem(polygons: readonly (readonly (readonly Position[])[])[]): 'overlap' | 'complex' | null {
+	try {
+		return polygons.length > 1 && polygonsOverlap(polygons) ? 'overlap' : null;
+	} catch (e) {
+		if (e instanceof Refused) return 'complex';
 		throw e;
 	}
 }

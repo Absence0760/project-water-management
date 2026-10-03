@@ -35,6 +35,7 @@ import {
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
+	overlapProblem,
 	parseGeoJson,
 	proposeKinds,
 	type GeoProblem,
@@ -335,6 +336,15 @@ function importedFeatures(kind: MapFeatureKind, parsed: ParsedFeature[], fileNam
 	if (kind !== 'catchment_boundary') return { problems, rows: parsed.map((f) => ({ kind, name: f.name, geometry: f.geometry, areaM2: f.areaM2, properties: f.properties })) };
 	const polygons = parsed.flatMap((f) => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : []));
 	const geometry: Geometry = polygons.length === 1 ? { type: 'Polygon', coordinates: polygons[0]! } : { type: 'MultiPolygon', coordinates: polygons };
+	// One boundary of overlapping polygons would count the overlap twice in its area.
+	const overlap = overlapProblem(polygons);
+	if (overlap) {
+		const message =
+			overlap === 'overlap'
+				? 'The file’s polygons overlap, so as one catchment boundary their overlap would count twice; merge them into one polygon (QGIS: Dissolve) and upload it again.'
+				: 'The file’s polygons are too complex to check for overlaps as one catchment boundary; simplify them, or merge them into one polygon.';
+		return { problems: [{ feature: null, message }], rows: [] };
+	}
 	return {
 		problems,
 		rows: [

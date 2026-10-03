@@ -573,6 +573,14 @@ did, and refuses the whole file on any problem, listing them per feature:
   which the polygon is refused as too complex, so a hostile file can't cost
   quadratic time ([security.md § Input handling](./security.md#input-handling),
   Geometry cost).
+- **No area counted twice**: a MultiPolygon's parts may share an edge or a
+  corner (neighbouring quaternaries do) but not overlap, and a hole can't lie
+  inside another hole; either would count an area twice (or take it away
+  twice) in the server's area and in every share taken from it (land cover,
+  the CHIRPS cells). A one-kind **catchment boundary** file's polygons, which
+  become one MultiPolygon, are held to the same rule. `polygonsOverlap` in
+  `geojson.ts` sweeps the latitude slabs between vertices, with its own budget
+  (`GEO_MAX_SWEEP_STEPS`).
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
