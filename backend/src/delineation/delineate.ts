@@ -22,12 +22,20 @@ export const METHOD_VERSION = 'delineate-3';
 export const TARGET_ZOOM = 11;
 /** How far the click snaps to the channel (docs/design/delineation.md § Snapping). */
 export const SNAP_RADIUS_M = 150;
-/** The windows tried, in cells a side; the last is the cap (about 100 km at zoom 11). */
+/** The windows a request tries, in cells a side; the last is its cap (about 100 km at zoom 11). */
 export const WINDOWS = [1024, 2048, 3072] as const;
+/**
+ * The windows the background worker tries (the `delineate` job, docs/design/delineation.md § Where it runs), from the one after
+ * where the request stopped: the same code, up to about 200 km at zoom 11. 6 144 cells peaks near 1 GB, which the worker's
+ * memory is sized for (infra/jobs.tf, at least 2 048 MB with delineation_dem on).
+ */
+export const JOB_WINDOWS = [...WINDOWS, 4096, 6144] as const;
 /** Fewest cells a proposal may have: less is a click on a ridge or a slope, not a catchment. */
 export const MIN_CELLS = 9;
 /** Wall-clock budget for one delineation, under the API Lambda's 30 s timeout. */
 export const TIME_BUDGET_MS = 20_000;
+/** The worker's budget: well under its 300 s timeout, leaving the tick room for the job's writes and anything it ran first. */
+export const JOB_TIME_BUDGET_MS = 150_000;
 
 export const EARTH_RADIUS_M = 6378137;
 
@@ -49,7 +57,9 @@ export class DelineationRefused extends Error {
 	constructor(
 		readonly code: RefusalCode,
 		message: string,
-		readonly larger?: LargerChannel
+		readonly larger?: LargerChannel,
+		/** With `too_large`: the window (cells a side) it stopped at, so the worker can go on from the next (background.ts). */
+		readonly windowCells?: number
 	) {
 		super(message);
 	}
@@ -175,6 +185,8 @@ export async function delineate(
 		junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 		/** Keep the point even beside a much larger channel (otherwise refused with `larger_channel`). */
 		keepPoint?: boolean;
+		/** Called before each window is read, with its place in `windows` (the worker reports it as the job's progress). */
+		onWindow?: (index: number, of: number) => Promise<void> | void;
 	} = {}
 ): Promise<Delineation> {
 	const now = opts.now ?? (() => performance.now());
@@ -199,6 +211,7 @@ export async function delineate(
 	const cellSizeM = (2 * Math.PI * EARTH_RADIUS_M * Math.cos((lat * Math.PI) / 180)) / W;
 	for (let wi = 0; wi < windows.length; wi++) {
 		const nCells = windows[wi]!;
+		await opts.onWindow?.(wi, windows.length);
 		const x0 = Math.floor(gx) - nCells / 2;
 		const y0 = Math.floor(gy) - nCells / 2;
 		const grid = await readWindow(dem, z, size, x0, y0, nCells);
@@ -241,7 +254,9 @@ export async function delineate(
 				const km = Math.round((nCells * cellSizeM) / 1000);
 				throw new DelineationRefused(
 					'too_large',
-					`The catchment above that point reaches beyond the ${km} km the app delineates around a click, so it can’t be proposed whole. Pick an outlet further upstream, or draw or import the boundary.`
+					`The catchment above that point reaches beyond the ${km} km the app delineates around a click, so it can’t be proposed whole. Pick an outlet further upstream, or draw or import the boundary.`,
+					undefined,
+					nCells
 				);
 			}
 			continue;

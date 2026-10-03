@@ -73,6 +73,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'dem_attempt.user_id': { excluded: 'a count of elevation-model requests for the hourly cap, a day at most' },
 	'delineation_proposal.created_by': { excluded: 'the project’s delineation proposal; its maker only, and map.delineation_proposed is in auditEvents' },
 	'delineation_proposal.decided_by': { excluded: 'the project’s delineation proposal; who decided it only, and map.delineation_accepted / _rejected are in auditEvents' },
+	// A click delineated on the worker (191_delineation_request): the project's record; the proposal it made is audited as theirs.
+	'delineation_request.created_by': { excluded: 'the project’s delineation request; who queued it only, and map.delineation_proposed is in auditEvents' },
 	// A model proposed from the map (178_start_proposal): the project's record; map.start_* audit events are exported.
 	'start_proposal.created_by': { excluded: 'the project’s start-from-the-map proposal; its maker only, and map.start_proposed is in auditEvents' },
 	'start_proposal.decided_by': { excluded: 'the project’s start-from-the-map proposal; who decided it only, and map.start_applied / _discarded are in auditEvents' },
