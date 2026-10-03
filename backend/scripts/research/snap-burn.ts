@@ -8,10 +8,10 @@
 //
 // The burn: a river pixel (WBM 3) lowers the surface by 12 m, tapering linearly to 2 m at 0.005° (~500 m) from it;
 // a lake pixel (WBM 2) by 14 m within 0.0025°; the deepest burn reaching a cell wins. HydroSHEDS steps the taper; a
-// linear one is close enough for this question. Mask pixels are cached per 1° tile under $TMPDIR.
+// linear one is close enough for this question. Mask pixels are cached per 1° tile in ~/.cache/water-management-tiles/wbm/.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { configuredDem } from '../../src/delineation/dem.js';
 import { EARTH_RADIUS_M, readWindow, TARGET_ZOOM, toPx, worldPx } from '../../src/delineation/delineate.js';
@@ -27,8 +27,9 @@ process.argv.forEach((a, i) => {
 });
 const WINDOW = 2048;
 const GDAL_IMAGE = process.env.GDAL_IMAGE ?? 'ghcr.io/osgeo/gdal:ubuntu-small-3.11.3';
-const CACHE = join(tmpdir(), 'wm-wbm-cache');
-mkdirSync(CACHE, { recursive: true });
+// The operator's own tiles cache (as `pnpm dev:tiles:*` uses), private to the user: never the shared temp dir.
+const CACHE = join(homedir(), '.cache', 'water-management-tiles', 'wbm');
+mkdirSync(CACHE, { recursive: true, mode: 0o700 });
 
 /** Every WBM water pixel (lon, lat, 2 lake | 3 river) of the 1° tile whose south-west corner is (tLon, tLat). */
 function tileWater(tLon: number, tLat: number): [number, number, number][] {
@@ -36,7 +37,13 @@ function tileWater(tLon: number, tLat: number): [number, number, number][] {
 	const ew = tLon < 0 ? `W${String(-tLon).padStart(3, '0')}` : `E${String(tLon).padStart(3, '0')}`;
 	const name = `Copernicus_DSM_COG_10_${ns}_00_${ew}_00`;
 	const cached = join(CACHE, `${name}.xyz`);
-	if (!existsSync(cached)) {
+	let have: string | null = null;
+	try {
+		have = readFileSync(cached, 'utf8');
+	} catch {
+		have = null;
+	}
+	if (have === null) {
 		let txt = '';
 		try {
 			txt = execFileSync('docker', ['run', '--rm', GDAL_IMAGE, 'gdal2xyz', '-srcnodata', '0', '-skipnodata', `/vsicurl/https://copernicus-dem-30m.s3.amazonaws.com/${name}_DEM/AUXFILES/${name}_WBM.tif`, '/vsistdout/'], {
@@ -47,9 +54,15 @@ function tileWater(tLon: number, tLat: number): [number, number, number][] {
 		} catch {
 			txt = '';
 		}
-		writeFileSync(cached, txt);
+		// Written once, exclusively: a file already there (another run's) is kept, never overwritten.
+		try {
+			writeFileSync(cached, txt, { flag: 'wx', mode: 0o600 });
+		} catch {
+			// Someone else wrote it first: theirs stands.
+		}
+		have = txt;
 	}
-	return readFileSync(cached, 'utf8')
+	return have
 		.trim()
 		.split('\n')
 		.filter(Boolean)

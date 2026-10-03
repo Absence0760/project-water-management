@@ -197,8 +197,15 @@ old snap at the same click.
   0.03 km² gully, the burn drawing the flow towards the mask's river and
   away from the clicked stream. The mask's rivers are the big ones; near
   them, burning can pull a small stream's click onto the wrong channel.
-- **Large reaches and main stems** (41 with mask within 1.2 km): running;
-  added to this section before the PR merges.
+- **Large reaches and main stems** (41 with mask within 1.2 km, one more
+  skipped after two dropped DEM reads): burning **fixed none and broke 3**.
+  Large reaches: 7 of 15 right unburnt, 5 burnt; main stems on the trunk:
+  12 of 26 unburnt, 11 burnt. Two thirds of them came out with the same
+  area either way.
+
+**Conclusion: don't burn the mask.** With the old snap it never helped and
+sometimes pulled a click onto the wrong channel; the placement rules above
+fix the cases it was meant to.
 
 
 ## Limits of this evidence
@@ -220,9 +227,8 @@ old snap at the same click.
 - **Drawing the DEM's own channels** while Delineate or Sub-catchments is on
   (issue #374 item 3) would let the editor click the line the DEM agrees
   with and make the guard rarely fire. Not built here; it's the next step.
-- **Burning the Water Body Mask** for main stems: see the burn result above;
-  a decision for the DEM pipeline (`pnpm dev:tiles:terrain`, the
-  production tiles), not the click.
+- **Burning the Water Body Mask**: measured above and rejected; nothing to
+  do unless a later DEM (HydroSHEDS v2) changes the picture.
 - **OSM burning**: blocked on the ODbL question above.
 - **HydroSHEDS v2**: revisit when it covers Africa.
 
