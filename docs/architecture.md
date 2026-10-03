@@ -661,8 +661,10 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
 dam yield's `yield`, the scenario sweep's `sweep`, the seasonal
-outlook's `outlook`, and automated calibration's `auto_calibration` and
-`uncertainty` (below); step 2's
+outlook's `outlook`, automated calibration's `auto_calibration` and
+`uncertainty` (below), and the Map's `delineate`, a catchment too large for
+the delineation request (`jobs/handlers/delineate.ts`,
+[design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,

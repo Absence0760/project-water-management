@@ -721,7 +721,10 @@ the result change?", and put back any earlier version.
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
-  registration numbers, file name and hash, counts; never a holder's name),
+  registration numbers, file name and hash, counts; never a holder's name;
+  a viewer reads `allocation.created/changed/deleted` without the
+  registration number and volume until an owner lets viewers read each
+  volume: the History reads every subject through `app_audit_subject`, 190),
   `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
   series, lifetime; never the key or its hash), `alert_rules.changed` (051:
   an editor switched alert kinds on or off or changed a threshold),
@@ -1558,7 +1561,9 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   Unique `(project_id, sha256)`. Deleting it deletes its features; the API
   deletes it with its last feature.
 - **`map_feature`**: `id`, `project_id`, `kind` (`catchment_boundary` |
-  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100),
+  `farm_parcel` | `dam` | `gauge` | `river` | `other`), `name` (≤ 100, one
+  line: `map_feature_name_one_line` refuses the engine's
+  `NAME_CONTROL_CHARS`, migration 192),
   `node_id` (→ `node`, `SET NULL`; same project by `assert_same_project`; a
   parcel or dam stands for a farm or water user, a gauge for a gauge, a
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
@@ -1640,6 +1645,29 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   and an insert's `created_by` is the signed-in user
   (`delineation_proposal_final`, SECURITY DEFINER since 185). No node
   column, so farmers never read it. Covering indexes on every foreign key.
+- **`delineation_request`** (`191_delineation_request.sql`,
+  [design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)):
+  a click handed to the background worker, too large for the request (or
+  sent there with `background`), and what came of it. `id`, `project_id`
+  (cascade), `job_id` (→ `job`, `SET NULL` when the 30-day purge takes it),
+  `status` (`queued` until the job writes the outcome, `proposed`,
+  `refused`, or `superseded` by the same editor's next click),
+  `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
+  picked at a confluence, jsonb), `from_window` (the smallest window the
+  job tries), `proposal_id` (composite key → `delineation_proposal (id,
+  project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
+  `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
+  (the channel a `larger_channel` refusal offers), `check_note`,
+  `created_by` (→ `app_user`, `SET NULL`), `created_at`, `finished_at`
+  (set exactly when it leaves `queued`). RLS: viewers read, editors
+  insert (as themselves), update and delete; the job writes the outcome as
+  the editor who queued it. A finished request never changes but for its
+  two links clearing (`delineation_request_final`). The route keeps the
+  newest 20 finished a project. `job.kind` accepts `delineate`, and
+  `app_cancel_job` (latest 191) cancels a waiting one as well as `yield`.
+  `app_release_job` (191, the worker's own call) puts a claimed job back to
+  `queued` 120 s on, giving back the attempt its claim counted: a delineate
+  job the tick had too little time left for (never a failure, no backoff).
 - **`start_proposal`** (`178_start_proposal.sql`, issue #326 C3,
   [maps.md § Start from the map](./maps.md#start-from-the-map)): a model
   proposed for an empty project from its map, and the editor's decision.
@@ -1649,7 +1677,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),
@@ -1671,7 +1699,8 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   the Map tab's River network layer draws and proposes rivers from. Primary
   key `(dataset, reach_id)` (the load's label, `synthetic` for the committed
   fixture; the source's own reach id, HydroRIVERS' `HYRIV_ID`), `name` (''
-  when the source names none), `strahler` (1–15), `upstream_km2`,
+  when the source names none; one line, `river_reference_name_one_line`,
+  migration 192, since a reach added to a project carries it), `strahler` (1–15), `upstream_km2`,
   `length_km`, `discharge_m3s` (each NULL when not given), `geometry`
   (LineString or MultiLineString), its bounding box (`min_lon`, `min_lat`,
   `max_lon`, `max_lat`, indexed for the layer's bbox query), `source`
@@ -3273,6 +3302,22 @@ job tick deletes entries older than 40 days (`app_purge_erasure_log`,
 runbook ([deployment.md § Restoring the database](./deployment.md#restoring-the-database),
 step 6a), which reads it on the old instance and deletes each row again on
 the restored one.
+
+### Reference loads (192_feature_names_reference_load.sql)
+
+`reference_load (kind, dataset, source_key, source_sha256, loaded_at)`,
+keyed by `(kind, dataset)`: the reference-bucket object a production load
+of a map dataset read (`land-cover`, `evaporation`, `rivers`) and the
+SHA-256 it was checked against. Written in the same transaction as the
+dataset by the replace functions (`replaceCroplandDataset`,
+`replaceEvaporationDataset`, `replaceRivers`, through
+`geo/referenceOrigin.ts`), and deleted by any other replace of that
+dataset (a local `pnpm import:*`), so it never outlives the data it
+describes. No foreign key: rivers have no dataset table. Owner-only like
+`erasure_log` (RLS on, no policy, no grant; `catalogue.db.test.ts`
+`OWNER_ONLY`): the migrate Lambda and the import scripts write it as the
+schema owner and the app never reads it
+([deployment.md § Reference datasets](./deployment.md#reference-datasets)).
 
 ### The job purge clears links (148_job_purge_clears_links.sql)
 

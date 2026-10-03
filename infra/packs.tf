@@ -247,7 +247,7 @@ resource "aws_vpc_endpoint" "s3" {
   }
 
   # Only the worker's read of packs/ (PDF checks, bundle re-runs) and the API's put of a bundle
-  # (pack_bundles.tf), in the packs bucket; the API's read of the delineation DEM and the migrate
+  # (pack_bundles.tf), in the packs bucket; the API's and the worker's read of the delineation DEM and the migrate
   # Lambda's read of a reference file (map_data.tf).
   policy = data.aws_iam_policy_document.s3_endpoint.json
 
@@ -277,13 +277,15 @@ data "aws_iam_policy_document" "s3_endpoint" {
   # Delineation's ranged reads of the DEM (map_data.tf). Listed whether or not
   # delineation_dem is on: the endpoint policy only narrows, and without the
   # role's own grant (api_dem, created only when it is on) nothing passes.
+  # The worker reads it too, for the `delineate` job (a catchment too large
+  # for the request; worker_dem, only when delineation_dem is on).
   statement {
     sid       = "ApiReadsDelineationDem"
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.tiles.arn}/${local.dem_key}"]
     principals {
       type        = "AWS"
-      identifiers = [aws_iam_role.lambda.arn]
+      identifiers = [aws_iam_role.lambda.arn, aws_iam_role.worker_lambda.arn]
     }
   }
   # Tracing a dam's reads of the water occurrence (map_data.tf), the same way:

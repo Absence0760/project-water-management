@@ -62,6 +62,19 @@ describe('splitting a polygon', () => {
 		expect(JSON.stringify(ev!.subject)).not.toMatch(/coordinates/);
 	});
 
+	it('checks the parts against the shape’s own area, not its stored one (a delineated piece stores its cells’ area, start-6)', async () => {
+		const made = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Delineated', geometry: square(21.3, -33.7, 0.02) });
+		// As divide stores a piece: its area from the DEM's cells, half a per cent off its simplified outline's.
+		await asOwner('UPDATE map_feature SET area_m2 = area_m2 * 1.005 WHERE id = $1', [made.body.feature.id]);
+		const res = await editor.call('POST', at(`/features/${made.body.feature.id}/split`), { parts: splitHalves(21.3, -33.7, 0.02) });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		// Positive control: parts that miss a strip of the shape are still refused.
+		const other = await editor.call('POST', at('/features'), { kind: 'farm_parcel', name: 'Other', geometry: square(21.4, -33.7, 0.02) });
+		const short = splitHalves(21.4, -33.7, 0.02);
+		short[1]!.coordinates[0] = short[1]!.coordinates[0]!.map(([x, y]) => [x === 21.42 ? 21.419 : x!, y!]);
+		expect((await editor.call('POST', at(`/features/${other.body.feature.id}/split`), { parts: short })).status).toBe(400);
+	});
+
 	it('splits the boundary into areas and leaves it whole; names given are used', async () => {
 		const made = await editor.call('POST', at('/features'), { kind: 'catchment_boundary', name: 'Valley', geometry: square(21.3, -33.7, 0.1) });
 		const res = await editor.call('POST', at(`/features/${made.body.feature.id}/split`), { parts: splitHalves(21.3, -33.7, 0.1), names: ['West', 'East'], as: 'other' });

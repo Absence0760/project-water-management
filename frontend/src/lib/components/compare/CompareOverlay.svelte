@@ -7,15 +7,19 @@
 	// time; the node matching and the delta are the pure helpers in overlay.ts.
 	// A feature series only one run stored (a river pump the scenario added)
 	// is drawn against zeros for the other run, under overlay.ts zeroFillable.
+	// A forecast run (WP-2.12) is drawn whole with its forecast days in the
+	// band, but the difference and the read-out take its record only (issue
+	// #51, overlay.ts recordOf), as every figure of the run does.
 	import { untrack } from 'svelte';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunCompareResponse, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { toDisplayUnit } from '$lib/components/runs/results';
-	import { CATCHMENT_GROUP, deltaStats, isFlowSeries, matchOverlay, pickOption, seriesDelta, summaryText, zeroSeries } from './overlay';
+	import { CATCHMENT_GROUP, deltaStats, isFlowSeries, matchOverlay, overlayForecastFrom, pickOption, recordOf, seriesDelta, summaryText, zeroSeries } from './overlay';
 
 	let { data }: { data: RunCompareResponse } = $props();
 
@@ -138,11 +142,22 @@
 			{ label: sideName('B'), startDate: p.b.startDate, values: conv(p.b), color: '--series-2', width: 1.25 }
 		];
 	});
-	const delta = $derived(pair ? seriesDelta(pair.a, pair.b) : null);
+	const forecastA = $derived(data.a.run.summary.forecast?.from ?? null);
+	const forecastB = $derived(data.b.run.summary.forecast?.from ?? null);
+	const band = $derived(forecastBand(overlayForecastFrom(forecastA, forecastB)));
+	const records = $derived(pair ? { a: recordOf(pair.a, forecastA), b: recordOf(pair.b, forecastB) } : null);
+	const delta = $derived(records ? seriesDelta(records.a, records.b) : null);
 	const deltaSeries = $derived.by<ChartSeries[]>(() =>
 		delta && delta.values.length ? [{ label: 'B − A', startDate: delta.startDate, values: conv(delta), color: '--series-3', width: 1.25 }] : []
 	);
-	const stats = $derived(pair ? deltaStats(pair.a, pair.b) : null);
+	const stats = $derived(records ? deltaStats(records.a, records.b) : null);
+	/** "Run A is a forecast run…": which sides were cut, and where. */
+	const forecastNote = $derived(
+		[forecastA ? ['A', forecastA] : null, forecastB ? ['B', forecastB] : null]
+			.filter((x): x is [string, string] => x !== null)
+			.map(([s, from]) => `Run ${s} is a forecast run: its days from ${from} ran on forecast rain, so the difference and the read-out stop the day before.`)
+			.join(' ')
+	);
 
 	const where = $derived(group ? group.label : '');
 	const RECENT = 3 * 365;
@@ -186,6 +201,7 @@
 					recentDays={RECENT}
 					recentLabel="Last 3 years"
 					toolbar={flow ? unitToggle : undefined}
+					{band}
 				/>
 				{#if missingSide && pair}
 					<p class="summary" data-testid="overlay-zero-note">
@@ -195,6 +211,9 @@
 				{/if}
 				{#if stats}
 					<p class="summary" data-testid="overlay-summary" aria-live="polite">{summaryText(stats, unit, scale)}</p>
+				{/if}
+				{#if forecastNote}
+					<p class="summary" data-testid="overlay-forecast-note">{forecastNote}</p>
 				{/if}
 				{#if deltaSeries.length}
 					<LineChart

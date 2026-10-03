@@ -1124,7 +1124,8 @@ const LAND_COVER_FIELDS: Record<string, Check> = {
 const BOREHOLE_FIELDS: Record<string, Check> = {
 	id,
 	nodeId: id,
-	name: nameOf(0, 200),
+	// 1–200, as PUT /model takes a borehole name (backend/src/model/validate.ts).
+	name: nameOf(1, 200),
 	capacityM3Day: nonNeg,
 	annualCapM3: nullable(nonNeg),
 	mode: oneOf(BOREHOLE_MODES),

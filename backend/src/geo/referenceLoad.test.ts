@@ -86,7 +86,10 @@ describe('which kinds load', () => {
 
 	it('agrees with the docs/maps.md § Sources table: allowed kinds have only allowed rows, blocked kinds only blocked ones', () => {
 		const doc = readFileSync(MAPS_MD, 'utf8');
-		const table = doc.slice(doc.indexOf('\n## Sources'));
+		// The Sources table alone: the section's subsections (### Checksums) have tables of their own.
+		const from = doc.indexOf('\n## Sources');
+		const next = doc.indexOf('\n#', from + 1);
+		const table = doc.slice(from, next === -1 ? undefined : next);
 		const rows = table.split('\n').filter((l) => l.startsWith('| ') && !l.startsWith('| Dataset') && !l.startsWith('| ---'));
 		expect(rows.length).toBeGreaterThan(5);
 		const status = (row: string) => row.split(' | ').at(-1)!.replace(/[|*]/g, '').trim().toLowerCase();

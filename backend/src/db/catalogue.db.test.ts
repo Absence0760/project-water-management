@@ -19,7 +19,7 @@ const NO_RLS = new Set(['schema_migrations']);
  * purge write it as SECURITY DEFINER functions, and only the operator, as the
  * schema owner, reads it (deployment.md § Restoring the database).
  */
-const OWNER_ONLY = new Set(['erasure_log']);
+const OWNER_ONLY = new Set(['erasure_log', 'reference_load']);
 /**
  * Views that may run with their owner's rights (security_invoker off), each
  * with why. An owner-rights view reads its tables as the schema owner, so RLS
@@ -271,6 +271,8 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	// A delineation proposal (175): who proposed and decided it is a pointer only; the acts are audited.
 	'delineation_proposal.created_by': 'set null',
 	'delineation_proposal.decided_by': 'set null',
+	// A click delineated on the worker (191): who queued it is a pointer only; the proposal it made is audited.
+	'delineation_request.created_by': 'set null',
 	// A start-from-the-map proposal (178): the same.
 	'start_proposal.created_by': 'set null',
 	'start_proposal.decided_by': 'set null',
@@ -342,6 +344,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 const JOB_REFERENCES: Record<string, { updateTrigger: false } | { updateTrigger: true; purgeTest: string }> = {
 	'assessment.job_id': { updateTrigger: true, purgeTest: 'src/assessments/assessments.db.test.ts' },
 	'auto_calibration.job_id': { updateTrigger: true, purgeTest: 'src/calibration/calibration.db.test.ts' },
+	'delineation_request.job_id': { updateTrigger: true, purgeTest: 'src/delineation/requests.db.test.ts' },
 	'report.job_id': { updateTrigger: false },
 	'scenario_sweep.job_id': { updateTrigger: true, purgeTest: 'src/sweeps/sweeps.db.test.ts' },
 	'seasonal_outlook.job_id': { updateTrigger: true, purgeTest: 'src/outlooks/outlooks.db.test.ts' },

@@ -160,6 +160,7 @@ import type {
 	GaugeStationLookup,
 	DamProposals,
 	DelineationProposal,
+	DelineationRequest,
 	DelineationState,
 	ClickPieces,
 	ChannelTileAnswer,
@@ -1104,9 +1105,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** A catchment delineated from a click on the Map (issue #326 B-delineate, docs/api.md § Delineation): proposed, then accepted or rejected. */
 		delineation: {
 			get: (id: string) => request<DelineationState>('GET', `${p(id)}/map/delineation`),
-			/** `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel). */
-			propose: (id: string, body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; reach?: { dataset: string; reachId: number } }) =>
-				request<{ proposal: DelineationProposal; check: string | null }>('POST', `${p(id)}/map/delineation`, body),
+			/**
+			 * `keepPoint`: keep the point even beside a much larger channel (otherwise 422 `larger_channel`, its `details.larger` the channel).
+			 * A catchment too large for the request, or `background`, comes back as a request the worker answers (202): follow it with `request`.
+			 */
+			propose: (
+				id: string,
+				body: { lon: number; lat: number; from: DelineationProposal['from']; keepPoint?: boolean; reach?: { dataset: string; reachId: number }; background?: boolean }
+			) => request<{ proposal: DelineationProposal; check: string | null } | { request: DelineationRequest }>('POST', `${p(id)}/map/delineation`, body),
+			/** A delineation the worker has: waiting, running, or what came of it (viewer). */
+			request: (id: string, rid: string) => request<{ request: DelineationRequest }>('GET', `${p(id)}/map/delineation/requests/${enc(rid)}`),
 			/** Save it as the catchment boundary (replacing one only with `replaceBoundary`) or as an "other" polygon. */
 			accept: (id: string, pid: string, body: { as: 'catchment_boundary' | 'other'; replaceBoundary?: boolean; name?: string }) =>
 				request<{ proposal: DelineationProposal; feature: MapFeature; summary: string }>('POST', `${p(id)}/map/delineation/${enc(pid)}/accept`, body),

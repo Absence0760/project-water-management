@@ -2480,7 +2480,12 @@ database:
 - The registered user's **name** is the only personal field kept, in
   `allocation_holder`, readable by editors and owners and by the linked farmer
   for their own farm; **viewers never read it** (RLS, decision D3). The
-  history records registration numbers, file names and counts, never names.
+  history records registration numbers, file names and counts, never names;
+  a viewer reads the allocation events without the registration number (a
+  unique identifier, POPIA s1) and volume until an owner lets viewers read
+  each volume (`app_audit_subject`, 190, the History's one read of an
+  event's subject), and the data-subject export leaves both out of every
+  allocation event (they are the registered user's, not the exporter's).
   The export's `holder` column is only in an editor's file.
 - **Decision D3** (provisional position, pre-counsel research, 2026-10-01).
   A per-farm volume beside a farm's name identifies its holder in a rural
@@ -2557,8 +2562,13 @@ placed points. The server never trusts the browser with geometry:
   (`geo/clip.ts eachBand`), so the work grows with the vertices times
   log(cells), not vertices × cells: before, clipping the whole row piece to
   every cell let a 48 000-position comb (1.3 MB, valid) cost about 92 s of
-  CPU in one viewer GET of `evaporation-proposals` (`geo/clip.test.ts` bounds
-  the work). The import route has its own body limit (7 MB of JSON, `app.ts`
+  CPU in one viewer GET of `evaporation-proposals`. No clipping order helps
+  a shape that puts every vertex in every row (a comb whose teeth run its
+  full height: its pieces alone are vertices × rows, about a billion over
+  20 000 rows), so the work also has a hard budget (`GRID_WORK_BUDGET`, 8
+  million vertices clipped, about a second): past it the summary is a
+  problem ("too detailed … simplify it", 400 on the accept routes), not
+  minutes of CPU (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`). The import route has its own body limit (7 MB of JSON, `app.ts`
   exempts that one path from the general 4 MB), and the parse is
   `JSON.parse` of a string: no XML, no zip (shapefiles aren't read yet, so
   there is no archive to bomb), no external references.
@@ -2636,6 +2646,19 @@ placed points. The server never trusts the browser with geometry:
   only the operator's file and fail closed on anything malformed, within
   fixed bounds (§ Map data files below). The proposal's polygon passes the same
   `checkGeometry` as every map polygon before it is stored.
+  A catchment too large for the request goes to the worker's `delineate`
+  job (191_delineation_request, design/delineation.md § Where it runs):
+  larger windows (up to 6 144 cells, about 1 GB) in the worker's 300 s and
+  a 150 s budget, so not on an API slot. Each account may have one
+  waiting or running at a time (`DELINEATE_JOBS_PER_USER`, counted under a
+  per-account advisory lock; the job's dedupe key names the account): a
+  new click in the same project supersedes its waiting one (the job is
+  cancelled), and one running, or waiting in another project, is 429. The
+  request that queued it has already counted as an attempt (and a
+  `background` request counts as one too), the job runs as its editor
+  under RLS (it fails closed once they lose the role), and the worker's
+  reserved concurrency bounds the total. The request row holds only the
+  click, the outcome and who queued it (`SET NULL` with the account).
 - **Map data files** (round-4 hardening): the hand-written readers bound
   what a file can make them do, so a corrupt or hostile archive (a
   compromised upstream, a wrong upload) is refused with the reader's own
@@ -2660,12 +2683,17 @@ placed points. The server never trusts the browser with geometry:
   sawtooth whose edges all overlap in longitude took ~9 s of blocked event
   loop before; now refused in under 0.1 s) and checks a polygon's rings
   against each other, so a hole can't cross its outer ring or another hole.
-  The overlap check (`polygonsOverlap`: MultiPolygon parts, holes inside
-  holes, a boundary file's polygons, a split's two parts) counts every
+  The overlap check (`polygonsOverlap`: MultiPolygon parts, a boundary
+  file's polygons, a split's two parts) counts every
   vertex it clips and every edge it visits per latitude slab against
   `GEO_MAX_SWEEP_STEPS` (10 million) and refuses past it, so a comb of long
   teeth at distinct heights, or hundreds of parts whose boxes all meet,
-  can't make it quadratic.
+  can't make it quadratic. Holes inside holes (`holesNested`) are found by
+  a sweep over the holes' boxes and a point-in-ring test only where one box
+  holds another, the ring indexed into latitude strips, with every box
+  compared and edge indexed or tested counted against the same budget: a
+  big C-shaped hole with thousands of small holes in its box costs its
+  edges once, not once per small hole.
   Placing a dam's outline on the DEM (`rasterize`, start from the map and
   divide) adds each edge only to the rows it spans, rather than testing
   every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.

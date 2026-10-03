@@ -2791,7 +2791,12 @@ what](./allocations.md#who-sees-what)).
   run's per-unit daily series (`supplied`, `allocation_left_*`) still reach
   them ([followups.md § Allocations](./followups.md#allocations-wp-310)).
 - History: `allocation.created/changed/deleted/imported/import_deleted/viewer_units`; the
-  preview is exempt (it writes nothing).
+  preview is exempt (it writes nothing). `GET …/history` gives a viewer
+  `allocation.created/changed/deleted` without `registrationNo` and
+  `volumeM3PerYear` until an owner switches **What viewers see** on
+  (`app_audit_subject`, 190), and `GET …/runs/:runId/changes-since` lists
+  no registered-volume line to that viewer. The data-subject export carries
+  neither field in any allocation event.
 
 ## Publication
 
@@ -2920,6 +2925,9 @@ never a farm's row, name or id.
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
   key below `k` holders. A body without `token` (or `key`) is `400`.
+  When the published run is a forecast run, the series stops the day before
+  its first forecast day (190): the monthly means and the last 365 days are
+  the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
@@ -3012,11 +3020,20 @@ only propose.
 | GET | `/projects/:id/evaporation-proposals` | `?dataset=` (optional; default a real dataset before the synthetic one, then the newest load) | `200 { dataset: EvaporationDataset \| null, datasets: { dataset, kind, version, synthetic }[], boundary: { featureId, name } \| null, target: 'pe' \| 'apan' \| null, proposal: { monthlyMm, annualMm, coverage, cells } \| { problem } \| null, settings: { apanMm, peKind, peMm, dailyApan }, accepted: EvaporationAccepted[] }` (issue #326 B-evap, `geo/evaporationRoutes.ts`, [maps.md § Evaporation from the map](./maps.md#evaporation-from-the-map)): the catchment boundary's 12 monthly means (Oct … Sep, mm, to 0.1) from the grid, area-weighted over the cells it covers, with the share of the boundary that has values; `target` is where the dataset's kind goes (`et0` → `pe`, GR4J's monthly PE; `apan` → `apan`, the A-pan row), never converted. `settings` is the saved settings' A-pan row, PE kind and monthly PE row (null under `pan`), and `dailyApan`, the days a daily A-pan record (`evap_apan_mm`) covers, `{ from, to }` to its last value, or null without one: it replaces the monthly A-pan row on those days, and the panel's confirmation says so. `proposal: null` without a dataset or a boundary; `{ problem }` when the grid can't stand for it (no value inside, under 50 % covered, too big). Writes nothing. `400` for an unknown dataset | viewer |
 | POST | `/projects/:id/evaporation-from-map` | `{ dataset }` | `200 { target, monthlyMm, dataset, revisionId }`: the 12 values, re-derived on the server from the boundary as it is, written into `settings.pe` (`{ kind: 'monthly', mm, source }`, the source naming the dataset; for a reference-ET grid) or `settings.apanMm` (for an A-pan grid), recorded as one settings revision whose reason cites the dataset, its version, period and method, and as an `evaporation_accepted` row (181). `400` for an unknown dataset, no catchment boundary, a boundary the grid can't summarise, or no evaporation in it | editor |
 
+- A feature's `name` (0–100 characters after trimming) is one line, as a
+  model name is (§ Model data; migration 192): the Map draws it as a label.
+  `POST`/`PATCH …/map/features`, the split's `names`, a reviewed import
+  row's `name` and the delineation accept's `name` refuse a line break, tab
+  or other control character with `400` (`cannot contain line breaks or
+  control characters`); the names read from a GeoJSON file and from the
+  river network are made one line instead (the engine's `oneLineName`), so a
+  file is never refused for them.
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
   areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
   `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
-  points and lines; `center` is a point itself, a polygon's centroid (its
+  points and lines (a parcel saved from a delineated piece: the piece's
+  area from the DEM's cells, its outline simplified); `center` is a point itself, a polygon's centroid (its
   largest part's), a line's middle vertex; `properties` holds only
   `description` and `ref` from a file. A boundary or parcel is a Polygon or
   MultiPolygon, a gauge a Point, a river a LineString or MultiLineString, a
@@ -3065,10 +3082,11 @@ map feature like any other.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[] }`: the newest 10, any status. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
-| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId } }` | `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream; with this answer only, not stored). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window, about 100 km), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included; security.md § Map uploads); `503` when the DEM can't be read | editor |
+| GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[], request: DelineationRequest \| null }`: the newest 10 proposals, any status, and the project's newest delineation still with the background worker (queued or running), else null. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId }, background?: boolean }` | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km) or its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream; with this answer only, not stored). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment reaches where the DEM has no data), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
 | POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
+| GET | `/projects/:id/map/delineation/requests/:rid` | – | `200 { request: DelineationRequest }`: a delineation the worker has, as it is now; `404` for one of another project | viewer |
 
 - `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
   'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
@@ -3076,9 +3094,21 @@ map feature like any other.
   dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
   createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
   `featureId` the accepted feature (`null` again once it is deleted).
+- `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
+  'proposed' | 'refused' | 'superseded', from, click, progress, error,
+  proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
+  `queued` / `running` while its job waits or runs (`progress` 0–100 while it
+  runs, a step a window); `proposed` with `proposal` (the project's open
+  proposal it made, decided by the routes above; `null` once pruned) and
+  `check`; `refused` with `refusal = { reason, message, larger? }`, the
+  reasons and sentences of the request's own 422 (and `off` when the DEM went
+  away first); `failed` when the job died (its `error`); `superseded` when the
+  same editor clicked again before it ran. The Map asks every 2 s while it
+  waits.
 - Each write is in the audit log (`map.delineation_proposed`,
   `map.delineation_accepted`, `map.delineation_rejected`: ids, the click's
-  kind, the area, the dataset; never the polygon). A stranger gets `404`.
+  kind, the area, the dataset; never the polygon; `background: true` on one
+  the worker made, as the editor who queued it). A stranger gets `404`.
 
 ### The elevation model's channels
 
@@ -3121,7 +3151,10 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-5`). `placedBy` is `matched` (on the channel matching
+  the map's (`start-6`; every `areaM2` and `totalAreaM2` is summed from
+  the DEM's cells, each at its own area on the ellipsoid, so the pieces add
+  up to the catchment exactly; `geometry` is simplified for the map and its
+  own area may differ a little). `placedBy` is `matched` (on the channel matching
   the river reach within 1 km of the click, `reach = { dataset, reachId,
   upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
   snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's
@@ -3945,11 +3978,11 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event). An event's `subject` is read as the caller may see it (`app_audit_subject`, 190): an `allocation.created/changed/deleted` without `registrationNo` and `volumeM3PerYear` for a viewer until an owner lets viewers read each volume ([Allocations](#allocations)) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
-| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
+| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100). To a viewer who can't read each registered volume, neither side has the allocations (no registered-volume line) | viewer |
 | POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
 | GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length, …, siteNodeId }[] }` (kept: the newest 5, ≤ 180 days; `siteNodeId` = the flow record's gauge when the revision was kept, null = the outlet, 085) | viewer |
 | POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id; a flow record comes back at the site it had, `409` when that gauge is no longer in the model) | editor |

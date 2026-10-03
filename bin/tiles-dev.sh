@@ -66,6 +66,11 @@
 # six 10° occurrence tiles are about 100 MB together; the archive is a few
 # tens of MB. WATER_SOURCE (the download folder's URL) and TILES_BBOX override it.
 #
+# `rivers` and `water` check each whole file they download (or reuse from the
+# cache) against bin/source-checksums.sha256, since neither publisher offers a
+# checksum: a mismatch stops with both hashes, an unlisted file is recorded on
+# first use (commit it; docs/maps.md § Checksums).
+#
 # `rivers` needs ogr2ogr (GDAL: `sudo dnf install gdal`) and the database up
 # (pnpm dev:db:up). HydroRIVERS is © WWF, free for commercial use with the
 # attribution docs/maps.md § Sources records (HydroSHEDS licence). RIVERS_URL
@@ -86,7 +91,9 @@ TERRAIN_URL="http://localhost:9002/tiles/terrain.pmtiles"
 WATER_SRC="${WATER_SOURCE:-https://s3.waw4-1.cloudferro.com/swift/v1/global-surface-water/download2024/Aggregated/VER1-5/occurrence}"
 WATER_FILE="$CACHE/water.pmtiles"
 WATER_URL="http://localhost:9002/tiles/water.pmtiles"
-GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.11.3}"
+# By digest (the multi-arch index's), so the tag can't move under us; pnpm check:pins
+# refuses a default without one. To move it: docker buildx imagetools inspect <tag>.
+GDAL_IMAGE="${GDAL_IMAGE:-ghcr.io/osgeo/gdal:ubuntu-small-3.11.3@sha256:a7c6f68b9868420861be6dd51873ac464fc587ae3b6206b546408d67d697328e}"
 RIVERS_SRC="${RIVERS_URL:-https://data.hydrosheds.org/file/HydroRIVERS/HydroRIVERS_v10_af_shp.zip}"
 RIVERS_ZIP="$CACHE/$(basename "$RIVERS_SRC")"
 RIVERS_FILE="$CACHE/rivers.geojson"
@@ -113,6 +120,9 @@ for src in "$TERRAIN_SRC" "$WATER_SRC" "$RIVERS_SRC"; do
 done
 [[ -z "${TILES_BUILD:-}" || "$TILES_BUILD" =~ ^[0-9]{8}$ ]] || die "TILES_BUILD must be a build date, YYYYMMDD (got: $TILES_BUILD)"
 fetch_https() { curl --proto '=https' --proto-redir '=https' "$@"; }
+# A whole-file download checked against bin/source-checksums.sha256 (recorded on
+# first use when absent; a mismatch moves the file to <file>.mismatch and stops).
+verify_source() { node "$ROOT/scripts/guards/source_checksums.mjs" "$@"; }
 
 fetch_fonts() {
 	mkdir -p "$CACHE"
@@ -122,6 +132,9 @@ fetch_fonts() {
 		fetch_https -fsSL -o "$tgz.part" "https://codeload.github.com/protomaps/basemaps-assets/tar.gz/$FONTS_REF"
 		mv "$tgz.part" "$tgz"
 	fi
+	# The commit pins what the archive holds; the manifest pins its bytes, so a
+	# codeload archive that changes under the same commit stops here.
+	verify_source "$tgz"
 	rm -rf "$FONTS" && mkdir -p "$FONTS"
 	local members=("$top/fonts/OFL.txt")
 	for f in "${FONT_STACKS[@]}"; do members+=("$top/fonts/$f"); done
@@ -196,6 +209,7 @@ case "${1:-}" in
 			fetch_https -fSL -o "$RIVERS_ZIP.part" "$RIVERS_SRC"
 			mv "$RIVERS_ZIP.part" "$RIVERS_ZIP"
 		fi
+		verify_source "$RIVERS_ZIP"
 		rm -rf "$CACHE/rivers-shp" && mkdir -p "$CACHE/rivers-shp"
 		unzip -q -o "$RIVERS_ZIP" -d "$CACHE/rivers-shp"
 		shp=$(find "$CACHE/rivers-shp" -name '*.shp' | head -n 1)
@@ -231,6 +245,7 @@ case "${1:-}" in
 					echo "Downloading $name …"
 					if fetch_https -fsSL -o "$CACHE/gsw/$name.part" "$WATER_SRC/$name"; then mv "$CACHE/gsw/$name.part" "$CACHE/gsw/$name"; else rm -f "$CACHE/gsw/$name.part"; echo "  none there (open sea): skipped"; continue; fi
 				fi
+				verify_source "$CACHE/gsw/$name"
 				tiles+=("$name")
 			done
 		done

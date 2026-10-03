@@ -288,8 +288,8 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: pemPrivateKey }
 	},
 	DEM_URL: {
-		why: 'The DEM catchment delineation reads (delineation/dem.ts, issue #326 B-delineate): empty turns it off. Only the API delineates; the other Lambdas never call configuredDem.',
-		checks: { api: demUrl }
+		why: 'The DEM catchment delineation reads (delineation/dem.ts, issue #326 B-delineate): empty turns it off. The API delineates around a click; the worker delineates a catchment too large for the request (the delineate job, 191). The other Lambdas never call configuredDem.',
+		checks: { api: demUrl, worker: demUrl }
 	},
 	DEM_LABEL: { why: 'The DEM’s name on each proposal; empty takes the archive’s own. A label, never a credential or a switch.' },
 	WATER_URL: {

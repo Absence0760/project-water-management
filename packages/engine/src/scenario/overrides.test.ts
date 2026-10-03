@@ -2223,4 +2223,13 @@ describe('validateScenarioOps: names are one line (issue #385)', () => {
 		]);
 		expect(errors).toEqual([]);
 	});
+
+	it("refuses a blank borehole name, as PUT /model does (1–200 characters)", () => {
+		for (const name of ['', '   ']) {
+			expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name } }]).errors, JSON.stringify(name)).toEqual(['ops[0].borehole.name: must be a name of 1–200 characters']);
+		}
+		expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name: 'x'.repeat(201) } }]).errors).toEqual(['ops[0].borehole.name: must be a name of 1–200 characters']);
+		// Positive control: one character and 200 pass.
+		for (const name of ['B', 'x'.repeat(200)]) expect(validateScenarioOps([{ op: 'borehole.add', borehole: { ...bh, name } }]).errors).toEqual([]);
+	});
 });

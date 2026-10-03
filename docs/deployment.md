@@ -1113,13 +1113,19 @@ plan-only until the first deploy):
   `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
   setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
-  `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
+  `lambda-worker.handler`): in the private VPC, 1024 MB (2 048 with
+  `delineation_dem`, § The Map tab), 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
   SQS triggers' `maximum_concurrency`, 4 × 2, or throttled pollers burn
   receive counts into the DLQs), connecting as `water_app` (pool of 2) with
   verified TLS.
   Each invocation runs one tick within its remaining time (less a minute);
-  jobs lease for 6 minutes, longer than the function can run.
+  jobs lease for 6 minutes, longer than the function can run. A handler
+  that bounds its own work gets the function's deadline (less 10 s;
+  `JobContext.deadline`): a `delineate` job fits its budget inside it, and
+  one claimed with under 20 s left, or cut short by it before its last
+  window, goes back to the queue 120 s on without spending an attempt
+  (`app_release_job`, `job_released` in the log).
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.
@@ -1593,7 +1599,12 @@ role read that one key (`api_dem`), and the Map offers **Delineate**. It
 refuses a plan where the API Lambda is under 1 024 MB or 25 s: a
 delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 ([design/delineation.md § Where it runs](./design/delineation.md#where-it-runs)),
-which the defaults (1 024 MB, 30 s) hold with room to spare.
+which the defaults (1 024 MB, 30 s) hold with room to spare. The worker
+gets the same `DEM_URL` and grant (`worker_dem`) for the `delineate` job (a
+catchment too large for the request, up to 6 144 cells), and at least
+2 048 MB whatever `worker_memory_mb` says, since that window peaks near
+1 GB (`infra/jobs.tf` `local.worker_memory_mb`; more memory is also more
+CPU, and a few cents a month at the 5-minute tick).
 
 **Tracing a dam** (#326 C2, [maps.md § Assisted
 drawing](./maps.md#assisted-drawing)) reads `water.pmtiles` from the API
@@ -1661,6 +1672,16 @@ the object → Versions, or `aws s3api list-object-versions --prefix
 reference/<kind>/`), so restore that version (copy it back over the key),
 `sha256sum` it, and run the workflow with its hash. Values a project
 already accepted were copied into the project and don't change either way.
+
+**Which file is loaded.** Each load records the object's key and SHA-256
+with the dataset, in the same transaction (`reference_load`, migration 192;
+`geo/referenceOrigin.ts`), so the record outlives the Actions log. The
+workflow's log prints the file it loaded and the one it replaced (key,
+SHA-256 and when it was loaded): that replaced file is the one to restore
+to undo the load. A local `pnpm import:*` of the same label names no
+bucket file, so it deletes the record rather than leave it describing data
+that is gone. The table is owner-only (the app never reads it); to read it
+outside a load, `SELECT * FROM reference_load` as the schema owner.
 
 Only what [maps.md § Sources](./maps.md#sources) marks allowed loads. The
 workflow offers those kinds alone, its gate refuses the rest, and the

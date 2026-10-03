@@ -4,7 +4,7 @@
 // published farm view. Every "not" has a positive control.
 import { forecastSplit, runForecastChecked, runModelChecked, withoutForecastTail, type RunSummary } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 import { loadModelInput, loadRunInput, trimRuns } from './execute.js';
 
@@ -223,5 +223,30 @@ describe('forecast days in exports and in the farm view', () => {
 		const plain = (await farmer.call('GET', `/projects/${projectId}/farm/${farm.id}`)).body;
 		expect(plain.farm.forecast).toBeUndefined();
 		expect(plain.farm.dataUntil).toBe('2022-11-04');
+	});
+
+	it('a share link’s chart of a published forecast run reads its record only, never the forecast days (190)', async () => {
+		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: forecastRun })).status).toBe(201);
+		const link = await owner.call('POST', `/projects/${projectId}/share-links`, { label: 'Forum', expiresInDays: 30 });
+		expect(link.status).toBe(201);
+		const token = new URL(link.body.link.url).hash.replace(/^#t=/, '');
+		const days = (await asOwner(`SELECT cardinality("values") AS n FROM run_series WHERE run_id = $1 AND node_id IS NULL AND key = 'natural_flow'`, [forecastRun]))[0].n;
+		// The stored series runs on into the forecast days...
+		expect(days).toBe(DAYS + FORECAST_DAYS);
+		for (const key of ['natural_flow', 'ewr']) {
+			const res = await anon('POST', '/share/series', { token, key });
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			// ...the link's last 365 days end the day before the forecast (2022-11-04), and its months at November 2022 on the record's days.
+			expect(res.body.recent.startDate).toBe('2021-11-05');
+			expect(res.body.recent.values).toHaveLength(365);
+			expect(res.body.monthly.startMonth).toBe('2021-10');
+			expect(res.body.monthly.values).toHaveLength(14);
+		}
+		// Positive control: an ordinary run's link reads to its last day, the same day here.
+		const o = (await post(owner, projectId, {})).body.run.id as string;
+		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: o })).status).toBe(201);
+		const plain = await anon('POST', '/share/series', { token, key: 'natural_flow' });
+		expect(plain.body.recent).toMatchObject({ startDate: '2021-11-05' });
+		expect(plain.body.recent.values).toHaveLength(365);
 	});
 });
