@@ -5,6 +5,8 @@ import {
 	categoryFromText,
 	EXAMPLE_HIGH_FLOWS_CSV,
 	exampleGridCsv,
+	filledCells,
+	highFlowTyped,
 	naturalComplete,
 	newTable,
 	parseGrid,
@@ -243,5 +245,19 @@ describe('naturalComplete', () => {
 		expect(naturalComplete([[1, null], [2, 3]])).toBe(false);
 		expect(naturalComplete([[1, NaN]])).toBe(false);
 		expect(naturalComplete([[-1]])).toBe(false);
+	});
+});
+
+describe('asking before a Fill replaces typed values', () => {
+	it('counts the cells of a grid that hold a value other than a new table’s 0', () => {
+		expect(filledCells(null)).toBe(0);
+		expect(filledCells(blankEwrRuleTable().ewr)).toBe(0);
+		expect(filledCells(table().ewr)).toBe(36);
+		expect(filledCells([[1, null as unknown as number, NaN, 0]])).toBe(1);
+	});
+	it('a high flow holds something typed once it has a name or a peak', () => {
+		expect(highFlowTyped({ label: '', months: [11, 12, 1], peakM3s: NaN, durationDays: 3, perYear: 1 })).toBe(false);
+		expect(highFlowTyped({ label: 'Class II freshet', months: [11], peakM3s: NaN, durationDays: 3, perYear: 1 })).toBe(true);
+		expect(highFlowTyped({ label: '', months: [11], peakM3s: 4, durationDays: 3, perYear: 1 })).toBe(true);
 	});
 });

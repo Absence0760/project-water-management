@@ -10,7 +10,7 @@
 	import { RATING_SOURCE_MAX, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { ABOVE_OPTIONS, FLAG_OPTIONS, qualityFlagsError, ratedKinds, ratingField, RECORD_NAME, withRating } from './qualityFlags';
+	import { ABOVE_OPTIONS, FLAG_OPTIONS, qualityFlagsError, ratedKinds, ratingField, ratingProblem, RECORD_NAME, withRating } from './qualityFlags';
 
 	let {
 		value = $bindable(),
@@ -34,7 +34,7 @@
 </script>
 
 <fieldset class="plain qf" aria-describedby="{uid}-hint">
-	<legend>Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></legend>
+	<legend><h3 class="title">Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></h3></legend>
 	<p class="hint" id="{uid}-hint">
 		A flow above the highest field gauging, or below the lowest, comes from an extrapolated rating curve. Enter the gauged range where you know it,
 		with where it comes from. Days the Data checks call suspect (outliers, flat stretches) are flagged too. The fit leaves flagged days out by default
@@ -42,14 +42,39 @@
 	</p>
 	{#each kinds as kind (kind)}
 		{@const r = ratingField(value, kind)}
+		<!-- The record's problem sits under the field it is fixed in, which names it (aria-describedby). -->
+		{@const p = ratingProblem(value, kind)}
+		{@const errId = `${uid}-${kind}-err`}
 		<div class="rating" data-testid="rating-{kind}">
 			<div class="field">
 				<label for="{uid}-{kind}-max">{RECORD_NAME[kind]}: highest gauging <span class="u">(m³/s)</span></label>
-				<NumberInput id="{uid}-{kind}-max" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })} placeholder="not known" />
+				<NumberInput
+					id="{uid}-{kind}-max"
+					nullable
+					min={0}
+					step="any"
+					disabled={readonly}
+					bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })}
+					placeholder="not known"
+					aria-invalid={p?.field === 'max' ? 'true' : undefined}
+					aria-describedby={p?.field === 'max' ? errId : undefined}
+				/>
+				{#if p?.field === 'max'}<span class="err" id={errId}>{p.message}</span>{/if}
 			</div>
 			<div class="field">
 				<label for="{uid}-{kind}-min"><span class="visually-hidden">{RECORD_NAME[kind]}: </span>Lowest gauging <span class="u">(m³/s)</span></label>
-				<NumberInput id="{uid}-{kind}-min" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })} placeholder="not known" />
+				<NumberInput
+					id="{uid}-{kind}-min"
+					nullable
+					min={0}
+					step="any"
+					disabled={readonly}
+					bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })}
+					placeholder="not known"
+					aria-invalid={p?.field === 'min' ? 'true' : undefined}
+					aria-describedby={p?.field === 'min' ? errId : undefined}
+				/>
+				{#if p?.field === 'min'}<span class="err" id={errId}>{p.message}</span>{/if}
 			</div>
 			<div class="field source">
 				<label for="{uid}-{kind}-src">Source<span class="visually-hidden"> of the {RECORD_NAME[kind].toLowerCase()} gauged range</span></label>
@@ -61,7 +86,10 @@
 					value={r.source}
 					oninput={(e) => set(kind, { source: e.currentTarget.value })}
 					placeholder="e.g. DWS gauging list, rating table 2019"
+					aria-invalid={p?.field === 'source' ? 'true' : undefined}
+					aria-describedby={p?.field === 'source' ? errId : undefined}
 				/>
+				{#if p?.field === 'source'}<span class="err" id={errId}>{p.message}</span>{/if}
 			</div>
 		</div>
 	{/each}
@@ -91,7 +119,8 @@
 			</select>
 		</div>
 	</div>
-	{#if error}<p class="err" role="alert">{error}</p>{/if}
+	<!-- A record not shown here (its series is gone) still blocks Save: say so. -->
+	{#if error && !kinds.some((k) => ratingProblem(value, k))}<p class="err">{error}</p>{/if}
 </fieldset>
 
 <style>
@@ -106,6 +135,9 @@
 		font-size: 0.9rem;
 		padding: 0;
 		margin-bottom: 0.2rem;
+	}
+	.title {
+		margin: 0;
 	}
 	.hint {
 		font-size: 0.8rem;

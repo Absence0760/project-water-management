@@ -701,21 +701,28 @@ The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom
 (`model/SaveBar.svelte`), which starts at the sidebar's edge (`--sidebar-w`,
 from `AppShell`) so the account menu at the sidebar's foot stays usable. The Project page's details (name, description,
-time zone, WUA name; issue #162 item 12) go through the same bar: the page
-holds them (`project/detailsDraft.svelte.ts`), so they survive a tab change,
-and **Save changes** saves whatever is unsaved (the details, then the
-model), **Discard** puts both back. The bar says what is unsaved ("Unsaved
-changes to the project details", "… to the model and the project
-details", and for the model alone the areas that changed: "… to the model
-(network and transfers)", `model/changedAreas.ts`; its region is named
-*Unsaved project details* while only the details are). Anything that blocks
+time zone, WUA name; issue #162 item 12) and the Settings & calibration form
+go through the same bar: the page holds them (`project/detailsDraft.svelte.ts`,
+`settings/settingsDraft.svelte.ts`), so they survive a tab change, and
+**Save changes** saves whatever is unsaved (the details, then the settings,
+then the model), **Discard** puts them all back. The bar says what is
+unsaved ("Unsaved changes to the settings", "… to the model and the
+settings", "… to the project details", and for the model alone the areas
+that changed: "… to the model (network and transfers)",
+`model/changedAreas.ts`); its region is named *Unsaved model changes* with
+model edits, else *Unsaved settings* or *Unsaved project details*, and
+*Unsaved changes* when only a number that needs fixing is. Anything that blocks
 the save is listed under the bar as links to where it is fixed
 (`model/ProblemLinks.svelte`: the first three, then **and N more**): a
 node's problem opens its sheet (`?tab=network&edit=<id>`), a crop's its
 sheet (`crop=`), a transfer's its card (`?tab=transfers#tr-<id>-h`, the
-rule's heading focused on landing), the details' the Project page, and a
-number field holding text it can't take (`invalidFields`, above) the field
-itself, which counts as unsaved work. The disabled **Save changes** and
+rule's heading focused on landing), the details' the Project page, a
+settings group's its panel ("Simulation period: Simulation start must be
+before the end.", `#set-period`, through `?tab=settings` from another tab;
+the panel's heading takes the focus), and a number field holding text it
+can't take (`invalidFields`, above) the field itself, which counts as
+unsaved work (a high flow's **Peaks in** that doesn't read as months counts
+the same way). The disabled **Save changes** and
 **Preview** name that list (`aria-describedby`). A model tab with such a
 problem stays in the sidebar, with its problem dot, even when hidden
 (`stripTabs`' `keep`). **Discard** asks first ("Discard your unsaved
@@ -725,11 +732,14 @@ takes the bar away, a live region outside it says "Changes saved." or
 "Changes discarded." and the focus moves to the page's title
 (`focusPageStart`). The bar's other drafts come to it as a list
 (`model/pageDraft.ts` `PageDraft`: what it is called, its region name,
-where its problems are fixed, `dirty`/`saving`/`saveError`/`problems`,
-`revert()`); the page adapts the details to it and saves them in
-`saveAll`. The optional reason field shows only with model edits (it goes
-into History with them). Every other card on the Project page acts at once.
-Settings has its own save button, which sits above that bar.
+`dirty`/`saving`/`saveError`, its `problems` as links, whether it takes the
+reason and Preview, `revert()`); the page adapts the details and the
+settings to it and saves them in `saveAll`. The optional reason field shows
+with model or settings edits (it goes into History with them; one reason for
+both). A failed save says so in the bar ("Save failed: …"), beside Save.
+Discard and Save (and Preview) sit in one box that never splits on a
+phone. Every other card on the Project page acts at once. Settings has no
+save bar of its own.
 
 The save rows of the modals over the workspace (the node and crop sheets,
 the farm drawer, a grid; `model/ModelSaveRow.svelte`) carry the model's part
@@ -747,14 +757,12 @@ says so. While problems block that save it refuses, saying why and naming
 the first problem, with **Show the problem**, rather than run the saved
 model behind the person's back.
 
-**Preview unsaved edits** (issue #284, roadmap WP-1.17). With model edits
-unsaved and no problems to fix, the save bar has **Preview** (Network, Crops
-& demand, Transfers, the farm drawer's edits; every tab but Settings).
-Settings has its own **Preview** beside **Discard** while its form (with
-nothing blocking Save) or the model has unsaved edits; it takes both, so the
-save bar's is hidden there, and model edits with problems to fix are left
-out and named. Both open the same dialog
-(`preview/UnsavedPreviewDialog.svelte`, its own chunk), "Preview: your
+**Preview unsaved edits** (issue #284, roadmap WP-1.17). With model or
+settings edits unsaved, the save bar has **Preview**, on every tab. It takes
+the settings and the model's edits, each once nothing blocks its save; the
+one with problems to fix is left out and named under "Not in this preview"
+(and with both blocked Preview is disabled, naming the problems). It opens
+(`preview/UnsavedPreviewDialog.svelte`, its own chunk) "Preview: your
 unsaved settings" (or "model edits", or "settings and model edits"). When
 the page couldn't load the runs list, the dialog asks for it itself rather
 than say there is no run. It starts from the newest run
@@ -784,8 +792,9 @@ runs, about 0.3 s on the client catchment, `run.perf.test.ts`).
 
 **Leaving with unsaved changes** (issue #162 items 11 and 13;
 `lib/nav/unsaved.ts`, `lib/nav/leaveGuard.ts`). Unsaved work registers
-itself while it is on screen (`guardUnsaved`): the model's edits and the
-project details (the workspace page), override mode's unrecorded edits, a
+itself while it is on screen (`guardUnsaved`): the model's edits, the
+project details and the settings (the workspace page; the header's
+**Unsaved changes** badge counts all three), override mode's unrecorded edits, a
 half-filled **Add a change** form or a typed but unsaved scenario rename,
 a name typed into the **New scenario** dialog, and a number field holding
 text it can't take ("numbers that need fixing": any change of page or tab
@@ -821,8 +830,15 @@ there is something to say about what goes with the node (its crop areas,
 transfers, boreholes…, `removeMessage`); Crops' **Remove crop** when the crop
 has planted areas; Transfers' **Remove transfer** whenever the rule has
 anything set besides its ends (a month's rate, a limit, an off-take's
-fields: `transferIsBlank`), so a rule just added goes at once. Discarding
-unsaved edits always asks (the save bar's **Discard changes**, a save row's
+fields: `transferIsBlank`), so a rule just added goes at once. On Settings,
+**Remove the rule table at …** always asks (**Remove the table**, naming its
+grids and high flows), a rain-source period asks once it has a reason or
+fixed factors (**Remove the period**), and a fill that would replace typed
+values asks, naming how many: **Fill the EWR values** (or low or natural
+flows) over a grid with values other than a new table's 0, **Fill the high
+flows** over components with a name or a peak, and **Propose from the
+double-mass breaks** over listed ranges with reasons. Discarding unsaved
+edits always asks (the save bar's **Discard changes**, a save row's
 **Discard model changes**).
 
 **A part that fails to download.** Every tab but Overview, the Add data
@@ -4183,18 +4199,48 @@ section header, which it fills (`fillHeader`) like the other sections.
   rather than a side rail because the monthly input rows need the full
   width. On phones it is one strip that scrolls sideways inside itself (the
   marked link kept in view), never the page. While shown, the menu raises
-  the page's `scroll-padding-top` by its height, and this tab sets
-  `scroll-padding-bottom` to the save bar's, so a jumped-to group or a
-  focused control is never hidden under either (WCAG 2.4.11).
-- **Save bar.** Sticky at the bottom (above the model save bar when that
-  shows), with "Unsaved settings", **Preview** (what the unsaved settings, and
-  the model's unsaved edits, do to the last run; § Preview unsaved edits under
-  Project workspace), **Discard** and **Save settings** (editors only). When something blocks Save it says how many groups have a problem
-  and links to each one (`saveBlockers`; the link's accessible name carries
-  the message), and that group's menu link gets a red dot ("has a problem").
-  Each problem is also shown next to its field. The bar ends with the form;
-  a line under it tells editors that Data feeds, API keys (owners) and
-  scheduled reports save as they change, not with Save settings.
+  the page's `scroll-padding-top` by its height, and the workspace page sets
+  `scroll-padding-bottom` to the save bar's while it shows, so a jumped-to
+  group or a focused control is never hidden under either (WCAG 2.4.11).
+- **Saving.** The settings save through the workspace's one save bar
+  ([§ Project workspace](#project-workspace), `model/SaveBar.svelte`), with
+  the model's edits and the project details: the page holds the form
+  (`settings/settingsDraft.svelte.ts`), so changing tab keeps it, leaving the
+  project asks first, the header shows **Unsaved changes**, **Discard** asks
+  first and **Save changes**, **Preview** and the reason field are the bar's.
+  The tab has no save bar, reason field or Discard of its own, and it is not
+  a `<form>`: the notes' forms and the quaternary lookup inside it are forms
+  of their own, never nested, so adding a note never saves the settings, and
+  Enter in a field saves nothing. What blocks the save is listed in the bar,
+  one link per group ("Rain gaps: Fit range 1: needs a reason",
+  `saveBlockers`), landing on the group's heading; that group's menu link
+  gets a red dot ("has a problem"). Each problem is also shown next to the
+  field it is fixed in, which names it (`aria-describedby`); a required text
+  left blank in a row just added (a reason, a source) is marked once the
+  field has been left, not the moment the row appears. A number field
+  holding text it can't take lists itself too and blocks the save. After the
+  form, a line tells editors that Data feeds, API keys (owners) and
+  scheduled reports save as they change, not with the save bar's Save
+  changes.
+- **Switches keep what they turned off.** Unticking a section and ticking it
+  again before saving brings back what was there, never a fresh default:
+  the monthly dam evaporation factors, the WR2012 check's reference (and its
+  MAR band's bounds), a record's flow-gap filling, the declared evidence rule,
+  automated calibration's flagged-days share, as already the areal
+  correction, GR4J's monthly PE, the CHIRPS gap map and drought
+  restrictions. The page's draft keeps them (`kept`, `last…`) until the
+  settings are saved or discarded.
+- **Headings.** Each panel is an `h2`; inside the long ones each sub-group is
+  an `h3` in the order shown (in its fieldset's legend where it has one), so
+  heading navigation reaches them: under Flow calibration the areal rainfall
+  correction, GR4J potential evaporation and Evaporation from the map; under
+  Rain gaps the CHIRPS bias correction and quantile map, the CHIRPS fit
+  period, zero-rain runs, multi-day accumulations and the rain source
+  periods; under the Calibration record the quality flags and flow gaps.
+  Fit the parameters (`#set-fit`) is a panel with its own `h2` over Fit
+  automatically, the fit record, the calibration rules and automated
+  calibration. Each help tip has a name of its own (the three GR4J
+  parameters' "About GR4J, for …").
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
@@ -4206,7 +4252,10 @@ the row scrolls.
 At 320 px the whole tab reflows with no sideways page scroll (WCAG 1.4.10):
 selects and period lists shrink to the screen, and only the section menu and
 the monthly tables scroll, inside their own boxes (`e2e/tests/reflow.spec.ts`,
-which checks every catchment tab).
+which checks every catchment tab). In a narrow scroll box (under 30rem, a
+container query) a monthly row's label takes a 6.5rem column and wraps, its
+unit on a line of its own, so about four months show beside it rather than
+two.
 
 
 - **Demand**: A-pan (Oct–Sep), with a line under it saying where the model's
@@ -4306,8 +4355,12 @@ which checks every catchment tab).
       writes the table cells used plus the RH and wind note into the **Pan
       coefficient source** note: nothing is saved until Save, and the values
       and note stay editable. The button stays
-      disabled, with the reason beside it, until every month has a valid RH
-      and wind and the note is written. Then the monthly **pan coefficient**
+      disabled, with the reason beside it (read with the button, not
+      announced on every keystroke), until every month has a valid RH and
+      wind and the note is written; the note is marked missing once it has
+      been left. Each suggested Kp names its Table 5 class (RH, wind, the
+      table's value) in text a screen reader, keyboard or touch user reaches,
+      not only a tooltip. Then the monthly **pan coefficient**
       row. A warning appears under the row when a month sits outside
       FAO-56's usual 0.6–0.85 range for a Class A pan — a plausibility
       check, not a hard limit, so a value further out still saves. Under
@@ -4369,9 +4422,10 @@ which checks every catchment tab).
   double-mass breaks** (`settings/proposeFitRanges.ts`, pure part
   `fitRangeProposal.ts`) loads the catchment rain and CHIRPS and fills the
   list with one range per double-mass segment, each reason saying it is a
-  proposal; nothing is saved until Save, and the hint says to check each
-  range against the station history, since a detected break can be a year
-  or two off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
+  proposal ("Proposed one range …" or "Proposed 2 ranges …"); over listed
+  ranges with reasons it asks first, naming how many are replaced. Nothing
+  is saved until Save, and the hint says to check each range against the
+  station history, since a detected break can be a year or two off ([model.md §2.4b *Fit period*](./model.md#fit-period-and-per-range-factors-engine--0290-issue-40)).
   Fit provenance shows the fit period and the factors per range, with the
   years each was fitted on, that the fit ran under. Between the picker and
   the fit period, **CHIRPS quantile map** (`settings.chirpsQuantileMap`,
@@ -4424,8 +4478,10 @@ which checks every catchment tab).
   a fixed-factor period, to start with) and **Wet day from (mm)** (1 mm,
   0.1–10); a hint says what it does and that each run reports the heavy-day
   share either way. The form blocks Save on the engine's own check
-  (`rainSourceError`, which the API uses too), with the first problem
-  shown under the list. It doesn't reuse the period editors above: its rows
+  (`rainSourceError`, which the API uses too); each period's problem is
+  shown in its own card and names the field it is fixed in
+  (`rainSourceProblems`, `aria-describedby`). Removing a period with a reason
+  or fixed factors asks first. It doesn't reuse the period editors above: its rows
   have different fields, and it is the second list with water-year fields
   (the CHIRPS fit period is the first), short of the third caller that
   would justify a shared editor.
@@ -4578,7 +4634,8 @@ which checks every catchment tab).
     engine 1.19.0 shows no table.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
-    the form then shows "Unsaved settings". Nothing is stored until Save.
+    the save bar then shows "Unsaved changes to the settings". Nothing is
+    stored until Save.
     Below the panel, **Fit record of these parameters**
     (`calibration/FitProvenance.svelte`) shows the record: model and time,
     objective, seed, model runs, engine version, the record and window fitted
@@ -4703,7 +4760,10 @@ which checks every catchment tab).
   in the data*). A used value goes into the form only; Save keeps it. A
   proposal from the committed synthetic dataset carries a warning that its
   values are invented; with no dataset loaded, or no quaternary at the point,
-  it says so.
+  it says so. **Close the proposal** puts the button back (and the focus on
+  it). Unticking **Compare runs with WR2012 naturalised flow**, or the MAR
+  band, and ticking it again brings back what was typed until the settings
+  are saved or discarded.
 - **Flow share between hydrological units**: the method, and the **High/low
   MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
   is *High/low MAP split*, the one method that reads it (issue #174); under
@@ -4757,7 +4817,12 @@ which checks every catchment tab).
   notes ("Check: the EWR rises with the % point in Jan …", an EWR above the
   natural flow) show under the table without blocking Save; a missing source,
   a bad point list or a blank cell, and two tables for one site, block Save
-  and the save bar links here. **Remove the rule table at …** deletes one.
+  and the save bar links here. **Add a rule table** is in the panel's head,
+  above the tables. **Remove the rule table at …** asks first, then deletes
+  one; a Fill over a grid (or high flows) that already holds values asks
+  first, naming how many are replaced. A **Peaks in** that doesn't read as
+  months is said under its field, kept as typed, and blocks the save as an
+  invalid number does.
   From engine 0.33.0 ([model.md §2.9d](./model.md)): a *total* table has
   **Also enter the low flows (maintenance and drought)**, which adds a blank
   **Low flows (maintenance to drought)** grid (blank cells block Save; switching
@@ -4788,7 +4853,10 @@ which checks every catchment tab).
   model's restriction rule, off by default; see
   [§ Drought restrictions](#drought-restrictions).
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
-- **Data quality** (`DataQualitySection.svelte`): three groups.
+- **Data quality** (`DataQualitySection.svelte`), "Input checks, and the
+  zero-rain and low-vs-CHIRPS limits runs use": three groups. Its messages
+  use the labels' words ("flat stretch"), and its note links to **Rain gaps**
+  (`#set-rain`) for the zero-rain runs.
   *Gauge vs logger*: the lowest and highest ratio in %, shown to one
   decimal, and the minimum shared days (defaults 66.7 % (two thirds),
   150 %, 90 days). *Outliers and flat stretches* (engine ≥ 1.20.0): the rain
@@ -6427,14 +6495,18 @@ see (WP-2.3); every place it shows says so.
   a phone, no sideways scroll): **Name**, **Starts below (% of capacity)**
   and one **… cut (%)** per part of demand (crops, then each demand-object
   category; blank = *Not cut*; domestic and municipal marked *floor kept*),
-  each input labelled "Level 2: cut on …, %". **Add a deeper level** (the
+  each input labelled "Level 2: cut on …, %" (", basic-needs floor kept" for
+  those two). **Add a deeper level** (the
   last level's cuts, half its threshold) / **Remove the deepest level**;
   **Where the levels come from**. A rule the engine refuses (a date twice, a
   shallower deeper level, a deeper level cutting less) shows its first
-  problem under the cards (a status, not an alert) and blocks Save (the
-  save bar links here); switching off saves null, and the rule switched off
-  comes back until saved. Field history under it. A viewer reads it,
-  disabled, and *Drought restrictions: off.* when there is none.
+  problem in the group it is fixed in (the level's card, a date list, the
+  source; else under the cards), which names it (`aria-describedby`), and
+  blocks Save (the save bar links here); switching off saves null, and the
+  rule switched off comes back until saved. Field history under it. A viewer
+  reads it: its names, days and source read-only (still focusable), its
+  selects and boxes disabled, and *Drought restrictions: off.* when there is
+  none.
   From engine 1.54.0: **Start from the published notice** (editors) reads
   the project's current publication and, after asking when a rule is set,
   fills the rule from its notice (one level below 100 % at the notice's %,

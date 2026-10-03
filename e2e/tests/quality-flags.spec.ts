@@ -4,6 +4,7 @@
 // the fit record saying when the flag settings changed since.
 import { seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 
 test('a gauged range needs its source, and saves with it', async ({ page, owner }) => {
 	void owner;
@@ -13,13 +14,15 @@ test('a gauged range needs its source, and saves with it', async ({ page, owner 
 	// Only a gauge record in the project: only its range is offered.
 	await expect(flags.getByLabel(/^Logger record: highest gauging/)).toHaveCount(0);
 	await flags.getByLabel(/^Gauge record: highest gauging/).fill('0.3');
-	await expect(flags.getByRole('alert')).toHaveText('Gauge record gauged range: A gauged range needs its source.');
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
-	await flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true }).fill('Synthetic rating table');
-	await expect(flags.getByRole('alert')).toHaveCount(0);
+	// The message sits under the field it is fixed in, which names it.
+	const source = flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true });
+	await expect(source).toHaveAccessibleDescription('Gauge record gauged range: A gauged range needs its source.');
+	await expect(source).toHaveAttribute('aria-invalid', 'true');
+	await expect(saveChanges(page)).toBeDisabled();
+	await source.fill('Synthetic rating table');
+	await expect(flags.getByText('Gauge record gauged range: A gauged range needs its source.')).toHaveCount(0);
 	await flags.getByLabel('Suspect days').selectOption({ label: 'Score as recorded' });
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(flags.getByLabel(/^Gauge record: highest gauging/)).toHaveValue('0.3');
 	await expect(flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true })).toHaveValue('Synthetic rating table');

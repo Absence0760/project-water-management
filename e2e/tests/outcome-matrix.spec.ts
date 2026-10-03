@@ -24,6 +24,7 @@ import { addMember, createProject, createRun, putModel, putSeries, sampleModel, 
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { ungroup } from '../support/format.ts';
 
@@ -118,8 +119,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await expect(section.getByTestId('cutoffs-pending-reserveMonthsMet')).toHaveText('Provisional defaults, not yet confirmed by the catchment’s hydrologist');
 	await expect(section.getByTestId('cutoffs-pending-daysBelowEwr')).toHaveText('Provisional defaults, not yet confirmed by the catchment’s hydrologist');
 	await section.getByLabel('Water-year classes').selectOption('terciles');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByText('Settings saved.')).toBeVisible();
+	await saveSettings(page);
 	const saved = await getJson<{ project: { settings: { outcomes: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outcomes).toEqual({ yearClassMethod: 'terciles', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null });
 
@@ -191,8 +191,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	await expect(section.getByTestId('cutoffs-pending-daysBelowEwr')).toHaveCount(0);
 	await section.getByLabel('Lower risk up to (%)').fill('15');
 	await section.getByLabel('Increasing risk up to (%)').fill('40');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByText('Settings saved.')).toBeVisible();
+	await saveSettings(page);
 	const custom = await getJson<{ project: { settings: { outcomes: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(custom.project.settings.outcomes).toEqual({
 		yearClassMethod: 'terciles',

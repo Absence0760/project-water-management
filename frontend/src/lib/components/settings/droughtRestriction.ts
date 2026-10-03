@@ -56,6 +56,23 @@ export function restrictionFormError(rule: DroughtRestrictionRule | null | undef
 	return `${i.message.charAt(0).toUpperCase()}${i.message.slice(1)}.`;
 }
 
+/**
+ * Where the rule's first problem (restrictionFormError's) is fixed, so the
+ * form puts the message there and ties it to the group (aria-describedby):
+ * a level (`level-0`), a date list, the source, or the rule as a whole.
+ */
+export function restrictionProblemAt(rule: DroughtRestrictionRule | null | undefined): `level-${number}` | 'reviewDates' | 'liftDates' | 'source' | 'rule' | null {
+	if (!rule) return null;
+	const i = droughtRestrictionIssues(rule)[0];
+	if (!i) return null;
+	const where = /^levels\[(\d+)\]/.exec(i.field);
+	if (where) return `level-${Number(where[1])}`;
+	if (i.field.startsWith('reviewDates')) return 'reviewDates';
+	if (i.field.startsWith('liftDates')) return 'liftDates';
+	if (i.field === 'source') return 'source';
+	return 'rule';
+}
+
 /** "MM-DD" ↔ month and day, for the date pickers. */
 export const splitMonthDay = (md: string): { month: number; day: number } => ({ month: Number(md.slice(0, 2)) || 1, day: Number(md.slice(3, 5)) || 1 });
 export const joinMonthDay = (month: number, day: number): string => `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;

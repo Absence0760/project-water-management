@@ -14,6 +14,7 @@ import { createProject, createRun, putModel, putSeries, sampleModel, syntheticRa
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { createScenario } from '../support/scenarios.ts';
@@ -68,8 +69,7 @@ test('a scenario sets a restriction rule; the outlook’s triggers become the pr
 	await settings.getByLabel('Storage the level reads').selectOption({ label: 'Each unit’s own dam' });
 	await settings.getByLabel('Also restrict when the EWR wasn’t met the day before a review').check();
 	await expect(settings.getByTestId('restriction-words')).toContainText("each unit's own dam; at least level 1 when the EWR at the outlet wasn't met the day before a review");
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	const fromNotice = (await settingsOf(page.request, project.id)).droughtRestriction as { basis?: string; ewrTrigger?: unknown; levels: { belowPct: number }[] };
 	expect(fromNotice).toMatchObject({ basis: 'own', ewrTrigger: { siteNodeId: null, level: 1 }, levels: [{ belowPct: 1 }] });
 

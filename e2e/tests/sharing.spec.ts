@@ -91,7 +91,9 @@ test('an owner shares a project read-only with a viewer, who joins by accepting 
 
 	await v.getByRole('link', { name: 'Settings' }).click();
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
-	await expect(v.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
+	// No save bar for a viewer, whatever they type into.
+	await expect(v.getByRole('region', { name: /^Unsaved / })).toHaveCount(0);
+	await expect(v.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
 
 	await v.getByRole('link', { name: 'Data', exact: true }).click();
 	await expect(v.getByRole('heading', { name: 'Input time series' })).toBeVisible();

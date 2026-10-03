@@ -4,7 +4,9 @@
 	settings.evidenceUncertaintyRule. Declared before anyone sees a band: an
 	evidence report cites the first complete ensemble whose options match it
 	exactly, and none when there is no rule. Replaced whole on save; switching
-	it off saves null. Bind the value; `error` is set while it is invalid, so
+	it off saves null, and switching it back on brings back the rule switched
+	off (bind `last` to the page's draft, settingsDraft `kept`), never the
+	defaults, until the form is saved or discarded. Bind the value; `error` is set while it is invalid, so
 	the parent form can block saving. Its own chunk: the Settings tab chunk sits
 	at its size ceiling.
 -->
@@ -22,18 +24,21 @@
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
-	import { defaultEvidenceRule, evidenceRuleFieldsError, RULE_BOUNDS_LABEL, RULE_WR2012_LABEL, withdrawnRule } from './evidenceRule';
+	import { evidenceRuleFieldsError, RULE_BOUNDS_LABEL, RULE_WR2012_LABEL, withEvidenceRule } from './evidenceRule';
 
 	let {
 		value = $bindable(),
 		error = $bindable(null),
 		saved,
+		last = $bindable(),
 		readonly = false
 	}: {
 		value: DeclaredUncertaintyRule | null | undefined;
 		error?: string | null;
 		/** The rule as saved, so switching off withdraws it (null) or, never saved, leaves the form unchanged. */
 		saved: DeclaredUncertaintyRule | null | undefined;
+		/** The rule switching it off turned off, kept until saved or discarded. */
+		last?: unknown;
 		readonly?: boolean;
 	} = $props();
 
@@ -44,7 +49,8 @@
 	});
 
 	function setOn(on: boolean) {
-		value = on ? defaultEvidenceRule() : withdrawnRule(saved);
+		if (!on && value) last = $state.snapshot(value);
+		value = withEvidenceRule(on, saved, last as DeclaredUncertaintyRule | null | undefined);
 	}
 	/** One threshold changed, the rule replaced whole (as it is saved). */
 	function setThreshold<K extends keyof DeclaredUncertaintyRule['thresholds']>(k: K, v: DeclaredUncertaintyRule['thresholds'][K]) {

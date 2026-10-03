@@ -8,14 +8,20 @@
 	let { problems, id, max = 3 }: { problems: readonly ProblemLink[]; id: string; max?: number } = $props();
 
 	let all = $state(false);
-	/** A link to a field on this page (`#id`, an invalid number): focus the field itself, not just scroll to it. */
+	/**
+	 * A link to something on this page (`#id`): an invalid number takes the focus itself; a group (a
+	 * Settings panel, `#set-rain`) is scrolled to and its heading takes it, not just scrolled to.
+	 */
 	function follow(e: MouseEvent, href: string) {
 		if (!href.startsWith('#')) return;
 		const el = document.getElementById(href.slice(1));
 		if (!el) return;
 		e.preventDefault();
-		el.scrollIntoView({ block: 'center' });
-		el.focus({ preventScroll: true });
+		const field = el.matches('input, select, textarea, button, [tabindex]');
+		const target = field ? el : (el.querySelector<HTMLElement>('h2, h3') ?? el);
+		if (!field && !target.hasAttribute('tabindex')) target.tabIndex = -1;
+		(field ? el : target).scrollIntoView({ block: field ? 'center' : 'start' });
+		target.focus({ preventScroll: true });
 	}
 	const shown = $derived(all ? problems : problems.slice(0, max));
 </script>

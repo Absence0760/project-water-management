@@ -1,5 +1,6 @@
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { openAddData, uploadedNote } from '../support/addData.ts';
 
 // Issue #66: a series' source and given unit (107_series_source.sql), and gap
@@ -62,9 +63,12 @@ test('the Data tab shades the gap days a run fills, and Settings turns the filli
 	// One control for scoring filled days: the quality flags' infilled treatment, which says so here.
 	await expect(page.getByTestId('gap-fill-scoring')).toContainText('Infilled days');
 	await expect(page.getByLabel('Infilled days')).toHaveValue('exclude');
+	// Off and on again before saving: the record's own spec comes back, not the defaults.
 	await fill.uncheck();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await fill.check();
+	await expect(gauge.getByLabel('Interpolate gaps up to (days)')).toHaveValue('5');
+	await fill.uncheck();
+	await saveSettings(page);
 	await page.goto(`/projects/${project.id}?tab=series`);
 	await page.getByRole('row', { name: /Weir/ }).getByRole('button', { name: 'View', exact: true }).click();
 	await expect(page.locator('figure.chart canvas')).toBeVisible();

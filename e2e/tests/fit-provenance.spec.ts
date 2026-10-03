@@ -5,6 +5,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 import { ungroup } from '../support/format.ts';
 
@@ -35,8 +36,7 @@ test('an applied fit is saved with its record, and the run shows which fit and v
 	await expect(definition(record, 'Seed')).toHaveText('7');
 	await expect(definition(record, 'Bounds')).toHaveText('typical (Perrin et al. 80 %)');
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByLabel(/^Run label/).fill('Fitted');
@@ -72,8 +72,7 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	const record = page.getByRole('region', { name: /^Fit record of these parameters/ });
 	await expect(record.getByText('Parameters edited since fit')).toHaveCount(0);
 	await expect(record.getByText('This fit was not validated', { exact: false })).toBeVisible();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	const fittedRun = await createRun(page.request, project.id, 'Fitted');
 
 	const x1 = page.getByLabel(/^Production store capacity X1/);
@@ -83,8 +82,7 @@ test('editing a fitted parameter by hand marks the fit record as edited: in the 
 	await expect(record.getByText('Parameters edited since fit')).toBeVisible();
 	await expect(record.getByText(/^Parameters edited since the fit: Production store capacity X1\./)).toBeVisible();
 
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(page.getByRole('region', { name: /^Fit record of these parameters/ }).getByText('Parameters edited since fit')).toBeVisible();
 
@@ -119,14 +117,13 @@ test('a calibration exclusion needs a reason, and shows in What changed and on t
 	await excl.getByRole('button', { name: 'Exclude a water year' }).click();
 	// No reason yet: saving is blocked.
 	await expect(excl.getByRole('alert')).toHaveText('Exclusion 1: needs a reason.');
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+	await expect(saveChanges(page)).toBeDisabled();
 	await excl.getByLabel(/^Water year/).fill('2021');
 	await excl.getByLabel(/^Water year/).press('Tab');
 	await expect(excl.getByText('WY 2021/22: 2021-10-01 – 2022-09-30')).toBeVisible();
 	await excl.getByLabel('Reason').fill('Rain gauge moved');
 	await expect(excl.getByRole('alert')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(page.getByRole('group', { name: /^Calibration exclusions/ }).getByLabel('Reason')).toHaveValue('Rain gauge moved');
 

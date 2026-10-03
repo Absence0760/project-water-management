@@ -1,12 +1,13 @@
 <script lang="ts">
 	// The workspace's one sticky footer for unsaved edits: the model's (the
 	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the page's
-	// other drafts (`drafts`: the project details, issue #162 item 12; see
-	// pageDraft.ts for adding one). Unsaved indicator naming what changed, the
-	// problems that block the save as links to where they are fixed, the
-	// optional reason for a model change (kept with it in the History tab),
-	// Preview of the model's edits against the last run (issue #284), Save /
-	// Discard for everything unsaved. Discard asks first, naming what goes.
+	// other drafts (`drafts`: the project details, issue #162 item 12, and the
+	// Settings & calibration form; see pageDraft.ts for adding one). Unsaved
+	// indicator naming what changed, the problems that block the save as links
+	// to where they are fixed, the optional reason for a model or settings
+	// change (kept with it in the History tab), Preview of the model and
+	// settings edits against the last run (issue #284), Save / Discard for
+	// everything unsaved. Discard asks first, naming what goes.
 	// Once a save or a discard takes the bar away, a live region outside it
 	// says so and the focus moves to the page's title (it was on a button that
 	// is gone).
@@ -38,9 +39,9 @@
 		readonly: boolean;
 		/** Rendered height (0 when hidden), so the page can keep content clear of it. */
 		height?: number;
-		/** The optional "why" sent with a model save (at most 500 characters). */
+		/** The optional "why" sent with a model or settings save (at most 500 characters). */
 		reason?: string;
-		/** Preview what the unsaved model edits do to the last run (issue #284); null hides the button. */
+		/** Preview what the unsaved model and settings edits do to the last run (issue #284); null hides the button. */
 		onpreview?: (() => void) | null;
 	} = $props();
 
@@ -60,7 +61,7 @@
 	const areas = $derived(editor.dirty ? changedAreas(editor.savedModel(), editor.model) : []);
 	const problems = $derived<ProblemLink[]>([
 		...(editor.dirty ? editor.issues.map((i) => ({ message: i.message, href: issueHref(i) })) : []),
-		...dirtyDrafts.flatMap((d) => d.problems.map((message) => ({ message, href: d.href }))),
+		...dirtyDrafts.flatMap((d) => d.problems),
 		...invalid.map((f) => ({ message: f.label ? `${f.label}: ${f.message}` : f.message, href: `#${f.id}` }))
 	]);
 	const blocking = $derived(problems.length);
@@ -74,7 +75,15 @@
 			...(invalid.length ? [`the ${invalid.length === 1 ? 'number' : 'numbers'} that need fixing`] : [])
 		])
 	);
-	const region = $derived(editor.dirty || !dirtyDrafts.length ? 'Unsaved model changes' : dirtyDrafts[0]!.region);
+	/** Whether a reason field shows: a model or settings change keeps one. */
+	const takesReason = $derived(editor.dirty || dirtyDrafts.some((d) => d.takesReason));
+	// Preview shows the model's edits and a previewable draft's (the settings), each once nothing blocks it;
+	// one with problems is left out and the dialog says so.
+	const previewDrafts = $derived(dirtyDrafts.filter((d) => d.previewable));
+	const canPreview = $derived(!!onpreview && (editor.dirty || previewDrafts.length > 0));
+	const previewReady = $derived((editor.dirty && editor.issues.length === 0) || previewDrafts.some((d) => d.problems.length === 0));
+	// Named for what is unsaved: the model, else the first draft, else only numbers that need fixing (on any page).
+	const region = $derived(editor.dirty ? 'Unsaved model changes' : dirtyDrafts.length ? dirtyDrafts[0]!.region : 'Unsaved changes');
 
 	let bar: HTMLDivElement | undefined = $state();
 	let announcement = $state('');
@@ -130,19 +139,22 @@
 				{/if}
 			</span>
 			<div class="spacer"></div>
-			<!-- The reason goes with the model's save (the History tab keeps it). -->
-			{#if editor.dirty}
+			<!-- The reason goes with the model's and the settings' save (the History tab keeps it). -->
+			{#if takesReason}
 				<label class="reason">
 					<span class="visually-hidden">Reason for this change (optional)</span>
 					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
 				</label>
 			{/if}
-			<!-- The model's edits only, so it waits until they have no problems the engine would refuse. -->
-			{#if editor.dirty && onpreview}
-				<button type="button" class="btn" onclick={onpreview} disabled={saving || editor.issues.length > 0} aria-describedby={editor.issues.length ? 'savebar-problems' : undefined}>Preview</button>
-			{/if}
-			<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
-			<button type="button" class="btn btn-primary" onclick={save} disabled={saving || blocking > 0 || !dirty} aria-describedby={blocking ? 'savebar-problems' : undefined}>Save changes</button>
+			<!-- One box that never splits on a phone: Discard is never left on a row apart from Save. -->
+			<div class="acts">
+				<!-- The model's and the settings' edits, each once it has no problems the engine would refuse. -->
+				{#if canPreview}
+					<button type="button" class="btn" onclick={onpreview} disabled={saving || !previewReady} aria-describedby={!previewReady && blocking ? 'savebar-problems' : undefined}>Preview</button>
+				{/if}
+				<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
+				<button type="button" class="btn btn-primary" onclick={save} disabled={saving || blocking > 0 || !dirty} aria-describedby={blocking ? 'savebar-problems' : undefined}>Save changes</button>
+			</div>
 		</div>
 		{#if blocking && !saving}
 			<div class="inner problems-row"><ProblemLinks {problems} id="savebar-problems" /></div>
@@ -198,6 +210,12 @@
 	}
 	.reason input {
 		width: 100%;
+	}
+	.acts {
+		display: flex;
+		gap: 0.6rem;
+		flex-wrap: nowrap;
+		margin-left: auto;
 	}
 	@media (max-width: 640px) {
 		.btn {

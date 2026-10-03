@@ -19,6 +19,7 @@ import type { Page } from '@playwright/test';
 import { PASSWORD, createProject, createRun, node, putModel, putSeries, seedRunnableProject, uniqueEmail, updateSettings } from '../support/api.ts';
 import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { addCrop } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
@@ -255,8 +256,7 @@ test('A-pan and EWR, entered in Settings, feed the run’s summary, and the run 
 		await page.getByLabel(`A-pan evaporation, ${m}, mm`).fill(APAN_MM[i]!);
 		await page.getByLabel(`Pragmatic EWR, ${m}, m³/day`).fill(EWR_M3_DAY[i]!);
 	}
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// --- run the model ---------------------------------------------------------------
 	await tab(page, 'Runs & results').click();

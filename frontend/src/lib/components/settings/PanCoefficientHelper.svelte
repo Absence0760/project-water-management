@@ -3,7 +3,9 @@
 	suggests a monthly Class A pan coefficient from monthly mean RH and wind at
 	2 m, the pan's siting and fetch, and an optional stated bare-surroundings
 	reduction. It stores nothing: Apply hands the 12 values and a provenance
-	note to `onapply`, and the parent fills its form with them.
+	note to `onapply`, and the parent fills its form with them. The source is
+	marked missing only once it has been left, and the
+	button's reason is read when it is focused, not announced on every keystroke.
 -->
 <script lang="ts">
 	import { FAO56_REDUCTION_GUIDANCE, FAO56_RH_LABELS, FAO56_SITING_LABELS, FAO56_TABLE5_SOURCE, FAO56_WIND_LABELS } from '@water-management/engine';
@@ -31,6 +33,10 @@
 		const f = FETCH_OPTIONS.find((x) => x === Number(v));
 		if (f !== undefined) form.fetchM = f;
 	}
+
+	// The source is required; it is marked so once left, not the moment the helper opens.
+	let sourceLeft = $state(false);
+	const sourceBad = $derived(sourceLeft && !form.source.trim());
 
 	function apply() {
 		if (ready) onapply(ready.values, ready.note);
@@ -92,8 +98,9 @@
 						<th scope="row">Suggested Kp</th>
 						{#each WATER_YEAR_MONTHS as m, i (m)}
 							{@const r = suggestion.results[i]}
-							<td class="num" data-testid="pan-helper-kp" title={r ? `RH ${FAO56_RH_LABELS[r.cell.rhClass]}, wind ${FAO56_WIND_LABELS[r.cell.windClass]}: Table 5 ${r.tableKp}` : undefined}>
-								{r ? r.kp : '–'}
+							<!-- The Table 5 class behind each value, in words a keyboard, touch or screen-reader user reaches too (not only a title). -->
+							<td class="num" data-testid="pan-helper-kp">
+								{r ? r.kp : '–'}{#if r}<span class="visually-hidden">{`: RH ${FAO56_RH_LABELS[r.cell.rhClass]}, wind ${FAO56_WIND_LABELS[r.cell.windClass]}, Table 5 ${r.tableKp}`}</span>{/if}
 							</td>
 						{/each}
 					</tr>
@@ -109,21 +116,27 @@
 				required
 				placeholder="e.g. station name, record period, monthly means"
 				value={form.source}
-				aria-invalid={!form.source.trim() || undefined}
-				class:invalid={!form.source.trim()}
+				aria-invalid={sourceBad || undefined}
+				aria-describedby="{uid}-src-h"
+				class:invalid={sourceBad}
 				oninput={(e) => (form.source = e.currentTarget.value)}
+				onblur={() => (sourceLeft = true)}
 			/>
+			<span class="hint" id="{uid}-src-h" class:err={sourceBad}>Required: it goes into the source note with the values.</span>
 		</div>
 		{#if !readonly}
 			<div class="row">
 				<button type="button" class="btn btn-sm" disabled={!ready} onclick={apply} aria-describedby="{uid}-block">Fill the pan-coefficient row</button>
-				<span class="hint" id="{uid}-block" role="status">{suggestion.blocker ? `${suggestion.blocker}.` : 'Replaces the 12 values in the row; you can still edit them.'}</span>
+				<span class="hint" id="{uid}-block">{suggestion.blocker ? `${suggestion.blocker}.` : 'Replaces the 12 values in the row; you can still edit them.'}</span>
 			</div>
 		{/if}
 	</div>
 </details>
 
 <style>
+	.hint.err {
+		color: var(--danger);
+	}
 	.pan-helper {
 		border-top: 1px solid var(--border);
 		padding-top: 0.6rem;

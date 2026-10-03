@@ -130,26 +130,60 @@ test('a number that needs fixing counts as unsaved: the bar lists it, and leavin
 	const project = await createProject(page.request, 'Bar invalid number');
 	await putModel(page.request, project.id, sampleModel());
 	await openTransfers(page, project.id);
+	// Only a number that needs fixing is unsaved, so the bar is named for that, not for model changes.
+	const invalidBar = (p: Page) => p.getByRole('region', { name: 'Unsaved changes' });
 	await page.getByLabel('Takes from, transfer 1', { exact: true }).selectOption('dam');
 	const storage = page.getByLabel('Min source storage of transfer 1, %', { exact: true });
 	await storage.fill('120');
 	await storage.blur();
-	await expect(saveBar(page)).toContainText('1 problem to fix before saving');
-	await expect(saveBar(page).getByRole('link', { name: /^Min source storage of transfer 1, %/ })).toBeVisible();
-	await expect(saveBar(page).getByRole('button', { name: 'Save changes' })).toBeDisabled();
+	await expect(invalidBar(page)).toContainText('1 problem to fix before saving');
+	await expect(invalidBar(page).getByRole('link', { name: /^Min source storage of transfer 1, %/ })).toBeVisible();
+	await expect(invalidBar(page).getByRole('button', { name: 'Save changes' })).toBeDisabled();
 
 	// Another page drops the field (it unmounts): asked first; Stay keeps the text.
 	await sections(page).getByRole('link', { name: 'Summary', exact: true }).click();
 	await answerConfirm(page, false, 'numbers that need fixing');
 	await expect(storage).toHaveValue('120');
 	// Its link puts the cursor back in it.
-	await saveBar(page).getByRole('link', { name: /^Min source storage of transfer 1, %/ }).click();
+	await invalidBar(page).getByRole('link', { name: /^Min source storage of transfer 1, %/ }).click();
 	await expect(storage).toBeFocused();
 	// Discard puts the stored value back, and nothing asks any more.
-	await saveBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
+	await invalidBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
 	await answerConfirm(page, true, 'the number that needs fixing');
 	await expect(storage).toHaveValue('20');
 	await sections(page).getByRole('link', { name: 'Summary', exact: true }).click();
 	await expect(title(page, 'Summary')).toBeVisible();
 	await expect(confirmBox(page)).toBeHidden();
+});
+
+test('on Settings, Run model with unsaved settings saves them first; a settings problem is a link in the bar and stops the run', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Bar settings run');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
+	const bar = page.getByRole('region', { name: 'Unsaved settings' });
+	const run = page.getByTestId('section-header').getByRole('button', { name: 'Run model', exact: true });
+
+	// A problem in a group: the bar links to it, and the run is refused, saying why.
+	await page.getByLabel('Simulation start').fill('2022-06-01');
+	await page.getByLabel('Simulation end').fill('2022-01-01');
+	await expect(bar.getByRole('link', { name: 'Simulation period: Simulation start must be before the end.' })).toBeVisible();
+	await run.click();
+	await answerConfirm(page, false, 'A run uses the saved model, and your unsaved settings can’t be saved yet');
+	await page.getByLabel('Simulation start').fill('');
+	await page.getByLabel('Simulation end').fill('');
+
+	// An edit: Save and run saves the settings (the project's PATCH), then runs.
+	await page.getByLabel('A-pan evaporation, Oct, mm').fill('160');
+	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
+	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/projects/${project.id}`));
+	const ran = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/projects/${project.id}/runs`));
+	await run.click();
+	await answerConfirm(page, true, 'Your unsaved settings aren’t in it yet');
+	expect((await saved).status()).toBe(200);
+	expect((await ran).status()).toBeLessThan(300);
+	await expect(page).toHaveURL(/tab=runs&run=/);
+	await expect(page.getByRole('region', { name: /^Unsaved / })).toHaveCount(0);
+	const settings = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
+	expect(settings.apanMm[0]).toBe(160);
 });

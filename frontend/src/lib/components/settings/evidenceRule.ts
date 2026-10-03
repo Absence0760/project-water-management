@@ -47,3 +47,18 @@ export function evidenceRuleFieldsError(r: DeclaredUncertaintyRule | null | unde
 	const err = declaredRuleError(r);
 	return err ? `Evidence uncertainty rule: ${err}.` : null;
 }
+
+/**
+ * The rule switched on or off. On brings back the rule switched off (`last`,
+ * kept until the form is saved or discarded) rather than the defaults: an
+ * untick and re-tick must never quietly change a declared licensing rule.
+ * Off withdraws it (withdrawnRule).
+ */
+export function withEvidenceRule(
+	on: boolean,
+	saved: DeclaredUncertaintyRule | null | undefined,
+	last: DeclaredUncertaintyRule | null | undefined
+): DeclaredUncertaintyRule | null | undefined {
+	if (!on) return withdrawnRule(saved);
+	return last ? (JSON.parse(JSON.stringify(last)) as DeclaredUncertaintyRule) : defaultEvidenceRule();
+}

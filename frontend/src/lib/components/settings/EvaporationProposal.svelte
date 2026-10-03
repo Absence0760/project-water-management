@@ -271,6 +271,21 @@
 		width: 13rem;
 		white-space: normal;
 	}
+	/* A narrow panel (a phone): the row label takes a narrow column and wraps, its unit on a line of its own,
+	   so about four months show beside it instead of two. A container query on the scroll box: the app
+	   frame's width isn't the viewport's. */
+	.table-wrap {
+		container: monthly / inline-size;
+	}
+	@container monthly (max-width: 30rem) {
+		.monthly th.sticky {
+			width: 6.5rem;
+			min-width: 6.5rem;
+		}
+		.monthly th.sticky .u {
+			display: block;
+		}
+	}
 	.monthly td {
 		width: calc(6.5ch + 0.7rem + 2px + 0.4rem);
 		padding-left: 0.2rem;

@@ -4,7 +4,9 @@
 	bounds and objectives to fit, the held-out test and score that pick the fit,
 	the filters, and the hydrologist's sign-off. The server sets the revision and
 	clears the sign-off when a rule changes. Bind the value; `error` is set while
-	it is invalid, so the parent form can block saving.
+	it is invalid, so the parent form can block saving. Bind `lastShare` to the
+	page's draft (settingsDraft `kept`): the flagged-days share unticking its rule
+	turned off, brought back when it is ticked again until saved or discarded.
 -->
 <script lang="ts">
 	import {
@@ -31,14 +33,18 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { BOUNDS_LABEL } from '$lib/calibration/fit';
 	import { pctToShare, rulesFieldsError, rulesStatusText, shareToPct, toggled } from './calibrationRules';
+	import { keptOr } from './kept';
 
 	let {
 		value = $bindable(),
 		error = $bindable(null),
+		lastShare = $bindable(),
 		readonly = false
 	}: {
 		value: CalibrationRules;
 		error?: string | null;
+		/** The share unticking "Leave out a water year…" turned off. */
+		lastShare?: unknown;
 		readonly?: boolean;
 	} = $props();
 
@@ -51,10 +57,16 @@
 	});
 	const name = (o: ObjectiveId) => OBJECTIVE_LABELS[o];
 	let signBy = $state('');
+	/** 20 % by default; ticked again, the share it was unticked with. */
+	function setExclusion(on: boolean) {
+		const share = value.exclusions.maxFlaggedShare;
+		if (!on && share !== null) lastShare = share;
+		value.exclusions = { maxFlaggedShare: keptOr(on, lastShare as number | null | undefined, () => 0.2, null) };
+	}
 </script>
 
 <fieldset class="plain rules" aria-describedby="{uid}-hint" data-testid="calibration-rules">
-	<legend>Calibration rules <HelpTip key="settings.calibrationRules" /></legend>
+	<legend><h3 class="title">Calibration rules <HelpTip key="settings.calibrationRules" /></h3></legend>
 	<p class="hint" id="{uid}-hint">
 		Automated calibration makes its choices by these rules, saved before any fit is seen: which water years to leave out, which fits to try and which
 		one to keep. It only runs on the saved rules, and saving a change raises the revision.
@@ -71,7 +83,7 @@
 					type="checkbox"
 					disabled={readonly}
 					checked={value.exclusions.maxFlaggedShare !== null}
-					onchange={(e) => (value.exclusions = { maxFlaggedShare: e.currentTarget.checked ? 0.2 : null })}
+					onchange={(e) => setExclusion(e.currentTarget.checked)}
 				/>
 				Leave out a water year by its flagged days
 			</label>
@@ -257,7 +269,8 @@
 		flex-direction: column;
 		gap: 0.15rem;
 	}
-	.field :global(input),
+	/* Not a checkbox: stretched, "Leave out a water year…" sat half a field away from its box. */
+	.field :global(input:not([type='checkbox'])),
 	.field select {
 		width: 100%;
 	}
@@ -282,7 +295,14 @@
 		color: var(--danger);
 		font-size: 0.85rem;
 	}
-	@media (max-width: 640px) {
+	.rules {
+		container: cal-rules / inline-size;
+	}
+	.title {
+		margin: 0;
+	}
+	/* A narrow column (a phone): touch-sized buttons. A container query, as the app frame's width isn't the viewport's. */
+	@container cal-rules (max-width: 40rem) {
 		.btn {
 			min-height: 44px;
 		}
