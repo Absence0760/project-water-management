@@ -374,7 +374,7 @@ test('a long dam marked off-channel on the map: its unit proposes Upstream inflo
 	await expect(unit.getByTestId('start-placement')).toHaveText('On the river where the dam’s own outflow joins it, as marked: off-channel, so the dam takes only its own catchment’s runoff.');
 	await expect(unit.getByTestId('start-tick-upstream')).not.toBeChecked();
 	await expect(unit).toContainText('Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it.');
-	await expect(unit).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,  ]+ km²; the rest passes it by\./);
+	await expect(unit).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,\u202f]+ km²; the rest passes it by\./);
 	await expectNoViolations(page);
 	await startSheet(page).getByTestId('start-tick-all').click();
 	await expect(unit.getByTestId('start-tick-upstream')).toBeChecked();

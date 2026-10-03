@@ -2,7 +2,7 @@
 // from merge.ts so the fetcher Lambda (lambda-fetcher.ts), which needs these
 // but not SERIES_KINDS, reaches only the engine's calendar module and not its
 // model (the bundle guard in lambda-fetcher.test.ts).
-import { fromEpochDay, toEpochDay, isIsoDate } from '@water-management/engine/calendar';
+import { isIsoDate } from '@water-management/engine/calendar';
 import { z } from 'zod';
 
 export const MAX_SERIES_VALUES = 60_000;

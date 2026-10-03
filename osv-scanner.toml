@@ -15,3 +15,18 @@ reason = "Prototype pollution fixed in xlsx 0.19.3; the repo pins 0.20.3 by CDN 
 id = "GHSA-5pgg-2g8v-p4x9"
 ignoreUntil = 2027-03-31
 reason = "ReDoS fixed in xlsx 0.20.2; the repo pins 0.20.3 by CDN URL, which OSV can't read as a version."
+
+# http-cache-semantics 4.2.0 (GHSA-ch52-4w7c-c8xp, Dependabot alert #44) has
+# no fixed release yet: the fix is on upstream's main (2026-09-29), not on
+# npm. It reaches only the report renderer's image (backend/renderer-deps),
+# through aws-lambda-ric -> node-gyp -> make-fetch-happen, and node-gyp runs
+# only while `npm ci` compiles aws-lambda-ric's native addon in the
+# Dockerfile's deps stage. Nothing loads it at run time, and the flaw needs a
+# cache shared between users' responses, which a one-off build that fetches
+# Node headers doesn't have. When a fixed version ships, refresh
+# renderer-deps/package-lock.json and drop this entry (docs/followups.md
+# § Server-side reports).
+[[IgnoredVulns]]
+id = "GHSA-ch52-4w7c-c8xp"
+ignoreUntil = 2027-01-31
+reason = "Build-time only (node-gyp under aws-lambda-ric in the renderer image's deps stage), never loaded at run time, no shared cache; no fixed release exists yet."

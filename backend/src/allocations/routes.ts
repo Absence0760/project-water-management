@@ -10,7 +10,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type RunAllocations, isIsoDate } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, type AllocationMode, type RunAllocations, isIsoDate } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';

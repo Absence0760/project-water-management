@@ -35,7 +35,7 @@
 // the volume, and its months and rate are what a cap run adds on top.
 //
 // Pure, like the rest of the engine.
-import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearOf, isIsoDate as isRealDate } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearOf, isIsoDate as isRealDate } from '../calendar';
 import { isStorageOnly, type AllocationEntry, type AllocationWaterSource } from './compare';
 import { cmpStr } from '../order';
 

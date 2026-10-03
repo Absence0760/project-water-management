@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import type { DemandObject, LandCoverPatch, ModelInput, ModelOutput, NetworkNode, ProjectSettings, RunSeries, Transfer } from '../project';
-import { runModel, runModelWith, withVerification } from '../run';
+import { runModelWith, withVerification } from '../run';
 import { checkInvariants } from '../verify/checks';
 
 const flat = (v: number) => new Array(12).fill(v);
@@ -125,7 +125,6 @@ function farmBalances(input: ModelInput, out: ModelOutput) {
 }
 
 
-const zeros = (n: number) => new Array(n).fill(0);
 /** Upstream unit A (all the runoff) → B (no area, the unit under test) → G: B's L + N is the natural flow. */
 const ab = (b: Partial<NetworkNode>, opts: { objects?: DemandObject[]; days: number; start?: string; settings?: Partial<ProjectSettings> }) =>
 	build({ nodes: [gauge(), farm('A', { downstreamNodeId: 'B' }), farm('B', { areaKm2: 0, ...b })], objects: opts.objects ?? [], days: opts.days, ...(opts.start ? { start: opts.start } : {}), ...(opts.settings ? { settings: opts.settings } : {}) });

@@ -16,7 +16,6 @@ import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
 
-const header = (page: Page) => page.getByTestId('section-header');
 const list = (page: Page) => page.getByTestId('map-feature-list');
 const card = (page: Page) => page.getByTestId('map-feature-card');
 const bar = (page: Page) => page.getByTestId('map-draw-bar');

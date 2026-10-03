@@ -121,8 +121,6 @@ async function failed(db: Db, feed: FeedRow, error: string): Promise<IngestOutco
 
 type OkResult = Extract<FetchResult, { ok: true }>;
 
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
-
 /**
  * The feed's final marker after this answer (CHIRPS only, else null): the last
  * day through which its series holds final values, every day from before the

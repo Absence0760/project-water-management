@@ -16,7 +16,6 @@ import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, loadSyntheticQuaternaries, loadSyntheticRivers, openLayers, openMap, parcelsGeoJson, showTab, uploadThroughSheet } from '../support/map.ts';
 import { layoutSettled } from '../support/reflow.ts';
 
-const header = (page: Page) => page.getByTestId('section-header');
 const layers = (page: Page) => page.getByTestId('map-layers');
 const codes = (page: Page) => page.getByTestId('map-quaternary-codes');
 const canvas = (page: Page) => page.getByTestId('catchment-map').locator('canvas');

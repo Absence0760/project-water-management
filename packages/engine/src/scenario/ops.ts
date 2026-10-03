@@ -5,7 +5,7 @@
 import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
-import { fromEpochDay, isIsoDate, toEpochDay } from '../calendar';
+import { isIsoDate } from '../calendar';
 /** An ISO calendar date that exists (not 2021-02-30): the calendar's own, here for the scenario code that imports it from this module. */
 export { isIsoDate };
 import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';

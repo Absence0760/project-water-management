@@ -15,7 +15,6 @@ import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION
 import { expect, test } from '../support/fixtures.ts';
 import { boundaryGeoJson, loadRiverNetwork, openMap, showTab, uploadThroughSheet } from '../support/map.ts';
 
-const header = (page: Page) => page.getByTestId('section-header');
 const sheet = (page: Page, name = 'Delineate a catchment') => page.getByRole('dialog', { name });
 const review = (page: Page) => sheet(page, 'The delineated catchment');
 

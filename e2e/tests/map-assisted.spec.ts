@@ -20,7 +20,6 @@ import { box, openMap, showTab } from '../support/map.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { WATER_DAM, WATER_DRY } from '../support/water.ts';
 
-const header = (page: Page) => page.getByTestId('section-header');
 const list = (page: Page) => page.getByTestId('map-feature-list');
 const card = (page: Page) => page.getByTestId('map-feature-card');
 const bar = (page: Page) => page.getByTestId('map-draw-bar');

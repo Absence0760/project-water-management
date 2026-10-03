@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
 import type { DemandObject, LandCoverPatch, ModelInput, ModelOutput, NetworkNode, ProjectSettings, RunSeries, Transfer } from '../project';
-import { runModel, runModelWith, withVerification } from '../run';
+import { runModelWith, withVerification } from '../run';
 import { checkInvariants } from '../verify/checks';
 
 const flat = (v: number) => new Array(12).fill(v);
@@ -37,24 +37,6 @@ function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 }
 const gauge = (id = 'G', over: Partial<NetworkNode> = {}): NetworkNode => farm(id, { kind: 'gauge', downstreamNodeId: null, areaKm2: 0, sortOrder: 99, ...over });
 
-const town = (nodeId: string, m3Day: number, over: Partial<DemandObject> = {}): DemandObject => ({
-	id: `town-${nodeId}`,
-	nodeId,
-	name: `Town at ${nodeId}`,
-	category: 'municipal',
-	sizing: 'monthly',
-	monthlyM3Day: flat(m3Day),
-	count: null,
-	litresPerUnitDay: null,
-	lossPct: 0,
-	monthlyFactor: null,
-	returnPct: 0,
-	priority: 'first',
-	destination: 'internal',
-	enabled: true,
-	note: '',
-	...over
-});
 
 interface Build {
 	nodes: NetworkNode[];
@@ -169,14 +151,18 @@ describe('fixed in 1.69.0: river off-takes of one priority break each other’s 
 		});
 
 	it('without a sibling: the two hands-off rules share the 100 m³ above 900 (holds today)', () => {
-		const out = run(net(false), [1000]);
+		const input = net(false);
+		const out = run(input, [1000]);
+		farmBalances(input, out);
 		near(get(out, 'S', 'transfer_rule@b1'), [50]);
 		near(get(out, 'S', 'transfer_rule@b2'), [50]);
 		near(get(out, 'S', 'outflow'), [900]);
 	});
 
 	it('a 1 m³/day sibling without a hands-off flow must not let them take more than the 100 m³ above their 900', () => {
-		const out = run(net(true), [1000]);
+		const input = net(true);
+		const out = run(input, [1000]);
+		farmBalances(input, out);
 		const both = get(out, 'S', 'transfer_rule@b1')[0]! + get(out, 'S', 'transfer_rule@b2')[0]!;
 		expect(both).toBeLessThanOrEqual(100 + 1e-9);
 		// The river below the source keeps 900 less at most the 1 m³ the rule without a hands-off flow may take below it.
@@ -213,6 +199,8 @@ describe('fixed in 1.69.0: off-take water arriving at a unit is summed in simula
 		const a = run(net(false), [300]);
 		const b = run(net(true), [300]);
 		passes(net(false), a);
+		farmBalances(net(false), a);
+		farmBalances(net(true), b);
 		const mb = new Map(b.series.map((s) => [`${s.nodeId}/${s.key}`, s.values]));
 		expect(get(b, 'D', 'offtake_in')).toEqual(get(a, 'D', 'offtake_in'));
 		for (const s of a.series) expect(mb.get(`${s.nodeId}/${s.key}`), `${s.nodeId}/${s.key}`).toEqual(s.values);

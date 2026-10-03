@@ -27,11 +27,6 @@ function series(out: Pick<ModelOutput, 'series'>, nodeId: string | null, key: st
 	if (!s) throw new Error(`no series ${nodeId}:${key}`);
 	return s.values;
 }
-const sum = (a: readonly number[], from = 0, to = a.length - 1) => {
-	let s = 0;
-	for (let t = from; t <= to; t++) s += a[t]!;
-	return s;
-};
 const snapshot = (x: ModelInput): RunInputsSnapshot => ({ settings: x.settings, model: x.model, series: Object.fromEntries(Object.entries(x.series).map(([k, s]) => [k, { startDate: s!.startDate, length: s!.values.length, valuesSha256: JSON.stringify(s!.values) }])) });
 
 /** The test catchment with a canal head `c` (a town of 150 m³/day) fed by a river off-take from Farm A. */
