@@ -342,6 +342,12 @@ pnpm dev:ingest:push                                   # into flow_logger_m3s �
 pnpm dev:ingest:push --kind rain_catchment_mm --name Weir --unit mm --file my.csv --keep-dates
 ```
 
+A CSV is `date,value` rows (`YYYY-MM-DD`, a plain decimal or empty for no
+reading), a header row and `#` comments skipped, in any order; days it
+leaves out are sent as no reading. A day given twice, an impossible date
+(`2024-02-31`) or a value that isn't a decimal number stops the script
+before anything is sent.
+
 The series appears on the Data tab, and History shows the merge by
 `API key “<name>”`. Nothing sensitive is committed: the key lives only in
 your gitignored file.
