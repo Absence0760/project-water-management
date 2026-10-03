@@ -416,7 +416,10 @@ decide a licence application.
   source and a reason code: never the stored message, which can name a grid
   cell or a station) and `report_render_failed` (the report and project ids,
   `render`/`store` and `retry`: never the error text or the render token), and
-  a failed queue send or PDF store by `safeError` too. Never an error's message or a pg `detail`, which
+  a failed queue send or PDF store by `safeError` too, as does the worker for a
+  queue record it couldn't handle (`worker_record_failed`), a job's progress
+  write (`job_progress_failed`) and a `job_dead` alert check it couldn't queue
+  (`alert_schedule_failed`). Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
