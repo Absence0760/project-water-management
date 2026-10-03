@@ -14,6 +14,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { ALLOCATION_EVENT_IDENTIFIERS, withoutAllocationIdentifiers } from './viewerUnits.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Event = { type: string; kind: string; subject: Record<string, unknown> };
@@ -130,6 +131,17 @@ describe('the data-subject export', () => {
 		}
 		// What the person did is still there.
 		expect(mine.map((e) => e.kind)).toContain('allocation.created');
+	});
+
+	it('drops exactly the export’s identifier list in SQL too, so the two lists can’t drift apart', async () => {
+		// app_audit_subject (190) and ALLOCATION_EVENT_IDENTIFIERS (viewerUnits.ts) each name the keys; one
+		// added to only one of them would leak through the other channel.
+		const subject = Object.fromEntries([...ALLOCATION_EVENT_IDENTIFIERS.map((k) => [k, 'x']), ['allocationId', 'kept']]);
+		const [row] = await withUser(viewer.id, async (db) =>
+			(await db.query(`SELECT app_audit_subject($1, 'allocation.changed', $2::jsonb) AS s`, [projectId, JSON.stringify(subject)])).rows
+		);
+		expect(row.s).toEqual({ allocationId: 'kept' });
+		expect(withoutAllocationIdentifiers({ kind: 'allocation.changed', subject } as never).subject).toEqual(row.s);
 	});
 });
 
