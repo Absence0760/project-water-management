@@ -253,8 +253,8 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'b023 Farm spec'
 	},
 	'flow-share': {
-		long: 'Catchment natural flow is split into the runoff of each hydrological unit by a fixed share per hydrological unit. Three methods:\n\n• Area — the hydrological unit’s area over the total area.\n• Hi/Lo — area-weighted separately in the high- and low-rainfall zones, then combined with the Hi/Lo split.\n• Manual — a share you enter per hydrological unit, typically computed in a separate study.\n\nThe same shares divide the pragmatic EWR into per-unit EWR shares. A warning appears when the shares don’t sum to 1 (tolerance 0.0002).',
-		aliases: ['fragmentation', 'fragmented flow', 'share'],
+		long: 'Catchment natural flow is split into the runoff of each hydrological unit by a fixed share per hydrological unit. Three methods:\n\n• Area — the hydrological unit’s area over the total area.\n• Hi/Lo — area-weighted separately in the high- and low-rainfall zones, then combined with the Hi/Lo split.\n• Manual — a share you enter per hydrological unit, typically computed in a separate study.\n\nThe same shares divide the pragmatic EWR into per-unit EWR shares. A warning appears when the shares don’t sum to 1 (tolerance 0.0002).\n\nChoose the method in Settings & calibration, under Flow share between hydrological units. The node table’s In use column and each hydrological unit’s form (Share in use) show the share it gets with the saved method, and the table’s total row their sum.',
+		aliases: ['fragmentation', 'fragmented flow', 'share', 'share in use', 'in use'],
 		related: ['hi-lo-split', 'farm-area', 'natural-flow'],
 		source: 'b023 Farm spec; docs/model.md §2.5'
 	},

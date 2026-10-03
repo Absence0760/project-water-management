@@ -2122,7 +2122,12 @@ note's link on the Summary, `notes.ts` `noteHref`).
   every field has
   a unit, a help tip and an entry in the field guide. Percentages are stored
   0–1 and shown 0–100. Fields that only apply to farms show "–" on gauge rows.
-  The flow share in use (with the Settings method) and its total are shown.
+  The flow share in use (with the Settings method) and its total are shown;
+  computed, it isn't a field, but it has its ⓘ (the Flow share glossary
+  entry) and a field-guide row like the fields, and the table's intro and the
+  one-node form link "Settings & calibration" to the method
+  (`?tab=settings#set-share`). The method's hint in Settings links back to
+  the node table.
   The one-node form and the view-only table show thousands separators
   (300 000, the app's usual `fmtNum` style, § Number style) on the non-% fields; a field
   switches to the plain number while it is being edited, and typed or pasted
