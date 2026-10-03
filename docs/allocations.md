@@ -227,7 +227,10 @@ decides what the volumes do to a run
   registered or licensed volume were taken in full (a registration is not an
   entitlement), the background of a cumulative
   assessment (WP-3.11). A scenario can switch it on for one run
-  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
+  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)). A demand
+  level (an outlook's, a sweep's, a scenario's `demand.scale`, the
+  abstraction sensitivity case) applies after the scaling, so 80 % asks for
+  80 % of the volumes (engine ≥ 1.70.0, [model.md §2.12a](./model.md)).
 
 A scenario can also set, replace or remove a volume for one run
 (`allocation.set` / `allocation.remove`, engine ≥ 1.35.0, [scenarios.md §

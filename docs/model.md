@@ -320,6 +320,11 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    changes; a value that isn't a date is ignored with a warning. Only the
    seasonal outlook sets it (§2.15), so a demand level changes the season
    and not the history the season starts from. It is not a project setting.
+   On a full-allocation run (§2.12a) the factor applies **after** the
+   allocation's factor k, which is fitted on the demand before it (engine ≥
+   1.70.0, issue #90 Q29): F = factor × k × F₀, so 85 % is 85 % of the
+   registered use. Before 1.70.0 k was fitted on the factored demand and a
+   uniform factor cancelled out.
 
 5. **Abstraction demand (engine ≥ 0.16.0, [audit N1](./engine-audit.md))**:
    the farm abstracts enough to cover its application losses,
@@ -3866,12 +3871,21 @@ before to the bit, and a day the schedule switches off stays off (s = 0, no
 floor). The floor is on the demand, not the supply: on a short day the
 object is still served by its priority class, and what it lacks of b_k(t) is
 reported. A full allocation (`allocationMode` `fullAllocation`, §2.12a)
-rescales the unit's whole demand afterwards by its factor KF, but on a
-restricted day an object with a floor keeps MAX(KF × o_k, MIN(B_k, o_k)), so
-a restriction what-if on a full-allocation run never takes it below its
-floor either (the unit's demand over the year is then its registered volume
-plus what the floor holds). A full allocation alone is not a restriction and
-rescales the object, floor included; whether it should hold the floor too is
+scales the object by its factor KF **first** (engine ≥ 1.70.0, issue #90
+Q29), and the demand factor then cuts that:
+
+```
+o_k(t) = MAX(KF × monthly_k[m] × s_k(t) × f[m], MIN(B_k, KF × monthly_k[m] × s_k(t)))     when f[m] < 1
+```
+
+so a restriction what-if on a full-allocation run cuts the registered use and
+never takes the object below MIN(its floor, its registered use), the floor
+the drought restriction rule keeps too (§2.7i). Before 1.70.0 it kept
+MAX(KF × o_k, MIN(B_k, o_k)) with o_k the restricted demand above: the floor
+of the demand before the allocation, which could ask for more than the unit
+had registered (25 m³/day of floor in a year with nothing registered). A
+full allocation alone is not a restriction and rescales the object, floor
+included; whether it should hold the floor too is
 [audit W1](./engine-audit.md), for the hydrologist. The curtailment report holds the floor
 too (§2.11). The drought restriction rule (WP-3.8, engine ≥ 1.54.0, §2.7i) holds
 the same floor, with the object's floor and `dayFloor`: MIN(floor, the
@@ -4218,9 +4232,10 @@ each **pending the hydrologist**, listed in
   rule reuses the object's floor and `dayFloor`. A cut of 100 % leaves the
   floor. Its demand before the restriction is the plan's, so on a
   full-allocation run it is already scaled by the allocation factor KF and
-  the floor is MIN(floor, KF × d), where a `demand.scale` restriction keeps
-  MIN(floor, d): [engine-audit W1](./engine-audit.md), for the hydrologist,
-  decides both.
+  the floor is MIN(floor, KF × d), as a `demand.scale` restriction's is from
+  engine 1.70.0 (§2.7f; before, it kept MIN(floor, d)). Whether a full
+  allocation alone should hold the floor is [engine-audit W1](./engine-audit.md),
+  for the hydrologist.
 - *The demand stays the demand.* Unlike `demand.scale` (a scenario's change
   in what is wanted), a restriction is a cut in what is supplied: the
   shortfall and the assurance of supply count it.
@@ -6939,7 +6954,7 @@ the ensemble's members). Each change is a scenario op (`applyScenario`,
 | Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast, a rain-source period's alternative gauge and the reanalysis, engine ≥ 1.69.0; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
 | Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
 | Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
-| Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it | no unit or user has demand over the reporting window |
+| Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it. On a full-allocation run, 0.7 and 1.3 × the registered volume (engine ≥ 1.70.0, §2.12a; before, both ends were the central run) | no unit or user has demand over the reporting window |
 | Initial dam storage | empty / full | every dam's `damInitialPct` 0 / 1 (`node.set`) | no farm has a dam |
 
 The ranges are CR-21's, except the dam evaporation factor's: ±15 % gives
@@ -7967,6 +7982,43 @@ the unit at 0 m³ (docs/allocations.md § Importing). An allocation without
   `scaled-no-demand-tail-year`). A tail that starts on 1 October starts a
   year with no historical days, a part year of its own over its tail days.
 
+  **Demand factors apply after the full allocation** (engine ≥ 1.70.0,
+  issue #90 Q29, the operator's provisional answer pending the
+  hydrologist). *D* in *k* is the demand **before** the unit's demand
+  factors (a scenario's `demand.scale` and its parts, §2.3 step 4a; a
+  seasonal outlook's or demand sweep's level, §2.14, §2.15; the abstraction
+  sensitivity case, §2.10g), and the factors then multiply the scaled
+  demand:
+
+  ```
+  D′(n,t) = f(n,t) × k(n,y) × D₀(n,t)        crops: F = f_crops × k × F₀; each object as §2.7f; a water user f × k × its row
+  ```
+
+  So a level of 0.8 asks for 80 % of the registered volume, 1.2 for 120 %
+  (more than registered: an over-abstraction what-if), and a factor on some
+  months only takes those months' share of the volume down. The allocation's
+  *k*, its `allocation_demand_factor` column and the summary's `scaled` rows
+  (the demand before, the volume after) are the run's without the factors.
+  Before 1.70.0 *k* was fitted on the factored demand, so a uniform factor
+  cancelled out and a months-only one moved water between months: every
+  level of a full-allocation outlook asked the same water (ER-23 aside),
+  the abstraction sensitivity case gave both ends the central run, and a
+  scenario's `demand.scale` on a registered unit did nothing to its year.
+  **Why this order**: South African restrictions are stated as a share of
+  each user's allocation or registration, not of a modelled demand: DWS's
+  curtailments "are measured against the water allocations/water
+  registrations or water demand of the users as per projected annual water
+  use" ([DWS, GN 1220 of 2020](https://source.acts.co.za/national-water-act-1998/n1220_notice_no__1220_of_2020.php),
+  e.g. "70 % of allocation"), and the Western Cape system's operating rules
+  inform users "what their allocations will be" and hold them to "the
+  restricted allocations" ([WCWSS operating rules, Annexure C §C.1.3](https://sbm.gov.za/wp-content/uploads/Pages/E-Library/Council_Item_BRVAS/BRVAS-Annexure-C-Operating-Rules-CLN.pdf)).
+  A full allocation stands for every holder taking that allocation, so a
+  level is a share of it; the drought restriction rule (§2.7i) already cut
+  the scaled demand. Outside a full allocation nothing changes: `none` and
+  `cap` never scale demand, and a unit without a volume, or a run whose
+  factors are 1, runs to the bit as before
+  (`e2e/outputs.fullAllocationLevels.e2e.test.ts`).
+
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
 **cap** applies the months and the rate, per source, each day:
@@ -8061,7 +8113,10 @@ the budget on 1 October, falling by the day's use, with the room MIN(it, the
 limit); `limitBound` redone per day from those columns, the use, `demand` and
 `deficit` with `limitBoundKind`; a full
 allocation's factor constant within a year and each scaled unit's demand over
-the run's days of a year equal to the volume registered over them; no mode
+the run's days of a year equal to the volume registered over them (with a
+demand factor, engine ≥ 1.70.0, its demand before the factor, recomputed
+from the gross demand, the effective rain and the objects' months, × the
+factor); no mode
 column in a run of another mode; and `RunSummary.allocations` equal to
 `compareAllocations` of the run's own series. The day replays in the balance
 and workings checks (the user's river take, the farm's dam, river pump,
@@ -8254,7 +8309,8 @@ of the run's natural flow at the outlet (`natural_flow`, m³).
 
 **Outcome matrix** (`outcomeMatrix(levels, classes, options)`). One row per
 demand level (a run each; R1's `demand.scale` at 1.0 / 0.85 / 0.7 once it
-exists), one column per class. Per cell:
+exists; on a full-allocation project a share of the registered volume,
+engine ≥ 1.70.0, §2.12a), one column per class. Per cell:
 
 | Metric | When | Per water year | Cell value |
 | --- | --- | --- | --- |
@@ -8503,7 +8559,13 @@ checks the method reproduces the base run).
 - the level's ops applied. **Only `demand.scale` ops make a level**
   (`outlookLevelProblems`): any other op would change the history, and so
   the state the season starts from. A base that already carries a demand
-  factor (a scenario run) is refused.
+  factor (a scenario run) is refused. On a full-allocation project (§2.12a)
+  a level is a share of each unit's **registered volume** (engine ≥ 1.70.0,
+  issue #90 Q29): the level applies after the allocation's factor, so a
+  member from 1 October asks level × the volume over the season's days,
+  and from a later decision date level × what the 100 % member asks. Before
+  1.70.0 the factor was refitted on the levelled demand and every level's
+  members asked the same water; the planning figure then said nothing.
 
 `outlookSeasonInput` builds the same member without the history, for a run
 from a snapshot: its only series are the season's forecast rain and daily
@@ -8528,7 +8590,8 @@ the one the year's days before the decision date fit, and dropped on
 1 October, where the member fits its own part year and asks for its prorated
 volume (`withAllocationKnownBefore`, in `outlookBaseAndSnapshot` and
 `runOutlookMember`; engine ≥ 1.69.0, before, errata ER-23): what the older
-path's members fit. The older path, kept as `warmStart: false` and
+path's members fit. Either factor is fitted on the demand before the level,
+which then applies after it (engine ≥ 1.70.0, §2.12a). The older path, kept as `warmStart: false` and
 `outlookMemberInput`, re-ran the history in every member as forecast mode
 does (§2.4f) and refitted those statistics on each member's record
 (history + analogue season; from engine 1.28.0 on the history before the
@@ -8669,7 +8732,8 @@ storage reset below does on the snapshot's day, every series to the bit
 except the reset's `dam_storage_set` step, which a snapshot's dams don't
 need (`warmstart.invariants.test.ts`). The snapshot comes from
 `outlookBaseAndSnapshot`, so a full allocation's decision-year factor is the
-one fitted before the review date, as in §2.15 (engine ≥ 1.69.0). With
+one fitted before the review date, as in §2.15 (engine ≥ 1.69.0), and each
+level is a share of the registered use (engine ≥ 1.70.0). With
 `warmStart: false` each member re-runs the history and sets the storage
 inside the run:
 

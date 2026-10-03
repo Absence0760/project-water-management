@@ -241,7 +241,7 @@
 				<div class="field">
 					<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
 					<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date.</span>
+					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date; on a full-allocation run, its registered volume (80 means 80 % of it).</span>
 				</div>
 				<label class="check">
 					<input type="checkbox" bind:checked={withPlan} disabled={busy} />
