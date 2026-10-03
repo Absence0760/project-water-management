@@ -9,12 +9,12 @@
 // its own branch's last cell before it (that branch only). Measured and
 // tested against the routing Delineate uses; pure.
 import { DX, DY, OUT } from './flow.js';
-import { place, type PlaceGrid } from './place.js';
+import { place, WIDE_MATCH_M, type PlaceGrid } from './place.js';
 
 /** How far (m) the branches' paths may run before they must have met: past it the DEM's junction is too far from the click to trust. */
 export const JUNCTION_PATH_M = 4000;
 /** How far (m) a branch's channel is looked for from the click once the river is named. */
-export const JUNCTION_MATCH_M = 2500;
+export const JUNCTION_MATCH_M = WIDE_MATCH_M;
 
 export interface JunctionRiver {
 	key: string;
@@ -48,7 +48,7 @@ export function junctionOutlets(g: PlaceGrid & { dir: Uint8Array }, cx: number, 
 	};
 	const tributary = above[0]!;
 	const main = above[above.length - 1]!;
-	const t = place(g, cx, cy, { snapRadiusM, expectedKm2: tributary.km2, matchRadiusM: JUNCTION_MATCH_M });
+	const t = place(g, cx, cy, { snapRadiusM, expectedKm2: tributary.km2, chosen: true });
 	if (!t || t.how !== 'matched') return null;
 	const steps = Math.ceil(JUNCTION_PATH_M / g.cellSizeM) * 2;
 	// Half the main river's area, but no more than a quarter of the routed window: a river bigger than the window
@@ -78,7 +78,7 @@ export function junctionOutlets(g: PlaceGrid & { dir: Uint8Array }, cx: number, 
 		for (const r of rivers) if (r.role === 'below') out.set(r.key, k);
 		// A third river above (rare): matched by area, as without a junction.
 		for (const r of above.slice(1, -1)) {
-			const p = place(g, cx, cy, { snapRadiusM, expectedKm2: r.km2, matchRadiusM: JUNCTION_MATCH_M });
+			const p = place(g, cx, cy, { snapRadiusM, expectedKm2: r.km2, chosen: true });
 			if (!p) return null;
 			out.set(r.key, p.cell);
 		}

@@ -3181,6 +3181,8 @@ export interface LargerChannel {
 	km2: number;
 	/** What drains through the cell the point snapped to (km²). */
 	pointKm2: number;
+	/** Offered because it matches a nearby river reach (not for being 100× larger): the reach's area at the point (km²). It can be smaller than the point's channel. */
+	reachKm2?: number;
 }
 
 /** POST …/map/subcatchments: one piece per click kept, in click order; the dropped clicks with why. */

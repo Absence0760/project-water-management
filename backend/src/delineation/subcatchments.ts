@@ -14,7 +14,7 @@ import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import { AUTHALIC_RADIUS_M, sinAuthalic } from '../geo/area.js';
 import type { Dem, DemInfo } from './dem.js';
 import { boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
-import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
+import { junctionOutlets, type JunctionRiver } from './junction.js';
 import { place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
@@ -41,8 +41,10 @@ export interface UnitPoint {
 	geometry: Geometry;
 	/** A point's expected upstream area (km², a nearby river reach's): the point is matched to it (place.ts, issue #374). */
 	expectedKm2?: number | null;
-	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M. */
+	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M (place.ts `chosen`). */
 	chosen?: boolean;
+	/** How far the point is from that reach's line (m): off the line, a point on a DEM channel of its own stays there (place.ts rule 3). */
+	reachDistanceM?: number | null;
 	/** At a confluence: its rivers and the one picked; the point goes on the DEM's own junction (junction.ts), else by area. */
 	junction?: { rivers: JunctionRiver[]; chosenKey: string } | null;
 }
@@ -358,16 +360,24 @@ export async function delineateUnits(
 				if (key !== undefined) how.set(key, { placedBy: 'junction' });
 				return atJunction;
 			}
-			const placed = place(g0, x, y, { snapRadiusM, expectedKm2, matchRadiusM: pt?.chosen ? JUNCTION_MATCH_M : undefined });
+			const placed = place(g0, x, y, { snapRadiusM, expectedKm2, chosen: pt?.chosen, reachDistanceM: pt?.reachDistanceM });
 			if (!placed) return null;
 			if (key !== undefined) {
 				const larger = placed.larger
 					? (() => {
 							const lx = placed.larger.cell % nCells;
-							return { at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]), distanceM: placed.larger.distanceM, km2: km2(acc[placed.larger.cell]!), pointKm2: km2(acc[placed.cell]!) };
+							return {
+								at: toPos([lx + 0.5, (placed.larger.cell - lx) / nCells + 0.5]),
+								distanceM: placed.larger.distanceM,
+								km2: km2(acc[placed.larger.cell]!),
+								pointKm2: km2(acc[placed.cell]!),
+								...(placed.larger.reach && expectedKm2 ? { reachKm2: expectedKm2 } : {})
+							};
 						})()
 					: undefined;
-				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}), ...(expectedKm2 && placed.how === 'snapped' ? { unmatched: true } : {}) });
+				// A channel matching the reach, offered (place.ts rules 3 and 4), says more than "unmatched" would.
+				const unmatched = !!expectedKm2 && placed.how === 'snapped' && !placed.larger?.reach;
+				how.set(key, { placedBy: placed.how, ...(larger ? { larger } : {}), ...(unmatched ? { unmatched: true } : {}) });
 			}
 			return placed.cell;
 		};

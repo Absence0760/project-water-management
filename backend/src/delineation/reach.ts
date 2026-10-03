@@ -11,6 +11,15 @@
 // doesn't choose: it answers with the choices (ConfluenceChoice), each labelled
 // by where it lies against the junction, and the caller asks the editor, who
 // sends the one they meant back as `reach`.
+//
+// A reach's upstream area is what drains to its LOWER end. A click near the
+// top of a long reach drains less, and matched to the lower end's area it
+// slid downstream: clicks a kilometre below the head of 16–50 km² head reaches
+// slid 266–781 m down the river in 7 of 15 matched clicks (the hydrologist persona's
+// finding 13). So the area the click is matched to is the reach's area at the
+// click (areaAlong): its upper end's area (what its inflowing reaches drain,
+// or HEAD_KM2 for a reach nothing flows into) plus the rest in proportion to
+// how far down the line the click lies.
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Position } from '../geo/geojson.js';
@@ -83,6 +92,67 @@ export function lineDistM(p: Position, coordinates: Position[] | Position[][]): 
 export interface NearReachLine extends NearReach {
 	start: Position;
 	end: Position;
+	/** The line itself, as one run of positions from its upper end to its lower end. */
+	line: Position[];
+}
+
+/**
+ * Where a HydroRIVERS line starts with nothing flowing into it, its catchment has just reached the network's threshold:
+ * "rivers with a catchment of at least 10 km² or a mean flow of at least 0.1 m³/s" (HydroRIVERS v1.0 technical documentation).
+ */
+export const HEAD_KM2 = 10;
+
+/** How far down the line (0 at its upper end, 1 at its lower end) the point nearest p lies, by length. Pure. */
+export function fractionAlong(p: Position, line: readonly Position[]): number {
+	const kx = 111320 * Math.cos((p[1] * Math.PI) / 180);
+	const ky = 110950;
+	let total = 0;
+	let at = 0;
+	let best = Infinity;
+	for (let i = 0; i + 1 < line.length; i++) {
+		const a = line[i]!;
+		const b = line[i + 1]!;
+		const ax = (p[0] - a[0]) * kx;
+		const ay = (p[1] - a[1]) * ky;
+		const dx = (b[0] - a[0]) * kx;
+		const dy = (b[1] - a[1]) * ky;
+		const len = Math.hypot(dx, dy);
+		const t = len ? Math.max(0, Math.min(1, (ax * dx + ay * dy) / (len * len))) : 0;
+		const d = Math.hypot(ax - t * dx, ay - t * dy);
+		if (d < best) (best = d), (at = total + t * len);
+		total += len;
+	}
+	return total ? at / total : 1;
+}
+
+/**
+ * The reach's upstream area at the click (km²): its upper end's (`upperKm2`, what flows in; null: nothing does, so
+ * HEAD_KM2) plus the rest of its area in proportion to how far down the line the click lies. Never above the reach's own
+ * area or below its upper end's. Pure.
+ */
+export function areaAlong(r: Pick<NearReachLine, 'upstreamKm2' | 'line'>, click: Position, upperKm2: number | null): number {
+	const top = Math.min(upperKm2 ?? HEAD_KM2, r.upstreamKm2);
+	return top + (r.upstreamKm2 - top) * fractionAlong(click, r.line);
+}
+
+/** What drains to the reach's upper end: the areas of the reaches whose lower end is there, or null when none is. */
+async function upperEndKm2(db: Db, r: NearReachLine): Promise<number | null> {
+	const [lon, lat] = r.start;
+	const eps = 1e-6;
+	const { rows } = await db.query<{ upstream_km2: number; geometry: { coordinates: Position[] | Position[][] } }>(
+		`SELECT upstream_km2, geometry FROM river_reference
+		  WHERE dataset = $1 AND upstream_km2 IS NOT NULL AND reach_id <> $2
+		    AND max_lon >= $3 AND min_lon <= $4 AND max_lat >= $5 AND min_lat <= $6
+		  LIMIT 50`,
+		[r.dataset, r.reachId, lon - eps, lon + eps, lat - eps, lat + eps]
+	);
+	let sum = 0;
+	let any = false;
+	for (const u of rows) {
+		const end = linesOf(u.geometry.coordinates).at(-1)!.at(-1)!;
+		if (Math.abs(end[0] - lon) <= eps && Math.abs(end[1] - lat) <= eps) (sum += u.upstream_km2), (any = true);
+	}
+	return any ? sum : null;
 }
 
 /** Every reach with an upstream area within `radiusM` of the click, the nearest first. */
@@ -101,7 +171,7 @@ export async function reachesNear(db: Db, click: Position, radiusM = MATCH_RADIU
 		const d = lineDistM(click, r.geometry.coordinates);
 		if (d > radiusM) continue;
 		const lines = linesOf(r.geometry.coordinates);
-		out.push({ dataset: r.dataset, reachId: Number(r.reach_id), upstreamKm2: r.upstream_km2, distanceM: d, start: lines[0]![0]!, end: lines.at(-1)!.at(-1)! });
+		out.push({ dataset: r.dataset, reachId: Number(r.reach_id), upstreamKm2: r.upstream_km2, distanceM: d, start: lines[0]![0]!, end: lines.at(-1)!.at(-1)!, line: lines.flat() });
 	}
 	return out.sort((a, b) => a.distanceM - b.distanceM);
 }
@@ -134,7 +204,7 @@ export function confluenceChoices(click: Position, near: readonly NearReachLine[
 	// there turns on. Only two in the same place against the junction with about one area are one choice (the nearer kept).
 	const kept: NearReachLine[] = [];
 	for (const r of close) if (!kept.some((k) => roleOf(k) === roleOf(r) && ratio(k, r) < DISTINCT_FACTOR)) kept.push(r);
-	const withRole = kept.map(({ start: _s, end: _e, ...r }) => ({ ...r, role: roleOf({ ...r, start: _s, end: _e }) }));
+	const withRole = kept.map(({ start: _s, end: _e, line: _l, ...r }) => ({ ...r, role: roleOf({ ...r, start: _s, end: _e, line: _l }) }));
 	const above = withRole.filter((r) => r.role === 'above');
 	const mainAbove = above.reduce<(typeof above)[number] | null>((m, r) => (!m || r.upstreamKm2 > m.upstreamKm2 ? r : m), null);
 	const labelOf = (r: (typeof withRole)[number]) =>
@@ -151,18 +221,30 @@ export function confluenceChoices(click: Position, near: readonly NearReachLine[
 	return withRole.sort((a, b) => order[a.role] - order[b.role] || b.upstreamKm2 - a.upstreamKm2).map((r) => ({ ...r, label: labelOf(r) }));
 }
 
+/** The reach a click means, as reachFor gives it: `upstreamKm2` is its area AT THE CLICK (areaAlong), `reachKm2` at its lower end. */
+export interface ReachAtClick extends NearReach {
+	reachKm2: number;
+}
+
 /**
  * The reach to match a click to: the one the editor `chose` (re-read here,
  * never taken from the request; refused unless within MATCH_RADIUS_M), else
  * the nearest, unless the click is at a confluence (ConfluenceAmbiguity).
+ * Its `upstreamKm2` is the area at the click, the one to match the outlet to.
  */
 export async function reachFor(
 	db: Db,
 	click: Position,
 	chosen?: { dataset: string; reachId: number } | null
-): Promise<{ reach: NearReach | null; junction: { rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[]; chosenKey: string } | null }> {
+): Promise<{ reach: ReachAtClick | null; junction: { rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[]; chosenKey: string } | null }> {
 	const near = await reachesNear(db, click);
-	const plain = (r: NearReachLine): NearReach => ({ dataset: r.dataset, reachId: r.reachId, upstreamKm2: r.upstreamKm2, distanceM: r.distanceM });
+	const plain = async (r: NearReachLine): Promise<ReachAtClick> => ({
+		dataset: r.dataset,
+		reachId: r.reachId,
+		upstreamKm2: areaAlong(r, click, await upperEndKm2(db, r)),
+		reachKm2: r.upstreamKm2,
+		distanceM: r.distanceM
+	});
 	const choices = confluenceChoices(click, near);
 	if (chosen) {
 		const r = near.find((x) => x.dataset === chosen.dataset && x.reachId === chosen.reachId);
@@ -170,10 +252,10 @@ export async function reachFor(
 		// At a confluence the junction's rivers go along, so the outlet is put at the DEM's own junction (junction.ts).
 		const keyOf = (c: { dataset: string; reachId: number }) => `${c.dataset}:${c.reachId}`;
 		return {
-			reach: plain(r),
+			reach: await plain(r),
 			junction: choices ? { rivers: choices.map((c) => ({ key: keyOf(c), role: c.role, km2: c.upstreamKm2 })), chosenKey: keyOf(r) } : null
 		};
 	}
 	if (choices) throw new ConfluenceAmbiguity(choices);
-	return { reach: near[0] ? plain(near[0]) : null, junction: null };
+	return { reach: near[0] ? await plain(near[0]) : null, junction: null };
 }
