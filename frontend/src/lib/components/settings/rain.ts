@@ -88,12 +88,12 @@ export const ACCUMULATION_OPTIONS: { value: AccumulationMode; label: string; hel
 	{
 		value: 'spread',
 		label: 'Spread over the days they cover (default)',
-		help: 'A large reading after days of 0 or blank, on a day CHIRPS was dry although it rained over those days, looks like several days read at once. The recorded total is kept and spread over the days in proportion to bias-corrected CHIRPS, instead of all on one day. The stored series is not changed, and each run lists what it spread.'
+		help: 'A large reading after days of 0 or blank, on a day CHIRPS was dry although it rained over those days, looks like several days read at once. The recorded total is kept and spread over the days in proportion to bias-corrected CHIRPS, instead of all on one day. Blank days count only up to 7 in a row: a large reading straight after a longer outage is set aside and CHIRPS fills its day. The stored series is not changed, and each run lists what it spread or set aside.'
 	},
 	{
 		value: 'asRecorded',
 		label: 'Run as recorded (one day)',
-		help: 'Each reading stays on its day, as the workbook runs it. The days before it stay 0, or are filled from CHIRPS when they are part of a flagged zero run, so that rain is counted twice. To keep only some readings as recorded, list them below instead.'
+		help: 'Each reading stays on its day, as the workbook runs it. The days before it stay 0, or are filled from CHIRPS when they are part of a flagged zero run or a blank outage, so that rain is counted twice. To keep only some readings as recorded, list them below instead.'
 	}
 ];
 
