@@ -1654,7 +1654,10 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `refused`, or `superseded` by the same editor's next click),
   `click_kind`, `click_lon`, `click_lat`, `keep_point`, `reach` (the reach
   picked at a confluence, jsonb), `from_window` (the smallest window the
-  job tries), `proposal_id` (composite key → `delineation_proposal (id,
+  job tries), `aim` (jsonb ≤ 300 bytes: where the request's last window
+  cut the catchment, `{ zoom, box, cut }`, so the job's first window is
+  placed over it; null when the request asked for the background at once),
+  `proposal_id` (composite key → `delineation_proposal (id,
   project_id)`, `ON DELETE SET NULL (proposal_id)`; that table gained the
   `UNIQUE (id, project_id)` for it), `refusal_code`, `refusal`, `larger`
   (the channel a `larger_channel` refusal offers), `check_note`,
@@ -1677,7 +1680,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method` (1–1000: each placement rule that ran defined once, or, when nearly every kind ran at once and that would pass 1 000 characters, named by the method version instead, `fitMethod`),
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),

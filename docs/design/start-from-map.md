@@ -98,7 +98,27 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    delineation's windows (1 024, 2 048, 3 072 cells) that holds the
    boundary's box. Filled and routed once; grown while the outlet's
    catchment reaches the window's edge; refused at the cap (the ~100 km
-   limit stays, followups.md), as a single delineation is.
+   limit stays, followups.md), as a single delineation is. Since
+   `start-12` (issue #390, the hydrologist persona's findings 1 and 6,
+   as Delineate's `delineate-6`, [delineation.md § Method](./delineation.md#method)
+   step 2):
+   - **Placed over the catchment**: each larger window is placed by the
+     catchment the last one cut (`windowOrigin`), keeping the points and
+     the boundary (with their margin) and 6.5 km round the centre inside,
+     so a catchment running one way from its gauge isn't refused at half
+     the window.
+   - **Grown for a river cut at the outlet**: when the outlet (a gauge
+     with its reach's area, `start-7`, or the lowest click) matched no
+     channel, and a channel within the match radius is cut by the window
+     with under twice the reach's area, the window grows over it rather
+     than leave the outlet in a gully, whose small catchment never reached
+     the border, so the plan was proposed whole. Up to the cap, for a
+     reach that fits the cap's square; not when the editor chose the
+     guard's channel or a matching channel is offered; a river cut at the
+     DEM's missing data is refused `no_data`.
+   - **`unmatched` on a cut click** is kept unless the click's reach is
+     larger than the routed square (`start-10` dropped it for every cut
+     click, which hid a miss on a river that would have fit).
 2. **The outlet.** A gauge is placed as a Delineate click is
    (`pointPlacement.ts`, since `start-7`): its nearest river reach within
    1 km looked up in the reading transaction, and the gauge put on the cell

@@ -609,7 +609,10 @@ against the DWS area) plus the persona's clicks, before (`--src` on the
   still too large). The station run's own probe of a shifted window made
   59 whole.
 - **Cost:** the window sizes are unchanged, so is memory: A62H at 6 144
-  cells peaks at 705 MB before and after (this laptop, idle). A river cut
+  cells peaked at 705 MB before and after this change (measured before
+  the pans' copy of the elevations, `delineate-9`, was merged; with it the
+  worker's largest window peaks at about 1.1 GB, [delineation.md § Where
+  it runs](./delineation.md#where-it-runs)). A river cut
   by the first window costs the next window's routing (D17D: about 2 s
   against 0.6 s for the wrong answer); the placed windows often save one.
   Picking the first window from the reach's area (the persona's other

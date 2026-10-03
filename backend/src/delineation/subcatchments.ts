@@ -13,10 +13,29 @@
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import { cellRowAreaM2, mercatorLat } from '../geo/area.js';
 import type { Dem, DemInfo } from './dem.js';
-import { bearingWord, boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, tooLargeText, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
-import { JUNCTION_MATCH_M, junctionOutlets, type JunctionRiver } from './junction.js';
-import { GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place } from './place.js';
-import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
+import {
+	aimAt,
+	bearingWord,
+	boundsText,
+	cutChannel,
+	DelineationRefused,
+	EARTH_RADIUS_M,
+	readWindow,
+	SNAP_RADIUS_M,
+	TARGET_ZOOM,
+	TIME_BUDGET_MS,
+	toLonLat,
+	toPx,
+	tooLargeText,
+	windowOrigin,
+	WINDOWS,
+	worldPx,
+	type Aim,
+	type LargerChannel
+} from './delineate.js';
+import { JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver } from './junction.js';
+import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place, WIDE_MATCH_M } from './place.js';
+import { accumulate, d8, DX, DY, edgeMask, fill, NO_DATA_EDGE, OUT, openFlags, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
 
@@ -33,9 +52,12 @@ import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
  * matching channel offered; a gully snap offers the reach's channel out to 2.5 km; the reach's area is taken at the point;
  * start-10 (the hydrologist's review, findings 9 and 11): a dam outline that only clips a much larger channel placed at its own outflow (damOutflow), and no `unmatched` on a click cut at the window;
  * start-11 (the hydrologist's review, finding 8): the area of the catchment, of each piece and of each unit's whole catchment that
- * drains into pans (closed depressions the fill routes onward) reported as non-contributing beside the areas (pans.ts); the areas unchanged.
+ * drains into pans (closed depressions the fill routes onward) reported as non-contributing beside the areas (pans.ts); the areas unchanged;
+ * start-12 (issue #390, findings 1 and 6 reaching Start, Divide and Sub-catchments): a river the window cuts at the outlet grows the
+ * window instead of leaving the outlet in a gully, each larger window is placed over the catchment (delineate.ts windowOrigin), and a
+ * cut click keeps its `unmatched` unless its reach is larger than the routed square.
  */
-export const START_METHOD_VERSION = 'start-11';
+export const START_METHOD_VERSION = 'start-12';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -492,13 +514,19 @@ export async function delineateUnits(
 	}
 	const need = 2 * (Math.ceil(reach) + MARGIN_CELLS);
 	const first = windows.findIndex((c) => c >= need);
+	// What every window keeps inside around the centre, wherever it is placed (delineate.ts windowOrigin): the points and the
+	// boundary with their margin, and the junction's match and its path downhill.
+	const keep = Math.max(Math.ceil(reach) + MARGIN_CELLS, Math.ceil((JUNCTION_MATCH_M + JUNCTION_PATH_M) / cellSizeM) + 2);
+	const capCells = windows[windows.length - 1]!;
+	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
+	/** Where the last window cut the catchment: the next window is placed over it. */
+	let aim: Aim | null = null;
 	if (first < 0) {
 		throw new DelineationRefused('too_large', `The catchment boundary reaches beyond the ${Math.round((windows[windows.length - 1]! * cellSizeM) / 1000)} km the app delineates around its outlet, so it can’t be divided into units here. Draw or type the units instead.`);
 	}
 	for (let wi = first; wi < windows.length; wi++) {
 		const nCells = windows[wi]!;
-		const x0 = Math.floor(gx) - nCells / 2;
-		const y0 = Math.floor(gy) - nCells / 2;
+		const [x0, y0] = windowOrigin(nCells, gx, gy, Math.min(keep, Math.floor((nCells - 1) / 2)), aim);
 		const toGrid = ([lo, la]: Position): Pt => {
 			const [px, py] = toPx(lo, la, W);
 			return [px - x0, py - y0];
@@ -511,6 +539,8 @@ export async function delineateUnits(
 		fill(grid, edge);
 		const dir = d8(grid, edge);
 		const acc = accumulate(nCells, nCells, dir);
+		/** Whether each cell's catchment runs past the window or the data's edge (flow.ts openFlags). */
+		const cutFlags = openFlags(nCells, nCells, dir, edge);
 		const km2 = (cells: number) => (cells * cellSizeM * cellSizeM) / 1e6;
 		// Each window row's cell area (m²): a Web Mercator cell is a longitude × latitude rectangle, so its area on the ellipsoid
 		// is exact in (λ, sin β), as geo/area.ts measures every polygon: the area of an unsimplified outline is its cells' sum.
@@ -599,6 +629,32 @@ export async function delineateUnits(
 			if (outlet < 0) throw new DelineationRefused('no_data', 'The elevation model has no data inside the boundary.');
 			how.set(OUTLET, { placedBy: 'boundary' });
 		}
+		// The outlet's river cut by the window (delineate.ts, delineate-6): a reach near the outlet, nothing matching its area, a
+		// channel in reach cut by the window with under twice it. In a window smaller than the river, a gauge on it snaps into a
+		// gully whose catchment never reaches the border, and the plan was proposed whole. Grown (placed over that channel) up to
+		// the cap, as long as the reach fits the cap's square; not when the editor chose the guard's channel or a matching channel
+		// is already offered (place.ts rules 3 and 4).
+		const outletHints: PlacementHints | undefined = lowest ? req.points.find((p) => p.id === outletId) : fixedOutlet ? req.outletHints : undefined;
+		const outletAt: Position | null = lowest ? (req.points.find((p) => p.id === outletId)?.geometry as { coordinates?: Position } | undefined)?.coordinates ?? null : fixedOutlet;
+		const outletHow = how.get(lowest ? (outletId ?? OUTLET) : OUTLET);
+		const expectedKm2 = outletHints?.expectedKm2;
+		if (expectedKm2 && outletAt && outletHow?.placedBy === 'snapped' && outletHow.larger?.reachKm2 === undefined && !outletHints?.useLarger) {
+			const [cx, cy] = toGrid(outletAt);
+			const gully = acc[outlet]! * cellKm2 < GULLY_SHARE * expectedKm2;
+			const radiusM = outletHints?.chosen || gully ? WIDE_MATCH_M : MATCH_RADIUS_M;
+			const cut = cutChannel({ nx: nCells, ny: nCells, acc, edge, cellSizeM }, cutFlags, cx, cy, radiusM, (2 * expectedKm2) / cellKm2);
+			if (cut >= 0 && cutFlags[cut]! & NO_DATA_EDGE) {
+				throw new DelineationRefused('no_data', `The river at ${theOutlet} runs past the edge of the elevation model’s data, so its catchment can’t be divided whole.`);
+			}
+			if (cut >= 0 && nCells < capCells && expectedKm2 <= (capCells * cellSizeM) ** 2 / 1e6) {
+				const next = windows[wi + 1]!;
+				if ((now() - started) * (1 + (next / nCells) ** 2) > budget) {
+					throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), expectedKm2));
+				}
+				aim = aimAt(upstream(nCells, nCells, dir, cut), nCells, x0, y0);
+				continue;
+			}
+		}
 		const catchment = upstream(nCells, nCells, dir, outlet);
 		const touch = touchesEdge(grid, edge, catchment);
 		// Clicks: a catchment past the window is not refused. The pieces past it are open (inflows), the others whole; refused only when every piece is open.
@@ -607,7 +663,10 @@ export async function delineateUnits(
 			const next = windows[wi + 1];
 			const elapsed = now() - started;
 			// A bigger window can close a piece at the window's border, never one at the DEM's no-data.
-			if (!touch.noData && next !== undefined && elapsed * (1 + (next / nCells) ** 2) <= budget) continue;
+			if (!touch.noData && next !== undefined && elapsed * (1 + (next / nCells) ** 2) <= budget) {
+				aim = aimAt(catchment, nCells, x0, y0);
+				continue;
+			}
 			truncated = true;
 		}
 		if (touch.noData && !lowest) throw new DelineationRefused('no_data', `The catchment above ${theOutlet} runs past the edge of the elevation model’s data, so it can’t be divided whole.`);
@@ -617,6 +676,7 @@ export async function delineateUnits(
 			if (next === undefined || elapsed * (1 + (next / nCells) ** 2) > budget) {
 				throw new DelineationRefused('too_large', tooLargeText('outlet', Math.round((nCells * cellSizeM) / 1000), req.outletHints?.expectedKm2));
 			}
+			aim = aimAt(catchment, nCells, x0, y0);
 			continue;
 		}
 		let catchmentCells = 0;
@@ -752,7 +812,8 @@ export async function delineateUnits(
 		}
 		// A click whose catchment runs past the window can't be matched to its reach in it (the Orange's 340 724 km² in a 100 km
 		// window): calling it unmatched was a false alarm on every main-stem click (the hydrologist's review, finding 11). Cut are
-		// the lowest click, and every unit with an open piece and those below it.
+		// the lowest click, and every unit with an open piece and those below it. Only a reach larger than the routed square loses
+		// it (as Delineate grows only for a reach that fits, start-12): a smaller one could have matched, so the warning stands.
 		if (truncated) {
 			const cut = new Set<string>(outletId !== undefined ? [outletId] : []);
 			kept.forEach((_, i) => {
@@ -761,7 +822,8 @@ export async function delineateUnits(
 			});
 			for (const id of cut) {
 				const h = how.get(id);
-				if (h?.unmatched) how.set(id, { placedBy: h.placedBy, ...(h.larger ? { larger: h.larger } : {}) });
+				const reachKm2 = req.points.find((p) => p.id === id)?.expectedKm2;
+				if (h?.unmatched && reachKm2 && reachKm2 > (nCells * cellSizeM) ** 2 / 1e6) how.set(id, { placedBy: h.placedBy, ...(h.larger ? { larger: h.larger } : {}) });
 			}
 		}
 		// An open piece isn't outlined (it would be cut at the window, and the API doesn't show it): no geometry, no area.

@@ -32,7 +32,7 @@ locals {
   jobs_visibility_seconds = 6 * local.worker_timeout_seconds
 
   # A `delineate` job (a catchment too large for the request, up to 6 144
-  # cells a side) peaks at about 1.2 GB (docs/design/delineation.md § Where it
+  # cells a side) peaks at about 1.1 GB (docs/design/delineation.md § Where it
   # runs): with delineation_dem on, the worker gets at least this much,
   # whatever worker_memory_mb says. More memory is also more CPU on Lambda.
   delineation_worker_memory_mb = 2048

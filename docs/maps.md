@@ -1244,10 +1244,10 @@ to a point on a river. The design, the method and its accuracy are in
 - **Limits.** 30 delineations per project per hour (429 beyond); each takes
   one to a few seconds (measured on the real DEM: 0.5–4 s, up to about
   460 MB at the largest window) and stops before 20 s, under the API's
-  30 s timeout. On the worker a 6 144-cell window takes about 11 s on a
-  laptop and peaks near 1 GB (an invented 6 144-cell valley, 2026-10-03),
-  about 1.2 GB with the pans' copy of the elevations (delineate-9, the real
-  DEM), and a job stops before 150 s.
+  30 s timeout. On the worker a 6 144-cell window takes about 11–15 s on a
+  laptop and peaks at about 1.1 GB (the real DEM, the pans' copy of the
+  elevations included; design/delineation.md § Where it runs), and a job
+  stops before 150 s.
 - **Attribution.** A delineated polygon is adapted Copernicus data, so the
   sheet carries the licence's Art. 6(b) notice when the DEM is the GLO-30
   one; the accepted feature's description names the dataset.

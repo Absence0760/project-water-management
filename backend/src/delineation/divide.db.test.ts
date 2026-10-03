@@ -111,7 +111,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-11' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-12' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -191,7 +191,7 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-11/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-12/);
 		// The parcel stores its piece's area from the cells, the unit's area: the simplified outline's own area is a little off it.
 		const [parcel] = await asOwner(
 			`SELECT f.area_m2, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 AND n.name = 'Top pump'`,
