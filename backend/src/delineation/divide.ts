@@ -51,6 +51,7 @@ import {
 	upstreamFirst
 } from './start.js';
 import { panWarning, type PanReport } from './pans.js';
+import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
 import { delineateUnits, ownsLand, type UnitRole } from './subcatchments.js';
 
 export const DivideBody = z
@@ -92,6 +93,8 @@ export const DivideApplyBody = z
 						key: z.string().uuid(),
 						/** Take the proposed area (its own piece, saved as the node's parcel). */
 						area: z.boolean(),
+						/** With `area`: its gross area (the default) or its effective one, without what drains into pans (195, areaBasis.ts). */
+						areaBasis: AreaBasis.optional(),
 						/** Take the proposed drains-into. */
 						drainsInto: z.boolean(),
 						/** A dam unit: all of its own runoff reaches its dam. */
@@ -107,8 +110,8 @@ export const DivideApplyBody = z
 		/** The rest of the catchment's area: not taken, given to a unit already in the model, or a new unit. */
 		rest: z.discriminatedUnion('to', [
 			z.object({ to: z.literal('none') }).strict(),
-			z.object({ to: z.literal('node'), nodeId: z.string().uuid() }).strict(),
-			z.object({ to: z.literal('new'), name: Name }).strict()
+			z.object({ to: z.literal('node'), nodeId: z.string().uuid(), areaBasis: AreaBasis.optional() }).strict(),
+			z.object({ to: z.literal('new'), name: Name, areaBasis: AreaBasis.optional() }).strict()
 		])
 	})
 	.strict();
@@ -175,8 +178,9 @@ export interface DividePlan {
 }
 
 export interface DivideDecision {
-	units: { key: string; nodeId: string | null; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; parcelId: string | null }[];
-	rest: { to: 'none' | 'node' | 'new'; nodeId: string | null; parcelId: string | null };
+	/** `areaBasis`: which area was taken (195), with `area`; absent on a decision before 195 (gross, the only choice then). */
+	units: { key: string; nodeId: string | null; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; add: boolean; parcelId: string | null }[];
+	rest: { to: 'none' | 'node' | 'new'; areaBasis?: AreaBasis; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
 
@@ -462,11 +466,13 @@ export const divideRoutes = new Hono<AuthEnv>()
 				if (!nid) continue;
 				const n = nodes.get(nid)!;
 				const cur = u.current;
+				if (t.areaBasis === 'effective' && !t.area) throw new ApiError(400, `Tick ${u.name}’s area to take its effective area.`);
 				if (t.area) {
 					if (u.areaM2 === null || !u.geometry) throw new ApiError(400, `${u.name} has no proposed area to take.`);
 					if (n.kind !== 'farm') throw new ApiError(400, `${u.name} is not a unit, so it has no catchment area.`);
 					if (cur && Math.abs(n.areaKm2 - cur.areaKm2) > EPS_KM2) throw changed(`${u.name}’s area`);
-					n.areaKm2 = u.areaM2 / 1e6;
+					// Gross unless the effective area (without what drains into pans) is asked for (195).
+					n.areaKm2 = takenAreaM2(u.name, u.areaM2, u.nonContributingM2, t.areaBasis ?? 'gross') / 1e6;
 				}
 				if (t.drainsInto) {
 					if (cur && n.downstreamNodeId !== cur.downstreamNodeId) throw changed(`What ${u.name} drains into`);
@@ -501,13 +507,17 @@ export const divideRoutes = new Hono<AuthEnv>()
 					added.push(restNode);
 					nodes.set(restNode.id, restNode);
 				}
-				restNode.areaKm2 = plan.rest.areaM2 / 1e6;
+				restNode.areaKm2 = takenAreaM2('The rest of the catchment', plan.rest.areaM2, plan.rest.nonContributingM2, body.rest.areaBasis ?? 'gross') / 1e6;
 			}
 			const next = ModelBody.parse({ ...model, nodes: [...model.nodes.map((n) => nodes.get(n.id)!), ...added] });
 			const loop = loopIn(next.nodes);
 			if (loop) throw new ApiError(400, `The ticked drains-into would make a loop (${loop.join(' → ')}); tick the order of the units along it too, or change it on the Network.`);
 			const problems = modelProblems(next);
 			if (problems.length) throw new ApiError(400, 'The divided model doesn’t pass the model’s checks.', problems);
+			// Each node's parcel as it stood before the save: saveModel forgets the link of an area that changes (typed over),
+			// and a taken area that changes (a new outline, or gross after effective) must still redraw its own parcel.
+			const { rows: linked } = await db.query<{ id: string; area_feature_id: string | null }>('SELECT id, area_feature_id FROM node WHERE project_id = $1', [id]);
+			const parcelBefore = new Map(linked.map((r) => [r.id, r.area_feature_id]));
 			await saveModel(db, id, next);
 
 			// Parcels: each taken area's outline, linked to its node, and the area marked as from the map (as Use this area does).
@@ -521,52 +531,60 @@ export const divideRoutes = new Hono<AuthEnv>()
 				[id]
 			);
 			const made = new Set(madeRows.map((r) => r.id));
-			const parcel = async (nodeId: string, name: string, geometry: Polygonal, areaM2: number): Promise<string> => {
-				const { rows: cur } = await db.query<{ area_feature_id: string | null }>('SELECT area_feature_id FROM node WHERE id = $1 AND project_id = $2', [nodeId, id]);
-				const old = cur[0]?.area_feature_id;
+			// The parcel keeps the gross area and what of it drains into pans (195); the node has the area taken, and which.
+			const parcel = async (nodeId: string, name: string, geometry: Polygonal, areaM2: number, ncM2: number | undefined, basis: AreaBasis): Promise<string> => {
+				const nc = ncM2 === undefined ? null : Math.min(ncM2, areaM2);
+				const old = parcelBefore.get(nodeId);
 				if (old && made.has(old)) {
 					const { rowCount } = await db.query(
-						`UPDATE map_feature SET geometry = $4, area_m2 = $5, properties = $6 WHERE id = $1 AND project_id = $2 AND node_id = $3 AND kind = 'farm_parcel'`,
-						[old, id, nodeId, JSON.stringify(geometry), areaM2, JSON.stringify({ description: provenance.slice(0, 500) })]
+						`UPDATE map_feature SET geometry = $4, area_m2 = $5, properties = $6, non_contributing_m2 = $7 WHERE id = $1 AND project_id = $2 AND node_id = $3 AND kind = 'farm_parcel'`,
+						[old, id, nodeId, JSON.stringify(geometry), areaM2, JSON.stringify({ description: provenance.slice(0, 500) }), nc]
 					);
 					if (rowCount) {
-						await db.query(`UPDATE node SET area_source = 'map', area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, old]);
+						await db.query(`UPDATE node SET area_source = 'map', area_basis = $4, area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, old, basis]);
 						return old;
 					}
 				}
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, created_by)
-					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-					[id, featureNameOf(`${name}: own sub-catchment`), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
+					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, non_contributing_m2, created_by)
+					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+					[id, featureNameOf(`${name}: own sub-catchment`), nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2, nc]
 				);
-				await db.query(`UPDATE node SET area_source = 'map', area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id]);
+				await db.query(`UPDATE node SET area_source = 'map', area_basis = $4, area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id, basis]);
 				return rows[0]!.id;
 			};
 			const decisionUnits: DivideDecision['units'] = [];
 			for (const u of plan.units) {
 				const t = ticks.get(u.key)!;
 				const nid = nodeOf.get(u.key) ?? null;
-				const parcelId = nid && t.area && u.geometry && u.areaM2 !== null ? await parcel(nid, nodes.get(nid)!.name, u.geometry, u.areaM2) : null;
+				const basis = t.areaBasis ?? 'gross';
+				const parcelId = nid && t.area && u.geometry && u.areaM2 !== null ? await parcel(nid, nodes.get(nid)!.name, u.geometry, u.areaM2, u.nonContributingM2, basis) : null;
 				// The point stands for its node now, if it stood for nothing (a link, not a model value).
 				if (nid) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND node_id IS NULL`, [u.key, id, nid]);
-				decisionUnits.push({ key: u.key, nodeId: nid, area: t.area, drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, add: t.add, parcelId });
+				decisionUnits.push({ key: u.key, nodeId: nid, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, add: t.add, parcelId });
 			}
-			const restParcel = restNode && plan.rest.geometry ? await parcel(restNode.id, restNode.name, plan.rest.geometry, plan.rest.areaM2) : null;
+			const restBasis = body.rest.to === 'none' ? 'gross' : (body.rest.areaBasis ?? 'gross');
+			const restParcel = restNode && plan.rest.geometry ? await parcel(restNode.id, restNode.name, plan.rest.geometry, plan.rest.areaM2, plan.rest.nonContributingM2, restBasis) : null;
 			if (plan.outlet.featureId) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = 'gauge' AND node_id IS NULL`, [plan.outlet.featureId, id, outflow.id]);
 
 			const areas = decisionUnits.filter((u) => u.area).length + (restParcel ? 1 : 0);
 			const orders = decisionUnits.filter((u) => u.drainsInto).length;
 			const runoff = decisionUnits.filter((u) => u.runoffToDam).length;
 			const gauges = decisionUnits.filter((u) => u.add).length;
+			// Which areas were taken effective (without what drains into pans), so the run's inputs say so (195).
+			const effective = [
+				...decisionUnits.filter((u) => u.parcelId && u.areaBasis === 'effective').map((u) => nodes.get(u.nodeId!)!.name),
+				...(restParcel && restBasis === 'effective' ? [restNode!.name] : [])
+			];
 			const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Divided from the map: ${s(areas, 'area')}, ${s(orders, 'drains-into', 'drains-into')}, ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
+				reason: `Divided from the map: ${s(areas, 'area')}${areaBasisNote(areas, effective)}, ${s(orders, 'drains-into', 'drains-into')}, ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, ${s(gauges, 'gauge')} added` : ''}${body.rest.to === 'new' ? ', the rest of the catchment added' : ''} from ${p.dataset}, ${p.method_version}`.slice(0, 500)
 			});
 			const decision: DivideDecision = {
 				units: decisionUnits,
-				rest: { to: body.rest.to, nodeId: restNode?.id ?? null, parcelId: restParcel },
+				rest: { to: body.rest.to, ...(restParcel ? { areaBasis: restBasis } : {}), nodeId: restNode?.id ?? null, parcelId: restParcel },
 				revisionId: revision?.id ?? null
 			};
 			await db.query(`UPDATE start_proposal SET status = 'applied', decision = $3, decided_by = app_current_user_id(), decided_at = now() WHERE id = $1 AND project_id = $2`, [

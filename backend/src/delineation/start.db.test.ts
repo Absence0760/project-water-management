@@ -179,7 +179,7 @@ describe('with the synthetic DEM', () => {
 		expect(top.nonContributingM2).toBe(0);
 		expect(plan.rest.nonContributingM2).toBe(0);
 		expect(plan.warnings.filter((w: string) => /drains into a pan \(a closed depression on the elevation model, at /.test(w))).toEqual([
-			expect.stringMatching(/in Valley dam’s own area\. Use the effective area if you model them as non-contributing\.$/)
+			expect.stringMatching(/in Valley dam’s own area\. Choose the effective area beside an area’s tick if you model them as non-contributing\.$/)
 		]);
 		// A second proposal supersedes the first.
 		const again = await owner.call('POST', p.at('/map/start'), body);
@@ -229,6 +229,14 @@ describe('with the synthetic DEM', () => {
 			['Rest of the valley', 'map', 'farm_parcel']
 		]);
 		expect(sources[1]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-12/);
+		// Gross, the default (195): the units took the parcels' whole areas, and say so.
+		const bases = await asOwner(`SELECT name, area_basis FROM node WHERE project_id = $1 ORDER BY sort_order`, [p.id]);
+		expect(bases.map((b) => [b.name, b.area_basis])).toEqual([
+			['Valley weir', null],
+			['Top pump', 'gross'],
+			['Valley dam', null],
+			['Rest of the valley', 'gross']
+		]);
 		// The gauge stands for the outflow gauge; the dam for its unit.
 		const links = await asOwner('SELECT f.id, f.node_id FROM map_feature f WHERE f.id = ANY($1::uuid[])', [[gauge, dam]]);
 		expect(new Map(links.map((l) => [l.id, l.node_id]))).toEqual(new Map([[gauge, by['Valley weir']!.id], [dam, by['Valley dam']!.id]]));
@@ -236,7 +244,8 @@ describe('with the synthetic DEM', () => {
 		// (The project's first change also records the baseline before it.)
 		const revs = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND id > $2 AND source <> 'baseline'`, [p.id, rev]);
 		expect(revs).toHaveLength(1);
-		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 nodes; 2 areas and 1 drains-into from Synthetic DEM/);
+		// Both areas gross, the default (195): the reason says so.
+		expect(revs[0]!.reason).toMatch(/^Started from the map: 4 nodes; 2 areas \(gross\) and 1 drains-into from Synthetic DEM/);
 		expect(ok.body.proposal).toMatchObject({ status: 'applied', decidedBy: expect.any(String) });
 		expect(ok.body.proposal.decision.units.map((u: { name: string; area: boolean; drainsInto: boolean }) => [u.name, u.area, u.drainsInto])).toEqual([
 			['Top pump', true, false],
@@ -250,6 +259,81 @@ describe('with the synthetic DEM', () => {
 		expect(again.status).toBe(409);
 		expect(again.body.error).toMatch(/nodes already/);
 		expect((await viewer.call('GET', p.at('/map/start'))).body.modelEmpty).toBe(false);
+	});
+
+	it('takes a unit’s effective area when asked (195): without what drains into pans, recorded on the node, the decision and the revision', async () => {
+		const q = await newProject('Start, effective area');
+		const g = await feature(q.at, { kind: 'gauge', name: 'Valley weir', lon: pos(OUTLET_CELL.x, OUTLET_CELL.y)[0], lat: pos(OUTLET_CELL.x, OUTLET_CELL.y)[1] });
+		const d = await feature(q.at, { kind: 'dam', name: 'Valley dam', lon: pos(DAM_CELL.x, DAM_CELL.y + 1)[0], lat: pos(DAM_CELL.x, DAM_CELL.y + 1)[1] });
+		const t = await feature(q.at, { kind: 'other', name: 'Top pump', lon: pos(DAM_CELL.x, DAM_CELL.y - 100)[0], lat: pos(DAM_CELL.x, DAM_CELL.y - 100)[1] });
+		const r = await owner.call('POST', q.at('/map/start'), { outletFeatureId: g, points: [{ featureId: d, role: 'dam' }, { featureId: t, role: 'abstraction' }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const { id: spid, plan } = r.body.proposal;
+		const [top, mid] = plan.units;
+		expect(mid.nonContributingM2).toBeGreaterThan(0);
+		const url = q.at(`/map/start/${spid}/apply`);
+		const rest = { include: true, name: 'Rest of the valley', area: true };
+		// The effective area needs the area ticked.
+		const unticked = await owner.call('POST', url, {
+			outletName: 'Valley weir',
+			units: [
+				{ key: top.key, name: 'Top pump', area: true, drainsInto: true, runoffToDam: false },
+				{ key: mid.key, name: 'Valley dam', area: false, areaBasis: 'effective', drainsInto: true, runoffToDam: true }
+			],
+			rest
+		});
+		expect(unticked.status).toBe(400);
+		expect(unticked.body.error).toMatch(/Tick Valley dam’s area to take its effective area/);
+		const ok = await owner.call('POST', url, {
+			outletName: 'Valley weir',
+			units: [
+				// Gross named outright: its whole piece (the positive control; it holds no pan anyway).
+				{ key: top.key, name: 'Top pump', area: true, areaBasis: 'gross', drainsInto: true, runoffToDam: false },
+				// Effective: the dam's piece less what drains into the valley's pan.
+				{ key: mid.key, name: 'Valley dam', area: true, areaBasis: 'effective', drainsInto: true, runoffToDam: true }
+			],
+			rest
+		});
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const by = Object.fromEntries((ok.body.model.nodes as { name: string; areaKm2: number }[]).map((n) => [n.name, n]));
+		expect(by['Top pump']!.areaKm2).toBeCloseTo(top.areaM2 / 1e6, 9);
+		expect(by['Valley dam']!.areaKm2).toBeCloseTo((mid.areaM2 - mid.nonContributingM2) / 1e6, 9);
+		expect(by['Valley dam']!.areaKm2).toBeLessThan(mid.areaM2 / 1e6);
+		expect(by['Rest of the valley']!.areaKm2).toBeCloseTo(plan.rest.areaM2 / 1e6, 9);
+		// The parcel keeps the gross outline and area, and what of it drains into pans; the node says which it took.
+		const rows = await asOwner(
+			`SELECT n.name, n.area_source, n.area_basis, f.area_m2, f.non_contributing_m2 FROM node n JOIN map_feature f ON f.id = n.area_feature_id
+			 WHERE n.project_id = $1 ORDER BY n.sort_order`,
+			[q.id]
+		);
+		expect(rows.map((x) => [x.name, x.area_source, x.area_basis])).toEqual([
+			['Top pump', 'map', 'gross'],
+			['Valley dam', 'map', 'effective'],
+			['Rest of the valley', 'map', 'gross']
+		]);
+		expect(rows[1]!.area_m2).toBeCloseTo(mid.areaM2, 3);
+		expect(rows[1]!.non_contributing_m2).toBeCloseTo(mid.nonContributingM2, 3);
+		expect(rows[0]!.non_contributing_m2).toBe(0);
+		expect(ok.body.proposal.decision.units.map((u: { name: string; areaBasis?: string }) => [u.name, u.areaBasis])).toEqual([
+			['Top pump', 'gross'],
+			['Valley dam', 'effective']
+		]);
+		expect(ok.body.proposal.decision.rest.areaBasis).toBe('gross');
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 AND source <> 'baseline' ORDER BY id DESC LIMIT 1`, [q.id]);
+		expect(rev!.reason).toMatch(/^Started from the map: 4 nodes; 3 areas \(gross; effective, without what drains into pans: Valley dam\) and 2 drains-into/);
+		// The map lists the parcel's pans figure and the node's basis, so it can tell the area is still this parcel's.
+		const map = await viewer.call('GET', q.at('/map/features'));
+		expect(map.status).toBe(200);
+		const damNode = map.body.nodes.find((n: { name: string }) => n.name === 'Valley dam');
+		expect(damNode).toMatchObject({ areaSource: 'map', areaBasis: 'effective' });
+		const parcel = map.body.features.find((f: { id: string }) => f.id === damNode.areaFeatureId);
+		expect(parcel.nonContributingM2).toBeCloseTo(mid.nonContributingM2, 3);
+		// Typing over the area clears the basis with the source (store.ts).
+		const model = (await owner.call('GET', q.at('/model'))).body;
+		const typed = await owner.call('PUT', q.at('/model'), { ...model, nodes: model.nodes.map((n: { name: string; areaKm2: number }) => (n.name === 'Valley dam' ? { ...n, areaKm2: 1.5 } : n)) });
+		expect(typed.status, JSON.stringify(typed.body)).toBe(200);
+		const [after] = await asOwner(`SELECT area_source, area_basis FROM node WHERE project_id = $1 AND name = 'Valley dam'`, [q.id]);
+		expect(after).toEqual({ area_source: 'typed', area_basis: null });
 	});
 
 	it('refuses to apply once the model gained nodes since the proposal; a discarded proposal can’t be applied', async () => {

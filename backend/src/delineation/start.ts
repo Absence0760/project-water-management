@@ -33,6 +33,7 @@ import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { PlacementChoice, placementOf, placementWarnings, pointReaches, PointsAtConfluence, ReachNotNearPoint, type PointPlacement, type PointReach } from './pointPlacement.js';
 import { panWarning, type PanReport } from './pans.js';
+import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
 import { delineateUnits, START_METHOD_VERSION, type PlacementHints, type UnitRole } from './subcatchments.js';
 import { pointInGeometry } from '../geo/geojson.js';
 
@@ -76,6 +77,8 @@ export const ApplyBody = z
 						name: Name,
 						/** Take the unit's proposed area (and save its outline as the unit's parcel). */
 						area: z.boolean(),
+						/** With `area`: its gross area (the default) or its effective one, without what drains into pans (195, areaBasis.ts). */
+						areaBasis: AreaBasis.optional(),
 						/** Take the proposed drains-into; unticked, the unit drains into the outflow gauge. */
 						drainsInto: z.boolean(),
 						/** A dam unit: all of its runoff reaches the dam (pctRunoffToDam = 1). */
@@ -84,7 +87,7 @@ export const ApplyBody = z
 					.strict()
 			)
 			.max(START_POINTS_MAX),
-		rest: z.object({ include: z.boolean(), name: Name, area: z.boolean() }).strict()
+		rest: z.object({ include: z.boolean(), name: Name, area: z.boolean(), areaBasis: AreaBasis.optional() }).strict()
 	})
 	.strict();
 
@@ -135,8 +138,9 @@ export interface StartPlan {
 
 export interface StartDecision {
 	outlet: { name: string; nodeId: string };
-	units: { key: string; name: string; nodeId: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; parcelId: string | null }[];
-	rest: { include: boolean; name: string; area: boolean; nodeId: string | null; parcelId: string | null };
+	/** `areaBasis`: which area was taken (195), with `area`; absent on a decision before 195 (gross, the only choice then). */
+	units: { key: string; name: string; nodeId: string; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; parcelId: string | null }[];
+	rest: { include: boolean; name: string; area: boolean; areaBasis?: AreaBasis; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
 
@@ -539,10 +543,20 @@ export const startRoutes = new Hono<AuthEnv>()
 			for (const u of plan.units) {
 				const t = ticks.get(u.key)!;
 				if (t.area && (u.areaM2 === null || !u.geometry)) throw new ApiError(400, `${t.name} has no proposed area to take.`);
+				if (t.areaBasis === 'effective' && !t.area) throw new ApiError(400, `Tick ${t.name}’s area to take its effective area.`);
 				if (t.drainsInto && !u.drainsIntoProposed) throw new ApiError(400, `${t.name} has no proposed order to take.`);
 				if (t.runoffToDam && u.role !== 'dam') throw new ApiError(400, `${t.name} is not a dam unit.`);
 			}
 			if (body.rest.include && body.rest.area && (plan.rest.areaM2 === null || !plan.rest.geometry)) throw new ApiError(400, 'The rest of the catchment has no proposed area to take.');
+			if (body.rest.areaBasis === 'effective' && !(body.rest.include && body.rest.area)) throw new ApiError(400, 'Tick the rest of the catchment’s area to take its effective area.');
+			// Each taken area, gross unless the effective one is asked for (195); 400 when there's no pans figure for it.
+			const taken = new Map<string, number>();
+			for (const u of plan.units) {
+				const t = ticks.get(u.key)!;
+				if (t.area && u.areaM2 !== null) taken.set(u.key, takenAreaM2(t.name.trim(), u.areaM2, u.nonContributingM2, t.areaBasis ?? 'gross'));
+			}
+			const restTaken =
+				body.rest.include && body.rest.area && plan.rest.areaM2 !== null ? takenAreaM2(body.rest.name.trim(), plan.rest.areaM2, plan.rest.nonContributingM2, body.rest.areaBasis ?? 'gross') : null;
 
 			// The nodes: the outflow gauge, the units (upstream first, as the plan lists them), the rest.
 			const outlet: NetworkNode = { ...newNetworkNode(crypto.randomUUID(), 0, null), name: body.outletName.trim() };
@@ -552,14 +566,14 @@ export const startRoutes = new Hono<AuthEnv>()
 				const t = ticks.get(u.key)!;
 				const down = t.drainsInto && u.drainsInto ? nodeOf.get(u.drainsInto)! : outlet.id;
 				const n: NetworkNode = { ...newNetworkNode(nodeOf.get(u.key)!, i + 1, down), name: t.name.trim(), kind: u.role === 'user' ? 'user' : u.role === 'gauge' ? 'gauge' : 'farm' };
-				if (t.area && u.areaM2 !== null) n.areaKm2 = u.areaM2 / 1e6;
+				if (taken.has(u.key)) n.areaKm2 = taken.get(u.key)! / 1e6;
 				if (t.runoffToDam) n.pctRunoffToDam = 1;
 				nodes.push(n);
 			});
 			const restId = body.rest.include ? crypto.randomUUID() : null;
 			if (restId) {
 				const n: NetworkNode = { ...newNetworkNode(restId, plan.units.length + 1, outlet.id), name: body.rest.name.trim() };
-				if (body.rest.area && plan.rest.areaM2 !== null) n.areaKm2 = plan.rest.areaM2 / 1e6;
+				if (restTaken !== null) n.areaKm2 = restTaken / 1e6;
 				nodes.push(n);
 			}
 			const next = ModelBody.parse({ ...model, nodes });
@@ -569,40 +583,46 @@ export const startRoutes = new Hono<AuthEnv>()
 
 			// The parcels: each ticked area's outline, linked to its unit, and the unit's area from it (as Use this area does).
 			const provenance = p.dataset ? `Sub-catchment delineated from ${p.dataset} (${p.method_version}); check it against the map.` : `From the map (${p.method_version}).`;
-			const parcel = async (nodeId: string, name: string, geometry: Polygonal, areaM2: number): Promise<string> => {
+			// The parcel keeps the gross area and what of it drains into pans (195); the unit has the area taken, and which.
+			const parcel = async (nodeId: string, name: string, geometry: Polygonal, areaM2: number, ncM2: number | undefined, basis: AreaBasis): Promise<string> => {
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, created_by)
-					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-					[id, name, nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2]
+					`INSERT INTO map_feature (project_id, kind, name, node_id, geometry, properties, area_m2, non_contributing_m2, created_by)
+					 VALUES ($1, 'farm_parcel', $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+					[id, name, nodeId, JSON.stringify(geometry), JSON.stringify({ description: provenance.slice(0, 500) }), areaM2, ncM2 === undefined ? null : Math.min(ncM2, areaM2)]
 				);
-				await db.query(`UPDATE node SET area_source = 'map', area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id]);
+				await db.query(`UPDATE node SET area_source = 'map', area_basis = $4, area_feature_id = $3 WHERE id = $1 AND project_id = $2`, [nodeId, id, rows[0]!.id, basis]);
 				return rows[0]!.id;
 			};
 			const decisionUnits: StartDecision['units'] = [];
 			for (const u of plan.units) {
 				const t = ticks.get(u.key)!;
 				const nodeId = nodeOf.get(u.key)!;
-				const parcelId = t.area && u.geometry && u.areaM2 !== null ? await parcel(nodeId, t.name.trim(), u.geometry, u.areaM2) : null;
+				const basis = t.areaBasis ?? 'gross';
+				const parcelId = t.area && u.geometry && u.areaM2 !== null ? await parcel(nodeId, t.name.trim(), u.geometry, u.areaM2, u.nonContributingM2, basis) : null;
 				// The point the unit came from stands for it now (a link, not a model value).
 				// A gauge point stands for a gauge node; a dam or other point for a unit or user (map_feature's KIND_NODES).
 				await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = ANY($4::text[]) AND node_id IS NULL`, [u.key, id, nodeId, u.role === 'gauge' ? ['gauge'] : ['dam', 'other']]);
-				decisionUnits.push({ key: u.key, name: t.name.trim(), nodeId, area: t.area, drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, parcelId });
+				decisionUnits.push({ key: u.key, name: t.name.trim(), nodeId, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, parcelId });
 			}
 			let restParcel: string | null = null;
-			if (restId && body.rest.area && plan.rest.geometry && plan.rest.areaM2 !== null) restParcel = await parcel(restId, body.rest.name.trim(), plan.rest.geometry, plan.rest.areaM2);
+			const restBasis = body.rest.areaBasis ?? 'gross';
+			if (restId && body.rest.area && plan.rest.geometry && plan.rest.areaM2 !== null)
+				restParcel = await parcel(restId, body.rest.name.trim(), plan.rest.geometry, plan.rest.areaM2, plan.rest.nonContributingM2, restBasis);
 			if (plan.outlet.featureId) await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = 'gauge' AND node_id IS NULL`, [plan.outlet.featureId, id, outlet.id]);
 
 			const areas = decisionUnits.filter((u) => u.area).length + (restParcel ? 1 : 0);
 			const orders = decisionUnits.filter((u) => u.drainsInto).length;
+			// Which areas were taken effective (without what drains into pans), so the run's inputs say so (195).
+			const effective = [...decisionUnits.filter((u) => u.area && u.areaBasis === 'effective').map((u) => u.name), ...(restParcel && restBasis === 'effective' ? [body.rest.name.trim()] : [])];
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Started from the map: ${nodes.length} nodes; ${areas} ${areas === 1 ? 'area' : 'areas'} and ${orders} drains-into from ${p.dataset ? `${p.dataset}, ${p.method_version}` : 'the points as placed'}`.slice(0, 500)
+				reason: `Started from the map: ${nodes.length} nodes; ${areas} ${areas === 1 ? 'area' : 'areas'}${areaBasisNote(areas, effective)} and ${orders} drains-into from ${p.dataset ? `${p.dataset}, ${p.method_version}` : 'the points as placed'}`.slice(0, 500)
 			});
 			const decision: StartDecision = {
 				outlet: { name: outlet.name, nodeId: outlet.id },
 				units: decisionUnits,
-				rest: { include: body.rest.include, name: body.rest.name.trim(), area: body.rest.area, nodeId: restId, parcelId: restParcel },
+				rest: { include: body.rest.include, name: body.rest.name.trim(), area: body.rest.area, ...(restParcel ? { areaBasis: restBasis } : {}), nodeId: restId, parcelId: restParcel },
 				revisionId: revision?.id ?? null
 			};
 			await db.query(`UPDATE start_proposal SET status = 'applied', decision = $3, decided_by = app_current_user_id(), decided_at = now() WHERE id = $1 AND project_id = $2`, [

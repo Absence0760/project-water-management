@@ -196,9 +196,10 @@ export const delineationRoutes = new Hono<AuthEnv>()
 			}
 			const name = body.name ?? DEFAULT_NAME[p.click_kind];
 			const { rows } = await db.query<{ id: string }>(
-				`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, created_by)
-				 VALUES ($1, $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
-				[id, body.as, name, JSON.stringify(p.geometry), JSON.stringify({ description: `Delineated from ${p.dataset} (${p.method_version}); check it against the map.`.slice(0, 500) }), p.area_m2]
+				`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, non_contributing_m2, created_by)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, app_current_user_id()) RETURNING id`,
+				// What drains into pans goes with it (195), so Use this area can offer the effective area; null before delineate-9.
+				[id, body.as, name, JSON.stringify(p.geometry), JSON.stringify({ description: `Delineated from ${p.dataset} (${p.method_version}); check it against the map.`.slice(0, 500) }), p.area_m2, p.pans ? Math.min(p.pans.nonContributingM2, p.area_m2) : null]
 			);
 			const featureId = rows[0]!.id;
 			await db.query(`UPDATE delineation_proposal SET status = 'accepted', feature_id = $3, decided_by = app_current_user_id(), decided_at = now() WHERE id = $1 AND project_id = $2`, [

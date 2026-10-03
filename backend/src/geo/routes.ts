@@ -24,6 +24,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
+import { AreaBasis, basisText, takenAreaM2 } from '../delineation/areaBasis.js';
 import { beginModelChange, recordAudit, recordModelRevision } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange, notFound } from '../http/errors.js';
@@ -193,7 +194,13 @@ export const ImportPreviewBody = z
 	})
 	.strict();
 
-export const AreaFromMap = z.object({ featureId: uuid }).strict();
+export const AreaFromMap = z
+	.object({
+		featureId: uuid,
+		/** Which of a delineated feature's areas to take (195): its gross area (the default), or its effective one, without what drains into pans. */
+		basis: AreaBasis.optional()
+	})
+	.strict();
 
 export const QuaternaryQuery = z
 	.object({
@@ -211,6 +218,7 @@ export interface FeatureRow {
 	geometry: Geometry;
 	properties: Record<string, string>;
 	area_m2: number | null;
+	non_contributing_m2: number | null;
 	source_id: string | null;
 	created_by_name: string | null;
 	created_at: Date;
@@ -227,6 +235,8 @@ export interface MapFeature {
 	properties: Record<string, string>;
 	/** Geodesic area of a polygon, m² (computed on the server); null for points and lines. */
 	areaM2: number | null;
+	/** Of its area, what drains into pans (m²), when it was made from a delineation that looked (195); null when unknown. Its effective area is areaM2 less it. */
+	nonContributingM2: number | null;
 	/** A point at its middle (lon, lat): the point itself, a polygon's centroid, a line's middle vertex. */
 	center: Position;
 	sourceId: string | null;
@@ -244,6 +254,7 @@ export const toFeature = (r: FeatureRow): MapFeature => ({
 	geometry: r.geometry,
 	properties: r.properties,
 	areaM2: r.area_m2,
+	nonContributingM2: r.non_contributing_m2,
 	center: centerOf(r.geometry),
 	sourceId: r.source_id,
 	createdBy: r.created_by_name,
@@ -252,7 +263,7 @@ export const toFeature = (r: FeatureRow): MapFeature => ({
 });
 
 const SELECT_FEATURES = `
-	SELECT f.id, f.kind, f.name, f.node_id, n.name AS node_name, f.geometry, f.properties, f.area_m2, f.source_id,
+	SELECT f.id, f.kind, f.name, f.node_id, n.name AS node_name, f.geometry, f.properties, f.area_m2, f.non_contributing_m2, f.source_id,
 		u.display_name AS created_by_name, f.created_at, f.updated_at
 	FROM map_feature f
 	LEFT JOIN node n ON n.id = f.node_id
@@ -485,14 +496,14 @@ export const mapRoutes = new Hono<AuthEnv>()
 				 WHERE s.project_id = $1 ORDER BY s.imported_at DESC, s.id`,
 				[id]
 			);
-			const { rows: nodes } = await db.query<{ id: string; name: string; kind: string; area_km2: number; area_source: 'typed' | 'map'; area_feature_id: string | null }>(
-				'SELECT id, name, kind::text AS kind, area_km2, area_source, area_feature_id FROM node WHERE project_id = $1 ORDER BY sort_order, name',
+			const { rows: nodes } = await db.query<{ id: string; name: string; kind: string; area_km2: number; area_source: 'typed' | 'map'; area_basis: AreaBasis | null; area_feature_id: string | null }>(
+				'SELECT id, name, kind::text AS kind, area_km2, area_source, area_basis, area_feature_id FROM node WHERE project_id = $1 ORDER BY sort_order, name',
 				[id]
 			);
 			return c.json({
 				features: rows.map(toFeature),
 				sources: sources.map((s) => ({ id: s.id, fileName: s.file_name, sha256: s.sha256, crs: s.crs, importedAt: s.imported_at.toISOString(), importedBy: s.imported_by, features: s.features })),
-				nodes: nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, areaKm2: n.area_km2, areaSource: n.area_source, areaFeatureId: n.area_feature_id })),
+				nodes: nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, areaKm2: n.area_km2, areaSource: n.area_source, areaBasis: n.area_basis, areaFeatureId: n.area_feature_id })),
 				quaternaryDatasets: await quaternaryDatasets(db)
 			});
 		})
@@ -597,7 +608,8 @@ export const mapRoutes = new Hono<AuthEnv>()
 				if (body.as) throw new ApiError(400, 'Only the catchment boundary’s parts take another kind; a split shape keeps its own.');
 				into = before.kind;
 				mustChange(
-					await db.query(`UPDATE map_feature SET name = $3, geometry = $4, area_m2 = $5 WHERE id = $1 AND project_id = $2`, [
+					// The pans figure was the whole outline's: neither part has one.
+					await db.query(`UPDATE map_feature SET name = $3, geometry = $4, area_m2 = $5, non_contributing_m2 = NULL WHERE id = $1 AND project_id = $2`, [
 						fid,
 						id,
 						(body.names?.[0] || before.name).slice(0, FEATURE_NAME_MAX),
@@ -634,9 +646,10 @@ export const mapRoutes = new Hono<AuthEnv>()
 			if (kind === 'catchment_boundary' && before.kind !== 'catchment_boundary') await removeBoundary(db, id);
 			mustChange(
 				await db.query(
-					`UPDATE map_feature SET kind = $3, name = $4, node_id = $5, geometry = $6, area_m2 = $7
+					// A new outline drops the pans figure, which was the old outline's (195).
+					`UPDATE map_feature SET kind = $3, name = $4, node_id = $5, geometry = $6, area_m2 = $7, non_contributing_m2 = CASE WHEN $8::boolean THEN NULL ELSE non_contributing_m2 END
 					 WHERE id = $1 AND project_id = $2`,
-					[fid, id, kind, body.name ?? before.name, nodeId, JSON.stringify(g?.geometry ?? before.geometry), g ? g.areaM2 : before.area_m2]
+					[fid, id, kind, body.name ?? before.name, nodeId, JSON.stringify(g?.geometry ?? before.geometry), g ? g.areaM2 : before.area_m2, g !== null]
 				)
 			);
 			const feature = toFeature(await loadFeature(db, id, fid));
@@ -759,19 +772,21 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const f = await loadFeature(db, id, body.featureId);
 			if (f.area_m2 === null || f.area_m2 <= 0) throw new ApiError(400, 'That feature is not a polygon with an area.');
 			if (!AREA_KINDS.includes(f.kind)) throw new ApiError(400, `${cap(KIND_LABEL[f.kind])}’s area is not a hydrological unit’s catchment area; use a farm parcel.`);
+			const label = f.name ? `“${f.name}”` : KIND_LABEL[f.kind];
+			// Gross unless the effective area (without what drains into pans) is asked for, and the feature has the figure (195).
+			const basis = body.basis ?? 'gross';
+			const areaKm2 = takenAreaM2(label, f.area_m2, f.non_contributing_m2, basis) / 1e6;
 			const change = await beginModelChange(db, id);
-			const areaKm2 = f.area_m2 / 1e6;
 			// A delineated piece's parcel stores its area from the DEM's cells (start-6), its outline simplified: say which.
 			const outlineM2 = geometryAreaM2(f.geometry) ?? 0;
 			const fromPolygon = Math.abs(outlineM2 - f.area_m2) <= 1e-6 * f.area_m2 + 0.01;
-			await db.query(`UPDATE node SET area_km2 = $3, area_source = 'map', area_feature_id = $4 WHERE id = $1 AND project_id = $2`, [nodeId, id, areaKm2, f.id]);
-			const label = f.name ? `“${f.name}”` : KIND_LABEL[f.kind];
+			await db.query(`UPDATE node SET area_km2 = $3, area_source = 'map', area_basis = $5, area_feature_id = $4 WHERE id = $1 AND project_id = $2`, [nodeId, id, areaKm2, f.id, basis]);
 			const revision = await recordModelRevision(db, id, {
 				source: 'model_put',
 				before: change.before,
-				reason: `Area of ${n[0].name} from the map: ${label} (${areaKm2.toFixed(3)} km², ${fromPolygon ? 'computed from its polygon' : 'from the elevation model’s cells it was delineated from'})`.slice(0, 500)
+				reason: `Area of ${n[0].name} from the map: ${label} (${[`${areaKm2.toFixed(3)} km²`, basisText(basis, f.non_contributing_m2)].filter(Boolean).join(', ')}, ${fromPolygon ? 'computed from its polygon' : 'from the elevation model’s cells it was delineated from'})`.slice(0, 500)
 			});
-			return c.json({ nodeId, areaKm2, areaSource: 'map', areaFeatureId: f.id, revisionId: revision?.id ?? null });
+			return c.json({ nodeId, areaKm2, areaSource: 'map', areaBasis: basis, areaFeatureId: f.id, revisionId: revision?.id ?? null });
 		});
 	})
 	.get('/:id/map/quaternary', async (c) => {

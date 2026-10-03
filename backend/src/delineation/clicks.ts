@@ -249,9 +249,10 @@ export const clickRoutes = new Hono<AuthEnv>()
 			const ids: string[] = [];
 			for (const p of saved) {
 				const { rows } = await db.query<{ id: string }>(
-					`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, created_by)
-					 VALUES ($1, 'other', $2, $3, $4, $5, app_current_user_id()) RETURNING id`,
-					[id, pieceName(p.click), JSON.stringify(p.geometry), JSON.stringify({ description: pieceDescription(r, p) }), p.areaM2]
+					`INSERT INTO map_feature (project_id, kind, name, geometry, properties, area_m2, non_contributing_m2, created_by)
+					 VALUES ($1, 'other', $2, $3, $4, $5, $6, app_current_user_id()) RETURNING id`,
+					// What of it drains into pans (195): Use this area offers its effective area.
+					[id, pieceName(p.click), JSON.stringify(p.geometry), JSON.stringify({ description: pieceDescription(r, p) }), p.areaM2, p.nonContributingM2 === null ? null : Math.min(p.nonContributingM2, p.areaM2)]
 				);
 				ids.push(rows[0]!.id);
 			}
