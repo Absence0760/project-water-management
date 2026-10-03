@@ -10,6 +10,7 @@ import {
 	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
+	OVERLAP_SHARE,
 	polygonsOverlap,
 	proposeKinds,
 	ringSelfIntersects,
@@ -277,6 +278,13 @@ describe('overlapping parts and nested holes', () => {
 		expect(checkGeometry(mp([box(0, 0, 1, 1)], [[[1, 0], [2, 0], [2, 1], [1, 1], [1, 0.5], [1, 0]]]))).toHaveProperty('geometry');
 		expect(checkGeometry(mp([box(0, 0, 4, 4), box(1, 1, 3, 3)], [box(1.5, 1.5, 2.5, 2.5)]))).toHaveProperty('geometry');
 		expect(checkGeometry(mp([box(0, 0, 1, 1)], [box(5, 5, 6, 6)]))).toHaveProperty('geometry');
+	});
+
+	it('takes neighbours digitised to overlap by a sliver along their shared edge (as the DWS quaternaries do), up to OVERLAP_SHARE of the area', () => {
+		// 0.1° boxes, the second reaching 0.00001° (about 1 m, 0.005 % of their area) into the first: passes; 0.001° (0.5 %): refused.
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20.09999, -30, 20.2, -29.9)]))).toHaveProperty('geometry');
+		expect(checkGeometry(mp([box(20, -30, 20.1, -29.9)], [box(20.099, -30, 20.2, -29.9)]))).toEqual({ problem: expect.stringMatching(/parts that overlap/) });
+		expect(OVERLAP_SHARE).toBe(0.001);
 	});
 
 	it('refuses a hole inside another hole (its area was taken away twice), and takes holes side by side', () => {

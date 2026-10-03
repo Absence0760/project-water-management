@@ -16,6 +16,7 @@
 // `type` or `layer` property is read only to propose each feature's kind
 // (proposeKinds, issue #326 D2), and is not kept.
 import { geometryAreaM2 } from './area.js';
+import { clipX, clipY, openRing } from './clip.js';
 
 export type Position = [number, number];
 export type GeometryType = 'Point' | 'LineString' | 'MultiLineString' | 'Polygon' | 'MultiPolygon';
@@ -36,6 +37,8 @@ export const GEO_MAX_FEATURES = 500;
 export const GEO_MAX_PAIR_CHECKS = 5_000_000;
 /** Edge visits the overlap sweep (polygonsOverlap) may make before it gives up and refuses the shape as too complex. */
 export const GEO_MAX_SWEEP_STEPS = 10_000_000;
+/** The share of a shape's area its parts (or holes) may cover twice: digitising slivers between neighbours, never a part counted again. */
+export const OVERLAP_SHARE = 0.001;
 /** Coordinates are kept to 7 decimals (about 1 cm). */
 const DECIMALS = 1e7;
 
@@ -249,74 +252,105 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
 }
 
 /**
- * Whether the interiors of two of `groups` overlap (by an area, not just a
- * shared edge or corner). Each group is one region of closed rings read
- * even-odd, rings that don't cross each other (a polygon's outer ring and
- * holes, or one hole alone). Parts of a MultiPolygon that overlap, or a hole
- * inside another hole, make the area count twice (or take away twice), so
- * the checks refuse them; parts that share an edge, as neighbouring
- * quaternaries do, pass.
+ * Whether `groups` overlap by more than `share` of their area: the area
+ * inside two of them (in degrees², planar: a ratio over one catchment)
+ * against the sum of their own areas. Each group is one region of closed
+ * rings read even-odd, rings that don't cross each other (a polygon's outer
+ * ring and holes, or one hole alone). Parts of a MultiPolygon that overlap,
+ * or a hole inside another hole, make the area count twice (or take it away
+ * twice), so the checks refuse them. Parts that share an edge, as
+ * neighbouring quaternaries do, pass, and so do the slivers where two
+ * independently digitised neighbours overlap a little along their shared
+ * boundary: the DWS quaternaries overlap by up to 0.023 % of a group's area,
+ * so OVERLAP_SHARE leaves several times that.
  *
- * A sweep over the horizontal slabs between successive vertex latitudes:
- * inside a slab no ring has a vertex, so each edge crossing it is straight
- * and their order can change only where two cross. In each slab the edges
- * are put in order of longitude at its middle; two groups overlap there if
- * some stretch of positive width lies inside both, or if two edges of
- * different groups swap order between the slab's bottom and top (they cross
- * inside it). Only groups whose boxes meet another group's take part. Every
- * edge visited counts against GEO_MAX_SWEEP_STEPS; past it the shape is
- * refused as too complex, so a hostile file can't cost quadratic time.
+ * Two groups can overlap only inside the box their boxes share, so each
+ * pair whose boxes meet is clipped to that box (geo/clip.ts) and swept
+ * there: over the horizontal slabs between successive vertex latitudes,
+ * where no ring has a vertex and each edge is straight, the width inside
+ * both is measured at the slab's bottom, middle and top (a group inside
+ * while an odd number of its edges lie to the west) and integrated by
+ * Simpson's rule. Every vertex clipped and every edge visited counts against
+ * GEO_MAX_SWEEP_STEPS; past it the shape is refused as too complex, so a
+ * hostile file can't cost quadratic time.
  */
-export function polygonsOverlap(groups: readonly (readonly (readonly Position[])[])[]): boolean {
+export function polygonsOverlap(groups: readonly (readonly (readonly Position[])[])[], share = OVERLAP_SHARE): boolean {
 	const boxes = groups.map((rings) => {
 		let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
 		for (const r of rings) for (const [x, y] of r) (w = Math.min(w, x)), (e = Math.max(e, x)), (s = Math.min(s, y)), (n = Math.max(n, y));
 		return { w, s, e, n };
 	});
-	const meets = (a: (typeof boxes)[number], b: (typeof boxes)[number]) => a.w < b.e && b.w < a.e && a.s < b.n && b.s < a.n;
-	const taking = groups.map((_, g) => boxes.some((b, h) => h !== g && meets(boxes[g]!, b)));
+	// The groups' own areas, holes taken away.
+	const own = groups.reduce((sum, rings) => sum + Math.abs(Math.abs(planarArea(rings[0]!)) - rings.slice(1).reduce((h, r) => h + Math.abs(planarArea(r)), 0)), 0);
+	const limit = share * own;
+	const work = { steps: 0 };
+	const spend = (n: number) => {
+		work.steps += n;
+		if (work.steps > GEO_MAX_SWEEP_STEPS) throw new Refused('has parts too complex to check for overlaps; simplify it');
+	};
+	let overlap = 0;
+	for (let i = 0; i < groups.length; i++) {
+		for (let j = i + 1; j < groups.length; j++) {
+			const [a, b] = [boxes[i]!, boxes[j]!];
+			spend(1);
+			const box = { w: Math.max(a.w, b.w), s: Math.max(a.s, b.s), e: Math.min(a.e, b.e), n: Math.min(a.n, b.n) };
+			if (box.w >= box.e || box.s >= box.n) continue;
+			const clipped = [groups[i]!, groups[j]!].map((rings) =>
+				rings.flatMap((r) => {
+					spend(r.length);
+					const c = clipY(clipX(openRing(r), box.w, box.e), box.s, box.n);
+					return c.length >= 3 ? [c] : [];
+				})
+			);
+			if (!clipped[0]!.length || !clipped[1]!.length) continue;
+			overlap += twiceCovered(clipped, spend);
+			if (overlap > limit) return true;
+		}
+	}
+	return false;
+}
+
+/** The area (degrees²) inside both of two groups of open rings (each read even-odd): polygonsOverlap's slab sweep. */
+function twiceCovered(groups: readonly (readonly Position[])[][], spend: (n: number) => void): number {
 	// Each edge from its lower end to its upper (so an edge two groups share is computed identically for both); flat edges cross no slab.
 	const edges: { g: number; x0: number; y0: number; x1: number; y1: number }[] = [];
 	groups.forEach((rings, g) => {
-		if (!taking[g]) return;
 		for (const r of rings) {
-			for (let i = 0; i < r.length - 1; i++) {
-				const [a, b] = r[i]![1] <= r[i + 1]![1] ? [r[i]!, r[i + 1]!] : [r[i + 1]!, r[i]!];
-				if (a[1] !== b[1]) edges.push({ g, x0: a[0], y0: a[1], x1: b[0], y1: b[1] });
+			for (let i = 0; i < r.length; i++) {
+				const p = r[i]!;
+				const q = r[(i + 1) % r.length]!;
+				const [lo, hi] = p[1] <= q[1] ? [p, q] : [q, p];
+				if (lo[1] !== hi[1]) edges.push({ g, x0: lo[0], y0: lo[1], x1: hi[0], y1: hi[1] });
 			}
 		}
 	});
-	if (!edges.length) return false;
 	edges.sort((a, b) => a.y0 - b.y0);
 	const ys = [...new Set(edges.flatMap((e) => [e.y0, e.y1]))].sort((a, b) => a - b);
 	const xAt = (e: (typeof edges)[number], y: number) => (y === e.y0 ? e.x0 : y === e.y1 ? e.x1 : e.x0 + ((e.x1 - e.x0) * (y - e.y0)) / (e.y1 - e.y0));
-	const inside = new Uint8Array(groups.length);
+	/** The width inside both groups along latitude y, of the edges crossing it. */
+	const both = (crossing: readonly (typeof edges)[number][], y: number) => {
+		const row = crossing.map((e) => ({ g: e.g, x: xAt(e, y) })).sort((a, b) => a.x - b.x);
+		const inside = [false, false];
+		let w = 0;
+		for (let i = 0; i < row.length - 1; i++) {
+			inside[row[i]!.g] = !inside[row[i]!.g];
+			if (inside[0] && inside[1]) w += row[i + 1]!.x - row[i]!.x;
+		}
+		return w;
+	};
 	let active: (typeof edges)[number][] = [];
 	let next = 0;
-	let steps = 0;
+	let area = 0;
 	for (let k = 0; k < ys.length - 1; k++) {
 		const lo = ys[k]!;
 		const hi = ys[k + 1]!;
 		active = active.filter((e) => e.y1 > lo);
 		while (next < edges.length && edges[next]!.y0 <= lo) active.push(edges[next++]!);
-		steps += active.length;
-		if (steps > GEO_MAX_SWEEP_STEPS) throw new Refused('has parts too complex to check for overlaps; simplify it');
-		const mid = (lo + hi) / 2;
-		const row = active.map((e) => ({ g: e.g, x: xAt(e, mid), b: xAt(e, lo), t: xAt(e, hi) })).sort((a, b) => a.x - b.x);
-		let open = 0;
-		for (let i = 0; i < row.length; i++) {
-			const c = row[i]!;
-			inside[c.g] ^= 1;
-			open += inside[c.g] ? 1 : -1;
-			const after = row[i + 1];
-			if (!after) continue;
-			if (after.x > c.x && open > 1) return true;
-			// Ordered at the middle, a swap at the bottom or top is two edges crossing within the slab.
-			if (after.g !== c.g && (after.b < c.b || after.t < c.t)) return true;
-		}
-		inside.fill(0);
+		spend(3 * active.length);
+		// Every active edge spans the whole slab, so the three lines cross the same edges.
+		area += ((hi - lo) * (both(active, lo) + 4 * both(active, (lo + hi) / 2) + both(active, hi))) / 6;
 	}
-	return false;
+	return area;
 }
 
 function ring(a: unknown, count: { n: number }): Position[] {

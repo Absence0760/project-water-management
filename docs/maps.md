@@ -439,7 +439,7 @@ Split / Save the shape as any drawing, through the server's checks
   area within 0.1 % (plus 1 m²) and each lies within the shape (every
   edge of a part that isn't the shape's own stays inside its outline,
   `geo/splitCheck.ts`; security.md § Map uploads), and they don't
-  overlap (they may share the cut; the same half twice adds up too, and
+  overlap (beyond `OVERLAP_SHARE`, 0.1 %; they may share the cut; the same half twice adds up too, and
   lost the other half); one
   `map.feature_split` event names both parts. A unit whose area was taken
   from the split shape keeps that area until **Use** is pressed again.
@@ -580,9 +580,14 @@ did, and refuses the whole file on any problem, listing them per feature:
   inside another hole; either would count an area twice (or take it away
   twice) in the server's area and in every share taken from it (land cover,
   the CHIRPS cells). A one-kind **catchment boundary** file's polygons, which
-  become one MultiPolygon, are held to the same rule. `polygonsOverlap` in
-  `geojson.ts` sweeps the latitude slabs between vertices, with its own budget
-  (`GEO_MAX_SWEEP_STEPS`).
+  become one MultiPolygon, are held to the same rule. Independently
+  digitised neighbours overlap a little along their shared line (the DWS
+  quaternaries by up to 0.023 % of a region's area), so slivers up to
+  `OVERLAP_SHARE` (0.1 %) of the area pass. `polygonsOverlap` in
+  `geojson.ts` clips each pair of parts whose boxes meet to the box they
+  share and sweeps it slab by slab, with its own budget
+  (`GEO_MAX_SWEEP_STEPS`); a boundary of all 288 quaternaries of drainage
+  region D (173 000 vertices) checks in about 0.4 s.
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the
