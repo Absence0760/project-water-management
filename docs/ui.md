@@ -177,10 +177,15 @@ focus, marked `aria-invalid` with a short message under it that
 99.9*, *Enter 0 or more*, *Enter 100 or less*, *Enter a number*, each with *,
 or leave it blank for none* on a nullable field), or the caller's
 `invalidMessage`. The stored value doesn't change until the text is valid. A
-field still invalid is registered in `invalidFields`
+field still invalid is registered in its owner's `InvalidFields`
 (`common/invalidFields.svelte.ts`: `count`, `fields` with each one's label and
-message, `reset()`), which the save bar and the leave guard read as unsaved
-work; a value changed from outside (load, discard, undo) or `reset()` puts the
+message, `reset()`), which that owner's save and leave guard read as unsaved
+work. The registry is scoped through Svelte context: an owner calls
+`provideInvalidFields()` (the workspace page for its save bar; each
+scenario's override mode for its Record), a field registers with the nearest
+one above it (`useInvalidFields()`), and a field with none uses the default
+`invalidFields`, so a number typed in override mode never reaches the page's
+save bar; a value changed from outside (load, discard, undo) or `reset()` puts the
 field back to its stored value. Clearing a field stores null (none) only when
 it is `nullable`; a caller that wants a blank to mean 0 passes `nullable` and
 maps `null` to 0 in its `onchange`. A revision line saved before the change
@@ -739,7 +744,17 @@ with model or settings edits (it goes into History with them; one reason for
 both). A failed save says so in the bar ("Save failed: …"), beside Save.
 Discard and Save (and Preview) sit in one box that never splits on a
 phone. Every other card on the Project page acts at once. Settings has no
-save bar of its own.
+save bar of its own. A save keeps what was typed while it was in flight:
+the details and the settings each come back from the server measured
+against what the save sent (`ProjectDetailsDraft.afterSave`,
+`SettingsDraft.afterSave`), so an edit made meanwhile stays unsaved and the
+bar stays up, and the rest takes the server's values. When an automated
+fit or a proposal (the evaporation from the map) is applied, the form
+rebases onto the project's new settings preferring them (`rebase(…,
+'saved')`): the applied settings show the applied values, and other
+unsaved edits are kept. The rebase works per top-level setting: an edit
+anywhere in a nested one (`calibration`, `gr4j`, `pe`) keeps or yields that
+whole object, since its fields go together.
 
 The save rows of the modals over the workspace (the node and crop sheets,
 the farm drawer, a grid; `model/ModelSaveRow.svelte`) carry the model's part
@@ -6741,7 +6756,13 @@ them scenarios).
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
   about unrecorded edits; leaving it does (the leave guard, above), and
-  **Close override mode** with edits asks "Close override mode?" first. **Edits to record**
+  **Close override mode** with edits asks "Close override mode?" first. A
+number field in its tables holding text it can't take counts in override
+mode's own registry (`provideInvalidFields`, above), not the page's: the
+workspace save bar never shows it, Record is disabled with "1 problem in
+the tables to fix before recording." and the field listed under it as a
+link (**Fix before recording:**), it counts as unrecorded for leaving and
+closing, and **Discard edits** puts it back. **Edits to record**
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no

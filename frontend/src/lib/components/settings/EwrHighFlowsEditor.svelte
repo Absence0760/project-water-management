@@ -13,7 +13,7 @@
 	import { untrack } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { invalidFields } from '$lib/components/common/invalidFields.svelte';
+	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import { describeMonths } from '$lib/format/months';
 	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, highFlowTyped, parseHighFlows, parseMonths } from './ewrRules';
 
@@ -27,6 +27,8 @@
 		readonly?: boolean;
 		siteLabel: string;
 	} = $props();
+	// The nearest owner's registry of invalid fields (the workspace page, or a scenario's override mode).
+	const invalidFields = useInvalidFields();
 
 	const uid = $props.id();
 	// Months as typed, by row, until they parse.

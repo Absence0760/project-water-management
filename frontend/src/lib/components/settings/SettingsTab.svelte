@@ -277,11 +277,15 @@
 	// The declared uncertainty rule as saved (issue #71): switching it off withdraws this one.
 	const savedEvidenceRule = $derived(draft.saved.evidenceUncertaintyRule);
 
-	/** The server saved an automated fit or a proposal (issue #153): take the project's settings as they now are. */
+	/**
+	 * The server saved an automated fit or a proposal (issue #153): take the project's settings as they now
+	 * are. A rebase, not a load: an edit typed while it was applied stays unsaved, but a setting the apply
+	 * changed shows the applied value. The page's onProjectChange then finds nothing more to rebase.
+	 */
 	async function reloadAfterApply() {
 		const p = await api.projects.get(project.id);
+		draft.rebase(p.settings, 'saved');
 		onProjectChange(p);
-		draft.load(p.settings);
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */

@@ -5,7 +5,18 @@
 	// (aria-describedby), so a screen reader hears why it can't save.
 	import type { ProblemLink } from './pageDraft';
 
-	let { problems, id, max = 3 }: { problems: readonly ProblemLink[]; id: string; max?: number } = $props();
+	let {
+		problems,
+		id,
+		max = 3,
+		lead = 'Fix before saving:'
+	}: {
+		problems: readonly ProblemLink[];
+		id: string;
+		max?: number;
+		/** The list's lead-in (a scenario's override mode records, it doesn't save). */
+		lead?: string;
+	} = $props();
 
 	let all = $state(false);
 	/**
@@ -28,7 +39,7 @@
 
 {#if problems.length}
 	<div class="problems" {id}>
-		<span class="lead">Fix before saving:</span>
+		<span class="lead">{lead}</span>
 		<ul>
 			{#each shown as p, i (i)}<li><a href={p.href} data-sveltekit-noscroll onclick={(e) => follow(e, p.href)}>{p.message}</a></li>{/each}
 			{#if problems.length > max}

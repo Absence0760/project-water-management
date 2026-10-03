@@ -6,6 +6,14 @@
 // a Discard calls `reset()` to put every invalid field back to its stored
 // value: a discard that restores the same value wouldn't move the field
 // otherwise.
+//
+// Each owner of a save has its own registry: the workspace page (its save
+// bar) and each scenario's override mode (its Record), so a field typed in one
+// never counts against the other. An owner calls `provideInvalidFields()`;
+// NumberInput (and whatever else registers or reads) calls
+// `useInvalidFields()`, which finds the nearest owner above it, or the
+// page-level default `invalidFields` when there is none.
+import { getContext, hasContext, setContext } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export interface InvalidField {
@@ -17,7 +25,7 @@ export interface InvalidField {
 	message: string;
 }
 
-class InvalidFields {
+export class InvalidFields {
 	#fields = new SvelteMap<string, InvalidField>();
 	#epoch = $state(0);
 
@@ -52,4 +60,19 @@ class InvalidFields {
 	}
 }
 
+/** The default registry, for fields with no owner above them. */
 export const invalidFields = new InvalidFields();
+
+const KEY = Symbol('invalidFields');
+
+/** Make `fields` the registry of every component below this one (call during component init); returns it. */
+export function provideInvalidFields(fields: InvalidFields = new InvalidFields()): InvalidFields {
+	setContext(KEY, fields);
+	return fields;
+}
+
+/** The nearest owner's registry (call during component init), else the default `invalidFields`. */
+export function useInvalidFields(): InvalidFields {
+	return hasContext(KEY) ? getContext<InvalidFields>(KEY) : invalidFields;
+}
+

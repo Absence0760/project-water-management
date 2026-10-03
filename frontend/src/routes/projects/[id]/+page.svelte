@@ -48,7 +48,7 @@
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
 	import { guardUnsaved, listAnd } from '$lib/nav/unsaved';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { invalidFields } from '$lib/components/common/invalidFields.svelte';
+	import { provideInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import type { PageDraft } from '$lib/components/model/pageDraft';
 	import { issueHref } from '$lib/model/validate';
 	import { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
@@ -151,6 +151,9 @@
 	// The Settings & calibration form's unsaved settings: held here for the same reasons, so a tab
 	// change keeps them and the one save bar saves them (settings/settingsDraft.svelte.ts).
 	const settings = new SettingsDraft();
+	// The number fields on this page holding text they can't take (common/invalidFields): this page's
+	// own registry, which a scenario's override mode (with its own) keeps out of the save bar.
+	const invalidFields = provideInvalidFields();
 	// A model tab with problems in unsaved edits stays in the strip though hidden, so its link and dot can be reached.
 	const problemTabs = $derived(hasRole(project?.role, 'editor') && editor.dirty ? MODEL_TABS.filter((id) => editor.issues.some((x) => x.area === id)) : []);
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS, problemTabs));
@@ -502,9 +505,11 @@
 		details.saving = true;
 		details.saveError = null;
 		try {
+			const sent = details.typed();
 			const p = await api.projects.update(projectId, details.patch());
 			project = p;
-			details.load(p);
+			// Not a load: a field edited while the save was in flight stays unsaved.
+			details.afterSave(sent, p);
 			settings.rebase(p.settings);
 			fieldHistory?.refresh();
 			return true;
@@ -525,10 +530,12 @@
 		settings.saveError = null;
 		try {
 			const why = saveReason.trim();
-			const p = await api.projects.update(projectId, { settings: settings.snapshot(), ...(why ? { reason: why } : {}) });
+			const sent = settings.snapshot();
+			const p = await api.projects.update(projectId, { settings: sent, ...(why ? { reason: why } : {}) });
 			project = p;
 			details.rebase(p);
-			settings.load(p.settings);
+			// Not a load: edits typed while the save was in flight stay unsaved (settingsDraft afterSave).
+			settings.afterSave(sent, p.settings);
 			fieldHistory?.refresh();
 			return true;
 		} catch (e) {

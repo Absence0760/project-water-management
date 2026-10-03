@@ -7,7 +7,7 @@
 	// the same way in every mode. Text the field can't take is kept, even after
 	// blur, marked `aria-invalid`, with a message under it (from the bounds, or
 	// `invalidMessage`) that `aria-describedby` names; the field counts in
-	// `invalidFields` until it is fixed, `invalidFields.reset()` puts it back,
+	// its owner's `invalidFields` (the nearest `provideInvalidFields()`) until it is fixed, `reset()` puts it back,
 	// or the stored value changes from outside (load, discard, undo).
 	// `grouped` shows thousands separators (300 000, narrow no-break spaces) whenever the field isn't
 	// being edited; it is then a plain text box (role textbox). Otherwise the field is a
@@ -16,7 +16,7 @@
 	import { untrack } from 'svelte';
 	import type { HTMLInputAttributes } from 'svelte/elements';
 	import { NumberField, numberFieldMessage } from './numberField.svelte';
-	import { invalidFields } from './invalidFields.svelte';
+	import { useInvalidFields } from './invalidFields.svelte';
 
 	let {
 		value = $bindable(),
@@ -56,6 +56,8 @@
 		invalidMessage?: string;
 		onchange?: (v: number | null) => void;
 	} & Omit<HTMLInputAttributes, 'value' | 'onchange' | 'min' | 'max' | 'step' | 'type'> = $props();
+	// The nearest owner's registry of invalid fields (the workspace page, or a scenario's override mode).
+	const invalidFields = useInvalidFields();
 
 	const uid = $props.id();
 	const fieldId = $derived(id ?? `${uid}-n`);

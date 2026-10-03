@@ -13,7 +13,7 @@
 	// is gone).
 	import { tick } from 'svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { invalidFields } from '$lib/components/common/invalidFields.svelte';
+	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import { focusPageStart } from '$lib/a11y/focusPage';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { issueHref } from '$lib/model/validate';
@@ -44,6 +44,8 @@
 		/** Preview what the unsaved model and settings edits do to the last run (issue #284); null hides the button. */
 		onpreview?: (() => void) | null;
 	} = $props();
+	// The nearest owner's registry of invalid fields (the workspace page, or a scenario's override mode).
+	const invalidFields = useInvalidFields();
 
 	const dirtyDrafts = $derived(drafts.filter((d) => d.dirty));
 	// Number fields holding text they can't take (common/invalidFields): unsaved work too, and they block the save.

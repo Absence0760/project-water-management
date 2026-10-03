@@ -53,4 +53,27 @@ describe('ProjectDetailsDraft', () => {
 		expect(d.timeZone).toBe('Africa/Johannesburg');
 		expect(d.dirty).toBe(true);
 	});
+	it('after a save, a field edited while it was in flight stays unsaved; the rest takes the saved value', () => {
+		const d = new ProjectDetailsDraft();
+		d.load(project());
+		d.name = 'Vaal upper ';
+		d.description = 'Upper reaches';
+		const sent = d.typed();
+		// Typed while the PATCH is out.
+		d.description = 'Upper reaches, from the weir';
+		d.afterSave(sent, project({ name: 'Vaal upper', description: 'Upper reaches' }));
+		expect(d.name).toBe('Vaal upper');
+		expect(d.description).toBe('Upper reaches, from the weir');
+		expect(d.dirty).toBe(true);
+		d.revert();
+		expect(d.description).toBe('Upper reaches');
+	});
+	it('after a save with no edit meanwhile, it is clean', () => {
+		const d = new ProjectDetailsDraft();
+		d.load(project());
+		d.name = 'Vaal upper';
+		const sent = d.typed();
+		d.afterSave(sent, project({ name: 'Vaal upper' }));
+		expect(d.dirty).toBe(false);
+	});
 });

@@ -67,6 +67,60 @@ describe('SettingsDraft', () => {
 		expect(d.s.apanMm[0]).toBe(defaultProjectSettings().apanMm[0]);
 	});
 
+	it('after a save, an edit typed while it was in flight stays unsaved; the rest takes the server’s values', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		d.s.apanMm[0] = 123;
+		d.lastAreal = { factors: new Array(12).fill(1.1), method: 'map', source: 'x' } as never;
+		const sent = d.snapshot();
+		// Typed while the PATCH is out.
+		d.s.februaryDays = 29;
+		// The server saved what was sent (and normalised a value the form didn't touch since).
+		d.afterSave(sent, { ...sent, lakeEvapFactor: 0.65 } as ProjectSettings);
+		expect(d.s.februaryDays).toBe(29);
+		expect(d.s.apanMm[0]).toBe(123);
+		expect(d.s.lakeEvapFactor).toBe(0.65);
+		expect(d.dirty).toBe(true);
+		// What a switch kept stays with the unsaved edit.
+		expect(d.lastAreal).not.toBeNull();
+		// Discard goes back to what the server saved, not to before the save.
+		d.revert();
+		expect(d.s.februaryDays).toBe(defaultProjectSettings().februaryDays);
+		expect(d.s.apanMm[0]).toBe(123);
+	});
+
+	it('after a save with no edit meanwhile, the form is clean and starts over as after a load', () => {
+		const d = new SettingsDraft();
+		d.load(saved());
+		d.s.apanMm[0] = 123;
+		d.lastAreal = { factors: new Array(12).fill(1.1), method: 'map', source: 'x' } as never;
+		const sent = d.snapshot();
+		d.afterSave(sent, sent);
+		expect(d.dirty).toBe(false);
+		expect(d.s.apanMm[0]).toBe(123);
+		expect(d.lastAreal).toBeNull();
+	});
+
+	it('an applied fit (rebase preferring the saved) shows its values and keeps unrelated unsaved edits', () => {
+		const d = new SettingsDraft();
+		const base = saved();
+		d.load(base);
+		// Typed while the fit was being applied: one unrelated setting, and the fit's own.
+		d.s.februaryDays = 29;
+		d.s.gr4j = { ...d.s.gr4j, x1: 111 };
+		const fitted = saved({ gr4j: { ...base.gr4j, x1: 420, x2: 0.4 } });
+		d.rebase(fitted, 'saved');
+		expect(d.s.gr4j.x1).toBe(420);
+		expect(d.s.gr4j.x2).toBe(0.4);
+		expect(d.x2Open).toBe(true);
+		expect(d.s.februaryDays).toBe(29);
+		expect(d.dirty).toBe(true);
+		// The page's own rebase that follows changes nothing more.
+		d.rebase(fitted);
+		expect(d.s.gr4j.x1).toBe(420);
+		expect(d.s.februaryDays).toBe(29);
+	});
+
 	it('the snapshot is plain data the API can take', () => {
 		const d = new SettingsDraft();
 		d.load(saved());
@@ -87,5 +141,13 @@ describe('rebaseSettings', () => {
 		expect(out.februaryDays).toBe(29);
 		expect(out.lakeEvapFactor).toBe(0.6);
 		expect('reportStart' in out).toBe(false);
+	});
+
+	it('a setting both changed is the form’s, unless the saved is preferred', () => {
+		const before = editableSettings(saved());
+		const draft = { ...editableSettings(saved()), lakeEvapFactor: 0.5 } as typeof before;
+		const after = editableSettings(saved({ lakeEvapFactor: 0.6 }));
+		expect(rebaseSettings(draft, before, after).lakeEvapFactor).toBe(0.5);
+		expect(rebaseSettings(draft, before, after, 'saved').lakeEvapFactor).toBe(0.6);
 	});
 });

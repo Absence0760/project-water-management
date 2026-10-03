@@ -11,7 +11,7 @@
 	// with the save bar, which saves and discards them.
 	import { tick } from 'svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { invalidFields } from '$lib/components/common/invalidFields.svelte';
+	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { issueHref, type ModelIssue } from '$lib/model/validate';
 	import { listAnd } from '$lib/nav/unsaved';
@@ -32,6 +32,8 @@
 		/** An area whose problems the modal already lists above the row (the grid modal's IssueList): the row links the rest. */
 		listed?: ModelIssue['area'] | null;
 	} = $props();
+	// The nearest owner's registry of invalid fields (the workspace page, or a scenario's override mode).
+	const invalidFields = useInvalidFields();
 
 	const uid = $props.id();
 	// Number fields holding text they can't take (common/invalidFields) block the save too, and Discard puts them back.
