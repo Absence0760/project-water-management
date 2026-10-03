@@ -38,7 +38,7 @@ test('a monthly PE row moves GR4J’s PE and natural flow, and leaves irrigation
 	// The row starts from today's PE (0.7 × 150 mm in Oct), and the pan coefficient goes: GR4J no longer reads it.
 	await expect(page.getByLabel('Monthly PE, Oct, mm')).toHaveValue('105');
 	await expect(page.getByLabel('Pan coefficient, Oct')).toHaveCount(0);
-	await expect(page.getByLabel('Pan-coefficient preset')).toHaveCount(0);
+	await expect(page.getByLabel('Pan-coefficient preset', { exact: true })).toHaveCount(0);
 	await expect(group).toContainText('Irrigation demand and dam evaporation still use the A-pan row');
 	// The source is required before Save.
 	const save = page.getByRole('button', { name: 'Save settings' });
@@ -117,8 +117,8 @@ test('the FAO-56 Table 5 helper fills the pan-coefficient row from humidity and 
 	await expect(page.getByLabel('Pan coefficient source')).toHaveValue('FAO-56 Table 5, Case A, 10 m green crop fetch; RH and wind: Synthetic station, 2010–2020 monthly means');
 	await expect(page.getByLabel('Pan coefficient, May')).toHaveValue('0.75');
 	// A preset replaces the row and names itself in the note.
-	await page.getByLabel('Pan-coefficient preset').selectOption({ label: 'Generic (flat 0.70)' });
+	await page.getByLabel('Pan-coefficient preset', { exact: true }).selectOption({ label: 'Generic (flat 0.70)' });
 	await expect(page.getByLabel('Pan coefficient source')).toHaveValue(/^Generic \(flat 0\.70\) preset: indicative, from FAO-56 Table 5/);
 	// The picker is an action, not a setting: it goes back to "Choose a preset…", so the same preset can be picked again.
-	await expect(page.getByLabel('Pan-coefficient preset')).toHaveValue('');
+	await expect(page.getByLabel('Pan-coefficient preset', { exact: true })).toHaveValue('');
 });
