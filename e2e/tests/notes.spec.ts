@@ -84,6 +84,10 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await expect(item).toContainText('edited');
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Notes on EWR (1)' })).toBeVisible();
+	// The groups whose sources and determinations most need a "why" take notes too (WR2012, Reserve rules, restrictions, Evidence).
+	for (const group of ['WR2012 check', 'Reserve rule tables', 'Drought restrictions', 'Evidence']) {
+		await expect(page.getByRole('button', { name: `Add a note on ${group}` })).toBeVisible();
+	}
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await page.getByRole('button', { name: 'Add a note on this run' }).click();

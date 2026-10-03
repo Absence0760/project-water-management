@@ -592,7 +592,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Change one parameter at a time. For GR4J start with X1 (soil store: less flow when larger), then X4 (timing of the peaks), then X3 (how slowly flow recedes).',
-							'To see what the change does first, press **Preview** beside **Save settings**: the last run against the same run with your unsaved change, worked out in your browser (KGE, NSE, PBIAS and supply). Nothing is saved and no run is made.',
+							'To see what the change does first, press **Preview** on the save bar: the last run against the same run with your unsaved change, worked out in your browser (KGE, NSE, PBIAS and supply). Nothing is saved and no run is made.',
 							'Save and run.',
 							'On the run, read the **Hydrograph** (observed flow against simulated outflow) and the **Calibration** panel: [[kge|KGE]], [[nse|NSE]], [[pbias|PBIAS]], [[log-nse]] and the annual volume table.',
 							'Fix volume first (PBIAS near 0), then the shape of the peaks, then the recessions and low flows.',

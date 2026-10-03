@@ -1179,6 +1179,7 @@
 			bind:lowFlowMeasure={s.lowFlowMeasure}
 			{readonly}
 			nodes={editor?.model.nodes ?? []}
+			projectId={project.id}
 		/>
 	</div>
 
@@ -1187,6 +1188,7 @@
 		<div class="panel-head">
 			<h2 id="restrict-h">Drought restrictions <HelpTip key="settings.droughtRestriction" /></h2>
 			<span class="muted small">Cut demand by level when the farm dams fall below a share of their capacity</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('restrict')} />
 		</div>
 		<Lazy load={loadDroughtRestriction}>
 			{#snippet children(DroughtRestrictionFields)}
@@ -1252,6 +1254,7 @@
 		<div class="panel-head">
 			<h2 id="evid-h">Evidence <HelpTip key="settings.evidenceUncertaintyRule" /></h2>
 			<span class="muted small">The uncertainty rule an evidence report’s bands must follow, declared before any band is seen</span>
+			<NotesDrawer projectId={project.id} target={settingTarget('evidence')} />
 		</div>
 		<Lazy load={loadEvidenceRule}>
 			{#snippet children(EvidenceRuleFields)}

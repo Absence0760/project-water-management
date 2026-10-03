@@ -11,6 +11,8 @@
 	import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '$lib/components/notes/notes';
 	import { newTable, rulesError, siteOptions } from './ewrRules';
 
 	let {
@@ -19,7 +21,8 @@
 		chargeSource = $bindable(),
 		lowFlowMeasure = $bindable(),
 		readonly = false,
-		nodes
+		nodes,
+		projectId = null
 	}: {
 		value: EwrRuleTable[];
 		error?: string | null;
@@ -28,6 +31,8 @@
 		/** settings.lowFlowMeasure (engine ≥ 1.3.0); undefined = 'total'. */
 		lowFlowMeasure?: LowFlowMeasure;
 		readonly?: boolean;
+		/** For the group's notes; none without it. */
+		projectId?: string | null;
 		/** The network, for the site picker (outlet and gauges). */
 		nodes: readonly NetworkNode[];
 	} = $props();
@@ -51,6 +56,7 @@
 	<div class="panel-head">
 		<h2 id="{uid}-h">Reserve rule tables <HelpTip key="settings.ewrRules" /></h2>
 		<span class="muted small">Optional: judge each month against the Ecological Reserve’s assurance rules</span>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('reserve')} />{/if}
 		<!-- In the head, above the tables: with several sites they run screens long (a "new" action goes above a long list). -->
 		{#if !readonly}
 			<button type="button" class="btn btn-sm head-add" disabled={!canAdd} onclick={add} aria-describedby={!canAdd && value.length ? `${uid}-full` : undefined}>Add a rule table</button>

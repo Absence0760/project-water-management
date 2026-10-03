@@ -2,7 +2,7 @@
 	// Settings → Outcome matrix (issue #53 R4, docs/ui.md § Outcome matrix):
 	// how the Runs tab's outcome matrix splits water years into classes, and
 	// the risk cut-offs its cells are coloured by. Part of the Settings form
-	// (Save settings saves it), in the Settings tab's chunk. No model input: it changes how results are read, never a
+	// (the save bar saves it), in the Settings tab's chunk. No model input: it changes how results are read, never a
 	// run. The cut-offs' defaults are placeholders pending the hydrologist
 	// (plan.md O1; the client agreed, issue #90), and the section says so while
 	// they are in use. The year-class method's default is confirmed (O2).

@@ -3,7 +3,7 @@
 	// outlook): the season a new outlook runs (a decision date and a season
 	// end, as a month and day), the planning share and the review date (R6,
 	// the review triggers' day). Part of the Settings
-	// form (Save settings saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
+	// form (the save bar saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
 	// the client (plan.md O3, O6, issue #90).
 	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, defaultReviewDate } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';

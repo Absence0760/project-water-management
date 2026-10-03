@@ -16,6 +16,8 @@
 	import { tick } from 'svelte';
 	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '$lib/components/notes/notes';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -106,6 +108,7 @@
 	<div class="panel-head">
 		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
 		<span class="muted small">Optional: compare simulated natural flow with the quaternary’s naturalised flow</span>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('wr2012')} />{/if}
 	</div>
 	<p class="hint muted">
 		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
