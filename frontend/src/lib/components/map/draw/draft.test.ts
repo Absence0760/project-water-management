@@ -146,6 +146,7 @@ const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geo
 	name: 'Shape',
 	nodeId: null,
 	nodeName: null,
+	damPosition: null,
 	geometry,
 	properties: {},
 	areaM2: 1,

@@ -25,6 +25,7 @@ const feature = (id: string, kind: MapFeature['kind'], nodeId: string | null = n
 	name: id,
 	nodeId,
 	nodeName: null,
+	damPosition: null,
 	geometry: { type: 'Point', coordinates: [20, -33] },
 	properties: {},
 	areaM2: null,
@@ -114,8 +115,8 @@ describe('the ticks', () => {
 			],
 			rest: { to: 'none' }
 		});
-		expect(divideOffers(p.units[0]!)).toEqual({ add: false, area: true, drainsInto: true, runoffToDam: false });
-		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: false, drainsInto: true, runoffToDam: false });
+		expect(divideOffers(p.units[0]!)).toEqual({ add: false, area: true, drainsInto: true, runoffToDam: false, upstreamToDam: false });
+		expect(divideOffers(p.units[1]!)).toEqual({ add: true, area: false, drainsInto: true, runoffToDam: false, upstreamToDam: false });
 		expect(tickAllDivide(p, t).units).toEqual([
 			{ key: 'top', area: true, drainsInto: true, runoffToDam: false, add: false },
 			{ key: 'gauge', area: false, drainsInto: true, runoffToDam: false, add: true, name: 'G1' }
@@ -154,6 +155,18 @@ describe('the ticks', () => {
 		expect(sameAsNow(same, same.units[0]!, 'drainsInto')).toBe(true);
 		expect(sameAsNow(same, same.units[0]!, 'runoffToDam')).toBe(false);
 		expect(sameAsNow(p, p.units[0]!, 'drainsInto')).toBe(false);
+	});
+
+	it('offers, compares and counts a marked dam’s shares (194)', () => {
+		const shares = { pctUpstreamToDam: 0 as const, pctRunoffToDam: 0.025, damCatchmentM2: 0.05e6 };
+		const marked = plan([unit('off', { damShares: shares, current: { areaKm2: 5, areaSource: 'typed', downstreamNodeId: 'out', downstreamName: 'Outflow', pctRunoffToDam: 0.025, pctUpstreamToDam: 1 } }), unit('plain')]);
+		expect(sameAsNow(marked, marked.units[0]!, 'runoffToDam')).toBe(true);
+		expect(sameAsNow(marked, marked.units[0]!, 'upstreamToDam')).toBe(false);
+		// An unmarked dam proposes no upstream share: never "the same".
+		expect(sameAsNow(marked, marked.units[1]!, 'upstreamToDam')).toBe(false);
+		const t = tickAllDivide(marked, initialDivideTicks(marked));
+		expect(t.units.map((u) => u.upstreamToDam)).toEqual([true, undefined]);
+		expect(divideSummary(t)).toBe('The model takes 2 areas (each saved as its unit’s parcel), 2 drains-into and 2 runoffs to the dam, 1 upstream inflow to a dam. Every value not ticked stays as it is.');
 	});
 
 	it('says what apply will do in counts', () => {

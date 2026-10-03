@@ -1569,7 +1569,11 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
   geometry; CHECKs hold the type to the kind), `properties` (allowlisted
   strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
-  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  polygon), `dam_position` (194: `on_channel` | `off_channel` | NULL, a dam
+  polygon's position against its river as the editor said; NULL = not said,
+  the outline decides; `map_feature_dam_position_dam` holds it to a dam
+  polygon; Start and Divide place the dam by it, docs/maps.md § Start from
+  the map), `source_id` (composite key → `geo_source (id, project_id)`,
   cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the
@@ -1678,12 +1682,14 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `discarded` | `superseded`; at most one `proposed` per project, partial
   unique index), `plan` (jsonb, under 4 MB: the units, their sub-catchments'
   areas and outlines, the order, the rest of the catchment, the outlet, the
-  warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
+  warnings; a dam marked on or off its river, 194, its `damShares`;
+  `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method` (1–1000: each placement rule that ran defined once, or, when nearly every kind ran at once and that would pass 1 000 characters, named by the method version instead, `fitMethod`),
   `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387, `start-6` areas from the cells, `start-7` Start and Divide placing each point as Delineate does and recording its `placement` in the plan, `start-8` for keeping a point beside a confluence on its river's side of the DEM's junction, issue #390, `start-9` for `delineate-5`'s rules reaching them: a point on the DEM's own channel stays on it, a gully snap offered the reach's channel out to 2.5 km, the reach's area at the point, `start-10` for a dam polygon whose outline only clips a much larger channel placed at its own outflow, and no `unmatched` on a click cut at the window, `start-11` what drains into pans reported in the plan: `plan.pans`, each unit's `nonContributingM2` and `totalNonContributingM2`, `plan.rest.nonContributingM2`, `start-12` the windows grown for a river cut at the outlet and placed over the catchment, and a cut click's `unmatched` kept unless its reach is larger than the routed square, `start-13` for `delineate-11`'s head reach reaching them), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
-  `applied`: the ticks, the node and parcel ids, the revision),
+  `applied`: the ticks, `upstreamToDam` on a unit with `damShares`, the
+  node and parcel ids, the revision),
   `created_by`, `decided_by` (→ `app_user`, `SET NULL`), `created_at`,
   `decided_at` (set exactly when applied or discarded). The plan, the mode
   and every other column but the decision's never change (185: dataset,

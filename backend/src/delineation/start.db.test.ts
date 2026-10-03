@@ -466,6 +466,65 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		await owner.call('DELETE', q.at(`/map/features/${offDam}`));
 	});
 
+	it('places a long dam along the river by its marked siting, proposes its dam’s shares, and applies them (194)', async () => {
+		await clear();
+		// Its own project (the apply fills the model). Three cells wide and 20 long, the river its west column all the way: the
+		// outline alone can't tell it from a reservoir.
+		const w = await newProject('Start, a dam’s siting');
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const g = pos(DAM_CELL.x, DAM_CELL.y + 60);
+		const weir = await feature(w.at, { kind: 'gauge', name: 'Weir', lon: g[0], lat: g[1] });
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const longDam = await feature(w.at, { kind: 'dam', name: 'Long dam', geometry: { type: 'Polygon', coordinates: [ring] } });
+		const propose = () => owner.call('POST', w.at('/map/start'), { outletFeatureId: weir, points: [{ featureId: longDam, role: 'dam' }] });
+		const unitOf = (r: Awaited<ReturnType<typeof propose>>) => r.body.proposal.plan.units.find((u: { key: string }) => u.key === longDam);
+		const apply = (r: Awaited<ReturnType<typeof propose>>, t: Record<string, boolean>) =>
+			owner.call('POST', w.at(`/map/start/${r.body.proposal.id}/apply`), {
+				outletName: 'Weir',
+				units: [{ key: longDam, name: 'Long dam', area: true, drainsInto: true, runoffToDam: false, ...t }],
+				rest: { include: false, name: 'Rest', area: false }
+			});
+
+		// Unset (the positive control): placed and proposed as start-12 always did, no shares, and none to take.
+		const unset = await propose();
+		expect(unset.status, JSON.stringify(unset.body)).toBe(201);
+		expect(unitOf(unset).totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		expect(unitOf(unset).placement).not.toHaveProperty('damPosition');
+		expect(unitOf(unset)).not.toHaveProperty('damShares');
+		expect(unset.body.proposal.methodVersion).toBe('start-12');
+		const refused = await apply(unset, { upstreamToDam: true });
+		expect(refused.status).toBe(400);
+		expect(refused.body.error).toMatch(/has no proposed upstream inflow to its dam: mark the dam on or off the river/);
+
+		// On the river: the river's cell, everything from upstream and all its own runoff into the dam.
+		expect((await owner.call('PATCH', w.at(`/map/features/${longDam}`), { damPosition: 'on_channel' })).status).toBe(200);
+		const on = await propose();
+		expect(unitOf(on).placement).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
+		expect(unitOf(on).damShares).toEqual({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null });
+		expect(Math.abs(unitOf(on).totalAreaM2 / unitOf(unset).totalAreaM2 - 1)).toBeLessThan(0.001);
+
+		// Off-channel: its unit is the river's reach where its own outflow joins the river; the river passes the dam by and only
+		// its own catchment's runoff enters it.
+		expect((await owner.call('PATCH', w.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const off = await propose();
+		expect(off.status, JSON.stringify(off.body)).toBe(201);
+		const u = unitOf(off);
+		expect(u.placement).toMatchObject({ placedBy: 'polygon', larger: null, damPosition: 'off_channel' });
+		expect(u.totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		expect(u.damShares.pctUpstreamToDam).toBe(0);
+		expect(u.damShares.damCatchmentM2).toBeGreaterThan(0);
+		expect(u.damShares.pctRunoffToDam).toBeGreaterThan(0);
+		expect(u.damShares.pctRunoffToDam).toBeLessThan(0.05);
+		expect(Math.abs(u.damShares.pctRunoffToDam - u.damShares.damCatchmentM2 / u.areaM2)).toBeLessThanOrEqual(0.0005);
+		expect(off.body.proposal.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
+		const ok = await apply(off, { runoffToDam: true, upstreamToDam: true });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		const node = ok.body.model.nodes.find((n: { name: string }) => n.name === 'Long dam');
+		expect(node).toMatchObject({ pctUpstreamToDam: 0, pctRunoffToDam: u.damShares.pctRunoffToDam });
+		expect(ok.body.proposal.decision.units).toEqual([expect.objectContaining({ key: longDam, runoffToDam: true, upstreamToDam: true })]);
+	});
+
 	it('asks for the river at a confluence, every such point at once, and places it on the one picked', async () => {
 		await clear();
 		// Two rivers of clearly different areas ending where the gauge is: a tributary and the main river above a junction.

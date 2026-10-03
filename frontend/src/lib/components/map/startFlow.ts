@@ -100,14 +100,20 @@ export function proposeBody(choices: Record<string, PointChoice>, outlet: string
 }
 
 /** Which values of a unit were proposed (only those can be ticked). */
-export const unitOffers = (u: StartUnit) => ({ area: u.areaM2 !== null && !!u.geometry, drainsInto: u.drainsIntoProposed, runoffToDam: u.role === 'dam' && u.drainsIntoProposed });
+export const unitOffers = (u: StartUnit) => ({
+	area: u.areaM2 !== null && !!u.geometry,
+	drainsInto: u.drainsIntoProposed,
+	runoffToDam: u.role === 'dam' && u.drainsIntoProposed,
+	/** A dam marked on or off the river (194): its Upstream inflow to dam. */
+	upstreamToDam: !!u.damShares
+});
 export const restOffersArea = (p: StartPlan) => p.rest.areaM2 !== null && !!p.rest.geometry;
 
 /** The ticks a proposal opens with: the proposed names, every value unticked (each is accepted explicitly). */
 export function initialTicks(p: StartPlan): StartTicks {
 	return {
 		outletName: p.outlet.name,
-		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false })),
+		units: p.units.map((u) => ({ key: u.key, name: u.name, area: false, drainsInto: false, runoffToDam: false, ...(u.damShares ? { upstreamToDam: false } : {}) })),
 		rest: { include: false, name: p.rest.name, area: false }
 	};
 }
@@ -119,7 +125,7 @@ export function tickAll(p: StartPlan, t: StartTicks): StartTicks {
 		outletName: t.outletName,
 		units: t.units.map((x) => {
 			const o = unitOffers(by.get(x.key)!);
-			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: o.runoffToDam };
+			return { ...x, area: o.area, drainsInto: o.drainsInto, runoffToDam: o.runoffToDam, ...(o.upstreamToDam ? { upstreamToDam: true } : {}) };
 		}),
 		rest: { ...t.rest, include: true, area: restOffersArea(p) }
 	};

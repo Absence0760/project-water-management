@@ -7,7 +7,7 @@ import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
-import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
+import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, offChannelOutflow, ownsLand, riverBelow, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -150,6 +150,79 @@ describe('rasterize and mostDrained', () => {
 		mask[g.at(2, 2)] = 0;
 		expect(damOutflow(g.nx, mask, g.dir, acc, edge).straddled).toBeNull();
 		expect(damOutflow(g.nx, new Uint8Array(mask.length), g.dir, acc, edge)).toEqual({ cell: -1, straddled: null });
+	});
+
+	describe('a dam the editor marked on or off the river (194, map_feature.dam_position)', () => {
+		/** The river grid with a large catchment brought in from above it, and a mask of the cells given. */
+		const setup = (cells: readonly (readonly [number, number])[]) => {
+			const g = riverGrid();
+			const acc = accumulate(g.nx, g.ny, g.dir);
+			for (let y = 0; y < g.ny; y++) acc[g.at(2, y)]! += 10_000;
+			const mask = new Uint8Array(g.nx * g.ny);
+			for (const [x, y] of cells) mask[g.at(x, y)] = 1;
+			return { g, acc, mask, edge: new Uint8Array(mask.length) };
+		};
+		// A long off-channel dam lying along the river: two cells wide, the river its west column for its whole length.
+		const along = [0, 1, 2, 3, 4].flatMap((y) => [[2, y] as const, [3, y] as const]);
+
+		it('reproduces the gap: unset, a long dam along the river is taken as on it (its stem runs the outline’s length)', () => {
+			const { g, acc, mask, edge } = setup(along);
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge)).toEqual({ cell: g.at(2, 4), straddled: null });
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge, null)).toEqual({ cell: g.at(2, 4), straddled: null });
+		});
+
+		it('off-channel: its own outflow, no river cell taken, nothing offered', () => {
+			const { g, acc, mask, edge } = setup(along);
+			const out = damOutflow(g.nx, mask, g.dir, acc, edge, 'off_channel');
+			expect(out.straddled).toBeNull();
+			expect(out.cell % g.nx).toBe(3);
+			expect(acc[out.cell]!).toBeLessThan(LARGER_FACTOR * 10);
+		});
+
+		it('on the river: the river’s cell, even for an outline the automatic rule takes as only clipping it', () => {
+			const { g, acc, mask, edge } = setup([[3, 1], [4, 1], [3, 2], [4, 2], [2, 2]]);
+			// Unset: the clip rule puts it off the river, the river offered.
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge).straddled).toBe(g.at(2, 2));
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge, 'on_channel')).toEqual({ cell: g.at(2, 2), straddled: null });
+			// Off-channel: its own, as the clip rule says, but with no channel offered.
+			const off = damOutflow(g.nx, mask, g.dir, acc, edge, 'off_channel');
+			expect(off.straddled).toBeNull();
+			expect([g.at(3, 1), g.at(3, 2)]).toContain(off.cell);
+		});
+
+		it('off-channel with no watercourse in its outline: its most-drained cell, as any dam', () => {
+			const g = riverGrid();
+			const acc = accumulate(g.nx, g.ny, g.dir);
+			const mask = new Uint8Array(g.nx * g.ny);
+			for (const [x, y] of along) mask[g.at(x, y)] = 1;
+			// The column-2 cells carry their side cells only (at most 26 cells here), under 100× the outline's 10 cells.
+			expect(damOutflow(g.nx, mask, g.dir, acc, new Uint8Array(mask.length), 'off_channel').cell).toBe(g.at(2, 4));
+		});
+
+		it('off-channel drawn wholly on the river: no outflow of its own (-1)', () => {
+			const { g, acc, mask, edge } = setup([[2, 1], [2, 2], [2, 3]]);
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge, 'off_channel')).toEqual({ cell: -1, straddled: null });
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge, 'on_channel').cell).toBe(g.at(2, 3));
+		});
+
+		it('off-channel leaves out every stretch of the river, where it leaves the outline and comes back too', () => {
+			const { g, acc, mask, edge } = setup([[2, 0], [3, 0], [3, 1], [3, 2], [2, 3], [3, 3]]);
+			// The river's cell (2, 1)–(2, 2) are outside: its re-entry at (2, 3) is the most-drained, and a stem of one cell.
+			expect(offChannelOutflow(mask, acc, edge) % g.nx).toBe(3);
+			expect(damOutflow(g.nx, mask, g.dir, acc, edge, 'off_channel').cell % g.nx).toBe(3);
+		});
+	});
+
+	it('finds where an off-channel dam’s outflow joins its river, within the steps given', () => {
+		const g = riverGrid();
+		const acc = accumulate(g.nx, g.ny, g.dir);
+		for (let y = 0; y < g.ny; y++) acc[g.at(2, y)]! += 10_000;
+		// From (4, 1): west to (3, 1), then the river at (2, 1).
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1000, 5)).toBe(g.at(2, 1));
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1000, 1)).toBe(-1);
+		// A cell on the river is its own junction; no watercourse that large anywhere: none.
+		expect(riverBelow(g.nx, g.dir, acc, g.at(2, 3), 1000, 0)).toBe(g.at(2, 3));
+		expect(riverBelow(g.nx, g.dir, acc, g.at(4, 1), 1e9, 99)).toBe(-1);
 	});
 
 	it('picks the most-drained cell of a mask, never an edge cell', () => {
@@ -320,6 +393,69 @@ describe('delineateUnits (synthetic DEM)', () => {
 			expect(r.method).toMatch(/1 point at a dam polygon’s outflow/);
 		});
 
+		// A long off-channel dam lying along the river: three cells wide and 20 long, the river its west column all the way.
+		const along = [corner(X, Y), corner(X + 3, Y), corner(X + 3, Y + 20), corner(X, Y + 20), corner(X, Y)];
+
+		it('a long dam along the river: unset, the dam takes the river (the gap); marked off-channel, its unit is the river’s reach and the dam’s own catchment its share; on the river, the river’s', async () => {
+			const river = await delineate(dem, at(X, Y + 19));
+			const unset = await delineateUnits(dem, { outlet, boundary: null, points: [dam(along)] });
+			const off = await delineateUnits(dem, { outlet, boundary: null, points: [dam(along, { damPosition: 'off_channel' })] });
+			const on = await delineateUnits(dem, { outlet, boundary: null, points: [dam(along, { damPosition: 'on_channel' })] });
+			// Unset: the stem runs the outline's length, so the automatic rule takes it as on the river (unchanged: start-12).
+			expect(unset.units[0]!.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
+			expect(unset.units[0]!.damPosition).toBeUndefined();
+			expect(unset.method).not.toMatch(/marked/);
+			// Off-channel: the unit is the river's reach where the dam's own outflow joins it (the river passes the dam by, River to
+			// dam fills it), so the unit's area is the river's; the dam's own catchment, its share, is nowhere near it.
+			const u = off.units[0]!;
+			expect(u).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+			expect(u.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeGreaterThan(0);
+			expect(u.damCatchmentM2!).toBeLessThan(0.02 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeLessThanOrEqual(u.areaM2);
+			expect(u.larger).toBeUndefined();
+			expect(unset.units[0]!.damCatchmentM2).toBeUndefined();
+			expect(off.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
+			expect(off.method).toMatch(/marked off-channel: its unit on the river where its own outflow \(no cell carrying 100× the outline’s cells\) joins it within 1000 m, what drains to that outflow the dam’s share/);
+			expect(off.method).not.toMatch(/its own if a river only clips it/);
+			// On the river: the river's cell, as unset here.
+			expect(on.units[0]!).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
+			near(on.units[0]!.totalAreaM2, unset.units[0]!.totalAreaM2, 0.001);
+			expect(on.method).toMatch(/\(1 marked on the river\).*marked on the river: its most-accumulating cell/);
+		});
+
+		it('an outline that only clips the river, marked on it: the river’s catchment, nothing offered', async () => {
+			const r = await delineateUnits(dem, { outlet, boundary: null, points: [dam(clipping, { damPosition: 'on_channel' })] });
+			const river = await delineate(dem, at(X, Y + 3));
+			expect(r.units[0]!).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
+			expect(r.units[0]!.larger).toBeUndefined();
+			near(r.units[0]!.totalAreaM2, river.areaM2, 0.05);
+		});
+
+		it('takes a sub-cell off-channel dam’s own catchment from the cell under it, never the river’s', async () => {
+			// A tenth of a cell, in the cell just east of the river.
+			const [cx, cy] = [X + 1.1, Y + 5.1];
+			const tiny = [corner(cx, cy), corner(cx + 0.1, cy), corner(cx + 0.1, cy + 0.1), corner(cx, cy + 0.1), corner(cx, cy)];
+			const river = await delineate(dem, at(X, Y + 5));
+			const unset = await delineateUnits(dem, { outlet, boundary: null, points: [dam(tiny)] });
+			const off = await delineateUnits(dem, { outlet, boundary: null, points: [dam(tiny, { damPosition: 'off_channel' })] });
+			// Unset, its corner is snapped to the most-drained cell within 150 m. Off-channel, the dam's own catchment is the cell
+			// under it (never the river's), and its unit the river beside it, where that cell drains.
+			expect(unset.units[0]!.placedBy).toBe('snapped');
+			const u = off.units[0]!;
+			expect(u).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+			expect(u.totalAreaM2).toBeGreaterThan(0.5 * river.areaM2);
+			expect(u.damCatchmentM2!).toBeGreaterThan(0);
+			expect(u.damCatchmentM2!).toBeLessThan(0.01 * river.areaM2);
+		});
+
+		it('drops an off-channel dam drawn wholly on the river, saying why', async () => {
+			const onRiver = [corner(X, Y), corner(X + 1, Y), corner(X + 1, Y + 10), corner(X, Y + 10), corner(X, Y)];
+			const r = await delineateUnits(dem, { outlet, boundary: null, points: [dam(onRiver, { damPosition: 'off_channel' })] });
+			expect(r.units).toHaveLength(0);
+			expect(r.dropped).toEqual([expect.objectContaining({ id: 'off', damPosition: 'off_channel', reason: expect.stringMatching(/marked off-channel, but its whole outline lies on the river/) })]);
+		});
+
 		it('puts the dam on the river when the editor says it is on it (Use that channel)', async () => {
 			const r = await delineateUnits(dem, { outlet, boundary: null, points: [dam(clipping, { useLarger: true })] });
 			const river = await delineate(dem, at(X, Y + 3));
@@ -464,12 +600,28 @@ describe('placementText and startMethod', () => {
 		expect(placementText([], 0, null, 150)).toBe('no points placed');
 	});
 
+	it('names a dam’s marked position only when one was marked (194), the unmarked rule only while a dam is unmarked', () => {
+		const unmarked = placementText(['polygon', 'polygon'], 0, null, 150);
+		expect(placementText(['polygon', 'polygon'], 0, null, 150, false, [])).toBe(unmarked);
+		expect(unmarked).not.toMatch(/marked/);
+		expect(placementText(['polygon', 'polygon', 'polygon'], 0, null, 150, false, ['off_channel', 'on_channel'])).toBe(
+			'placed on the channel: 3 points at a dam polygon’s outflow (1 marked off-channel, 1 marked on the river) (outflow: its own if a river only clips it; marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share; marked on the river: its most-accumulating cell)'
+		);
+		expect(placementText(['polygon'], 0, null, 150, false, ['off_channel'])).toBe(
+			'placed on the channel: 1 point at a dam polygon’s outflow (1 marked off-channel) (marked off-channel: its unit on the river where its own outflow (no cell carrying 100× the outline’s cells) joins it within 1000 m, what drains to that outflow the dam’s share)'
+		);
+		// The brief form keeps the counts, the rules named by the version.
+		expect(placementText(['polygon'], 0, null, 150, true, ['on_channel'])).toBe(
+			`placed on the channel: 1 point at a dam polygon’s outflow (1 marked on the river) (each rule as ${START_METHOD_VERSION} defines it, docs/maps.md)`
+		);
+	});
+
 	it('fits start_proposal.method (1 000 characters) whatever ran, every rule at once', () => {
 		// Every placement a point can have (a Record so a new kind fails to compile here until it's listed), twice, with the
 		// longest outlet's and a click outlet's note.
 		const kinds: Record<PlacedBy, true> = { matched: true, junction: true, snapped: true, larger: true, exact: true, polygon: true, boundary: true };
 		const points = Object.keys(kinds) as PlacedBy[];
-		const placement = (brief: boolean) => placementText([...points, ...points], 50, 'boundary', 150, brief) + ' (the outlet: the click most water drains through)';
+		const placement = (brief: boolean) => placementText([...points, ...points], 50, 'boundary', 150, brief, ['off_channel', 'on_channel']) + ' (the outlet: the click most water drains through)';
 		// In full it runs past the column, so the stored method names the version for the rules instead of failing the insert.
 		expect(startMethod(99_999, 11, placement(false)).length).toBeGreaterThan(METHOD_MAX_CHARS);
 		const m = fitMethod(99_999, 11, placement);
