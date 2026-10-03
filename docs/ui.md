@@ -7387,8 +7387,9 @@ March") is kept against what it is about.
     (the run notes stay the modeller's one explanation; these are comments
     from anyone on the team);
   - in the head of each **Settings** group (Demand, Flow calibration, Rain
-    gaps, Calibration record, Flow share, EWR, Simulation period, Data
-    quality), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
+    gaps, Calibration record, WR2012 check, Flow share, EWR, Reserve rule
+    tables, Drought restrictions, Simulation period, Data quality,
+    Evidence), keyed by group (`SETTING_NOTE_GROUPS` in `notes.ts`);
   - on the **Summary**: *Recent notes*, the newest 8 across the project,
     each naming and linking to its target, and the project-level notes
     button.
