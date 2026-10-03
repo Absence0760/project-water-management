@@ -1361,7 +1361,23 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment, 241–385 km² on GLO-30 for a 3 × 3-cell dam whose outline
   clipped one river cell, against 0.01–0.14 km² beside it). A long
   off-channel dam lying along the river, overlapping it for most of its
-  length, is still taken as on it. A
+  length, is taken as on it by the outline alone, so the dam's card asks
+  (**Siting**, a dam drawn as its outline only; 194 `map_feature.dam_position`):
+  *Not said (from its outline)*, the default, keeps the rule above;
+  *On the river* puts the dam on the outline's most-drained cell, the
+  river's, whatever the outline; *Off-channel (filled by a pump or a
+  furrow)* puts it at the most-drained outline cell that is not on a
+  watercourse, a watercourse being a cell carrying 100× the outline's own
+  cells (no off-channel dam's own slopes drain a hundred times its water's
+  edge), so no cell of the river is taken however much of the outline it
+  runs along (one drawn wholly on the river is dropped, saying so). The name
+  follows DWS practice: a dam registration (form DW762, section 21(b))
+  distinguishes off-channel storage, naming the watercourse it would drain
+  to, and DWS's own off-channel storage (OCS) dams are filled from a river
+  they don't sit on. A marked dam's card says it was placed as marked, and
+  the method counts them ("1 point at a dam polygon’s outflow (1 marked
+  off-channel)", with the rule) only when one is marked; an unmarked dam is
+  placed exactly as before, so the method stays `start-12`. A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the channel
   matching river reach 11509680 (292 km²), 602 m from the point"), and the

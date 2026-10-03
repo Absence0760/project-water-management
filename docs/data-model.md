@@ -1569,7 +1569,11 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   boundary or river for nothing, `map_feature_node_check`), `geometry` (GeoJSON
   geometry; CHECKs hold the type to the kind), `properties` (allowlisted
   strings), `area_m2` (the polygon's geodesic area, NULL exactly when not a
-  polygon), `source_id` (composite key → `geo_source (id, project_id)`,
+  polygon), `dam_position` (194: `on_channel` | `off_channel` | NULL, a dam
+  polygon's position against its river as the editor said; NULL = not said,
+  the outline decides; `map_feature_dam_position_dam` holds it to a dam
+  polygon; Start and Divide place the dam by it, docs/maps.md § Start from
+  the map), `source_id` (composite key → `geo_source (id, project_id)`,
   cascade; NULL = placed in the app), `created_by` (→ `app_user`, `SET NULL`),
   `created_at`, `updated_at`. At most one `catchment_boundary` per project
   (partial unique index). It is Step 2's `catchment_geometry` source for the

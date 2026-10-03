@@ -2999,7 +2999,7 @@ only propose.
 | GET | `/projects/:id/map/features` | – | `{ features: MapFeature[], sources: { id, fileName, sha256, crs, importedAt, importedBy, features }[], nodes: { id, name, kind, areaKm2, areaSource: 'typed' \| 'map', areaFeatureId }[], quaternaryDatasets: { dataset, count }[] }`; the catchment boundary first | viewer |
 | GET | `/projects/:id/map/linked-nodes` | – | `{ nodeIds: string[] }`: each node at least one feature is linked to, once, and no geometry. The "Show on map" links on Network, Hydrological units and Dams (issue #326) read this rather than the feature list. A farmer gets `403`, as from `/map/features` | viewer |
 | POST | `/projects/:id/map/features` | `{ kind, name?, nodeId?, lon, lat }` (a point) or `{ kind, name?, nodeId?, geometry, traced? }` | `201 { feature }`. `400` for a geometry that fails the checks (the message says which: projected, 3D, a ring that crosses itself …), a type the kind doesn't take, a node of another project or of a kind the feature can't stand for. A `catchment_boundary` replaces the current one. `traced: { lon, lat, minOccurrence: 10 \| 25 \| 50 \| 75, edited }` (#326 C2, a `dam` or `other` polygon only): the outline was traced from the water occurrence data at that point; the server traces it again, refuses (`400`) an outline sent with `edited: false` that isn't that trace, writes the method in `properties.description` and audits `map.feature_created` with `from: 'dam_trace'`, the dataset, the share and `edited`; `409` when tracing is off, `422` with `details.reason` when the point no longer traces, `429` past the trace cap (as `POST …/map/dam-trace`; a `traced` save counts as a trace) | editor |
-| PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes | editor |
+| PATCH | `/projects/:id/map/features/:fid` | any of `kind`, `name`, `nodeId` (`null` unlinks), `damPosition` (`'on_channel'` \| `'off_channel'` \| `null`, a dam polygon only, 194), `lon` + `lat` or `geometry` | `200 { feature }`; the area is recomputed when the geometry changes. `damPosition` on anything but a dam polygon is a `400`; it is kept through other edits while the feature stays a dam polygon and cleared when it stops being one. A change to it is in the `map.feature_changed` event (`damPosition: { from, to }`) | editor |
 | POST | `/projects/:id/map/features/:fid/split` | `{ parts: [Polygon, Polygon], names?: [string, string], as?: 'farm_parcel' \| 'other' }` | `201 { features: [MapFeature, MapFeature] }` (#326 C2; the cut is made in the browser, `draw/split.ts`). Each part passes the geometry checks; together their areas must be the shape's within 0.1 % (+1 m²) and they must lie within its bounds (else `400`). A parcel, dam or other area keeps its id, name and link on the first part (renamed by `names[0]`) and the second is a new feature of its kind (`names[1]`, default "<name> (part 2)", no node, `properties.description` "Split from “<name>” along a drawn line."). The catchment boundary stays whole and both parts are new `as` features (default `other`, named "<boundary> part 1/2"); `as` on anything else is a `400`. `400` for a point, a line, or a polygon with holes or several parts. One `map.feature_split` event: the shape's id, kind and name, `into`, both parts' ids and areas | editor |
 | GET | `/projects/:id/map/dam-trace` | – | `200 { available, dataset: { label, attribution, fingerprint, maxZoom, bounds } \| null }`: whether tracing a dam is on (`WATER_URL` configured and readable) | viewer |
 | POST | `/projects/:id/map/dam-trace` | `{ lon, lat, minOccurrence?: 10 \| 25 \| 50 \| 75 }` (default 25) | `200 { trace: { click, seed, snapDistanceM, geometry: Polygon, areaM2, cells, cellSizeM, zoom, minOccurrence, dataset, attribution, datasetFingerprint, method, methodVersion } }`: the outline of the water round the point (#326 C2, [maps.md § Assisted drawing](./maps.md#assisted-drawing)); nothing is saved or audited. `409` when tracing is off; `422 { details: { reason } }` refused: `outside` the data, `no_data` there or at the water's edge, `no_water` (none at that share within about 60 m), `too_large` (past about 16 km), `too_small`, `outline`; `429` past 300 traces a project or 600 a user an hour (every attempt counted before the work, refused ones too; saving a traced outline counts one), with `Retry-After`; `503` when the data can't be read | editor |
@@ -3030,7 +3030,12 @@ only propose.
   file is never refused for them.
 - `MapFeature = { id, kind: 'catchment_boundary' | 'farm_parcel' | 'dam' |
   'gauge' | 'river' | 'other', name, nodeId, nodeName, geometry, properties,
-  areaM2, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
+  areaM2, damPosition, center: [lon, lat], sourceId, createdBy, createdAt, updatedAt }`.
+  `damPosition` (194) is a dam polygon's position against its river as an
+  editor said: `on_channel` (on the watercourse), `off_channel` (an
+  off-channel storage dam, filled by a pump or a furrow) or `null` (not
+  said: its outline decides); always `null` for anything else. Start and
+  Divide place the dam by it (§ Start from the map, Placing the points).
   `areaM2` is the geodesic area of a polygon (WGS84 ellipsoid), `null` for
   points and lines (a parcel saved from a delineated piece: the piece's
   area from the DEM's cells, its outline simplified); `center` is a point itself, a polygon's centroid (its
@@ -3236,6 +3241,11 @@ values now, taken only when ticked.
   on its own cell; `polygon`: a dam polygon's outflow, its most-drained
   cell, or, when the outline only clips a much larger channel, its own
   footprint's, that channel in `larger` with `outline: true` (`start-10`);
+  a dam whose feature has a `damPosition` is placed by it instead, with
+  `damPosition` in its placement and nothing in `larger`: `on_channel`, the
+  outline's most-drained cell; `off_channel`, the most-drained outline cell
+  carrying under 100× the outline's cells, the river never taken (one whose
+  whole outline lies on the river is dropped, saying so) (194);
   `boundary`: the boundary's; null without a DEM; absent on proposals
   before `start-7`). A snapped point beside a channel with 100× its
   upstream area carries it in `larger` and a sentence in `warnings` (the

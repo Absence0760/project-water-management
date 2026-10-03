@@ -3930,19 +3930,27 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `backend/scripts/research/snap-gauges.ts` (the header says how) and
       refresh the section's numbers. Trigger: the round fixing those
       findings merging.
-- [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
-      review finding 9, fixed in `start-10` for the common cases). A dam
-      polygon whose outline only clips a much larger channel now goes at
-      its own footprint's outflow with the river offered
-      (`subcatchments.ts` `damOutflow`), but the geometry can't tell a long
-      off-channel dam lying along the river, overlapping it for most of its
-      length, from a narrow reservoir on it: that one is still taken as on
-      the river, its catchment the river's. Durable fix: an "off-channel
-      (filled by a pump or a furrow)" choice on a dam feature (Dams page
-      and map), which Start and Divide honour by placing the dam at its
-      own outflow whatever the geometry says. Trigger: a client with
-      off-channel storage dams, or a Start plan where a dam's area is
-      many times its neighbours'.
+- [x] **Ask whether a dam is on its river or off it** (the hydrologist's
+      review finding 9, fixed in `start-10` for the common cases; the
+      durable fix 2026-10-03, branch wip/r5-off-channel-dam). A dam
+      polygon's card on the map asks its **Siting** (194
+      `map_feature.dam_position`: not said, on the river, off-channel),
+      and Start and Divide place it by that (`damOutflow`'s `position`,
+      `offChannelOutflow`): off-channel at its own outflow, no cell
+      carrying 100× the outline's cells taken, so a long dam lying along
+      the river no longer takes the river's catchment; on the river at the
+      river's cell. Unset keeps the outline's rule (still `start-12`); the
+      method names a marked dam only when one is marked (maps.md § Start
+      from the map).
+- [ ] **Take a dam's siting into its unit** (from the siting fix above).
+      Start and Divide place an off-channel dam by its siting, but the
+      unit they propose still starts at *Upstream inflow to dam* 100 % (a
+      dam on the river, model.md §3 Q1), and the Dams page doesn't show
+      the siting. Durable fix: propose *Upstream inflow to dam* 0 % for a
+      dam marked off-channel (100 % on the river) as a tickable value in
+      Start's and Divide's plans, and show the map's siting beside the
+      field on the Dams page. Trigger: a client catchment started from the
+      map with off-channel dams (the client's are, 2026-10-02).
 - [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). On 2 flat lower rivers GLO-30 has no channel within
       2.5 km carrying the river, and Delineate accepts a catchment under

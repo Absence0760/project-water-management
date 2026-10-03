@@ -149,7 +149,18 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    beside three gauged rivers of 260–390 km², its outline taking in one
    river cell): 241–385 km² before, the footprint's 0.01–0.14 km² after.
    The geometry can't tell a long off-channel dam lying along the river
-   from a narrow reservoir on it, so that one is taken as on the river. A snapped point beside a channel with 100× its
+   from a narrow reservoir on it, so the editor says which in the dam's
+   card (194 `map_feature.dam_position`, `damOutflow`'s `position`):
+   `on_channel` takes the outline's most-drained cell whatever the outline;
+   `off_channel` (`offChannelOutflow`) the most-drained outline cell
+   carrying under LARGER_FACTOR × the outline's cell count, so every cell
+   of a watercourse is left out, wherever it leaves the outline and comes
+   back, and a channel smaller than that stays as the dam's own (an
+   outline wholly on the river is dropped with its reason); a sub-cell
+   off-channel outline takes the cell under its first corner, never
+   snapped onto the river. Neither offers a channel. Unset, the rule above
+   decides as before (no method version bump); a marked dam carries
+   `damPosition` in its placement and the method counts it. A snapped point beside a channel with 100× its
    upstream area keeps the guard's finding in its `placement.larger` and a
    warning (the outlet's first, since every unit is placed against it);
    **use that channel** proposes again with `useLarger` for that point, and

@@ -2640,7 +2640,12 @@ map" card) stays the schematic; this is the geography.
   Network does. The page fits 1440×960 with thirty units and the legend.
 - **The picked feature's card** (top of the side column): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
-  nodes of fitting kinds for editors, else the node's name), **Unit’s
+  nodes of fitting kinds for editors, else the node's name), **Siting** for
+  a dam drawn as its outline (194: a select of *Not said (from its
+  outline)*, *On the river* and *Off-channel (filled by a pump or a
+  furrow)* for editors, saved on change, with a line saying Start and Divide
+  place an off-channel dam at its own outflow; the words for a viewer; not
+  asked of a point dam; maps.md § Start from the map), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
   (its area *typed*, **From the map** this feature, or this feature's
   *earlier outline* once it was reshaped or split after the area was
