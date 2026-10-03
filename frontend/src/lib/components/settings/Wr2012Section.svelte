@@ -13,7 +13,7 @@
 	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
+	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';

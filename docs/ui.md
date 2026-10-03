@@ -159,7 +159,31 @@ of them group with `engine/src/format.ts`. A figure and its unit keep an
 ordinary no-break space on the farm pages. Typed or pasted numbers accept any
 space, and a comma in a valid grouping (1,500), as a separator (`parseNum`).
 Exports don't group: a CSV is plain numbers, and the workbook's format codes
-draw the reader's own locale. A revision line saved before the change
+draw the reader's own locale.
+
+### Number fields
+
+Every number a user types goes through `common/NumberInput.svelte`, and every
+one reads its text the same way, whatever it holds (a %, a month, a volume, a
+cell of the node table): any space, a comma in a valid grouping (1,500) as a
+separator, and otherwise one comma as a decimal comma (12,5 = 12.5; 0,125 =
+0.125), through `readNumber` (`common/numberField.svelte.ts`). Each is a text
+box with the decimal keypad (`inputmode="decimal"`); a plain field is a
+spinbutton that ArrowUp/ArrowDown step, a `grouped` one (300 000 at rest) a
+textbox. Text the field can't take (out of `min`/`max`, not a number, or blank
+in a field that isn't `nullable`) stays as typed, even after the field loses
+focus, marked `aria-invalid` with a short message under it that
+`aria-describedby` names: built from the bounds (*Enter a number from 0 to
+99.9*, *Enter 0 or more*, *Enter 100 or less*, *Enter a number*, each with *,
+or leave it blank for none* on a nullable field), or the caller's
+`invalidMessage`. The stored value doesn't change until the text is valid. A
+field still invalid is registered in `invalidFields`
+(`common/invalidFields.svelte.ts`: `count`, `fields` with each one's label and
+message, `reset()`), which the save bar and the leave guard read as unsaved
+work; a value changed from outside (load, discard, undo) or `reset()` puts the
+field back to its stored value. Clearing a field stores null (none) only when
+it is `nullable`; a caller that wants a blank to mean 0 passes `nullable` and
+maps `null` to 0 in its `onchange`. A revision line saved before the change
 ("750,000 m³") still matches today's diff for the History attribution
 (`backend/src/history/attribute.ts`).
 

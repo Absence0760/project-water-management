@@ -40,12 +40,22 @@ async function editAndSave(page: Page, projectId: string, model: Model) {
 	// Upper 12 km² of 21.5 km² of units, by area.
 	await expect(nodeRow(grid, model, 'Upper farm')).toContainText('55.81%');
 
-	// Out of range: shown, marked invalid, not taken.
+	// Out of range: shown, marked invalid, not taken, and the field says the range it takes.
+	// The text and the message stay after the field loses focus (not put back to the old value).
 	const initial = grid.getByLabel('Dam initial storage of Upper farm, %');
 	await initial.fill('150');
 	await expect(initial).toHaveAttribute('aria-invalid', 'true');
-	await initial.fill('70');
+	await expect(initial).toHaveAccessibleDescription('Enter a number from 0 to 100');
+	await initial.blur();
+	await expect(initial).toHaveValue('150');
+	await expect(grid.getByText('Enter a number from 0 to 100', { exact: true })).toBeVisible();
+	// A decimal comma reads the same in a % cell as in a volume.
+	await initial.fill('70,5');
 	await expect(initial).not.toHaveAttribute('aria-invalid', 'true');
+	await expect(grid.getByText('Enter a number from 0 to 100', { exact: true })).toHaveCount(0);
+	await initial.blur();
+	await expect(initial).toHaveValue('70.5');
+	await initial.fill('70');
 
 	// A gauge has no dam: its fields are not used.
 	await grid.getByLabel('Kind of Lower block').selectOption('gauge');
