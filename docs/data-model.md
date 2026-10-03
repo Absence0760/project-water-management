@@ -1630,7 +1630,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
   `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
   (16 hex: SHA-256 of the archive's header and root directory),
-  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387), `feature_id`
+  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387, `delineate-5` for clicks on the DEM's own channels, the wider offer from a gully and the reach's area at the click), `feature_id`
   (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when

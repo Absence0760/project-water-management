@@ -1121,11 +1121,24 @@ to a point on a river. The design, the method and its accuracy are in
   DEM's channel (`place.ts`, issue #374, measured in
   [design/delineation-snapping.md](./design/delineation-snapping.md)):
   near a loaded river reach (within 1 km), on the cell whose upstream area
-  matches the reach's; otherwise on the most-drained cell within about
-  150 m, and if a channel with 100× its upstream area runs within 1 km the
-  sheet says so instead of proposing ("A much larger channel runs 504 m
-  north of your point: …") with **Use that channel** and **Keep my
-  point**. **At a confluence** (reaches within 200 m whose areas differ by
+  matches the reach's area at the click (its upper end's plus the rest in
+  proportion to how far down the line the click is); otherwise on the
+  most-drained cell within about 150 m, and if a channel with 100× its
+  upstream area runs within 1 km the sheet says so instead of proposing ("A
+  much larger channel runs 504 m north of your point: …") with **Use that
+  channel** and **Keep my point**. A click **on a red line** (the elevation
+  model's channel) more than 150 m from the river reach's line stays on that
+  channel: when the reach's matching channel lies further than the snap,
+  the sheet offers it the same way ("Your point is on a channel the
+  elevation model sees, draining 2.06 km², but the mapped river nearby
+  drains about 617 km² there, and the channel matching it runs 480 m north
+  …"), never moving the point by itself. The same holds the other way
+  round, wherever the line is: a click on a river whose nearest mapped line
+  is a small tributary's stays on the river, the tributary's channel
+  offered. And when the point lands in a
+  gully (under a tenth of the reach's area) with no match within 1 km, a
+  matching channel out to 2.5 km is offered ("… that far off it can be
+  another river, so check it on the map"). **At a confluence** (reaches within 200 m whose areas differ by
   1.5×) the server doesn't choose: the sheet asks which river ("The river
   below the junction, 497 km²", "The main river above the junction, 422
   km²", "The tributary above the junction, 67 km²"), and the outlet goes at
@@ -1325,7 +1338,11 @@ pick first.
   when a channel 100× larger runs within 1 km its line names it ("a much
   larger channel (620 km²) runs 504 m north: …") with **Use the larger
   channel**, which moves the click there and routes again (Undo moves it
-  back). A click with under 1 km² upstream and no larger channel nearby is
+  back). A click on a red line beside a river reach, or one in a gully with
+  the reach's channel up to 2.5 km off, stays where it is and its line
+  offers the reach's channel ("the channel matching the mapped river (about
+  617 km² there) runs 480 m north, …") with **Use that channel** (the same
+  rules as Delineation's). A click with under 1 km² upstream and no larger channel nearby is
   flagged ("very little drains here: it probably missed the channel").
   A click at a confluence waits in the panel until the river is picked
   (as Delineate's sheet asks), then goes at the DEM's junction for it.

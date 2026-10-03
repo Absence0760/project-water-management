@@ -3,8 +3,9 @@
 Why a click on a river line can land in a gully, what the literature does
 about it, and what each way of moving a click onto the channel gets right on
 real South African rivers. Written for issue #374; the rules it led to are
-built in `backend/src/delineation/place.ts` (Delineate `delineate-2`, Start,
-Divide and Sub-catchments `start-3`) and described in
+built in `backend/src/delineation/place.ts` (Delineate `delineate-2`,
+Sub-catchments `start-3`; refined in `delineate-5`, § Clicks on the red
+lines) and described in
 [maps.md § Delineation](../maps.md#delineation) and
 [delineation.md § Method](./delineation.md#method). Measured 2026-10-02.
 
@@ -249,6 +250,84 @@ km², seed `confluence-1`):
 - **As built:** the junction where found, else the area match within 2.5 km
   (the river having been named, the wider radius measured better): 85 % of
   river choices within ½–2×, 3 % flagged, 12 % not.
+
+## Clicks on the red lines, gullies and the head of a reach (fourth experiment, `delineate-5`)
+
+The hydrologist persona (issue #390 part 2) found three ways the rules above
+still placed a click wrong without asking. Each was reproduced on GLO-30 and
+HydroRIVERS, fixed in `place.ts` / `reach.ts`, and measured before and after
+(2026-10-03, the same 2 048-cell window as above).
+
+- **A click on a red line beside a mapped river was moved onto the river.**
+  The area match was tuned on clicks *on* HydroRIVERS lines; the editor is
+  told to click the DEM's channels. `backend/scripts/research/snap-redline.ts`
+  clicks the middle vertex of 23 red lines of 1–8 km² lying 250–900 m from a
+  reach of 100–3 000 km² (that reach the nearest, no confluence; seed
+  `redline-1`) through the app's path (`reachFor`, `delineate`). Before: **7
+  moved onto the river silently** (e.g. 28.0002° E, 26.3336° S: a 2 km²
+  stream became 611 km² after a 480 m move), 1 asked, 14 stayed, 1 too large.
+  Now a click on a DEM channel of its own (≥ 1 km² within 1.5 cells), more
+  than 150 m from the reach's line, whose area is outside the reach's 50 %
+  band, snaps on its stream and the reach's matching channel is **offered**
+  (422 `larger_channel` with `reachKm2`; a click's piece offers it): **0
+  moved, 11 asked, 12 stayed**. A click on the mapped line itself still
+  matches (it is the displacement rule 1 is for) when its channel is
+  *smaller* than the band, as does a river picked at a confluence. The other
+  way round counts wherever the line is: the gauge validation (issue #390
+  part 1, 446 gauges) found 9 gauges on a river whose nearest line was a
+  tributary's moved silently onto the tributary (0.01–0.1× their area), all
+  within 1 km of a junction; at 26.74444° E, 33.50678° S (published 575 km²)
+  the 29 km² reach 59 m away pulled the outlet 511 m onto a 15.7 km²
+  channel. Now a click on a channel larger than the band stays on it and the
+  tributary's channel is offered: that gauge now asks, its point on the
+  river (370 km² inside the first window).
+- **A gully proposed beside a river whose channel lies 1–2.5 km off.** F20A's
+  outlet (17.23542° E, 29.24375° S; reach 1 169 km²) gave 3.4 km² with only the
+  *unmatched* note: the matching channel (1 161 km²) is 2.46 km away, past
+  the 1 km match and the guard. Widening the silent match to 2.5 km is ruled
+  out by the first experiment (5–8 % on another river), so the rule now
+  *offers* it: no match within 1 km and a snap under a tenth of the reach's
+  area tries Lehner's ranking out to 2.5 km and refuses with that channel
+  ("… that far off it can be another river, so check it on the map"). F20A
+  now asks, offering the 1 161 km² channel (at a 3 072-cell window; 1 032 km²
+  of it inside 2 048).
+- **A click near the head of a reach slid downstream.** The reach's area is
+  at its lower end; a click higher up was matched to it. On 30 clicks one
+  vertex below the top of HydroRIVERS head reaches of 10–50 km² (seed
+  `head-1`): before, 15 matched, of which **7 slid 266–781 m down the line**
+  (median slide +172 m), 8 fell into a gully and 7 asked. Now the reach's
+  area is taken **at the click** (`reach.ts` `areaAlong`): its upper end's
+  area (the reaches ending there, or HydroRIVERS' stated 10 km² threshold for
+  a head reach) plus the rest in proportion to the length down the line. 27
+  matched, 4 slid over 250 m (median slide −24 m, median |slide| 97 m), 0
+  gullies, 3 asked. The 4 left are where the DEM drains well under 10 km² at
+  the head, so a cell further down fits the band better.
+
+**Nothing else regressed** (the as-built rules on the first experiment's
+220 reaches, `snap-methods.ts --no-mask`, `AB4`/`AB5` rows of
+`snap-summary.ts`):
+
+| Class | delineate-4: right / flagged / wrong unflagged | delineate-5 |
+| --- | --- | --- |
+| small (60) | 87 % / 8 % / 5 % | 78 % / 18 % / 3 % |
+| medium (60) | 78 % / 7 % / 15 % | 78 % / 12 % / 10 % |
+| large (60) | 67 % / 13 % / 12 % (8 % inconclusive) | 67 % / 17 % / 8 % (8 %) |
+| main stems (40) | 48 % / 48 % / 5 % | 48 % / 48 % / 5 % |
+| **all (220)** | **72 % / 16 % / 10 %** | **70 % / 21 % / 7 %** |
+
+Silent wrong placements fall from 10 % to 7 %: 9 gullies are now offered the
+reach's channel. The small class's "right" falls by five reaches. One clicked
+vertex sits on a channel more than twice the reach's area, so it now asks
+(the gauge rule above); three are this experiment's clicking artefact, not a regression: on reaches
+of 2–3 vertices and 0.6–1.5 km the "vertex next to the downstream end" is
+the reach's *upper* end, and the reference is the lower end's area; the old
+rule scored right there only by sliding down to it (finding 13). The fourth
+(39 km², 8.5 km long) had matched a cell of exactly 2× the reference and now
+snaps with the guard's offer. The confluence experiment
+(`snap-confluence.ts`, 60 junctions, 180 river choices) is unchanged where
+the app uses it: the picked river within 2.5 km 161 of 180 right before and
+after, the junction rule untouched; an unpicked click there (never placed by
+the app, which asks) flags 24 instead of 16.
 
 ## What these samples can't show (check before trusting a number)
 
