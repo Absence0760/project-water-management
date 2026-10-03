@@ -450,11 +450,14 @@ Split / Save the shape as any drawing, through the server's checks
   non-pointer way), with the share of observations a cell must be water in
   to count (10, 25 (the default), 50 or 75 %). The server reads a window of
   the water occurrence raster round the point (256 cells, about 8 km, grown
-  once to 512), moves a click within about 60 m of water onto it, floods
+  once to 512), moves a click within 60 m of water onto it (the water cell
+  whose centre is nearest the click, measured from the click itself, so the
+  move is never more than 60 m; `trace-dam-2`, issue #387), floods
   the cells at or over the share that touch the clicked one by an edge
   (two dams meeting at a corner stay two), fills islands (an outline has no
   holes here), outlines the cells and simplifies the outline by half a cell
-  (`trace-dam-1`). Water that reaches the edge of the larger window ("isn't
+  (`trace-dam-2`; `trace-dam-1` counted the 60 m in whole cells from the
+  clicked cell, reaching up to about 80 m). Water that reaches the edge of the larger window ("isn't
   a dam this can trace"), or the edge of the data, dry land and a point
   outside the data are refused with a sentence. Nothing is stored: the
   outline comes back as the draft, a dam to adjust (snapping and all), and
@@ -464,7 +467,7 @@ Split / Save the shape as any drawing, through the server's checks
   with `traced` (the click, the share, and whether it was adjusted): the
   server traces the click again with its own raster, refuses an outline
   sent as unadjusted that isn't that trace, and writes the method in the
-  feature's description ("Traced from <dataset> (trace-dam-1): water in at
+  feature's description ("Traced from <dataset> (trace-dam-2): water in at
   least 25 % of the observations, clicked at …; then adjusted by hand.
   Check it against the map. Source: EC JRC/Google.") and the
   `map.feature_created` event (`from: 'dam_trace'`, the dataset, the share,
@@ -1223,7 +1226,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 - **Applying** writes only what is ticked, only into an empty model (409
   once it has nodes), as one model revision: the nodes, each ticked area
   saved as its unit's parcel (`farm_parcel`, linked, "Sub-catchment
-  delineated from … (start-4)") and its area from it (*from the map*), the
+  delineated from … (start-5)") and its area from it (*from the map*), the
   points linked to their nodes. The proposal keeps the plan and the ticks.
 - **Gauges as nodes.** A gauge on the map other than the outlet is *a gauge
   in the network* by default: in the order like a water user (the units
@@ -1294,7 +1297,9 @@ pick first.
   the channel the DEM routes along. A click within 1 km of a loaded river
   reach is put on the channel whose upstream area matches the reach's; its
   line says so ("on the channel matching river reach 11492928 (412.50
-  km²)"). Any other click snaps to the most-drained cell within 150 m, and
+  km²)"). Any other click snaps to the most-drained cell within 150 m
+  (measured from the click itself to each cell's centre, so the move is
+  never more than 150 m; since `start-5`, issue #387), and
   when a channel 100× larger runs within 1 km its line names it ("a much
   larger channel (620 km²) runs 504 m north: …") with **Use the larger
   channel**, which moves the click there and routes again (Undo moves it

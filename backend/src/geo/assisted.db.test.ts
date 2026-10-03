@@ -162,7 +162,7 @@ describe('tracing a dam', () => {
 		const [{ n: before }] = await asOwner('SELECT count(*)::int AS n FROM map_feature WHERE project_id = $1', [projectId]);
 		const res = await editor.call('POST', at('/dam-trace'), { lon, lat });
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
-		expect(res.body.trace).toMatchObject({ minOccurrence: 25, methodVersion: 'trace-dam-1', geometry: { type: 'Polygon' } });
+		expect(res.body.trace).toMatchObject({ minOccurrence: 25, methodVersion: 'trace-dam-2', geometry: { type: 'Polygon' } });
 		expect(res.body.trace.areaM2).toBeGreaterThan(20_000);
 		const [{ n: after }] = await asOwner('SELECT count(*)::int AS n FROM map_feature WHERE project_id = $1', [projectId]);
 		expect(after).toBe(before);
@@ -176,7 +176,7 @@ describe('tracing a dam', () => {
 		const trace = (await editor.call('POST', at('/dam-trace'), { lon, lat, minOccurrence: 50 })).body.trace;
 		const saved = await editor.call('POST', at('/features'), { kind: 'dam', name: 'Traced dam', geometry: trace.geometry, traced: { lon, lat, minOccurrence: 50, edited: false } });
 		expect(saved.status, JSON.stringify(saved.body)).toBe(201);
-		expect(saved.body.feature.properties.description).toMatch(/^Traced from Synthetic water occurrence .*\(trace-dam-1\): water in at least 50 % of the observations, clicked at 33\.\d{4}° S, 21\.\d{4}° E\. Check it against the map\.$/);
+		expect(saved.body.feature.properties.description).toMatch(/^Traced from Synthetic water occurrence .*\(trace-dam-2\): water in at least 50 % of the observations, clicked at 33\.\d{4}° S, 21\.\d{4}° E\. Check it against the map\.$/);
 		const [ev] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.feature_created' AND subject->>'featureId' = $2`, [projectId, saved.body.feature.id]);
 		expect(ev!.subject).toMatchObject({ from: 'dam_trace', minOccurrence: 50, edited: false, dataset: expect.stringMatching(/Synthetic/) });
 

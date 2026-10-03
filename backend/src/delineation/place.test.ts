@@ -82,3 +82,62 @@ describe('place: snapped, with the larger-channel guard', () => {
 		expect(place(g, 20.5, 20.5, { snapRadiusM: 150 })).toBeNull();
 	});
 });
+
+describe('place: the snap distance never exceeds the stated radius (issue #387)', () => {
+	// Cell sizes the DEM is read at: zoom 11 with 512 px tiles (TARGET_ZOOM, GLO-30 via Mapterhorn) at the equator and across
+	// South Africa's latitudes, and the synthetic fixture's 128 m (zoom 10, 256 px). The old rule counted round(radius / cell)
+	// whole cells from the clicked cell, so a corner click reached up to about (round(r) + 0.7) cells: 156–200 m against 150 m.
+	const W11 = 2 ** 11 * 512;
+	const cellAt = (lat: number) => (2 * Math.PI * 6378137 * Math.cos((lat * Math.PI) / 180)) / W11;
+	const SIZES = [...[0, -22, -28, -34.5].map((lat) => [`zoom 11 at ${lat}°`, cellAt(lat)] as const), ['the fixture’s 128 m', 127.6] as const];
+
+	/** A deterministic pseudo-random sequence (mulberry32). */
+	function rng(seed: number) {
+		return () => {
+			seed |= 0;
+			seed = (seed + 0x6d2b79f5) | 0;
+			let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+			t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+			return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+		};
+	}
+
+	it.each(SIZES)('%s: the chosen cell’s centre is within 150 m of the exact click, and is the most-drained cell that is', (_, cellSizeM) => {
+		const n = 31;
+		const rand = rng(Math.round(cellSizeM * 1000));
+		let worst = 0;
+		for (let k = 0; k < 400; k++) {
+			const acc = new Int32Array(n * n);
+			for (let i = 0; i < acc.length; i++) acc[i] = 1 + Math.floor(rand() * 1000);
+			const edge = new Uint8Array(n * n);
+			const cx = 15 + rand();
+			const cy = 15 + rand();
+			const p = place({ nx: n, ny: n, acc, edge, cellSizeM }, cx, cy, { snapRadiusM: 150 })!;
+			const x = p.cell % n;
+			const y = (p.cell - x) / n;
+			const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) * cellSizeM;
+			worst = Math.max(worst, d);
+			expect(d).toBeLessThanOrEqual(150);
+			// Brute force: the most cells of any cell within 150 m (the click's own cell counts always).
+			let max = 0;
+			for (let j = 0; j < acc.length; j++) {
+				const jx = j % n;
+				const jy = (j - jx) / n;
+				const own = jx === Math.floor(cx) && jy === Math.floor(cy);
+				if (own || Math.hypot(jx + 0.5 - cx, jy + 0.5 - cy) * cellSizeM <= 150) max = Math.max(max, acc[j]!);
+			}
+			expect(acc[p.cell]).toBe(max);
+		}
+		// The bound is reached, not merely respected: some placements land in the radius's outer ring.
+		expect(worst).toBeGreaterThan(150 - cellSizeM);
+	});
+
+	it('leaves a river just past 150 m alone, though it is within the old whole-cell reach', () => {
+		const g = grid();
+		// The click 1.6 cells (160 m) east of the river's centre line, in row 20: the old rule (round(1.5) = 2 whole cells from cell 22) took the river.
+		const p = place(g, 22.1, 20.5, { snapRadiusM: 150 })!;
+		expect(g.acc[p.cell]).toBe(1);
+		// Positive control: 1.4 cells (140 m) from it, the river is in reach and taken.
+		expect(place(g, 21.9, 20.5, { snapRadiusM: 150 })!.cell).toBe(g.at(20, 20));
+	});
+});

@@ -76,10 +76,22 @@ describe('flow routing', () => {
 		const acc = new Int32Array(25).fill(1);
 		const edge = new Uint8Array(25);
 		acc[2 * 5 + 3] = 9;
-		expect(snap(5, 5, acc, edge, 2, 2, 1)).toBe(2 * 5 + 3);
-		expect(snap(5, 5, acc, edge, 1, 2, 1)).toBe(2 * 5 + 1); // the 9 is out of reach: the click's own cell
+		expect(snap(5, 5, acc, edge, 2.5, 2.5, 1)).toBe(2 * 5 + 3);
+		expect(snap(5, 5, acc, edge, 1.5, 2.5, 1)).toBe(2 * 5 + 1); // the 9 is out of reach: the click's own cell
 		edge.fill(1);
-		expect(snap(5, 5, acc, edge, 2, 2, 2)).toBeNull();
+		expect(snap(5, 5, acc, edge, 2.5, 2.5, 2)).toBeNull();
+	});
+
+	it('measures the radius from the exact click to each cell’s centre, not in whole cells from the clicked cell (issue #387)', () => {
+		const acc = new Int32Array(25).fill(1);
+		const edge = new Uint8Array(25);
+		acc[2 * 5 + 3] = 9; // centre (3.5, 2.5)
+		// A click near its cell's western edge: the 9 is 1.9 cells away, out of a 1.5-cell radius (the old rule, round(1.5) = 2 whole cells from cell (1, 2), took it).
+		expect(snap(5, 5, acc, edge, 1.6, 2.5, 1.5)).toBe(2 * 5 + 1);
+		// Near the eastern edge of the same cell, 1.1 cells away: in reach.
+		expect(snap(5, 5, acc, edge, 2.4, 2.5, 1.5)).toBe(2 * 5 + 3);
+		// A radius under half a cell still has the click's own cell.
+		expect(snap(5, 5, acc, edge, 2.9, 2.9, 0.1)).toBe(2 * 5 + 2);
 	});
 
 	it('collects exactly the cells whose paths pass the outlet', () => {

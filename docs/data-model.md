@@ -1594,7 +1594,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   `geo/geojson.ts`), `area_m2` (geodesic), `cells`, `cell_size_m`, `zoom`,
   `window_cells`, `dataset` (1–200, the DEM's label), `dataset_fingerprint`
   (16 hex: SHA-256 of the archive's header and root directory),
-  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences), `feature_id`
+  `method` (1–1000), `method_version` (`delineate-1`, `delineate-2` since issue #374, `delineate-3` for confluences, `delineate-4` for the snap radius measured from the exact click, issue #387), `feature_id`
   (composite key → `map_feature (id, project_id)`, `ON DELETE SET NULL
   (feature_id)`; set only when accepted), `created_by`, `decided_by` (→
   `app_user`, `SET NULL`), `created_at`, `decided_at` (set exactly when
@@ -1615,7 +1615,7 @@ is left for PostGIS when Step 4 needs cross-catchment spatial queries).
   areas and outlines, the order, the rest of the catchment, the outlet, the
   warnings; `start.ts` `StartPlan`), `from_dem`, `dataset` and
   `dataset_fingerprint` (both set exactly when `from_dem`), `method`,
-  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences), `mode` (`start` | `divide`, 182: a
+  `method_version` (`start-2`, `start-3` since issue #374, `start-4` for confluences, `start-5` for the snap radius measured from the exact point, issue #387), `mode` (`start` | `divide`, 182: a
   division of a model that has nodes, always `from_dem`; never changes),
   `decision` (jsonb, set exactly when
   `applied`: the ticks, the node and parcel ids, the revision),

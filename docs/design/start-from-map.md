@@ -79,7 +79,10 @@ the first build; `start-2` added gauges as nodes and their counted whole
 catchment, the partition of land-owning units unchanged; `start-3`, issue
 #374, places a point with a river reach nearby on the channel matching the
 reach's upstream area and names a much larger channel beside a snapped one,
-the same rules as Delineate's, [delineation.md § Method](./delineation.md#method).)
+the same rules as Delineate's, [delineation.md § Method](./delineation.md#method);
+`start-4` asks for the river at a confluence; `start-5`, issue #387,
+measures the snap radius from the exact point to each cell's centre, so a
+point is never moved more than 150 m.)
 
 ## Sub-catchments: the method
 

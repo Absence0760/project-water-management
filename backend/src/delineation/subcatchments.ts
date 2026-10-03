@@ -19,8 +19,12 @@ import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } fr
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 
 /** Bump when the method changes what a proposal holds; recorded on every proposal. */
-/** start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named; start-4: a click at a confluence asks for the river and goes at the DEM's own junction. */
-export const START_METHOD_VERSION = 'start-4';
+/**
+ * start-3 (issue #374): a point with a nearby river reach matched to its upstream area; the rest snapped, with a much larger channel nearby named;
+ * start-4: a click at a confluence asks for the river and goes at the DEM's own junction; start-5 (issue #387): the snap radius measured from the
+ * exact point to each cell's centre, so a snap distance never exceeds it.
+ */
+export const START_METHOD_VERSION = 'start-5';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 

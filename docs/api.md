@@ -3097,7 +3097,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-4`). `placedBy` is `matched` (on the channel matching
+  the map's (`start-5`). `placedBy` is `matched` (on the channel matching
   the river reach within 1 km of the click, `reach = { dataset, reachId,
   upstreamKm2 }`) or `snapped`; `larger` is a much larger channel beside a
   snapped click (`{ at, distanceM, km2, pointKm2 }`, as Delineate's

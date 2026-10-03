@@ -53,8 +53,13 @@ export function fixtureOccurrence(x: number, y: number): number {
 
 /** A click in the dam's water (its middle, beside the island). [lon, lat] */
 export const DAM_CLICK = waterLonLat(DAM.x - 6 + 0.5, DAM.y + 0.5);
-/** A click on dry land just beside the dam's edge (under 60 m out): moved onto the water. */
-export const DAM_NEAR_CLICK = waterLonLat(DAM.x + DAM.a + 1 + 0.5, DAM.y + 0.5);
+/**
+ * A click on dry land just beside the dam's edge, one cell (about 32 m) out: moved onto the water. (It was two cells,
+ * about 64 m, out, which the old whole-cell snap reached past its 60 m; issue #387.)
+ */
+export const DAM_NEAR_CLICK = waterLonLat(DAM.x + DAM.a + 0.5, DAM.y + 0.5);
+/** The pond's centre cell and radius (cells), for the snap-bound tests. */
+export const POND_CELL = { x: POND.x, y: POND.y, r: POND.r } as const;
 /** A click well away from any water. */
 export const DRY_CLICK = waterLonLat(60.5, 60.5);
 /** A click in the lake the raster's edge cuts off. */
