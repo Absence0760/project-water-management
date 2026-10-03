@@ -3942,15 +3942,14 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       off-channel storage dams, or a Start plan where a dam's area is
       many times its neighbours'.
 - [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
-      gauge run). On 2 flat lower rivers (a Zululand floodplain, a wide
-      Western Cape valley) GLO-30 has no channel within 2.5 km carrying the
-      river, and Delineate accepts a far smaller catchment (under 0.01× and 0.4×
-      the published area) with only the *unmatched* caveat. Durable fix:
-      refuse, or ask, when the placed area is under ~10 % of the reach's
-      area and no matching channel lies within 2.5 km (the same rule
-      finding 7 asks for), and name the cause ("the elevation model routes
-      this river elsewhere here: draw or import the boundary"). Trigger:
-      finding 7's fix, which should cover these with a test on a DEM whose
+      gauge run). On 2 flat lower rivers GLO-30 has no channel within
+      2.5 km carrying the river, and Delineate accepts a catchment under
+      half the published area with only the *unmatched* caveat. Durable
+      fix: refuse, or ask, when the placed area is under ~10 % of the
+      reach's area and no matching channel lies within 2.5 km (the same
+      rule finding 7 asks for), and name the cause ("the elevation model
+      routes this river elsewhere here: draw or import the boundary").
+      Trigger: finding 7's fix, which should cover these with a test on a DEM whose
       river is diverted.
 - [x] **Pans: the non-contributing area of a delineated catchment**
       (persona-hydrologist finding 8, 2026-10-03, branch wip/r3-pans;
