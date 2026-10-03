@@ -50,6 +50,7 @@ import {
 	TINY_PIECE_M2,
 	toProposal,
 	upstreamFirst,
+	damRunoff,
 	withDamShares,
 	type DamShares
 } from './start.js';
@@ -470,6 +471,9 @@ export const divideRoutes = new Hono<AuthEnv>()
 					nodeOf.set(u.key, null);
 				}
 			}
+			// Each node's area basis now (195): a marked dam's runoff share follows the area its node keeps.
+			const { rows: bases } = await db.query<{ id: string; area_basis: AreaBasis | null }>('SELECT id, area_basis FROM node WHERE project_id = $1', [id]);
+			const basisNow = new Map(bases.map((r) => [r.id, r.area_basis]));
 			// The ticked values, each against the value it replaces.
 			for (const u of plan.units) {
 				const t = ticks.get(u.key)!;
@@ -497,7 +501,8 @@ export const divideRoutes = new Hono<AuthEnv>()
 				if (t.runoffToDam) {
 					if (u.role !== 'dam') throw new ApiError(400, `${u.name} is not a dam unit.`);
 					if (cur && n.pctRunoffToDam !== cur.pctRunoffToDam) throw changed(`${u.name}’s runoff to the dam`);
-					n.pctRunoffToDam = u.damShares?.pctRunoffToDam ?? 1;
+					// On the basis of the area the node has after apply: the one ticked, else the one it has now (195).
+					n.pctRunoffToDam = damRunoff(u.name, u.damShares, t.area ? (t.areaBasis ?? 'gross') : (basisNow.get(nid) ?? 'gross'));
 				}
 				if (t.upstreamToDam) {
 					if (!u.damShares) throw new ApiError(400, `${u.name} has no proposed upstream inflow to its dam: mark the dam on or off the river on the map, and propose again.`);

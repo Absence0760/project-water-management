@@ -715,6 +715,19 @@ imported, split, or reshaped since: a new outline drops the figure, which
 was the old one's) offers no choice, and the server refuses an effective
 area for it (400).
 
+An off-channel dam's *runoff to the dam* follows the area taken.
+`pctRunoffToDam` is a share of the unit's runoff (model.md §2.7, M = I ×
+`pctRunoffToDam`), and that runoff is generated over the unit's `areaKm2`.
+Gross, the share is the dam's own catchment over the piece; effective, it
+is the dam's catchment less the pans in it over the piece less its pans
+(`damShares.pctRunoffToDamEffective`, with `damNonContributingM2`), so the
+same water reaches the dam whichever area the unit has. The card's line
+and the value applied are the ones for the area ticked (Divide: for the
+area the node keeps when its area isn't ticked). A dam on the river takes
+all its unit's runoff either way. A proposal made before the effective
+share existed is refused an effective area with that tick (400: propose
+again).
+
 ## Checks
 
 The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
@@ -1419,7 +1432,8 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   upstream inflow passes the dam by (*Upstream inflow to dam* 0 %, River
   to dam filling it) and whose own runoff reaches the dam only from the
   dam's own catchment (*runoff to the dam* = what drains to the dam's
-  outflow ÷ the unit's area, to 0.1 %). Both are proposed as ticks on the
+  outflow ÷ the unit's area, to 0.1 %; with the unit's area taken
+  effective, both less their pans, [§ Pans and the effective area](#pans-and-the-effective-area)). Both are proposed as ticks on the
   unit's card in Start and Divide (`damShares`; Divide beside the node's
   values now); an unmarked dam proposes only the old *all of its own runoff
   reaches the dam* tick. The name

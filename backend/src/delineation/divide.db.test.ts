@@ -449,6 +449,48 @@ describe('a dam polygon marked on or off the river (194)', () => {
 		expect(rev!.reason).toMatch(/1 runoff to the dam, 1 upstream inflow to a dam/);
 	});
 
+	it('takes an off-channel dam’s runoff share on the basis its area is taken (195)', async () => {
+		const v = await valley('Divide, off-channel dam, effective');
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const longDam = (await owner.call('POST', v.at('/map/features'), { kind: 'dam', name: 'Long dam', nodeId: v.nodes.dam.id, geometry: { type: 'Polygon', coordinates: [ring] } })).body.feature.id as string;
+		expect((await owner.call('PATCH', v.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.dam ? { featureId: longDam, nodeId: v.nodes.dam.id } : p)) };
+		const propose = async () => {
+			const r = await owner.call('POST', v.at('/map/divide'), body);
+			expect(r.status, JSON.stringify(r.body)).toBe(201);
+			type Shares = { pctRunoffToDam: number; pctRunoffToDamEffective: number; damCatchmentM2: number; damNonContributingM2: number };
+			return r.body.proposal as { id: string; plan: { units: { key: string; nodeId: string | null; areaM2: number; nonContributingM2: number; damShares: Shares }[] } };
+		};
+		const nodeOf = (m: { nodes: (ApiNode & { pctUpstreamToDam: number })[] }) => m.nodes.find((n) => n.id === v.nodes.dam.id)!;
+		// The dam unit's piece (the river's reach) holds the valley's pan; the dam's own small catchment holds none.
+		const p1 = await propose();
+		const u1 = p1.plan.units.find((x) => x.key === longDam)!;
+		expect(u1.nonContributingM2).toBeGreaterThan(0);
+		expect(u1.damShares.damNonContributingM2).toBe(0);
+		expect(u1.damShares.pctRunoffToDamEffective).toBeCloseTo(Math.round((u1.damShares.damCatchmentM2 / (u1.areaM2 - u1.nonContributingM2)) * 1000) / 1000, 9);
+		// Gross (the positive control): the share over the whole piece, as before.
+		const gross = await owner.call('POST', v.at(`/map/divide/${p1.id}/apply`), { units: ticks(p1.plan, { [longDam]: { area: true, runoffToDam: true } }), rest: { to: 'none' } });
+		expect(gross.status, JSON.stringify(gross.body)).toBe(200);
+		expect(nodeOf(gross.body.model).pctRunoffToDam).toBe(u1.damShares.pctRunoffToDam);
+		expect(nodeOf(gross.body.model).areaKm2).toBeCloseTo(u1.areaM2 / 1e6, 9);
+		// Effective: the area less its pans, and the share over that, so the same water reaches the dam.
+		const p2 = await propose();
+		const u2 = p2.plan.units.find((x) => x.key === longDam)!;
+		const eff = await owner.call('POST', v.at(`/map/divide/${p2.id}/apply`), { units: ticks(p2.plan, { [longDam]: { area: true, areaBasis: 'effective', runoffToDam: true } }), rest: { to: 'none' } });
+		expect(eff.status, JSON.stringify(eff.body)).toBe(200);
+		const n = nodeOf(eff.body.model);
+		expect(n.areaKm2).toBeCloseTo((u2.areaM2 - u2.nonContributingM2) / 1e6, 9);
+		expect(n.pctRunoffToDam).toBe(u2.damShares.pctRunoffToDamEffective);
+		expect(n.pctRunoffToDam).toBeGreaterThan(u2.damShares.pctRunoffToDam);
+		// Unticked area afterwards: the share follows the effective area the node keeps.
+		const p3 = await propose();
+		const again = await owner.call('POST', v.at(`/map/divide/${p3.id}/apply`), { units: ticks(p3.plan, { [longDam]: { runoffToDam: true } }), rest: { to: 'none' } });
+		expect(again.status, JSON.stringify(again.body)).toBe(200);
+		expect(nodeOf(again.body.model).pctRunoffToDam).toBe(p3.plan.units.find((x) => x.key === longDam)!.damShares.pctRunoffToDamEffective);
+	});
+
 	it('refuses a share changed since the proposal', async () => {
 		const v = await valley('Divide, a dam’s share changed');
 		const c = (x: number, y: number) => fixtureLonLat(x, y);

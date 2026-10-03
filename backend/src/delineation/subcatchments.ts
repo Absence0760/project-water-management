@@ -365,6 +365,8 @@ export interface UnitPiece {
 	 * runoff that reaches the dam (pctRunoffToDam), the rest of the piece and the river passing it by. Only with `off_channel`.
 	 */
 	damCatchmentM2?: number;
+	/** Of damCatchmentM2, what drains into pans (m², 195): the effective share's numerator is damCatchmentM2 less it. With damCatchmentM2 only. */
+	damNonContributingM2?: number;
 	/**
 	 * Only with `outlet: 'lowest'`: its catchment runs past the routed window (or the DEM's data), so its piece is not whole.
 	 * Its outline is null and its areas count only the cells inside the window; the water from above it enters as an inflow.
@@ -999,12 +1001,15 @@ export async function delineateUnits(
 			}
 		}
 		// An off-channel dam's own catchment: the cells above its own outflow that its unit owns (its share of the unit's runoff).
+		// And what of it drains into pans (195), so an effective area's share leaves the dam's own pans out too.
+		const damNc: (number | undefined)[] = [];
 		const damM2 = kept.map((k, i) => {
 			const own = damOwn.get(k.p.id);
 			if (own === undefined || open[i]) return undefined;
 			const above = upstream(nCells, nCells, dir, own);
 			let m2 = 0;
 			for (let c = 0; c < above.length; c++) if (above[c] && part.owner[c] === i) m2 += rowM2[(c - (c % nCells)) / nCells]!;
+			damNc[i] = ncAreaM2(nCells, found.nc, rowM2, (c) => above[c] === 1 && part.owner[c] === i);
 			return m2;
 		});
 		// A unit that owns no land: the cells above it, counted (the pieces above it would miss the land between).
@@ -1040,7 +1045,7 @@ export async function delineateUnits(
 				nonContributingM2: ownsLand(k.p.role) ? ncPiece[i]! : 0,
 				totalNonContributingM2: ncTotal[i]!,
 				...(how.get(k.p.id) ?? {}),
-				...(damM2[i] !== undefined ? { damCatchmentM2: damM2[i] } : {}),
+				...(damM2[i] !== undefined ? { damCatchmentM2: damM2[i], damNonContributingM2: damNc[i]! } : {}),
 				...(open[i] ? { open: true } : {})
 			})),
 			// A dropped point keeps its placement: one snapped into a gully beside its river names the river, so it can be moved there.

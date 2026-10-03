@@ -366,7 +366,7 @@
 							{#if offer.runoffToDam}
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="start-tick-dam" />
-									<span>{damShareLines(u.damShares, u.areaM2)?.runoff ?? 'All of its own runoff reaches the dam (its area ends at the wall)'}</span>
+									<span>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its area ends at the wall)'}</span>
 								</label>
 							{/if}
 							{#if offer.upstreamToDam}

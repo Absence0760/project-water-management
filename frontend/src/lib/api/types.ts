@@ -3110,6 +3110,10 @@ export interface DamShares {
 	pctUpstreamToDam: 0 | 1;
 	pctRunoffToDam: number;
 	damCatchmentM2: number | null;
+	/** The runoff share when the unit's area is taken effective (195): the dam's catchment less its pans over the piece less its pans; 1 on the river. Absent when unknown. */
+	pctRunoffToDamEffective?: number;
+	/** Of damCatchmentM2, what drains into pans (195). */
+	damNonContributingM2?: number;
 }
 
 /** What the server proposed for an empty model from the map (178_start_proposal; docs/api.md § Start from the map). */

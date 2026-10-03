@@ -585,7 +585,7 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect((await owner.call('PATCH', w.at(`/map/features/${longDam}`), { damPosition: 'on_channel' })).status).toBe(200);
 		const on = await propose();
 		expect(unitOf(on).placement).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
-		expect(unitOf(on).damShares).toEqual({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null });
+		expect(unitOf(on).damShares).toEqual({ pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null, pctRunoffToDamEffective: 1 });
 		expect(Math.abs(unitOf(on).totalAreaM2 / unitOf(unset).totalAreaM2 - 1)).toBeLessThan(0.001);
 
 		// Off-channel: its unit is the river's reach where its own outflow joins the river; the river passes the dam by and only
@@ -601,6 +601,8 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		expect(u.damShares.pctRunoffToDam).toBeGreaterThan(0);
 		expect(u.damShares.pctRunoffToDam).toBeLessThan(0.05);
 		expect(Math.abs(u.damShares.pctRunoffToDam - u.damShares.damCatchmentM2 / u.areaM2)).toBeLessThanOrEqual(0.0005);
+		// Its effective share (195): the dam's catchment less its pans over the piece less its pans.
+		expect(Math.abs(u.damShares.pctRunoffToDamEffective - (u.damShares.damCatchmentM2 - u.damShares.damNonContributingM2) / (u.areaM2 - u.nonContributingM2))).toBeLessThanOrEqual(0.0005);
 		expect(off.body.proposal.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
 		const ok = await apply(off, { runoffToDam: true, upstreamToDam: true });
 		expect(ok.status, JSON.stringify(ok.body)).toBe(200);

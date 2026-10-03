@@ -129,22 +129,58 @@ export interface StartUnit {
  * the piece ending at the wall). Off-channel, the unit is the river's reach where the dam's own outflow joins it: the river passes
  * the dam by (pctUpstreamToDam 0; River to dam is how it fills) and only the dam's own catchment's runoff enters it
  * (pctRunoffToDam = damCatchmentM2 / the piece's area, to 0.001).
+ *
+ * pctRunoffToDam is a share of the unit's runoff I (model.md §2.7 M = I × pctRunoffToDam), and I is generated over the unit's
+ * areaKm2. Taken gross, that area is the whole piece and the share is the dam's catchment over it. Taken effective (195), the
+ * unit's runoff comes only from the piece less its pans, so the share is the dam's catchment less the pans inside it over the
+ * piece less its pans (pctRunoffToDamEffective): the same water reaches the dam either way.
  */
 export interface DamShares {
 	pctUpstreamToDam: 0 | 1;
 	pctRunoffToDam: number;
 	/** Off-channel: what drains to the dam's own outflow (m²), the runoff share's numerator. */
 	damCatchmentM2: number | null;
+	/**
+	 * Off-channel (195): the share when the unit's area is taken effective, (damCatchmentM2 − its pans) / (the piece − its pans), to
+	 * 0.001; on the river 1. Absent when the figures aren't known (a plan from before it): apply then refuses an effective area with
+	 * the runoff ticked and asks for a new proposal.
+	 */
+	pctRunoffToDamEffective?: number;
+	/** Off-channel (195): of damCatchmentM2, what drains into pans, the effective share's numerator being the catchment less it. */
+	damNonContributingM2?: number;
+}
+
+/** The runoff share a dam unit takes on its area's basis (195): pctRunoffToDam, or pctRunoffToDamEffective; null when that isn't known. Pure. */
+export function runoffShareFor(shares: DamShares, basis: AreaBasis): number | null {
+	if (basis === 'gross') return shares.pctRunoffToDam;
+	return shares.pctRunoffToDamEffective ?? null;
 }
 
 /** A unit's DamShares from its piece; null for an unmarked dam (today's proposal), any other role, or no area. Pure. */
-export function damSharesOf(u: { role: UnitRole; areaM2: number | null; damPosition?: DamPosition; damCatchmentM2?: number }): DamShares | null {
+export function damSharesOf(u: DamSharesInput): DamShares | null {
 	if (u.role !== 'dam' || !u.damPosition) return null;
-	if (u.damPosition === 'on_channel') return { pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null };
+	if (u.damPosition === 'on_channel') return { pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null, pctRunoffToDamEffective: 1 };
 	const own = u.damCatchmentM2 ?? null;
-	const share = own !== null && u.areaM2 ? Math.min(1, Math.max(0, Math.round((own / u.areaM2) * 1000) / 1000)) : 1;
-	return { pctUpstreamToDam: 0, pctRunoffToDam: share, damCatchmentM2: own };
+	const ratio = (num: number, den: number) => Math.min(1, Math.max(0, Math.round((num / den) * 1000) / 1000));
+	const share = own !== null && u.areaM2 ? ratio(own, u.areaM2) : 1;
+	// The effective share: both sides less their pans; known only with both figures and some piece left.
+	const left = u.areaM2 !== null && u.nonContributingM2 !== undefined ? u.areaM2 - u.nonContributingM2 : null;
+	const effective = own !== null && left !== null && left > 0 && u.damNonContributingM2 !== undefined ? ratio(Math.max(0, own - u.damNonContributingM2), left) : null;
+	return { pctUpstreamToDam: 0, pctRunoffToDam: share, damCatchmentM2: own, ...(effective !== null ? { pctRunoffToDamEffective: effective, damNonContributingM2: u.damNonContributingM2! } : {}) };
 }
+
+/**
+ * A dam unit's pctRunoffToDam at apply, on the basis its area is taken (195): 1 for an unmarked dam (all its runoff), else the
+ * marked dam's share on that basis. 400, naming the unit, for an effective share a plan from before 195's fix can't give.
+ */
+export function damRunoff(name: string, shares: DamShares | undefined, basis: AreaBasis): number {
+	if (!shares) return 1;
+	const share = runoffShareFor(shares, basis);
+	if (share === null) throw new ApiError(400, `${name}’s share of runoff into its off-channel dam has no effective figure in this proposal: propose again, or take its gross area.`);
+	return share;
+}
+
+type DamSharesInput = { role: UnitRole; areaM2: number | null; damPosition?: DamPosition; damCatchmentM2?: number; nonContributingM2?: number; damNonContributingM2?: number };
 
 export interface StartPlan {
 	fromDem: boolean;
@@ -325,7 +361,7 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 }
 
 /** A unit's damShares field, when it has one (spread into a plan's unit). */
-export function withDamShares(u: { role: UnitRole; areaM2: number | null; damPosition?: DamPosition; damCatchmentM2?: number }): { damShares?: DamShares } {
+export function withDamShares(u: DamSharesInput): { damShares?: DamShares } {
 	const shares = damSharesOf(u);
 	return shares ? { damShares: shares } : {};
 }
@@ -603,7 +639,7 @@ export const startRoutes = new Hono<AuthEnv>()
 				const down = t.drainsInto && u.drainsInto ? nodeOf.get(u.drainsInto)! : outlet.id;
 				const n: NetworkNode = { ...newNetworkNode(nodeOf.get(u.key)!, i + 1, down), name: t.name.trim(), kind: u.role === 'user' ? 'user' : u.role === 'gauge' ? 'gauge' : 'farm' };
 				if (taken.has(u.key)) n.areaKm2 = taken.get(u.key)! / 1e6;
-				if (t.runoffToDam) n.pctRunoffToDam = u.damShares?.pctRunoffToDam ?? 1;
+				if (t.runoffToDam) n.pctRunoffToDam = damRunoff(t.name.trim(), u.damShares, t.area ? (t.areaBasis ?? 'gross') : 'gross');
 				if (t.upstreamToDam && u.damShares) n.pctUpstreamToDam = u.damShares.pctUpstreamToDam;
 				nodes.push(n);
 			});

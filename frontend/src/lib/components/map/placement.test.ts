@@ -33,6 +33,14 @@ describe('placementLine', () => {
 		});
 	});
 
+	it('words an off-channel dam’s share on the area taken: effective leaves the pans out of both sides (195)', () => {
+		const shares = { pctUpstreamToDam: 0 as const, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6, pctRunoffToDamEffective: 0.033 };
+		expect(damShareLines(shares, 4e6, 'gross', 1e6)!.runoff).toBe('2.5 % of its runoff reaches the dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s 4.00 km²; the rest passes it by.');
+		expect(damShareLines(shares, 4e6, 'effective', 1e6)!.runoff).toBe('3.3 % of its runoff reaches the dam: of the unit’s effective 3.00 km², what drains to the dam’s own outflow, its pans left out; the rest passes it by.');
+		// No effective figure (a plan from before it): the gross words.
+		expect(damShareLines({ ...shares, pctRunoffToDamEffective: undefined }, 4e6, 'effective', 1e6)!.runoff).toMatch(/^2\.5 % /);
+	});
+
 	it('says a dam was placed by the position marked on the map (194)', () => {
 		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'off_channel' }), null)).toBe('On the river where the dam’s own outflow joins it, as marked: off-channel, so the dam takes only its own catchment’s runoff.');
 		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'on_channel' }), null)).toBe('At the dam polygon’s most-drained cell, on the river, as marked.');

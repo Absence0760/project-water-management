@@ -3257,9 +3257,11 @@ values now, taken only when ticked.
   own outflow (the most-drained outline cell carrying under 100× the
   outline's cells) joins it within 1 km (one whose whole outline lies on
   the river is dropped, saying so). Such a unit carries `damShares: {
-  pctUpstreamToDam: 0 | 1, pctRunoffToDam, damCatchmentM2 }` (on the river
-  1, 1, null; off-channel 0, what drains to the dam's outflow ÷ the unit's
-  area, that area), the values `upstreamToDam` and `runoffToDam` take on
+  pctUpstreamToDam: 0 | 1, pctRunoffToDam, damCatchmentM2,
+  pctRunoffToDamEffective?, damNonContributingM2? }` (on the river
+  1, 1, null, 1; off-channel 0, what drains to the dam's outflow ÷ the unit's
+  area, that area, and with the area taken effective (195) both less their
+  pans, the dam catchment's pans), the values `upstreamToDam` and `runoffToDam` take on
   apply; a Divide unit's `current` has `pctUpstreamToDam` (194);
   `boundary`: the boundary's; null without a DEM; absent on proposals
   before `start-7`). A snapped point beside a channel with 100× its

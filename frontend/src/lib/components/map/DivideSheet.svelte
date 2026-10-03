@@ -355,7 +355,7 @@
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="divide-tick-dam" />
 									<span
-										>{damShareLines(u.damShares, u.areaM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
+										>{damShareLines(u.damShares, u.areaM2, t.area ? (t.areaBasis ?? 'gross') : 'gross', u.nonContributingM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
 									>
 								</label>
 							{/if}
