@@ -4,7 +4,7 @@
 // revision or a run's inputs, and a series' kept values and restoring them.
 // Viewers read; editors restore. Farmers get 403 (requireRole 'viewer'), and
 // RLS shows them nothing either way (D4).
-import { diffInputs, upgradeLegacyModel, type InputChange, type RunInputsSnapshot } from '@water-management/engine';
+import { cleanModelNames, diffInputs, upgradeLegacyModel, type InputChange, type RunInputsSnapshot } from '@water-management/engine';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -216,9 +216,13 @@ async function restorePreview(db: Db, projectId: string, target: InputsSnapshot)
 	return describeChange(await inputsSnapshot(db, projectId), normalise(target));
 }
 
-/** A stored snapshot in today's shape: a run from an older engine carries an older model. */
+/**
+ * A stored snapshot in today's shape: a run from an older engine carries an older model, and one from
+ * before issue #385 may carry a name over several lines, which today's schema refuses (cleanModelNames,
+ * as 189_one_line_names cleaned the stored model).
+ */
 function normalise(s: InputsSnapshot): InputsSnapshot {
-	return { settings: s.settings ?? {}, model: upgradeLegacyModel((s.model ?? {}) as Parameters<typeof upgradeLegacyModel>[0]) as InputsSnapshot['model'] };
+	return { settings: s.settings ?? {}, model: cleanModelNames(upgradeLegacyModel((s.model ?? {}) as Parameters<typeof upgradeLegacyModel>[0])) as InputsSnapshot['model'] };
 }
 
 /**

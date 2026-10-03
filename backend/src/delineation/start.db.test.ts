@@ -103,6 +103,27 @@ describe('without an elevation model', () => {
 	});
 });
 
+describe('names over several lines (issue #385)', () => {
+	it('proposes a map point’s name on one line, and refuses a unit name with a line break at apply', async () => {
+		process.env.DEM_URL = '';
+		const p = await newProject('Start, one line');
+		await feature(p.at, { kind: 'catchment_boundary', name: 'Drawn', geometry: { type: 'Polygon', coordinates: SQUARE } });
+		const dam = await feature(p.at, { kind: 'dam', name: 'Upper\r\ndam', lon: 20.74, lat: -33.45 });
+		const r = await owner.call('POST', p.at('/map/start'), { points: [{ featureId: dam, role: 'dam' }] });
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const [unit] = r.body.proposal.plan.units as { key: string; name: string }[];
+		expect(unit!.name).toBe('Upper dam');
+		const apply = (name: string) =>
+			owner.call('POST', p.at(`/map/start/${r.body.proposal.id}/apply`), { outletName: 'Weir', units: [{ key: unit!.key, name, area: false, drainsInto: false, runoffToDam: false }], rest: { include: false, name: 'Rest', area: false } });
+		const bad = await apply('Upper\ndam');
+		expect(bad.status).toBe(400);
+		expect(JSON.stringify(bad.body)).toMatch(/cannot contain line breaks or control characters/);
+		const ok = await apply(unit!.name);
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect((ok.body.model.nodes as { name: string }[]).map((n) => n.name)).toContain('Upper dam');
+	});
+});
+
 describe('with the synthetic DEM', () => {
 	let p: Awaited<ReturnType<typeof newProject>>;
 	let gauge: string;

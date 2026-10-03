@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hasNameControlChars } from '@water-management/engine';
 import { XlDateTime, XlDuration, XlTime, clean, columnIndex, columnLetter, isName, isNumeric, num, pyFloat, pyFloatRepr, pyFormatG, pyRepr, pyStr } from './cells';
 
 // Expected strings are what CPython 3.12 prints for the same values.
@@ -95,6 +96,28 @@ describe('the importer coercions', () => {
 		expect(clean(false)).toBe('');
 		expect(clean(NaN)).toBe('nan');
 		expect(clean(12)).toBe('12');
+	});
+
+	// The same cases as scripts/wbt-import/test_clean.py (issue #385): a name is one line, as the app requires.
+	it.each([
+		['Golf\nFarm', 'Golf Farm'],
+		['Golf\r\nFarm\n', 'Golf Farm'],
+		['Echo\t\tFarm', 'Echo Farm'],
+		['\x01Alpha\x07 Farm\x1b', 'Alpha Farm'],
+		['Vines\x9fD', 'Vines D'],
+		['a\x7fb', 'a b'],
+		['a\x85b', 'a b'],
+		['a\u2028b\u2029c', 'a b c'],
+		['Caf\u00e9\u00a0Farm', 'Caf\u00e9 Farm'],
+		['a\ufeffb', 'a\ufeffb']
+	])('clean() makes %j one line: %j', (raw, want) => {
+		expect(clean(raw)).toBe(want);
+		expect(hasNameControlChars(clean(raw))).toBe(false);
+	});
+
+	it('clean() reads a cell of only control characters as blank', () => {
+		expect(clean('\n\x01\x9f')).toBe('');
+		expect(isName('\r\n\x1b')).toBe(false);
 	});
 
 	it('isName(): not blank, not a | separator, not a -- sentinel', () => {

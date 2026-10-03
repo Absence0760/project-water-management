@@ -191,6 +191,26 @@ The checklist for these is issue #62; the history scrub is #63.
       pack-share.db.test.ts (two pack notices) and alerts.db.test.ts (a
       digest-waiting delivery from the daily-cap test).
 
+## One-line names (issue #385, 2026-10-02)
+
+Model names (nodes, crops, boreholes, demand objects, schedule labels) are
+one line since migration 189 (api.md § Model data). Left, found on the way:
+
+- [ ] **Map feature names.** `map_feature.name` (`backend/src/geo/routes.ts`
+      `Name`, the GeoJSON upload's `featureName`, the river loader) still
+      takes line breaks and control characters, and the Map draws them as
+      labels. Start and Divide already propose such a name on one line
+      (`cleanName`). Durable fix: the same `hasNameControlChars` refusal on
+      the feature routes, `cleanName` in the GeoJSON and river readers (bulk
+      paths), and a migration cleaning stored feature names. Trigger: next
+      work on the map's feature routes.
+- [ ] **A scenario's borehole may have a blank name.** The engine's
+      `borehole.add` check (`scenario/ops.ts` `BOREHOLE_FIELDS.name`) takes
+      0–200 characters where PUT /model needs 1–200, so a scenario can add a
+      borehole the model schema would refuse. Durable fix: `nameOf(1, 200)`
+      there, checking the stored scenarios first. Trigger: next work on
+      scenario ops.
+
 ## Two-step sign-in (issue #282)
 
 Built 2026-10-01: TOTP (RFC 6238) with ten recovery codes, the two-step

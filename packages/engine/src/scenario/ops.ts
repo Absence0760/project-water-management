@@ -6,6 +6,7 @@ import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { ALLOCATION_WATER_USES, type AllocationEntry } from '../allocations/compare';
 import { fromEpochDay, toEpochDay } from '../calendar';
+import { hasNameControlChars, NAME_CONTROL_MESSAGE } from '../names';
 import {
 	ACCUMULATION_MODES,
 	BOREHOLE_MODES,
@@ -159,7 +160,14 @@ export function isIsoDate(v: unknown): v is string {
 const isoDate: Check = (v) => (isIsoDate(v) ? null : 'must be an ISO date (YYYY-MM-DD)');
 /** Ids: the backend stores UUIDs; the engine only needs a non-empty string. */
 const id: Check = (v) => (typeof v === 'string' && v.length >= 1 && v.length <= 100 ? null : 'must be an id (1–100 characters)');
-const name: Check = (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 100 ? null : 'must be a name of 1–100 characters');
+/** A name as the model schema takes one (backend/src/model/validate.ts nameText): trimmed `min`–`max` characters, one line (issue #385). */
+const nameOf =
+	(min: number, max: number, what = 'a name'): Check =>
+	(v) => {
+		if (typeof v !== 'string' || v.trim().length < min || v.trim().length > max) return min ? `must be ${what} of ${min}–${max} characters` : `must be ${what} of at most ${max} characters`;
+		return hasNameControlChars(v) ? NAME_CONTROL_MESSAGE : null;
+	};
+const name: Check = nameOf(1, 100);
 
 // ---------------------------------------------------------------------------
 // node.set: the editable fields, per node kind
@@ -766,7 +774,7 @@ export type DemandObjectSetField = (typeof DEMAND_OBJECT_SET_FIELDS)[number];
 
 const DEMAND_WINDOW_KEYS = ['label', 'span', 'from', 'to', 'easterFrom', 'easterTo', 'weekdays', 'factor'] as const;
 const DEMAND_WINDOW_CHECKS: Record<(typeof DEMAND_WINDOW_KEYS)[number], Check> = {
-	label: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be text of at most 200 characters'),
+	label: nameOf(0, 200, 'text'),
 	span: oneOf(DEMAND_SCHEDULE_SPANS),
 	from: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
 	to: nullable((v) => (typeof v === 'string' && v.length <= 10 ? null : 'must be a date of at most 10 characters')),
@@ -802,7 +810,7 @@ const scheduleOf = (v: unknown): DemandScheduleWindow[] | null =>
 		: null;
 
 const DEMAND_OBJECT_FIELD_CHECKS: Record<DemandObjectSetField, Check> = {
-	name: (v) => (typeof v === 'string' && v.trim().length >= 1 && v.trim().length <= 200 ? null : 'must be a name of 1–200 characters'),
+	name: nameOf(1, 200),
 	category: oneOf(DEMAND_OBJECT_CATEGORIES),
 	sizing: oneOf(DEMAND_OBJECT_SIZINGS),
 	monthlyM3Day: nullable(monthlyOf(nonNeg)),
@@ -1095,7 +1103,7 @@ const LAND_COVER_FIELDS: Record<string, Check> = {
 const BOREHOLE_FIELDS: Record<string, Check> = {
 	id,
 	nodeId: id,
-	name: (v) => (typeof v === 'string' && v.length <= 200 ? null : 'must be a name of at most 200 characters'),
+	name: nameOf(0, 200),
 	capacityM3Day: nonNeg,
 	annualCapM3: nullable(nonNeg),
 	mode: oneOf(BOREHOLE_MODES),

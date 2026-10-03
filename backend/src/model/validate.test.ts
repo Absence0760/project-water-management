@@ -438,3 +438,42 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		});
 	});
 });
+
+describe('names are one line (issue #385)', () => {
+	const gauge = node('Gauge', null, { kind: 'gauge' });
+	const unit = node('Unit', gauge.id);
+	const crop = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: new Array(12).fill(0.5) };
+	const borehole = { id: crypto.randomUUID(), nodeId: unit.id, name: 'BH 1', capacityM3Day: 100 };
+	const object = { id: crypto.randomUUID(), nodeId: unit.id, name: 'Town', monthlyM3Day: new Array(12).fill(10), note: 'first line\nsecond line', schedule: [{ label: 'Easter week', span: 'always', factor: 1 }] };
+	const m = (o: { unit?: object; crop?: object; borehole?: object; object?: object } = {}) => ({
+		nodes: [gauge, { ...unit, ...o.unit }],
+		crops: [{ ...crop, ...o.crop }],
+		cropAreas: [],
+		transfers: [],
+		boreholes: [{ ...borehole, ...o.borehole }],
+		demandObjects: [{ ...object, ...o.object }]
+	});
+	const BAD = ['Golf\nFarm', 'Golf\r\nFarm', 'Golf\tFarm', 'Golf\u0007Farm', 'Golf\u007fFarm', 'Golf\u0085Farm', 'Golf\u009fFarm', 'Golf\u2028Farm', 'Golf\u2029Farm'];
+
+	it('takes one-line names, and a demand object’s note may still run over lines (positive control)', () => {
+		const parsed = ModelBody.parse(m({ unit: { name: 'Café Farm' }, crop: { name: 'Vines D' } }));
+		expect(parsed.nodes[1]!.name).toBe('Café Farm');
+		expect(parsed.demandObjects![0]!.note).toBe('first line\nsecond line');
+		// A trailing line break is whitespace the trim takes off, as before.
+		expect(ModelBody.parse(m({ unit: { name: 'Unit\n' } })).nodes[1]!.name).toBe('Unit');
+	});
+
+	it.each(BAD)('refuses %j in a node, crop, borehole or demand object name, or a schedule label', (name) => {
+		for (const [where, o] of [
+			['node', { unit: { name } }],
+			['crop', { crop: { name } }],
+			['borehole', { borehole: { name } }],
+			['demand object', { object: { name } }],
+			['schedule label', { object: { schedule: [{ label: name, span: 'always', factor: 1 }] } }]
+		] as const) {
+			const r = ModelBody.safeParse(m(o));
+			expect(r.success, where).toBe(false);
+			expect(r.error?.issues.map((i) => i.message), where).toEqual(['cannot contain line breaks or control characters']);
+		}
+	});
+});

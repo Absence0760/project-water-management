@@ -330,7 +330,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | Fixture | Importer branch |
 | --- | --- |
 | [Network]: 9 farms and 2 gauges, a three-way confluence (Echo) and a two-way one (Hotel), a gauge mid-network (Midway Gauge), one outflow (Outlet Gauge) | `read_network`, `downstreamNodeId` as the inverse of the upstream columns, gauge vs farm kind, `sortOrder` |
-| "Echo&nbsp;&nbsp;Farm" (double space) in [Network], "Echo Farm " and " Golf Farm" in [Farm demand] | `clean()` whitespace normalisation, names matched across sheets |
+| "Echo&nbsp;&nbsp;Farm" (double space) and "Golf⏎Farm" (a line break typed in the cell) in [Network], "Echo Farm " and " Golf Farm" in [Farm demand], "Vines D" typed with a U+009F control character for the space in [Crop demand] | `clean()`: every run of whitespace and control characters (C0, DEL, C1) one space, so a name is one line, as the app requires (issue #385); names matched across sheets |
 | Delta Farm in [Network], not in [Farm spec] | note "missing from [Farm spec]"; zero parameters, `pctUpstreamToDam` 1, `flowShareManual` null |
 | Every [Farm spec] farm | note "Upstream inflow above dam %: … stores 100 % − the workbook's value"; the generator types b023's values (India Farm 0, Alpha 1, Hotel 0.75 …), so the stored shares are 1, 0, 0.25 … |
 | [Farm spec] method "Specific"; Charlie Farm's external fragmentation blank | `flowShareMethod: "manual"`; a blank share reads as 0 (the "Specific with no values" case) |
