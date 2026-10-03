@@ -606,11 +606,22 @@ function capRoom(budget: Float64Array | null, limit: Float64Array | null | undef
 }
 
 /**
+ * Add a day's surface and groundwater use to a capped node's use so far this
+ * water year, each only on a day its source is capped (engine ≥ 1.70.0, #90
+ * Q24): use on a day no allocation of the source is in force doesn't count
+ * against the year's volume.
+ */
+function countUse(c: AllocationCap, used: Float64Array, t: number, surface: number, groundwater: number): void {
+	if (c.surface && c.surface[t]! < Infinity) used[0]! += surface;
+	if (c.groundwater && c.groundwater[t]! < Infinity) used[1]! += groundwater;
+}
+
+/**
  * What a node may still take today under an allocation cap (engine ≥ 1.18.0):
  * [surface, groundwater], each capRoom; Infinity for a source (or a node)
  * without a cap. Records the room in the node's allocation_room columns, and
  * what is left of the year's volume in its allocation_left ones (a source with
- * a limit, engine ≥ 1.40.0). A water year the source isn't capped in, none of
+ * a limit, engine ≥ 1.40.0). A day the source isn't capped, none of
  * its allocations being in force (budget Infinity, engine ≥ 1.70.0), leaves
  * both columns blank (NaN): there is no number to show.
  */
@@ -1181,8 +1192,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				}
 				const au = allocUsed[i];
 				if (au) {
-					au[0]! += G - Ggw;
-					au[1]! += Ggw;
+					countUse(node.allocationCap!, au, t, G - Ggw, Ggw);
 				}
 				const T = (node.userReturn ?? 0) * G;
 				const Uriver = sumU - Gs + T;
@@ -1403,10 +1413,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
 			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), Dr) : Math.min(Gs + Ggw + Gr, Dr);
 			const au = allocUsed[i];
-			if (au) {
-				au[0]! += G - Ggw;
-				au[1]! += Ggw + Gd;
-			}
+			if (au) countUse(node.allocationCap!, au, t, G - Ggw, Ggw + Gd);
 			const P = avail - Gs;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);
@@ -1488,7 +1495,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// The flow left past the dam, never below 0 (Σ shares of all of it can round an ulp past it), then every return.
 				Uriver = Math.max(0, flowPast - taken) + T;
 				// River water is surface use, within the cap with the dam side's.
-				if (au) au[0]! += Griver;
+				if (au) countUse(node.allocationCap!, au, t, Griver, 0);
 			}
 			const Dep = deplete(node, r, t, dGw, Uriver);
 			let U = Uriver - Dep;

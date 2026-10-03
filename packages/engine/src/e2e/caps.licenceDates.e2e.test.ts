@@ -1,10 +1,15 @@
 // End-to-end: an allocation cap around its licences' dates (docs/model.md
 // §2.12a, engine ≥ 1.70.0, issue #393, #90 Q24, a provisional answer pending
-// the hydrologist). In cap mode a water year in which none of a unit's
-// allocations of a source is in force (before the first starts, after the
-// last ends, or between two) isn't capped for that source, as a unit with no
-// allocation of the source isn't; one run warning names the units, sources
-// and water years. Before 1.70.0 such a year had a budget of 0.
+// the hydrologist). In cap mode a day on which none of a unit's allocations
+// of a source is in force (before the first starts, after the last ends, or
+// between two) isn't capped for that source, as a unit with no allocation of
+// the source isn't, and its use doesn't count against the water year's
+// budget; the budget stays prorated to the licences' days. A full allocation
+// keeps a unit's modelled demand (factor 1) in a water year with no licence
+// in force on its days. One run warning names the units, sources and days
+// (years for a full allocation). Before 1.70.0 a cap gave a year with none
+// in force a budget of 0 and counted the use before a licence's start in its
+// first year, and a full allocation scaled such a year's demand to 0.
 //
 // The catchment: a unit F with a 10⁹ m³ dam that starts full and loses
 // nothing (no A-pan, no seepage, no rain), so it can always give its demand,
@@ -15,7 +20,8 @@
 // A year's surface use is G − GW (§2.12a); with no borehole it is G. Hand
 // values below follow from model.md §2.12a's budget formula
 //   budget(y) = Σ V(a) × |L(y) ∩ [validFrom, validTo]| ÷ |L(y)|
-// and the room MAX(0, budget − use so far), drawn at 100 m³ a day from 1 Oct.
+// and the room MAX(0, budget − use so far on capped days), drawn at 100 m³ a
+// day from the first capped day.
 // Synthetic names and values only.
 import { describe, expect, it } from 'vitest';
 import type { AllocationEntry } from '../allocations/compare';
@@ -30,7 +36,8 @@ const flat = (v: number) => new Array(12).fill(v) as number[];
 const START = '2020-10-01';
 const DAYS = 3 * 365;
 const YEAR = 365;
-const WARN = "allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): ";
+const WARN = "allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: ";
+const FA_WARN = 'full allocation: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates): ';
 
 function farm(id: string, over: Partial<NetworkNode> = {}): NetworkNode {
 	return {
@@ -105,7 +112,7 @@ const perYear = (a: number[]) => [0, 1, 2].map((y) => sum(a, y * YEAR, (y + 1) *
 function passes(out: ModelOutput) {
 	expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
 }
-const capWarnings = (out: ModelOutput) => out.summary.warnings.filter((w) => w.includes('is in force in some water years'));
+const capWarnings = (out: ModelOutput) => out.summary.warnings.filter((w) => w.includes('no licence in force'));
 const sourceOf = (out: ModelOutput, nodeId: string, s: 'surface' | 'groundwater') => out.summary.allocations!.nodes.find((n) => n.nodeId === nodeId)!.sources.find((x) => x.waterSource === s)!;
 const near = (a: number[], b: number[], digits = 6) => {
 	expect(a.length).toBe(b.length);
@@ -158,7 +165,7 @@ describe('caps: a licence that starts partway through the run (§2.12a, engine �
 	});
 
 	it('one warning names the unit, the source and the year', () => {
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2020`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
 		expect(capWarnings(plain)).toEqual([]);
 	});
 });
@@ -166,11 +173,11 @@ describe('caps: a licence that starts partway through the run (§2.12a, engine �
 describe('caps: a licence that ends partway through the run', () => {
 	// 9 125 m³ a year until 30 Sep 2021: 2020/21 capped at 9 125 (91 days × 100 + 25 on day 91), then uncapped.
 	const out = run(build({ allocations: [surface('L', 9_125, null, '2021-09-30')] }));
-	it('the years after it ends are uncapped: 9 125, 36 500, 36 500 m³; the warning gives them as a range', () => {
+	it('the years after it ends are uncapped: 9 125, 36 500, 36 500 m³; the warning gives the days', () => {
 		near(perYear(get(out, 'F', 'supplied')), [9_125, 36_500, 36_500]);
 		expect(get(out, 'F', 'allocation_room_surface').slice(YEAR).every((v) => Number.isNaN(v))).toBe(true);
 		expect(sourceOf(out, 'F', 'surface').capReached!.map((r) => r.waterYear)).toEqual([2020]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water years 2021–2022`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-01 to 2023-09-30`]);
 		passes(out);
 	});
 });
@@ -182,28 +189,91 @@ describe('caps: several licences with staggered dates', () => {
 		const room = get(out, 'F', 'allocation_room_surface');
 		expect(room[YEAR]).toBe(7_300);
 		expect(room[2 * YEAR]).toBeCloseTo(10_950, 9);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2020`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
 		passes(out);
 	});
 
 	it('a gap year between two licences is uncapped; the years either side are capped', () => {
 		const out = run(build({ allocations: [surface('A', 7_300, null, '2021-09-30'), surface('B', 3_650, '2022-10-01')] }));
 		near(perYear(get(out, 'F', 'supplied')), [7_300, 36_500, 3_650]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2021`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-01 to 2022-09-30`]);
 		passes(out);
 	});
 
-	it('a licence that starts inside a water year keeps the documented part-year budget for that whole year (unchanged by 1.70.0)', () => {
-		// 36 500 m³ a year from 1 Apr 2022: 2021/22 has 183 of its 365 days in force, budget 36 500 × 183 ÷ 365 =
-		// 18 300 for the whole year, which F may take from 1 October (§2.12a: "a unit may take its volume early"),
-		// so days 0–182 of 2021/22 take 100 and the rest nothing. 2020/21 has none in force: uncapped. 2022/23: 36 500.
+	it('a licence from 1 April: October–March uncapped and not counted, April–September capped at 183/365 of its volume', () => {
+		// 36 500 m³ a year from 1 Apr 2022. 2021/22: 1 Oct–31 Mar (182 days) uncapped, 18 200 m³; from 1 April the
+		// budget is 36 500 × 183 ÷ 365 = 18 300, with none of it spent (the use before the start doesn't count), and
+		// the 183 days ask for exactly 18 300. 2020/21 uncapped; 2022/23 36 500. Before 1.70.0 the 18 300 was spent
+		// from 1 October and April–September took nothing: 18 300 for the year.
 		const out = run(build({ allocations: [surface('L', 36_500, '2022-04-01')] }));
 		const G = get(out, 'F', 'supplied');
-		near(perYear(G), [36_500, 18_300, 36_500]);
-		expect(get(out, 'F', 'allocation_room_surface')[YEAR]).toBeCloseTo(18_300, 9);
-		expect(G[YEAR + 182]).toBeCloseTo(100, 9);
-		expect(G[YEAR + 183]).toBe(0);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2020`]);
+		near(perYear(G), [36_500, 36_500, 36_500]);
+		const room = get(out, 'F', 'allocation_room_surface');
+		expect(room[YEAR + 181]).toBeNaN();
+		expect(room[YEAR + 182]).toBeCloseTo(18_300, 9);
+		expect(room[2 * YEAR - 1]).toBeCloseTo(100, 6);
+		expect(sourceOf(out, 'F', 'surface').capReached!.map((r) => [r.waterYear, r.budgetM3])).toEqual([
+			[2021, 18_300],
+			[2022, 36_500]
+		]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2022-03-31`]);
+		passes(out);
+	});
+
+	it('a licence from 1 September: October–August uncapped, September capped at 30/365 (the use before not counted)', () => {
+		// 18 250 m³ a year from 1 Sep 2021. 2020/21: 1 Oct–31 Aug (335 days) uncapped, 33 500 m³; September's budget is
+		// 18 250 × 30 ÷ 365 = 1 500, all of it left on 1 September: 1–15 September take 100 (1 500), 16–30 nothing.
+		// 35 000 for the year. Then 18 250 a year. Before 1.70.0 the 1 500 was spent in the first 15 days of October
+		// and the year took 1 500.
+		const out = run(build({ allocations: [surface('L', 18_250, '2021-09-01')] }));
+		const G = get(out, 'F', 'supplied');
+		near(perYear(G), [35_000, 18_250, 18_250]);
+		const sep1 = toEpochDay('2021-09-01') - toEpochDay(START);
+		const room = get(out, 'F', 'allocation_room_surface');
+		expect(room[sep1 - 1]).toBeNaN();
+		expect(room[sep1]).toBeCloseTo(1_500, 9);
+		expect(G[sep1 + 14]).toBeCloseTo(100, 9);
+		expect(G[sep1 + 15]).toBe(0);
+		const src = sourceOf(out, 'F', 'surface');
+		expect(src.capReached![0]).toEqual({ waterYear: 2020, budgetM3: expect.closeTo(1_500, 9), usedM3: expect.closeTo(1_500, 9) });
+		// 16–30 September: the room was all taken and F went short.
+		expect(src.limitBound![0]).toEqual({ waterYear: 2020, days: 15, volumeDays: 15, rateDays: 0, monthsDays: 0 });
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-08-31`]);
+		passes(out);
+	});
+
+	it('a licence ending on 31 March: its 182/365 share capped to then, April–September uncapped and not counted', () => {
+		// 18 250 m³ a year to 31 Mar 2021: budget 18 250 × 182 ÷ 365 = 9 100, taken in the first 91 days; 1 Jan–31 Mar
+		// (days 91–181) nothing; 1 Apr–30 Sep (183 days) uncapped, 18 300. 27 400 for 2020/21, then 36 500 a year.
+		// Before 1.70.0 the year stayed capped at 9 100 to 30 September.
+		const out = run(build({ allocations: [surface('L', 18_250, null, '2021-03-31')] }));
+		const G = get(out, 'F', 'supplied');
+		near(perYear(G), [27_400, 36_500, 36_500]);
+		expect(G[90]).toBeCloseTo(100, 9);
+		expect(G[91]).toBe(0);
+		expect(G[181]).toBe(0);
+		expect(G[182]).toBeCloseTo(100, 9);
+		const src = sourceOf(out, 'F', 'surface');
+		expect(src.capReached).toEqual([{ waterYear: 2020, budgetM3: 9_100, usedM3: expect.closeTo(9_100, 9) }]);
+		expect(src.limitBound).toEqual([{ waterYear: 2020, days: 91, volumeDays: 91, rateDays: 0, monthsDays: 0 }]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-04-01 to 2023-09-30`]);
+		passes(out);
+	});
+
+	it('a gap inside a water year between two licences: uncapped and not counted; the share either side is one budget', () => {
+		// A (18 250) to 31 Dec 2020 and B (18 250) from 1 Jul 2021, each in force 92 days of 2020/21: budget 2 × 4 600 =
+		// 9 200, which October–December's 92 × 100 use up. January–June (181 days) uncapped, 18 100; July–September
+		// nothing left. 27 300 for the year; 2021/22 and 2022/23 are B's 18 250.
+		const out = run(build({ allocations: [surface('A', 18_250, null, '2020-12-31'), surface('B', 18_250, '2021-07-01')] }));
+		const G = get(out, 'F', 'supplied');
+		near(perYear(G), [27_300, 18_250, 18_250]);
+		const jul1 = toEpochDay('2021-07-01') - toEpochDay(START);
+		const room = get(out, 'F', 'allocation_room_surface');
+		expect(room[91]).toBeCloseTo(100, 9);
+		expect(room[92]).toBeNaN();
+		expect(room[jul1]).toBeCloseTo(0, 9);
+		expect(G[jul1]).toBe(0);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-01-01 to 2021-06-30`]);
 		passes(out);
 	});
 
@@ -215,11 +285,14 @@ describe('caps: several licences with staggered dates', () => {
 		passes(out);
 	});
 
-	it('a licence in force for one day of a year makes that year capped (at its one day’s share)', () => {
-		// Valid to 1 Oct 2021, the first day of 2021/22: that year's budget is 36 500 × 1 ÷ 365 = 100 m³.
+	it('a licence in force for one day of a year caps that day only, at its one day’s share', () => {
+		// Valid to 1 Oct 2021, the first day of 2021/22: that day's budget is 36 500 × 1 ÷ 365 = 100 m³ (its demand);
+		// the other 364 days are uncapped. Before 1.70.0 the year was capped at 100.
 		const out = run(build({ allocations: [surface('L', 36_500, null, '2021-10-01')] }));
-		near(perYear(get(out, 'F', 'supplied')), [36_500, 100, 36_500]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2022`]);
+		near(perYear(get(out, 'F', 'supplied')), [36_500, 36_500, 36_500]);
+		expect(get(out, 'F', 'allocation_room_surface')[YEAR]).toBeCloseTo(100, 9);
+		expect(get(out, 'F', 'allocation_room_surface')[YEAR + 1]).toBeNaN();
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2021-10-02 to 2023-09-30`]);
 		passes(out);
 	});
 });
@@ -243,7 +316,7 @@ describe('caps: each source on its own', () => {
 		);
 		expect(get(out, 'F', 'allocation_room_groundwater').slice(0, YEAR).every((v) => Number.isNaN(v))).toBe(true);
 		expect(get(out, 'F', 'allocation_room_surface').every((v) => Number.isFinite(v))).toBe(true);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater in water year 2020`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 2020-10-01 to 2021-09-30`]);
 		passes(out);
 	});
 
@@ -254,7 +327,7 @@ describe('caps: each source on its own', () => {
 		near(perYear(get(out, 'F', 'groundwater_used')), [36_500, 36_500, 36_500]);
 		expect(has(out, 'F', 'allocation_room_groundwater')).toBe(false);
 		expect(out.summary.warnings).toContain(`allocation cap: "Unit F" has no groundwater volume registered, so its boreholes aren't capped`);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water in water year 2020`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" surface water 2020-10-01 to 2021-09-30`]);
 		passes(out);
 	});
 });
@@ -272,24 +345,52 @@ describe('caps: several units, one warning', () => {
 		near(perYear(get(out, 'A', 'supplied')), [36_500, 18_250, 18_250]);
 		near(perYear(get(out, 'B', 'supplied')), [36_500, 36_500, 18_250]);
 		near(perYear(get(out, 'C', 'supplied')), [36_500, 36_500, 36_500]);
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit A" surface water in water year 2020; "Unit B" surface water in water years 2020–2021`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit A" surface water 2020-10-01 to 2021-09-30; "Unit B" surface water 2020-10-01 to 2022-09-30`]);
 		expect(out.summary.warnings.some((w) => w.includes('1 unit has no registered volume') && w.includes('Unit C'))).toBe(true);
 		passes(out);
 	});
 
-	it('compare-only and full allocation never warn about it (it is the cap’s rule)', () => {
-		for (const mode of ['none', 'fullAllocation'] as const) {
-			const out = run(build({ allocations: [surface('L', 18_250, '2021-10-01')], settings: { allocationMode: mode } }));
-			expect(capWarnings(out), mode).toEqual([]);
-		}
+	it('compare-only never warns about it; full allocation warns in its own words, by water year', () => {
+		const none = run(build({ allocations: [surface('L', 18_250, '2021-10-01')], settings: { allocationMode: 'none' } }));
+		expect(capWarnings(none)).toEqual([]);
+		const full = run(build({ allocations: [surface('L', 18_250, '2021-10-01')], settings: { allocationMode: 'fullAllocation' } }));
+		expect(capWarnings(full)).toEqual([`${FA_WARN}"Unit F" in water year 2020`]);
+	});
+});
+
+describe('full allocation: a water year with no licence in force keeps the modelled demand (engine ≥ 1.70.0, #90 Q24)', () => {
+	const fa = { allocationMode: 'fullAllocation' } as const;
+	it('a licence from 1 Oct 2021: 2020/21 asks for its modelled 36 500 m³ (factor 1), then 18 250 a year (factor ½)', () => {
+		// Before 1.70.0 2020/21 had nothing registered over its days and was scaled to 0.
+		const out = run(build({ allocations: [surface('L', 18_250, '2021-10-01')], settings: fa }));
+		near(perYear(get(out, 'F', 'supplied')), [36_500, 18_250, 18_250]);
+		const k = get(out, 'F', 'allocation_demand_factor');
+		expect([k[0], k[YEAR], k[2 * YEAR]]).toEqual([1, 0.5, 0.5]);
+		// Only the scaled years are listed.
+		expect(out.summary.allocations!.nodes[0]!.scaled!.map((y) => y.waterYear)).toEqual([2021, 2022]);
+		passes(out);
 	});
 
-	it('full allocation is unchanged: a year with no licence in force scales the demand to 0 (§2.12a, a separate question)', () => {
-		// fullAllocation asks each year for the volume registered over its run days: 0 in 2020/21. Pinned so a change
-		// to the full-allocation rule is a decision of its own (reported with #393).
-		const out = run(build({ allocations: [surface('L', 18_250, '2021-10-01')], settings: { allocationMode: 'fullAllocation' } }));
-		near(perYear(get(out, 'F', 'supplied')), [0, 18_250, 18_250]);
+	it('a gap year between two licences keeps its modelled demand; the years either side are scaled', () => {
+		const out = run(build({ allocations: [surface('A', 18_250, null, '2021-09-30'), surface('B', 9_125, '2022-10-01')], settings: fa }));
+		near(perYear(get(out, 'F', 'supplied')), [18_250, 36_500, 9_125]);
+		expect(capWarnings(out)).toEqual([`${FA_WARN}"Unit F" in water year 2021`]);
 		passes(out);
+	});
+
+	it('either source in force scales the year: a groundwater licence alone counts (both sources together, §2.12a)', () => {
+		const out = run(build({ allocations: [{ id: 'W', nodeId: 'F', waterSource: 'groundwater', volumeM3PerYear: 18_250, validTo: '2021-09-30' }, surface('S', 18_250, '2022-10-01')], settings: fa }));
+		near(perYear(get(out, 'F', 'supplied')), [18_250, 36_500, 18_250]);
+		expect(capWarnings(out)).toEqual([`${FA_WARN}"Unit F" in water year 2021`]);
+	});
+
+	it('a year a licence starts inside is still scaled whole, to the volume over its in-force days (open, model.md §2.12a)', () => {
+		// From 1 Apr 2021: 2020/21 registers 18 250 × 183 ÷ 365 = 9 150 over its days, and its whole demand is scaled to
+		// that (factor 9 150 ÷ 36 500), the October–March days included. Pinned: whether those days should keep their
+		// modelled demand, as the cap now leaves them uncapped, is a question of its own.
+		const out = run(build({ allocations: [surface('L', 18_250, '2021-04-01')], settings: fa }));
+		near(perYear(get(out, 'F', 'supplied')), [9_150, 18_250, 18_250]);
+		expect(capWarnings(out)).toEqual([]);
 	});
 });
 
@@ -346,7 +447,9 @@ describe('caps: invariants across licence dates on a rain-driven catchment', () 
 	});
 
 	it('the warning names both units and their uncapped years', () => {
-		expect(capWarnings(cap)).toEqual([`${WARN}"${base.model.nodes.find((n) => n.id === 'a')!.name}" surface water in water years 2001–2002; "${base.model.nodes.find((n) => n.id === 'b')!.name}" surface water in water years 2001, 2004–2005`]);
+		expect(capWarnings(cap)).toEqual([
+			`${WARN}"${base.model.nodes.find((n) => n.id === 'a')!.name}" surface water 2001-10-01 to 2003-09-30; "${base.model.nodes.find((n) => n.id === 'b')!.name}" surface water 2001-10-01 to 2002-09-30, 2004-10-01 to 2006-09-30`
+		]);
 	});
 
 	it('a run resumed inside or at the end of an uncapped year is the uninterrupted run’s tail (§2.16)', () => {
@@ -376,7 +479,7 @@ describe('caps: a scenario that adds a licence (allocation.set)', () => {
 		const out = run(r.input);
 		const b = run(base);
 		expect(get(out, 'F', 'supplied')).toEqual(get(b, 'F', 'supplied'));
-		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater in water years 2020–2021`]);
+		expect(capWarnings(out)).toEqual([`${WARN}"Unit F" groundwater 2020-10-01 to 2022-09-30`]);
 		passes(out);
 	});
 

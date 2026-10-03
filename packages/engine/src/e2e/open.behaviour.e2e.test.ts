@@ -91,11 +91,12 @@ describe('item 1: a negative CHIRPS value on a catchment-rain gap is missing (en
 });
 
 // ── Item 4, decided (engine ≥ 1.70.0, #90 Q24, provisional) ────────────────
-// §2.12a cap: a water year in which none of a unit's allocations of a source
-// is in force isn't capped for that source, as a unit with no allocation of
-// it isn't (before 1.70.0 the budget formula gave such a year 0, so the unit
-// took nothing, with no warning). One run warning names the unit, the source
-// and the years. The full set of cases is in caps.licenceDates.e2e.test.ts.
+// §2.12a cap: a day on which none of a unit's allocations of a source is in
+// force isn't capped for that source, as a unit with no allocation of it
+// isn't, and its use doesn't count against the year's volume (before 1.70.0
+// the budget formula gave a year with none in force 0, so the unit took
+// nothing, with no warning). One run warning names the unit, the source and
+// the days. The full set of cases is in caps.licenceDates.e2e.test.ts.
 describe('item 4, decided: cap mode leaves a water year with no allocation in force uncapped (engine ≥ 1.70.0)', () => {
 	it('a licence of 18 250 m³ from 1 Oct 2022: 2021/22 takes its whole 36 500 m³ demand, 2022/23 its 18 250 m³', () => {
 		const days = 730;
@@ -138,8 +139,8 @@ describe('item 4, decided: cap mode leaves a water year with no allocation in fo
 		const src = out.summary.allocations!.nodes[0]!.sources[0]!;
 		expect(src.capReached).toEqual([{ waterYear: 2022, budgetM3: 18_250, usedM3: expect.closeTo(18_250, 6) }]);
 		expect(src.limitBound!.map((y) => y.waterYear)).toEqual([2022]);
-		expect(out.summary.warnings.filter((w) => /is in force/.test(w))).toEqual([
-			`allocation cap: none of a unit's licences of a source is in force in some water years, so its use of that source isn't capped there, as for a unit with no licence of it (check the licence dates): "Unit F" surface water in water year 2021`
+		expect(out.summary.warnings.filter((w) => /no licence in force/.test(w))).toEqual([
+			`allocation cap: no licence in force, so modelled demand is used, uncapped (as for a unit with no licence; check the licence dates), and that use doesn't count against the water year's volume: "Unit F" surface water 2021-10-01 to 2022-09-30`
 		]);
 	});
 });
