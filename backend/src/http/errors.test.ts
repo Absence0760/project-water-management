@@ -25,7 +25,7 @@ describe('handleError', () => {
 	it('answers a job collision with a pending job the caller can’t see as 409 job_collision, not a 500 (issue #386)', async () => {
 		const res = await appThrowing(new JobCollisionError()).request('/');
 		expect(res.status).toBe(409);
-		expect(await res.json()).toEqual({ error: expect.stringMatching(/pending job/), code: 'job_collision' });
+		expect(await res.json()).toEqual({ error: expect.stringMatching(/already queued or just starting/), code: 'job_collision' });
 	});
 
 	it('sends no code for an uncoded error (the client words it by status)', async () => {
