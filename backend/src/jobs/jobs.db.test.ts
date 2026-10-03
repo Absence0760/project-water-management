@@ -373,6 +373,48 @@ describe('claiming', () => {
 		expect((await withoutUser((db) => claimJobs(db, 10, 60))).map((j) => j.id)).toContain(b.job.id);
 		await asOwner('DELETE FROM job WHERE project_id IN ($1, $2)', [pid, other]);
 	});
+
+	it('a running job that fails while a newer one with its key is pending is superseded, and the tick goes on', async () => {
+		const u = await signUp('Superseded');
+		const pid = await project(u);
+		let calls = 0;
+		const registry: HandlerRegistry = {
+			// The first attempt fails in a way worth retrying, after new work with its key was queued (a "Run now",
+			// new data's re-run, a run's alert check) while it ran.
+			rerun: defineHandler({
+				role: 'editor',
+				payload: z.object({}).passthrough(),
+				run: async () => {
+					if (calls++ > 0) return;
+					await enqueue(u, { projectId: pid, kind: 'rerun', dedupeKey: 'k', payload: { label: 'newer' } });
+					throw new JobError('the source timed out');
+				}
+			})
+		};
+		const { job: a } = await enqueue(u, { projectId: pid, kind: 'rerun', dedupeKey: 'k' });
+		const { job: other } = await enqueue(u, { projectId: pid, kind: 'rerun', delaySeconds: 1 });
+		await makeDue(other.id);
+		await asOwner(`UPDATE job SET run_after = now() - interval '1 minute' WHERE id = $1`, [a.id]);
+
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		const tick = await runTick({ handlers: registry, projectIds: [pid], feeds: false, reports: false, alerts: false });
+		const errors = spy.mock.calls.map((c) => c.join(' '));
+		const infos = info.mock.calls.map((c) => c.join(' '));
+		spy.mockRestore();
+		info.mockRestore();
+		// Retrying it would make two pending jobs with one key (job_dedupe_idx): the newer one does the work instead.
+		expect(await jobRow(a.id)).toMatchObject({ status: 'dead', attempts: 1, lease_token: null, last_error: 'the source timed out (a newer job with the same key is queued)' });
+		// Not a dead letter: no job_dead line (the alarm's metric filter), a job_superseded one instead.
+		expect(errors.filter((l) => l.includes('"event":"job_dead"'))).toEqual([]);
+		expect(infos.filter((l) => l.includes('"event":"job_superseded"'))).toHaveLength(1);
+		// The tick carried on: the other due job ran, and so did the newer job with the key, once the old one was out of its way.
+		expect(await jobRow(other.id)).toMatchObject({ status: 'done' });
+		const [newer] = await asOwner(`SELECT id, status, payload FROM job WHERE project_id = $1 AND dedupe_key = 'k' AND id <> $2`, [pid, a.id]);
+		expect(newer).toMatchObject({ status: 'done', payload: { label: 'newer' } });
+		expect(tick).toMatchObject({ claimed: 3, done: 2, dead: 1 });
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
 });
 
 describe('a tick scoped to some projects (123_scoped_job_claim.sql, the e2e tick)', () => {
