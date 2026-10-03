@@ -33,7 +33,7 @@ import { configuredDem } from './dem.js';
 import { DelineationRefused } from './delineate.js';
 import { PlacementChoice, placementOf, placementWarnings, pointReaches, PointsAtConfluence, ReachNotNearPoint, type PointPlacement, type PointReach } from './pointPlacement.js';
 import { panWarning, type PanReport } from './pans.js';
-import { delineateUnits, START_METHOD_VERSION, type PlacementHints, type UnitRole } from './subcatchments.js';
+import { delineateUnits, START_METHOD_VERSION, type DamPosition, type PlacementHints, type UnitRole } from './subcatchments.js';
 import { pointInGeometry } from '../geo/geojson.js';
 
 /** Proposals one project may ask for in an hour: each routes the DEM (seconds of CPU on the API). */
@@ -206,7 +206,7 @@ const NO_DEM_METHOD =
 interface MapInputs {
 	boundary: { id: string; geometry: Polygonal; areaM2: number } | null;
 	outlet: { featureId: string | null; name: string; point: Position | null; foundIn: StartPlan['outlet']['foundIn'] };
-	points: { featureId: string; name: string; role: UnitRole; geometry: Geometry }[];
+	points: { featureId: string; name: string; role: UnitRole; geometry: Geometry; damPosition: DamPosition | null }[];
 }
 
 /** The boundary, the outlet and the points the request names, read and checked (one transaction). */
@@ -217,8 +217,8 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 	);
 	const boundary = b[0] ? { id: b[0].id, geometry: b[0].geometry, areaM2: b[0].area_m2 } : null;
 	const ids = [...body.points.map((p) => p.featureId), ...(body.outletFeatureId ? [body.outletFeatureId] : [])];
-	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry }>(
-		'SELECT id, kind, name, geometry FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
+	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry; dam_position: DamPosition | null }>(
+		'SELECT id, kind, name, geometry, dam_position FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
 		[projectId, ids]
 	);
 	const byId = new Map(fs.map((f) => [f.id, f]));
@@ -251,7 +251,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 		if (!['dam', 'gauge', 'other'].includes(f.kind)) throw new ApiError(400, `“${f.name || 'A feature'}” can’t be a unit.`);
 		// A gauge node stands for a gauge on the map (map_feature's KIND_NODES), so only a gauge point is one.
 		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge node.`);
-		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry };
+		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry, damPosition: f.dam_position };
 	});
 	return { boundary, outlet, points };
 }
@@ -410,7 +410,7 @@ export const startRoutes = new Hono<AuthEnv>()
 						outlet: inputs.outlet.point,
 						outletHints: outletHints(inputs.outlet.foundIn, reaches),
 						boundary: inputs.boundary?.geometry ?? null,
-						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
+						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, damPosition: p.damPosition, ...reaches.get(p.featureId)?.hints }))
 					});
 				} catch (err) {
 					if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });

@@ -21,6 +21,11 @@ describe('placementLine', () => {
 		expect(placementLine(pl({ placedBy: 'boundary' }), null)).toBe('At the most-drained cell inside the boundary.');
 	});
 
+	it('says a dam was placed by the position marked on the map (194)', () => {
+		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'off_channel' }), null)).toBe('At the outflow of the dam’s own outline, as marked: off-channel, so no cell of the river was taken.');
+		expect(placementLine(pl({ placedBy: 'polygon', damPosition: 'on_channel' }), null)).toBe('At the dam polygon’s most-drained cell, on the river, as marked.');
+	});
+
 	it('names an unmatched reach beside a snapped point, and keeps the old line for a proposal from before start-7', () => {
 		expect(placementLine(pl({ reach, unmatched: true }), 143)).toBe('Snapped to the most-drained cell nearby, 143 m from the point: no channel near it matches river reach 11509680 (292 km²), so it may be on another stream.');
 		expect(placementLine(pl({}), 143)).toBe('Snapped to the most-drained cell nearby, 143 m from the point.');

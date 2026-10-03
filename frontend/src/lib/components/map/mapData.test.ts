@@ -2,7 +2,7 @@
 // form's parsing and an import refusal's problems.
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapNodeArea } from '$lib/api/types';
-import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea } from './mapData';
+import { alreadyAccepted, areaTargets, areaText, boundsOf, boundsOfAll, featureSummary, importProblems, parseDegrees, positionText, problemText, takesArea, takesDamPosition } from './mapData';
 
 const feature = (over: Partial<MapFeature>): MapFeature => ({
 	id: 'f1',
@@ -13,6 +13,7 @@ const feature = (over: Partial<MapFeature>): MapFeature => ({
 	geometry: { type: 'Polygon', coordinates: [[[21, -34], [22, -34], [22, -33], [21, -33], [21, -34]]] },
 	properties: {},
 	areaM2: 12_345_678,
+	damPosition: null,
 	center: [21.5, -33.5],
 	sourceId: null,
 	createdBy: null,
@@ -102,5 +103,12 @@ describe('area targets', () => {
 		expect(takesArea(feature({ kind: 'dam' }))).toBe(false);
 		expect(takesArea(feature({ kind: 'catchment_boundary' }))).toBe(false);
 		expect(takesArea(feature({ kind: 'other', geometry: { type: 'Point', coordinates: [21.5, -33.5] } }))).toBe(false);
+	});
+
+	it('asks where a dam stands against its river only of a dam drawn as its outline (194)', () => {
+		expect(takesDamPosition(feature({ kind: 'dam' }))).toBe(true);
+		expect(takesDamPosition(feature({ kind: 'dam', geometry: { type: 'Point', coordinates: [21.5, -33.5] } }))).toBe(false);
+		expect(takesDamPosition(feature({}))).toBe(false);
+		expect(takesDamPosition(feature({ kind: 'other' }))).toBe(false);
 	});
 });

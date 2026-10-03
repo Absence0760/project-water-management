@@ -466,6 +466,36 @@ describe('each point placed as Delineate places it (start-7, the hydrologist’s
 		await owner.call('DELETE', q.at(`/map/features/${offDam}`));
 	});
 
+	it('places a long dam lying along the river by the position marked on the map: off-channel its own, on the river the river’s (194)', async () => {
+		await clear();
+		// Three cells wide and 20 long, the river its west column all the way: the outline alone can't tell it from a reservoir.
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 40];
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const longDam = await feature(q.at, { kind: 'dam', name: 'Long dam', geometry: { type: 'Polygon', coordinates: [ring] } });
+		const propose = () => owner.call('POST', q.at('/map/start'), { outletFeatureId: gauge, outletUseLarger: true, points: [{ featureId: longDam, role: 'dam' }] });
+		const unitOf = (r: Awaited<ReturnType<typeof propose>>) => r.body.proposal.plan.units.find((u: { key: string }) => u.key === longDam);
+		// Unset: the river's catchment, as start-12 always gave it.
+		const unset = await propose();
+		expect(unset.status, JSON.stringify(unset.body)).toBe(201);
+		expect(unitOf(unset).totalAreaM2 / 1e6).toBeGreaterThan(0.5 * riverKm2);
+		expect(unitOf(unset).placement).not.toHaveProperty('damPosition');
+		expect(unset.body.proposal.methodVersion).toBe('start-12');
+		// Marked off-channel in the feature sheet: its own outflow, the method saying so.
+		expect((await owner.call('PATCH', q.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const off = await propose();
+		expect(off.status, JSON.stringify(off.body)).toBe(201);
+		expect(unitOf(off).placement).toMatchObject({ placedBy: 'polygon', larger: null, damPosition: 'off_channel' });
+		expect(unitOf(off).totalAreaM2 / 1e6).toBeLessThan(0.02 * riverKm2);
+		expect(off.body.proposal.method).toMatch(/1 point at a dam polygon’s outflow \(1 marked off-channel\)/);
+		// Marked on the river: the river's again.
+		expect((await owner.call('PATCH', q.at(`/map/features/${longDam}`), { damPosition: 'on_channel' })).status).toBe(200);
+		const on = await propose();
+		expect(unitOf(on).placement).toMatchObject({ placedBy: 'polygon', damPosition: 'on_channel' });
+		expect(Math.abs(unitOf(on).totalAreaM2 / unitOf(unset).totalAreaM2 - 1)).toBeLessThan(0.001);
+		await owner.call('DELETE', q.at(`/map/features/${longDam}`));
+	});
+
 	it('asks for the river at a confluence, every such point at once, and places it on the one picked', async () => {
 		await clear();
 		// Two rivers of clearly different areas ending where the gauge is: a tributary and the main river above a junction.

@@ -350,6 +350,32 @@ describe('each point placed as Delineate places it (start-7)', () => {
 	});
 });
 
+describe('a dam polygon marked on or off the river (194)', () => {
+	it('places a long dam along the river at its own outflow once it is marked off-channel', async () => {
+		const v = await valley('Divide, off-channel dam');
+		// Three cells wide and 20 long, the river its west column all the way, standing for the dam unit.
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const made = await owner.call('POST', v.at('/map/features'), { kind: 'dam', name: 'Long dam', nodeId: v.nodes.dam.id, geometry: { type: 'Polygon', coordinates: [ring] } });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const longDam = made.body.feature.id as string;
+		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.dam ? { featureId: longDam, nodeId: v.nodes.dam.id } : p)) };
+		const damOf = (r: { body: { proposal: { plan: { units: { key: string; totalAreaM2: number; placement: Record<string, unknown> }[] } } } }) =>
+			r.body.proposal.plan.units.find((u) => u.key === longDam)!;
+		const unset = await owner.call('POST', v.at('/map/divide'), body);
+		expect(unset.status, JSON.stringify(unset.body)).toBe(201);
+		expect(damOf(unset).placement).not.toHaveProperty('damPosition');
+		expect((await owner.call('PATCH', v.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const off = await owner.call('POST', v.at('/map/divide'), body);
+		expect(off.status, JSON.stringify(off.body)).toBe(201);
+		expect(damOf(off).placement).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+		// The river's catchment before, the footprint's own after.
+		expect(damOf(off).totalAreaM2).toBeLessThan(0.05 * damOf(unset).totalAreaM2);
+		expect(off.body.proposal.method).toMatch(/\(1 marked off-channel\)/);
+	});
+});
+
 describe('the own sub-catchment parcel’s name', () => {
 	it('fits the map’s 100 characters for a unit whose name is already near them', async () => {
 		const v = await valley('Divide, long name');

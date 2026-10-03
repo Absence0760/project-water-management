@@ -24,6 +24,7 @@ const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geo
 	name: id,
 	nodeId: null,
 	nodeName: null,
+	damPosition: null,
 	geometry,
 	properties: {},
 	areaM2: null,

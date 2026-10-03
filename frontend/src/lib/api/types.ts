@@ -2592,6 +2592,8 @@ export interface MapFeature {
 	properties: Record<string, string>;
 	/** Geodesic area of a polygon, m², computed on the server; null for points and lines. */
 	areaM2: number | null;
+	/** A dam polygon's position against its river, as an editor said (194); null = not said, its outline decides. Always null for anything else. */
+	damPosition: DamPosition | null;
 	/** A point at its middle (lon, lat). */
 	center: MapPosition;
 	sourceId: string | null;
@@ -2650,11 +2652,19 @@ export interface MapLinkedNodes {
 	nodeIds: string[];
 }
 
+/**
+ * Where a dam stands against its river (194, backend subcatchments.ts DamPosition): on the watercourse (the river forms its
+ * reservoir), or an off-channel storage dam beside it, filled by a pump or a furrow. Start and Divide place the dam by it.
+ */
+export type DamPosition = 'on_channel' | 'off_channel';
+
 /** POST/PATCH …/map/features: a point from the coordinates form, or a geometry. */
 export interface MapFeatureInput {
 	kind?: MapFeatureKind;
 	name?: string;
 	nodeId?: string | null;
+	/** A dam polygon's position against its river; null clears it. PATCH only, and only for a dam polygon (else 400). */
+	damPosition?: DamPosition | null;
 	lon?: number;
 	lat?: number;
 	geometry?: MapGeometry;
@@ -3033,6 +3043,8 @@ export interface PointPlacement {
 	larger: LargerChannel | null;
 	/** A reach was near but no channel near the point matched its area. */
 	unmatched: boolean;
+	/** A dam polygon placed by the position marked on the map (194), not by its outline; absent when unmarked. */
+	damPosition?: DamPosition;
 }
 
 /** A point's placement choices in a start or division request: the river picked at a confluence, the larger channel taken. */

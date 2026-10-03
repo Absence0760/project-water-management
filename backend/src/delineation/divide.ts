@@ -51,7 +51,7 @@ import {
 	upstreamFirst
 } from './start.js';
 import { panWarning, type PanReport } from './pans.js';
-import { delineateUnits, ownsLand, type UnitRole } from './subcatchments.js';
+import { delineateUnits, ownsLand, type DamPosition, type UnitRole } from './subcatchments.js';
 
 export const DivideBody = z
 	.object({
@@ -219,7 +219,7 @@ interface DivideInputs {
 	outflow: NetworkNode;
 	model: ProjectModel;
 	areaSource: Map<string, 'typed' | 'map'>;
-	points: { featureId: string; featureKind: string; name: string; node: NetworkNode | null; geometry: Geometry }[];
+	points: { featureId: string; featureKind: string; name: string; node: NetworkNode | null; geometry: Geometry; damPosition: DamPosition | null }[];
 }
 
 async function readInputs(db: Db, projectId: string, body: z.infer<typeof DivideBody>): Promise<DivideInputs> {
@@ -234,8 +234,8 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 	);
 	const boundary = b[0] ? { id: b[0].id, geometry: b[0].geometry, areaM2: b[0].area_m2 } : null;
 	const ids = [...body.points.map((p) => p.featureId), ...(body.outletFeatureId ? [body.outletFeatureId] : [])];
-	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry; node_id: string | null }>(
-		'SELECT id, kind, name, geometry, node_id FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
+	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry; node_id: string | null; dam_position: DamPosition | null }>(
+		'SELECT id, kind, name, geometry, node_id, dam_position FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
 		[projectId, ids]
 	);
 	const byId = new Map(fs.map((f) => [f.id, f]));
@@ -265,14 +265,14 @@ async function readInputs(db: Db, projectId: string, body: z.infer<typeof Divide
 		if (p.nodeId === null) {
 			if (f.kind !== 'gauge' || f.geometry.type !== 'Point') throw new ApiError(400, `${label} is not a gauge point, so it can’t be a new gauge node.`);
 			if (f.node_id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'a node'} already.`);
-			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry };
+			return { featureId: f.id, featureKind: f.kind, name: oneLineName(f.name) || `Gauge ${++gauges}`, node: null, geometry: f.geometry, damPosition: f.dam_position };
 		}
 		const n = nodes.get(p.nodeId);
 		if (!n) throw new ApiError(400, `${label} is matched to a node that isn’t in the model (deleted since?). Reload and propose again.`);
 		if (n.id === outflow.id) throw new ApiError(400, `${n.name} is the outflow: it is where the division ends, not one of its points.`);
 		if (!(KIND_NODES[f.kind as keyof typeof KIND_NODES] ?? []).includes(n.kind)) throw new ApiError(400, `${label} can’t stand for ${n.name} (a ${n.kind} node).`);
 		if (f.node_id && f.node_id !== n.id) throw new ApiError(400, `${label} stands for ${nodes.get(f.node_id)?.name ?? 'another node'} on the map, not ${n.name}.`);
-		return { featureId: f.id, featureKind: f.kind, name: f.name, node: n, geometry: f.geometry };
+		return { featureId: f.id, featureKind: f.kind, name: f.name, node: n, geometry: f.geometry, damPosition: f.dam_position };
 	});
 	return { boundary, outlet, outflow, model, areaSource: new Map(src.map((r) => [r.id, r.area_source])), points };
 }
@@ -303,7 +303,7 @@ export const divideRoutes = new Hono<AuthEnv>()
 					outlet: inputs.outlet.point,
 					outletHints: outletHints(inputs.outlet.foundIn, reaches),
 					boundary: inputs.boundary?.geometry ?? null,
-					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
+					points: inputs.points.map((p) => ({ id: p.featureId, role: roleOf(p.node, p.featureKind), geometry: p.geometry, damPosition: p.damPosition, ...reaches.get(p.featureId)?.hints }))
 				});
 			} catch (err) {
 				if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });

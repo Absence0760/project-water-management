@@ -62,6 +62,8 @@ export function placementLine(pl: PointPlacement | null | undefined, movedM: num
 		case 'exact':
 			return 'On the delineated outlet, as Delineate placed it.';
 		case 'polygon':
+			if (pl.damPosition === 'off_channel') return 'At the outflow of the dam’s own outline, as marked: off-channel, so no cell of the river was taken.';
+			if (pl.damPosition === 'on_channel') return 'At the dam polygon’s most-drained cell, on the river, as marked.';
 			return pl.larger?.outline
 				? `At the outflow of the dam’s own outline: a much larger channel (${km2(pl.larger.km2)}) only clips its edge, so the dam was taken as off that channel.`
 				: 'At the dam polygon’s most-drained cell (its outflow).';

@@ -12,6 +12,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { answerConfirm } from '../support/confirm.ts';
 import { whatChanged } from '../support/compare.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -231,6 +232,46 @@ test('the quaternary under the boundary proposes the WR2012 values, one at a tim
 	await expect(page.getByLabel('Quaternary area (km²)', { exact: true })).toHaveValue('');
 	await expect(rows.getByRole('row').filter({ hasText: 'Quaternary MAP (mm)' })).toContainText('Used');
 	await expectNoViolations(page);
+});
+
+test('an editor marks a dam outline off-channel in its card, kept across a reload; a viewer reads it; a point dam isn’t asked (194)', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Catchment map dam siting');
+	await openMap(page, project.id);
+	await uploadThroughSheet(page, 'dam', 'dams.geojson', damGeoJson());
+	await row(page, 'Upper dam').click();
+	const siting = card(page).getByRole('combobox', { name: 'Where Upper dam stands against its river' });
+	await expect(siting).toHaveValue('');
+	await expect(siting.locator('option:checked')).toHaveText('Not said (from its outline)');
+	await expect(card(page)).toContainText('Start and Divide place an off-channel dam at its own outflow, never on the river beside it; unsaid, its outline decides.');
+	const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/map\/features\//.test(r.url()));
+	await siting.selectOption({ label: 'Off-channel (filled by a pump or a furrow)' });
+	expect((await saved).status()).toBe(200);
+	await expect(siting).toHaveValue('off_channel');
+	await expect(siting).toBeEnabled();
+	await page.reload();
+	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+	await expect(card(page).getByRole('combobox', { name: 'Where Upper dam stands against its river' })).toHaveValue('off_channel');
+	await expectNoViolations(page);
+
+	// A viewer reads the siting as words, with nothing to change.
+	const viewer = await signIn('Dam siting viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.goto(page.url());
+	await expect(v.locator('.map-page[data-ready]')).toBeVisible();
+	await expect(card(v).getByRole('heading', { name: 'Upper dam' })).toBeVisible();
+	await expect(card(v).getByTestId('map-dam-position')).toHaveText('Off-channel (filled by a pump or a furrow)');
+	await expect(card(v).getByRole('combobox')).toHaveCount(0);
+
+	// A dam placed as a point has no outline to place by: its card doesn't ask.
+	const point = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data: { kind: 'dam', name: 'Point dam', lon: 21.33, lat: -33.65 } });
+	expect(point.status()).toBe(201);
+	await page.reload();
+	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+	await row(page, 'Point dam').click();
+	await expect(card(page).getByRole('heading', { name: 'Point dam' })).toBeVisible();
+	await expect(card(page).getByTestId('map-dam-position')).toHaveCount(0);
 });
 
 test('a viewer sees the map, its sidebar row, the list, the card and Every feature, but no edit tools', async ({ page, owner, signIn }) => {
