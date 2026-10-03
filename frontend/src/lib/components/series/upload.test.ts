@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mergePreview } from './coverage';
-import { inStoredUnit, latestFileText } from './upload';
+import { inStoredUnit } from './upload';
 
 describe('inStoredUnit', () => {
 	it('scales a flow file in l/s to m³/s, keeping gaps', () => {
@@ -22,39 +22,5 @@ describe('inStoredUnit', () => {
 		const file = inStoredUnit('flow_observed_m3s', 'l/s', [1200, 800, 600]);
 		const p = mergePreview(stored, { startDate: '2021-10-01', values: file.values });
 		expect({ added: p.added, changed: p.changed, unchanged: p.unchanged }).toEqual({ added: 1, changed: 0, unchanged: 2 });
-	});
-});
-
-describe('latestFileText', () => {
-	/** A file whose text arrives when the test says. */
-	const slowFile = () => {
-		let settle!: { resolve: (t: string) => void; reject: (e: Error) => void };
-		const p = new Promise<string>((resolve, reject) => (settle = { resolve, reject }));
-		return { file: { text: () => p }, ...settle };
-	};
-
-	it('drops a read that a later pick overtook, however late it lands', async () => {
-		const read = latestFileText();
-		const big = slowFile();
-		const first = read(big.file);
-		const second = read({ text: async () => 'small.csv' });
-		expect(await second).toBe('small.csv');
-		big.resolve('big.csv');
-		expect(await first).toBeNull();
-	});
-
-	it('drops a read when the file is cleared, and a superseded read’s failure', async () => {
-		const read = latestFileText();
-		const a = slowFile();
-		const first = read(a.file);
-		expect(await read(null)).toBeNull();
-		a.reject(new Error('NotReadableError'));
-		expect(await first).toBeNull();
-	});
-
-	it('reads the latest pick, and lets its own failure through', async () => {
-		const read = latestFileText();
-		expect(await read({ text: async () => 'only.csv' })).toBe('only.csv');
-		await expect(read({ text: () => Promise.reject(new Error('NotReadableError')) })).rejects.toThrow('NotReadableError');
 	});
 });

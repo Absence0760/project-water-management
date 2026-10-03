@@ -9,6 +9,7 @@
 	import { untrack } from 'svelte';
 	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { latestFileText } from '$lib/files/latest';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
 	import {
@@ -60,7 +61,7 @@
 
 	function remove(i: number) {
 		value.splice(i, 1);
-		for (const list of [pointsText, pointsBad, pasteText, pasteNote] as unknown[][]) list.splice(i, 1);
+		for (const list of [pointsText, pointsBad, pasteText, pasteNote, readers] as unknown[][]) list.splice(i, 1);
 	}
 
 	function onPoints(i: number, text: string) {
@@ -84,12 +85,20 @@
 	}
 
 	/** A CSV or text file's contents into the paste box, to fill whichever grid the user picks. */
+	// One file reader per table, removed with it: the latest file picked for a table wins (a
+	// large one still read can't land over a smaller one picked after it), and a read lands in
+	// the table it was picked for even when a table above it was removed meanwhile.
+	const readers: ReturnType<typeof latestFileText>[] = [];
 	async function loadFile(i: number, e: Event & { currentTarget: HTMLInputElement }) {
 		const f = e.currentTarget.files?.[0];
 		e.currentTarget.value = '';
 		if (!f) return;
-		pasteText[i] = await f.text();
-		pasteNote[i] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
+		const reader = (readers[i] ??= latestFileText());
+		const text = await reader(f);
+		const at = readers.indexOf(reader);
+		if (text === null || at < 0) return;
+		pasteText[at] = text;
+		pasteNote[at] = { ok: true, text: `Read ${f.name}: pick which values to fill.` };
 	}
 
 	const exampleHref = (kind: 'total' | 'lowFlow') => `data:text/csv;charset=utf-8,${encodeURIComponent(exampleGridCsv(kind))}`;
