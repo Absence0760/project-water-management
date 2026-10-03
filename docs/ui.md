@@ -2640,7 +2640,14 @@ map" card) stays the schematic; this is the geography.
   Network does. The page fits 1440×960 with thirty units and the legend.
 - **The picked feature's card** (top of the side column): its name, Kind,
   Area (or Position, or Shape for a line), **Stands for** (a select of the
-  nodes of fitting kinds for editors, else the node's name), **Unit’s
+  nodes of fitting kinds for editors, else the node's name), **Siting** for
+  a dam drawn as its outline (194: a select of *Not said (from its
+  outline)*, *On the river* and *Off-channel (filled by a pump or a
+  furrow)* for editors, saved on change, with a line saying Start and Divide
+  take only an off-channel dam's own catchment into it, the river passing it
+  by (their review cards then offer the dam's *Upstream inflow to dam* and
+  its runoff share as ticks); the words for a viewer; not
+  asked of a point dam; maps.md § Start from the map), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
   (its area *typed*, **From the map** this feature, or this feature's
   *earlier outline* once it was reshaped or split after the area was
@@ -2698,7 +2705,11 @@ map" card) stays the schematic; this is the geography.
   are the map's key; the card with the focus or the pointer lights its
   piece), its name, a gauge's "It measures … of the catchment above it",
   and a tick for each value proposed (Area … saved
-  as its parcel; Drains into …; All of its own runoff reaches the dam),
+  as its parcel; Drains into …; All of its own runoff reaches the dam, or
+  for a dam marked off-channel on the map "2.5 % of its runoff reaches the
+  dam: the 0.10 km² draining to the dam’s own outflow, of the unit’s …"
+  and a tick for "Upstream inflow to dam 0 %: off-channel, …" (100 % for
+  one marked on the river), 194),
   every tick off at first; under a ticked area whose piece holds pans, a
   **Which area** radio group (`AreaBasisChoice.svelte`, 195): **Gross, …
   (what drains into pans included)**, checked, or **Effective, … (without
@@ -2756,7 +2767,8 @@ map" card) stays the schematic; this is the geography.
   its number badge, the node's name (or "A new gauge" with **Add it to the
   model as a gauge node** and its name), and a tick for each value with the
   value now beside it (Area … Now: 12.00 km², typed; Drains into … Now: …;
-  All of its own runoff reaches the dam. Now: 50 %), "(the same)" when
+  All of its own runoff reaches the dam. Now: 50 %; a marked dam's share
+  and Upstream inflow to dam as in Start, each with Now), "(the same)" when
   equal; under a ticked area whose piece holds pans, Start's **Which area**
   choice; the rest of the catchment ("Its area goes to": Nobody / a unit /
   A new unit, with its name, and the choice when it holds pans); **How it was made**; **Discard** and **Apply

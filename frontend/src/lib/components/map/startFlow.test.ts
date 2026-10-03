@@ -25,6 +25,7 @@ const feature = (id: string, kind: MapFeature['kind'], geometry: MapFeature['geo
 	name: id,
 	nodeId: null,
 	nodeName: null,
+	damPosition: null,
 	geometry,
 	properties: {},
 	areaM2: null,
@@ -166,7 +167,19 @@ describe('the ticks', () => {
 		expect(t.rest).toMatchObject({ include: true, area: true });
 		// Without an elevation model nothing but the rest's area (the boundary) is offered.
 		const bare = plan([unit('a', { areaM2: null, geometry: null, drainsIntoProposed: false })], { fromDem: false });
-		expect(unitOffers(bare.units[0]!)).toEqual({ area: false, drainsInto: false, runoffToDam: false });
+		expect(unitOffers(bare.units[0]!)).toEqual({ area: false, drainsInto: false, runoffToDam: false, upstreamToDam: false });
+	});
+
+	it('offers a marked dam’s Upstream inflow to dam, unticked until ticked, and only a marked dam’s (194)', () => {
+		const marked = plan([unit('off', { damShares: { pctUpstreamToDam: 0, pctRunoffToDam: 0.025, damCatchmentM2: 0.1e6 } }), unit('plain')]);
+		expect(unitOffers(marked.units[0]!).upstreamToDam).toBe(true);
+		expect(unitOffers(marked.units[1]!).upstreamToDam).toBe(false);
+		const open = initialTicks(marked);
+		expect(open.units.map((u) => u.upstreamToDam)).toEqual([false, undefined]);
+		expect(tickAll(marked, open).units.map((u) => [u.key, u.runoffToDam, u.upstreamToDam])).toEqual([
+			['off', true, true],
+			['plain', true, undefined]
+		]);
 	});
 
 	it('names what each unit drains into by the names as typed', () => {

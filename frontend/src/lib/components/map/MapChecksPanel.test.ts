@@ -24,6 +24,7 @@ const parcel = (id: string, name: string, nodeId: string | null, x: number): Map
 	name,
 	nodeId,
 	nodeName: null,
+	damPosition: null,
 	geometry: { type: 'Polygon', coordinates: [[[x, -34], [x + 0.02, -34], [x + 0.02, -33.98], [x, -33.98], [x, -34]]] },
 	properties: {},
 	areaM2: 4e6,

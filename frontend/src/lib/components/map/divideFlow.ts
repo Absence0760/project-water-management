@@ -70,13 +70,15 @@ export const divideOffers = (u: DivideUnit) => ({
 	add: u.nodeId === null,
 	area: u.areaM2 !== null && !!u.geometry && u.role !== 'user' && u.role !== 'gauge',
 	drainsInto: true,
-	runoffToDam: u.role === 'dam'
+	runoffToDam: u.role === 'dam',
+	/** A dam marked on or off the river (194): its Upstream inflow to dam. */
+	upstreamToDam: !!u.damShares
 });
 
 /** The ticks a division opens with: every value unticked, a new gauge named as its point. */
 export function initialDivideTicks(p: DividePlan): DivideTicks {
 	return {
-		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, add: false, ...(u.nodeId ? {} : { name: u.name }) })),
+		units: p.units.map((u) => ({ key: u.key, area: false, drainsInto: false, runoffToDam: false, ...(u.damShares ? { upstreamToDam: false } : {}), add: false, ...(u.nodeId ? {} : { name: u.name }) })),
 		rest: { to: 'none' }
 	};
 }
@@ -87,7 +89,7 @@ export function tickAllDivide(p: DividePlan, t: DivideTicks): DivideTicks {
 	return {
 		units: t.units.map((x) => {
 			const o = divideOffers(by.get(x.key)!);
-			return { ...x, add: o.add, area: o.area, drainsInto: true, runoffToDam: o.runoffToDam };
+			return { ...x, add: o.add, area: o.area, drainsInto: true, runoffToDam: o.runoffToDam, ...(o.upstreamToDam ? { upstreamToDam: true } : {}) };
 		}),
 		rest: t.rest
 	};
@@ -102,11 +104,12 @@ export function divideDrainsIntoName(p: DividePlan, t: DivideTicks, u: DivideUni
 }
 
 /** Whether a proposed value is what the node has already (ticking it changes nothing). */
-export function sameAsNow(p: DividePlan, u: DivideUnit, what: 'area' | 'drainsInto' | 'runoffToDam'): boolean {
+export function sameAsNow(p: DividePlan, u: DivideUnit, what: 'area' | 'drainsInto' | 'runoffToDam' | 'upstreamToDam'): boolean {
 	const c = u.current;
 	if (!c) return false;
 	if (what === 'area') return u.areaM2 !== null && Math.abs(c.areaKm2 - u.areaM2 / 1e6) < 0.0005;
-	if (what === 'runoffToDam') return c.pctRunoffToDam === 1;
+	if (what === 'runoffToDam') return c.pctRunoffToDam === (u.damShares?.pctRunoffToDam ?? 1);
+	if (what === 'upstreamToDam') return !!u.damShares && c.pctUpstreamToDam === u.damShares.pctUpstreamToDam;
 	const target = u.drainsInto ? p.units.find((x) => x.key === u.drainsInto)?.nodeId : p.outlet.nodeId;
 	return !!target && c.downstreamNodeId === target;
 }
@@ -123,7 +126,7 @@ export function divideProblem(p: DividePlan, t: DivideTicks, nodeNames: readonly
 			if (names.has(n.toLowerCase())) return `Two nodes would be called “${n}”: give the new gauge a name of its own.`;
 			names.add(n.toLowerCase());
 		}
-		if (!u.nodeId && !x.add && (x.drainsInto || x.area || x.runoffToDam)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
+		if (!u.nodeId && !x.add && (x.drainsInto || x.area || x.runoffToDam || x.upstreamToDam)) return `${u.name} is a new gauge: tick Add it before taking its order.`;
 		if (x.drainsInto && u.drainsInto) {
 			const target = p.units.find((y) => y.key === u.drainsInto);
 			if (target && !target.nodeId && !tick.get(target.key)?.add) return `${u.name} would drain into the new gauge ${tick.get(target.key)?.name?.trim() || target.name}, which isn’t being added: tick Add it too.`;
@@ -151,9 +154,10 @@ export function divideSummary(t: DivideTicks): string {
 	const areas = t.units.filter((u) => u.area).length + (t.rest.to === 'none' ? 0 : 1);
 	const orders = t.units.filter((u) => u.drainsInto).length;
 	const runoff = t.units.filter((u) => u.runoffToDam).length;
+	const upstream = t.units.filter((u) => u.upstreamToDam).length;
 	const gauges = t.units.filter((u) => u.add).length;
 	const effective = t.units.filter((u) => u.area && u.areaBasis === 'effective').length + (t.rest.to !== 'none' && t.rest.areaBasis === 'effective' ? 1 : 0);
-	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel${effective ? `; ${effective} without what drains into pans` : ''}), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
+	return `The model takes ${s(areas, 'area')} (each saved as its unit’s parcel${effective ? `; ${effective} without what drains into pans` : ''}), ${s(orders, 'drains-into', 'drains-into')} and ${s(runoff, 'runoff to the dam', 'runoffs to the dam')}${upstream ? `, ${s(upstream, 'upstream inflow to a dam', 'upstream inflows to dams')}` : ''}${gauges ? `, and ${s(gauges, 'new gauge')}` : ''}${t.rest.to === 'new' ? ', and a new unit for the rest of the catchment' : ''}. Every value not ticked stays as it is.`;
 }
 
 /** How far over the catchment the units may add up before the sheet says so: the pieces' own rounding stays under it. */

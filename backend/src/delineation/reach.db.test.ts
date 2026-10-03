@@ -83,10 +83,15 @@ describe('the reach’s area at the click (finding 13)', () => {
 		const head = await withUser(editor.id, (db) => reachFor(db, CLICK));
 		expect(head.reach).toMatchObject({ reachId: 99000001, reachKm2: 200 });
 		expect(head.reach!.upstreamKm2).toBeCloseTo(HEAD_KM2 + (200 - HEAD_KM2) * 0.5, 0);
+		// A head reach: its upper end and the click's place down the line go along, for the DEM to read the upper end's area (place.ts expectedOnGrid).
+		expect(head.reach!.head).toMatchObject({ at: LINE[0], reachKm2: 200 });
+		expect(head.reach!.head!.fraction).toBeCloseTo(0.5, 2);
 		// With a reach of 120 km² flowing into its upper end: 120 + 80 × ½.
 		await plantLine(99000003, 120, [at(DAM_CELL.x + 3, DAM_CELL.y - 20), LINE[0]!]);
 		const fed = await withUser(editor.id, (db) => reachFor(db, CLICK));
 		expect(fed.reach!.upstreamKm2).toBeCloseTo(160, 0);
+		// Not a head reach: no upper end to read.
+		expect(fed.reach!.head).toBeNull();
 		// Another dataset's line ending there doesn't count.
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', ['snap-test-other']);
 		await asOwner(
@@ -109,7 +114,7 @@ describe('Delineate', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
 		expect(Math.abs(r.body.proposal.areaM2 / 1e6 / riverKm2 - 1)).toBeLessThan(0.05);
 		expect(r.body.proposal.method).toMatch(/best matches reach 99000001 of snap-test/);
-		expect(r.body.proposal.methodVersion).toBe('delineate-10');
+		expect(r.body.proposal.methodVersion).toBe('delineate-11');
 	});
 
 	it('keeps a click on a channel of its own 500 m off the reach’s line there, offering the river’s channel (finding 4)', async () => {
@@ -293,7 +298,7 @@ describe('Sub-catchments', () => {
 		expect(r.status, JSON.stringify(r.body)).toBe(200);
 		const [matched] = r.body.pieces;
 		expect(matched).toMatchObject({ click: 0, placedBy: 'matched', reach: { dataset: DATASET, reachId: 99000001 }, larger: null });
-		expect(r.body.methodVersion).toBe('start-12');
+		expect(r.body.methodVersion).toBe('start-13');
 		await asOwner('DELETE FROM river_reference WHERE dataset = $1', [DATASET]);
 		const plain = await editor.call('POST', `/projects/${projectId}/map/subcatchments`, {
 			clicks: [

@@ -149,7 +149,29 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    beside three gauged rivers of 260–390 km², its outline taking in one
    river cell): 241–385 km² before, the footprint's 0.01–0.14 km² after.
    The geometry can't tell a long off-channel dam lying along the river
-   from a narrow reservoir on it, so that one is taken as on the river. A snapped point beside a channel with 100× its
+   from a narrow reservoir on it, so the editor says which in the dam's
+   card (194 `map_feature.dam_position`, `damOutflow`'s `position`):
+   `on_channel` takes the outline's most-drained cell whatever the outline;
+   `off_channel` finds the dam's own outflow (`offChannelOutflow`: the
+   most-drained outline cell carrying under LARGER_FACTOR × the outline's
+   cell count, so every cell of a watercourse is left out, wherever it
+   leaves the outline and comes back, and a channel smaller than that stays
+   as the dam's own; a sub-cell outline takes the cell under its first
+   corner, never snapped), and puts the *unit* where that outflow's D8 path
+   meets a watercourse within GUARD_RADIUS_M (`riverBelow`; else at the
+   outflow). That is the model's off-channel farm dam (model.md §2.7): a
+   reach of the river whose upstream inflow H passes the dam by (K = 0)
+   and whose runoff I enters the dam only from the dam's own catchment
+   (M = I × pctRunoffToDam), River to dam (O) filling it from the river.
+   Placing the unit at the dam's own outflow instead would leave it off the
+   river, with nothing for River to dam to draw on. The piece's cells that
+   drain to the dam's outflow are `damCatchmentM2`, and `damSharesOf`
+   (start.ts) proposes `pctUpstreamToDam` 0 and `pctRunoffToDam` =
+   damCatchmentM2 ÷ the piece's area (to 0.001); on the river, 1 and 1. An
+   outline wholly on the river is dropped with its reason. Neither offers a
+   channel. Unset, the rule above decides and only the old runoff tick is
+   proposed (no method version bump); a marked dam carries `damPosition` in
+   its placement, `damShares` in its unit, and the method counts it. A snapped point beside a channel with 100× its
    upstream area keeps the guard's finding in its `placement.larger` and a
    warning (the outlet's first, since every unit is placed against it);
    **use that channel** proposes again with `useLarger` for that point, and

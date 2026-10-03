@@ -8,8 +8,9 @@
 //   tsx --env-file=.env.development scripts/research/snap-methods.ts <out.json> [--per-stratum 40] [--main 30] [--seed s] [--no-mask]
 //
 // --no-mask skips M5 (the water mask, read through docker); the as-built rows
-// (AB4: delineate-4's rule; AB5: place.ts as it is now, matched to the
-// reach's area at the click, reach.ts areaAlong) don't need it.
+// (AB4: delineate-4's rule; AB5: delineate-5's, matched to the reach's area
+// at the click, reach.ts areaAlong; AB6: place.ts as it is now, a head
+// reach's upper end read from the DEM, place.ts expectedOnGrid) don't need it.
 //
 // Samples HydroRIVERS reaches (the loaded `HydroRIVERS-v10` dataset) inside
 // South Africa by upstream area, clicks each one's vertex next to its
@@ -25,8 +26,8 @@ import pg from 'pg';
 import { configuredDem } from '../../src/delineation/dem.js';
 import { EARTH_RADIUS_M, readWindow, TARGET_ZOOM, toLonLat, toPx, worldPx } from '../../src/delineation/delineate.js';
 import { accumulate, d8, edgeMask, fill, snap, touchesEdge, upstream } from '../../src/delineation/flow.js';
-import { place } from '../../src/delineation/place.js';
-import { areaAlong } from '../../src/delineation/reach.js';
+import { expectedOnGrid, place } from '../../src/delineation/place.js';
+import { areaAlong, fractionAlong } from '../../src/delineation/reach.js';
 
 const args = process.argv.slice(2);
 const out = args[0] ?? '';
@@ -212,6 +213,14 @@ async function main() {
 			const expectedKm2 = areaAlong({ upstreamKm2: ref, line: r.coords }, click, r.upper_km2 === null ? null : Number(r.upper_km2));
 			const pl = place(g, cx, cy, { snapRadiusM: 150, expectedKm2, reachDistanceM: 0 });
 			picks.push({ method: 'AB5 as built, delineate-5', cell: pl?.cell ?? null, flagged: !!pl?.larger, note: pl?.larger?.reach ? 'offered the reach’s channel' : undefined });
+			const head = r.upper_km2 === null ? { at: r.coords[0]!, fraction: fractionAlong(click, r.coords), reachKm2: ref } : null;
+			const toWindow = (q: [number, number]) => {
+				const [px, py] = toPx(q[0], q[1], W);
+				return [px - x0, py - y0] as const;
+			};
+			const opts6 = { snapRadiusM: 150, expectedKm2, reachDistanceM: 0 };
+			const pl6 = place(g, cx, cy, { ...opts6, expectedKm2: expectedOnGrid({ ...g, dir }, cx, cy, opts6, head, toWindow) });
+			picks.push({ method: 'AB6 as built, delineate-11', cell: pl6?.cell ?? null, flagged: !!pl6?.larger, note: pl6?.larger?.reach ? 'offered the reach’s channel' : undefined });
 		}
 		const wbm = NO_MASK ? [] : waterMask(click);
 		const wbmCells = new Set<number>();

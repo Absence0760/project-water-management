@@ -34,7 +34,7 @@ import { DelineationRefused } from './delineate.js';
 import { PlacementChoice, placementOf, placementWarnings, pointReaches, PointsAtConfluence, ReachNotNearPoint, type PointPlacement, type PointReach } from './pointPlacement.js';
 import { panWarning, type PanReport } from './pans.js';
 import { AreaBasis, areaBasisNote, takenAreaM2 } from './areaBasis.js';
-import { delineateUnits, START_METHOD_VERSION, type PlacementHints, type UnitRole } from './subcatchments.js';
+import { delineateUnits, START_METHOD_VERSION, type DamPosition, type PlacementHints, type UnitRole } from './subcatchments.js';
 import { pointInGeometry } from '../geo/geojson.js';
 
 /** Proposals one project may ask for in an hour: each routes the DEM (seconds of CPU on the API). */
@@ -81,8 +81,10 @@ export const ApplyBody = z
 						areaBasis: AreaBasis.optional(),
 						/** Take the proposed drains-into; unticked, the unit drains into the outflow gauge. */
 						drainsInto: z.boolean(),
-						/** A dam unit: all of its runoff reaches the dam (pctRunoffToDam = 1). */
-						runoffToDam: z.boolean()
+						/** A dam unit: its runoff reaches the dam (pctRunoffToDam: 1, or a marked dam's share, damShares). */
+						runoffToDam: z.boolean(),
+						/** A dam marked on or off the river (194): take its Upstream inflow to dam (damShares.pctUpstreamToDam). */
+						upstreamToDam: z.boolean().optional()
 					})
 					.strict()
 			)
@@ -116,6 +118,31 @@ export interface StartUnit {
 	/** Of its own area and of its whole catchment, what drains into pans (m²; pans.ts, start-11): reported, not taken out. Absent without a DEM or before start-11. */
 	nonContributingM2?: number;
 	totalNonContributingM2?: number;
+	/** A dam marked on or off the river (194): the dam's shares it proposes (damShares). Absent for an unmarked dam and any other unit. */
+	damShares?: DamShares;
+}
+
+/**
+ * The shares a dam marked on or off its river proposes for its unit (194; docs/model.md §2.7, K and M). On the river, the river
+ * forms the reservoir: everything from upstream and all of the unit's own runoff enters it (pctUpstreamToDam 1, pctRunoffToDam 1,
+ * the piece ending at the wall). Off-channel, the unit is the river's reach where the dam's own outflow joins it: the river passes
+ * the dam by (pctUpstreamToDam 0; River to dam is how it fills) and only the dam's own catchment's runoff enters it
+ * (pctRunoffToDam = damCatchmentM2 / the piece's area, to 0.001).
+ */
+export interface DamShares {
+	pctUpstreamToDam: 0 | 1;
+	pctRunoffToDam: number;
+	/** Off-channel: what drains to the dam's own outflow (m²), the runoff share's numerator. */
+	damCatchmentM2: number | null;
+}
+
+/** A unit's DamShares from its piece; null for an unmarked dam (today's proposal), any other role, or no area. Pure. */
+export function damSharesOf(u: { role: UnitRole; areaM2: number | null; damPosition?: DamPosition; damCatchmentM2?: number }): DamShares | null {
+	if (u.role !== 'dam' || !u.damPosition) return null;
+	if (u.damPosition === 'on_channel') return { pctUpstreamToDam: 1, pctRunoffToDam: 1, damCatchmentM2: null };
+	const own = u.damCatchmentM2 ?? null;
+	const share = own !== null && u.areaM2 ? Math.min(1, Math.max(0, Math.round((own / u.areaM2) * 1000) / 1000)) : 1;
+	return { pctUpstreamToDam: 0, pctRunoffToDam: share, damCatchmentM2: own };
 }
 
 export interface StartPlan {
@@ -139,7 +166,7 @@ export interface StartPlan {
 export interface StartDecision {
 	outlet: { name: string; nodeId: string };
 	/** `areaBasis`: which area was taken (195), with `area`; absent on a decision before 195 (gross, the only choice then). */
-	units: { key: string; name: string; nodeId: string; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; parcelId: string | null }[];
+	units: { key: string; name: string; nodeId: string; area: boolean; areaBasis?: AreaBasis; drainsInto: boolean; runoffToDam: boolean; upstreamToDam?: boolean; parcelId: string | null }[];
 	rest: { include: boolean; name: string; area: boolean; areaBasis?: AreaBasis; nodeId: string | null; parcelId: string | null };
 	revisionId: string | null;
 }
@@ -210,7 +237,7 @@ const NO_DEM_METHOD =
 interface MapInputs {
 	boundary: { id: string; geometry: Polygonal; areaM2: number } | null;
 	outlet: { featureId: string | null; name: string; point: Position | null; foundIn: StartPlan['outlet']['foundIn'] };
-	points: { featureId: string; name: string; role: UnitRole; geometry: Geometry }[];
+	points: { featureId: string; name: string; role: UnitRole; geometry: Geometry; damPosition: DamPosition | null }[];
 }
 
 /** The boundary, the outlet and the points the request names, read and checked (one transaction). */
@@ -221,8 +248,8 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 	);
 	const boundary = b[0] ? { id: b[0].id, geometry: b[0].geometry, areaM2: b[0].area_m2 } : null;
 	const ids = [...body.points.map((p) => p.featureId), ...(body.outletFeatureId ? [body.outletFeatureId] : [])];
-	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry }>(
-		'SELECT id, kind, name, geometry FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
+	const { rows: fs } = await db.query<{ id: string; kind: string; name: string; geometry: Geometry; dam_position: DamPosition | null }>(
+		'SELECT id, kind, name, geometry, dam_position FROM map_feature WHERE project_id = $1 AND id = ANY($2::uuid[])',
 		[projectId, ids]
 	);
 	const byId = new Map(fs.map((f) => [f.id, f]));
@@ -255,7 +282,7 @@ async function readMapInputs(db: Db, projectId: string, body: z.infer<typeof Pro
 		if (!['dam', 'gauge', 'other'].includes(f.kind)) throw new ApiError(400, `“${f.name || 'A feature'}” can’t be a unit.`);
 		// A gauge node stands for a gauge on the map (map_feature's KIND_NODES), so only a gauge point is one.
 		if (p.role === 'gauge' && !(f.kind === 'gauge' && f.geometry.type === 'Point')) throw new ApiError(400, `“${f.name || 'A feature'}” is not a gauge point, so it can’t be a gauge node.`);
-		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry };
+		return { featureId: f.id, name: oneLineName(f.name) || `${DEFAULT_ROLE_NAME[p.role]} ${++counter[p.role]}`, role: p.role, geometry: f.geometry, damPosition: f.dam_position };
 	});
 	return { boundary, outlet, points };
 }
@@ -294,6 +321,12 @@ export function planWithoutDem(inputs: MapInputs): StartPlan {
 		zoom: null,
 		windowCells: null
 	};
+}
+
+/** A unit's damShares field, when it has one (spread into a plan's unit). */
+export function withDamShares(u: { role: UnitRole; areaM2: number | null; damPosition?: DamPosition; damCatchmentM2?: number }): { damShares?: DamShares } {
+	const shares = damSharesOf(u);
+	return shares ? { damShares: shares } : {};
 }
 
 export function pointOf(g: Geometry): Position {
@@ -414,7 +447,7 @@ export const startRoutes = new Hono<AuthEnv>()
 						outlet: inputs.outlet.point,
 						outletHints: outletHints(inputs.outlet.foundIn, reaches),
 						boundary: inputs.boundary?.geometry ?? null,
-						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, ...reaches.get(p.featureId)?.hints }))
+						points: inputs.points.map((p) => ({ id: p.featureId, role: p.role, geometry: p.geometry, damPosition: p.damPosition, ...reaches.get(p.featureId)?.hints }))
 					});
 				} catch (err) {
 					if (err instanceof DelineationRefused) throw new ApiError(422, err.message, { reason: err.code });
@@ -446,7 +479,8 @@ export const startRoutes = new Hono<AuthEnv>()
 					drainsIntoProposed: true,
 					placement: placementOf(u, reaches.get(u.id)),
 					nonContributingM2: u.nonContributingM2,
-					totalNonContributingM2: u.totalNonContributingM2
+					totalNonContributingM2: u.totalNonContributingM2,
+					...withDamShares(u)
 				}));
 				const dropped = r.dropped.map((d) => ({ featureId: d.id, name: named.get(d.id)!.name, reason: d.reason, ...(d.placedBy ? { placement: placementOf(d, reaches.get(d.id)) } : {}) }));
 				// A dropped point snapped beside its river: the larger channel is how to bring it in.
@@ -546,6 +580,7 @@ export const startRoutes = new Hono<AuthEnv>()
 				if (t.areaBasis === 'effective' && !t.area) throw new ApiError(400, `Tick ${t.name}’s area to take its effective area.`);
 				if (t.drainsInto && !u.drainsIntoProposed) throw new ApiError(400, `${t.name} has no proposed order to take.`);
 				if (t.runoffToDam && u.role !== 'dam') throw new ApiError(400, `${t.name} is not a dam unit.`);
+				if (t.upstreamToDam && !u.damShares) throw new ApiError(400, `${t.name} has no proposed upstream inflow to its dam: mark the dam on or off the river on the map, and propose again.`);
 			}
 			if (body.rest.include && body.rest.area && (plan.rest.areaM2 === null || !plan.rest.geometry)) throw new ApiError(400, 'The rest of the catchment has no proposed area to take.');
 			if (body.rest.areaBasis === 'effective' && !(body.rest.include && body.rest.area)) throw new ApiError(400, 'Tick the rest of the catchment’s area to take its effective area.');
@@ -567,7 +602,8 @@ export const startRoutes = new Hono<AuthEnv>()
 				const down = t.drainsInto && u.drainsInto ? nodeOf.get(u.drainsInto)! : outlet.id;
 				const n: NetworkNode = { ...newNetworkNode(nodeOf.get(u.key)!, i + 1, down), name: t.name.trim(), kind: u.role === 'user' ? 'user' : u.role === 'gauge' ? 'gauge' : 'farm' };
 				if (taken.has(u.key)) n.areaKm2 = taken.get(u.key)! / 1e6;
-				if (t.runoffToDam) n.pctRunoffToDam = 1;
+				if (t.runoffToDam) n.pctRunoffToDam = u.damShares?.pctRunoffToDam ?? 1;
+				if (t.upstreamToDam && u.damShares) n.pctUpstreamToDam = u.damShares.pctUpstreamToDam;
 				nodes.push(n);
 			});
 			const restId = body.rest.include ? crypto.randomUUID() : null;
@@ -602,7 +638,7 @@ export const startRoutes = new Hono<AuthEnv>()
 				// The point the unit came from stands for it now (a link, not a model value).
 				// A gauge point stands for a gauge node; a dam or other point for a unit or user (map_feature's KIND_NODES).
 				await db.query(`UPDATE map_feature SET node_id = $3 WHERE id = $1 AND project_id = $2 AND kind = ANY($4::text[]) AND node_id IS NULL`, [u.key, id, nodeId, u.role === 'gauge' ? ['gauge'] : ['dam', 'other']]);
-				decisionUnits.push({ key: u.key, name: t.name.trim(), nodeId, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, parcelId });
+				decisionUnits.push({ key: u.key, name: t.name.trim(), nodeId, area: t.area, ...(t.area ? { areaBasis: basis } : {}), drainsInto: t.drainsInto, runoffToDam: t.runoffToDam, ...(u.damShares ? { upstreamToDam: !!t.upstreamToDam } : {}), parcelId });
 			}
 			let restParcel: string | null = null;
 			const restBasis = body.rest.areaBasis ?? 'gross';

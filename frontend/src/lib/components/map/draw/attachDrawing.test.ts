@@ -125,6 +125,7 @@ describe('attachDrawing: snapping (#326 C2)', () => {
 		name: 'Neighbour',
 		nodeId: null,
 		nodeName: null,
+		damPosition: null,
 		geometry: { type: 'Polygon', coordinates: [[[20.01, -33.01], [20.03, -33.01], [20.03, -33.03], [20.01, -33.03], [20.01, -33.01]]] },
 		properties: {},
 		areaM2: null,

@@ -43,7 +43,16 @@
 //     WIDE_MATCH_M (the matching channel lies 1.2–1.5 km off at the 90th
 //     percentile) and that channel offered, not taken: at that radius Lehner's
 //     ranking lands on another river 5–8 % of the time, so the editor decides.
-import { snap } from './flow.js';
+//
+// And one for a head reach (delineate-11): the area at the click assumed
+// HydroRIVERS' 10 km² at the reach's upper end (reach.ts HEAD_KM2), but on
+// GLO-30 that spot drains 6–14 km², so a click near the head slid down its own
+// channel to where the DEM drains the constant's figure. expectedOnGrid reads
+// the DEM's own area there instead: from the cell the constant matches, up the
+// channel (the larger branch at each fork) to its cell nearest the reach's
+// upper end, and rebuilds the area at the click from it.
+import type { Position } from '../geo/geojson.js';
+import { DX, DY, snap } from './flow.js';
 
 /** How far the area match looks (m): 1 km placed none on another river; 2.5 km placed 5–7 % there. */
 export const MATCH_RADIUS_M = 1000;
@@ -63,6 +72,82 @@ export const ON_CHANNEL_CELLS = 1.5;
 export const ON_LINE_M = 150;
 /** A snap draining less than this share of the reach's area is a gully (the research's < 0.1×): then the wider match is offered. */
 export const GULLY_SHARE = 0.1;
+
+/**
+ * A head reach's (nothing flows into it, reach.ts): its upper end, how far down its line the click lies (0–1, by length) and
+ * its own area (km², at its lower end), for expectedOnGrid.
+ */
+export interface HeadHint {
+	at: Position;
+	fraction: number;
+	reachKm2: number;
+}
+/** How near (m) a head reach's upper end the DEM's channel must pass for its area to be read there (headAreaKm2). */
+export const HEAD_STEM_M = 1000;
+/** Where the climb up a channel stops (km²): its last cell drains about a tenth of a square kilometre. */
+export const STEM_END_KM2 = 0.1;
+
+export interface PlaceOpts {
+	snapRadiusM: number;
+	expectedKm2?: number | null;
+	chosen?: boolean;
+	/** How far the click is from the reach's line (m; reach.ts distanceM); unknown counts as on it, so rule 3 stays off. */
+	reachDistanceM?: number | null;
+}
+
+/**
+ * The DEM's upstream area (km²) at a head reach's upper end, (hx, hy) in fractional cells: climbing from `from` (a cell on
+ * the reach's channel) up the channel, always into the most-drained cell flowing into it, until it drains under STEM_END_KM2,
+ * the area of its cell nearest the upper end. Null when the climb passes no nearer than HEAD_STEM_M (the channel isn't the
+ * reach's), when that cell's catchment runs past the window (`open`, flow.ts openFlags: its area there is only a floor), or
+ * when it drains more than the whole reach. Pure.
+ */
+export function headAreaKm2(g: PlaceGrid & { dir: Uint8Array; open?: Uint8Array }, from: number, hx: number, hy: number, reachKm2: number): number | null {
+	const { nx, ny, acc, dir, cellSizeM } = g;
+	const endCells = (STEM_END_KM2 * 1e6) / (cellSizeM * cellSizeM);
+	let best = -1;
+	let bestD = Infinity;
+	for (let c = from; c >= 0; ) {
+		const x = c % nx;
+		const y = (c - x) / nx;
+		const d = Math.hypot(x + 0.5 - hx, y + 0.5 - hy) * cellSizeM;
+		if (d < bestD) (best = c), (bestD = d);
+		let up = -1;
+		for (let k = 0; k < 8; k++) {
+			const ux = x - DX[k]!;
+			const uy = y - DY[k]!;
+			if (ux < 0 || uy < 0 || ux >= nx || uy >= ny) continue;
+			const u = uy * nx + ux;
+			if (dir[u] === k && acc[u]! >= endCells && (up < 0 || acc[u]! > acc[up]!)) up = u;
+		}
+		c = up;
+	}
+	if (best < 0 || bestD > HEAD_STEM_M || g.open?.[best]) return null;
+	const km2 = (acc[best]! * cellSizeM * cellSizeM) / 1e6;
+	return km2 > reachKm2 ? null : km2;
+}
+
+/**
+ * The area to match the click at (cx, cy) to in this grid: `opts.expectedKm2` (reach.ts reachFor's, which counts a head
+ * reach's upper end as HEAD_KM2), unless the reach is a head reach (`head`) and the grid reads its upper end's area
+ * (headAreaKm2, climbing from the cell that area matches): then that area plus the rest of the reach's in proportion down
+ * the line, as reach.ts areaAlong does. `toGrid` maps a position to fractional cells. Pure.
+ */
+export function expectedOnGrid(
+	g: PlaceGrid & { dir: Uint8Array; open?: Uint8Array },
+	cx: number,
+	cy: number,
+	opts: PlaceOpts,
+	head: HeadHint | null | undefined,
+	toGrid: (p: Position) => readonly [number, number]
+): number | null | undefined {
+	if (!head || !opts.expectedKm2) return opts.expectedKm2;
+	const first = place(g, cx, cy, opts);
+	if (first?.how !== 'matched') return opts.expectedKm2;
+	const [hx, hy] = toGrid(head.at);
+	const top = headAreaKm2(g, first.cell, hx, hy, head.reachKm2);
+	return top === null ? opts.expectedKm2 : top + (head.reachKm2 - top) * head.fraction;
+}
 
 export interface Placement {
 	cell: number;
@@ -90,18 +175,7 @@ export interface PlaceGrid {
  * `chosen`: the editor named that river at a confluence, so it is matched out to WIDE_MATCH_M and taken (rules 3 and 4 don't apply);
  * `reachDistanceM`: the click's distance from that reach's line, for rule 3.
  */
-export function place(
-	g: PlaceGrid,
-	cx: number,
-	cy: number,
-	opts: {
-		snapRadiusM: number;
-		expectedKm2?: number | null;
-		chosen?: boolean;
-		/** How far the click is from the reach's line (m; reach.ts distanceM); unknown counts as on it, so rule 3 stays off. */
-		reachDistanceM?: number | null;
-	}
-): Placement | null {
+export function place(g: PlaceGrid, cx: number, cy: number, opts: PlaceOpts): Placement | null {
 	const { nx, ny, acc, edge, cellSizeM } = g;
 	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
 	const disc = (m: number, visit: (i: number, d: number) => void) => {

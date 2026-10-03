@@ -3930,19 +3930,39 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       `backend/scripts/research/snap-gauges.ts` (the header says how) and
       refresh the section's numbers. Trigger: the round fixing those
       findings merging.
-- [ ] **Ask whether a dam is on its river or off it** (the hydrologist's
-      review finding 9, fixed in `start-10` for the common cases). A dam
-      polygon whose outline only clips a much larger channel now goes at
-      its own footprint's outflow with the river offered
-      (`subcatchments.ts` `damOutflow`), but the geometry can't tell a long
-      off-channel dam lying along the river, overlapping it for most of its
-      length, from a narrow reservoir on it: that one is still taken as on
-      the river, its catchment the river's. Durable fix: an "off-channel
-      (filled by a pump or a furrow)" choice on a dam feature (Dams page
-      and map), which Start and Divide honour by placing the dam at its
-      own outflow whatever the geometry says. Trigger: a client with
-      off-channel storage dams, or a Start plan where a dam's area is
-      many times its neighbours'.
+- [x] **Ask whether a dam is on its river or off it** (the hydrologist's
+      review finding 9, fixed in `start-10` for the common cases; the
+      durable fix 2026-10-03, branch wip/r5-off-channel-dam). A dam
+      polygon's card on the map asks its **Siting** (194
+      `map_feature.dam_position`: not said, on the river, off-channel),
+      and Start and Divide place it by that (`damOutflow`'s `position`,
+      `offChannelOutflow`): off-channel at its own outflow, no cell
+      carrying 100× the outline's cells taken, so a long dam lying along
+      the river no longer takes the river's catchment; on the river at the
+      river's cell. Unset keeps the outline's rule (still `start-12`); the
+      method names a marked dam only when one is marked (maps.md § Start
+      from the map).
+- [x] **Take a dam's siting into its unit** (from the siting fix above;
+      2026-10-03, branch wip/r5-off-channel-dam). Start and Divide propose
+      a marked dam's *Upstream inflow to dam* (0 % off-channel, 100 % on
+      the river) as a tick, and its runoff tick takes the dam's own share:
+      off-channel, the unit is the river's reach where the dam's own
+      outflow joins it and the share is what drains to that outflow ÷ the
+      unit's area (model.md §2.7 K and M; River to dam fills it); on the
+      river, 100 %. Unmarked dams propose what they did (`damShares`
+      absent). maps.md § Start from the map.
+- [ ] **Show a dam's siting beside its Upstream inflow to dam** (from the
+      fix above). The map's siting reaches the model only through a Start
+      or Divide tick; the Network editor's *Upstream inflow to dam* field
+      (`network/fields.ts`), where the share is edited by hand, doesn't
+      show the map's siting, and nothing says when the two disagree (a dam
+      marked off-channel whose share is typed back to 100 %). Not on the
+      Dams page: it doesn't show the share at all. Durable fix: return each
+      linked dam polygon's `damPosition` with `GET …/map/linked-nodes` and
+      show it in the field's hint, with a warning when the share contradicts
+      it. Trigger: the next change to the Network editor's dam fields or to
+      `linked-nodes`, or a client model where a marked dam's typed share
+      disagrees with its siting.
 - [ ] **A DEM that routes a lower river elsewhere** (new in issue #390's
       gauge run). On 2 flat lower rivers GLO-30 has no channel within
       2.5 km carrying the river, and Delineate accepts a catchment under
@@ -5754,7 +5774,7 @@ handling: Delineation, Map data files, Geometry cost). Left open:
 
 ## Placing a click on the DEM's channel (hydrologist persona findings 4, 7, 13; delineate-5)
 
-- [ ] **A head reach's upper-end area is a constant.** `reach.ts` takes
+- [x] **A head reach's upper-end area is a constant.** `reach.ts` takes
       HydroRIVERS' stated 10 km² threshold (`HEAD_KM2`) for the upper end
       of a reach nothing flows into. Where the DEM drains well under that at
       the head (4 of 27 matched head-reach clicks, 2026-10-03,
@@ -5764,4 +5784,13 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       reach's first vertex (the matching cell there) instead of a constant,
       or match head reaches only within the snap radius. Trigger: the next
       Delineate accuracy round, or a client report of a dam wall placed
-      below itself.
+      below itself. **Done 2026-10-03 (`delineate-11`, `start-13`):** the
+      area is read from the routed window by climbing the DEM's channel from
+      the cell the constant matches to its cell nearest the reach's first
+      vertex (`place.ts` `expectedOnGrid`), the constant kept where the
+      window can't say. On 180 head-reach clicks slides down the click's own
+      channel fell from 6 to 3, within 250 m rose from 89 to 95; reading the
+      most-drained cell near the vertex instead was rejected (hillside
+      cells), and matching only within the snap radius turned 41 of 90
+      clicks into asks
+      ([delineation-snapping.md § The head reach's upper end](./design/delineation-snapping.md#the-head-reachs-upper-end-seventh-experiment-delineate-11)).

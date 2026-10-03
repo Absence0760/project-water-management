@@ -222,7 +222,14 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      `delineate-5`): its upper end's area (what flows in, or HydroRIVERS'
      10 km² threshold for a head reach) plus the rest in proportion to how
      far down the line the click lies, so a click near the top of a long
-     reach no longer slides down it to the lower end's area. A click on
+     reach no longer slides down it to the lower end's area. For a head
+     reach (since `delineate-11`) the routed window's own area at its
+     upper end replaces the 10 km²: climbing from the cell that figure
+     matches, up the channel (the larger branch at each fork), to its cell
+     nearest the reach's first vertex (within 1 km; not when that cell's
+     catchment is cut by the window or drains more than the whole reach),
+     the constant kept only where none qualifies (`place.ts`
+     `expectedOnGrid`). A click on
      the DEM's own channel (1 km² or more within a cell and a half) more
      than 150 m from the reach's line, whose own area is outside the 50 %
      band, is **not moved** past the snap radius by the match: it snaps,
@@ -288,7 +295,7 @@ river's side of the DEM's junction (issue #390), `delineate-6` for windows
 placed over the catchment, grown for a river they cut, and no data as the
 data's edge, `delineate-8` for 5 and 7 together, `delineate-9` for the pans
 reported beside the catchment (§ Pans), `delineate-10` for 6 and 9
-together; bumped whenever the method changes what a click
+together, `delineate-11` for a head reach's upper end read from the DEM; bumped whenever the method changes what a click
 proposes), and the pans' report (193).
 
 ## Pans

@@ -62,7 +62,7 @@
 	import FeatureList from './FeatureList.svelte';
 	import MapChecks from './MapChecks.svelte';
 	import { mapChecks } from './mapChecks';
-	import { alreadyAccepted, areaTargets, areaText, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea } from './mapData';
+	import { alreadyAccepted, areaTargets, areaText, DAM_POSITION_LABEL, featureSummary, isPolygon, KIND_LABEL, KIND_NODES, takesArea, takesDamPosition } from './mapData';
 	import { areaSourceOf, featureName, headerLine, inListOrder, keyGroups, pickedFeature } from './mapList';
 	import { channelColour, glyphsUrl, overlayColours, riverNetworkColour } from './mapStyle';
 	import { exportFileName, geoJsonText } from './mapExport';
@@ -762,6 +762,20 @@
 		}
 	}
 
+	/** Where a dam stands against its river (194): Start and Divide place it by this, '' leaving it to its outline. */
+	async function setDamPosition(f: MapFeature, value: string) {
+		busy = f.id;
+		rowError = null;
+		try {
+			await api.map.update(projectId, f.id, { damPosition: value === 'on_channel' || value === 'off_channel' ? value : null });
+			await load();
+		} catch (err) {
+			rowError = { id: f.id, text: msg(err) };
+		} finally {
+			busy = null;
+		}
+	}
+
 	async function acceptArea(f: MapFeature) {
 		const nodeId = targetOf(f);
 		const n = farms.find((x) => x.id === nodeId);
@@ -886,6 +900,18 @@
 		</select>
 	{:else}
 		{f.nodeName ?? '–'}
+	{/if}
+{/snippet}
+
+<!-- A dam outline's position against its river (194): a select for editors, else its words. Start and Divide place the dam by it. -->
+{#snippet damPosition(f: MapFeature)}
+	{#if canEdit}
+		<select class="cap" aria-label="Where {featureName(f)} stands against its river" aria-describedby="{uid}-dam-position" value={f.damPosition ?? ''} disabled={busy === f.id} onchange={(e) => setDamPosition(f, e.currentTarget.value)} data-testid="map-dam-position">
+			{#each ['', 'on_channel', 'off_channel'] as const as v (v)}<option value={v}>{DAM_POSITION_LABEL[v]}</option>{/each}
+		</select>
+		<p class="hint muted" id="{uid}-dam-position">Start and Divide take only an off-channel dam’s own catchment into it, the river passing it by; unsaid, its outline decides.</p>
+	{:else}
+		<span data-testid="map-dam-position">{DAM_POSITION_LABEL[f.damPosition ?? '']}</span>
 	{/if}
 {/snippet}
 
@@ -1099,6 +1125,10 @@
 								{#if KIND_NODES[picked.kind].length}
 									<dt>Stands for</dt>
 									<dd>{@render standsFor(picked)}</dd>
+								{/if}
+								{#if takesDamPosition(picked)}
+									<dt>Siting</dt>
+									<dd>{@render damPosition(picked)}</dd>
 								{/if}
 								{@render resultFacts(picked)}
 								{#if areaSourceOf(picked, nodes)}

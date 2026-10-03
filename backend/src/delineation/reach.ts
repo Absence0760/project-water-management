@@ -20,10 +20,18 @@
 // click (areaAlong): its upper end's area (what its inflowing reaches drain,
 // or HEAD_KM2 for a reach nothing flows into) plus the rest in proportion to
 // how far down the line the click lies.
+//
+// HEAD_KM2 is HydroRIVERS' threshold on its own 15″ grid; the DEM can drain
+// well under it at the same spot (4 of 27 matched head-reach clicks still slid
+// over 250 m, delineate-5). So a head reach also carries `head` (its upper end
+// and how far down the line the click lies), and once the window is routed the
+// area at the click is rebuilt from the DEM's own area at that upper end
+// (place.ts expectedOnGrid); HEAD_KM2 stays only where the upper end is outside
+// the window.
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Position } from '../geo/geojson.js';
-import { MATCH_RADIUS_M } from './place.js';
+import { MATCH_RADIUS_M, type HeadHint } from './place.js';
 
 /** A river reach the editor picked at a confluence: which one, never its area (the server reads that). */
 export const ReachChoiceBody = z.object({ dataset: z.string().min(1).max(100), reachId: z.number().int().nonnegative() }).strict();
@@ -226,9 +234,14 @@ export function confluenceChoices(click: Position, near: readonly NearReachLine[
 	return withRole.sort((a, b) => order[a.role] - order[b.role] || b.upstreamKm2 - a.upstreamKm2).map((r) => ({ ...r, label: labelOf(r) }));
 }
 
-/** The reach a click means, as reachFor gives it: `upstreamKm2` is its area AT THE CLICK (areaAlong), `reachKm2` at its lower end. */
+/**
+ * The reach a click means, as reachFor gives it: `upstreamKm2` is its area AT THE CLICK (areaAlong), `reachKm2` at its lower end;
+ * `head` only for a head reach (nothing flows in), whose `upstreamKm2` assumed HEAD_KM2 at the upper end: the DEM's own area
+ * there replaces it once routed (place.ts expectedOnGrid).
+ */
 export interface ReachAtClick extends NearReach {
 	reachKm2: number;
+	head: HeadHint | null;
 }
 
 /** How close (m) two lines' ends must be to be one junction: HydroRIVERS' reaches share the junction's vertex exactly. */
@@ -274,13 +287,17 @@ export async function reachFor(
 	chosen?: { dataset: string; reachId: number } | null
 ): Promise<{ reach: ReachAtClick | null; junction: { rivers: { key: string; role: ConfluenceChoice['role']; km2: number }[]; chosenKey: string } | null }> {
 	const near = await reachesNear(db, click);
-	const plain = async (r: NearReachLine): Promise<ReachAtClick> => ({
-		dataset: r.dataset,
-		reachId: r.reachId,
-		upstreamKm2: areaAlong(r, click, await upperEndKm2(db, r)),
-		reachKm2: r.upstreamKm2,
-		distanceM: r.distanceM
-	});
+	const plain = async (r: NearReachLine): Promise<ReachAtClick> => {
+		const upper = await upperEndKm2(db, r);
+		return {
+			dataset: r.dataset,
+			reachId: r.reachId,
+			upstreamKm2: areaAlong(r, click, upper),
+			reachKm2: r.upstreamKm2,
+			distanceM: r.distanceM,
+			head: upper === null ? { at: r.start, fraction: fractionAlong(click, r.line), reachKm2: r.upstreamKm2 } : null
+		};
+	};
 	const choices = confluenceChoices(click, near);
 	if (chosen) {
 		const r = near.find((x) => x.dataset === chosen.dataset && x.reachId === chosen.reachId);

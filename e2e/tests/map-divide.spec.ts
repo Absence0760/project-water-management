@@ -199,3 +199,53 @@ test('Discard changes nothing; a viewer is offered no division, and a link to it
 	await expect(viewer.page.getByRole('dialog')).toHaveCount(0);
 	await expect(viewer.page.getByTestId('map-divide-open')).toHaveCount(0);
 });
+
+test('a dam outline marked off-channel offers its Upstream inflow to dam and its own runoff share beside the values now, and apply takes them (194)', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(60_000);
+	const project = await createProject(page.request, 'Divide with an off-channel dam');
+	const weir = node('Weir', 'gauge', null, 0);
+	const dam = node('Long dam unit', 'farm', weir.id, 1, { damCapacityM3: 200_000, areaKm2: 5 });
+	await putModel(page.request, project.id, { nodes: [weir, dam], crops: [], cropAreas: [], transfers: [] });
+	const post = async (data: Record<string, unknown>) => {
+		const r = await page.request.post(`${API_URL}/projects/${project.id}/map/features`, { data });
+		expect(r.status()).toBe(201);
+		return ((await r.json()) as { feature: { id: string } }).feature.id;
+	};
+	await post({ kind: 'gauge', name: 'Weir', lon: FIXTURE_MID_GAUGE[0], lat: FIXTURE_MID_GAUGE[1], nodeId: weir.id });
+	// Three cells wide and 20 long, the river its west column all the way (as map-start.spec.ts and start.db.test.ts).
+	const ring = [
+		[20.7421875, -33.4474849],
+		[20.7463074, -33.4474849],
+		[20.7463074, -33.4703991],
+		[20.7421875, -33.4703991],
+		[20.7421875, -33.4474849]
+	];
+	const damId = await post({ kind: 'dam', name: 'Long dam', nodeId: dam.id, geometry: { type: 'Polygon', coordinates: [ring] } });
+	expect((await page.request.patch(`${API_URL}/projects/${project.id}/map/features/${damId}`, { data: { damPosition: 'off_channel' } })).status()).toBe(200);
+	await openMap(page, project.id);
+	await page.getByTestId('map-divide-open').click();
+	await expect(sheet(page).getByLabel(/^Long dam/)).toHaveValue(dam.id);
+	await sheet(page).getByTestId('divide-propose').click();
+
+	const review = page.getByTestId('divide-review');
+	const card = review.getByTestId('divide-unit');
+	await expect(card).toHaveCount(1);
+	await expect(card.getByTestId('divide-tick-upstream')).not.toBeChecked();
+	await expect(card).toContainText(/Upstream inflow to dam 0 %: off-channel, as marked on the map, so the river passes it by; River to dam fills it\. Now: \d+ %/);
+	await expect(card).toContainText(/\d(\.\d)? % of its runoff reaches the dam: the [\d.]+ km² draining to the dam’s own outflow, of the unit’s [\d.,  ]+ km²; the rest passes it by\. Now: \d+ %/);
+	await expectNoViolations(page);
+	await card.getByTestId('divide-tick-upstream').check();
+	await card.getByTestId('divide-tick-dam').check();
+	await sheet(page).getByTestId('divide-apply').click();
+	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
+	await expect(confirm).toContainText('0 drains-into and 1 runoff to the dam, 1 upstream inflow to a dam.');
+	await confirm.getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Divided the model from the map.');
+
+	const model = (await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json()) as { nodes: { id: string; pctUpstreamToDam: number; pctRunoffToDam: number }[] };
+	const n = model.nodes.find((x) => x.id === dam.id)!;
+	expect(n.pctUpstreamToDam).toBe(0);
+	expect(n.pctRunoffToDam).toBeGreaterThan(0);
+	expect(n.pctRunoffToDam).toBeLessThan(0.05);
+});

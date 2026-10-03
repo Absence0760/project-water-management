@@ -48,7 +48,7 @@
 	import PieceBadge from './PieceBadge.svelte';
 	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { confluencePointsOf, OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { confluencePointsOf, damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import type { ConfluencePoint } from '$lib/api/types';
 	import { openDivide, outletGauges } from './startFlow';
 
@@ -354,7 +354,19 @@
 							{#if offer.runoffToDam}
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="divide-tick-dam" />
-									<span>All of its own runoff reaches the dam (its piece ends at the wall). Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span>
+									<span
+										>{damShareLines(u.damShares, u.areaM2)?.runoff ?? 'All of its own runoff reaches the dam (its piece ends at the wall).'} Now: {u.current ? pct(u.current.pctRunoffToDam) : '–'}</span
+									>
+								</label>
+							{/if}
+							{#if offer.upstreamToDam}
+								<label class="tick">
+									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="divide-tick-upstream" />
+									<span
+										>{damShareLines(u.damShares, u.areaM2)?.upstream} Now: {u.current?.pctUpstreamToDam !== undefined ? pct(u.current.pctUpstreamToDam) : '–'}{sameAsNow(p, u, 'upstreamToDam')
+											? ' (the same)'
+											: ''}</span
+									>
 								</label>
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="divide-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}

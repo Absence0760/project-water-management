@@ -50,6 +50,7 @@ import {
 import { quaternaryAt, quaternaryDatasets } from './quaternary.js';
 import { configuredWater, traceDam, TraceRefused, type MinOccurrence } from '../delineation/damTrace.js';
 import { countMapCompute } from '../delineation/throttle.js';
+import { DAM_POSITIONS, type DamPosition } from '../delineation/subcatchments.js';
 import { logEvent } from '../logging/logEvent.js';
 import { safeError } from '../logging/safeError.js';
 
@@ -147,6 +148,8 @@ export const EditFeature = z
 		kind: z.enum(MAP_FEATURE_KINDS).optional(),
 		name: Name.optional(),
 		nodeId: uuid.nullable().optional(),
+		/** A dam polygon's position against its river (194): null = not said, the outline decides (subcatchments.ts damOutflow). */
+		damPosition: z.enum(DAM_POSITIONS).nullable().optional(),
 		lon: Lon.optional(),
 		lat: Lat.optional(),
 		geometry: z.unknown().optional()
@@ -219,6 +222,7 @@ export interface FeatureRow {
 	properties: Record<string, string>;
 	area_m2: number | null;
 	non_contributing_m2: number | null;
+	dam_position: DamPosition | null;
 	source_id: string | null;
 	created_by_name: string | null;
 	created_at: Date;
@@ -237,6 +241,8 @@ export interface MapFeature {
 	areaM2: number | null;
 	/** Of its area, what drains into pans (m²), when it was made from a delineation that looked (195); null when unknown. Its effective area is areaM2 less it. */
 	nonContributingM2: number | null;
+	/** A dam polygon's position against its river as the editor said (194); null = not said (always null for anything else). */
+	damPosition: DamPosition | null;
 	/** A point at its middle (lon, lat): the point itself, a polygon's centroid, a line's middle vertex. */
 	center: Position;
 	sourceId: string | null;
@@ -255,6 +261,7 @@ export const toFeature = (r: FeatureRow): MapFeature => ({
 	properties: r.properties,
 	areaM2: r.area_m2,
 	nonContributingM2: r.non_contributing_m2,
+	damPosition: r.dam_position,
 	center: centerOf(r.geometry),
 	sourceId: r.source_id,
 	createdBy: r.created_by_name,
@@ -263,7 +270,7 @@ export const toFeature = (r: FeatureRow): MapFeature => ({
 });
 
 const SELECT_FEATURES = `
-	SELECT f.id, f.kind, f.name, f.node_id, n.name AS node_name, f.geometry, f.properties, f.area_m2, f.non_contributing_m2, f.source_id,
+	SELECT f.id, f.kind, f.name, f.node_id, n.name AS node_name, f.geometry, f.properties, f.area_m2, f.non_contributing_m2, f.dam_position, f.source_id,
 		u.display_name AS created_by_name, f.created_at, f.updated_at
 	FROM map_feature f
 	LEFT JOIN node n ON n.id = f.node_id
@@ -643,17 +650,29 @@ export const mapRoutes = new Hono<AuthEnv>()
 			assertKindFits(kind, g?.geometry ?? before.geometry);
 			const nodeId = body.nodeId !== undefined ? body.nodeId : KIND_NODES[kind].length ? before.node_id : null;
 			await assertNodeFits(db, id, kind, nodeId);
+			// Only a dam polygon says where it stands against its river (194): asked of anything else, 400; kept while it stays one, else cleared.
+			const damPolygon = kind === 'dam' && ['Polygon', 'MultiPolygon'].includes((g?.geometry ?? before.geometry).type);
+			if (body.damPosition && !damPolygon) throw new ApiError(400, 'Only a dam drawn as its outline can be marked on or off the river; a point has no outflow of its own to place.');
+			const damPosition = damPolygon ? (body.damPosition !== undefined ? body.damPosition : before.dam_position) : null;
 			if (kind === 'catchment_boundary' && before.kind !== 'catchment_boundary') await removeBoundary(db, id);
 			mustChange(
 				await db.query(
 					// A new outline drops the pans figure, which was the old outline's (195).
-					`UPDATE map_feature SET kind = $3, name = $4, node_id = $5, geometry = $6, area_m2 = $7, non_contributing_m2 = CASE WHEN $8::boolean THEN NULL ELSE non_contributing_m2 END
+					`UPDATE map_feature SET kind = $3, name = $4, node_id = $5, geometry = $6, area_m2 = $7, dam_position = $8,
+						non_contributing_m2 = CASE WHEN $9::boolean THEN NULL ELSE non_contributing_m2 END
 					 WHERE id = $1 AND project_id = $2`,
-					[fid, id, kind, body.name ?? before.name, nodeId, JSON.stringify(g?.geometry ?? before.geometry), g ? g.areaM2 : before.area_m2, g !== null]
+					[fid, id, kind, body.name ?? before.name, nodeId, JSON.stringify(g?.geometry ?? before.geometry), g ? g.areaM2 : before.area_m2, damPosition, g !== null]
 				)
 			);
 			const feature = toFeature(await loadFeature(db, id, fid));
-			await recordAudit(db, id, 'map.feature_changed', { featureId: fid, kind, name: feature.name, moved: g !== null, nodeId: feature.nodeId });
+			await recordAudit(db, id, 'map.feature_changed', {
+				featureId: fid,
+				kind,
+				name: feature.name,
+				moved: g !== null,
+				nodeId: feature.nodeId,
+				...(damPosition !== before.dam_position ? { damPosition: { from: before.dam_position, to: damPosition } } : {})
+			});
 			return c.json({ feature });
 		});
 	})

@@ -1153,7 +1153,9 @@ to a point on a river. The design, the method and its accuracy are in
   [design/delineation-snapping.md](./design/delineation-snapping.md)):
   near a loaded river reach (within 1 km), on the cell whose upstream area
   matches the reach's area at the click (its upper end's plus the rest in
-  proportion to how far down the line the click is); otherwise on the
+  proportion to how far down the line the click is; for a head reach, its
+  upper end's area as the elevation model drains it there, not
+  HydroRIVERS' 10 km² threshold); otherwise on the
   most-drained cell within about 150 m, and if a channel with 100× its
   upstream area runs within 1 km the sheet says so instead of proposing ("A
   much larger channel runs 504 m north of your point: …") with **Use that
@@ -1394,7 +1396,34 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
   catchment, 241–385 km² on GLO-30 for a 3 × 3-cell dam whose outline
   clipped one river cell, against 0.01–0.14 km² beside it). A long
   off-channel dam lying along the river, overlapping it for most of its
-  length, is still taken as on it. A
+  length, is taken as on it by the outline alone, so the dam's card asks
+  (**Siting**, a dam drawn as its outline only; 194 `map_feature.dam_position`):
+  *Not said (from its outline)*, the default, keeps the rule above;
+  *On the river* puts the dam on the outline's most-drained cell, the
+  river's, whatever the outline, and proposes *Upstream inflow to dam*
+  100 % and all of its unit's runoff into the dam; *Off-channel (filled by
+  a pump or a furrow)* finds the dam's own outflow, the most-drained
+  outline cell that is not on a watercourse, a watercourse being a cell
+  carrying 100× the outline's own cells (no off-channel dam's own slopes
+  drain a hundred times its water's edge), so no cell of the river is the
+  dam's however much of the outline it runs along (one drawn wholly on the
+  river is dropped, saying so). The unit goes where that outflow joins the
+  river (within 1 km, else at the outflow), as the model represents an
+  off-channel farm dam (model.md §2.7): a reach of the river whose
+  upstream inflow passes the dam by (*Upstream inflow to dam* 0 %, River
+  to dam filling it) and whose own runoff reaches the dam only from the
+  dam's own catchment (*runoff to the dam* = what drains to the dam's
+  outflow ÷ the unit's area, to 0.1 %). Both are proposed as ticks on the
+  unit's card in Start and Divide (`damShares`; Divide beside the node's
+  values now); an unmarked dam proposes only the old *all of its own runoff
+  reaches the dam* tick. The name
+  follows DWS practice: a dam registration (form DW762, section 21(b))
+  distinguishes off-channel storage, naming the watercourse it would drain
+  to, and DWS's own off-channel storage (OCS) dams are filled from a river
+  they don't sit on. A marked dam's card says it was placed as marked, and
+  the method counts them ("1 point at a dam polygon’s outflow (1 marked
+  off-channel)", with the rule) only when one is marked; an unmarked dam is
+  placed exactly as before, so the method stays `start-12`. A
   delineated outlet (a boundary from Delineate) stays on its own cell, where
   Delineate put it. Each card says where its point went ("On the channel
   matching river reach 11509680 (292 km²), 602 m from the point"), and the

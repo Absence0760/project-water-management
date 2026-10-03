@@ -111,7 +111,7 @@ describe('dividing the valley', () => {
 		expect((await stranger.call('POST', v.at('/map/divide'), v.body)).status).toBe(404);
 		const r = await owner.call('POST', v.at('/map/divide'), v.body);
 		expect(r.status, JSON.stringify(r.body)).toBe(201);
-		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-12' });
+		expect(r.body.proposal).toMatchObject({ mode: 'divide', status: 'proposed', fromDem: true, dataset: expect.stringMatching(/Synthetic DEM/), methodVersion: 'start-13' });
 		const plan = r.body.proposal.plan;
 		expect(plan.outlet).toMatchObject({ featureId: v.f.outlet, nodeId: v.nodes.weir.id, name: 'Valley weir', foundIn: 'gauge' });
 		// Upstream first: the pump drains into the dam, the dam into the new gauge, the gauge into the outflow.
@@ -121,7 +121,7 @@ describe('dividing the valley', () => {
 			['Mid weir', 'gauge', null]
 		]);
 		const [pump, dam, mid] = plan.units;
-		expect(pump.current).toEqual({ areaKm2: 2, areaSource: 'typed', downstreamNodeId: v.nodes.weir.id, downstreamName: 'Valley weir', pctRunoffToDam: 0.5 });
+		expect(pump.current).toEqual({ areaKm2: 2, areaSource: 'typed', downstreamNodeId: v.nodes.weir.id, downstreamName: 'Valley weir', pctRunoffToDam: 0.5, pctUpstreamToDam: 0 });
 		expect(mid).toMatchObject({ nodeId: null, current: null, areaM2: null, geometry: null });
 		expect(mid.totalAreaM2).toBeGreaterThan(pump.areaM2 + dam.areaM2);
 		expect(Math.abs((pump.areaM2 + dam.areaM2 + plan.rest.areaM2) / plan.catchment.areaM2 - 1)).toBeLessThan(1e-9);
@@ -191,7 +191,7 @@ describe('dividing the valley', () => {
 			['Valley dam', 'typed', null, null],
 			['Valley weir', 'typed', null, null]
 		]);
-		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-12/);
+		expect(sources[0]!.description).toMatch(/Sub-catchment delineated from Synthetic DEM.*start-13/);
 		// The parcel stores its piece's area from the cells, the unit's area: the simplified outline's own area is a little off it.
 		const [parcel] = await asOwner(
 			`SELECT f.area_m2, f.geometry FROM node n JOIN map_feature f ON f.id = n.area_feature_id WHERE n.project_id = $1 AND n.name = 'Top pump'`,
@@ -406,6 +406,65 @@ describe('each point placed as Delineate places it (start-7)', () => {
 		const mid = picked.body.proposal.plan.units.find((u: { key: string }) => u.key === v.f.mid);
 		expect(mid.placement).toMatchObject({ reach: { dataset: DATASET, reachId: 99200001, chosen: true } });
 		expect(['matched', 'junction']).toContain(mid.placement.placedBy);
+	});
+});
+
+describe('a dam polygon marked on or off the river (194)', () => {
+	it('proposes a marked dam’s shares against the node’s, applies them, and none for an unmarked one', async () => {
+		const v = await valley('Divide, off-channel dam');
+		// Three cells wide and 20 long, the river its west column all the way, standing for the dam unit.
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const made = await owner.call('POST', v.at('/map/features'), { kind: 'dam', name: 'Long dam', nodeId: v.nodes.dam.id, geometry: { type: 'Polygon', coordinates: [ring] } });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const longDam = made.body.feature.id as string;
+		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.dam ? { featureId: longDam, nodeId: v.nodes.dam.id } : p)) };
+		type Unit = { key: string; areaM2: number; totalAreaM2: number; placement: Record<string, unknown>; current: Record<string, unknown>; damShares?: { pctUpstreamToDam: number; pctRunoffToDam: number; damCatchmentM2: number } };
+		const damOf = (r: { body: { proposal: { plan: { units: Unit[] } } } }) => r.body.proposal.plan.units.find((u) => u.key === longDam)!;
+
+		// Unset (the positive control): no shares proposed, and taking one is refused.
+		const unset = await owner.call('POST', v.at('/map/divide'), body);
+		expect(unset.status, JSON.stringify(unset.body)).toBe(201);
+		expect(damOf(unset).placement).not.toHaveProperty('damPosition');
+		expect(damOf(unset)).not.toHaveProperty('damShares');
+		expect(damOf(unset).current).toMatchObject({ pctUpstreamToDam: 0, pctRunoffToDam: 0.5 });
+		const refused = await owner.call('POST', v.at(`/map/divide/${unset.body.proposal.id}/apply`), { units: ticks(unset.body.proposal.plan, { [longDam]: { upstreamToDam: true } }), rest: { to: 'none' } });
+		expect(refused.status).toBe(400);
+
+		// Off-channel: on the river's reach where its own outflow joins it, the river passing the dam by.
+		expect((await owner.call('PATCH', v.at(`/map/features/${longDam}`), { damPosition: 'off_channel' })).status).toBe(200);
+		const off = await owner.call('POST', v.at('/map/divide'), body);
+		expect(off.status, JSON.stringify(off.body)).toBe(201);
+		const u = damOf(off);
+		expect(u.placement).toMatchObject({ placedBy: 'polygon', damPosition: 'off_channel' });
+		expect(u.damShares).toMatchObject({ pctUpstreamToDam: 0 });
+		expect(u.damShares!.pctRunoffToDam).toBeGreaterThan(0);
+		expect(u.damShares!.pctRunoffToDam).toBeLessThan(0.5);
+		expect(off.body.proposal.method).toMatch(/\(1 marked off-channel\)/);
+		const ok = await owner.call('POST', v.at(`/map/divide/${off.body.proposal.id}/apply`), { units: ticks(off.body.proposal.plan, { [longDam]: { runoffToDam: true, upstreamToDam: true } }), rest: { to: 'none' } });
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect((ok.body.model.nodes as (ApiNode & { pctUpstreamToDam: number })[]).find((n) => n.id === v.nodes.dam.id)).toMatchObject({ pctUpstreamToDam: 0, pctRunoffToDam: u.damShares!.pctRunoffToDam });
+		const [rev] = await asOwner(`SELECT reason FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1`, [v.id]);
+		expect(rev!.reason).toMatch(/1 runoff to the dam, 1 upstream inflow to a dam/);
+	});
+
+	it('refuses a share changed since the proposal', async () => {
+		const v = await valley('Divide, a dam’s share changed');
+		const c = (x: number, y: number) => fixtureLonLat(x, y);
+		const [X, Y] = [DAM_CELL.x, DAM_CELL.y + 20];
+		const ring = [c(X, Y), c(X + 3, Y), c(X + 3, Y + 20), c(X, Y + 20), c(X, Y)];
+		const longDam = (await owner.call('POST', v.at('/map/features'), { kind: 'dam', name: 'Long dam', nodeId: v.nodes.dam.id, geometry: { type: 'Polygon', coordinates: [ring] } })).body.feature.id as string;
+		expect((await owner.call('PATCH', v.at(`/map/features/${longDam}`), { damPosition: 'on_channel' })).status).toBe(200);
+		const body = { ...v.body, points: v.body.points.map((p) => (p.featureId === v.f.dam ? { featureId: longDam, nodeId: v.nodes.dam.id } : p)) };
+		const r = await owner.call('POST', v.at('/map/divide'), body);
+		expect(r.status, JSON.stringify(r.body)).toBe(201);
+		const model = (await owner.call('GET', v.at('/model'))).body;
+		model.nodes.find((n: ApiNode) => n.id === v.nodes.dam.id).pctUpstreamToDam = 0.4;
+		expect((await owner.call('PUT', v.at('/model'), model)).status).toBe(200);
+		const stale = await owner.call('POST', v.at(`/map/divide/${r.body.proposal.id}/apply`), { units: ticks(r.body.proposal.plan, { [longDam]: { upstreamToDam: true } }), rest: { to: 'none' } });
+		expect(stale.status).toBe(409);
+		expect(stale.body.error).toMatch(/Long dam|Valley dam/);
 	});
 });
 

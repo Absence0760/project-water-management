@@ -24,7 +24,7 @@
 	import PieceBadge from './PieceBadge.svelte';
 	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
-	import { confluencePointsOf, OUTLET_KEY, placementLine, withPlacement } from './placement';
+	import { confluencePointsOf, damShareLines, OUTLET_KEY, placementLine, withPlacement } from './placement';
 	import type { ConfluencePoint } from '$lib/api/types';
 	import {
 		applySummary,
@@ -366,7 +366,13 @@
 							{#if offer.runoffToDam}
 								<label class="tick">
 									<input type="checkbox" bind:checked={t.runoffToDam} data-testid="start-tick-dam" />
-									<span>All of its own runoff reaches the dam (its area ends at the wall)</span>
+									<span>{damShareLines(u.damShares, u.areaM2)?.runoff ?? 'All of its own runoff reaches the dam (its area ends at the wall)'}</span>
+								</label>
+							{/if}
+							{#if offer.upstreamToDam}
+								<label class="tick">
+									<input type="checkbox" bind:checked={t.upstreamToDam} data-testid="start-tick-upstream" />
+									<span>{damShareLines(u.damShares, u.areaM2)?.upstream}</span>
 								</label>
 							{/if}
 							{#if placementLine(u.placement, u.snapDistanceM)}<p class="hint" data-testid="start-placement">{placementLine(u.placement, u.snapDistanceM)}</p>{/if}
