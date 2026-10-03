@@ -7,8 +7,12 @@
 	// largest, opened on few visits (an empty model), loads when opened,
 	// which keeps the tab under its 60 KB budget (61 → 57 KB, issue #374;
 	// splitting Divide the model too saved 2 KB more for 3 KB of overhead).
+	// Upload GeoJSON (the sheet and its review table, importReview.ts) loads
+	// when opened too: round 3's delineation work took the tab back to 62 KB,
+	// and the split brought it to 58 KB for ~1.8 KB of overhead in the total.
 	const loadMap = () => import('./CatchmentMap.svelte');
 	const loadStartSheet = () => import('./StartSheet.svelte');
+	const loadUploadSheet = () => import('./UploadSheet.svelte');
 </script>
 
 <script lang="ts">
@@ -80,6 +84,7 @@
 	import { openProposal } from './delineation';
 	import { openDivide, openStart, type StartDraft } from './startFlow';
 	import type { DivideDraft } from './divideFlow';
+	import { emptyPlacement } from './placement';
 	import { litPieces, piecesShape } from './pieces';
 	import type { MapGeometry, MapPosition } from '$lib/api/types';
 	import { Draft } from './draw/draft.svelte';
@@ -91,7 +96,6 @@
 	import { DRAW_CHOICES, editableCorners } from './draw/shape';
 	import MapRainLink from './MapRainLink.svelte';
 	import SourceList from './SourceList.svelte';
-	import UploadSheet from './UploadSheet.svelte';
 
 	let {
 		projectId,
@@ -362,7 +366,7 @@
 		backToSheet = back ? sheet : null;
 	}
 	/** What the editor chose and ticked in the sheet: kept here, so closing it or leaving for a tool loses nothing. */
-	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {} });
+	let startDraft = $state<StartDraft>({ picked: {}, outlet: null, pointsAsked: false, ticks: {}, placement: emptyPlacement() });
 	async function startApplied() {
 		notice = 'Started the model from the map. Its nodes are on the Network now, and each unit’s point and parcel stand for it on the map.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
@@ -375,7 +379,7 @@
 	// --- divide a model that has nodes from the map (#326 C3's follow-up): editors, with a DEM on the server ---
 	const pendingDivide = $derived(openDivide(startInfo));
 	const canDivide = $derived(canEdit && !!startInfo && !startInfo.modelEmpty && startInfo.elevation);
-	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {} });
+	let divideDraft = $state<DivideDraft>({ picked: {}, outlet: null, ticks: {}, placement: emptyPlacement() });
 	async function divideApplied() {
 		notice = 'Divided the model from the map. The ticked areas, order and gauges are in the model, each area saved as its unit’s parcel.';
 		await Promise.all([load(), loadStart(), onModelChanged()]);
@@ -1164,7 +1168,11 @@
 			</div>
 
 			{#if upload.open}
-				<UploadSheet bind:open={upload.open} {projectId} sources={data.sources} onimported={imported} />
+				<Lazy load={loadUploadSheet}>
+					{#snippet children(UploadSheet)}
+						<UploadSheet bind:open={upload.open} {projectId} sources={data!.sources} onimported={imported} />
+					{/snippet}
+				</Lazy>
 			{/if}
 			{#if checksSheet.open}
 				<Dialog bind:open={checksSheet.open} title="Map checks" side>

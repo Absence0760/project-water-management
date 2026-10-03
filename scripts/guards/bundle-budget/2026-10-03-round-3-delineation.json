@@ -1,0 +1,4 @@
+{
+	"addKb": 4,
+	"why": "Round 3 of the delineation work (fix/delineation-round-3: DEM channels, larger-channel choice, confluence placement, pans, Sub-catchments and the rest of its merged branches). Measured 2026-10-03 against fix/followups-round-2 @ a21608bd: 1,668,569 bytes gzipped JS+CSS (1630 KB) there, 1,673,630 bytes (1635 KB) on fix/delineation-round-3 @ dc941c7d with the Upload GeoJSON sheet split out of the Map tab's chunk: +5,061 bytes, of which the pans entry covers 639 and the split's chunk overhead is ~1.8 KB (the Map tab chunk went 62,662 to 58,651 bytes). Headroom ~0.6 KB."
+}

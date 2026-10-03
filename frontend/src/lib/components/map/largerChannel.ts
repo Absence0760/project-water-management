@@ -23,8 +23,11 @@ export function bearingWord(from: readonly [number, number], to: readonly [numbe
 	return ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round(deg / 45) % 8]!;
 }
 
-/** A short line for a click's piece: where the larger channel is and how big. */
+/** A short line for a click's piece: where the larger channel (or the one matching the mapped river) is and how big. */
 export function largerLine(from: readonly [number, number], l: LargerChannel): string {
+	if (l.reachKm2 !== undefined) {
+		return `the channel matching the mapped river (about ${km2Text(l.reachKm2)} there) runs ${Math.round(l.distanceM)} m ${bearingWord(from, l.at)}, ${km2Text(l.km2)} here: the point stays on the channel it is on unless you move it`;
+	}
 	return `a much larger channel (${km2Text(l.km2)}) runs ${Math.round(l.distanceM)} m ${bearingWord(from, l.at)}: the river line may sit off the channel the elevation model sees`;
 }
 

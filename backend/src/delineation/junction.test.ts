@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { accumulate, OUT } from './flow.js';
-import { junctionOutlets } from './junction.js';
+import { junctionBranches, junctionOutlets } from './junction.js';
 
 // A 21 × 25 grid of 100 m cells (0.01 km² each): the main river south down
 // column 10, fed by the hillside west of it (rows drain east into it); a
@@ -67,5 +67,37 @@ describe('junctionOutlets', () => {
 		expect(junctionOutlets(g, 10.6, 12.4, [{ key: 'a', role: 'along', km2: 1 }, { key: 't', role: 'above', km2: 0.2 }, { key: 'm', role: 'above', km2: 1 }], 150)).toBeNull();
 		// A "main river" far bigger than anything that joins the tributary: no junction to find.
 		expect(junctionOutlets(g, 10.6, 12.4, [{ key: 'm', role: 'above', km2: 500 }, { key: 't', role: 'above', km2: km2(g, cell(11, 12)) }], 150)).toBeNull();
+	});
+
+	// The hydrologist persona's finding 5 (issue #390): a gauge a few hundred metres from a junction goes on its own
+	// river's side of the DEM's junction and stays where it was clicked along it, not at the junction (finding 12).
+	const rivers = (g: ReturnType<typeof grid>) => [
+		{ key: 'below', role: 'below' as const, km2: km2(g, cell(10, 12)) },
+		{ key: 'main', role: 'above' as const, km2: km2(g, cell(10, 11)) },
+		{ key: 'trib', role: 'above' as const, km2: km2(g, cell(11, 12)) }
+	];
+
+	it('keeps a click 250 m up the main river on the main river where it was clicked, upstream of the junction', () => {
+		const g = grid();
+		const out = junctionOutlets(g, 10.5, 9.4, rivers(g), 150)!;
+		expect(out.get('main')).toBe(cell(10, 9));
+		// The junction itself is still found from there; the main river's outlet is above it, without the tributary.
+		expect(junctionBranches(g, 10.5, 9.4, rivers(g), 150)!.junction).toBe(cell(10, 12));
+		expect(km2(g, out.get('main')!)).toBeLessThan(km2(g, cell(10, 11)));
+	});
+
+	it('keeps a click 300 m down the river below where it was clicked, below the junction (the tributary included)', () => {
+		const g = grid();
+		const out = junctionOutlets(g, 10.4, 15.6, rivers(g), 150)!;
+		expect(out.get('below')).toBe(cell(10, 15));
+		expect(km2(g, out.get('below')!)).toBeGreaterThan(km2(g, cell(10, 12)));
+	});
+
+	it('keeps a click up the tributary on the tributary, and a click near the junction at the junction', () => {
+		const g = grid();
+		expect(junctionOutlets(g, 13.5, 12.6, rivers(g), 150)!.get('trib')).toBe(cell(13, 12));
+		// A click on the main river just below where the DEM's tributary joins, asked and answered "the main river above":
+		// the main river's last cell before the junction, never below it.
+		expect(junctionOutlets(g, 10.5, 13.4, rivers(g), 150)!.get('main')).toBe(cell(10, 11));
 	});
 });

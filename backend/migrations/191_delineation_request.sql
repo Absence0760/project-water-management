@@ -30,6 +30,11 @@
 --     (auth/export.ts), as delineation_proposal.created_by.
 --  3. app_cancel_job (latest: 040_yield) also cancels a delineate job: a new
 --     click supersedes the same user's waiting one in the project.
+--  4. app_release_job: the worker hands a claimed job back to the queue
+--     without spending the attempt its claim counted, for a job the tick had
+--     too little time left for (a delineate job claimed late in a worker
+--     Lambda's 300 s). Not a failure: no backoff, no error kept, and so a
+--     valid catchment never goes dead from unlucky ticks.
 
 -- ---------------------------------------------------------------------------
 -- 1. job: the new kind
@@ -110,6 +115,23 @@ CREATE FUNCTION delineation_request_final() RETURNS trigger
 CREATE TRIGGER delineation_request_final BEFORE UPDATE ON delineation_request
 	FOR EACH ROW EXECUTE FUNCTION delineation_request_final();
 
+-- Its job is a delineate job of its own project (as yield_result_guard, 040):
+-- on insert, and whenever the route links the job.
+CREATE FUNCTION delineation_request_job() RETURNS trigger
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	BEGIN
+		IF NEW.job_id IS NOT NULL AND NOT EXISTS (
+			SELECT 1 FROM job j WHERE j.id = NEW.job_id AND j.project_id = NEW.project_id AND j.kind = 'delineate'
+		) THEN
+			RAISE EXCEPTION 'job % is not a delineate job of this project', NEW.job_id USING ERRCODE = 'foreign_key_violation';
+		END IF;
+		RETURN NEW;
+	END
+	$$;
+CREATE TRIGGER delineation_request_job BEFORE INSERT OR UPDATE OF job_id, project_id ON delineation_request
+	FOR EACH ROW EXECUTE FUNCTION delineation_request_job();
+
 ALTER TABLE delineation_request ENABLE ROW LEVEL SECURITY;
 CREATE POLICY delineation_request_select ON delineation_request FOR SELECT USING (app_has_role(project_id, 'viewer'));
 CREATE POLICY delineation_request_insert ON delineation_request FOR INSERT
@@ -144,3 +166,34 @@ CREATE OR REPLACE FUNCTION app_cancel_job(p_id uuid) RETURNS text
 		RETURN v_status;
 	END
 	$$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Handing a claimed job back without spending its attempt
+-- ---------------------------------------------------------------------------
+-- The worker's own call (jobs/runner.ts, a JobRelease from the handler), as
+-- app_finish_job: the lease token fences off a worker whose lease ran out.
+-- The job is queued again after p_delay_seconds (past the rest of this tick),
+-- and the attempt its claim counted is given back. Returns 'queued', or NULL
+-- when the lease was lost.
+CREATE FUNCTION app_release_job(p_id uuid, p_lease uuid, p_delay_seconds integer) RETURNS text
+	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+	AS $$
+	DECLARE
+		v_status text;
+	BEGIN
+		IF p_delay_seconds IS NULL OR p_delay_seconds < 0 OR p_delay_seconds > 3600 THEN
+			RAISE EXCEPTION 'a release waits 0 to 3600 s' USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+		UPDATE job j SET
+			status = 'queued',
+			attempts = greatest(j.attempts - 1, 0),
+			run_after = now() + make_interval(secs => p_delay_seconds),
+			locked_until = NULL,
+			lease_token = NULL
+		WHERE j.id = p_id AND j.status = 'running' AND j.lease_token = p_lease
+		RETURNING j.status INTO v_status;
+		RETURN v_status;
+	END
+	$$;
+REVOKE ALL ON FUNCTION app_release_job(uuid, uuid, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_release_job(uuid, uuid, integer) TO water_app;

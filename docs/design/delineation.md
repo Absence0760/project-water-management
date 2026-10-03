@@ -119,7 +119,9 @@ polygon).
   a 150 s budget under the worker's 300 s timeout. Measured on an invented
   valley (this laptop, 2026-10-03): 4 096 cells about 4.5 s and 530 MB, 6 144
   cells about 11 s and 1.05 GB peak (8 192 would be about 21 s and 1.8 GB,
-  hence the cap). With `delineation_dem` on, Terraform gives the worker at
+  hence the cap); the pans' copy of the elevations (§ Pans) adds 4 bytes a
+  cell, so 6 144 cells now peak at about 1.2 GB (the real DEM around
+  Bultfontein, 2026-10-03). With `delineation_dem` on, Terraform gives the worker at
   least 2 048 MB (`infra/jobs.tf`), which also buys it more CPU.
   **Why only then, not every click**: most catchments are proposed in a
   few seconds by the request, and locally the worker runs only with `pnpm
@@ -180,8 +182,11 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      a "much larger channel" quoted at its window-local area: D17D's
      outlet (DWS 750 km²) gave 134 km², N22D's and C51D's were refused
      (persona-hydrologist finding 1); grown, they are 747, 344 and
-     869 km². Not when the point is kept (`keepPoint`: the editor chose
-     the small channel), not for a reach larger than the worker's cap's
+     869 km². It looks as far as `place()` matches (2.5 km for a river
+     picked at a confluence or from a gully, else 1 km). Not when the point
+     is kept (`keepPoint`: the editor chose the small channel), not when a
+     channel matching the reach is already offered (place.ts rules 3 and
+     4), not for a reach larger than the worker's cap's
      whole square (the Orange: no window can match it), and at the
      worker's cap the snap and its guard apply as before. The request's
      last window hands such a click to the worker like any other
@@ -206,7 +211,19 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      (`river_reference`, `reach.ts`), the cell within 1 km whose upstream
      area best matches the reach's, by Lehner's (2012) station allocation:
      cells within 50 % of the area, ranked by area misfit plus twice the
-     scaled distance. None passing falls through to:
+     scaled distance. The reach's area is taken **at the click** (since
+     `delineate-5`): its upper end's area (what flows in, or HydroRIVERS'
+     10 km² threshold for a head reach) plus the rest in proportion to how
+     far down the line the click lies, so a click near the top of a long
+     reach no longer slides down it to the lower end's area. A click on
+     the DEM's own channel (1 km² or more within a cell and a half) more
+     than 150 m from the reach's line, whose own area is outside the 50 %
+     band, is **not moved** past the snap radius by the match: it snaps,
+     and the reach's matching channel is offered as below (a farm dam's
+     stream beside a river stays the stream unless the editor says
+     otherwise). A click on a channel *larger* than the band stays on it
+     wherever the line is (a gauge on a river whose nearest mapped line is a
+     tributary's, beside a junction), the tributary's channel offered. None passing falls through to:
    - **Snapped**: the cell with the most upstream cells within **150 m**
      (about five cells) of the click, measured from the exact click to
      each cell's centre, so the distance moved never exceeds it (since
@@ -219,7 +236,11 @@ All in `backend/src/delineation/`, pure functions over typed arrays
      nearest cell, its distance and both areas, and the sheet offers **Use
      that channel** or **Keep my point** (`keepPoint`). It is never moved
      there silently: near a confluence the bigger channel is the wrong
-     river.
+     river. When nothing within 1 km matched a nearby reach and the snap
+     landed in a gully (under a tenth of the reach's area), the match is
+     tried again out to 2.5 km and that channel offered the same way (since
+     `delineate-5`): that far off it can be another river, so it is never
+     taken silently.
    The distance moved is shown. Fewer than 9 upstream cells is refused
    ("click on the river itself").
 7. **Upstream cells**: every cell whose D8 path passes the snapped outlet.
@@ -253,9 +274,66 @@ are never confused), the method sentence and `methodVersion`
 (`delineate-1`, then `delineate-2` for the matched outlet and the
 larger-channel guard, `delineate-3` for asking the river at a confluence,
 `delineate-4` for the snap radius measured from the exact click,
-`delineate-6` for windows placed over the catchment, grown for a river they
-cut, and no data as the data's edge; bumped whenever the method changes what a click
-proposes).
+`delineate-5` for a click on the DEM's own channel staying on it, a gully
+snap offering the reach's channel out to 2.5 km and the reach's area taken
+at the click, `delineate-7` for keeping a click beside a confluence on its
+river's side of the DEM's junction (issue #390), `delineate-6` for windows
+placed over the catchment, grown for a river they cut, and no data as the
+data's edge, `delineate-8` for 5 and 7 together, `delineate-9` for the pans
+reported beside the catchment (§ Pans), `delineate-10` for 6 and 9
+together; bumped whenever the method changes what a click
+proposes), and the pans' report (193).
+
+## Pans
+
+Built for the hydrologist's review, finding 8 (delineate-9, start-11,
+migration 193; the research, thresholds and sources in
+[pans-research.md](./pans-research.md)). Priority-Flood fills every closed
+depression so that D8 can route it to the outlet; in the interior many of
+those depressions are pans, whose catchments WR2012 counts as
+non-contributing ("endoreic areas"). `backend/src/delineation/pans.ts`
+reads the fill's output (the elevations before it, a Float32 copy, and
+after it) and reports, beside the catchment:
+
+- **Non-contributing (pans)**: the area of the catchment that drains into a
+  pan, the pans' floors included, with **the effective area** (the
+  catchment less it), the pans' count and the largest five (the floor's
+  deepest point, its area, its depth below the spill, what drains into it
+  and what it holds over that, in mm).
+- **A pan** is a closed depression of the filled DEM at least **1 m** deep
+  below its spill, at least **0.1 km²** in floor, and holding at least
+  **100 mm** of its own catchment's runoff below the spill (over twice
+  South Africa's mean annual runoff, so an average year doesn't fill it:
+  the PFRA's effective-area test). The last rule keeps out a dam drawn
+  down below its spillway and the pond behind an embankment, which hold a
+  few millimetres over their catchments. A depression holding the outlet
+  (or, in Start and Divide, a unit's point), or spilling into it within
+  the snap radius, is that point's own basin, never a pan.
+- **The catchment is not changed.** It stays the gross one (as WR2012's
+  quaternary areas are), routed through the filled pans as before, so the
+  polygon and its area are what they were; the figure is reported, and the
+  hydrologist decides whether to model the pans as non-contributing.
+- **Where it shows**: the Delineate sheet's facts (*Into pans*, *Effective
+  area*) and *How it was made* (the pans' method); stored on the proposal
+  (`delineation_proposal.pans`). Start and Divide store it in the plan
+  (`plan.pans`, each unit's `nonContributingM2` and
+  `totalNonContributingM2`, `plan.rest.nonContributingM2`) and add a warning
+  naming how much drains into pans and which pieces hold it. A saved
+  sub-catchment from clicks says it in its description.
+- **Cost** (the real DEM around Bultfontein, the whole window as the
+  catchment, the worst case): 0.3 s at 2 048 cells, 0.8 s at the
+  request's 3 072-cell cap, 2.7 s at the worker's 6 144 (against fills of
+  0.65, 1.7 and 13 s); the copy is 4 bytes a cell, so the worker's largest
+  window now peaks at about 1.2 GB (it was 1.05 GB), inside its 2 048 MB.
+- **Beside missing data**: the pans read the elevations before the fill,
+  where a missing cell is NaN; only the catchment's cells are looked at, and
+  a catchment never holds a missing cell or one beside it (§ Method 9), so
+  missing data is never a pan.
+- **Tests**: `pans.test.ts` (hand-made grids: a pan and what drains into
+  it, counted independently; too shallow, too small, too little storage;
+  a depression at a point; nested pans), `delineate.test.ts` and
+  `subcatchments.test.ts` against the synthetic DEM, whose flank now holds
+  a pan (`fixture.ts` `PAN`), the DB tests for what is stored.
 
 ## Accuracy, as shown to the user
 
@@ -266,10 +344,11 @@ The card says, in short:
   absolute vertical accuracy is a few metres, so in flat land the divide
   can be hundreds of metres out, and a catchment can come out joined to or
   cut from its neighbour.
-- *Flat land and dams.* Flats (and reservoirs, which the DEM sees as flat
-  water) drain towards their outlet by construction, not by observation.
-  Canals, pipelines, culverts and inter-basin transfers are invisible to
-  it.
+- *Flat land, dams and pans.* Flats (and reservoirs, which the DEM sees as
+  flat water) drain towards their outlet by construction, not by
+  observation, and so do pans: the area draining into them is reported
+  beside the catchment, not taken out (§ Pans). Canals, pipelines,
+  culverts and inter-basin transfers are invisible to it.
 - *Check it against the map* (the Relief layer, rivers, the quaternary
   outlines) before accepting, and edit the accepted polygon with Draw if
   needed.
@@ -297,6 +376,9 @@ viewers read, editors propose and decide; RLS and grants in the same
 file; the accepted feature linked by a same-project composite key, kept
 when the feature is deleted with the link cleared; superseded and rejected
 proposals pruned past the newest 50 a project). No other table changes.
+Migration **193_delineation_pans.sql** adds `delineation_proposal.pans`
+(jsonb: the non-contributing area, the pans' count, the largest five and
+the method; NULL before delineate-9).
 API in docs/api.md § Delineation:
 
 - `GET /projects/:id/map/delineation` (viewer): whether it is on, the

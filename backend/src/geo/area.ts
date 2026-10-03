@@ -64,3 +64,16 @@ export function geometryAreaM2(g: { type: string; coordinates: unknown }): numbe
 	if (g.type === 'MultiPolygon') return (g.coordinates as Position[][][]).reduce((s, p) => s + polygonAreaM2(p), 0);
 	return null;
 }
+
+/** The latitude (degrees, unrounded) of row edge `y` of a Web Mercator grid `W` cells round the world. */
+export const mercatorLat = (y: number, W: number): number => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / W))) * 180) / Math.PI;
+
+/**
+ * The area (m²) on the WGS84 ellipsoid of one cell of a Web Mercator grid `W` cells round the world whose row runs from
+ * latitude `top` to `bottom`: R_q² · Δλ · |sin β(top) − sin β(bottom)|, with β the authalic latitude and R_q the authalic
+ * radius (Snyder 1987, eq. 3-12; the measure this module uses for every polygon). Not the cell's side squared at its centre,
+ * which is a sphere's figure and drifts from the ellipsoid's by up to half a per cent.
+ */
+export function cellRowAreaM2(top: number, bottom: number, W: number): number {
+	return AUTHALIC_RADIUS_M * AUTHALIC_RADIUS_M * ((2 * Math.PI) / W) * Math.abs(sinAuthalic(top) - sinAuthalic(bottom));
+}

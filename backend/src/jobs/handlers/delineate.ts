@@ -19,14 +19,14 @@
 // to the queue for the next tick instead of being killed or wrongly refused.
 import { z } from 'zod';
 import { configuredDem } from '../../delineation/dem.js';
-import { delineate, DelineationRefused, type LargerChannel } from '../../delineation/delineate.js';
+import { delineate, DelineationRefused, tooLargeText, type LargerChannel } from '../../delineation/delineate.js';
 import { checkNote, storeProposal } from '../../delineation/proposals.js';
 import { ConfluenceAmbiguity, reachFor, ReachNotNear } from '../../delineation/reach.js';
-import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
+import { cutShort, jobBudget, jobWindowsFrom, MIN_JOB_TIME_MS, RELEASE_DELAY_SECONDS, REQUEST_COLS, type RequestRow } from '../../delineation/requests.js';
 import { ApiError } from '../../http/errors.js';
 import { logEvent } from '../../logging/logEvent.js';
 import { safeError } from '../../logging/safeError.js';
-import { JobError } from '../errors.js';
+import { JobError, JobRelease } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 export const DelineatePayload = z.object({ requestId: z.string().uuid() }).strict();
@@ -69,18 +69,19 @@ export const delineateHandler = defineHandler({
 		}
 		const windows = jobWindowsFrom(req.from_window);
 		if (windows.length === 0) {
-			return refuse('too_large', 'The catchment above that point is larger than the app delineates. Pick an outlet further upstream, or draw or import the boundary.');
+			return refuse('too_large', tooLargeText('click', null, near.reach?.upstreamKm2));
 		}
 		// Within the worker Lambda's time: a job claimed late in a tick goes back to the queue rather than be cut off.
 		const budgetMs = jobBudget(deadline, Date.now());
-		const later = () => new JobError('The worker had too little time left for it in this run; it runs again shortly.', { retry: true });
+		// Handed back without spending an attempt: a late claim says nothing about the catchment.
+		const later = () => new JobRelease('too little time left in this tick', RELEASE_DELAY_SECONDS);
 		if (budgetMs < MIN_JOB_TIME_MS) throw later();
 		let result;
 		try {
 			result = await delineate(dem, click, {
 				windows,
 				budgetMs,
-				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach } : null,
+				expected: near.reach ? { km2: near.reach.upstreamKm2, reach: `reach ${near.reach.reachId} of ${near.reach.dataset}`, chosen: !!req.reach, distanceM: near.reach.distanceM } : null,
 				junction: near.junction,
 				keepPoint: req.keep_point,
 				// One step a window; a cancel (or a lost lease) stops it before the next.

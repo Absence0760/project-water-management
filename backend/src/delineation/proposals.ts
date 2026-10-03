@@ -9,6 +9,7 @@ import { recordAudit } from '../history/record.js';
 import { ApiError, notFound } from '../http/errors.js';
 import { UUID } from '../projects/access.js';
 import type { Delineation } from './delineate.js';
+import type { PanReport } from './pans.js';
 
 /** Superseded and rejected proposals kept per project (accepted ones are all kept, as their features' provenance). */
 export const PROPOSALS_KEPT = 50;
@@ -32,6 +33,8 @@ export interface ProposalRow {
 	dataset_fingerprint: string;
 	method: string;
 	method_version: string;
+	/** What drains into pans (193); null before delineate-9. */
+	pans: PanReport | null;
 	feature_id: string | null;
 	created_by_name: string | null;
 	created_at: Date;
@@ -41,7 +44,7 @@ export interface ProposalRow {
 
 export const SELECT = `
 	SELECT p.id, p.status, p.click_kind, p.click_lon, p.click_lat, p.outlet_lon, p.outlet_lat, p.snap_distance_m, p.geometry,
-		p.area_m2, p.cells, p.cell_size_m, p.zoom, p.window_cells, p.dataset, p.dataset_fingerprint, p.method, p.method_version,
+		p.area_m2, p.cells, p.cell_size_m, p.zoom, p.window_cells, p.dataset, p.dataset_fingerprint, p.method, p.method_version, p.pans,
 		p.feature_id, cu.display_name AS created_by_name, p.created_at, du.display_name AS decided_by_name, p.decided_at
 	FROM delineation_proposal p
 	LEFT JOIN app_user cu ON cu.id = p.created_by
@@ -65,6 +68,7 @@ export const toProposal = (r: ProposalRow) => ({
 	datasetFingerprint: r.dataset_fingerprint,
 	method: r.method,
 	methodVersion: r.method_version,
+	pans: r.pans,
 	featureId: r.feature_id,
 	createdBy: r.created_by_name,
 	createdAt: r.created_at.toISOString(),
@@ -80,11 +84,16 @@ export async function loadProposal(db: Db, projectId: string, pid: string): Prom
 	return rows[0];
 }
 
-/** The river-network check (issue #374): a reach nearby whose area no channel matched. With the answer only. */
+/**
+ * The river-network check (issue #374): a reach nearby whose area no channel matched; or (issue #390) an outlet a confluence's junction
+ * moved far from the click. With the answer only.
+ */
 export function checkNote(r: Delineation): string | null {
-	return r.unmatched
-		? `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km², but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`
-		: null;
+	if (r.unmatched)
+		return `The river network has ${r.unmatched.reach} near this point, draining about ${Math.round(r.unmatched.reachKm2).toLocaleString('en-ZA')} km² there, but no channel within 1 km drains within half of that: this catchment (${(r.areaM2 / 1e6).toFixed(2)} km²) may be on another stream. Check it against the map.`;
+	if (r.farJunction)
+		return `The outlet was moved ${(r.farJunction.movedM / 1000).toFixed(1)} km from the point to keep it on ${r.farJunction.reach}'s side of a confluence: the elevation model's rivers meet away from where the river network joins them. A gauge or weir that far from its site records another catchment, so check the outlet against the map.`;
+	return null;
 }
 
 /**
@@ -99,8 +108,8 @@ export async function storeProposal(db: Db, projectId: string, from: 'outlet' | 
 	const { rows } = await db
 		.query<{ id: string }>(
 			`INSERT INTO delineation_proposal (project_id, click_kind, click_lon, click_lat, outlet_lon, outlet_lat, snap_distance_m, geometry,
-				area_m2, cells, cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, created_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, app_current_user_id()) RETURNING id`,
+				area_m2, cells, cell_size_m, zoom, window_cells, dataset, dataset_fingerprint, method, method_version, pans, created_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, app_current_user_id()) RETURNING id`,
 			[
 				projectId,
 				from,
@@ -118,7 +127,8 @@ export async function storeProposal(db: Db, projectId: string, from: 'outlet' | 
 				r.dataset.label,
 				r.dataset.fingerprint,
 				r.method,
-				r.methodVersion
+				r.methodVersion,
+				JSON.stringify(r.pans)
 			]
 		)
 		.catch((err: unknown) => {

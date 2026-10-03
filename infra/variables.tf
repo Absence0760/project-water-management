@@ -453,7 +453,7 @@ variable "migrate_reserved_concurrency" {
 # --- Background jobs (jobs.tf) -------------------------------------------------
 
 variable "worker_memory_mb" {
-  description = "Worker Lambda memory. A queued re-run is the same engine run the API does, so the same 1024 MB. With delineation_dem on, the worker gets at least 2048 MB whatever this says: a `delineate` job (a catchment too large for the request) peaks near 1 GB (jobs.tf local.worker_memory_mb)."
+  description = "Worker Lambda memory. A queued re-run is the same engine run the API does, so the same 1024 MB. With delineation_dem on, the worker gets at least 2048 MB whatever this says: a `delineate` job (a catchment too large for the request) peaks at about 1.2 GB (jobs.tf local.worker_memory_mb)."
   type        = number
   default     = 1024
 }

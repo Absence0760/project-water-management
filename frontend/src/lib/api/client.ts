@@ -170,6 +170,7 @@ import type {
 	MapGeometry,
 	StartProposal,
 	StartRole,
+	PlacementChoice,
 	StartState,
 	StartTicks,
 	DivideProposal,
@@ -1131,14 +1132,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		/** Start an empty model from the map (issue #326 C3, docs/api.md § Start from the map): proposed, then applied value by value or discarded. */
 		start: {
 			get: (id: string) => request<StartState>('GET', `${p(id)}/map/start`),
-			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; role: StartRole }[] }) =>
+			propose: (id: string, body: { outletFeatureId?: string | null; outletReach?: PlacementChoice['reach']; outletUseLarger?: boolean; points: ({ featureId: string; role: StartRole } & PlacementChoice)[] }) =>
 				request<{ proposal: StartProposal }>('POST', `${p(id)}/map/start`, body),
 			apply: (id: string, spid: string, ticks: StartTicks) => request<{ proposal: StartProposal; model: ProjectModel }>('POST', `${p(id)}/map/start/${enc(spid)}/apply`, ticks),
 			discard: (id: string, spid: string) => request<{ proposal: StartProposal | DivideProposal }>('POST', `${p(id)}/map/start/${enc(spid)}/discard`)
 		},
 		/** Divide a model that has nodes into sub-catchments from the map (182, docs/api.md § Start from the map); read and discarded through `start`. */
 		divide: {
-			propose: (id: string, body: { outletFeatureId?: string | null; points: { featureId: string; nodeId: string | null }[] }) =>
+			propose: (id: string, body: { outletFeatureId?: string | null; outletReach?: PlacementChoice['reach']; outletUseLarger?: boolean; points: ({ featureId: string; nodeId: string | null } & PlacementChoice)[] }) =>
 				request<{ proposal: DivideProposal }>('POST', `${p(id)}/map/divide`, body),
 			apply: (id: string, spid: string, ticks: DivideTicks) => request<{ proposal: DivideProposal; model: ProjectModel }>('POST', `${p(id)}/map/divide/${enc(spid)}/apply`, ticks)
 		},

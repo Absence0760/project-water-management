@@ -83,7 +83,10 @@ the same rules as Delineate's, [delineation.md § Method](./delineation.md#metho
 `start-4` asks for the river at a confluence; `start-5`, issue #387,
 measures the snap radius from the exact point to each cell's centre, so a
 point is never moved more than 150 m; `start-6`
-takes every area from the cells instead of the simplified outline.)
+takes every area from the cells instead of the simplified outline;
+`start-7` makes `start-3`'s and `start-4`'s claims true for Start and
+Divide, which until then never looked a point's reach up (§ Sub-catchments:
+the method, steps 2 and 3).)
 
 ## Sub-catchments: the method
 
@@ -96,13 +99,61 @@ reading, filling, D8 and outline tracing (`flow.ts`, `outline.ts`):
    boundary's box. Filled and routed once; grown while the outlet's
    catchment reaches the window's edge; refused at the cap (the ~100 km
    limit stays, followups.md), as a single delineation is.
-2. **The outlet.** A gauge or a delineated outlet snaps as a click does
-   (150 m). Otherwise it is the most-drained cell inside the boundary.
-3. **Each unit's point** snaps the same way. A dam *polygon* takes the
+2. **The outlet.** A gauge is placed as a Delineate click is
+   (`pointPlacement.ts`, since `start-7`): its nearest river reach within
+   1 km looked up in the reading transaction, and the gauge put on the cell
+   whose upstream area matches the reach's at the point (`place.ts`; since
+   `start-9` all of Delineate's `delineate-5` rules: a point on a DEM
+   channel of its own stays on it, the reach's channel offered, and a gully
+   snap offers the reach's channel out to 2.5 km); at a confluence the
+   editor picks the river (422 `confluence`, every such point at once) and
+   it goes at the DEM's junction (`junction.ts`); with no reach, the
+   most-drained cell within 150 m. A delineated outlet is already on the
+   channel, so it keeps its own cell (it used to be snapped again, up to
+   150 m further down the river). Otherwise it is the most-drained cell
+   inside the boundary.
+3. **Each unit's point** is placed the same way. A dam *polygon* takes the
    most-drained cell inside it (or within the snap radius of it): its
-   spillway, near enough. Two points that snap to one cell, or a point
-   whose cell isn't upstream of the outlet, are dropped with a warning, not
-   guessed at.
+   spillway, near enough, when the river runs through the reservoir. An
+   outline that only clips a river (an off-channel dam filled by a pump or
+   a furrow, or a traced outline taking in a cell of the river beside it)
+   would give the dam the river's whole catchment, so `damOutflow`
+   (`start-10`, the hydrologist's review finding 9) follows the river's stem
+   up from that cell while it stays inside the outline: a stem twice as
+   long as the outline's longer side at most, carrying at least 100× the
+   most-drained outline cell off the stem (the guard's LARGER_FACTOR; twice
+   flagged hillside gullies beside a dam on GLO-30), means the river only clips it.
+   The dam then goes at that cell (its own footprint's outflow) and the
+   river is offered as a larger channel (`larger.outline`); **use that
+   channel** puts it on the river. Measured on GLO-30 (a 3 × 3-cell dam
+   beside three gauged rivers of 260–390 km², its outline taking in one
+   river cell): 241–385 km² before, the footprint's 0.01–0.14 km² after.
+   The geometry can't tell a long off-channel dam lying along the river
+   from a narrow reservoir on it, so that one is taken as on the river. A snapped point beside a channel with 100× its
+   upstream area keeps the guard's finding in its `placement.larger` and a
+   warning (the outlet's first, since every unit is placed against it);
+   **use that channel** proposes again with `useLarger` for that point, and
+   the server puts it on the channel the guard finds again (never a cell
+   from the request). Each point's `placement` (how, which reach, the larger
+   channel, a reach unmatched) is kept in the plan, and the method names
+   only the rules that ran (`placementText`). Two points on one cell, or a
+   point whose cell isn't upstream of the outlet, are dropped with a
+   warning, not guessed at.
+
+   Why (the hydrologist's review, finding 3): before `start-7` every point
+   was snapped 150 m with no reach. On 12 HydroRIVERS reaches of 100–600
+   km², a gauge at the reach's second-to-last vertex landed in a gully 5
+   times, and the dam five vertices up the same line was then dropped as
+   "not upstream"; the stored method still claimed the area match. Run
+   with `backend/scripts/research/snap-start.ts` on the local GLO-30:
+
+   | Reach (km²) | Delineate | `start-6` | `start-7` |
+   |---|---|---|---|
+   | 11509680 (292) | 428 | 5.6, dam dropped | 428, dam kept (296) |
+   | 11494929 (237) | 334 | 1.4, dam dropped | 334, dam snapped with the unmatched warning |
+   | 11516319 (166) | 156 | 0.08, dam dropped | asks which river at the dam; 156, dam kept (145) |
+   | 11511508 (478) | refused `larger_channel` | 0.03, dam dropped | 0.03 with the larger-channel warning; with use that channel 476, dam kept (462) |
+   | 11514358 (121) | 119 | 119, dam 0.09 | 119, dam kept (109) |
 4. **Drains into**: follow D8 down from the unit's cell to the first other
    unit's cell, or the outlet's. Exact on the D8 tree: no polygon tests.
 5. **Incremental area**: every cell upstream of a unit's cell whose path

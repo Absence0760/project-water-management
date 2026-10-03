@@ -2480,7 +2480,12 @@ database:
 - The registered user's **name** is the only personal field kept, in
   `allocation_holder`, readable by editors and owners and by the linked farmer
   for their own farm; **viewers never read it** (RLS, decision D3). The
-  history records registration numbers, file names and counts, never names.
+  history records registration numbers, file names and counts, never names;
+  a viewer reads the allocation events without the registration number (a
+  unique identifier, POPIA s1) and volume until an owner lets viewers read
+  each volume (`app_audit_subject`, 190, the History's one read of an
+  event's subject), and the data-subject export leaves both out of every
+  allocation event (they are the registered user's, not the exporter's).
   The export's `holder` column is only in an editor's file.
 - **Decision D3** (provisional position, pre-counsel research, 2026-10-01).
   A per-farm volume beside a farm's name identifies its holder in a rural
@@ -2643,7 +2648,7 @@ placed points. The server never trusts the browser with geometry:
   `checkGeometry` as every map polygon before it is stored.
   A catchment too large for the request goes to the worker's `delineate`
   job (191_delineation_request, design/delineation.md § Where it runs):
-  larger windows (up to 6 144 cells, about 1 GB) in the worker's 300 s and
+  larger windows (up to 6 144 cells, about 1.2 GB) in the worker's 300 s and
   a 150 s budget, so not on an API slot. Each account may have one
   waiting or running at a time (`DELINEATE_JOBS_PER_USER`, counted under a
   per-account advisory lock; the job's dedupe key names the account): a

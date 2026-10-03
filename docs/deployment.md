@@ -1123,7 +1123,9 @@ plan-only until the first deploy):
   jobs lease for 6 minutes, longer than the function can run. A handler
   that bounds its own work gets the function's deadline (less 10 s;
   `JobContext.deadline`): a `delineate` job fits its budget inside it, and
-  one claimed with under 20 s left goes back to the queue.
+  one claimed with under 20 s left, or cut short by it before its last
+  window, goes back to the queue 120 s on without spending an attempt
+  (`app_release_job`, `job_released` in the log).
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.
@@ -1600,8 +1602,8 @@ delineation peaks near 460 MB at its window cap and keeps a 20 s budget
 which the defaults (1 024 MB, 30 s) hold with room to spare. The worker
 gets the same `DEM_URL` and grant (`worker_dem`) for the `delineate` job (a
 catchment too large for the request, up to 6 144 cells), and at least
-2 048 MB whatever `worker_memory_mb` says, since that window peaks near
-1 GB (`infra/jobs.tf` `local.worker_memory_mb`; more memory is also more
+2 048 MB whatever `worker_memory_mb` says, since that window peaks at
+about 1.2 GB (`infra/jobs.tf` `local.worker_memory_mb`; more memory is also more
 CPU, and a few cents a month at the 5-minute tick).
 
 **Tracing a dam** (#326 C2, [maps.md § Assisted

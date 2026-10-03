@@ -2708,6 +2708,21 @@ map" card) stays the schematic; this is the geography.
   as its card in the sheet (R: the rest of the catchment) …" with **Review
   it**) says what the pieces are. The points step counts gauges apart ("1
   unit and 1 gauge, plus the rest of the catchment.").
+  **Where each point went** (`start-7`, `placement.ts`,
+  `PlacementAsk.svelte`): the outlet's line under the warnings ("The
+  outlet: On the channel matching river reach 11509680 (292 km²), 602 m
+  from the point."), and each card's ("Snapped to the most-drained cell
+  nearby, 143 m from the point: no channel near it matches …"). A point
+  snapped beside a much larger channel has its warning in the list and
+  **use that channel** on its card (**Use that channel for the outlet**
+  under the warnings), which proposes again with the point on that
+  channel. A point at a confluence stops the proposal with a box above
+  the sheet's error line: "These points are at a confluence …", a radio
+  group per point (legend: its name, or "The outlet (Weir)") with its
+  rivers ("The river along the point, 400 km²"), and **Propose with these
+  rivers** once each has one. The choices stay in the sheet's draft for
+  later proposals; picking another outlet drops the outlet's. Divide's
+  sheet does the same.
 - **Divide the model** (editors, a model with nodes, a DEM on the server;
   #326 C3's follow-up, `DivideSheet.svelte`, `divideFlow.ts`, [maps.md §
   Start from the map](./maps.md#start-from-the-map)). **Divide the model**
@@ -2748,8 +2763,11 @@ map" card) stays the schematic; this is the geography.
   (“Delineating…”). A refusal shows its sentence in the sheet ("That point
   is outside the elevation model …"). A point beside a much larger channel
   (issue #374) shows a warning box instead: "A much larger channel runs
-  504 m north of your point: about 620 km² drains through it here, against
-  0.18 km² at your point. River lines on the map can sit a few hundred
+  504 m north of your point: at least 620 km² drains through it inside the
+  34 km routed around your point, and more from beyond (the mapped river
+  here, reach … of HydroRIVERS, drains 340 724 km²), against 0.18 km² at
+  your point." (a channel whose catchment fits the window gets its area
+  plainly: "620 km² drains through it"). River lines on the map can sit a few hundred
   metres off the channel the elevation model sees. Use that channel, or
   keep your point if you meant the small one.", with **Use that channel**
   (primary: the coordinates move to it and it delineates there) and **Keep
@@ -2773,8 +2791,11 @@ map" card) stays the schematic; this is the geography.
   when it arrives) and the sheet becomes **The delineated catchment**, its
   title taking the focus: Area, The point is, Outlet ("128 m from the
   point, on the channel"), Cells ("33 609 cells, each about 128 m across"),
-  **How it was made** (closed: Dataset with its fingerprint, Method with its
-  version), **Before you accept it** (three caveats), then **Accept as the
+  Into pans ("8.52 km² (2 %) drains into a pan; the largest holds … mm over
+  its … km². Non-contributing in WR2012’s sense; still inside the area and
+  outline", or "none found …"; delineate-9) and Effective area (the area
+  less it), **How it was made** (closed: Dataset with its fingerprint, Method with its
+  version, Pans: the pans' method), **Before you accept it** (three caveats), then **Accept as the
   catchment boundary** (disabled until **Replace the current boundary “…”**
   is ticked when there is one), **Accept as an area** and **Reject**;
   **Delineate another point** goes back to the form, and the form's **Back
@@ -5122,13 +5143,21 @@ read it before.
   before the forecast only, and every "X of N days" beside them counts N
   over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
   EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
-  outflow, the hydrograph, dam storage, supply vs demand, the explorer)
+  outflow, the hydrograph, dam storage, supply vs demand, the explorer, the
+  runoff model's stores, the printed report's two charts, Compare runs'
+  overlay)
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
   option), so the band never rests on colour alone; the figure carries
   `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
   only the days before the forecast, and the caption says how many forecast
-  days it left out (issue #51).
+  days it left out (issue #51). The same for every figure read off the
+  stored series: River & reserve's shaded days below the EWR and their
+  count, the overlay's difference and read-out ("Run A is a forecast run: …
+  stop the day before"), the report's licence-impact board, and a share
+  link's chart. `scripts/guards/check_forecast_cut.mjs` (`pnpm test:guards`)
+  lists every reader of a run's stored series and how it treats the
+  forecast days, and fails on a new one that doesn't say.
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &

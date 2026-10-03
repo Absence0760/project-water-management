@@ -100,16 +100,22 @@ describe('with the synthetic DEM', () => {
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
 		const p = res.body.proposal;
-		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-6', featureId: null, createdBy: 'Leditor', decidedAt: null });
+		expect(p).toMatchObject({ status: 'proposed', from: 'outlet', zoom: 10, methodVersion: 'delineate-10', featureId: null, createdBy: 'Leditor', decidedAt: null });
 		expect(Math.abs(p.areaM2 / BASIN_AREA_M2 - 1)).toBeLessThan(0.03);
 		expect(p.geometry.type).toBe('Polygon');
 		expect(p.dataset).toMatch(/Synthetic DEM/);
 		expect(p.datasetFingerprint).toMatch(/^[0-9a-f]{16}$/);
 		expect(p.method).toMatch(/D8/);
 		expect(p.click).toEqual([OUTLET.lon, OUTLET.lat]);
+		// What drains into the valley's pan, stored with the proposal and its method (193, delineate-9).
+		expect(p.pans).toMatchObject({ count: 1, method: expect.stringMatching(/^Non-contributing \(pans\)/) });
+		expect(p.pans.nonContributingM2).toBeGreaterThan(0);
+		expect(p.pans.nonContributingM2).toBeLessThan(0.1 * p.areaM2);
+		const stored = (await asOwner(`SELECT pans FROM delineation_proposal WHERE id = $1`, [p.id])) as { pans: unknown }[];
+		expect(stored[0]!.pans).toEqual(p.pans);
 		firstId = p.id;
 		const audit = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'map.delineation_proposed'`, [projectId]);
-		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-6' });
+		expect(audit[0]!.subject).toMatchObject({ proposalId: firstId, from: 'outlet', methodVersion: 'delineate-10' });
 		expect(JSON.stringify(audit[0]!.subject)).not.toMatch(/coordinates/);
 	});
 

@@ -19,7 +19,8 @@
 	import { api, type DelineationProposal, type DelineationRequest, type DelineationState, type MapFeature } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import type { MapPosition } from '$lib/api/types';
-	import { CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
+	import { ApiError } from '$lib/api/client';
+	import { afterPollError, CAVEATS, datasetNotice, failedText, FROM_LABEL, isWaiting, openProposal, POLL_MS, proposalFacts, provenanceFacts, waitingText } from './delineation';
 	import { parseDegrees, positionText } from './mapData';
 	import { choiceText, confluenceOf, largerChannelOf } from './largerChannel';
 	import type { ConfluenceChoice, LargerChannel } from '$lib/api';
@@ -148,13 +149,27 @@
 		const timer = setTimeout(() => void poll(w.id), POLL_MS);
 		return () => clearTimeout(timer);
 	});
+	/** Failed asks in a row: a transient one (a dropped connection, a 5xx) is asked again, the job keeps running. */
+	let pollFailures = 0;
 	async function poll(id: string) {
+		let r: DelineationRequest;
 		try {
-			settle((await api.delineation.request(projectId, id)).request);
+			r = (await api.delineation.request(projectId, id)).request;
 		} catch (err) {
+			if (waiting?.id !== id) return;
+			pollFailures++;
+			if (afterPollError(pollFailures, err instanceof ApiError ? err.status : undefined) === 'retry') {
+				// A new object re-arms the effect: ask again in POLL_MS.
+				waiting = { ...waiting };
+				return;
+			}
+			pollFailures = 0;
 			waiting = null;
 			error = err instanceof Error ? err.message : String(err);
+			return;
 		}
+		pollFailures = 0;
+		await settle(r);
 	}
 	/** The worker's answer, shown as the request's own would have been. */
 	async function settle(r: DelineationRequest) {

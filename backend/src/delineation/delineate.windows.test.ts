@@ -133,9 +133,14 @@ describe('delineate: the data’s edge (finding 2)', () => {
 	});
 
 	it('proposes a catchment that stops short of the hole, whole: the land beside no data is not a sink', async () => {
-		const short = await delineate(functionDem(valley(40)), at(0, 0), { windows: [512] });
-		const r = await delineate(functionDem(valley(40), holeAbove), at(0, 0), { windows: [512] });
+		// With a pan on the valley floor (a pit 15 m deep), so the pans' report beside missing data is checked too.
+		const pitted = (u: number, v: number) => valley(40)(u, v) - (Math.hypot(u, v + 25) < 4 ? 15 * (1 - Math.hypot(u, v + 25) / 4) : 0);
+		const short = await delineate(functionDem(pitted), at(0, 0), { windows: [512] });
+		const r = await delineate(functionDem(pitted, holeAbove), at(0, 0), { windows: [512] });
 		expect(r.cells).toBe(short.cells);
+		// The pans read the elevations before the fill, where the hole is NaN: the pit is the one pan, the hole none.
+		expect(short.pans.count).toBe(1);
+		expect(r.pans).toEqual(short.pans);
 	});
 });
 

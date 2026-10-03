@@ -2791,7 +2791,12 @@ what](./allocations.md#who-sees-what)).
   run's per-unit daily series (`supplied`, `allocation_left_*`) still reach
   them ([followups.md § Allocations](./followups.md#allocations-wp-310)).
 - History: `allocation.created/changed/deleted/imported/import_deleted/viewer_units`; the
-  preview is exempt (it writes nothing).
+  preview is exempt (it writes nothing). `GET …/history` gives a viewer
+  `allocation.created/changed/deleted` without `registrationNo` and
+  `volumeM3PerYear` until an owner switches **What viewers see** on
+  (`app_audit_subject`, 190), and `GET …/runs/:runId/changes-since` lists
+  no registered-volume line to that viewer. The data-subject export carries
+  neither field in any allocation event.
 
 ## Publication
 
@@ -2920,6 +2925,9 @@ never a farm's row, name or id.
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and a use
   key below `k` holders. A body without `token` (or `key`) is `400`.
+  When the published run is a forecast run, the series stops the day before
+  its first forecast day (190): the monthly means and the last 365 days are
+  the record's, never forecast rain read as the river's flow.
 - `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
   `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
   It answers only while the scenario is `submitted` or `decided` (withdrawn
@@ -3075,7 +3083,7 @@ map feature like any other.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/delineation` | – | `{ available, dataset: { label, attribution, fingerprint, tileType, maxZoom, bounds: [w, s, e, n] } \| null, proposals: DelineationProposal[], request: DelineationRequest \| null }`: the newest 10 proposals, any status, and the project's newest delineation still with the background worker (queued or running), else null. `available` is false (and `dataset` null) when `DEM_URL` is empty or the DEM can't be read | viewer |
-| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId }, background?: boolean }` | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km, placed over the catchment), or the river reach near the point is still cut by it, or past its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream; with this answer only, not stored). `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment, or the river reach near the point, reaches where the DEM has no data), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/delineation` | `{ lon, lat, from: 'outlet' \| 'dam_wall', keepPoint?: boolean, reach?: { dataset, reachId }, background?: boolean }` | `202 { request: DelineationRequest }` when the catchment runs past the request's largest window (3 072 cells, about 100 km, placed over the catchment), or the river reach near the point is still cut by it, or past its 20 s, or with `background: true` (straight to the worker, skipping the request's own attempt): the worker's `delineate` job goes on from the next window, up to 6 144 cells (about 200 km), and the outcome lands on the request (below). Otherwise `201 { proposal, check }`, the project's one open proposal (the previous open one becomes `superseded`); `check` is null, or a sentence when a river reach within 1 km matched no channel's area (the catchment may be on another stream), or when keeping the point on its river's side of a confluence moved it more than 500 m (the DEM's rivers meet away from the mapped junction); with this answer only, not stored. `422 { error, details: { reason } }` when the DEM refuses, `reason` one of `outside` (the point is outside the DEM), `no_data` (the catchment, or the river reach near the point, reaches where the DEM has no data), `too_large` (it runs past the largest window and the worker has no larger one; the worker's own refusal at its cap is on the request instead), `too_small` (almost nothing drains there), `outline` (no valid polygon), `confluence` (reaches within 200 m differ in area by 1.5×: `details.choices = [{ dataset, reachId, upstreamKm2, distanceM, role: 'below' | 'above' | 'along', label }]`; send the same point with one as `reach`, its area read from the database, a reach not within 1 km 400), `larger_channel` (the point snapped beside a channel with 100× its upstream area within 1 km, and no river reach matched it: `details.larger = { at: [lon, lat], distanceM, km2, pointKm2 }`, its nearest cell; send that point, or the same one with `keepPoint: true`); nothing is saved. Near a river reach the outlet is matched to its upstream area (the method says which reach; maps.md § Delineation). `409` when delineation is off, or a second delineation finished at the same moment; `429` past 30 a project an hour, or past the account's elevation-model cap (2 running at once, 60 an hour across projects, shared with start and divide, refused attempts included, a request for the background as well; security.md § Map uploads), or for a delineation that would go to the worker while the account has one running, or waiting in another project (one per account; a new one in the same project supersedes the waiting one); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/delineation/:pid/accept` | `{ as: 'catchment_boundary' \| 'other', replaceBoundary?: boolean, name?: string }` | `200 { proposal, feature: MapFeature, summary }`: a new map feature of that kind with the proposal's polygon and area, named `name` or "Catchment above the outlet (delineated)" / "… the dam wall …", its description naming the dataset and method version. As the boundary when the project has one: `409` naming it unless `replaceBoundary: true` (then it replaces it). `409` for a proposal that isn't open | editor |
 | POST | `/projects/:id/map/delineation/:pid/reject` | – | `200 { proposal }`; `409` for one that isn't open | editor |
 | GET | `/projects/:id/map/delineation/requests/:rid` | – | `200 { request: DelineationRequest }`: a delineation the worker has, as it is now; `404` for one of another project | viewer |
@@ -3083,9 +3091,16 @@ map feature like any other.
 - `DelineationProposal = { id, status: 'proposed' | 'accepted' | 'rejected' |
   'superseded', from, click: [lon, lat], outlet: [lon, lat], snapDistanceM,
   geometry (a Polygon), areaM2, cells, cellSizeM, zoom, windowCells,
-  dataset, datasetFingerprint, method, methodVersion, featureId, createdBy,
+  dataset, datasetFingerprint, method, methodVersion, pans, featureId, createdBy,
   createdAt, decidedBy, decidedAt }`. `outlet` is where the click snapped to;
   `featureId` the accepted feature (`null` again once it is deleted).
+  `pans` (193, delineate-9; null on older proposals) = `PanReport = {
+  nonContributingM2, count, largest: { at: [lon, lat], floorM2, depthM,
+  drainsM2, storageMm }[] (at most 5, the largest catchment first), method }`:
+  what of the catchment drains into pans (closed depressions at least 1 m
+  deep, 0.1 km² in floor, holding at least 100 mm of their catchment's
+  runoff), reported beside `areaM2` and never taken out of it or the
+  polygon ([design/delineation.md § Pans](./design/delineation.md#pans)).
 - `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
   'proposed' | 'refused' | 'superseded', from, click, progress, error,
   proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
@@ -3128,13 +3143,15 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   lowest, cellSizeM, dataset: { label, fingerprint }, method, methodVersion }`;
   `ClickPiece = { click, point: [lon, lat], snapDistanceM, drainsInto,
   geometry (a Polygon, or null when its cells couldn't be outlined), areaM2,
-  totalAreaM2, open, placedBy, reach, larger, unmatched }` (`placedBy`
+  totalAreaM2, nonContributingM2, open, placedBy, reach, larger, unmatched }` (`nonContributingM2`: of its own area,
+  what drains into pans, start-11, null when open; a saved piece's description says it; `placedBy`
   `matched`, `junction` (at the DEM's junction for a river picked at a
   confluence) or `snapped`); a click may carry `reach` as Delineate's
   body does, and a click at a confluence without one answers 422
   `confluence` with `details.click` (its index) and the choices; `unmatched` is
   the river reach within 1 km of a snapped click whose area no channel near
-  it matched (`{ dataset, reachId, upstreamKm2 }`), else null. `click` and `drainsInto` are indexes into the request's
+  it matched (`{ dataset, reachId, upstreamKm2 }`), else null; never on a
+  click whose catchment runs past the routed window (`start-10`). `click` and `drainsInto` are indexes into the request's
   clicks (`drainsInto` null for the lowest); `point` is where the click
   snapped onto the channel; `totalAreaM2` everything upstream of it. `open`:
   an inflow point, its catchment past the routed window (about 100 km) or
@@ -3143,7 +3160,7 @@ geometry from the request. Off while `DEM_URL` is empty (`GET
   click is open is the request refused (422). A click
   that doesn't drain to the lowest one (another river) or snaps onto the
   same cell as another is in `dropped` with why. The method is Start from
-  the map's (`start-6`; every `areaM2` and `totalAreaM2` is summed from
+  the map's (`start-11`; every `areaM2` and `totalAreaM2` is summed from
   the DEM's cells, each at its own area on the ellipsoid, so the pieces add
   up to the catchment exactly; `geometry` is simplified for the map and its
   own area may differ a little). `placedBy` is `matched` (on the channel matching
@@ -3176,34 +3193,63 @@ values now, taken only when ticked.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/map/start` | – | `{ elevation, dataset \| null, modelEmpty, startedFromMap, proposals: (StartProposal \| DivideProposal)[] }`: the newest 5 of either mode, any status. `elevation` is false when `DEM_URL` is empty or the DEM can't be read; `modelEmpty` whether the model has no nodes; `startedFromMap` whether a start proposal was ever applied | viewer |
-| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge' }[] }` (at most 50, each once) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's); `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
+| POST | `/projects/:id/map/start` | `{ outletFeatureId?: uuid \| null, outletReach?: { dataset, reachId }, outletUseLarger?: boolean, points: { featureId, role: 'dam' \| 'abstraction' \| 'user' \| 'gauge', reach?: { dataset, reachId }, useLarger?: boolean }[] }` (at most 50, each once; `reach` and `useLarger` below the table) | `201 { proposal }`, the project's one open proposal (the previous open one, of either mode, becomes `superseded`). The outlet is the gauge point named, else the boundary's (its delineation's outlet when it came from Delineate, else the most-drained cell inside it). A point is a dam (a point or a polygon), or a gauge or other point; `gauge` (a gauge node in the order, owning no land) is a gauge point's only. Without a DEM a point outside the boundary is dropped. `400` for no boundary and no outlet, an outlet that isn't a gauge point, a `gauge` role on anything but a gauge point, or a feature not on this map; `409` once the model has nodes, or a second proposal finished at the same moment; `422 { error, details: { reason } }` when the DEM refuses (`outside`, `no_data`, `too_large`, `too_small`, `outline`, as delineation's), or `reason: 'confluence'` with `details.points: { featureId ('' for the outlet gauge), name, choices }[]`, every point at a confluence without a `reach` (with a DEM only); `400` for a `reach` not within 1 km of its point; `429` past 30 a project an hour, or the account's elevation-model cap (as delineation's); `503` when the DEM can't be read | editor |
 | POST | `/projects/:id/map/start/:spid/apply` | `{ outletName, units: { key, name, area, drainsInto, runoffToDam }[], rest: { include, name, area } }`, every proposed unit once | `200 { proposal, model }`: the outflow gauge, one node per unit (a user point a `user` node, a gauge point a `gauge` node), and the rest of the catchment if included, in one model revision ("Started from the map: …"). Only what is ticked is taken: a ticked area is saved as the unit's `farm_parcel` (linked, its description naming the dataset and method) and becomes its area with `area_source = 'map'`; an unticked one stays 0; an unticked drains-into is the outflow gauge; `runoffToDam` sets `pctRunoffToDam = 1` (dam units only). Each point is linked to its node. `400` for ticks that don't match the plan, a value ticked that wasn't proposed, or two nodes of one name; `409` for a proposal that isn't open, a division, or a model that has nodes | editor |
 | POST | `/projects/:id/map/start/:spid/discard` | – | `200 { proposal }` (a start or a division; audited as `map.start_discarded` or `map.divide_discarded`); `409` for one that isn't open | editor |
-| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, points: { featureId, nodeId: uuid \| null }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals as starting's; `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
+| POST | `/projects/:id/map/divide` | `{ outletFeatureId?: uuid \| null, outletReach?, outletUseLarger?, points: { featureId, nodeId: uuid \| null, reach?, useLarger? }[] }` (1 to 50, each feature once, each node once; `nodeId` null = a new gauge node, a gauge point only) | `201 { proposal }` (`mode: 'divide'`), superseding the open one. The outlet is a gauge linked to the model's outflow (or unlinked), else the boundary's, as starting; the outflow is the model's one node that drains nowhere. Each point's role comes from its node (a `user`, a `gauge`, a `farm` with a dam or at a dam point, else an abstraction point). `400` for a point standing for the outflow, for a node its kind can't stand for (map_feature's `KIND_NODES`), or for another node than the one it is linked to, a feature not on this map, a model without exactly one outflow; `409` for an empty model; `422 { error, details: { reason } }` with `reason: 'no_dem'` when `DEM_URL` is empty, or the DEM's refusals and the `confluence` question as starting's; `429` (shared with starting, and the account's elevation-model cap); `503` | editor |
 | POST | `/projects/:id/map/divide/:spid/apply` | `{ units: { key, area, drainsInto, runoffToDam, add, name? }[], rest: { to: 'none' } \| { to: 'node', nodeId } \| { to: 'new', name } }`, every proposed point once (`add` and `name` a new gauge's only) | `200 { proposal, model }`, one model revision ("Divided from the map: …"). Only what is ticked changes: a ticked area becomes the node's (`area_source = 'map'`, saved as its `farm_parcel`, "<name>: own sub-catchment"; a parcel an earlier start or division made for it is redrawn in place); a ticked drains-into is the proposed point's node (a new gauge's when added) or the outflow; `runoffToDam` sets `pctRunoffToDam = 1` (dam units); `add` makes the new gauge a `gauge` node (draining into the outflow unless its order is ticked); the rest's area goes to one of the plan's `untouched` units, or a new unit draining into the outflow. Unlinked points are linked to their nodes. `409` for a ticked value whose current one changed since the proposal (the plan keeps each node's `current` values, and the rest's candidates' areas), a node gone, an outflow that moved, a proposal not open, or a start proposal; `400` for ticks that don't match the plan, a value not proposed, an order into a new gauge not added, a loop, a clashing name, or a rest node that is one of the points | editor |
 
 - `StartProposal = { id, status: 'proposed' | 'applied' | 'discarded' |
   'superseded', plan, fromDem, dataset, datasetFingerprint, method,
   methodVersion, decision, createdBy, createdAt, decidedBy, decidedAt }`.
   `plan = { fromDem, outlet: { featureId, name, point, snapDistanceM,
-  foundIn }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
-  (upstream first), rest: { name, areaM2, geometry }, dropped: { featureId,
-  name, reason }[], warnings: string[], cellSizeM, zoom, windowCells }`;
+  foundIn, placement }, catchment: { areaM2, boundaryAreaM2 }, units: StartUnit[]
+  (upstream first), rest: { name, areaM2, geometry, nonContributingM2? }, pans?: PanReport, dropped: { featureId,
+  name, reason, placement? }[], warnings: string[], cellSizeM, zoom, windowCells }`;
   `StartUnit = { key (the feature's id), featureName, role, name, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto (a key, or null
-  for the outflow gauge), drainsIntoProposed }`. `decision` (once applied):
+  for the outflow gauge), drainsIntoProposed, placement, nonContributingM2?,
+  totalNonContributingM2? }`. The pans' figures (start-11; absent without a
+  DEM and on older plans): what of the catchment, the rest, each unit's own
+  piece and its whole catchment drains into pans, reported beside the areas
+  and never taken out of them; a warning says it in words. `decision` (once applied):
   the ticks, the node and parcel ids made, the revision id. Every proposal
   carries `mode: 'start' | 'divide'`.
 - `DivideProposal` = the same with `mode: 'divide'` and `plan = { mode,
-  outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn },
-  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry
-  }, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
+  outlet: { featureId, nodeId, name, point, snapDistanceM, foundIn, placement },
+  catchment, units: DivideUnit[] (upstream first), rest: { areaM2, geometry,
+  nonContributingM2? }, pans?: PanReport, untouched: { nodeId, name, areaKm2 }[] (farm nodes no point stands for, the ones the rest may go to, with their area when proposed),
   dropped, warnings, cellSizeM, zoom, windowCells }`; `DivideUnit = { key,
   featureName, nodeId (null: a new gauge), name, role, point,
   snapDistanceM, areaM2, totalAreaM2, geometry, drainsInto, current: {
   areaKm2, areaSource, downstreamNodeId, downstreamName, pctRunoffToDam } \|
-  null }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
+  null, placement, nonContributingM2?, totalNonContributingM2? }`. A gauge's or user's `areaM2` and `geometry` are null (they own no
   land); a gauge's `totalAreaM2` is what it measures.
+- **Placing the points** (`start-7`, `delineation/pointPlacement.ts`): with a
+  DEM, the outlet gauge and every map point are put on the DEM's channel as
+  Delineate puts a click: matched to the upstream area of the river reach
+  within 1 km, at the DEM's junction for the river picked at a confluence,
+  else snapped within 150 m. `placement = { placedBy: 'matched' \| 'junction'
+  \| 'snapped' \| 'larger' \| 'exact' \| 'polygon' \| 'boundary', reach: {
+  dataset, reachId, upstreamKm2, chosen } \| null, larger: { at, distanceM,
+  km2, pointKm2 } \| null, unmatched }` (`exact`: a delineated outlet kept
+  on its own cell; `polygon`: a dam polygon's outflow, its most-drained
+  cell, or, when the outline only clips a much larger channel, its own
+  footprint's, that channel in `larger` with `outline: true` (`start-10`);
+  `boundary`: the boundary's; null without a DEM; absent on proposals
+  before `start-7`). A snapped point beside a channel with 100× its
+  upstream area carries it in `larger` and a sentence in `warnings` (the
+  outlet's first); proposing again with that point's `useLarger: true`
+  (`outletUseLarger` for the outlet gauge; for a dam polygon, the channel
+  its outline clips) puts it on that channel, which
+  the server finds again (`placedBy: 'larger'`); a dropped point carries
+  its `placement` too, so one snapped into a gully beside its river can be
+  moved onto it the same way. A reach near a snapped
+  point that no channel matched is `unmatched` and a warning. A point at a
+  confluence (reaches within 200 m whose areas differ by 1.5×) is asked
+  about (422 `confluence`, every such point at once); its `reach` is one of
+  the choices offered. The proposal's `method` names only the rules that
+  ran.
 - Each write is in the audit log (`map.start_proposed`, `map.start_applied`,
   `map.start_discarded`, `map.divide_proposed`, `map.divide_applied`,
   `map.divide_discarded`: ids and counts; never a polygon). A stranger gets
@@ -3970,11 +4016,11 @@ Farmers get `403`.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event) | viewer |
+| GET | `/projects/:id/history` | `?before=<next>&limit=1..100&nodeId=&kind=&q=` | `{ items, next, historySince }`, newest first: model revisions (`type: 'revision'`, with their change lines, not the snapshot) and audit events (`type: 'event'`). `kind` is `revision`, an event kind (`series.replaced`) or its noun (`series`); `q` is the parameter filter's words (≤ 200 characters, the first 10 words, any order, any case): only revisions with a change line holding every word, on every page; events aren't filtered by it (the client writes their sentences and filters them); `next` is an opaque cursor (`<ts>\|<type>\|<id>`). `kind=publication` is the season decision log (issue #119): a `publication.*` event's `subject` holds the whole notice, the window, the run identity and `perFarm`, every unit's figures (viewers and above only, like every event). An event's `subject` is read as the caller may see it (`app_audit_subject`, 190): an `allocation.created/changed/deleted` without `registrationNo` and `volumeM3PerYear` for a viewer until an owner lets viewers read each volume ([Allocations](#allocations)) | viewer |
 | GET | `/projects/:id/history/fields` | – | `{ fields: Record<key, { count, lastAt, lastBy, change, filter }> }`: per model input, how many saved changes changed it and the last one ([Field history](#field-history)) | viewer |
 | GET | `/projects/:id/history/revisions/:revId` | – | `{ revision, preview }`: the revision with its `snapshot`, and what restoring it would change | viewer |
 | POST | `/projects/:id/history/revisions/:revId/restore` | `{ reason? }` | `201 { revision, relink }`: the new revision, and the farmers to re-link to restored farms. `409` when nothing would change or the old model fails today's validation | editor |
-| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100) | viewer |
+| GET | `/projects/:id/runs/:runId/changes-since` | – | `{ changes, revisions }`: the net change of the inputs since the run (`diffInputs`, series by hash) and the model revisions made since it, newest first (≤ 100). To a viewer who can't read each registered volume, neither side has the allocations (no registered-volume line) | viewer |
 | POST | `/projects/:id/runs/:runId/restore-inputs` | `{ reason? }` | `201 { revision, relink }`; `409` for a scenario run, or when nothing would change | editor |
 | GET | `/projects/:id/series/:seriesId/revisions` | – | `{ revisions: { id, createdAt, createdBy, reason, startDate, length, …, siteNodeId }[] }` (kept: the newest 5, ≤ 180 days; `siteNodeId` = the flow record's gauge when the revision was kept, null = the outlet, 085) | viewer |
 | POST | `/projects/:id/series/:seriesId/revisions/:revId/restore` | – | the series' `SeriesMeta` (works for a deleted series by its old id; a flow record comes back at the site it had, `409` when that gauge is no longer in the model) | editor |

@@ -14,6 +14,7 @@
 // allocations.md): compare an application with such a baseline and only the
 // wording changes. A pair where only one run is at full allocation is said so.
 import {
+	beforeForecast,
 	describeLicenceImpact,
 	licenceImpactByYearClass,
 	type DailySeries,
@@ -31,9 +32,15 @@ import { boundsText, OUTLET_SITE, type MatrixSite } from '$lib/components/outcom
 import { fmtNum } from '$lib/format/number';
 import type { ImpactSeries } from './impactSeries';
 
-/** Stored values (JSON has no NaN) back to the engine's NaN, as a catchment series. */
-const toRunSeries = (key: string, s: DailySeries | null): RunSeries[] =>
-	s ? [{ nodeId: null, key, label: key, unit: 'm³/day', values: s.values.map((v) => (v === null ? Number.NaN : v)) }] : [];
+/**
+ * Stored values (JSON has no NaN) back to the engine's NaN, as a catchment
+ * series. On a forecast run, the days before its first forecast day only
+ * (issue #51): the board counts the record's years, as the run's summary does.
+ */
+const toRunSeries = (key: string, s: DailySeries | null, forecastFrom: string | null | undefined): RunSeries[] =>
+	s
+		? [{ nodeId: null, key, label: key, unit: 'm³/day', values: Array.from(beforeForecast(s.values, s.startDate, forecastFrom), (v) => (v === null ? Number.NaN : v)) }]
+		: [];
 
 export const VERDICT_LABEL: Readonly<Record<OutcomeMetric, Record<LicenceImpactVerdict, string>>> = Object.freeze({
 	reserveMonthsMet: { moreBelow: 'More months below the Reserve', fewerBelow: 'Fewer months below the Reserve', noChange: 'No change in months below the Reserve', notEnoughYears: 'Not enough years' },
@@ -128,10 +135,16 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 		site = OUTLET_SITE;
 	}
 	let impact: LicenceImpact;
+	const fa = a.run.summary.forecast?.from;
+	const fb = b.run.summary.forecast?.from;
 	try {
 		impact = licenceImpactByYearClass({
-			background: { startDate: a.run.startDate, summary: a.run.summary, series: [...toRunSeries('natural_flow', input.series.background.natural), ...toRunSeries('ewr_shortfall', input.series.background.ewrShortfall)] },
-			application: { startDate: b.run.startDate, summary: b.run.summary, series: toRunSeries('ewr_shortfall', input.series.application.ewrShortfall) },
+			background: {
+				startDate: a.run.startDate,
+				summary: a.run.summary,
+				series: [...toRunSeries('natural_flow', input.series.background.natural, fa), ...toRunSeries('ewr_shortfall', input.series.background.ewrShortfall, fa)]
+			},
+			application: { startDate: b.run.startDate, summary: b.run.summary, series: toRunSeries('ewr_shortfall', input.series.application.ewrShortfall, fb) },
 			siteNodeId: site.id,
 			yearClassMethod: input.method
 		});

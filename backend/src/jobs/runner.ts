@@ -18,7 +18,7 @@ import { type LicenceRecordResult, sendLicenceRecordNotices } from '../licence/r
 import { safeError, stackFrames } from '../logging/safeError.js';
 import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
-import { describeFailure, JOB_ERROR_MAX, JobError, LeaseLostError } from './errors.js';
+import { describeFailure, JOB_ERROR_MAX, JobError, JobRelease, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
 import type { ClaimedJob, HandlerRegistry } from './registry.js';
@@ -27,7 +27,7 @@ import { logEvent } from '../logging/logEvent.js';
 /** Default lease: longer than any job may run (the worker Lambda's timeout is 300 s). */
 export const DEFAULT_LEASE_SECONDS = 360;
 
-export type JobOutcome = Extract<JobStatus, 'done' | 'failed' | 'dead'> | 'lost';
+export type JobOutcome = Extract<JobStatus, 'done' | 'failed' | 'dead'> | 'lost' | 'released';
 
 /** Run one claimed job as its acting user and record the outcome. */
 export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtInHandlers, deadline: number | null = null): Promise<JobOutcome> {
@@ -54,6 +54,14 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		if (err instanceof LeaseLostError) {
 			logEvent('warn', { event: 'job_lease_lost', jobId: job.id, kind: job.kind });
 			return 'lost';
+		}
+		if (err instanceof JobRelease) {
+			// Back to the queue, its attempt given back: too little time in this tick, nothing wrong with the job.
+			const { rows } = await withoutUser((db) =>
+				db.query<{ status: string | null }>('SELECT app_release_job($1, $2, $3) AS status', [job.id, job.leaseToken, err.delaySeconds])
+			);
+			logEvent('info', { event: 'job_released', jobId: job.id, kind: job.kind, delaySeconds: err.delaySeconds });
+			return rows[0]?.status === 'queued' ? 'released' : 'lost';
 		}
 		const failure = describeFailure(err);
 		// Name, code and stack frames only: an error's text can carry personal
@@ -187,6 +195,8 @@ export interface TickResult {
 	failed: number;
 	dead: number;
 	lost: number;
+	/** Handed back to the queue for a later tick, their attempt given back (JobRelease). */
+	released: number;
 	/** The queue after the tick. */
 	stats: QueueStats;
 	/** Data feeds queued by this tick (absent when feeds were off). */
@@ -224,6 +234,7 @@ export async function runTick(o: TickOptions = {}): Promise<TickResult> {
 		failed: 0,
 		dead: 0,
 		lost: 0,
+		released: 0,
 		stats: { due: 0, running: 0, oldestDueSeconds: 0 },
 		alerts: { scheduled: 0, purged: 0, sent: 0, skipped: 0, failed: 0, digests: 0 },
 		packNotices: { purged: 0, sent: 0, skipped: 0, failed: 0 },

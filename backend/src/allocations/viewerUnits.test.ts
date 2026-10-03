@@ -3,7 +3,7 @@
 // refusal) is in allocations.db.test.ts.
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { comparisonTotals, redactRunAllocations, volumeTotals, type VolumeRow } from './viewerUnits.js';
+import { comparisonTotals, redactRunAllocations, volumeTotals, withoutAllocationIdentifiers, type VolumeRow } from './viewerUnits.js';
 
 const row = (o: Partial<VolumeRow>): VolumeRow => ({
 	waterSource: 'surface',
@@ -74,5 +74,23 @@ describe('redactRunAllocations', () => {
 		// A run with none: its model gets an empty list, its summary stays as it was.
 		const plain = { model: { nodes: [] as unknown[], allocations: undefined }, summary: { farms: [] as unknown[], allocations: null } };
 		expect(redactRunAllocations(plain)).toEqual({ model: { nodes: [], allocations: [] }, summary: { farms: [], allocations: null } });
+	});
+});
+
+describe('withoutAllocationIdentifiers', () => {
+	it('leaves an allocation event’s registration number and volume out, and keeps what was done', () => {
+		const e = { kind: 'allocation.created', createdAt: 't', subject: { allocationId: 'a', registrationNo: 'R-1', nodeId: 'n', waterSource: 'surface', volumeM3PerYear: 5, waterUse: '21a' } };
+		expect(withoutAllocationIdentifiers(e)).toEqual({ kind: 'allocation.created', createdAt: 't', subject: { allocationId: 'a', nodeId: 'n', waterSource: 'surface', waterUse: '21a' } });
+		// The input is not changed.
+		expect(e.subject.registrationNo).toBe('R-1');
+		expect(withoutAllocationIdentifiers({ kind: 'allocation.deleted', subject: { allocationId: 'a', registrationNo: 'R-1' } }).subject).toEqual({ allocationId: 'a' });
+	});
+
+	it('leaves every other event, and a malformed one, as it is', () => {
+		const run = { kind: 'run.created', subject: { registrationNo: 'kept' } };
+		expect(withoutAllocationIdentifiers(run)).toBe(run);
+		expect(withoutAllocationIdentifiers(null)).toBe(null);
+		const noSubject = { kind: 'allocation.created' };
+		expect(withoutAllocationIdentifiers(noSubject)).toBe(noSubject);
 	});
 });

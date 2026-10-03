@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Round 2's other frontend changes: the forecast band on the compare overlay, the runoff stores chart and the printed report's two charts, the River & reserve forecast caption (forecast-cut guard), and the engine's oneLineName in four map sheets. Measured 2026-10-03: origin/main 1627 KB; merged round 2 1630 KB, of which 1 KB is the delineate-background entry."
+}
