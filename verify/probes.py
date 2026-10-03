@@ -423,6 +423,77 @@ def short_blank_run_window() -> dict:
     return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": []}, "series": series}
 
 
+def offtake_release_keep_and_floor() -> dict:
+    """Engine 1.70.0 (issue #90 Q26, Q27; §2.6a). (1) An off-take of up to
+    20 000 m³/day from a farm whose dam (off the river, nothing flows into it)
+    has a pass-inflow release targeting 1 500 m³/day leaves the target in the
+    river: it takes only the flow above 1 500. The rain rises over the run, so
+    the flow crosses the target on some days and is well above it on others.
+    (2) A demand-sized off-take from a larger source tops up a 5 000 m³ dam
+    held near its dead storage (2 750, dead 2 500) with a fixed release of
+    400 m³/day: its room counts the release in full, 5 000 − 2 750 + 400, so
+    the dam ends the first day full (the floor, MIN(400, 2 750 − 2 500) = 250,
+    would leave it 150 short)."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=3, damCapacityM3=1000, damInitialPct=1, damReleaseRule="passInflow", damReleaseM3Day=[1500] * 12),
+        _node("c", "farm", "o", areaKm2=0.1),
+        _node("s2", "farm", "o", areaKm2=30),
+        _node("d", "farm", "o", areaKm2=0.1, damCapacityM3=5000, damInitialPct=0.55, damMinPct=0.5, damReleaseRule="fixed", damReleaseM3Day=[400] * 12),
+    ]
+
+    def ot(i, a, b, sizing, top_up):
+        return {
+            "id": i, "fromNodeId": a, "toNodeId": b, "months": list(range(1, 13)), "maxRateM3s": 20000 / 86400,
+            "dailyCapM3": None, "minStoragePct": 0, "enabled": True, "priority": 0, "source": "river",
+            "handsOffM3Day": None, "handsOffEwr": False, "lossPct": 0, "sizing": sizing, "topUpDam": top_up,
+        }
+
+    transfers = [ot("t", "s", "c", "capacity", False), ot("u", "s2", "d", "demand", True)]
+    days = 150
+    series = {"rain_catchment_mm": {"startDate": "2020-01-01", "values": [round(0.2 * k, 1) for k in range(days)]}}
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": series}
+
+
+def dam_rules_rationing_and_release() -> dict:
+    """Engine 1.70.0 (issue #90 Q25, Q26; §2.6): two dam rules of one priority
+    from a 5 000 m³ dam that runs dry, limits 3 000 and 1 000: they share what
+    is left 3 : 1 (each asks its limit, never capped at the free water, which
+    would make it 1 : 1 on the second day). A third rule fills a 1 000 m³ dam
+    held near its dead storage (500, dead 400) that releases 300 m³/day: its
+    room counts the release in full, 1 000 − 500 + 300 = 800, so the dam ends
+    full (the floor, MIN(300, 500 − 400) = 100, would leave it at 800). And
+    (engine 1.70.0's rounds) an empty source beside a full one into one
+    receiver: the full one fills the room; one source into three receivers
+    whose rooms fill one after another: the water a filled receiver couldn't
+    take is offered to the others again, twice over."""
+    nodes = [
+        _node("o", "gauge", None),
+        _node("s", "farm", "o", areaKm2=1, damCapacityM3=5000, damInitialPct=1),
+        _node("a", "farm", "o", damCapacityM3=1e6),
+        _node("b", "farm", "o", damCapacityM3=1e6),
+        _node("s2", "farm", "o", damCapacityM3=1e6, damInitialPct=1),
+        _node("d", "farm", "o", damCapacityM3=1000, damInitialPct=0.5, damMinPct=0.4, damReleaseRule="fixed", damReleaseM3Day=[300] * 12),
+    ]
+    # An empty source beside a full one into one receiver (room 400): the full one fills it. One source of 900
+    # into rooms of 100, 350 and 2 000: room a source couldn't fill is offered again, twice (100, 350, 450).
+    nodes += [
+        _node("e1", "farm", "o", damCapacityM3=1000, damInitialPct=0),
+        _node("e2", "farm", "o", damCapacityM3=5000, damInitialPct=1),
+        _node("r", "farm", "o", damCapacityM3=1000, damInitialPct=0.6),
+        _node("w", "farm", "o", damCapacityM3=900, damInitialPct=1),
+        _node("r1", "farm", "o", damCapacityM3=1000, damInitialPct=0.9),
+        _node("r2", "farm", "o", damCapacityM3=1000, damInitialPct=0.65),
+        _node("r3", "farm", "o", damCapacityM3=5000, damInitialPct=0.6),
+    ]
+    transfers = [
+        _rule("ta", "s", "a", 3000, 0), _rule("tb", "s", "b", 1000, 0), _rule("td", "s2", "d", 100000, 0),
+        _rule("te1", "e1", "r", 300, 0), _rule("te2", "e2", "r", 500, 0),
+        _rule("tw1", "w", "r1", 1000, 0), _rule("tw2", "w", "r2", 1000, 0), _rule("tw3", "w", "r3", 1000, 0),
+    ]
+    return {"settings": _settings(), "model": {"nodes": nodes, "crops": [], "cropAreas": [], "transfers": transfers}, "series": _dry(4)}
+
+
 PROBES = {
     "forecast-tail-warmup": forecast_tail_warmup(),
     "band-and-room": band_and_room(),
@@ -443,4 +514,6 @@ PROBES = {
     "offtake-into-capped-unit": offtake_into_capped_unit(),
     "cap-licence-from-september": cap_licence_from_september(),
     "full-allocation-gap-year": full_allocation_gap_year(),
+    "offtake-release-keep-and-floor": offtake_release_keep_and_floor(),
+    "dam-rules-rationing-and-release": dam_rules_rationing_and_release(),
 }

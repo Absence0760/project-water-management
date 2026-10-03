@@ -50,7 +50,7 @@ MUTANTS = [
         "if j - s > ACC_MAX_BLANK_DAYS:",
         "if j - s >= ACC_MAX_BLANK_DAYS:",
     ),
-    ("transfers ignore the receiver's room (N4)", "if tot > rm and tot > 0:", "if False:"),
+    ("transfers ignore the receiver's room (N4)", "room_left[dst] = max(0.0, rm)", "room_left[dst] = math.inf"),
     (
         "a source's rules share one pool down to the lowest reserve (N6, before engine 1.36.0)",
         'elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]',
@@ -60,22 +60,6 @@ MUTANTS = [
         "the receiver's room leaves out its dam's own rain, evaporation and seepage (before engine 0.19.0)",
         "(storage[dst] + pd + sched[dst] - e_c - sp_c)",
         "storage[dst]",
-    ),
-    (
-        "within a priority the source's bands are shared first and the receiver's room after",
-        ("if tot > rm and tot > 0:", "if False:"),
-        (
-            '            if any(vol[t["id"]] > 0 for t, _ in group):',
-            """            for dst in sorted({t["toNodeId"] for t, _ in group}):
-                area, pd, e_raw, sp_raw = pre[dst]
-                rm2 = max(0.0, by_id[dst]["damCapacityM3"] - (storage[dst] + pd - e_raw - sp_raw) + draw_bound(dst) - sched[dst])
-                into = [t for t, _ in group if t["toNodeId"] == dst]
-                tot = sum(vol[t["id"]] for t in into)
-                if tot > rm2 and tot > 0:
-                    for t in into:
-                        vol[t["id"]] = vol[t["id"]] * rm2 / tot
-            if any(vol[t["id"]] > 0 for t, _ in group):""",
-        ),
     ),
     ("a run with no catchment area runs (on 0 m³ of natural flow)", "    if not area_km2 > 0:\n        raise Refused", "    if False:\n        raise Refused"),
     ("the receiver's room counts what it sent earlier the same day", "- sched[dst]\n", "- sched[dst] + drawn[dst]\n"),
@@ -211,8 +195,44 @@ MUTANTS = [
     ),
     (
         "an off-take ignores its hands-off flow",
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0)',
+    ),
+    (
+        "an off-take takes its source's pass-inflow release target (before engine 1.70.0)",
+        'keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
         'keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)',
-        "keep_k = zs",
+    ),
+    (
+        "off-takes of one priority ask MIN(limit, the flow above their keep) (before engine 1.70.0)",
+        "                    v = lim\n",
+        "                    v = min(max(0.0, U0 - taken - keep_k), lim)\n",
+    ),
+    (
+        "dam rules of one priority ask MIN(limit, their source's free water) (before engine 1.70.0)",
+        'rem[t["id"]] = lim',
+        'rem[t["id"]] = min(lim, max(0.0, storage[src["id"]] - drawn[src["id"]] - reserve[t["id"]]))',
+    ),
+    (
+        "a receiver's room is shared by what the rules ask, not what their sources gave (wasted room)",
+        "                basis = given\n",
+        "                basis = rem\n",
+    ),
+    ("room a source couldn't fill is never offered again (one round)", "                if not filled:\n                    break\n", "                break\n"),
+    (
+        "an off-take's top-up counts only a fixed release's floor (before engine 1.70.0)",
+        'floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o))',
+        'floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o, max(held, 0.0) - e_c - sp_c - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))',
+    ),
+    (
+        "a dam rule's room counts only a fixed release's floor (before engine 1.70.0)",
+        'floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))',
+        'floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c, after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0)))',
+    ),
+    (
+        "a fixed release makes no room for an off-take's top-up (before engine 1.70.0)",
+        'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)',
+        'rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))',
     ),
     (
         "off-takes of one priority share the flow above the lowest keep among them",

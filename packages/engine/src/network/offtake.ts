@@ -6,8 +6,9 @@
 // rest flows on down the destination's river. It is limited by its capacity
 // (MIN(max rate × 86 400, daily cap), and the month's own capacity when one is
 // set), by the flow there, and by what must stay in the river: the senior
-// users' requirement passing the source, a hands-off flow and, when asked,
-// the EWR at the source. A share of what it takes (conveyance losses) never
+// users' requirement passing the source, the target of a pass-inflow
+// release on the source's dam (engine ≥ 1.70.0), a hands-off flow and, when
+// asked, the EWR at the source. A share of what it takes (conveyance losses) never
 // arrives; a share of those losses may seep back to the river the same day
 // below the source or a farm downstream of it (engine ≥ 1.42.0). Pure; the plan (../run.ts), the simulation (./simulate.ts) and the
 // self-checks (../verify/checks.ts) read a rule through these functions, so a
@@ -204,8 +205,48 @@ export function planOfftakes(
 		}
 		out.push({ id: tr.id, ...(key ? { seriesKey: key } : {}), ...o });
 	}
+	splitLicenceWarnings(out, nodes, warnings);
 	return out;
 }
+
+/**
+ * Warn about rules that may be one licence entered more than once (engine ≥
+ * 1.70.0, issue #90 Q25): two or more planned river off-takes with the same
+ * source, the same destination and the same priority, of which at least two
+ * run in a common calendar month (capacity above 0 in it). Rules of one
+ * priority share a short river in proportion to what each asks, MIN(its
+ * capacity, its share of the need), so a licence split into several rules
+ * gets what it would as one rule; but one licence entered twice at its full
+ * size asks, and takes, twice its licence, and the run can't tell that from
+ * two licences on one canal. One warning per group, its rules in id order
+ * (the order planOfftakes accepted them in). Pure; `offtakes` as
+ * planOfftakes returns them.
+ */
+export function splitLicenceWarnings(offtakes: readonly PlanOfftake[], nodes: readonly Pick<NetworkNode, 'name'>[], warnings: string[]): void {
+	const groups = new Map<string, PlanOfftake[]>();
+	for (const o of offtakes) {
+		const key = `${o.from}|${o.to}|${o.priority}`;
+		const g = groups.get(key);
+		if (g) g.push(o);
+		else groups.set(key, [o]);
+	}
+	for (const g of groups.values()) {
+		if (g.length < 2) continue;
+		// The rules that share a month with another of the group: only they can meet on one day.
+		const meet = g.filter((a) => g.some((b) => b !== a && sharesMonth(a.capM3Day, b.capM3Day)));
+		if (meet.length < 2) continue;
+		const o = meet[0]!;
+		warnings.push(
+			`river off-take ${nodes[o.from]!.name} → ${nodes[o.to]!.name}: ${meet.length} rules of priority ${o.priority} (${meet.map((x) => x.id).join(', ')}) take from the same river for the same unit. ` +
+				'If they are one licence entered more than once at its full size, it takes that many times its licence: enter each licence once (a licence split into parts runs the same as one rule)'
+		);
+	}
+}
+
+const sharesMonth = (a: Float64Array, b: Float64Array): boolean => {
+	for (let m = 1; m <= 12; m++) if (a[m]! > 0 && b[m]! > 0) return true;
+	return false;
+};
 
 /** A river off-take's returned seepage as the EWR attribution counts it (engine ≥ 1.42.0, ./attribution.ts). */
 export interface OfftakeReturnLeg {

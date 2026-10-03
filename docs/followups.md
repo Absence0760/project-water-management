@@ -2780,7 +2780,8 @@ role and not before it.
       - ~~*Transfer room ignores today's release*~~: done (engine 1.29.0,
         issue #67): the room counts a fixed release's floor, the release
         with no inflow and nothing transferred in (`fixedReleaseFloor`,
-        model.md §2.6). A pass-inflow release stays uncounted: it is at most
+        model.md §2.6); from engine 1.70.0 its MIN(amount, outlet) in full
+        (`fixedReleaseRoom`, issue #90 Q26). A pass-inflow release stays uncounted: it is at most
         the day's inflow, which the room doesn't count either, and both are
         only known after the transfers are settled.
       - ~~*Self-checks water-balance table*~~: done (76f24440): optional

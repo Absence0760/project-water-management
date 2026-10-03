@@ -43,7 +43,7 @@ returns. It imports the engine by path and the example catchments from
 ## Running it
 
 ```bash
-pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 64 mutants)
+pnpm test:verify                                   # the guard: ~2–3 min locally (examples, probes, 12 random + 12 dense networks, 71 mutants)
 VERIFY_TEST_RANDOM=200 VERIFY_TEST_DENSE=200 pnpm test:verify   # what CI runs: agreement on 200 of each
 python3 verify/diff.py --random 100 --dense 100 --seed 1000     # the report; --keep DIR keeps the inputs and outputs, --verbose lists engine-only series
 ```
@@ -206,15 +206,15 @@ empty, and no other disagreement is allowed.
 ## The mutation self-test
 
 Agreement only means something if the cases exercise the rules. So
-`test_verify.py` breaks `model.py` one documented rule at a time (64
-mutants). Phase 1's 24: the receiver's room ignored, or shared after the source's bands; one
+`test_verify.py` breaks `model.py` one documented rule at a time (71
+mutants). Phase 1's 23 (the band-and-room order mutant went in engine 1.70.0, whose order is the one it tested): the receiver's room ignored; one
 reserve pool for all rules (N6); the room without the dam's losses, or
 counting what the receiver sent; no soil-water store; zero runs as recorded;
 accumulations not spread, or tested over the whole run; raw CHIRPS; the
 low-vs-CHIRPS median; a negative reading letting CHIRPS in; the binding-site
 tie; the seepage return; dead storage; J_int; the demand threshold; the
 forecast warm-up; crop efficiencies; the PE and evaporation month lengths;
-the return share; the exchange; no catchment area. Phase 2a's and later 40: a
+the return share; the exchange; no catchment area. Phase 2a's and later 48: a
 borehole's annual cap, the depletion lag and its carried deficit, the
 emergency level, supplemental boreholes before the dam, the 1 October reset;
 the cap's proration, the licence months and rate, the limit-bound kind, a
@@ -223,14 +223,19 @@ per-unit losses, the last schedule window, the priority classes, ranks
 within a class; the canal
 loss, its gross-up and return unit, an off-take's hands-off flow, off-takes
 of one priority sharing in bands at their keeps (engine 1.69.0), the dam
-top-up; junior users, user returns, the seniors' pass; the trigger's stop
+top-up, an off-take leaving its source's pass-inflow target, rules of one
+priority asking only MIN(limit, need) for off-takes and dam rules (not first
+capped at the free flow or water), a receiver's room shared by what the
+sources gave (not by what the rules ask: the wasted room) and offered again
+while a receiver fills (not one round), and a top-up's and a dam rule's room
+counting a fixed release's MIN(amount, outlet) in full (engine 1.70.0); junior users, user returns, the seniors' pass; the trigger's stop
 level, the pump's capacity and what it must leave; the survey curve, the
 outlet on a pass-inflow release, dead storage and the room for transfers on
 a fixed one; the hands-off flow on a dam, its EWR flag, no River to dam on
 a dam on the river (engine 1.68.0), River to dam by
 month. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
-three coverage probes reach the phase-2a rules a random network rarely
+five coverage probes reach the phase-2a rules a random network rarely
 does). A new rule added to `model.py` gets a mutant; a mutant that passes
 means the cases need one that reaches it.
 
@@ -278,7 +283,7 @@ and written into docs/model.md:
 
 | Probe | What the engine does | Where documented |
 | --- | --- | --- |
-| `band-and-room` | Within one priority the receiver's room is shared first (pro rata to MIN(limit, the rule's free water)), then the source's reserve bands, pro rata to what each rule still wants after the room | §2.6 |
+| `band-and-room` | Engine ≥ 1.70.0: within one priority the source's reserve bands come first (pro rata to what each rule asks), then the receiver's room, pro rata to what the sources gave, in rounds while a receiver fills. Before 1.70.0 the room came first (pro rata to MIN(limit, the rule's free water)) and the bands after, which this probe pinned then | §2.6 |
 | `room-while-sending` | A receiver's room is counted from yesterday's storage: what it sends at a lower priority the same day doesn't make room | §2.6 |
 | `accumulation-window-run` | The accumulation run test reads CHIRPS over the window's run days (the run's last 92 at most), not the whole run | §2.4d |
 | `low-vs-chirps-median` | The usual low-vs-CHIRPS ratio of an even number of years is the mean of the middle two | §2.10a |
@@ -295,7 +300,15 @@ keeps pumping until the stop level, §2.7e), `junior-user` (a junior user
 leaves the seniors' requirement, §2.7c) and `offtake-keep-bands` (off-takes
 of one priority share the flow in bands at their keeps, so a sibling without
 a hands-off flow doesn't let the others take below theirs, §2.6a, engine
-1.69.0), `outage-reading-set-aside` (a 30 mm reading after 150 blank days
-is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
+1.69.0), `offtake-release-keep-and-floor` (an off-take leaves its source's
+pass-inflow target in the river, and a top-up into a dam near its dead
+storage counts its fixed release in full, §2.6a, engine 1.70.0, issue #90
+Q26/Q27), `dam-rules-rationing-and-release` (two dam rules of one priority
+share a dam running dry 3 : 1 by their limits; a dam rule's room into a dam
+near its dead storage counts its fixed release in full; an empty source
+beside a full one into one receiver, the full one filling the room; one
+source into three receivers whose rooms fill one after another, its water
+offered again twice: §2.6, engine 1.70.0, issue #90 Q25/Q26),
+`outage-reading-set-aside` (a 30 mm reading after 150 blank days is set aside and CHIRPS fills its day, §2.4d, engine 1.70.0, issue #90 Q31)
 and `short-blank-run-window` (7 blank days still count like zeros, so the
 reading is spread; its mutant moves the limit by one).

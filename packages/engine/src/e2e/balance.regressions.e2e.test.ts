@@ -83,7 +83,7 @@ describe('fixed in 1.69.0: a release rule acts on days the dam does not exist (n
 	// sediment)"). A unit without a dam has no release (§2.7a item 3; resolveRelease returns null for capacity 0).
 	// But network/simulate.ts:1315 applies `node.release` whatever the day's capacity, so on those days a fixed or
 	// pass-inflow "release" takes the water routed to the absent dam before irrigation: the farm is supplied less
-	// than the same unit without a dam. The transfer room (simulate.ts:993) also counts the fixed release's floor
+	// than the same unit without a dam. The transfer room (simulate.ts:993) also counts the fixed release
 	// on such a day. Fix: release only when the day's capacity `cap` > 0 (both places).
 	for (const [why, dev] of [
 		['not in service until after the run', { damInServiceFrom: '2030-01-01' }],

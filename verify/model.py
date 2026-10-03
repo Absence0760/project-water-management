@@ -1296,51 +1296,77 @@ def run(doc: dict) -> dict:
                 active.append((t, lim))
         for prio in sorted({t["priority"] for t, _ in active}):
             group = [(t, lim) for t, lim in active if t["priority"] == prio]
-            want = {}
+            # Proportional rationing in rounds (engine >= 1.70.0, issue #90 Q25, §2.6): what each rule
+            # still asks (its limit alone, never first cut to its source's free water or its receiver's room).
+            rem = {}
             reserve = {}
             for t, lim in group:
                 src = by_id[t["fromNodeId"]]
-                res = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
-                reserve[t["id"]] = res
-                free = max(0.0, storage[src["id"]] - drawn[src["id"]] - res)
-                want[t["id"]] = min(lim, free)
+                reserve[t["id"]] = src["damCapacityM3"] * max(t.get("minStoragePct") or 0.0, src.get("damMinPct") or 0.0)
+                rem[t["id"]] = lim
+            # Each receiver's room.
+            room_left = {}
             for dst in sorted({t["toNodeId"] for t, _ in group}):
                 f = by_id[dst]
                 area, pd, e_raw, sp_raw = pre[dst]
                 after = storage[dst] + pd - e_raw - sp_raw
                 floor_rel = 0.0
                 if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                    # A fixed release's MIN(amount, outlet), in full (engine >= 1.70.0, issue #90 Q26).
                     outlet_c = f.get("damOutletCapacityM3Day")
-                    floor_rel = min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c,
-                                    after - drawn[dst] - f["damCapacityM3"] * (f.get("damMinPct") or 0.0))
-                    floor_rel = max(0.0, floor_rel)
+                    floor_rel = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_c is None else outlet_c))
                 rm = f["damCapacityM3"] - after + draw_bound(dst) + floor_rel - sched[dst]
-                rm = max(0.0, rm)
-                into = [t for t, _ in group if t["toNodeId"] == dst]
-                tot = sum(want[t["id"]] for t in into)
-                if tot > rm and tot > 0:
-                    diag["room_bound"] += 1
-                    for t in into:
-                        want[t["id"]] = want[t["id"]] * rm / tot
+                room_left[dst] = max(0.0, rm)
+            full = {d for d, v in room_left.items() if not v > 0}
             vol = {t["id"]: 0.0 for t, _ in group}
-            for src in sorted({t["fromNodeId"] for t, _ in group}):
-                from_src = [t for t, _ in group if t["fromNodeId"] == src]
-                cur = storage[src] - drawn[src]
-                left = {t["id"]: want[t["id"]] for t in from_src}
-                levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
-                if len(levels) > 1 and any(want[t["id"]] > 0 for t in from_src):
-                    diag["band_split"] += 1
-                for level in levels:
-                    band = max(0.0, cur - level)
-                    cur = min(cur, level)
-                    elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]
-                    tot = sum(left[t["id"]] for t in elig)
-                    if band <= 0 or tot <= 0:
+            taken = {}
+            while True:
+                # (1) At each source, its water above each rule's reserve, in bands at the reserves, pro rata
+                # to what each rule into a receiver that isn't full still asks.
+                given = {t["id"]: 0.0 for t, _ in group}
+                for src in sorted({t["fromNodeId"] for t, _ in group}):
+                    from_src = [t for t, _ in group if t["fromNodeId"] == src and rem[t["id"]] > 0 and t["toNodeId"] not in full]
+                    cur = storage[src] - drawn[src] - taken.get(src, 0.0)
+                    left = {t["id"]: rem[t["id"]] for t in from_src}
+                    levels = sorted({reserve[t["id"]] for t in from_src}, reverse=True)
+                    if len(levels) > 1:
+                        diag["band_split"] += 1
+                    for level in levels:
+                        band = max(0.0, cur - level)
+                        cur = min(cur, level)
+                        elig = [t for t in from_src if reserve[t["id"]] <= level and left[t["id"]] > 0]
+                        tot = sum(left[t["id"]] for t in elig)
+                        if band <= 0 or tot <= 0:
+                            continue
+                        for t in elig:
+                            give = left[t["id"]] if tot <= band else band * left[t["id"]] / tot
+                            given[t["id"]] += give
+                            left[t["id"]] -= give
+                # (2) Each receiver's room, pro rata to what the sources gave; a receiver given more is full.
+                basis = given
+                filled = False
+                for dst in sorted(room_left):
+                    if dst in full:
                         continue
-                    for t in elig:
-                        give = left[t["id"]] if tot <= band else band * left[t["id"]] / tot
-                        vol[t["id"]] += give
-                        left[t["id"]] -= give
+                    into = [t for t, _ in group if t["toNodeId"] == dst and rem[t["id"]] > 0]
+                    tot = sum(basis[t["id"]] for t in into)
+                    rm_left = room_left[dst]
+                    for t in into:
+                        x = min(given[t["id"]], basis[t["id"]] * rm_left / tot) if tot > rm_left else given[t["id"]]
+                        x = min(x, max(0.0, storage[t["fromNodeId"]] - drawn[t["fromNodeId"]] - taken.get(t["fromNodeId"], 0.0)))
+                        vol[t["id"]] += x
+                        rem[t["id"]] -= x
+                        taken[t["fromNodeId"]] = taken.get(t["fromNodeId"], 0.0) + x
+                    if tot > rm_left:
+                        diag["room_bound"] += 1
+                        full.add(dst)
+                        room_left[dst] = 0.0
+                        filled = True
+                    else:
+                        room_left[dst] = rm_left - tot
+                # (3) Room a source couldn't fill is offered again, while a receiver filled this round.
+                if not filled:
+                    break
             if any(vol[t["id"]] > 0 for t, _ in group):
                 diag["transfer_days"] += 1
             for t, _ in group:
@@ -1367,7 +1393,12 @@ def run(doc: dict) -> dict:
             held = storage[dst] + pd + J[dst]
             e_c = min(e_raw, max(held, 0.0))
             sp_c = min(sp_raw, max(held - e_c, 0.0))
-            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c))
+            # A fixed release's MIN(amount, outlet) in full (engine >= 1.70.0, issue #90 Q26), as a dam rule's room.
+            floor_ot = 0.0
+            if f["damCapacityM3"] > 0 and f.get("damReleaseRule") == "fixed" and f.get("damReleaseM3Day"):
+                outlet_o = f.get("damOutletCapacityM3Day")
+                floor_ot = max(0.0, min(f["damReleaseM3Day"][m], math.inf if outlet_o is None else outlet_o))
+            rm_dst = max(0.0, f["damCapacityM3"] - (storage[dst] + pd + sched[dst] - e_c - sp_c) + floor_ot)
             for t, c in caps:
                 # Under an allocation cap, the demand the cap still allows (§2.6a, §2.12a, engine >= 1.70.0):
                 # at most the destination's surface room at the start of the day; the top-up isn't capped.
@@ -1786,10 +1817,13 @@ def run(doc: dict) -> dict:
                 keeps = {}
                 for t in grp:
                     hk = t.get("handsOffM3Day")
-                    keep_k = max(zs, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
+                    # Engine >= 1.70.0 (issue #90 Q27): the source dam's pass-inflow target is kept too.
+                    keep_k = max(zs, pass_target if pass_target is not None else 0.0, hk if hk is not None else 0.0, z if t.get("handsOffEwr") else 0.0)
                     keeps[t["id"]] = keep_k
                     lim = rule_limit(t, o, m)
-                    v = min(max(0.0, U0 - taken - keep_k), lim)
+                    # Asks MIN(capacity, need share), never capped at the flow above its keep (engine >= 1.70.0,
+                    # issue #90 Q25); the bands keep it above its keep.
+                    v = lim
                     if t.get("sizing", "demand") != "capacity":
                         v = min(v, ot_need.get(t["id"], 0.0) / (1 - (t.get("lossPct") or 0.0)))
                     wants[t["id"]] = max(0.0, v)

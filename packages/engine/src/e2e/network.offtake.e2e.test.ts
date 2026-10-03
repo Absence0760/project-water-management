@@ -364,9 +364,10 @@ describe('the network around an off-take', () => {
 		near(get(byPriority, 'S', 'transfer_rule@a'), [300, 200]);
 		near(get(byPriority, 'S', 'transfer_rule@b'), [100, 0]);
 		const shared = run(three(0), [400, 200]);
-		// Day 2: limits MIN(cap, free 200) = 200 and 100 share the 200: 133.3 and 66.7.
-		near(get(shared, 'S', 'transfer_rule@a'), [300, 400 / 3]);
-		near(get(shared, 'S', 'transfer_rule@b'), [100, 200 / 3]);
+		// Day 2: capacities 300 and 100 share the 200 in proportion, 3 : 1: 150 and 50 (engine ≥ 1.70.0, issue #90
+		// Q25; before, each asked MIN(cap, free 200), 200 and 100: 133.3 and 66.7).
+		near(get(shared, 'S', 'transfer_rule@a'), [300, 150]);
+		near(get(shared, 'S', 'transfer_rule@b'), [100, 50]);
 		passes(three(0), shared);
 	});
 

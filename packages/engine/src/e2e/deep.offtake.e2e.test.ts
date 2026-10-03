@@ -6,7 +6,9 @@
 // networks (several rules per priority with distinct and tied keeps, rules
 // wanting nothing, monthly rates switching on 1 October, losses and their
 // seepage back, demand and capacity sizing, top-ups, sources with and without
-// a dam, senior users and the EWR), plus metamorphic properties and order
+// a dam, senior users and the EWR; engine ≥ 1.70.0: a source's pass-inflow
+// release target among the keeps and a destination's fixed release floor in
+// a top-up's room, issue #90 Q26/Q27), plus metamorphic properties and order
 // invariance to the bit. Synthetic names and values only.
 import { describe, expect, it } from 'vitest';
 import { toEpochDay, monthOfEpochDay, type Monthly } from '../calendar';
@@ -132,18 +134,20 @@ interface RefRule {
 }
 /**
  * Off-take volumes at one source on one day. By priority, lowest first; within
- * one, each active rule wants w = MIN(free_k, limit_k) (free_k = U₀ − taken so
- * far − keep_k); the flow between successive keeps, highest first (the top
- * band starts at U₀ − taken so far), goes pro rata to what each rule keeping
- * that much or less still wants.
+ * one, each active rule asks w = limit_k = MIN(capacity, need share ÷ (1 − l))
+ * (engine ≥ 1.70.0, issue #90 Q25: never capped at the flow above its keep;
+ * `freeCap` re-derives the rule before 1.70.0, w = MIN(free_k, limit_k), for
+ * the sensitivity count below); the flow between successive keeps, highest
+ * first (the top band starts at U₀ − taken so far), goes pro rata to what
+ * each rule keeping that much or less still wants.
  */
-function refShare(rules: readonly RefRule[], U0: number): Map<string, number> {
+function refShare(rules: readonly RefRule[], U0: number, freeCap = false): Map<string, number> {
 	const got = new Map<string, number>(rules.map((r) => [r.id, 0]));
 	let taken = 0;
 	for (const p of [...new Set(rules.map((r) => r.priority))].sort((a, b) => a - b)) {
 		const act = rules
 			.filter((r) => r.priority === p && r.cap > 0)
-			.map((r) => ({ r, left: Math.max(0, Math.min(Math.max(0, U0 - taken - r.keep), r.limit)) }))
+			.map((r) => ({ r, left: freeCap ? Math.max(0, Math.min(Math.max(0, U0 - taken - r.keep), r.limit)) : Math.max(0, r.limit) }))
 			.filter((a) => a.left > 0);
 		let top = U0 - taken;
 		let level = 0;
@@ -165,20 +169,21 @@ function refShare(rules: readonly RefRule[], U0: number): Map<string, number> {
 	return got;
 }
 
-describe('deep: hand-worked band sharing at one priority (§2.6a, engine 1.69.0)', () => {
+describe('deep: hand-worked band sharing at one priority (§2.6a, engine 1.69.0; asks uncapped, engine 1.70.0)', () => {
 	const dests = ['D1', 'D2', 'D3', 'D4'].map((id) => farm(id));
 	const net = (tr: Transfer[], days = 1, extra: Partial<Build> = {}) =>
 		build({ nodes: [gauge(), farm('S', { areaKm2: 1 }), ...dests, ...(extra.nodes ?? [])], transfers: tr, days, ...(extra.objects ? { objects: extra.objects } : {}), ...(extra.ewr !== undefined ? { ewr: extra.ewr } : {}), ...(extra.start ? { start: extra.start } : {}) });
 
-	it('three distinct keeps (0, 600, 800), capacity 300 each, on 1 000: 300, 175 and 50', () => {
-		// w: a 300, b MIN(400, 300) = 300, c MIN(200, 300) = 200. Band 1000–800: 800 wanted, 200 there →
-		// 75, 75, 50. Band 800–600 for a and b: 450 wanted, 200 there → 100 each. Band 600–0: a's 125.
+	it('three distinct keeps (0, 600, 800), capacity 300 each, on 1 000: 300, 166.7 and 66.7', () => {
+		// Each asks its 300 (engine ≥ 1.70.0: not capped at the flow above its keep, issue #90 Q25). Band 1000–800:
+		// 900 asked, 200 there → 66.7 each. Band 800–600 for a and b: 466.7 still asked, 200 there → 100 each.
+		// Band 600–0: a's last 133.3. (Before 1.70.0 c asked MIN(200, 300) = 200: 300, 175 and 50.)
 		const input = net([ot('a', 'S', 'D1', 300), ot('b', 'S', 'D2', 300, { handsOffM3Day: 600 }), ot('c', 'S', 'D3', 300, { handsOffM3Day: 800 })]);
 		const out = run(input, [1000]);
 		near(one(out, 'a'), [300]);
-		near(one(out, 'b'), [175]);
-		near(one(out, 'c'), [50]);
-		near(get(out, 'S', 'outflow'), [475]);
+		near(one(out, 'b'), [500 / 3]);
+		near(one(out, 'c'), [200 / 3]);
+		near(get(out, 'S', 'outflow'), [1400 / 3]);
 		passes(out);
 	});
 
@@ -240,10 +245,10 @@ describe('deep: hand-worked band sharing at one priority (§2.6a, engine 1.69.0)
 		const out = run(input, [1000]);
 		near(get(out, 'S', 'senior_requirement'), [700]);
 		near(get(out, 'S', 'ewr_cumulative'), [800]);
-		// Band 1000–800: w 300, 200, 300 → × 1/4: 75, 50, 75. Band 800–700: a and c, 450 wanted, 100 there → 50 each.
-		near(one(out, 'a'), [125]);
-		near(one(out, 'b'), [50]);
-		near(one(out, 'c'), [125]);
+		// Band 1000–800: each asks 300 → 66.7 each. Band 800–700: a and c, 466.7 still asked, 100 there → 50 each.
+		near(one(out, 'a'), [350 / 3]);
+		near(one(out, 'b'), [200 / 3]);
+		near(one(out, 'c'), [350 / 3]);
 		near(get(out, 'S', 'outflow'), [700]);
 		passes(out);
 	});
@@ -278,9 +283,9 @@ describe('deep: hand-worked band sharing at one priority (§2.6a, engine 1.69.0)
 		});
 		const out = run(input, [1000, 1000]);
 		near(get(out, 'S', 'spill'), [500, 1000]);
-		// Day 1, U₀ 500: band 500–400: w 300 + 100 → × 1/4: a 75, b 25; a takes its 225 more below. Day 2, U₀ 1000: both whole.
+		// Day 1, U₀ 500: band 500–400: each asks 300 → 50 each; a takes its 250 more below. Day 2, U₀ 1000: both whole.
 		near(one(out, 'a'), [300, 300]);
-		near(one(out, 'b'), [25, 300]);
+		near(one(out, 'b'), [50, 300]);
 		passes(out);
 	});
 
@@ -317,11 +322,15 @@ function randomCase(seed: number): Case {
 	const senior = g.bool(0.35);
 	if (senior) nodes.push(seniorUser('U', 'G', g.pick([0, g.float(0, 900), 5000])));
 	const sDam = g.bool(0.4);
+	// Engine ≥ 1.70.0 (issue #90 Q26, Q27), from a stream of its own so the cases before keep their draws: a
+	// pass-inflow release at a source with a dam (a monthly target or the EWR), fixed releases at destinations.
+	const h = new Rng(seed ^ 0x2f6b1c3d);
+	const passInflow = sDam && h.bool(0.5) ? { damReleaseRule: 'passInflow' as const, damReleaseM3Day: h.bool(0.6) ? Array.from({ length: 12 }, () => h.pick([0, h.float(0, 3000)])) : null } : {};
 	nodes.push(
 		farm('S', {
 			areaKm2: 1,
 			downstreamNodeId: senior ? 'U' : 'G',
-			...(sDam ? { damCapacityM3: g.float(50, 3000), damInitialPct: g.frac(), pctUpstreamToDam: g.frac(), pctRunoffToDam: g.frac(), damMinPct: g.frac(0.5, 0.1) * 0.5 } : {})
+			...(sDam ? { damCapacityM3: g.float(50, 3000), damInitialPct: g.frac(), pctUpstreamToDam: g.frac(), pctRunoffToDam: g.frac(), damMinPct: g.frac(0.5, 0.1) * 0.5, ...passInflow } : {})
 		})
 	);
 	const hasT = g.bool(0.4);
@@ -334,7 +343,8 @@ function randomCase(seed: number): Case {
 		const id = `D${k}`;
 		dIds.push(id);
 		const dam = g.bool(0.4);
-		nodes.push(farm(id, dam ? { damCapacityM3: g.float(10, 2000), damInitialPct: g.frac() } : {}));
+		const fixed = dam && h.bool(0.5) ? { damReleaseRule: 'fixed' as const, damReleaseM3Day: Array.from({ length: 12 }, () => h.pick([0, h.float(0, 800)])), damMinPct: h.pick([0, h.frac()]), damOutletCapacityM3Day: h.pick([null, h.float(0, 500)]) } : {};
+		nodes.push(farm(id, dam ? { damCapacityM3: g.float(10, 2000), damInitialPct: g.frac(), ...fixed } : {}));
 		if (g.bool(0.6)) objects.push(town(id, Array.from({ length: 12 }, () => (g.bool(0.15) ? 0 : g.float(0, 900)))));
 	}
 	const shared = g.float(0, 1500);
@@ -365,6 +375,9 @@ function randomCase(seed: number): Case {
 	return { input, natural };
 }
 
+/** Rule-days the replay met a pass-inflow target as a keep, and a fixed release floor in a top-up's room (engine ≥ 1.70.0). */
+const reached = { target: 0, floor: 0, oldCap: 0 };
+
 /** Replay each day of a run with refShare and the §2.6a destination split; returns the first mismatch. */
 function replay(input: ModelInput, out: ModelOutput): string | null {
 	const days = out.days;
@@ -390,7 +403,14 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 			if (!(cap > 0)) continue;
 			const dst = nodes.get(tr.toNodeId)!;
 			let n = s(dst.id, 'demand')[t]!;
-			if (tr.topUpDam && dst.damCapacityM3 > 0) n += Math.max(0, dst.damCapacityM3 - (t === 0 ? dst.damInitialPct * dst.damCapacityM3 : s(dst.id, 'dam_storage')[t - 1]!));
+			if (tr.topUpDam && dst.damCapacityM3 > 0) {
+				// No rain, evaporation, seepage or dam rules here: the dam holds yesterday's storage.
+				const q = t === 0 ? dst.damInitialPct * dst.damCapacityM3 : s(dst.id, 'dam_storage')[t - 1]!;
+				// Engine ≥ 1.70.0 (Q26): + a fixed release's MIN(amount, outlet), in full.
+				const floor = dst.damReleaseRule === 'fixed' ? Math.max(0, Math.min(dst.damReleaseM3Day![(m + 2) % 12]!, dst.damOutletCapacityM3Day ?? Infinity)) : 0;
+				if (floor > 0) reached.floor++;
+				n += Math.max(0, dst.damCapacityM3 - q + floor);
+			}
 			need.set(tr.id, (n * cap) / capInto.get(tr.toNodeId)!);
 		}
 		for (const src of new Set(rules.map((r) => r.fromNodeId))) {
@@ -398,23 +418,27 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 			const U0 = s(src, 'outflow')[t]! - s(src, 'offtake_loss_return')[t]! + s(src, 'offtake_out')[t]!;
 			const Zs = s(src, 'senior_requirement')[t]!;
 			const Z = s(src, 'ewr_cumulative')[t]!;
-			const ref = refShare(
-				mine.map((tr) => {
-					const cap = capOf(tr, m);
-					const l = tr.lossPct ?? 0;
-					return {
-						id: tr.id,
-						priority: tr.priority,
-						cap,
-						keep: Math.max(Zs, tr.handsOffM3Day ?? 0, tr.handsOffEwr ? Z : 0),
-						limit: tr.sizing === 'demand' ? Math.min(cap, (need.get(tr.id) ?? 0) / (1 - l)) : cap
-					};
-				}),
-				U0
-			);
+			// Engine ≥ 1.70.0 (Q27): a pass-inflow release's target at the source is kept too (its amount, or Z without).
+			const sn = nodes.get(src)!;
+			const target = sn.damReleaseRule === 'passInflow' ? (sn.damReleaseM3Day ? sn.damReleaseM3Day[(m + 2) % 12]! : Z) : 0;
+			if (target > Zs && mine.some((tr) => target > (tr.handsOffM3Day ?? 0) && !(tr.handsOffEwr && Z >= target))) reached.target++;
+			const spec = mine.map((tr) => {
+				const cap = capOf(tr, m);
+				const l = tr.lossPct ?? 0;
+				return {
+					id: tr.id,
+					priority: tr.priority,
+					cap,
+					keep: Math.max(Zs, target, tr.handsOffM3Day ?? 0, tr.handsOffEwr ? Z : 0),
+					limit: tr.sizing === 'demand' ? Math.min(cap, (need.get(tr.id) ?? 0) / (1 - l)) : cap
+				};
+			});
+			const ref = refShare(spec, U0);
+			const old = refShare(spec, U0, true);
 			for (const tr of mine) {
 				const v = s(src, `transfer_rule@${tr.id}`)[t]!;
 				const want = ref.get(tr.id)!;
+				if (Math.abs(old.get(tr.id)! - want) > 1e-6 * Math.max(1, U0)) reached.oldCap++;
 				if (Math.abs(v - want) > 1e-9 * Math.max(1, U0)) return `day ${t} ${src} rule ${tr.id}: engine ${v}, documented ${want} (U0 ${U0}, Zs ${Zs}, Z ${Z})`;
 			}
 		}
@@ -441,6 +465,13 @@ function replay(input: ModelInput, out: ModelOutput): string | null {
 	return null;
 }
 
+/** A source's pass-inflow release target on day t (§2.7e; kept by its off-takes, engine ≥ 1.70.0); 0 without one. */
+function releaseTarget(input: ModelInput, out: ModelOutput, src: string, t: number, Z: number): number {
+	const n = input.model.nodes.find((x) => x.id === src)!;
+	if (n.damReleaseRule !== 'passInflow') return 0;
+	return n.damReleaseM3Day ? n.damReleaseM3Day[(monthOfEpochDay(toEpochDay(out.startDate) + t) + 2) % 12]! : Z;
+}
+
 /** Days × sources where two rules of one priority with different keeps both took water. */
 function bandDays(input: ModelInput, out: ModelOutput): number {
 	const rules = input.model.transfers.filter((tr) => tr.source === 'river');
@@ -451,7 +482,8 @@ function bandDays(input: ModelInput, out: ModelOutput): number {
 			const Z = opt(out, src, 'ewr_cumulative', out.days)[t]!;
 			const on = rules.filter((r) => r.fromNodeId === src && opt(out, src, `transfer_rule@${r.id}`, out.days)[t]! > 0);
 			for (const p of new Set(on.map((r) => r.priority))) {
-				const keeps = new Set(on.filter((r) => r.priority === p).map((r) => Math.max(Zs, r.handsOffM3Day ?? 0, r.handsOffEwr ? Z : 0)));
+				const rt = releaseTarget(input, out, src, t, Z);
+				const keeps = new Set(on.filter((r) => r.priority === p).map((r) => Math.max(Zs, rt, r.handsOffM3Day ?? 0, r.handsOffEwr ? Z : 0)));
 				if (keeps.size > 1) n++;
 			}
 		}
@@ -480,6 +512,13 @@ describe('deep: random networks against the documented off-take sharing (§2.6a)
 		expect(active).toBeGreaterThan(300);
 		// …and days where rules of one priority with different keeps both took water (more than one band).
 		expect(multiBand).toBeGreaterThan(200);
+		// …and the engine ≥ 1.70.0 terms: a source's pass-inflow target above the senior requirement and some rule's own
+		// keep (444 source-days at writing), and a fixed release floor in a top-up's room (55 rule-days).
+		expect(reached.target).toBeGreaterThan(100);
+		expect(reached.floor).toBeGreaterThan(15);
+		// …and the replay would catch the rule before 1.70.0 (each ask capped at the flow above its keep): rule-days
+		// where that rule gives another volume.
+		expect(reached.oldCap).toBeGreaterThan(50);
 	});
 
 	it('no rule takes the river below its own keep: the rules of a priority keeping ≥ k take ≤ U₀ − taken earlier − k', () => {
@@ -495,7 +534,8 @@ describe('deep: random networks against the documented off-take sharing (§2.6a)
 					const U0 = opt(out, src, 'outflow', days)[t]! - opt(out, src, 'offtake_loss_return', days)[t]! + opt(out, src, 'offtake_out', days)[t]!;
 					const Zs = opt(out, src, 'senior_requirement', days)[t]!;
 					const Z = opt(out, src, 'ewr_cumulative', days)[t]!;
-					const keep = (tr: Transfer) => Math.max(Zs, tr.handsOffM3Day ?? 0, tr.handsOffEwr ? Z : 0);
+					const rt = releaseTarget(input, out, src, t, Z);
+					const keep = (tr: Transfer) => Math.max(Zs, rt, tr.handsOffM3Day ?? 0, tr.handsOffEwr ? Z : 0);
 					for (const r of mine) {
 						if (!(v(r.id) > 0)) continue;
 						const earlier = mine.filter((x) => x.priority < r.priority).reduce((a, x) => a + v(x.id), 0);
@@ -550,6 +590,9 @@ describe('deep: random networks against the documented off-take sharing (§2.6a)
 			x.settings.ewrPragmaticM3PerDay = x.settings.ewrPragmaticM3PerDay!.map((v) => v * 2) as unknown as Monthly;
 			for (const n of x.model.nodes) {
 				n.damCapacityM3 *= 2;
+				// Release amounts and outlets (engine ≥ 1.70.0's Q26/Q27 cases) are volumes too.
+				if (n.damReleaseM3Day) n.damReleaseM3Day = n.damReleaseM3Day.map((v) => v * 2);
+				n.damOutletCapacityM3Day = dbl(n.damOutletCapacityM3Day) ?? null;
 				if (n.userDemandM3Day) n.userDemandM3Day = n.userDemandM3Day.map((v) => v * 2);
 			}
 			for (const o of x.model.demandObjects ?? []) o.monthlyM3Day = o.monthlyM3Day!.map((v) => v * 2);
