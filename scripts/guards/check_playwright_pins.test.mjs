@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { imageProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
+import { composeImageProblems, imageProblems, pinProblems, readPins, scriptImageProblems } from './check_playwright_pins.mjs';
 
 const DIGEST = '@sha256:' + 'a'.repeat(64);
 
@@ -134,4 +134,28 @@ test("the repo's operator scripts pass, and tiles-dev.sh's GDAL image is among t
 	const tiles = readFileSync(join(root, 'bin/tiles-dev.sh'), 'utf8');
 	assert.match(tiles, /^GDAL_IMAGE="\$\{GDAL_IMAGE:-ghcr\.io\/osgeo\/gdal:[^@}]+@sha256:[0-9a-f]{64}\}"/m);
 	assert.deepEqual(scriptImageProblems(tiles, 'bin/tiles-dev.sh'), []);
+});
+
+test('docker-compose images pinned by tag and digest pass (positive control)', () => {
+	const compose = `services:\n  db:\n    image: postgres:17-alpine${DIGEST}\n  mail:\n    image: "axllent/mailpit:v1.31.2${DIGEST}" # quoted\n`;
+	assert.deepEqual(composeImageProblems(compose, 'docker-compose.yml'), []);
+});
+
+test('a docker-compose image by tag alone, by digest alone or with a short digest is refused, one line each', () => {
+	for (const image of ['postgres:17-alpine', `postgres${DIGEST}`, 'postgres:17-alpine@sha256:abc']) {
+		const problems = composeImageProblems(`services:\n  db:\n    image: ${image}\n  ok:\n    image: minio:x${DIGEST}\n`, 'docker-compose.yml');
+		assert.deepEqual(problems.length, 1, image);
+		assert.match(problems[0], new RegExp(`^docker-compose\\.yml: image "${image.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" is not pinned by digest`));
+	}
+});
+
+test('a docker-compose file with no image line is a problem, not a pass', () => {
+	assert.deepEqual(composeImageProblems('services: {}\n', 'docker-compose.yml'), ['docker-compose.yml: no image: line found']);
+});
+
+test("the repo's docker-compose.yml pins Postgres, Mailpit and MinIO by digest", () => {
+	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+	const compose = readFileSync(join(root, 'docker-compose.yml'), 'utf8');
+	for (const name of ['postgres', 'axllent/mailpit', 'pgsty/minio']) assert.match(compose, new RegExp(`^\\s*image: ${name}:[^@\\s]+@sha256:[0-9a-f]{64}$`, 'm'), name);
+	assert.deepEqual(composeImageProblems(compose, 'docker-compose.yml'), []);
 });

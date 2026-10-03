@@ -5603,6 +5603,23 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       that script. **Done 2026-10-03:** pinned to the tag's multi-arch index
       digest, and `check:pins` (`scriptImageProblems`) refuses any
       `*_IMAGE` default in `bin/*.sh` without one.
+- [x] **Pin the local-dev service images by digest** (round 2, 2026-10-03).
+      `docker-compose.yml` named Postgres, Mailpit and MinIO by tag only.
+      **Done:** each is `image:tag@sha256:…` (the tags' multi-arch index
+      digests from `docker buildx imagetools inspect`), and `check:pins`
+      (`composeImageProblems`) refuses an `image:` without one. Dependabot's
+      docker-compose entry moves tag and digest together. The label fonts'
+      archive (`bin/tiles-dev.sh fonts`) is held to a SHA-256 in
+      `bin/source-checksums.sha256` as well as its commit (maps.md §
+      Checksums).
+- [ ] **CI's Postgres service image floats.** `ci.yml`'s two `services:
+      postgres` (db-test, e2e) run `postgres:17-alpine` by tag, while
+      docker-compose.yml pins it by digest, and Dependabot's github-actions
+      ecosystem doesn't update service images. Durable fix: pin both to
+      compose's digest and have `check:pins` require they equal
+      docker-compose.yml's postgres image, so a Dependabot compose PR fails
+      until they move with it. Trigger: the next Postgres image bump, or the
+      next change to ci.yml's services.
 - [x] **No published checksums for the downloaded sources.** HydroRIVERS'
       zip, JRC GSW's tiles, dPET's yearly files and the Protomaps/Mapterhorn
       builds have no checksum the scripts verify (whether each publisher

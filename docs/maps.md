@@ -1729,7 +1729,7 @@ too) either way.
 | dPET yearly files (`pnpm import:evaporation:fetch`) | None: no manifest in the dataset folder, and its README and scripts name none; the site's whole-dataset zip (2.7 TB, streamed) carries only CRC-32s, which are not a tamper check. The DOI-versioned dataset doesn't change | SHA-256 recorded on each year's first fetch (2.4 GB a year, so none is pinned in advance), checked on every later fetch |
 | Protomaps daily basemap build (`pnpm dev:tiles:fetch`) | Yes, an MD5 of each whole build in `build-metadata.protomaps.dev/builds.json` | None possible: `pmtiles extract` reads only the bbox's byte ranges of a ~140 GB archive, and a whole-file MD5 can't check a partial read. The extract pins one build by date (`TILES_BUILD`), and go-pmtiles holds every range read to the archive's ETag, so a build changed mid-extract fails rather than mixing |
 | Mapterhorn planet build (`pnpm dev:tiles:terrain`) | Yes, an MD5 of each archive in `download.mapterhorn.com/download_urls.json` (with its version, 0.0.13) | None possible, for the same reason (a ~355 GB archive read by range); ETag-consistent reads as above |
-| Label fonts (basemaps-assets) | n/a | pinned by commit SHA (`FONTS_REF`); the GitHub archive itself isn't hashed |
+| Label fonts (basemaps-assets, `pnpm dev:tiles:fonts`) | None: GitHub's codeload archive of a commit carries no published hash | Pinned by commit SHA (`FONTS_REF`), and the archive's SHA-256 pinned in `bin/source-checksums.sha256` (recorded 2026-10-03, matching a fetch on 2026-10-01); another `TILES_FONTS_REF` is recorded on its first fetch |
 
 How the check works (`scripts/guards/source_checksums.mjs`, from
 `bin/tiles-dev.sh` and `bin/evaporation-fetch.sh`): after a whole-file

@@ -132,6 +132,9 @@ fetch_fonts() {
 		fetch_https -fsSL -o "$tgz.part" "https://codeload.github.com/protomaps/basemaps-assets/tar.gz/$FONTS_REF"
 		mv "$tgz.part" "$tgz"
 	fi
+	# The commit pins what the archive holds; the manifest pins its bytes, so a
+	# codeload archive that changes under the same commit stops here.
+	verify_source "$tgz"
 	rm -rf "$FONTS" && mkdir -p "$FONTS"
 	local members=("$top/fonts/OFL.txt")
 	for f in "${FONT_STACKS[@]}"; do members+=("$top/fonts/$f"); done
