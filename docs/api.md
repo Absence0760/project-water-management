@@ -25,17 +25,17 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
 | POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
 | DELETE | `/auth/me` | `{ password }` | "Delete my account" (issue #112): `204`, the account deleted and this browser's session and trusted-device cookies cleared, then an email to its address saying what was done; `403 wrong_current_password`; `429 signin_locked` + `Retry-After` while the address is locked; `409 account_sole_holder` with `details: { projects: [{ id, name }], teams: [{ id, name }] }`, the projects the person is the only owner of and the teams they are the only admin of (signed in) |
-| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
+| PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank (or only invisible characters) or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
-| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
+| POST | `/auth/verify-email` | `{ token }` | `200 { verified: true, email }` (the address the link confirmed) + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired, or its sender no longer owns the project (administers the team, 155) (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (or, for a pack's token, the issued pack); both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
-`user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
+`user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars (all of it counts: bcrypt hashes their SHA-256, so its 72-byte limit doesn't cut a long one short).
 
 ### Two-step sign-in
 
@@ -212,8 +212,10 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `withoutFarmFigures`); the project's history keeps them. Never a secret: no password or token hash, unsubscribe nonce, key or
   link material. One export a minute per account
   (`app_user.data_exported_at`); a render session is refused (403).
-- **`PATCH /auth/me`** changes only the fields sent: `displayName` (trimmed,
-  1–100 characters), `locale` (a code in the language table, e.g. `'en'` or
+- **`PATCH /auth/me`** changes only the fields sent: `displayName` (whitespace runs made one
+  space, control and bidi embedding/override/isolate characters dropped, then
+  trimmed; 1–100 characters with at least one visible one, as at sign-up,
+  `auth/displayName.ts`), `locale` (a code in the language table, e.g. `'en'` or
   `'af'`, or `null` to go back to following the browser; any other value,
   including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`),
   and `preferences`, whose keys sent replace the account's (the others stay):

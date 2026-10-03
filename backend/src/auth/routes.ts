@@ -25,10 +25,10 @@ import { countSignup } from './signupThrottle.js';
 import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
+import { displayName } from './displayName.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
-const displayName = z.string().trim().min(1).max(100);
 /** app_user.locale (050, 080): the farmer-facing pages' and emails' language, any in the engine's language table; null = not chosen (follow the browser). */
 const locale = z.enum(LOCALES).nullable();
 /** app_user.volume_unit (050): how the farm view shows volumes. */

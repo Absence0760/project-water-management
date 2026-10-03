@@ -18,7 +18,7 @@ export function emailAuthApi(api: Pick<Api, 'request'>) {
 		/** 204 on success; signs out every session (log in again afterwards). */
 		resetPassword: (token: string, password: string) =>
 			request<void>('POST', '/auth/reset-password', { token, password }),
-		verifyEmail: (token: string) => request<{ verified: true }>('POST', '/auth/verify-email', { token }),
+		verifyEmail: (token: string) => request<{ verified: true; email: string }>('POST', '/auth/verify-email', { token }),
 		/** Signed out, from the sign-in page (issue #57): always 202, whether or not the address has an account waiting to be confirmed. */
 		resendConfirmation: (email: string) => request<{ ok: true }>('POST', '/auth/resend-confirmation', { email }),
 		/** 202, or ApiError 429 (sent a moment ago) / 409 (already verified). */
@@ -68,5 +68,19 @@ export function passwordProblem(password: string, confirm: string): Msg | null {
 	if (password.length < 8) return msg('Use at least 8 characters.');
 	if (password.length > 200) return msg('Use at most 200 characters.');
 	if (password !== confirm) return msg('The two passwords don’t match.');
+	return null;
+}
+
+/**
+ * Display-name rule shared with the server (backend/src/auth/displayName.ts):
+ * 1–100 characters once whitespace runs are one space and the controls are
+ * dropped, with at least one letter, digit, symbol or punctuation mark, so a
+ * name of only invisible characters is refused here rather than as a bare 400.
+ */
+export function displayNameProblem(name: string): Msg | null {
+	// i18n-section: account
+	const clean = name.replace(/\s+/g, ' ').replace(/[\p{Cc}\u202A-\u202E\u2066-\u2069]/gu, '').trim();
+	if (!/[\p{L}\p{N}\p{S}\p{P}]/u.test(clean)) return msg('Enter a display name.');
+	if (clean.length > 100) return msg('Use at most 100 characters.');
 	return null;
 }

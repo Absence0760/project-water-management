@@ -184,7 +184,9 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 		// record (auth/device.ts), as after a password reset, so whoever keeps
 		// the address's shared record locked can't keep a new account out.
 		issueDevice(c, account.email, account.sessions_revoked_at);
-		return c.json({ verified: true });
+		// The address the link confirmed (its holder has the inbox): the page
+		// tells it from the account this browser is signed in to, if another.
+		return c.json({ verified: true, email: account.email });
 	})
 	.post('/resend-verification', requireUser, async (c) => {
 		const mail = await withUser(c.get('userId'), async (db) => {

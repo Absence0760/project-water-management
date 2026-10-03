@@ -89,10 +89,10 @@ describe('no table stores a raw credential', () => {
 		}
 	});
 
-	it('passwords are bcrypt hashes, never the password', async () => {
+	it('passwords are bcrypt hashes of the password’s SHA-256 (auth/password.ts), never the password', async () => {
 		const u = await signUp('Bcrypt');
 		const [row] = await asOwner('SELECT password_hash FROM app_user WHERE id = $1', [u.id]);
-		expect(row.password_hash).toMatch(/^\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$/);
+		expect(row.password_hash).toMatch(/^\$wm-sha256\$\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}$/);
 		expect(row.password_hash).not.toContain('correct horse');
 	});
 
