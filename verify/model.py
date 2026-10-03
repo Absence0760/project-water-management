@@ -772,7 +772,7 @@ def run(doc: dict) -> dict:
         e = farm_efficiency(f, rows, apan)
         smax = cropped * store_mm / 1000
         w = 0.0
-        gross_s, eff_s, soil_s, F_s, D_s = [], [], [], [], []
+        gross_s, eff_s, soil_s, F_s, D_s, F0_s = [], [], [], [], [], []
         for i, m in enumerate(wm):
             gross = 0.0
             for crop, a in rows:
@@ -783,6 +783,7 @@ def run(doc: dict) -> dict:
             need = max(0.0, gross)
             # Rain short of the need by no more than 1e-12 of it covers it (§2.3).
             used = need if need - available <= 1e-12 * need else available
+            F0_s.append(need - used)
             F = (need - used) * dfac(f, i)
             w = min(smax, max(0.0, available - used))
             gross_s.append(gross)
@@ -790,7 +791,7 @@ def run(doc: dict) -> dict:
             soil_s.append(w / cropped * 1000 if cropped > 0 else 0.0)
             F_s.append(F)
             D_s.append(F / e)
-        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "Dc": D_s, "e": e}
+        fd[f["id"]] = {"gross": gross_s, "eff": eff_s, "soil": soil_s, "F": F_s, "Dc": D_s, "e": e, "F0": F0_s}
 
     # Demand objects (§2.7f): enabled, on a farm, in id order.
     objs: dict[str, list[dict]] = {f["id"]: [] for f in farms}
@@ -800,6 +801,8 @@ def run(doc: dict) -> dict:
         objs[ob["nodeId"]].append(ob)
     obj_dem: dict[str, list[float]] = {}
     obj_floor: dict[str, list[float]] = {}
+    # Each object's demand before the demand factor (its month × its schedule): a full allocation fits on it.
+    obj_raw: dict[str, list[float]] = {}
     obj_B: dict[str, float] = {}
     for fid, lst in objs.items():
         x = by_id[fid]
@@ -818,9 +821,10 @@ def run(doc: dict) -> dict:
             if ob.get("category") in ("domestic", "municipal") and pop is not None:
                 B = pop * BASIC_LITRES / 1000 / (1 - loss)
             sched = ob.get("schedule") or []
-            dem, flo = [], []
+            dem, flo, raw = [], [], []
             for i, o in enumerate(days):
                 s = schedule_factor(sched, o)
+                raw.append(base[wm[i]] * s)
                 f_ = dfac(x, i)
                 v = base[wm[i]] * f_ * s
                 if B is not None and f_ < 1:
@@ -831,22 +835,30 @@ def run(doc: dict) -> dict:
                 flo.append(min(B, v) if B is not None else NAN)
             obj_dem[ob["id"]] = dem
             obj_floor[ob["id"]] = flo
+            obj_raw[ob["id"]] = raw
             if B is not None:
                 obj_B[ob["id"]] = B
 
-    # The unit's abstraction demand before a full allocation's factor.
+    # The unit's abstraction demand, D (after its demand factors), and D_base before them: a full
+    # allocation's factor is fitted on D_base and the demand factors apply after it (§2.12a, engine 1.70.0).
+    D_fact: dict[str, list[float]] = {}
     D_base: dict[str, list[float]] = {}
     for f in farms:
-        dd = []
+        dd, db = [], []
         for i in range(n):
             v = fd[f["id"]]["Dc"][i]
+            b = fd[f["id"]]["F0"][i] / fd[f["id"]]["e"]
             for ob in objs[f["id"]]:
                 v += obj_dem[ob["id"]][i]
+                b += obj_raw[ob["id"]][i]
             dd.append(v)
-        D_base[f["id"]] = dd
+            db.append(b)
+        D_fact[f["id"]] = dd
+        D_base[f["id"]] = db
     for u in users:
         ud = u.get("userDemandM3Day")
-        D_base[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
+        D_base[u["id"]] = [float(ud[wm[i]]) if ud else 0.0 for i in range(n)]
+        D_fact[u["id"]] = [float(ud[wm[i]]) * dfac(u, i) if ud else 0.0 for i in range(n)]
 
     # ---- allocations (§2.12a) -------------------------------------------
     alloc_mode = settings.get("allocationMode") or "none"
@@ -916,13 +928,17 @@ def run(doc: dict) -> dict:
             if nid in fd:
                 fd[nid]["F"] = [fd[nid]["F"][i] * k[i] for i in range(n)]
                 fd[nid]["Dc"] = [fd[nid]["Dc"][i] * k[i] for i in range(n)]
+                # Each object: its raw demand × k, then the demand factor, never below MIN(floor, raw × k).
                 for ob in objs[nid]:
                     od = obj_dem[ob["id"]]
+                    rw = obj_raw[ob["id"]]
+                    B = obj_B.get(ob["id"])
                     x = by_id[nid]
                     for i in range(n):
-                        v = od[i] * k[i]
-                        if not math.isnan(obj_floor[ob["id"]][i]) and dfac(x, i) < 1:
-                            v = max(v, obj_floor[ob["id"]][i])
+                        f_ = dfac(x, i)
+                        v = rw[i] * k[i] * f_
+                        if B is not None and f_ < 1:
+                            v = max(v, min(B, rw[i] * k[i]))
                         od[i] = v
                 dn = []
                 for i in range(n):
@@ -932,9 +948,9 @@ def run(doc: dict) -> dict:
                     dn.append(v)
                 Dn[nid] = dn
             else:
-                Dn[nid] = [dd[i] * k[i] for i in range(n)]
+                Dn[nid] = [D_fact[nid][i] * k[i] for i in range(n)]
         else:
-            Dn[nid] = list(dd)
+            Dn[nid] = list(D_fact[nid])
     capped = alloc_mode == "cap"
 
     # ---- river abstractions beside a unit's dam (§2.7j) -------------------

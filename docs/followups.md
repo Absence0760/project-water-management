@@ -396,6 +396,12 @@ runs and accumulations are real) can't be decided without the client.
       rule tables' monthly compliance) and raises the level to at least its
       own; a rule **from the published notice** is one level in force below
       100 % from the publication date to the next expected one.
+      From engine 1.70.0 (issue #90 Q30, the operator's decision): a dam that
+      comes into service mid-run **can only make a review milder while it
+      fills**: each review reads the level with the filling dams left out and
+      counted and applies the milder, until the dam first starts a day at the
+      mildest level's share of its capacity (no published source covers first
+      filling; judgement).
 - [ ] **Drought restrictions on the other water users: decide whether and
       how** (engine 1.54.0, [model.md §2.7i](./model.md)). The rule cuts
       only hydrological units: an other water user's demand has no category

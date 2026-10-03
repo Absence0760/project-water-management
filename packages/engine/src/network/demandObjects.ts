@@ -269,13 +269,6 @@ export interface PlanObjects {
 	 * null for one without. The day's floor is MIN(floor, its demand that day).
 	 */
 	floor: (number | null)[];
-	/**
-	 * The days a restriction (the demand factor below 1) applies on the unit
-	 * (engine ≥ 1.44.0): a full allocation's rescaling holds the floor on
-	 * these days too (allocations/mode.ts). Null when no day is restricted or
-	 * no object has a floor.
-	 */
-	restricted: Uint8Array | null;
 	/** Each object's category (engine ≥ 1.54.0): the part of demand a drought restriction level cuts it as (./restriction.ts). */
 	category: DemandObject['category'][];
 }
@@ -290,6 +283,13 @@ export interface PlanObjects {
  * municipal object below MIN(its basic-needs floor, its unrestricted
  * demand) (engine ≥ 1.44.0). Warnings name what runs differently from what was
  * entered.
+ *
+ * `scale` (engine ≥ 1.70.0, a full allocation's factor per run day,
+ * allocations/mode.ts planAllocations): multiplies each object's demand
+ * before the demand factor and the floor, so the factor cuts the scaled
+ * demand and the floor is MIN(floor, the scaled demand): a level of 0.8
+ * on a full-allocation run is 80 % of the registered use (docs/model.md
+ * §2.12a). Without it the expression is the one before 1.70.0, to the bit.
  */
 export function planObjects(
 	objects: readonly DemandObject[],
@@ -298,7 +298,8 @@ export function planObjects(
 	unitFactor: Float64Array | null | ((o: DemandObject) => Float64Array | null),
 	factorFrom: number,
 	warnings: string[],
-	day0?: number
+	day0?: number,
+	scale?: ArrayLike<number>
 ): PlanObjects {
 	const demand: Float64Array[] = [];
 	const schedule: (Float64Array | null)[] = [];
@@ -306,7 +307,6 @@ export function planObjects(
 	const tier = new Uint8Array(objects.length);
 	const total = new Float64Array(days);
 	const floors: (number | null)[] = [];
-	let restricted: Uint8Array | null = null;
 	objects.forEach((o, k) => {
 		const monthly = objectMonthlyM3Day(o, warnings);
 		const who = `demand object "${o.name}"`;
@@ -319,16 +319,23 @@ export function planObjects(
 		// The object's own demand factor (engine ≥ 1.45.0): the unit's × its category's (demand.scale with a part), one path for the floor below.
 		const factor = typeof unitFactor === 'function' ? unitFactor(o) : unitFactor;
 		const d = new Float64Array(days);
-		for (let t = 0; t < days; t++) {
-			const m = wy[t]!;
-			const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
-			d[t] = s ? v * s[t]! : v;
-			// A restriction never below the floor (engine ≥ 1.44.0); the schedule applies first, so a day off stays off.
-			if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) {
-				d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
-				(restricted ??= new Uint8Array(days))[t] = 1;
+		if (scale) {
+			// A full allocation (engine ≥ 1.70.0): the scaled demand is what the factor cuts and the floor holds.
+			for (let t = 0; t < days; t++) {
+				const m = wy[t]!;
+				const raw = (s ? monthly[m]! * s[t]! : monthly[m]!) * scale[t]!;
+				const cut = factor && t >= factorFrom;
+				d[t] = cut ? raw * factor[m]! : raw;
+				if (floor !== null && cut && factor[m]! < 1) d[t] = Math.max(d[t]!, dayFloor(floor, raw));
 			}
-		}
+		} else
+			for (let t = 0; t < days; t++) {
+				const m = wy[t]!;
+				const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
+				d[t] = s ? v * s[t]! : v;
+				// A restriction never below the floor (engine ≥ 1.44.0); the schedule applies first, so a day off stays off.
+				if (floor !== null && factor && t >= factorFrom && factor[m]! < 1) d[t] = Math.max(d[t]!, dayFloor(floor, s ? monthly[m]! * s[t]! : monthly[m]!));
+			}
 		demand.push(d);
 		schedule.push(s);
 		returnShare[k] = objectReturnShare(o);
@@ -341,7 +348,7 @@ export function planObjects(
 	const order = supplyLevels(objects, warnings);
 	order.level.forEach((l, k) => (tier[k] = l));
 	for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, cropLevel: order.cropLevel, levels: order.count, total, floor: floors, restricted, category: objects.map((o) => o.category) };
+	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, cropLevel: order.cropLevel, levels: order.count, total, floor: floors, category: objects.map((o) => o.category) };
 }
 
 /**

@@ -112,7 +112,8 @@ the dense ones:
   columns, and the summary's `capReached` and `limitBound` rows (with the
   day's kind); full-allocation runs (k per unit and water year over both
   sources, with a forecast tail, the floor held, the summary's `scaled`
-  rows); compare-only runs.
+  rows; k fitted on the demand before the demand factors, which then apply
+  after it, engine ≥ 1.70.0); compare-only runs.
 - **Demand factors** (§2.3 item 4a) from `demandFactorFrom`.
 - **Demand objects** (§2.7f): monthly and per-unit sizing (losses, monthly
   factors), schedules (always, yearly, a date range, Easter-relative, by

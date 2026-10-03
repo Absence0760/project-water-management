@@ -206,6 +206,29 @@ describe("allocationMode 'fullAllocation'", () => {
 		for (let t = 0; t < D.length; t += 101) expect(Zs[t]).toBeCloseTo(D[t]!, 9);
 	});
 
+	it('a demand factor applies after the factor (engine 1.70.0, issue #90 Q29): k is the plain run’s and each day’s demand is the factor × the plain day’s', () => {
+		// Farm A × 0.8 in Oct–Dec only, the rest × 1: the fit doesn't see the factor, so k is unchanged and the
+		// demand in those months is 0.8 × the full allocation's; the year asks Σ f D ÷ Σ D of its volume.
+		const r = runModelChecked(applyScenario(input, [{ op: 'demand.scale', factor: 0.8, nodeIds: ['a'], months: [10, 11, 12] }]).input);
+		expect(r.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		expect(col(r, 'a', ALLOCATION_SERIES.demandFactor.key)).toEqual(col(out, 'a', ALLOCATION_SERIES.demandFactor.key));
+		const D = col(out, 'a', 'demand')!;
+		const D1 = col(r, 'a', 'demand')!;
+		const d0 = toEpochDay(r.startDate);
+		for (let t = 0; t < D.length; t++) expect(D1[t], String(t)).toBeCloseTo((monthOfEpochDay(d0 + t) >= 10 ? 0.8 : 1) * D[t]!, 9);
+		// The summary's rows record the demand before the factor, so they are the plain run's.
+		expect(r.summary.allocations!.nodes[0]!.scaled).toEqual(out.summary.allocations!.nodes[0]!.scaled);
+	});
+
+	it('the allocations self-check holds the demand before its factor × k to the volume: a k off by 1 % fails it', () => {
+		const r = runModelChecked(applyScenario(input, [{ op: 'demand.scale', factor: 0.7 }]).input);
+		expect(r.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const x = applyScenario(input, [{ op: 'demand.scale', factor: 0.7 }]).input;
+		expect(checkAllocations(x, r)).toBeNull();
+		const off = { ...r, series: r.series.map((c) => (c.nodeId === 'a' && c.key === ALLOCATION_SERIES.demandFactor.key ? { ...c, values: c.values.map((v) => v * 1.01) } : c)) };
+		expect(checkAllocations(x, off)).toMatch(/before its demand factors × the full-allocation factor over water year/);
+	});
+
 	it('takes none of a volume in a year its unit has no demand, with a warning', () => {
 		const f = fullAllocationFactors([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100 }], new Float64Array(400), toEpochDay('2001-10-01'), 400);
 		expect([...new Set(f.factor)]).toEqual([0]);
