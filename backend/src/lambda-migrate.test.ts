@@ -1,7 +1,11 @@
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MigrateError } from '../scripts/migrate.js';
-import { failureSummary, handler, isMissingObject } from './lambda-migrate.js';
+import { failureSummary, handler, isMissingObject, ownerUrl, scramSha256Verifier } from './lambda-migrate.js';
+
+// The master secret as Secrets Manager returns it; each test sets its text.
+const secret = vi.hoisted(() => ({ text: '' }));
+vi.mock('./config/secretsManager.js', () => ({ getSecretString: async () => secret.text }));
 
 // The deploy workflow prints a failed run's summary to a public Actions log,
 // so it must carry codes and names only, never the error's text.
@@ -99,5 +103,84 @@ describe('isMissingObject: S3 answers a GetObject-only role 403 for a missing ke
 		expect(isMissingObject(Object.assign(new Error('x'), { name: 'SlowDown', $metadata: { httpStatusCode: 503 } }))).toBe(false);
 		expect(isMissingObject(new Error('socket hang up'))).toBe(false);
 		expect(isMissingObject(undefined)).toBe(false);
+	});
+});
+
+describe('the migrate run before it touches the database', () => {
+	/** The handler's failure: the summary it throws and the error it logged for CloudWatch. */
+	async function failure() {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const err = (await handler({}, context).catch((e: Error) => e)) as Error;
+		return { summary: JSON.parse(err.message) as { code: string }, message: err.message, logged: String(logged.mock.calls[0]?.[1]) };
+	}
+	const GOOD = 'A'.repeat(24);
+
+	it('a master secret that isn’t JSON fails without quoting it', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', 'arn:secret');
+		secret.text = 'password=hunter2-not-json';
+		const { summary, message, logged } = await failure();
+		expect(summary.code).toBe('setup_failed');
+		expect(logged).toContain('master secret is not JSON');
+		expect(logged + message).not.toContain('hunter2');
+	});
+
+	it('a master secret without a username or password fails', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', 'arn:secret');
+		for (const text of ['{"username":"water"}', '{"password":"x"}', '{}']) {
+			secret.text = text;
+			expect((await failure()).logged).toContain('master secret is missing username/password');
+			vi.restoreAllMocks();
+		}
+	});
+
+	it('names a missing DB_HOST or DB_NAME', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', 'arn:secret');
+		secret.text = JSON.stringify({ username: 'water', password: 'pw' });
+		vi.stubEnv('DB_NAME', 'water');
+		expect((await failure()).logged).toContain('DB_HOST is not set');
+		vi.restoreAllMocks();
+		vi.stubEnv('DB_HOST', 'db.internal');
+		vi.stubEnv('DB_NAME', '');
+		expect((await failure()).logged).toContain('DB_NAME is not set');
+	});
+
+	it('refuses a WATER_APP_PASSWORD shorter than 24 or not alphanumeric, before connecting', async () => {
+		vi.stubEnv('MASTER_SECRET_ARN', 'arn:secret');
+		secret.text = JSON.stringify({ username: 'water', password: 'pw' });
+		// Port 1: a connection attempt would fail with ECONNREFUSED, not this.
+		vi.stubEnv('DB_HOST', '127.0.0.1');
+		vi.stubEnv('DB_PORT', '1');
+		vi.stubEnv('DB_NAME', 'water');
+		for (const pw of ['A'.repeat(23), `${'A'.repeat(23)}!`, `${GOOD} `, '']) {
+			vi.stubEnv('WATER_APP_PASSWORD', pw);
+			const { logged } = await failure();
+			expect(logged).toContain(pw ? 'WATER_APP_PASSWORD must be 24+ alphanumeric characters' : 'WATER_APP_PASSWORD is not set');
+			vi.restoreAllMocks();
+		}
+	});
+});
+
+describe('ownerUrl', () => {
+	it('verifies the server’s certificate, encodes the credentials and defaults the port to 5432', () => {
+		vi.stubEnv('DB_HOST', 'db.internal');
+		vi.stubEnv('DB_NAME', 'water');
+		const url = new URL(ownerUrl({ username: 'wa ter', password: 'p@ss/w:rd' }));
+		expect(url.searchParams.get('sslmode')).toBe('verify-full');
+		expect([decodeURIComponent(url.username), decodeURIComponent(url.password), url.hostname, url.port || '5432', url.pathname]).toEqual(['wa ter', 'p@ss/w:rd', 'db.internal', '5432', '/water']);
+		vi.stubEnv('DB_PORT', '6543');
+		expect(new URL(ownerUrl({ username: 'u', password: 'p' })).port).toBe('6543');
+	});
+});
+
+describe('scramSha256Verifier', () => {
+	it('writes the pg_authid format, is the same for the same salt and differs for another (Postgres accepts it: lambda-migrate.db.test.ts)', () => {
+		const salt = Buffer.alloc(16, 7);
+		const v = scramSha256Verifier('pencil', salt);
+		expect(v).toMatch(/^SCRAM-SHA-256\$4096:[A-Za-z0-9+/]{22}==\$[A-Za-z0-9+/]{43}=:[A-Za-z0-9+/]{43}=$/);
+		expect(v.split('$')[1]).toBe(`4096:${salt.toString('base64')}`);
+		expect(scramSha256Verifier('pencil', salt)).toBe(v);
+		expect(scramSha256Verifier('pencil', Buffer.alloc(16, 8))).not.toBe(v);
+		expect(scramSha256Verifier('pencil')).not.toBe(scramSha256Verifier('pencil'));
+		expect(v).not.toContain('pencil');
 	});
 });

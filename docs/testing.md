@@ -65,9 +65,17 @@ what they time: the engine's run loop, the portfolio query
 (`backend/src/portfolio/portfolio.ts`; a new join or per-row subquery), or
 the role functions every RLS policy calls (`app_project_role`,
 `app_has_role`), or a model run's path (the engine, `runs/execute.ts`
-`storeRun`, the `rerun` job; the load checks). A
+`storeRun`, the `rerun` job; the load checks), or the GeoJSON checks'
+self-intersection sweep (`backend/src/geo/geojson.ts`). A
 budget should sit well above the measured time (the portfolio's is ~12×),
 so it catches a change in the query's shape, not machine noise.
+
+A unit test keeps a ceiling only as a hang guard far above the measured
+time (the hostile map files' 2 s for a decode of a few milliseconds),
+never as a budget: the sweep's 1 s for 80 ms failed under coverage on a
+loaded CI runner and moved to `geo/geojson.perf.test.ts`. Where the work is
+bounded by a count (GEO_MAX_PAIR_CHECKS, RASTER_MAX_CROSSINGS), the unit test
+asserts the refusal the count produces, which needs no clock.
 
 The backend `perf` project also holds one test that isn't a budget:
 `model/assurance-jit.perf.test.ts` (issue #192, engine-audit.md V1) runs the

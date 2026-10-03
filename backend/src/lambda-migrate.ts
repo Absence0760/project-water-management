@@ -122,7 +122,7 @@ export function scramSha256Verifier(password: string, salt = randomBytes(16), it
 	return `SCRAM-SHA-256$${iterations}:${salt.toString('base64')}$${storedKey.toString('base64')}:${serverKey.toString('base64')}`;
 }
 
-function ownerUrl(secret: MasterSecret): string {
+export function ownerUrl(secret: MasterSecret): string {
 	const host = requireEnv('DB_HOST');
 	const port = process.env.DB_PORT ?? '5432';
 	const db = requireEnv('DB_NAME');
@@ -139,8 +139,12 @@ function ownerUrl(secret: MasterSecret): string {
  * SUPERUSER / REPLICATION / BYPASSRLS in ALTER ROLE — even as NO…. The
  * defaults for a new role are already NO for all of them, and the check below
  * fails the deploy if anything ever changed that.
+ *
+ * `role` is water_app in the Lambda; the DB test (lambda-migrate.db.test.ts)
+ * names a throwaway role, since a role is the whole cluster's and water_app's
+ * password is every local database's.
  */
-async function syncAppRole(url: string, appPassword: string): Promise<MigrateResult['appRole']> {
+export async function syncAppRole(url: string, appPassword: string, role = 'water_app'): Promise<MigrateResult['appRole']> {
 	if (!/^[A-Za-z0-9]{24,}$/.test(appPassword)) {
 		throw new Error('WATER_APP_PASSWORD must be 24+ alphanumeric characters');
 	}
@@ -148,14 +152,15 @@ async function syncAppRole(url: string, appPassword: string): Promise<MigrateRes
 	await client.connect();
 	try {
 		const verifier = client.escapeLiteral(scramSha256Verifier(appPassword));
-		const exists = (await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'water_app'")).rowCount === 1;
-		await client.query(`${exists ? 'ALTER' : 'CREATE'} ROLE water_app WITH LOGIN PASSWORD ${verifier}`);
+		const exists = (await client.query('SELECT 1 FROM pg_roles WHERE rolname = $1', [role])).rowCount === 1;
+		await client.query(`${exists ? 'ALTER' : 'CREATE'} ROLE ${client.escapeIdentifier(role)} WITH LOGIN PASSWORD ${verifier}`);
 		const { rows } = await client.query<{ rolsuper: boolean; rolbypassrls: boolean; rolreplication: boolean; rolcreaterole: boolean }>(
-			"SELECT rolsuper, rolbypassrls, rolreplication, rolcreaterole FROM pg_roles WHERE rolname = 'water_app'"
+			'SELECT rolsuper, rolbypassrls, rolreplication, rolcreaterole FROM pg_roles WHERE rolname = $1',
+			[role]
 		);
 		const r = rows[0];
 		if (!r || r.rolsuper || r.rolbypassrls || r.rolreplication || r.rolcreaterole) {
-			throw new Error('water_app has a privileged attribute (SUPERUSER/BYPASSRLS/REPLICATION/CREATEROLE) — refusing to continue');
+			throw new Error(`${role} has a privileged attribute (SUPERUSER/BYPASSRLS/REPLICATION/CREATEROLE) — refusing to continue`);
 		}
 		return exists ? 'updated' : 'created';
 	} finally {
