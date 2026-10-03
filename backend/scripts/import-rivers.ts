@@ -12,7 +12,7 @@
 // one is HydroRIVERS (licence allows commercial use with attribution,
 // docs/maps.md § Sources), fetched and converted by `pnpm dev:tiles:rivers`
 // (bin/tiles-dev.sh) from the operator's own download; never committed.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,7 +70,7 @@ export async function importRivers(url: string, args: Args): Promise<{ written: 
 export const loadSyntheticRivers = (url: string) => importRivers(url, { files: [SYNTHETIC_RIVERS_FILE], dataset: SYNTHETIC_RIVERS, source: '', minOrder: 1 });
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseArgs(process.argv.slice(2));
 	if (!url) {

@@ -12,7 +12,7 @@
 // ticks value by value; nothing here writes anything.
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
 import type { Dem, DemInfo } from './dem.js';
-import { DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
+import { boundsText, DelineationRefused, EARTH_RADIUS_M, readWindow, SNAP_RADIUS_M, TARGET_ZOOM, TIME_BUDGET_MS, toLonLat, toPx, WINDOWS, worldPx, type LargerChannel } from './delineate.js';
 import { place } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, OUT, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
@@ -278,7 +278,7 @@ export async function delineateUnits(
 	let latMax = -Infinity;
 	for (const r of [...boundaryRings, clicks]) for (const [lo, la] of r) (lonMin = Math.min(lonMin, lo)), (lonMax = Math.max(lonMax, lo)), (latMin = Math.min(latMin, la)), (latMax = Math.max(latMax, la));
 	const centre: Position = fixedOutlet ?? [(lonMin + lonMax) / 2, (latMin + latMax) / 2];
-	if (!inside(centre)) throw new DelineationRefused('outside', `${lowest ? 'The clicks are' : 'The outlet is'} outside the elevation model (${info.label} covers ${w}° to ${e}° E, ${s}° to ${n}° N).`);
+	if (!inside(centre)) throw new DelineationRefused('outside', `${lowest ? 'The clicks are' : 'The outlet is'} outside the elevation model (${info.label} covers ${boundsText(info.bounds)}).`);
 	const probe = toPx(centre[0], centre[1], 2 ** z);
 	const here = await dem.tile(z, Math.floor(probe[0]), Math.floor(probe[1]));
 	if (!here) throw new DelineationRefused('no_data', `The elevation model has no data at ${lowest ? 'the clicks' : 'the outlet'}.`);

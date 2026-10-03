@@ -893,7 +893,7 @@
 	{@const s = areaSourceOf(f, nodes)}
 	{#if s}
 		{s.node.name}: {fmtNum(s.node.areaKm2, 3)} km² ·
-		{#if s.source === 'this'}<span class="badge">From the map</span> this {KIND_LABEL[f.kind].toLowerCase()}
+		{#if s.source === 'this'}<span class="badge">From the map</span> this {KIND_LABEL[f.kind].toLowerCase()}{#if s.earlier}’s earlier outline{/if}
 		{:else if s.source === 'other'}
 			{@const other = s.node.areaFeatureId ? featureById.get(s.node.areaFeatureId) : undefined}
 			<span class="badge">From the map</span> {other ? `“${featureName(other)}”` : 'a feature since deleted'}

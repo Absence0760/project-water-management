@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { pointInRing } from '../geo/geojson.js';
 import { openDem } from './dem.js';
-import { delineate, DelineationRefused, METHOD_VERSION } from './delineate.js';
+import { boundsText, delineate, DelineationRefused, METHOD_VERSION } from './delineate.js';
 import { BASIN_AREA_M2, DAM_CELL, FIXTURE_CELL_M, FIXTURE_ZOOM, fixtureLonLat, OUTLET_CELL } from './fixture.js';
 
 // Against the committed synthetic DEM (backend/fixtures/dem/, fixture.ts): a
@@ -61,7 +61,10 @@ describe('delineate (synthetic DEM)', () => {
 	});
 
 	it('refuses a point outside the DEM', async () => {
-		expect((await refusal(delineate(dem, [25, -30]))).code).toBe('outside');
+		const r = await refusal(delineate(dem, [25, -30]));
+		expect(r.code).toBe('outside');
+		// In degrees south, as people read them (it said "-33.7243397° to -33.1375512° N").
+		expect(r.message).toMatch(/covers 20\.39° E to 21\.09° E, 33\.72° S to 33\.14° S\)\.$/);
 	});
 
 	it('refuses a click on a slope that almost nothing drains to', async () => {
@@ -123,5 +126,11 @@ describe('the e2e copy of the fixture’s points', () => {
 		expect(pair('FIXTURE_MID_GAUGE')).toEqual(at(DAM_CELL.x, DAM_CELL.y + 60));
 		expect(pair('FIXTURE_UPPER')).toEqual(at(DAM_CELL.x, DAM_CELL.y - 100));
 		expect(pair('FIXTURE_OFF_CHANNEL')).toEqual(at(DAM_CELL.x + 3, DAM_CELL.y + 60));
+	});
+});
+
+describe('boundsText', () => {
+	it('names each side east or west, north or south, to two decimals', () => {
+		expect(boundsText([-1.5, -2.25, 3, 4.125])).toBe('1.50° W to 3.00° E, 2.25° S to 4.13° N');
 	});
 });

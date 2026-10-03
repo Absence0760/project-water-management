@@ -35,6 +35,7 @@ import {
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	KIND_GEOMETRY,
+	overlapProblem,
 	parseGeoJson,
 	proposeKinds,
 	type GeoProblem,
@@ -335,6 +336,15 @@ function importedFeatures(kind: MapFeatureKind, parsed: ParsedFeature[], fileNam
 	if (kind !== 'catchment_boundary') return { problems, rows: parsed.map((f) => ({ kind, name: f.name, geometry: f.geometry, areaM2: f.areaM2, properties: f.properties })) };
 	const polygons = parsed.flatMap((f) => (f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : []));
 	const geometry: Geometry = polygons.length === 1 ? { type: 'Polygon', coordinates: polygons[0]! } : { type: 'MultiPolygon', coordinates: polygons };
+	// One boundary of overlapping polygons would count the overlap twice in its area.
+	const overlap = overlapProblem(polygons);
+	if (overlap) {
+		const message =
+			overlap === 'overlap'
+				? 'The file’s polygons overlap, so as one catchment boundary their overlap would count twice; merge them into one polygon (QGIS: Dissolve) and upload it again.'
+				: 'The file’s polygons are too complex to check for overlaps as one catchment boundary; simplify them, or merge them into one polygon.';
+		return { problems: [{ feature: null, message }], rows: [] };
+	}
 	return {
 		problems,
 		rows: [
@@ -551,7 +561,13 @@ export const mapRoutes = new Hono<AuthEnv>()
 			const box = bboxOf(ring);
 			const inside = parts.every((p) => p.geometry.coordinates[0]!.every(([x, y]) => x >= box[0] - 1e-6 && x <= box[2] + 1e-6 && y >= box[1] - 1e-6 && y <= box[3] + 1e-6));
 			// Within the bounds and adding up isn't enough: each part must lie within the shape (splitCheck.ts).
-			if (!inside || Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1 || partsWithin(ring, parts.map((p) => p.geometry.coordinates[0]!)) !== null) {
+			// Nor is each lying within it: the same half twice adds up too. The parts may share the cut, never overlap.
+			if (
+				!inside ||
+				Math.abs(sum - whole) > SPLIT_AREA_TOLERANCE * whole + 1 ||
+				partsWithin(ring, parts.map((p) => p.geometry.coordinates[0]!)) !== null ||
+				overlapProblem(parts.map((p) => p.geometry.coordinates)) !== null
+			) {
 				throw new ApiError(400, 'The two parts are not this shape cut in two: together they must cover it exactly. Draw the line again.');
 			}
 			const label = before.name ? `“${before.name}”` : KIND_LABEL[before.kind];

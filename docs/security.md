@@ -2647,6 +2647,12 @@ placed points. The server never trusts the browser with geometry:
   sawtooth whose edges all overlap in longitude took ~9 s of blocked event
   loop before; now refused in under 0.1 s) and checks a polygon's rings
   against each other, so a hole can't cross its outer ring or another hole.
+  The overlap check (`polygonsOverlap`: MultiPolygon parts, holes inside
+  holes, a boundary file's polygons, a split's two parts) counts every
+  vertex it clips and every edge it visits per latitude slab against
+  `GEO_MAX_SWEEP_STEPS` (10 million) and refuses past it, so a comb of long
+  teeth at distinct heights, or hundreds of parts whose boxes all meet,
+  can't make it quadratic.
   Placing a dam's outline on the DEM (`rasterize`, start from the map and
   divide) adds each edge only to the rows it spans, rather than testing
   every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.
@@ -2668,7 +2674,9 @@ placed points. The server never trusts the browser with geometry:
   the shape's own has its ends and middle inside or on the outline and
   crosses none of its edges, at most 500 such edges, `geo/splitCheck.ts`;
   before, only the bounding box was checked, so an L cut into two
-  rectangles, one outside the L, passed), in one transaction, so a split
+  rectangles, one outside the L, passed; and the parts don't overlap,
+  `polygonsOverlap`, or the same half sent twice passed and the other half
+  was lost), in one transaction, so a split
   can't smuggle in an unrelated shape labelled as a split.
 - **Start from the map** (#326 C3, [maps.md § Start from the
   map](./maps.md#start-from-the-map)): the same DEM and the same bounds

@@ -2625,8 +2625,9 @@ map" card) stays the schematic; this is the geography.
   Area (or Position, or Shape for a line), **Stands for** (a select of the
   nodes of fitting kinds for editors, else the node's name), **Unit’s
   area** for a parcel or "other" polygon that stands for a hydrological unit
-  (its area *typed*, **From the map** this feature, or from another feature
-  by name), **Area into the model** (editors; parcels and `other` polygons
+  (its area *typed*, **From the map** this feature, or this feature's
+  *earlier outline* once it was reshaped or split after the area was
+  taken, or from another feature by name), **Area into the model** (editors; parcels and `other` polygons
   only, never a dam or the boundary): a unit (the linked one by default; the
   select stops at ~16rem) and **Use 9.257 km²**, which asks first ("Set
   Upper farm’s area from the map?", the old and new area) and then saves the
@@ -2896,7 +2897,8 @@ map" card) stays the schematic; this is the geography.
   largest first, then by name (`mapList.ts` `groupFeatures`). A row is a
   button (`aria-pressed`) with the name and, under it, the size or
   position, what it stands for ("linked" when that's its own name) and, for
-  a parcel, its unit's area source ("area typed", "area from the map"). A
+  a parcel, its unit's area source ("area typed", "area from the map",
+  "area from an earlier outline" when the parcel changed since). A
   pick far down is kept in view inside the list, never by scrolling the page;
   stacked on a phone, a pick from the list brings the card into view. The
   head's **Every feature** opens the grid.
