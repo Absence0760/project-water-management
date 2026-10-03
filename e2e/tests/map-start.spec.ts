@@ -158,9 +158,9 @@ test('Discard returns to the points and changes nothing; with no units the catch
 	await startSheet(page).getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByTestId('section-header').getByTestId('map-start-open')).toHaveText('Start from the map');
 	// A tool started from the header, then cancelled, never brings the sheet back.
-	await page.getByTestId('section-header').getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await bar(page).getByRole('button', { name: 'Cancel' }).click();
-	await page.getByTestId('section-header').getByRole('button', { name: 'Place a point' }).click();
+	await page.getByTestId('map-tools').getByRole('button', { name: 'Place a point', exact: true }).click();
 	await bar(page).getByTestId('map-enter-coordinates').click();
 	const place = page.getByRole('dialog', { name: 'Place a point' });
 	await place.getByLabel('Latitude').fill(String(FIXTURE_DAM[1]));

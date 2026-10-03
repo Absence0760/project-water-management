@@ -142,3 +142,30 @@ export async function uploadThroughSheet(page: Page, kind: string | null, name: 
 		await expect(sheet).toBeHidden();
 	}
 }
+
+/**
+ * The side column's tab (Details, Features, Checks; docs/ui.md § Map): one panel shows at a time, and a pick
+ * shows its Details, so a spec opens the list's tab before reading the list after a pick.
+ */
+export async function showTab(page: Page, tab: 'details' | 'features' | 'checks'): Promise<void> {
+	const t = page.getByTestId(`map-tab-${tab}`);
+	await expect(t).toBeVisible();
+	if ((await t.getAttribute('aria-selected')) !== 'true') await t.click();
+	await expect(t).toHaveAttribute('aria-selected', 'true');
+}
+
+/** The Layers panel over the map's right edge (under the zoom buttons), opened if it isn't. */
+export async function openLayers(page: Page): Promise<void> {
+	const b = page.getByTestId('map-layers-toggle');
+	await expect(b).toBeVisible();
+	if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
+	await expect(b).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** The Key panel over the map's bottom-left corner (open by default only while the areas show a run's results on a wide map). */
+export async function openKey(page: Page): Promise<void> {
+	const b = page.getByTestId('map-key-toggle');
+	await expect(b).toBeVisible();
+	if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click();
+	await expect(b).toHaveAttribute('aria-expanded', 'true');
+}

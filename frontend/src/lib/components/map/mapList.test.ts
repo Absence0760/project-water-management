@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapFeature, MapFeatureKind, MapNodeArea } from '$lib/api/types';
-import { areaSourceOf, areaSourceText, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, shortHash } from './mapList';
+import { areaSourceOf, areaSourceText, featureForNode, groupFeatures, headerLine, inListOrder, keyGroups, pickedFeature, presentKey, shortHash } from './mapList';
 import { overlayColours, riverNetworkColour } from './mapStyle';
 
 const ring = [
@@ -96,4 +96,20 @@ it('keys every overlay colour from mapStyle, in Areas, Lines and Points', () => 
 		const on = keyGroups(c, { riverNetwork: riverNetworkColour(dark) }).find((g) => g.label === 'Lines')!.items;
 		expect(on).toEqual([expect.objectContaining({ label: 'river' }), { label: 'river network', swatch: 'dashed', colour: riverNetworkColour(dark) }]);
 	}
+});
+
+describe('presentKey', () => {
+	const c = overlayColours(false);
+	const labels = (groups: ReturnType<typeof presentKey>) => groups.map((g) => `${g.label}: ${g.items.map((i) => i.label).join(', ')}`);
+	it('lists only the entries a feature on the map stands for, and drops an empty group', () => {
+		expect(labels(presentKey(keyGroups(c), [f('B', 'catchment_boundary', 9e8), f('P', 'farm_parcel', 1e6), f('G', 'gauge', null)]))).toEqual(['Areas: catchment boundary, parcel', 'Points: gauge']);
+		expect(presentKey(keyGroups(c), [])).toEqual([]);
+	});
+	it('tells a dam drawn as an area from one placed as a point, and keys a river only as a line', () => {
+		expect(labels(presentKey(keyGroups(c), [f('D', 'dam', null), f('R', 'river', null)]))).toEqual(['Lines: river', 'Points: dam']);
+		expect(labels(presentKey(keyGroups(c), [f('D', 'dam', 5e4), f('O', 'other', null)]))).toEqual(['Areas: dam', 'Points: other']);
+	});
+	it('keeps the River network layer’s line while the layer is on, with nothing of the project’s drawn', () => {
+		expect(labels(presentKey(keyGroups(c, { riverNetwork: riverNetworkColour(false) }), []))).toEqual(['Lines: river network']);
+	});
 });

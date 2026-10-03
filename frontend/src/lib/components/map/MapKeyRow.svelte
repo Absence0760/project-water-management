@@ -1,16 +1,16 @@
 <!--
-	The map's key row (issue #326 E7 and A1; docs/ui.md § Map): what the areas
-	are coloured by (`measure=`, days short by default, "Kind" the colours
-	before results), for editors and owners which run (`run=`; the published
-	run by default, any run, the newest when nothing is published), which run
-	that is in words, and the key: each band's word, what it means and how
-	many units it holds, or each kind's swatch when the map shows kinds. Every
-	choice is in the URL (a history entry, so Back undoes it). Each band
-	swatch carries the colour the map was given (`data-colour`, with its token
-	and the theme it was read in on the row), so a test can check the colours
-	follow the app's theme without reading the map's pixels. `end` puts one
-	more action at the end of the first line (the Map's Divide the model),
-	where it costs the page no height.
+	The map's key (issue #326 E7 and A1; docs/ui.md § Map), in the Key panel
+	over the map's bottom-left corner (a row under the map until 2026-10-02):
+	what the areas are coloured by (`measure=`, days short by default, "Kind"
+	the colours before results), for editors and owners which run (`run=`; the
+	published run by default, any run, the newest when nothing is published),
+	which run that is in words, and the key: each band's word, what it means
+	and how many units it holds, then the kinds drawn on the map (MapTab cuts
+	the key to them, mapList.ts presentKey). Every choice is in the URL (a
+	history entry, so Back undoes it). Each band swatch carries the colour the
+	map was given (`data-colour`, with its token and the theme it was read in
+	on the row), so a test can check the colours follow the app's theme
+	without reading the map's pixels.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
@@ -19,15 +19,13 @@
 	import { ewrLine, legendRows, MEASURE_PARAM, noRunLine, RUN_PARAM, runCaption, runOption, unlinkedAreas, VIEW_OPTIONS, viewLabel, viewParam, type MapView } from './mapResults';
 	import type { MapResults } from './mapResults.svelte';
 	import type { MapFeature } from '$lib/api/types';
-	import type { Snippet } from 'svelte';
 
 	let {
 		results,
 		key,
 		features,
 		canEdit,
-		dark,
-		end
+		dark
 	}: {
 		results: MapResults;
 		/** The kinds' key (mapList.ts keyGroups), in the map's colours. */
@@ -35,8 +33,6 @@
 		features: readonly MapFeature[];
 		canEdit: boolean;
 		dark: boolean;
-		/** One more action at the end of the first line (on the right of the pickers). */
-		end?: Snippet;
 	} = $props();
 
 	const uid = $props.id();
@@ -59,7 +55,7 @@
 	const ewr = $derived(results.ready ? ewrLine(results.ewr) : null);
 	const caption = $derived(runCaption(results.choice));
 	// While a measure shows, the areas' kinds give way to the bands: the key keeps the boundary, the lines and the points.
-	const otherKinds = $derived(key.map((g) => ({ ...g, items: g.items.filter((i) => g.label !== 'Areas' || i.swatch === 'dashed') })));
+	const otherKinds = $derived(key.map((g) => ({ ...g, items: g.items.filter((i) => g.label !== 'Areas' || i.swatch === 'dashed') })).filter((g) => g.items.length));
 </script>
 
 {#snippet kindKey(groups: { label: string; items: KeyItem[] }[])}
@@ -105,12 +101,10 @@
 					{/if}
 				</span>
 			{/if}
-			{#if end}<span class="end">{@render end()}</span>{/if}
 		</div>
 	{:else}
 		<div class="pickers small">
 			<p class="small muted no-run" data-testid="map-no-run">{noRunLine(canEdit, results.runs.length > 0)}</p>
-			{#if end}<span class="end">{@render end()}</span>{/if}
 		</div>
 	{/if}
 
@@ -131,8 +125,8 @@
 			</div>
 		{/if}
 		{#if ewr}<p class="small ewr" data-testid="map-ewr-line">{ewr}; each gauge’s card and Every feature say which.</p>{/if}
-		{@render kindKey(otherKinds)}
-	{:else}
+		{#if otherKinds.length}{@render kindKey(otherKinds)}{/if}
+	{:else if key.length}
 		{@render kindKey(key)}
 	{/if}
 </div>
@@ -141,24 +135,23 @@
 	.key-row {
 		display: flex;
 		flex-direction: column;
-		gap: 0.35rem;
+		gap: 0.45rem;
 	}
 	.pickers {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem 1rem;
-		align-items: center;
-	}
-	.end {
-		margin-left: auto;
-	}
-	.pick {
-		display: inline-flex;
-		align-items: center;
+		flex-direction: column;
 		gap: 0.4rem;
 	}
+	/* The label over its select: the panel is narrow. */
+	.pick {
+		display: grid;
+		gap: 0.15rem;
+	}
+	.pick span {
+		color: var(--text-muted);
+	}
 	.pick select {
-		max-width: min(22rem, 70vw);
+		width: 100%;
 		min-height: 32px;
 	}
 	.status {
@@ -177,21 +170,19 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 1rem;
-		align-items: center;
+		display: grid;
+		gap: 0.25rem;
 		color: var(--text-2);
 	}
 	.legend-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
+		display: grid;
+		grid-template-columns: auto auto minmax(0, 1fr);
+		align-items: baseline;
+		gap: 0.35rem;
 	}
 	.key {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 1rem;
+		display: grid;
+		gap: 0.3rem;
 		margin: 0;
 		color: var(--text-2);
 	}

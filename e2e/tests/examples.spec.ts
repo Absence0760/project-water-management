@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { ANALYST, DEMO, DROEVLEI, FARMER1, KLEINBERG, ORANJE, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { showTab } from '../support/map.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 
 // One seeding per run: the tests in this file share the seeded users.
@@ -91,14 +92,17 @@ test('a shared example has a seeded catchment map: a boundary, linked parcels, d
 	await expect(item('Klipdrift dam')).toContainText(/ha · Klipdrift/);
 	await expect(item('Melkhout Gauge')).toContainText(/E · linked/);
 	await expect(list.getByRole('group', { name: /Rivers/ }).getByRole('listitem').filter({ hasText: /^\s*Sandspruit\s*1 line\s*$/ })).toHaveCount(1);
-	// The checks (#326 A4): the seeded boundary has a margin round the farms, so the units' total is flagged.
-	await expect(page.getByTestId('map-checks-line')).toHaveText(/^\s*1 warning from the map’s checks\s*Show the checks\s*$/);
-	await page.getByTestId('map-checks-open').click();
-	const sheet = page.getByRole('dialog', { name: 'Map checks' });
-	await expect(sheet.locator('li[data-check="units-vs-boundary"]')).toContainText(/^The units add up to 184[.,]0 km², 12 % less than the boundary's 210[.,]2 km²\./);
-	// A warning's feature button picks it and closes the sheet.
-	await sheet.getByRole('button', { name: 'Show Sandspruit catchment on the map' }).click();
-	await expect(sheet).toBeHidden();
+	// The checks (#326 A4): the seeded boundary has a margin round the farms, so the units' total is flagged. They are the side
+	// column's Checks tab (a sheet until 2026-10-02), its count on the tab.
+	await expect(page.getByTestId('map-tab-checks')).toHaveAccessibleName('Checks (1 warning)');
+	await showTab(page, 'checks');
+	await expect(page.getByTestId('map-checks-line')).toHaveText(/^\s*1 warning from the map’s checks\s*$/);
+	const checks = page.getByTestId('map-checks');
+	await expect(checks.locator('li[data-check="units-vs-boundary"]')).toContainText(/^The units add up to 184[.,]0 km², 12 % less than the boundary's 210[.,]2 km²\./);
+	// A warning's feature button picks it and shows its Details.
+	await checks.getByRole('button', { name: 'Show Sandspruit catchment on the map' }).click();
+	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sandspruit catchment' })).toBeVisible();
+	await showTab(page, 'features');
 	await expect(list.getByRole('button', { name: /^Sandspruit catchment/ })).toHaveAttribute('aria-pressed', 'true');
 	await page.getByTestId('map-open-grid').click();
 	await expect(page.getByRole('dialog', { name: 'Every map feature' }).getByText('sandspruit-map.synthetic.geojson', { exact: true })).toBeVisible();

@@ -159,7 +159,7 @@ server ([§ Delineation](#delineation)).
   13+ files touches the bbox). Licence in [§ Sources](#sources).
 - `PUBLIC_TERRAIN_URL` (frontend env) is the file's URL. **Empty** (the
   committed default in `frontend/.env.development` and `.env.production`):
-  the Layers box offers no Relief toggle and no DEM is fetched, so a fresh
+  the Layers panel offers no Relief toggle and no DEM is fetched, so a fresh
   clone and CI download nothing. Set, the box has a **Relief** checkbox,
   off by default, in the URL with the other layers (`layers=relief`).
 - **The style** (`mapStyle.ts` `terrainSource`, `reliefLayer`): a
@@ -170,7 +170,7 @@ server ([§ Delineation](#delineation)).
   exaggeration low, so the land colours and the overlay's strokes keep
   their contrast. MapLibre overzooms past zoom 12. Turning the layer on or
   off changes the live map without reloading the style. A DEM that can't be
-  read drops the relief and says so in the Layers box; the basemap and
+  read drops the relief and says so in the Layers panel; the basemap and
   features stay. The relief is not a basemap layer, so the basemap failing
   leaves it drawn.
 - **Attribution**: while the relief is drawn, the map's attribution carries
@@ -187,7 +187,7 @@ server ([§ Delineation](#delineation)).
   `frontend/.env.development.local` beside the basemap's URLs (`pnpm
   dev:tiles:env` prints it); restart `pnpm dev`. `up` re-uploads a cached
   DEM when MinIO doesn't serve it but never downloads one, and sets the URL
-  only when MinIO serves it, so without it the Layers box offers no Relief toggle. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
+  only when MinIO serves it, so without it the Layers panel offers no Relief toggle. `TERRAIN_MAXZOOM` and `TERRAIN_SOURCE` (the archive's
   URL) override the defaults. Measured 2026-10-01 with
   `pmtiles extract … --dry-run` (go-pmtiles 1.31.2, the planet build of
   Mapterhorn 0.0.13):
@@ -255,8 +255,8 @@ server ([§ Delineation](#delineation)).
   computes nothing.
 - **Focus and announcements (round 4 a11y):** when the Delineate sheet
   closes and its opener is gone (the draw bar ends once a proposal comes
-  back), focus goes to the header's Delineate button, else the map, never
-  `<body>` (WCAG 2.4.3). The Layers box keeps one always-present status
+  back), focus goes to the map's Delineate tool, else the map, never
+  `<body>` (WCAG 2.4.3). The Layers panel keeps one always-present status
   region (`layersStatus`, mapLayers.ts) that says each layer loading, how
   many it shows and the reach picked (4.1.3); a failure is its own alert.
   The trace's share select is named by its visible label (2.5.3).
@@ -443,7 +443,7 @@ Split / Save the shape as any drawing, through the server's checks
   from the split shape keeps that area until **Use** is pressed again.
   Splitting into more than two is done a cut at a time.
 - **Trace a dam** (`backend/src/delineation/damTrace.ts`; **Trace a dam**
-  in the header, editors, only when the server has the water data). Click
+  among the map's tools, editors, only when the server has the water data). Click
   inside a dam's water (or **Enter coordinates** in the draw bar: the
   non-pointer way), with the share of observations a cell must be water in
   to count (10, 25 (the default), 50 or 75 %). The server reads a window of
@@ -508,7 +508,7 @@ answer, with no database connection held.
 
 ## Measure
 
-**Measure** in the Map tab's header (#326 A7; anyone who can see the map)
+**Measure** among the Map tab's tools on the map (#326 A7; anyone who can see the map)
 puts the map in the drawing mode (`draw/attachDrawing.ts`) with a
 `MeasureDraft` (`measure/measureDraft.svelte.ts`, a `Draft` that is never
 saved): a click, or Enter at the keyboard crosshair, adds a point;
@@ -656,9 +656,10 @@ model has unsaved edits the button waits: the change is saved straight away.
 ## Checks
 
 The Map tab's **Checks** (issue #326 A4) list what looks inconsistent
-between the map and the model: a one-line count under the feature list, and
-the warnings in the **Map checks** side sheet (`checks=1`, `MapChecks.svelte`;
-`cap` folds a long list behind "Show all", unused in the sheet). They are **warnings
+between the map and the model: the side column's **Checks** tab, its count on
+the tab and the warnings under it (`MapChecks.svelte`; `cap` folds a long list
+behind "Show all", unused there). The **Map checks** side sheet they were in
+until 2026-10-02 is gone; its link, `checks=1`, opens the tab. They are **warnings
 only**: nothing stops a save or a run. Each warning names its features as
 buttons that select them on the map and in the list; "No problems found"
 when there are none. The checks are pure and in the browser
@@ -1332,7 +1333,7 @@ the app can analyse; this layer is.
   basemap and ΔE ≥ 40 from every other stroke (`mapStyle.test.ts`). While
   the layer is on, the key's **Lines** gain "river network" with a dashed
   swatch.
-- **The list beside the map.** The Layers box says how many reaches are
+- **The list beside the map.** The Layers panel says how many reaches are
   around the catchment and where they come from ("10 reaches around the
   catchment, the biggest first, from synthetic." and, for the repo's
   network, **Synthetic test data, never real rivers.**), and lists them as

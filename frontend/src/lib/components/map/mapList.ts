@@ -149,3 +149,29 @@ export function keyGroups(c: { boundary: string; parcel: string; water: string; 
 		}
 	];
 }
+
+/** Which features a key entry stands for (group, then label), so the key lists only what the map draws. */
+function keyEntryDrawn(group: string, label: string, f: MapFeature): boolean {
+	const point = f.geometry.type === 'Point';
+	const line = f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString';
+	if (group === 'Points') return point && (label === 'gauge' ? f.kind === 'gauge' : label === 'dam' ? f.kind === 'dam' : f.kind === 'other');
+	if (group === 'Lines') return label === 'river' && f.kind === 'river' && line;
+	if (point) return false;
+	if (label === 'catchment boundary') return f.kind === 'catchment_boundary';
+	if (label === 'parcel') return f.kind === 'farm_parcel';
+	if (label === 'dam') return f.kind === 'dam';
+	// "other": an other area, or an other line (drawn dotted like it).
+	return f.kind === 'other';
+}
+
+/**
+ * The key cut to what is on the map: each entry only while a feature it stands
+ * for is drawn, a group only while it has an entry. A layer's own entry (the
+ * River network's dashed line) stays while the layer is on: it draws its own
+ * reaches, not the project's features.
+ */
+export function presentKey(groups: { label: string; items: KeyItem[] }[], features: readonly MapFeature[]): { label: string; items: KeyItem[] }[] {
+	return groups
+		.map((g) => ({ ...g, items: g.items.filter((i) => i.label === 'river network' || features.some((f) => keyEntryDrawn(g.label, i.label, f))) }))
+		.filter((g) => g.items.length > 0);
+}

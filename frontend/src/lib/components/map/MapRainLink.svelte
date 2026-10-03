@@ -1,44 +1,33 @@
 <!--
-	The Map tab's way to the rain feed from the boundary (issue #326 B-rain;
-	docs/ui.md § Map): one line, for editors, when the map has a catchment
-	boundary and no CHIRPS feed reads it (or one read it before it was
-	redrawn). The link opens Settings → Data feeds with the proposal showing.
-	It reads the feed list itself, and only when there is a boundary.
+	Whether a rain feed reads the Map's catchment boundary (issue #326 B-rain;
+	docs/ui.md § Map): for editors, while the map has a boundary, it reads the
+	feed list and says (`reads`) whether a CHIRPS feed reads the boundary
+	(`current`), read it before it was redrawn (`changed`), none does (`none`)
+	or the list couldn't be read (`error`). The Map's Getting started pill
+	(MapSetupPill) shows the step and its link to Settings → Data feeds; until
+	2026-10-02 this drew its own line above the map.
 -->
 <script lang="ts">
 	import { api, type MapFeature } from '$lib/api';
 	import { boundaryFeedState } from '../feeds/boundaryState';
+	import type { RainReads } from './mapSetup';
 
-	let { projectId, boundary }: { projectId: string; boundary: Pick<MapFeature, 'id' | 'updatedAt'> } = $props();
+	let { projectId, boundary, reads = $bindable(null) }: { projectId: string; boundary: Pick<MapFeature, 'id' | 'updatedAt'>; reads?: RainReads } = $props();
 
 	type Feeds = { feeds: { source: string; config: { boundary?: { featureId: string; updatedAt: string } } }[] };
-	let reads = $state<'current' | 'changed' | 'none' | 'error' | null>(null);
 
 	$effect(() => {
 		const b = { id: boundary.id, updatedAt: boundary.updatedAt };
 		let live = true;
+		reads = null;
 		api
 			.request<Feeds>('GET', `/projects/${encodeURIComponent(projectId)}/feeds`)
 			.then((r) => live && (reads = boundaryFeedState(r.feeds, b)))
-			// No line is better than a wrong one; the feeds panel says what failed.
+			// No step is better than a wrong one; the feeds panel says what failed.
 			.catch(() => live && (reads = 'error'));
 		return () => (live = false);
 	});
 </script>
 
-<!-- data-state says when the feed list is in (loading, current, changed, none): tests wait on it, not on time. -->
-<div class="rain" data-testid="map-rain" data-state={reads ?? 'loading'}>
-	{#if reads === 'none' || reads === 'changed'}
-		<p class="alert alert-info slim" data-testid="map-rain-link">
-			{reads === 'none' ? 'No rain feed reads this catchment boundary yet.' : 'The boundary changed since the rain feed took its cells.'}
-			<a href="?tab=settings&rain=boundary#set-feeds">{reads === 'none' ? 'Set up the rain feed from the boundary' : 'Propose its cells again'}</a>
-		</p>
-	{/if}
-</div>
-
-<style>
-	/* Takes no place in the page's layout of its own: only the line, when there is one. */
-	.rain {
-		display: contents;
-	}
-</style>
+<!-- data-state says when the feed list is in (loading, current, changed, none): tests wait on it, not on time. Draws nothing. -->
+<span class="rain" data-testid="map-rain" data-state={reads ?? 'loading'} hidden></span>
