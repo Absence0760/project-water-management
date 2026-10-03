@@ -27,6 +27,7 @@
 		dividePoints,
 		divideOverlap,
 		divideProblem,
+		divideApplyTicks,
 		divideSummary,
 		doubleNode,
 		initialDivideTicks,
@@ -42,6 +43,8 @@
 		type DivideDraft
 	} from './divideFlow';
 	import { featureName } from './mapList';
+	import AreaBasisChoice from './AreaBasisChoice.svelte';
+	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
 	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
@@ -171,7 +174,7 @@
 		busy = 'apply';
 		error = null;
 		try {
-			const r = await api.divide.apply(projectId, p.id, ticks);
+			const r = await api.divide.apply(projectId, p.id, divideApplyTicks(ticks));
 			delete draft.ticks[p.id];
 			await onapplied(r.proposal);
 			void focusTitle();
@@ -333,6 +336,10 @@
 										{u.current ? `${km2Now(u.current.areaKm2)}, ${u.current.areaSource === 'map' ? 'from the map' : 'typed'}` : '–'}{sameAsNow(p, u, 'area') ? ' (the same)' : ''}</span
 									>
 								</label>
+								{#if t.area && offersEffective(u.areaM2, u.nonContributingM2)}
+									<!-- Its piece holds pans (195): gross (the default) or effective, chosen here, never silently. -->
+									<AreaBasisChoice areaM2={u.areaM2!} ncM2={u.nonContributingM2!} bind:basis={() => t.areaBasis ?? 'gross', (v) => (t.areaBasis = v)} testid="divide-area-basis" />
+								{/if}
 							{/if}
 							{#if offer.drainsInto}
 								<label class="tick">
@@ -377,6 +384,10 @@
 									<label for="{uid}-rest-name">Its name</label>
 									<input id="{uid}-rest-name" bind:value={r.name} oninput={(e) => (restNewName = e.currentTarget.value)} maxlength="100" />
 								</div>
+							{/if}
+							{#if ticks.rest.to !== 'none' && offersEffective(p.rest.areaM2, p.rest.nonContributingM2)}
+								{@const r = ticks.rest}
+								<AreaBasisChoice areaM2={p.rest.areaM2} ncM2={p.rest.nonContributingM2!} bind:basis={() => r.areaBasis ?? 'gross', (v) => (r.areaBasis = v)} testid="divide-rest-area-basis" />
 							{/if}
 						{:else}
 							<p class="hint">Its outline couldn’t be made a polygon, so it has no parcel to save; type its area on the Network.</p>

@@ -148,11 +148,22 @@ export const emptyName = (t: StartTicks): boolean => [t.outletName, ...t.units.m
 
 export const km2Text = (m2: number | null): string => (m2 === null ? '–' : `${fmtNum(m2 / 1e6, 2)} km²`);
 
-/** What the confirm says will happen: counts of the ticked values. */
+/** What the confirm says will happen: counts of the ticked values, and which areas are effective (195). */
 export function applySummary(t: StartTicks): string {
 	const nodes = 1 + t.units.length + (t.rest.include ? 1 : 0);
 	const areas = t.units.filter((u) => u.area).length + (t.rest.include && t.rest.area ? 1 : 0);
 	const orders = t.units.filter((u) => u.drainsInto).length;
+	const effective = [...t.units.filter((u) => u.area && u.areaBasis === 'effective').map((u) => u.name.trim()), ...(t.rest.include && t.rest.area && t.rest.areaBasis === 'effective' ? [t.rest.name.trim()] : [])];
 	const s = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-	return `The empty model gets ${s(nodes, 'node')}, with ${s(areas, 'area')} (each saved as its unit’s parcel) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
+	return `The empty model gets ${s(nodes, 'node')}, with ${s(areas, 'area')} (each saved as its unit’s parcel${effective.length ? `; ${effective.join(', ')} without what drains into pans` : ''}) and ${s(orders, 'drains-into', 'drains-into')} from the proposal. Everything not ticked stays to be typed: an area of 0, draining into the outflow gauge.`;
+}
+
+/** The body apply sends: an area's basis only with its area ticked (the server refuses an effective area not taken), else gross. */
+export function applyTicks(t: StartTicks): StartTicks {
+	const basis = (area: boolean, b: StartTicks['rest']['areaBasis']) => (area && b ? { areaBasis: b } : {});
+	return {
+		outletName: t.outletName,
+		units: t.units.map(({ areaBasis, ...u }) => ({ ...u, ...basis(u.area, areaBasis) })),
+		rest: (({ areaBasis, ...r }) => ({ ...r, ...basis(r.include && r.area, areaBasis) }))(t.rest)
+	};
 }

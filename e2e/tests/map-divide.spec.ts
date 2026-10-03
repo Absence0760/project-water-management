@@ -137,6 +137,41 @@ test('an editor divides a typed model from the map, value by value, beside the v
 	expect(by['Hillside']!.areaKm2).not.toBe(20);
 });
 
+test('a piece holding a pan asks which area its tick takes: gross until changed, the effective one applied as chosen (195)', async ({ page, owner }) => {
+	void owner;
+	const v = await valley(page, 'Divide effective area');
+	await openMap(page, v.id, '&divide=1');
+	await sheet(page).getByTestId('divide-propose').click();
+	await expect(page.getByTestId('divide-sheet')).toHaveAttribute('data-step', 'review');
+	const cards = page.getByTestId('divide-review').getByTestId('divide-unit');
+	const [pump, dam] = [cards.nth(0), cards.nth(1)];
+	// The pump's piece holds no pan: its tick asks nothing. The dam's holds the valley's: the choice shows once ticked.
+	await pump.getByTestId('divide-tick-area').check();
+	await expect(pump.getByTestId('divide-area-basis')).toHaveCount(0);
+	await expect(dam.getByTestId('divide-area-basis')).toHaveCount(0);
+	await dam.getByTestId('divide-tick-area').check();
+	const basis = dam.getByTestId('divide-area-basis');
+	await expect(basis.getByRole('radio', { name: /^Gross, 27\d\.\d\d km²/ })).toBeChecked();
+	await basis.getByRole('radio', { name: /^Effective, \d+\.\d\d km² \(without the \d+\.\d\d km² draining into pans\)$/ }).check();
+	await expectNoViolations(page);
+	await sheet(page).getByTestId('divide-apply').click();
+	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
+	await expect(confirm).toContainText('The model takes 2 areas (each saved as its unit’s parcel; 1 without what drains into pans)');
+	await confirm.getByRole('button', { name: 'Apply' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText('Divided the model from the map.');
+
+	const listed = await (await page.request.get(`${API_URL}/projects/${v.id}/map/features`)).json();
+	const by = Object.fromEntries(listed.nodes.map((n: { id: string; areaBasis: string | null; areaKm2: number; areaFeatureId: string }) => [n.id, n]));
+	expect(by[v.pump.id].areaBasis).toBe('gross');
+	expect(by[v.dam.id].areaBasis).toBe('effective');
+	const parcel = listed.features.find((f: { id: string }) => f.id === by[v.dam.id].areaFeatureId);
+	expect(parcel.nonContributingM2).toBeGreaterThan(0);
+	expect(by[v.dam.id].areaKm2).toBeCloseTo((parcel.areaM2 - parcel.nonContributingM2) / 1e6, 6);
+	// The unit's card on the map says its area is the effective one.
+	await page.goto(`/projects/${v.id}?tab=map&feature=${parcel.id}`);
+	await expect(page.getByTestId('map-card-area-source')).toContainText(/Valley dam: [\d.]+ km² \(effective, without pans\) · From the map this farm parcel/);
+});
+
 test('Discard changes nothing; a viewer is offered no division, and a link to it does nothing', async ({ page, owner, signIn }) => {
 	void owner;
 	const v = await valley(page, 'Divide discard');

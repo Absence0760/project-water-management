@@ -1,0 +1,4 @@
+{
+	"addKb": 2,
+	"why": "Pans follow-up (wip/r5-effective-area, migration 195): the gross/effective area choice on Start's and Divide's area ticks (AreaBasisChoice.svelte), the Map card's Use select, and areaBasis.ts. Measured 2026-10-03 against fix/delineation-hydrologist-review @ 2f93f938: 1635 KB there with no headroom left, 1637 KB with this change (+1,528 bytes gzipped JS+CSS)."
+}

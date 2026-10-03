@@ -62,7 +62,7 @@ describe('useValue', () => {
 
 describe('lookupPoints', () => {
 	it('starts from the boundary’s centre, then each gauge', () => {
-		const base = { nodeId: null, nodeName: null, properties: {}, areaM2: null, sourceId: null, createdBy: null, createdAt: '', updatedAt: '' };
+		const base = { nodeId: null, nodeName: null, properties: {}, areaM2: null, sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '', updatedAt: '' };
 		const fs: MapFeature[] = [
 			{ ...base, id: 'g', kind: 'gauge', name: 'Weir', geometry: { type: 'Point', coordinates: [21.3, -33.6] }, center: [21.3, -33.6] },
 			{ ...base, id: 'b', kind: 'catchment_boundary', name: 'Upper', geometry: { type: 'Polygon', coordinates: [] }, center: [21.35, -33.65], areaM2: 1 },

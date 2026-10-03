@@ -168,7 +168,7 @@ describe('overlay', () => {
 	});
 
 	it('feeds the source polygons and lines only (points are markers), marking the selected one', () => {
-		const base = { name: '', nodeId: null, nodeName: null, properties: {}, center: [0, 0] as [number, number], sourceId: null, createdBy: null, createdAt: '', updatedAt: '' };
+		const base = { name: '', nodeId: null, nodeName: null, properties: {}, center: [0, 0] as [number, number], sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '', updatedAt: '' };
 		const fs: MapFeature[] = [
 			{ ...base, id: 'a', kind: 'gauge', geometry: { type: 'Point', coordinates: [0, 0] }, areaM2: null },
 			{ ...base, id: 'b', kind: 'river', geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] }, areaM2: null }
@@ -178,7 +178,7 @@ describe('overlay', () => {
 	});
 
 	it('carries a feature’s results colour only when fills names it', () => {
-		const base = { name: '', nodeId: null, nodeName: null, properties: {}, center: [0, 0] as [number, number], sourceId: null, createdBy: null, createdAt: '', updatedAt: '', areaM2: 1 };
+		const base = { name: '', nodeId: null, nodeName: null, properties: {}, center: [0, 0] as [number, number], sourceId: null, nonContributingM2: null, createdBy: null, createdAt: '', updatedAt: '', areaM2: 1 };
 		const square: MapFeature['geometry'] = { type: 'Polygon', coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
 		const fs: MapFeature[] = [
 			{ ...base, id: 'p1', kind: 'farm_parcel', geometry: square },

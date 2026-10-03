@@ -2592,6 +2592,8 @@ export interface MapFeature {
 	properties: Record<string, string>;
 	/** Geodesic area of a polygon, m², computed on the server; null for points and lines. */
 	areaM2: number | null;
+	/** Of its area, what drains into pans (m²), when it was made from a delineation (195); null when unknown. Its effective area is areaM2 less it. */
+	nonContributingM2: number | null;
 	/** A point at its middle (lon, lat). */
 	center: MapPosition;
 	sourceId: string | null;
@@ -2627,6 +2629,9 @@ export interface MapSource {
 	features: number;
 }
 
+/** Which of a delineated feature's areas a unit took (195): all of it, or without what drains into pans. */
+export type MapAreaBasis = 'gross' | 'effective';
+
 /** A node and where its area came from (152 node.area_source). */
 export interface MapNodeArea {
 	id: string;
@@ -2634,6 +2639,8 @@ export interface MapNodeArea {
 	kind: 'farm' | 'gauge' | 'user';
 	areaKm2: number;
 	areaSource: 'typed' | 'map';
+	/** With areaSource 'map': which of the feature's areas it took (195); null when typed. */
+	areaBasis: MapAreaBasis | null;
 	areaFeatureId: string | null;
 }
 
@@ -3092,8 +3099,9 @@ export interface StartPlan {
 /** The ticks an editor sends to apply a start proposal: every unit once, each value ticked or not. */
 export interface StartTicks {
 	outletName: string;
-	units: { key: string; name: string; area: boolean; drainsInto: boolean; runoffToDam: boolean }[];
-	rest: { include: boolean; name: string; area: boolean };
+	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	units: { key: string; name: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean }[];
+	rest: { include: boolean; name: string; area: boolean; areaBasis?: MapAreaBasis };
 }
 
 export interface StartProposal {
@@ -3162,8 +3170,9 @@ export interface DividePlan {
 
 /** The ticks an editor sends to apply a division: every point once. */
 export interface DivideTicks {
-	units: { key: string; area: boolean; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
-	rest: { to: 'none' } | { to: 'node'; nodeId: string } | { to: 'new'; name: string };
+	/** `areaBasis`: with `area`, the gross area (the default) or the effective one (195). */
+	units: { key: string; area: boolean; areaBasis?: MapAreaBasis; drainsInto: boolean; runoffToDam: boolean; add: boolean; name?: string }[];
+	rest: { to: 'none' } | { to: 'node'; nodeId: string; areaBasis?: MapAreaBasis } | { to: 'new'; name: string; areaBasis?: MapAreaBasis };
 }
 
 export interface DivideProposal extends Omit<StartProposal, 'mode' | 'plan'> {

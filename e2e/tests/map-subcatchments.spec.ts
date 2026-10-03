@@ -11,7 +11,8 @@
 // Axe-scanned with the pieces drawn, light and dark.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, node, putModel, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { FIXTURE_DAM, FIXTURE_JUNCTION, FIXTURE_JUNCTION_RIVER, FIXTURE_JUNCTION_TRIBUTARY, FIXTURE_OFF_CHANNEL, FIXTURE_OUTLET, FIXTURE_UPPER } from '../support/dem.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { loadRiverNetwork, openMap, uploadThroughSheet } from '../support/map.ts';
@@ -145,6 +146,52 @@ test('an editor clicks the river at the dam, then below and above it: each click
 	await expect(header(page).getByRole('button', { name: 'Delineate' })).toHaveAttribute('aria-pressed', 'false');
 	await expect(page.getByTestId('map-feature-card').getByRole('heading', { name: 'Sub-catchment 1' })).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('3 features');
+});
+
+test('Use this area on a saved piece holding a pan asks which area: gross by default, the effective one when picked (195)', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Effective area from a piece');
+	const weir = node('Valley weir', 'gauge', null, 0);
+	const unit = node('Dam unit', 'farm', weir.id, 1, { areaKm2: 5 });
+	await putModel(page.request, project.id, { nodes: [weir, unit], crops: [], cropAreas: [], transfers: [] });
+	// The pieces above and below the dam, saved as Save saves them: the upper one holds the valley's pan.
+	const saved = await page.request.post(`${API_URL}/projects/${project.id}/map/subcatchments/save`, {
+		data: { clicks: [FIXTURE_DAM, FIXTURE_OUTLET].map(([lon, lat]) => ({ lon, lat })) }
+	});
+	expect(saved.status()).toBe(201);
+	const [upper, lower] = (await saved.json()).features as { id: string; areaM2: number; nonContributingM2: number }[];
+	expect(upper!.nonContributingM2).toBeGreaterThan(0);
+	await openMap(page, project.id, `&feature=${upper!.id}`);
+	const card = page.getByTestId('map-feature-card');
+	await card.getByLabel('Hydrological unit to take Sub-catchment 1’s area').selectOption(unit.id);
+	const basis = card.getByTestId('map-area-basis');
+	// Gross until changed; the button names the area it takes (areaText: two decimals past 10 km²).
+	await expect(basis).toHaveValue('gross');
+	const text = (m2: number) => (m2 / 1e6).toFixed(m2 < 1e7 ? 3 : 2);
+	const grossM2 = upper!.areaM2;
+	const effectiveM2 = upper!.areaM2 - upper!.nonContributingM2;
+	await expect(card.getByRole('button', { name: `Use ${text(grossM2)} km²` })).toBeVisible();
+	await basis.selectOption('effective');
+	await card.getByRole('button', { name: `Use ${text(effectiveM2)} km²` }).click();
+	const dialog = page.getByRole('alertdialog', { name: 'Set Dam unit’s area from the map?' });
+	await expect(dialog).toContainText(`to ${(effectiveM2 / 1e6).toFixed(3)} km², the area of “Sub-catchment 1”, its effective area, without the`);
+	await dialog.getByRole('button', { name: 'Use this area' }).click();
+	await expect(page.getByTestId('map-notice')).toContainText(`Dam unit’s area is now ${(effectiveM2 / 1e6).toFixed(3)} km², from the map (effective, without what drains into pans).`);
+	await expect(card.getByRole('button', { name: 'In use' })).toBeDisabled();
+	await expect(card.getByTestId('map-card-area-source')).toContainText('(effective, without pans)');
+	// Reloaded, the card opens on the area in use.
+	await page.reload();
+	await expect(page.locator('.map-page[data-ready]')).toBeVisible();
+	await expect(basis).toHaveValue('effective');
+	await expect(card.getByRole('button', { name: 'In use' })).toBeDisabled();
+	// Switching back to gross is a change again.
+	await basis.selectOption('gross');
+	await expect(card.getByRole('button', { name: `Use ${text(grossM2)} km²` })).toBeEnabled();
+	await expectNoViolations(page);
+	// The lower piece holds no pan: no choice, its area as it is.
+	await openMap(page, project.id, `&feature=${lower!.id}`);
+	await expect(page.getByTestId('map-feature-card').getByRole('button', { name: /^Use / })).toBeVisible();
+	await expect(page.getByTestId('map-feature-card').getByTestId('map-area-basis')).toHaveCount(0);
 });
 
 test('a click beside a much larger channel names it, and Use the larger channel moves the click onto it', async ({ page, owner }) => {

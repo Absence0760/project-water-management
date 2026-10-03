@@ -29,6 +29,7 @@ const feature = (kind: MapFeatureKind, name: string, geometry: MapGeometry, over
 	properties: {},
 	areaM2: null,
 	center: [0, 0],
+	nonContributingM2: null,
 	sourceId: null,
 	createdBy: null,
 	createdAt: '2026-10-01T00:00:00Z',
@@ -41,6 +42,7 @@ const unit = (id: string, name: string, areaKm2: number, over: Partial<MapNodeAr
 	kind: 'farm',
 	areaKm2,
 	areaSource: 'typed',
+	areaBasis: null,
 	areaFeatureId: null,
 	...over
 });

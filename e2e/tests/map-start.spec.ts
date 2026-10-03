@@ -118,10 +118,21 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	await expect(unit.getByTestId('start-tick-area')).toBeChecked();
 	await expect(unit.getByTestId('start-tick-dam')).toBeChecked();
 	await expect(review.getByTestId('start-tick-rest-area')).toBeChecked();
+	// The valley's pan drains into the dam's piece (195): its ticked area asks which, gross until changed; the rest holds none.
+	const basis = unit.getByTestId('start-area-basis');
+	await expect(basis.getByRole('radio', { name: /^Gross, 3[2-5]\d\.\d\d km² \(what drains into pans included\)$/ })).toBeChecked();
+	await expect(review.getByTestId('start-rest-area-basis')).toHaveCount(0);
+	await basis.getByRole('radio', { name: /^Effective, \d+\.\d\d km² \(without the \d+\.\d\d km² draining into pans\)$/ }).check();
+	await expectNoViolations(page);
+	// Unticked, the choice goes with the area.
+	await unit.getByTestId('start-tick-area').uncheck();
+	await expect(basis).toHaveCount(0);
+	await unit.getByTestId('start-tick-area').check();
+	await expect(basis.getByRole('radio', { name: /^Effective/ })).toBeChecked();
 	await review.getByLabel('Outflow gauge’s name').fill('Valley weir');
 	await startSheet(page).getByTestId('start-apply').click();
 	const confirm = page.getByRole('alertdialog', { name: 'Apply the ticked values?' });
-	await expect(confirm).toContainText('The empty model gets 3 nodes, with 2 areas');
+	await expect(confirm).toContainText('The empty model gets 3 nodes, with 2 areas (each saved as its unit’s parcel; Valley dam without what drains into pans)');
 	await confirm.getByRole('button', { name: 'Apply' }).click();
 
 	// 4. Data and the first run.
@@ -144,6 +155,13 @@ test('an editor starts an empty model from the map: delineate, place the dam, re
 	await expect(page.getByTestId('map-start-open')).toHaveCount(0);
 	await expect(page.getByTestId('map-feature-list').getByRole('button', { name: /^Valley dam/ }).first()).toBeVisible();
 	await expect(page.getByTestId('map-summary')).toContainText('2 of 2 unit areas from the map');
+	// The dam's unit took its effective area, the rest its gross one, and the server says so (195).
+	const listed = await (await page.request.get(`${API_URL}/projects/${project.id}/map/features`)).json();
+	const by = Object.fromEntries(listed.nodes.map((n: { name: string; areaBasis: string | null; areaKm2: number }) => [n.name, n]));
+	expect(by['Valley dam'].areaBasis).toBe('effective');
+	expect(by['Rest of the catchment'].areaBasis).toBe('gross');
+	const parcel = listed.features.find((f: { nodeId: string; kind: string }) => f.kind === 'farm_parcel' && f.nodeId === by['Valley dam'].id);
+	expect(by['Valley dam'].areaKm2).toBeCloseTo((parcel.areaM2 - parcel.nonContributingM2) / 1e6, 6);
 });
 
 test('Discard returns to the points and changes nothing; with no units the catchment becomes one', async ({ page, owner }) => {

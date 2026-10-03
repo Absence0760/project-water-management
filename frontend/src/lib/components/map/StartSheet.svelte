@@ -19,6 +19,8 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { featureName } from './mapList';
+	import AreaBasisChoice from './AreaBasisChoice.svelte';
+	import { offersEffective } from './areaBasis';
 	import PieceBadge from './PieceBadge.svelte';
 	import PlacementAsk from './PlacementAsk.svelte';
 	import { proposalPieces, REST_KEY } from './pieces';
@@ -26,6 +28,7 @@
 	import type { ConfluencePoint } from '$lib/api/types';
 	import {
 		applySummary,
+		applyTicks,
 		candidatePoints,
 		choicesFor,
 		defaultChoice,
@@ -167,7 +170,7 @@
 		busy = 'apply';
 		error = null;
 		try {
-			const r = await api.start.apply(projectId, p.id, ticks);
+			const r = await api.start.apply(projectId, p.id, applyTicks(ticks));
 			await onapplied(r.proposal);
 			void focusTitle();
 		} catch (err) {
@@ -345,6 +348,10 @@
 									<input type="checkbox" bind:checked={t.area} data-testid="start-tick-area" />
 									<span>Area <strong>{km2Text(u.areaM2)}</strong>: what drains to it and to no unit above it (its whole catchment: {km2Text(u.totalAreaM2)}), saved as its parcel</span>
 								</label>
+								{#if t.area && offersEffective(u.areaM2, u.nonContributingM2)}
+									<!-- Its piece holds pans (195): gross (the default) or effective, chosen here, never silently. -->
+									<AreaBasisChoice areaM2={u.areaM2!} ncM2={u.nonContributingM2!} bind:basis={() => t.areaBasis ?? 'gross', (v) => (t.areaBasis = v)} testid="start-area-basis" />
+								{/if}
 							{:else if u.role !== 'user'}
 								<p class="hint">No area proposed: type it on the Network, or draw its parcel and Use it.</p>
 							{/if}
@@ -392,6 +399,14 @@
 									<input type="checkbox" bind:checked={ticks.rest.area} data-testid="start-tick-rest-area" />
 									<span>Area <strong>{km2Text(p.rest.areaM2)}</strong>{p.fromDem ? '' : ' (the boundary)'}, saved as its parcel</span>
 								</label>
+								{#if ticks.rest.area && offersEffective(p.rest.areaM2, p.rest.nonContributingM2)}
+									<AreaBasisChoice
+										areaM2={p.rest.areaM2!}
+										ncM2={p.rest.nonContributingM2!}
+										bind:basis={() => ticks.rest.areaBasis ?? 'gross', (v) => (ticks.rest.areaBasis = v)}
+										testid="start-rest-area-basis"
+									/>
+								{/if}
 							{/if}
 						{/if}
 					</li>
