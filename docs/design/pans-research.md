@@ -133,11 +133,83 @@ took from that (`backend/src/delineation/pans.ts`;
    otherwise report the dam's whole catchment as non-contributing.
 4. **Not built**: Monte Carlo depression probability (Lindsay & Creed) is
    tens of fills a click, far past the 20 s budget; WR2012's own endoreic
-   polygons (the base-map layer) aren't loaded as reference data (their
-   licence for redistribution is unknown, and they're 1995 digitising at
-   1:250 000); reading the river network to reject a depression a mapped
-   river flows through is left for when false positives are seen
-   (docs/followups.md).
+   polygons (the base-map layer) aren't loaded as reference data (see
+   § Storage on a river: no published licence, data behind a registration);
+   reading the river network to reject a depression a mapped river flows
+   through was built later (§ Storage on a river).
+5. **Storage on a river** (delineate-11, start-13): a depression passing
+   every pan test that a mapped river flows out of over a wall, or that a
+   dam holds, is listed apart and not counted (§ Storage on a river).
+
+## Storage on a river
+
+The follow-up from finding 8: the storage test keeps out a drawn-down dam
+on a large river, but a large dam low in a *small* catchment (an
+off-channel or pumped-storage dam, a big farm dam on a stream) holds well
+over 100 mm of its catchment's runoff and passed as a pan. Read and
+measured on 2026-10-03 against the local GLO-30 (the Mapterhorn
+Terrarium build) and HydroRIVERS v1.0 (Africa), the whole 3 072-cell
+window (about 100 km) taken as the catchment.
+
+- **HydroRIVERS runs through pans.** HydroSHEDS conditions its DEM by
+  filling sinks, keeping as sinks only the endorheic ones its ancillary
+  data confirm, and traces HydroRIVERS (reaches of at least 10 km²) on
+  it. So in the pan veld most pans have a reach running into and out of
+  them. Around Bultfontein (26.15° E, 28.29° S), "a reach flows in within
+  300 m of the floor and out within 500 m of the spill's path" flagged
+  **68 of the 179** depressions that pass the pan tests. Most of those
+  reaches are endorheic (HydroRIVERS' `ENDORHEIC` 1, `NEXT_DOWN` 0 at a
+  sink a few hundred metres off the GLO-30 pan), so counting only reaches
+  that reach the sea (`ENDORHEIC` 0) left 19, and requiring the depression
+  to drain at least the 10 km² HydroRIVERS maps a reach for left 8. Those
+  8 are still pans: OpenStreetMap maps three of them as intermittent
+  natural water (not `water=reservoir`), and none shows a wall.
+- **A wall tells them apart.** Below a dam the river bed lies below the
+  reservoir's floor within a few hundred metres; past a pan's spill (a low
+  saddle) the land falls slowly. The ground first lies below the floor, down
+  the spill's path, at 918 m to over 3 km for those 8 Bultfontein pans,
+  and at 47 m and 371 m for the two flagged in the eastern Free State
+  window (29.03° E, 28.45° S: 1.6 km² and 2 km² floors, 8 and 9 m deep,
+  371 and 673 mm over 30 and 23 km², the second beside OSM reservoirs).
+  Hence the rule: a reach that reaches the sea flows through and out,
+  **and** the ground falls past the floor within 500 m of the spill.
+- **Before and after**, the whole window as the catchment:
+
+  | Window (3 072 cells) | Pans before | Non-contributing before | Pans after | Non-contributing after | Storage on a river |
+  | --- | --- | --- | --- | --- | --- |
+  | Bultfontein | 179 | 3 750 km² | 179 | 3 750 km² | 0 |
+  | Eastern Free State (Sterkfontein) | 31 | 117.5 km² | 29 | 80 km² | 2 |
+
+  Clicks: the dam at 29.088° E, 28.580° S, delineated from its river 3 km
+  below (29.119° E, 28.610° S, 61 km²), was reported as a pan with 29.9 km²
+  (49 %) non-contributing; now none, and the dam listed as storage on a
+  river. Two clicks on rivers near Bultfontein (443 km² with 300 km² into
+  8 pans; 327 km² with 71.5 km² into 8) are unchanged. Sterkfontein Dam
+  itself is not a depression in GLO-30 (its water surface is at the
+  spill), so it never passed as a pan.
+- **What it costs**: the query over the depressions' boxes takes 0.2–0.7 s
+  (31–179 boxes) and the check about 0.1 s, inside the request's 20 s
+  budget; nothing is asked when no depression passes.
+- **What stays open**: the eastern Free State window's 29 "pans" include
+  many with a wall-like drop within 250 m (21 of 28, against 18 of 171
+  around Bultfontein): farm dams on streams under 10 km², which no reach
+  maps and the register (synthetic locally) doesn't hold. A wall test
+  without a mapped river would catch them but also some pans on a terrace
+  edge; it is a follow-up (docs/followups.md), measured first against the
+  DSO register once its licence allows loading it.
+- **The data it needs**: HydroRIVERS' `ENDORHEIC` (0/1), loaded into
+  `river_reference.endorheic` (migration 196) by `pnpm dev:tiles:rivers`
+  and the production reference load; a network loaded before 196 has it
+  NULL and is not used until reloaded. No new dataset: HydroRIVERS is
+  already in maps.md § Sources.
+- **WR2012's endoreic-area polygons** (the `Endoreic Areas` base-map layer,
+  User's Guide § 20): the WR2012 data are served from
+  waterresourceswr2012.co.za behind a registration that the study's author
+  approves by hand, and the site publishes no licence or terms for the GIS
+  data (only "Copyright © Water Research Commission"). With no licence to
+  redistribute or to run in a hosted app, and the layer being 1995
+  digitising at 1:250 000, they aren't used; asking the WRC for terms is
+  the way to change that.
 
 ## Cost
 
@@ -165,6 +237,12 @@ nothing extra but the copy.
 - Bailey, A.K. & Pitman, W.V. (2016). *Water Resources of South Africa 2012
   Study (WR2012): User's Guide*. WRC Report TT 684/16 (§ 16 Table 16.5, § 20
   and Table 20.1). <https://www.wrc.org.za/wp-content/uploads/mdocs/TT%20684-16.pdf>
+- Lehner, B. & Grill, G. (2013). Global river hydrography and network
+  routing: baseline data and new approaches to study the world's large
+  river systems. *Hydrological Processes* 27; HydroRIVERS v1.0 technical
+  documentation (`ENDORHEIC`, `NEXT_DOWN`). <https://www.hydrosheds.org/products/hydrorivers>
+- WR2012 data access (registration; no published data licence).
+  <https://waterresourceswr2012.co.za/>
 - Bailey, A.K. & Pitman, W.V. (2016). *WR2012: Executive Summary*. WRC
   Report TT 683/16 (§ 4, naturalised MAR). <https://www.wrc.org.za/wp-content/uploads/mdocs/TT%20683-16.pdf>
 - Tarboton, D. TauDEM 5, *Pit Remove* (depression mask).

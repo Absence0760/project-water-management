@@ -3971,15 +3971,40 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       node's area source and the revision reason, never a silent default.
       Trigger: the hydrologist asking for it after using the figure, or a
       client catchment in the pan veld (C, D, the Molopo).
-- [ ] **Cross-check a pan against the river network** (from finding 8's
-      fix). The storage rule keeps out a drawn-down dam and an embankment
-      pond on the synthetic DEM and on the real one around Bultfontein, but a
-      large storage dam low in its catchment could still pass it (a
-      depression holding over 100 mm of its catchment's runoff). Durable
-      fix: a depression a loaded HydroRIVERS reach flows out of is not a pan
-      (HydroSHEDS marks endorheic sinks itself), or WR2012's endoreic-area
-      polygons as reference data once their licence is known. Trigger: a
-      pan listed on a proposal that is a dam on a river.
+- [x] **Cross-check a pan against the river network** (from finding 8's
+      fix; 2026-10-03, branch wip/r5-pan-check, delineate-11, start-13,
+      migration 196; design/pans-research.md § Storage on a river). A
+      depression passing every pan test that a river-network reach reaching
+      the sea (HydroSHEDS' `ENDORHEIC` 0, now loaded as
+      `river_reference.endorheic`) or a drawn river flows through and out of,
+      where the ground falls past its floor within 500 m of the spill (a
+      wall), or that a dam of the register or the map holds, is storage on a
+      river: listed apart (`pans.onRiver`), not counted. Measured: around
+      Bultfontein every reach counted would have flagged 68 of 179 pans (HydroRIVERS
+      runs through pans, being traced on a filled DEM); the rule flags none
+      there, and 2 dam-like depressions in the eastern Free State (a 61 km²
+      catchment's 49 % "into pans" was a dam). WR2012's endoreic polygons sit
+      behind a registration with no published licence: not used.
+- [ ] **Reload the river network for its ENDORHEIC flag** (from the
+      cross-check above). A network loaded before migration 196 has
+      `endorheic` NULL, which the cross-check skips, so it does nothing until
+      the network is loaded again (`pnpm dev:tiles:rivers` locally, the
+      production reference load from a file `bin/tiles-dev.sh rivers` wrote
+      after this change). Trigger: the next reference load, or before the
+      first production deploy, whichever comes first.
+- [ ] **Farm dams under 10 km² still pass as pans** (from the cross-check
+      above). In the eastern Free State window 21 of the 28 remaining "pans"
+      fall past their floor within 250 m of the spill, as below a wall
+      (against 18 of 171 around Bultfontein): farm dams on streams no
+      HydroRIVERS reach maps and the (synthetic, locally) register doesn't
+      hold. Durable fix: load the DSO register of dams (its licence first,
+      maps.md § Sources), which the cross-check already reads; failing
+      that, measure a wall test without a mapped river (a steep drop past
+      the floor within ~250 m) against the register's dams and OSM's
+      `water=reservoir` before adopting it, since it would also catch a pan
+      on a terrace edge. Trigger: the register's licence settled, or a
+      client catchment outside the pan veld with a large non-contributing
+      figure.
 
 ## Crop factors (issue #54 item 1)
 

@@ -2793,8 +2793,12 @@ map" card) stays the schematic; this is the geography.
   point, on the channel"), Cells ("33 609 cells, each about 128 m across"),
   Into pans ("8.52 km² (2 %) drains into a pan; the largest holds … mm over
   its … km². Non-contributing in WR2012’s sense; still inside the area and
-  outline", or "none found …"; delineate-9) and Effective area (the area
-  less it), **How it was made** (closed: Dataset with its fingerprint, Method with its
+  outline", or "none found …"; delineate-9), Effective area (the area
+  less it) and, when a depression that holds as much is on a river,
+  Storage on a river ("A closed depression holds as much as a pan, but a
+  mapped river flows out of it over a wall: storage on a river, so the …
+  km² draining into it is not counted as non-contributing"; delineate-11),
+  **How it was made** (closed: Dataset with its fingerprint, Method with its
   version, Pans: the pans' method), **Before you accept it** (three caveats), then **Accept as the
   catchment boundary** (disabled until **Replace the current boundary “…”**
   is ticked when there is one), **Accept as an area** and **Reject**;

@@ -3096,11 +3096,15 @@ map feature like any other.
   `featureId` the accepted feature (`null` again once it is deleted).
   `pans` (193, delineate-9; null on older proposals) = `PanReport = {
   nonContributingM2, count, largest: { at: [lon, lat], floorM2, depthM,
-  drainsM2, storageMm }[] (at most 5, the largest catchment first), method }`:
-  what of the catchment drains into pans (closed depressions at least 1 m
-  deep, 0.1 km² in floor, holding at least 100 mm of their catchment's
-  runoff), reported beside `areaM2` and never taken out of it or the
-  polygon ([design/delineation.md § Pans](./design/delineation.md#pans)).
+  drainsM2, storageMm }[] (at most 5, the largest catchment first), onRiver?,
+  method }`: what of the catchment drains into pans (closed depressions at
+  least 1 m deep, 0.1 km² in floor, holding at least 100 mm of their
+  catchment's runoff), reported beside `areaM2` and never taken out of it or
+  the polygon ([design/delineation.md § Pans](./design/delineation.md#pans)).
+  `onRiver` (delineate-11, start-13; absent before) = `{ count, largest: {
+  …the same, by: 'river' | 'dam' }[] (at most 5) }`: the depressions that
+  pass the pan tests but are storage on a river (a mapped river flows out
+  over a wall, or a dam holds it), not counted in `nonContributingM2`.
 - `DelineationRequest = { id, status: 'queued' | 'running' | 'failed' |
   'proposed' | 'refused' | 'superseded', from, click, progress, error,
   proposal, check, refusal, createdAt, finishedAt }` (191_delineation_request):
