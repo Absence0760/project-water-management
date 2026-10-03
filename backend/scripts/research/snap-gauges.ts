@@ -39,7 +39,7 @@
 // in the other harnesses. Delineate's 20 s budget is lifted (budgetMs:
 // Infinity): this machine's speed under several shards is not the Lambda's,
 // and a refusal from the clock would hide what the window ladder does.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import pg from 'pg';
 import type { Position } from '../../src/geo/geojson.js';
 import { configuredDem, type Dem } from '../../src/delineation/dem.js';
@@ -364,7 +364,13 @@ async function run(csv: string, out: string, shard: [number, number], limit: num
 	const db = new pg.Client({ connectionString: process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL });
 	await db.connect();
 	// Resume: a rerun with the same out file keeps what it has (a dropped connection to the DEM ends a run).
-	const results: Result[] = existsSync(out) ? (JSON.parse(readFileSync(out, 'utf8')) as { results: Result[] }).results : [];
+	// Resume a stopped shard: read its file if there is one (one read, no check-then-read race).
+	let results: Result[] = [];
+	try {
+		results = (JSON.parse(readFileSync(out, 'utf8')) as { results: Result[] }).results;
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+	}
 	const done = new Set(results.map((r) => r.station.id));
 	for (const [k, s] of mine.entries()) {
 		if (done.has(s.id)) continue;

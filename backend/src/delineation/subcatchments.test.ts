@@ -7,7 +7,7 @@ import { delineate, DelineationRefused, worldPx } from './delineate.js';
 import { DAM_CELL, FIXTURE_CELL_M, fixtureLonLat, OUTLET_CELL, PAN } from './fixture.js';
 import { accumulate, OUT } from './flow.js';
 import { LARGER_FACTOR } from './place.js';
-import { allOpenText, cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
+import { cellRowAreaM2, damOutflow, delineateUnits, fitMethod, mercatorLat, METHOD_MAX_CHARS, mostDrained, ownsLand, partition, placementText, RASTER_MAX_CROSSINGS, rasterize, START_METHOD_VERSION, startMethod, type PlacedBy, type UnitPoint } from './subcatchments.js';
 
 // The pure core on hand-made grids, then the driver against the committed
 // synthetic DEM (fixture.ts: one valley, its river south along the axis, a dam).
@@ -346,7 +346,6 @@ describe('delineateUnits (synthetic DEM)', () => {
 describe('delineateUnits: each point placed as Delineate places it (start-7, the hydrologist’s review finding 3)', () => {
 	// A gauge on a displaced river line: three cells (about 380 m) east of the river, on the valley's side, where a 150 m
 	// snap finds only the hillside's gully. The dam point five cells up the same line, as the review placed it.
-	const outlet = at(OUTLET_CELL.x, OUTLET_CELL.y);
 	const gauge = at(DAM_CELL.x + 3, DAM_CELL.y + 60);
 	const damPoint = (hints: Partial<UnitPoint> = {}): UnitPoint => ({ ...point('dam', DAM_CELL.x + 3, DAM_CELL.y + 20), ...hints });
 
