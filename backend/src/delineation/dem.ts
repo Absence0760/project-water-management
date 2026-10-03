@@ -64,7 +64,17 @@ export function byteSource(url: string): ByteSource {
 	if (/^https?:\/\//.test(url)) {
 		return async (offset, length) => {
 			// No redirects: DEM_URL names the server, and nothing else is fetched.
-			const res = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+			const get = () => fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+			let res: Response;
+			try {
+				res = await get();
+			} catch (err) {
+				// The connection closed before any answer: a kept-alive socket the server had closed while the routing held the event
+				// loop (a large window routes for tens of seconds, so the close isn't seen until the next read reuses it). Sent once
+				// more on a fresh connection; a timeout (DOMException) or a second failure stands.
+				if (!(err instanceof TypeError)) throw err;
+				res = await get();
+			}
 			if (res.status === 416) {
 				await res.body?.cancel();
 				return new Uint8Array(0);

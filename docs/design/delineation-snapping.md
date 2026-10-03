@@ -301,7 +301,8 @@ failure is routed again at the 3 072-cell window for a diagnosis, and
 `--shift` reroutes each `too_large` refusal with the window moved towards
 the cut catchment. All 446 stations lie inside the local GLO-30 extract.
 
-**Results** (½–2× of the published area counts as right):
+**Results** (the first run, on `delineate-4`; ½–2× of the published area
+counts as right):
 
 | Published area | n | ½–2× | accepted outside ½–2×: silent / with the caveat | refused (`too_large`) | asked a confluence | matched / junction / snapped | median ratio (accepted) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -380,7 +381,7 @@ persona run named (findings 1, 4, 6, 7, 10, 11), and the gauges rank them:
 the outlet-centred window (finding 6) refuses most gauges of 1 000–10 000
 km², and the area match's obedience to the nearest line (finding 4, in both
 directions) is the largest silent error. The fixes belong to that round;
-rerun this harness after them.
+§ Rerun after the persona's fixes below has the numbers after them.
 
 **"Use that channel", followed through the worker** (findings 10 and 11,
 measured 2026-10-03 with a probe run by hand, not committed). The harness
@@ -406,6 +407,100 @@ nothing whole can come back. What changed is what the app says:
 - a click whose catchment runs past the window is no longer *unmatched*
   (no window could match its reach), and the every-piece-open refusal names
   a lower click that missed the river.
+
+### Rerun after the persona's fixes (2026-10-03)
+
+The same 446 stations, the same harness, on `delineate-10` / `start-12`
+(the hydrologist review's findings 1, 4, 6, 7, 10 and 11 fixed, issue
+#390). The harness now follows the app's whole Delineate path: the
+request's windows (1 024 → 2 048 → 3 072 cells) and, when the request
+stops `too_large` at its last window, the worker's (4 096, 6 144) with the
+first placed over where the request's cut the catchment (`stage` in its
+results). A `larger_channel` refusal is answered both ways an editor can
+("Use that channel" and "Keep my point"), and Start from the map runs at
+each station too (below). Delineate's time budgets stay lifted; aggregates
+only, as before.
+
+| Published area | n | ½–2× before → after | accepted outside ½–2× (silent / caveat) | refused `too_large` | refused `larger_channel` | proposed by the worker (½–2×) | median ratio (accepted) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| < 100 km² | 96 | 84 (88 %) → 85 (89 %) | 8 / 1 → 7 / 1 | 1 → 0 | 2 → 3 | 1 (0) | 0.99 → 0.99 |
+| 100–1 000 km² | 155 | 138 (89 %) → 147 (95 %) | 7 / 1 → 6 / 0 | 7 → 0 | 2 → 2 | 0 | 1.00 → 1.00 |
+| 1 000–10 000 km² | 129 | 18 (14 %) → 114 (88 %) | 8 / 5 → 3 / 3 | 94 → 1 | 4 → 8 | 46 (45) | 0.99 → 1.00 |
+| ≥ 10 000 km² (main stems) | 66 | 0 → 19 (29 %) | 2 / 2 → 0 / 3 | 52 → 35 | 10 → 8 | 19 (19) | 0.00 → 1.00 |
+
+Failures below 10 000 km², by class (first matching class wins, as
+before): 140 of 380 → 34 of 380.
+
+| Class | before | after | after: silent / caveat |
+| --- | --- | --- | --- |
+| refused `too_large` (finding 6) | 102 | 1 | – |
+| refused `larger_channel` | 8 | 13 | – |
+| no reach within 1 km: snapped into a gully (finding 7) | 4 | 4 | 4 / 0 |
+| a river's gauge moved onto a smaller stream's line (finding 4) | 9 | 3 | 3 / 0 |
+| a small stream's gauge moved onto a larger river's line (finding 4) | 4 | 5 | 4 / 1 |
+| another stream's reach nearest (one within 2 km matches) | 5 | 6 | 5 / 1 |
+| HydroRIVERS has no matching reach within 2 km | 1 | 0 | – |
+| the reach matched only at a 3 072-cell window (finding 1) | 3 | 1 | 0 / 1 |
+| snapped, no matching channel within 2.5 km (flat lower rivers) | 2 | 1 | 0 / 1 |
+| matched or junction, yet outside ½–2× | 2 | 0 | – |
+
+1. **The window is fixed for every size that fits the worker** (finding 6):
+   1 000–10 000 km² went from 14 % to 88 % right, with 1 refusal left in
+   129. Of 103 clicks the request handed to the worker (the 47 below
+   10 000 km² plus 56 main stems) it proposed 66, 64 within ½–2×; 35 main
+   stems and 1 smaller river stay `too_large` at 6 144 cells. 30 were
+   whole at 4 096 cells, 36 at 6 144. Main stems are now right 19 times
+   in 66 (median 1.00× among those proposed), all through the worker.
+2. **Time:** 13 of the 103 took longer than the worker's 150 s on this
+   machine with 8 shards routing at once (8 of them ended `too_large`
+   anyway), and 11 request-only results took longer than the request's
+   20 s. On a loaded laptop the budgets, not the windows, would refuse
+   those; the Lambda's measured times are in [maps.md](../maps.md).
+3. **Placement:** matched points are within ½–2× 97 % of the time (92 %
+   before); 123 points below 10 000 km² now go at the DEM's junction
+   (11 before: a click within 1 km of a mapped junction stays on its
+   river's side, `delineate-7`), 94 % of them right, 9 flagged as moved
+   over 500 m. The silent wrong-stream cases (finding 4, both ways, and
+   another stream's reach) fell from 18 to 14, 12 of them silent.
+4. **Larger channel, answered both ways** (findings 10 and 11): of 21
+   `larger_channel` refusals, "Use that channel" was right once, "Keep my
+   point" 11 times, either 12. 13 offered the reach's matching channel
+   (place.ts rules 3 and 4, new since the first run): there "Keep my
+   point" was right at 11 and "Use that channel" at none. **New failure
+   class:** at a gauge on the DEM's channel of its own, the nearby reach
+   is mostly another stream (its area outside ½–2× of the published one
+   at 9 of the 11 below 10 000 km²), so the channel offered for it is the
+   wrong river, and the dialogue's primary button takes it. The old
+   silent error (finding 4) is now a question, but one whose suggested
+   answer is wrong at gauges ([followups.md](../followups.md)).
+5. **Still open:** an off-river published position with no reach within
+   1 km (4 gauges, all more than 1 km from any line) still snaps into a
+   gully under 1 km² with no caveat (finding 7 covers a click with a
+   reach; with none, nothing warns), and one flat lower river still gets
+   under half its area with only the *unmatched* caveat (the open
+   follow-up on a DEM that routes a river elsewhere).
+
+**Start from the map at the same stations** (the station as the outlet
+gauge and no other point; its reach looked up as `pointReaches` does, the
+oracle's river at a confluence, divided by `delineateUnits` with Start's
+own windows):
+
+| Published area | n | Start ½–2× | Delineate ½–2× | refused `too_large` | accepted outside ½–2× (silent / warned) | both right: areas within 5 % |
+| --- | --- | --- | --- | --- | --- | --- |
+| < 100 km² | 96 | 86 (90 %) | 85 | 1 | 7 / 2 | 85 of 85 |
+| 100–1 000 km² | 155 | 149 (96 %) | 147 | 0 | 6 / 0 | 147 of 147 |
+| 1 000–10 000 km² | 129 | 75 (58 %) | 114 | 48 | 3 / 3 | 69 of 69 |
+| ≥ 10 000 km² | 66 | 0 | 19 | 52 | 0 / 13 | – |
+
+Where both are right they agree within 5 % every time, so Start places a
+gauge outlet as Delineate does. The difference is the windows: **new
+failure class**, Start (and Divide) have no worker, so a gauge outlet of
+1 000–10 000 km² is refused `too_large` 48 times in 129 where Delineate
+proposes it (all 45 cases where Delineate is right and Start isn't are
+that refusal; 9 the other way round). Start's outlet carried a
+larger-channel warning 20 times: as proposed it was right at 7, after
+"Use that channel for the outlet" at 1 (the same wrong-river offer as
+point 4).
 
 ## Beside a confluence (fifth experiment)
 
@@ -701,24 +796,26 @@ spots before it runs:
   stale or rounded, and the GRDC subset (446 stations) leans to long records
   and larger rivers.
 - **Which river.** The ½–2× test can't see a wrong river of similar size, or
-  the wrong side of a junction; the junction run measures sides directly.
-  The gauge run shows the nearest line choosing the wrong stream; a wrong
-  side of a junction within ½–2× still passes there unseen.
-- **Scale.** ✓ Gauges up to 10 000 km² and main stems. Most gauges of
-  1 000–10 000 km² are refused by the window, so their placement is
-  untested until finding 6 is fixed.
-- **Which path.** Only Delineate's. Start and Divide place points their own
-  way (persona finding 3) and Sub-catchments picks the lowest click; none
-  was run at gauges.
-- **The editor.** An oracle answers the confluence question with the right
-  river; a real editor may not know it.
-
   the wrong side of a junction; the junction runs measure sides directly,
   at the junction (third) and 0–1 000 m along each river (fifth). The fifth
   takes the DEM's junction as the reference: where the DEM and HydroRIVERS
-  disagree on where rivers meet, it scores the DEM's version.
-- **Scale.** Reaches up to 1 500 km² and junctions of up to 1 500 km²; main
-  stems only for being on the trunk.
+  disagree on where rivers meet, it scores the DEM's version. The gauge
+  runs show the nearest line choosing the wrong stream; a wrong side of a
+  junction within ½–2× still passes there unseen.
+- **Scale.** ✓ Gauges up to 10 000 km² and main stems, through the
+  worker's windows since the rerun (1 000–10 000 km²: 120 of 129 placed).
+  The vertex and junction runs: reaches and junctions up to 1 500 km²,
+  main stems only for being on the trunk.
+- **Which path.** ✓ Delineate's whole path (request and worker) and, since
+  the rerun, Start's with a gauge as the only point. Not Start with dams
+  and abstractions above the gauge (each point's own placement), not
+  Divide, and not Sub-catchments' lowest click; none was run at gauges.
+- **The time.** Delineate's budgets are lifted in the harnesses, so a
+  refusal from the clock (20 s for the request, 150 s for the worker) is
+  never counted; the rerun reports how many ran past them on this machine.
+- **The editor.** An oracle answers the confluence question with the right
+  river; a real editor may not know it. ✓ Both answers to a larger-channel
+  refusal are tried since the rerun; which one an editor picks isn't.
 
 ## Limits of this evidence
 
