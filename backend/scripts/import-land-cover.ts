@@ -25,7 +25,7 @@
 // The repo ships only invented data (backend/fixtures/geo/). ESA WorldCover is
 // CC BY 4.0 (docs/maps.md § Sources): the tiles are the operator's own
 // download, never committed.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -197,7 +197,7 @@ export const loadSyntheticLandCover = (url: string) => {
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseLandCoverArgs(process.argv.slice(2));
 	if (typeof args !== 'string' && args.out) {

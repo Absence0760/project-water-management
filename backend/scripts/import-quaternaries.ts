@@ -13,7 +13,7 @@
 // the operator's own registered download, whose redistribution terms are
 // unconfirmed (docs/maps.md), so they are loaded into the database, never
 // committed.
-import { config } from 'dotenv';
+import { loadDevEnv } from '../src/config/devEnv.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +62,7 @@ export async function importQuaternaries(url: string, args: Args): Promise<{ wri
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-	config({ path: ['.env.development.local', '.env.development'] });
+	loadDevEnv();
 	const url = process.env.MIGRATION_DATABASE_URL;
 	const args = parseArgs(process.argv.slice(2));
 	if (!url) {
