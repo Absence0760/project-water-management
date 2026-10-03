@@ -595,10 +595,11 @@
 	}
 	async function splitDone(parts: [MapFeature, MapFeature]) {
 		notice = `Split ${featureName(draft.feature ?? parts[0])} in two: ${parts.map((f) => (f.name ? `“${f.name}”` : KIND_LABEL[f.kind].toLowerCase())).join(' and ')}.`;
-		splitOpen = false;
-		draft.cancel();
 		await load();
 		await pickInPlace(parts[0].id);
+		// As drafted(): the sheet closes once the pick has landed, so the side column doesn't change under a click.
+		splitOpen = false;
+		draft.cancel();
 	}
 
 	// --- trace a dam (#326 C2): on when the server has water occurrence data; a point inside the water, then the outline as a drawing ---
@@ -697,10 +698,11 @@
 	}
 	async function drafted(f: MapFeature) {
 		notice = `Saved ${KIND_LABEL[f.kind].toLowerCase()} ${f.name ? `“${f.name}”` : ''} on the map.`;
-		draftSheetOpen = false;
-		draft.cancel();
 		await load();
 		await pickInPlace(f.id);
+		// Closed once the pick has landed: closing first left a moment where the side column then jumped to Details under a click.
+		draftSheetOpen = false;
+		draft.cancel();
 		await returnToStart();
 	}
 	function pasted(g: MapGeometry) {
