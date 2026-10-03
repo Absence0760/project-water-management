@@ -436,7 +436,11 @@ Migration **175_delineation.sql**: `delineation_proposal` (project-scoped;
 viewers read, editors propose and decide; RLS and grants in the same
 file; the accepted feature linked by a same-project composite key, kept
 when the feature is deleted with the link cleared; superseded and rejected
-proposals pruned past the newest 50 a project). No other table changes.
+proposals pruned past the newest 50 a project). Its `method` holds at most 1 000
+characters: the sentence is built by `delineationMethod` (every clause at
+once, the longest reach name, comes to about 750), and
+`fitDelineationMethod` falls back to naming the placement rule by the
+method version should it ever pass the limit, as Start's `fitMethod` does. No other table changes.
 Migration **193_delineation_pans.sql** adds `delineation_proposal.pans`
 (jsonb: the non-contributing area, the pans' count, the largest five and
 the method; NULL before delineate-9; from delineate-12 also `onRiver`,

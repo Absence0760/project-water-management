@@ -331,6 +331,62 @@ export function cutChannel(g: PlaceGrid, open: Uint8Array, cx: number, cy: numbe
 	return best;
 }
 
+/** delineation_proposal.method's limit (175_delineation.sql): whatever ran, the method must fit, or the insert fails. */
+export const DELINEATION_METHOD_MAX_CHARS = 1000;
+
+/** What ran for one delineation, for its method sentence. */
+export interface DelineationMethodFacts {
+	cellM: number;
+	zoom: number;
+	snapRadiusM: number;
+	/** How the outlet was placed: at a junction, matched to the reach's area, kept beside the reach's offered channel, or snapped. */
+	how: 'junction' | 'matched' | 'kept' | 'snapped';
+	/** The reach the click meant (its name, its area at the point, picked at a confluence, that area read from the DEM at a head reach's upper end). */
+	reach: { name: string; km2: number; chosen: boolean; fromHead: boolean } | null;
+	/** `kept`: the offered channel (on the DEM's own channel or not, how far). */
+	keptBeside: { onChannel: boolean; distanceM: number } | null;
+	/** `snapped` beside an unmatched reach: the point is in a gully, so the wider match was looked for too. */
+	gully: boolean;
+	/** The pans were cross-checked against the river network and the dams (pans.ts). */
+	checked: boolean;
+}
+
+/**
+ * The method sentence a delineation stores. `brief`: the placement rule named by the method version rather than spelled out,
+ * the form fitDelineationMethod falls back to when the full one would pass DELINEATION_METHOD_MAX_CHARS. Pure.
+ */
+export function delineationMethod(f: DelineationMethodFacts, brief = false): string {
+	const r = f.reach;
+	let placement: string;
+	if (brief) {
+		const rule = { junction: 'at a junction', matched: 'matched to the reach’s area', kept: 'kept by the editor beside the reach’s offered channel', snapped: 'snapped' }[f.how];
+		// The name cut to 120 characters: nothing else in the brief form grows, so it always fits.
+		const nm = r && r.name.length > 120 ? `${r.name.slice(0, 119)}…` : r?.name;
+		placement = `outlet placed ${rule}${r ? ` (${nm}, ${Math.round(r.km2)} km²)` : ''}, each rule as ${METHOD_VERSION} defines it (docs/design/delineation.md § Method); `;
+	} else if (f.how === 'junction') {
+		placement = `outlet placed on the channel of ${r!.name} nearest the point, on its side of the DEM's own junction (the tributary's channel matched by its area and followed downhill to where the main river joins it), ${r!.chosen ? 'the river picked at a confluence' : `the nearest river reach, within ${JUNCTION_SIDE_M} m of a mapped junction`}; `;
+	} else if (f.how === 'matched') {
+		placement = `outlet placed on the cell within ${r!.chosen ? JUNCTION_MATCH_M : MATCH_RADIUS_M} m whose upstream area best matches ${r!.name} (${Math.round(r!.km2)} km²${r!.fromHead ? ' at the point, from the DEM’s own area at the head reach’s upper end' : ''}; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `;
+	} else if (f.how === 'kept') {
+		placement = `outlet snapped to the most-accumulating cell within ${f.snapRadiusM} m and kept there by the editor, though ${f.keptBeside!.onChannel ? `the point is on the DEM's own channel and` : `nothing within ${MATCH_RADIUS_M} m matched and`} the channel ${Math.round(f.keptBeside!.distanceM)} m away matching ${r!.name} (${Math.round(r!.km2)} km²) was offered; `;
+	} else {
+		placement = `outlet snapped to the most-accumulating cell within ${f.snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept)${r && !r.chosen ? `; ${r.name} (${Math.round(r.km2)} km²) matched no cell within ${MATCH_RADIUS_M} m${f.gully ? ` (nor within ${WIDE_MATCH_M} m, looked for since the point is in a gully)` : ''}` : ''}; `;
+	}
+	return (
+		`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${f.cellM} m cells (zoom ${f.zoom}); ` +
+		placement +
+		`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${f.cellM} m); ` +
+		`the area draining into pans (closed depressions) reported beside it as non-contributing, not taken out` +
+		(f.checked ? ` (one a mapped river flows out of, or a dam holds, is storage on a river: not counted)` : '')
+	);
+}
+
+/** The method that fits delineation_proposal.method: in full when it fits, else with the placement rule named by the version. */
+export function fitDelineationMethod(f: DelineationMethodFacts): string {
+	const full = delineationMethod(f);
+	return full.length <= DELINEATION_METHOD_MAX_CHARS ? full : delineationMethod(f, true);
+}
+
 /** Delineate the catchment upstream of (lon, lat). Throws DelineationRefused with a sentence for the user. */
 export async function delineate(
 	dem: Dem,
@@ -524,18 +580,16 @@ export async function delineate(
 			windowCells: nCells,
 			dataset: info,
 			pans,
-			method:
-				`D8 steepest descent on the DEM after Priority-Flood+ε depression filling (Barnes, Lehman & Mulla 2014), ${cellM} m cells (zoom ${z}); ` +
-				(placed.how === 'junction'
-					? `outlet placed on the channel of ${expected!.reach} nearest the point, on its side of the DEM's own junction (the tributary's channel matched by its area and followed downhill to where the main river joins it), ${expected!.chosen ? 'the river picked at a confluence' : `the nearest river reach, within ${JUNCTION_SIDE_M} m of a mapped junction`}; `
-					: placed.how === 'matched'
-					? `outlet placed on the cell within ${expected?.chosen ? JUNCTION_MATCH_M : MATCH_RADIUS_M} m whose upstream area best matches ${expected!.reach} (${Math.round(expected!.km2)} km²${expected!.km2 !== opts.expected!.km2 ? ' at the point, from the DEM’s own area at the head reach’s upper end' : ''}; Lehner 2012: area accordance at least ${MIN_ACCORDANCE} %, ranked by area and distance); `
-					: placed.larger?.reach
-						? `outlet snapped to the most-accumulating cell within ${snapRadiusM} m and kept there by the editor, though ${placed.larger.reach.onChannel ? `the point is on the DEM's own channel and` : `nothing within ${MATCH_RADIUS_M} m matched and`} the channel ${Math.round(placed.larger.distanceM)} m away matching ${expected!.reach} (${Math.round(expected!.km2)} km²) was offered; `
-						: `outlet snapped to the most-accumulating cell within ${snapRadiusM} m (a channel with ${LARGER_FACTOR}× its upstream cells within ${GUARD_RADIUS_M} m is offered instead, unless the point is kept)${expected && !expected.chosen ? `; ${expected.reach} (${Math.round(expected.km2)} km²) matched no cell within ${MATCH_RADIUS_M} m${!placed.larger && cells * cellSizeM * cellSizeM < GULLY_SHARE * expected.km2 * 1e6 ? ` (nor within ${WIDE_MATCH_M} m, looked for since the point is in a gully)` : ''}` : ''}; `) +
-				`outline traced on the cells’ edges and simplified (Douglas–Peucker, about ${cellM} m); ` +
-				`the area draining into pans (closed depressions) reported beside it as non-contributing, not taken out` +
-				(opts.panReference ? ` (one a mapped river flows out of, or a dam holds, is storage on a river: not counted)` : ''),
+			method: fitDelineationMethod({
+				cellM,
+				zoom: z,
+				snapRadiusM,
+				how: placed.how === 'junction' ? 'junction' : placed.how === 'matched' ? 'matched' : placed.larger?.reach ? 'kept' : 'snapped',
+				reach: expected ? { name: expected.reach, km2: expected.km2, chosen: !!expected.chosen, fromHead: expected.km2 !== opts.expected!.km2 } : null,
+				keptBeside: placed.larger?.reach ? { onChannel: placed.larger.reach.onChannel, distanceM: placed.larger.distanceM } : null,
+				gully: !placed.larger && !!expected && cells * cellSizeM * cellSizeM < GULLY_SHARE * expected.km2 * 1e6,
+				checked: !!opts.panReference
+			}),
 			methodVersion: METHOD_VERSION
 		};
 	}
