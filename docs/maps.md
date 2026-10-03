@@ -1158,10 +1158,12 @@ so these are the lines to click: a click on one snaps onto it.
 - **Cost.** A tile it computes (not one it has) counts against the account's
   elevation-model cap like a delineation (60 an hour, 2 at once;
   security.md § Map uploads); a few seconds of CPU each.
-- **The line over the map** is the layer's key and status: "Red lines: the
-  elevation model's channels, where a click goes. River lines can sit
-  hundreds of metres off them.", "Drawing the elevation model's channels…",
-  "Zoom in to see …", or why they couldn't be drawn.
+- **What says so.** Delineate's bar and the Sub-catchments panel say "Click
+  a red line (the elevation model's channel) …"; a pill over the map's top
+  appears only when there is something to say: "Drawing the elevation
+  model's channels…", "Zoom in to see …", that there is no map to draw them
+  on, or why they couldn't be drawn. Measured on the GLO-30 tile at Upington:
+  309 lines, about 1 km of channel per km², 86 KB, 0.4 s.
 
 ## Start from the map
 
@@ -1232,7 +1234,7 @@ in [design/start-from-map.md](./design/start-from-map.md); the screen in
 
 ## Sub-catchments from clicks
 
-**Sub-catchments** in the Map's header (editors, with a DEM on the server;
+**Sub-catchments**, Delineate's choice **Sub-catchments, one per click** (editors, with a DEM on the server;
 `backend/src/delineation/clicks.ts`, the Map's `ClickBar.svelte`; the screen
 in [ui.md § Map](./ui.md#map-tabmap), the API in [api.md § Sub-catchments
 from clicks](./api.md#sub-catchments-from-clicks)) divides the land by
