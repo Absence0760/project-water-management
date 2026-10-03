@@ -201,6 +201,11 @@ MUTANTS = [
         "keep_h = float(ho[m]) if ho else 0.0",
     ),
     (
+        "a dam on the river takes River to dam",
+        "                dcap = 0.0  # a dam on the river takes no River to dam (§2.7 row O, engine >= 1.68.0)",
+        "                pass",
+    ),
+    (
         "River to dam by month is ignored",
         'dcap = float(dm[m]) if dm else (x.get("divertCapacityM3Day") or 0.0)',
         'dcap = x.get("divertCapacityM3Day") or 0.0',

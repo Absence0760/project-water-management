@@ -216,7 +216,8 @@ loss, its gross-up and return unit, an off-take's hands-off flow, the dam
 top-up; junior users, user returns, the seniors' pass; the trigger's stop
 level, the pump's capacity and what it must leave; the survey curve, the
 outlet on a pass-inflow release, dead storage and the room for transfers on
-a fixed one; the hands-off flow on a dam, its EWR flag, River to dam by
+a fixed one; the hands-off flow on a dam, its EWR flag, no River to dam on
+a dam on the river (engine 1.68.0), River to dam by
 month. Each mutant must disagree with the engine somewhere on the examples,
 the probes and the first 12 random and 12 dense networks (the dense ones and
 three coverage probes reach the phase-2a rules a random network rarely

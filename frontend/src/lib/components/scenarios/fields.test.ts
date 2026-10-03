@@ -322,7 +322,8 @@ describe('the hands-off flow and River to dam by month (engine 1.32.0, issue #20
 			expect(nodeFieldError(spec === handsOff ? 'handsOffM3Day' : 'divertMonthlyM3Day', row)).toBeNull();
 		}
 		expect(formatValue(handsOff, new Array(12).fill(150))).toBe('150 m³/day every month');
-		expect(formatValue(divert, row)).toBe('0.0129, 12 345.5, 0, 0, 150, 150, 150, 800, 800, 800, 800, 0 m³/day (Oct–Sep)');
+		// River to dam is shown in m³/s (stored m³/day): 864 m³/day is 0.01 m³/s.
+		expect(formatValue(divert, [864, 17_280, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])).toBe('0.01, 0.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 m³/s (Oct–Sep)');
 		expect(parseValue(divert, '1 2 3')).toEqual({ ok: false, error: 'enter 12 values, Oct to Sep (got 3)' });
 	});
 

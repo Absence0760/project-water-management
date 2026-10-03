@@ -233,9 +233,9 @@ describe('boreholes (WP-1.34)', () => {
 		expect(checkGroundwater(i, greedy)).toMatch(/groundwater 2000 outside/);
 	});
 
-	it('a drought rule can legitimately raise the supply fraction when demand grows (seed 4623; was 1450 before the fuzz generator drew rule tables), so the doubled-crop-area law is checked without it', () => {
-		const input = randomInput(4623);
-		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n24's supply fraction/);
+	it('a drought rule can legitimately raise the supply fraction when demand grows (seed 4536; was 4623 before a dam on the river lost River to dam, engine 1.68.0, and 1450 before the fuzz generator drew rule tables), so the doubled-crop-area law is checked without it', () => {
+		const input = randomInput(4536);
+		expect(checkDoubledCropAreas(input)).toMatch(/doubling crop areas raised n8's supply fraction/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});
 

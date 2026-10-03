@@ -33,7 +33,7 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
  * engine ≥ 1.60.0). Without a span, the entered capacity alone decides.
  */
 function noDamOf(n: NetworkNode, span: { start: number; end: number } | undefined): string | null {
-	const routed = n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || (Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0);
+	const routed = n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || diverts(n);
 	if (!routed) return null;
 	const dam = damPresence(n, span);
 	if (dam.always) return null;
@@ -206,7 +206,7 @@ function monthlyRow(raw: unknown, who: string, what: string, warnings: string[])
  * 0 in every month without the EWR is none. Invalid months run as 0 with a
  * warning; the backend refuses them on save.
  */
-export function operatingOf(n: NetworkNode, warnings: string[]): { handsOff?: PlanHandsOff; divertM3DayByMonth?: Float64Array } {
+export function operatingOf(n: NetworkNode, warnings: string[]): { handsOff?: PlanHandsOff; divertCapacityM3Day?: number; divertM3DayByMonth?: Float64Array } {
 	const hasHandsOff = n.handsOffM3Day !== null && n.handsOffM3Day !== undefined;
 	const hasDivert = n.divertMonthlyM3Day !== null && n.divertMonthlyM3Day !== undefined;
 	if (n.kind !== 'farm') {
@@ -215,14 +215,38 @@ export function operatingOf(n: NetworkNode, warnings: string[]): { handsOff?: Pl
 		return {};
 	}
 	const who = `unit "${n.name}"`;
-	const out: { handsOff?: PlanHandsOff; divertM3DayByMonth?: Float64Array } = {};
+	const out: { handsOff?: PlanHandsOff; divertCapacityM3Day?: number; divertM3DayByMonth?: Float64Array } = {};
 	let byMonth = hasHandsOff ? monthlyRow(n.handsOffM3Day, who, 'hands-off flow', warnings) : null;
 	if (byMonth && !byMonth.some((v) => v > 0)) byMonth = null;
 	const ewr = n.handsOffEwr === true;
 	if (byMonth || ewr) out.handsOff = { m3DayByMonth: byMonth, ewr };
+	// A dam on the river takes no River to dam (engine ≥ 1.68.0): the capacity stays stored, inert.
+	if (onRiverDam(n)) {
+		if (diverts(n)) warnings.push(`${who}: River to dam isn't used: its dam takes all of its upstream inflow (a dam on the river), and River to dam is for an off-channel dam`);
+		out.divertCapacityM3Day = 0;
+		return out;
+	}
 	const divert = hasDivert ? monthlyRow(n.divertMonthlyM3Day, who, 'River to dam by month', warnings) : null;
 	if (divert) out.divertM3DayByMonth = divert;
 	return out;
+}
+
+/**
+ * A dam on the river: all of the upstream inflow enters it (pctUpstreamToDam
+ * = 100 %). River to dam, which fills an off-channel dam from the river below
+ * it, isn't available to one (engine ≥ 1.68.0, docs/model.md §2.7h): the
+ * run, the trace and the self-checks take it as 0 whatever is stored.
+ */
+export function onRiverDam(n: Pick<NetworkNode, 'pctUpstreamToDam'>): boolean {
+	return n.pctUpstreamToDam >= 1;
+}
+
+/** The engine that first took River to dam as 0 for a dam on the river (onRiverDam). */
+export const ON_RIVER_DAM_SINCE = '1.68.0';
+
+/** River to dam is entered: a capacity above 0, or one month's when set by month. */
+function diverts(n: Pick<NetworkNode, 'divertCapacityM3Day' | 'divertMonthlyM3Day'>): boolean {
+	return Array.isArray(n.divertMonthlyM3Day) ? n.divertMonthlyM3Day.some((v) => v > 0) : n.divertCapacityM3Day > 0;
 }
 
 /** The flow the hands-off rule keeps in the river today (m³): MAX(the month's amount, the EWR Z when kept). */

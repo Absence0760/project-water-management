@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote } from './farms';
+import { asRunOfRiver, farmOperatingRules, placeholderPoolNote, readFarmSpec, runOfRiverNote, UPSTREAM_INTO_DAM_MARKER } from './farms';
 import { Report } from './report';
 import { syntheticB023 } from './testWorkbook';
 import { B023Workbook } from './workbook';
@@ -59,7 +59,21 @@ describe('readFarmSpec', () => {
 		expect(readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', 'Hi/Lo').build()), new Report()).method).toBe('hiLo');
 		const report = new Report();
 		expect(readFarmSpec(new B023Workbook(syntheticB023().set('Farm spec', 'M27', 'Pitman').build()), report).method).toBe('area');
-		expect(report.notes.map((n) => n.message)).toEqual(["unknown fragmentation method 'Pitman'; using area"]);
+		expect(report.notes.filter((n) => n.code === 'unknown-flow-share-method').map((n) => n.message)).toEqual(["unknown fragmentation method 'Pitman'; using area"]);
+	});
+
+	it('stores 1 − b023\'s Upstream inflow above dam %, which its formula sent past the dam; a fixed workbook\'s as entered (docs/model.md §3 Q1)', () => {
+		// The test workbook holds 0 and 0.5: Farm A's dam took none of the upstream inflow past it, so all of it went in.
+		const report = new Report();
+		const t = readFarmSpec(new B023Workbook(syntheticB023().build()), report);
+		expect([...t.farms.values()].map((f) => f.pctUpstreamToDam)).toEqual([1, 0.5]);
+		expect(report.notes.map((n) => n.code)).toEqual(['upstream-pct-converted']);
+		expect(report.notes[0]!.message).toContain("stores 100 % − the workbook's value");
+		// A workbook with the fixed formula carries the marker name: its values mean the share into the dam already.
+		const fixedReport = new Report();
+		const fixed = readFarmSpec(new B023Workbook(syntheticB023().name(UPSTREAM_INTO_DAM_MARKER, "'Farm spec'!$N$30").build()), fixedReport);
+		expect([...fixed.farms.values()].map((f) => f.pctUpstreamToDam)).toEqual([0, 0.5]);
+		expect(fixedReport.notes.map((n) => n.code)).toEqual(['upstream-pct-as-entered']);
 	});
 
 	it('defaults a blank hi/lo split to 0.5 / 0.5', () => {
