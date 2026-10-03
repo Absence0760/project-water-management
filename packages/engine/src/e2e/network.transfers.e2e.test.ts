@@ -358,8 +358,11 @@ describe('several rules (§2.6, Q18, N6)', () => {
 		passes(input, out);
 	});
 
-	it('the room first, then the bands: model.md’s band-and-room example (a 55.6, b 800)', () => {
+	it('the source’s bands first, then the room: model.md’s band-and-room example (a 100, b 800; engine ≥ 1.70.0)', () => {
 		// a keeps 50 % and may send 400 into R (dam 1000 at 95 %, demand 50: room 100); b keeps 0 % and may send 800 into an empty dam.
+		// The source rations first: band 1000–500 shared 400 : 800 → a 166.7, b 333.3; b its other 466.7 below. R's room
+		// cuts a to 100 and R is full, so nothing is offered again. (Before 1.70.0 the room came first, a was cut to 100
+		// and the band 1000–500 shared 100 : 800: a 55.6, b 800.)
 		const input = build({
 			nodes: [gauge(), farm('S', { damCapacityM3: 1000, damInitialPct: 1 }), farm('R', { areaKm2: 0, damCapacityM3: 1000, damInitialPct: 0.95 }), farm('E', { areaKm2: 0, damCapacityM3: 1000 })],
 			transfers: [rule('a', 'S', 'R', { dailyCapM3: 400, minStoragePct: 0.5 }), rule('b', 'S', 'E', { dailyCapM3: 800 })],
@@ -367,7 +370,8 @@ describe('several rules (§2.6, Q18, N6)', () => {
 			days: 1
 		});
 		const out = run(input, [0]);
-		near(get(out, 'S', 'transfer_rule@a'), [(100 * 500) / 900]);
+		near(get(out, 'S', 'transfer_rule@a'), [100]);
+		near(get(out, 'S', 'dam_storage'), [100]);
 		near(get(out, 'S', 'transfer_rule@b'), [800]);
 		passes(input, out);
 	});

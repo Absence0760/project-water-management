@@ -221,6 +221,127 @@ describe('Q25 (§2.6, §2.6a): rules of one priority share in proportion to MIN(
 		passes(two, o2);
 	});
 
+	// Dam rules into a receiver with room: sources (dams) S1, S2, S3 and receivers R1–R3 (dams, no demand), no rain or
+	// evaporation, so a receiver's room is its capacity less what it holds.
+	const damNet = (sources: Record<string, [number, number]>, receivers: Record<string, [number, number]>, transfers: Transfer[]) =>
+		build({
+			nodes: [
+				gauge(),
+				...Object.entries(sources).map(([id, [cap, held]]) => farm(id, { damCapacityM3: cap, damInitialPct: cap > 0 ? held / cap : 0 })),
+				...Object.entries(receivers).map(([id, [cap, held]]) => farm(id, { damCapacityM3: cap, damInitialPct: held / cap }))
+			],
+			transfers
+		});
+	const damRule = (id: string, from: string, to: string, cap: number, reserve = 0): Transfer => ({ ...ot(id, from, to, cap), source: 'dam', minStoragePct: reserve });
+
+	it('dam rules: an empty source beside a full one into one receiver: the full one fills the room (400)', () => {
+		// Room 1 000 − 600 = 400. The sources give a 0 (empty) and b 500, so the room goes to b: 400. (Sharing the room
+		// by the limits, 300 : 500, would leave a's 150 unused and the receiver 150 short.)
+		const input = damNet({ S1: [1000, 0], S2: [5000, 5000] }, { R: [1000, 600] }, [damRule('a', 'S1', 'R', 300), damRule('b', 'S2', 'R', 500)]);
+		const out = run(input, [0]);
+		near(get(out, 'S1', 'transfer_rule@a'), [0]);
+		near(get(out, 'S2', 'transfer_rule@b'), [400]);
+		near(get(out, 'R', 'dam_storage'), [1000]);
+		near(get(out, 'R', 'spill'), [0]);
+		passes(input, out);
+	});
+
+	it('dam rules: a nearly empty source (50) beside a full one: the room shared 50 : 500 by what each source gives', () => {
+		// The sources give a 50 and b 500; the room 400 shared in proportion: a 36.4, b 363.6, the receiver full.
+		const input = damNet({ S1: [1000, 50], S2: [5000, 5000] }, { R: [1000, 600] }, [damRule('a', 'S1', 'R', 300), damRule('b', 'S2', 'R', 500)]);
+		const out = run(input, [0]);
+		near(get(out, 'S1', 'transfer_rule@a'), [(400 * 50) / 550]);
+		near(get(out, 'S2', 'transfer_rule@b'), [(400 * 500) / 550]);
+		near(get(out, 'R', 'dam_storage'), [1000]);
+		passes(input, out);
+	});
+
+	it('dam rules: room a source can’t fill is offered again, two rounds over: 900 m³ into rooms of 100, 350 and 2 000 gives 100, 350, 450', () => {
+		// Round 1: 900 shared by three asks of 1 000 → 300 each; R1 takes 100 (full), R2 300, R3 300; 200 left.
+		// Round 2: R2 and R3 ask again, 100 each; R2 takes 50 (full), R3 100; 50 left. Round 3: R3 its last 50.
+		// The source ends empty and every receiver that wanted more got it. (One round alone: 100, 300, 300, with 200
+		// left in the source.)
+		const input = damNet({ S: [900, 900] }, { R1: [1000, 900], R2: [1000, 650], R3: [5000, 3000] }, [damRule('a', 'S', 'R1', 1000), damRule('b', 'S', 'R2', 1000), damRule('c', 'S', 'R3', 1000)]);
+		const out = run(input, [0]);
+		near(get(out, 'S', 'transfer_rule@a'), [100]);
+		near(get(out, 'S', 'transfer_rule@b'), [350]);
+		near(get(out, 'S', 'transfer_rule@c'), [450]);
+		near(get(out, 'S', 'dam_storage'), [0]);
+		near(get(out, 'R1', 'dam_storage'), [1000]);
+		near(get(out, 'R2', 'dam_storage'), [1000]);
+		passes(input, out);
+	});
+
+	it('dam rules: offering room again never takes a rule below its reserve: S keeps 50 % for a, 0 % for b', () => {
+		// S 1 000 full; a keeps 50 % (into R1, room 1 000), b keeps 0 % (into R2, room 100), limits 800 each.
+		// Round 1: band 1 000–500 shared 800 : 800 → 250 each; band 500–0 to b alone, 500 more (750). R2's room cuts b
+		// to 100 (full); a 250. Round 2: a asks its other 550; S holds 650, of which 650 − 500 = 150 lies above a's
+		// reserve → a 150 more. a 400, b 100, and S ends at 500, a's reserve.
+		const input = damNet({ S: [1000, 1000] }, { R1: [5000, 4000], R2: [1000, 900] }, [damRule('a', 'S', 'R1', 800, 0.5), damRule('b', 'S', 'R2', 800, 0)]);
+		const out = run(input, [0]);
+		near(get(out, 'S', 'transfer_rule@a'), [400]);
+		near(get(out, 'S', 'transfer_rule@b'), [100]);
+		near(get(out, 'S', 'dam_storage'), [500]);
+		passes(input, out);
+	});
+
+	it('property, dam rules: several sources (some empty) into receivers with room, licences split into parts: the same totals, no receiver overfilled', () => {
+		const g = new Rng(251);
+		let cutByRoom = 0;
+		for (let k = 0; k < 150; k++) {
+			const sources: Record<string, [number, number]> = {};
+			for (const id of ['S1', 'S2', 'S3']) {
+				const cap = g.float(100, 3000);
+				sources[id] = [cap, cap * g.pick([0, 0, g.frac(), 1])];
+			}
+			const receivers: Record<string, [number, number]> = {};
+			for (const id of ['R1', 'R2', 'R3']) {
+				const cap = g.float(100, 3000);
+				receivers[id] = [cap, cap * g.frac()];
+			}
+			const licences = Array.from({ length: g.int(2, 6) }, (_, j) => ({
+				id: `L${j}`,
+				from: g.pick(['S1', 'S2', 'S3']),
+				to: g.pick(['R1', 'R2', 'R3']),
+				cap: g.float(10, 2000),
+				reserve: g.pick([0, 0, 0.3, 0.6]),
+				priority: g.pick([0, 0, 1])
+			}));
+			const make = (split: boolean, seed: number) => {
+				const h = new Rng(seed);
+				const transfers: Transfer[] = [];
+				for (const l of licences) {
+					const parts = split ? h.int(1, 4) : 1;
+					const w = Array.from({ length: parts }, () => h.float(0.1, 1));
+					const tot = sum(w);
+					w.forEach((x, p) => transfers.push({ ...damRule(`${l.id}-${p}`, l.from, l.to, (l.cap * x) / tot, l.reserve), priority: l.priority }));
+				}
+				return damNet(sources, receivers, transfers);
+			};
+			const totals = (input: ModelInput, out: ModelOutput) => {
+				const t = new Map<string, number>();
+				for (const tr of input.model.transfers) t.set(tr.id.split('-')[0]!, (t.get(tr.id.split('-')[0]!) ?? 0) + get(out, tr.fromNodeId, `transfer_rule@${tr.id}`)[0]!);
+				return t;
+			};
+			const a = make(false, k);
+			const b = make(true, 7000 + k);
+			const oa = run(a, [0]);
+			const ob = run(b, [0]);
+			const ta = totals(a, oa);
+			const tb = totals(b, ob);
+			for (const l of licences) expect(tb.get(l.id), `case ${k} licence ${l.id}`).toBeCloseTo(ta.get(l.id)!, 6);
+			for (const id of ['R1', 'R2', 'R3']) {
+				expect(get(oa, id, 'dam_storage')[0], `case ${k} ${id}`).toBeLessThanOrEqual(receivers[id]![0] * (1 + 1e-12));
+				expect(get(oa, id, 'spill')[0], `case ${k} ${id}`).toBeCloseTo(0, 6);
+				if (Math.abs(get(oa, id, 'dam_storage')[0]! - receivers[id]![0]) < 1e-6 && licences.some((l) => l.to === id)) cutByRoom++;
+			}
+			passes(a, oa);
+			passes(b, ob);
+		}
+		// Many receivers fill (the room binds), so the room sharing and the rounds are exercised.
+		expect(cutByRoom).toBeGreaterThan(60);
+	});
+
 	it('property: random licences split into 1–4 random parts get the same totals, for off-takes and dam rules alike', () => {
 		const g = new Rng(25);
 		let short = 0;
