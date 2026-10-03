@@ -1239,7 +1239,7 @@ describe('multi-day accumulations block (B4)', () => {
 			'Start,End (reading day),Source,Reason,What the run did,Days in the run,Recorded total (mm),Reading (mm),Zero or blank days before,CHIRPS around the reading (mm),CHIRPS over the run (mm),CHIRPS over the window (mm),Rain used from it (mm)',
 			'2003-06-01,2003-06-21,detected,,spread by CHIRPS,21,120,120,20,1.5,90,91.5,120',
 			'2004-07-01,2004-07-09,detected,thunderstorm,kept as recorded (settings),9,40,40,8,0,30,,0',
-			'2005-02-10,2005-02-10,detected,,set aside as missing (read after a blank outage; CHIRPS fills its day),1,60,60,30,0.3,116,,2.5',
+			'2005-02-10,2005-02-10,detected,,set aside as missing (read after an outage; CHIRPS fills its day),1,60,60,30,0.3,116,,2.5',
 			'Windows spread,1',
 			'Run days from a window,21',
 			'Rain on them (mm),120',

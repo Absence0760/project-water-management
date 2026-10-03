@@ -121,9 +121,9 @@ describe('the holiday gauge: unread for two weeks over Christmas, the total read
 	});
 
 	it('the run warns, naming the reading, the outage and what stood in for it', () => {
-		const w = out.summary.warnings.find((x) => x.includes('after a blank outage set aside as missing'))!;
-		expect(w).toContain('2018-01-03 (90 mm read after 14 blank days; 0 mm used instead)');
-		expect(w).toContain('more than 7 blank days');
+		const w = out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))!;
+		expect(w).toContain('2018-01-03 (90 mm read after a 14-day outage; 0 mm used instead)');
+		expect(w).toContain('more than 7 days blank or listed as missing');
 		// Nothing was spread, and no zero run was set aside: §2.4c is not involved.
 		expect(col(out, 'rain_catchment_spread')).toBeUndefined();
 		expect(out.summary.zeroRainInfill?.days ?? 0).toBe(0);
@@ -333,5 +333,52 @@ describe('property: random outages in a 5-year record (40 seeds)', () => {
 		}
 		expect(spreads).toBeGreaterThan(50);
 		expect(asides).toBeGreaterThan(30);
+	});
+});
+
+describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)', () => {
+	// The holiday gauge again, but the unread days were entered as 0 and the modeller lists them as missing.
+	const f = fixture('2017-12-20', zeros(14), 90);
+	const listed = zrs({ missing: [{ start: '2017-12-20', end: '2018-01-02', reason: 'invented: observer away, zeros entered' }] });
+
+	it('14 listed days then 90 mm: set aside like a blank outage; §2.4c fills the listed zeros, CHIRPS the reading day; no double count', () => {
+		const out = runModel(catchment(f.series, listed));
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.end, w.status, w.outageDays])).toEqual([['2018-01-03', 'setAside', 14]]);
+		const miss = col(out, 'rain_catchment_missing')!;
+		let fill = 0;
+		for (let d = f.a; d <= f.r; d++) {
+			fill += f.fill(d);
+			expect(col(out, 'rain_used')![f.t(d)]).toBeCloseTo(f.fill(d), 12);
+			expect(miss[f.t(d)]).toBe(d < f.r ? 1 : 0);
+		}
+		expect(sumUsed(out, f.a, f.r)).toBeCloseTo(fill, 10);
+		expect(out.summary.zeroRainInfill!.days).toBe(14);
+		// The reading is out of the fit: January's factor stays exactly 1.4.
+		expect(out.summary.chirpsCorrection!.months[0]!.factor).toBeCloseTo(ratio(1), 12);
+		expect(out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'))).toContain('2018-01-03 (90 mm read after a 14-day outage');
+	});
+
+	it('the same with the listing blank and listed mixed (7 blank + 7 listed zeros): one 14-day outage', () => {
+		const g = fixture('2017-12-20', [...blanks(7), ...zeros(7)], 90);
+		const out = runModel(catchment(g.series, zrs({ missing: [{ start: '2017-12-27', end: '2018-01-02', reason: 'invented' }] })));
+		expect(out.summary.rainAccumulation!.windows.map((w) => [w.status, w.outageDays])).toEqual([['setAside', 14]]);
+		for (let d = g.a; d <= g.r; d++) expect(col(out, 'rain_used')![g.t(d)]).toBeCloseTo(g.fill(d), 12);
+	});
+
+	it('7 listed days or fewer: the detection is dropped as before, and the reading stays on its day', () => {
+		const g = fixture('2017-12-27', zeros(7), 40);
+		const out = runModel(catchment(g.series, zrs({ missing: [{ start: '2017-12-27', end: '2018-01-02', reason: 'invented' }] })));
+		expect(out.summary.rainAccumulation?.windows ?? []).toEqual([]);
+		expect(col(out, 'rain_used')![g.t(g.r)]).toBe(40);
+		for (let d = g.a; d < g.r; d++) expect(col(out, 'rain_catchment_missing')![g.t(d)]).toBe(1);
+		// Positive control: unlisted, the 7 zeros and the reading are a spread window.
+		const plain = runModel(catchment(g.series));
+		expect(plain.summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['spread']);
+	});
+
+	it('keepReadings still keeps it on its day', () => {
+		const out = runModel(catchment(f.series, zrs({ ...listed.zeroRainRuns, keepReadings: [{ start: '2018-01-03', end: '2018-01-03', reason: 'invented storm' }] })));
+		expect(out.summary.rainAccumulation!.windows.map((w) => w.status)).toEqual(['kept']);
+		expect(col(out, 'rain_used')![f.t(f.r)]).toBe(90);
 	});
 });

@@ -2190,8 +2190,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   and `chirpsMm` for a window not spread. The catchment series
   `rain_catchment_spread` is 1 on each day whose rain came from a window.
   Engine ≥ 1.70.0 adds `criteria.maxBlankDays` (7), the status `'setAside'`
-  (a reading straight after a blank outage of more than 7 days, treated as
-  missing: its window is its own day, and `usedMm` is the CHIRPS or forecast
+  (a reading straight after an outage, more than 7 days blank or listed as
+  missing, treated as missing: its window is its own day, and `usedMm` is the CHIRPS or forecast
   rain the run used there instead) and `outageDays` on each window (the
   outage's length for a set-aside or as-recorded outage reading, else
   `null`; absent on older runs).

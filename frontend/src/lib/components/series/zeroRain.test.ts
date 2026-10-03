@@ -87,7 +87,7 @@ describe('zeroRainShading', () => {
 		const res = zeroRainShading(s, zr(), chirps);
 		expect(res.ranges).toEqual([{ start: '2003-06-21', end: '2003-06-21' }]);
 		expect(res).toMatchObject({ days: 0, spreadDays: 0, setAsideDays: 1 });
-		expect(res.caption).toBe('Shaded: 1 reading after a blank outage that a run sets aside, so CHIRPS fills its day.');
+		expect(res.caption).toBe('Shaded: 1 reading after an outage that a run sets aside, so CHIRPS fills its day.');
 		// Kept as recorded, nothing is shaded.
 		expect(zeroRainShading(s, zr({ keepReadings: [{ start: '2003-06-21', end: '2003-06-21', reason: 'storm' }] }), chirps).caption).toBeNull();
 		// Only 7 blank days before it: a window over them, the fixture's zero day before them and the reading day

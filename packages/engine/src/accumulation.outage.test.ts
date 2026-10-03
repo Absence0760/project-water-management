@@ -237,8 +237,8 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 		expect(run.info.windows[0]!.usedMm).toBe(0);
 		const warn = accumulationWarnings(run.info);
 		expect(warn).toHaveLength(1);
-		expect(warn[0]).toMatch(/^1 catchment reading after a blank outage set aside as missing: /);
-		expect(warn[0]).toContain(`${iso(r)} (60 mm read after 30 blank days; 0 mm used instead)`);
+		expect(warn[0]).toMatch(/^1 catchment reading after an outage set aside as missing: /);
+		expect(warn[0]).toContain(`${iso(r)} (60 mm read after a 30-day outage; 0 mm used instead)`);
 		expect(warn[0]).toContain('keeps a reading as recorded');
 	});
 
@@ -298,8 +298,12 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 		const { c, h, r } = rec([...rep(20, B), 0, 0, 0, 0], 60, 20);
 		const series = { rain_catchment_mm: ds(c), rain_chirps_mm: ds(h) };
 		expect(rainAccumulations(series, zr(), 'monthly')!.windows.map((w) => [w.start, w.status])).toEqual([[iso(r - 4), 'spread']]);
-		const touch = { start: iso(r - 4), end: iso(r - 4), reason: 'bad day' };
+		const touch = { start: iso(r - 2), end: iso(r - 2), reason: 'bad day' };
 		expect(rainAccumulations(series, zr({ missing: [touch] }), 'monthly')!.windows).toEqual([]);
+		// A listed day next to the outage joins it (listed days read as blank): the outage is 21 days and the
+		// window the 3 zeros after it, which no longer touch the listed day.
+		const next = { start: iso(r - 4), end: iso(r - 4), reason: 'bad day' };
+		expect(rainAccumulations(series, zr({ missing: [next] }), 'monthly')!.windows.map((w) => [w.start, w.runDays])).toEqual([[iso(r - 3), 3]]);
 		// A missing period that ends on the outage's last day doesn't touch the window.
 		const before = { start: iso(1), end: iso(r - 5), reason: 'logger outage' };
 		expect(rainAccumulations(series, zr({ missing: [before] }), 'monthly')!.windows).toHaveLength(1);
@@ -325,8 +329,96 @@ describe('what a run does with an outage reading (rainAccumulations, spread, app
 		};
 		const info = { mode: 'asRecorded' as const, criteria: ACCUMULATION_CRITERIA, windows: [w], skipped: [], spreadWindows: 0, spreadDays: 0, spreadMm: 0 };
 		const [text] = accumulationWarnings(info, [w]);
-		expect(text).toContain('2001-07-01 (60 mm read after 30 blank days)');
+		expect(text).toContain('2001-07-01 (60 mm read after a 30-day outage)');
 		expect(text).toContain('a flagged zero run or a blank outage that CHIRPS fills, so that rain may be counted twice (2001-07-01)');
+	});
+});
+
+describe('days listed as missing count as blank for outages (engine ≥ 1.70.0)', () => {
+	// The record: 5 mm, 30 zeros, the reading of 60 mm, 5 mm. CHIRPS 4 mm a day over the zeros, 0 the day
+	// before the reading, the reading day and the day after. Listed periods end the day before the reading.
+	const base = () => {
+		const { c, h, r } = rec(rep(30, 0), 60, 4);
+		return { series: { rain_catchment_mm: ds(c), rain_chirps_mm: ds(h) } as Partial<Record<SeriesKind, DailySeries>>, c, h, r };
+	};
+	const miss = (from: number, to: number) => ({ start: iso(from), end: iso(to), reason: 'invented: logger fault' });
+
+	it('positive control: unlisted, the 30 zeros are an ordinary 31-day window', () => {
+		const { series, r } = base();
+		expect(rainAccumulations(series, zr(), 'monthly')!.windows.map((w) => [w.start, w.status])).toEqual([[iso(r - 30), 'spread']]);
+	});
+
+	it('8 listed days straight before the reading: an outage, and the reading is judged over it (CHIRPS 7 × 4 = 28 mm)', () => {
+		const { series, r } = base();
+		// 28 mm < half of 60: the reading fails the run test, so nothing at all (and the zeros' window is gone too).
+		expect(rainAccumulations(series, zr({ missing: [miss(r - 8, r - 1)] }), 'monthly')!.windows).toEqual([]);
+		// With 50 mm read, 28 ≥ 25: set aside.
+		const c = series.rain_catchment_mm!.values.slice();
+		c[r] = 50;
+		const acc = rainAccumulations({ ...series, rain_catchment_mm: ds(c) }, zr({ missing: [miss(r - 8, r - 1)] }), 'monthly')!;
+		expect(acc.windows).toEqual([
+			expect.objectContaining({ start: iso(r), end: iso(r), status: 'setAside', outageDays: 8, runDays: 8, runChirpsMm: 28, readingMm: 50, totalMm: 50 })
+		]);
+	});
+
+	it('a 20-day listed stretch: set aside with outage 20 (CHIRPS 19 × 4 = 76 ≥ 30)', () => {
+		const { series, r } = base();
+		const acc = rainAccumulations(series, zr({ missing: [miss(r - 20, r - 1)] }), 'monthly')!;
+		expect(acc.windows.map((w) => [w.end, w.status, w.outageDays, w.runChirpsMm])).toEqual([[iso(r), 'setAside', 20, 76]]);
+		expect(fitExcludedWindows(acc)).toHaveLength(1);
+	});
+
+	it('7 listed days or fewer behave as before: the window reaches across them and is dropped because it touches them', () => {
+		const { series, r } = base();
+		for (const n of [1, 3, 7]) expect(rainAccumulations(series, zr({ missing: [miss(r - n, r - 1)] }), 'monthly')!.windows, `${n} days`).toEqual([]);
+	});
+
+	it('4 blank days and 4 listed days side by side make an 8-day outage', () => {
+		const { series, r } = base();
+		const c = series.rain_catchment_mm!.values.slice();
+		for (let i = r - 8; i < r - 4; i++) c[i] = null;
+		const s2 = { ...series, rain_catchment_mm: ds(c) };
+		c[r] = 50; // CHIRPS over the 8 days, the day before left out: 28 ≥ 25
+		expect(rainAccumulations(s2, zr({ missing: [miss(r - 4, r - 1)] }), 'monthly')!.windows.map((w) => [w.status, w.outageDays])).toEqual([['setAside', 8]]);
+		// Blank first, listed after, or the other way round: the same.
+		const c2 = series.rain_catchment_mm!.values.slice();
+		for (let i = r - 4; i < r; i++) c2[i] = null;
+		c2[r] = 50;
+		expect(rainAccumulations({ ...series, rain_catchment_mm: ds(c2) }, zr({ missing: [miss(r - 8, r - 5)] }), 'monthly')!.windows.map((w) => [w.status, w.outageDays])).toEqual([['setAside', 8]]);
+		// Only 4 + 3: a 7-day stretch, so the window reaches across and touches the listed days: dropped.
+		expect(rainAccumulations(s2, zr({ missing: [miss(r - 3, r - 1)] }), 'monthly')!.windows).toEqual([]);
+	});
+
+	it('a listed stretch of more than 7 days ends a run: zeros after it form their own window, which doesn\'t touch it', () => {
+		const { series, r } = base();
+		// Listed: r-30 … r-11 (20 days). The run is the 10 zeros after it: CHIRPS 9 × 4 = 36 ≥ 30.
+		const acc = rainAccumulations(series, zr({ missing: [miss(r - 30, r - 11)] }), 'monthly')!;
+		expect(acc.windows.map((w) => [w.start, w.end, w.status, w.runDays])).toEqual([[iso(r - 10), iso(r), 'spread', 10]]);
+	});
+
+	it('readings inside the listed period count as unknown too, and a reading day inside it is never judged', () => {
+		const { series, r } = base();
+		const c = series.rain_catchment_mm!.values.slice();
+		c[r - 15] = 12; // a bad reading inside the listed stretch
+		expect(rainAccumulations({ ...series, rain_catchment_mm: ds(c) }, zr({ missing: [miss(r - 20, r - 1)] }), 'monthly')!.windows.map((w) => [w.status, w.outageDays])).toEqual([['setAside', 20]]);
+		expect(rainAccumulations(series, zr({ missing: [miss(r - 20, r)] }), 'monthly')!.windows).toEqual([]);
+	});
+
+	it('keepReadings keeps it; a listed accumulation that touches the missing days is skipped, so remove the listing to spread it', () => {
+		const { series, r } = base();
+		const m = [miss(r - 20, r - 1)];
+		expect(rainAccumulations(series, zr({ missing: m, keepReadings: [{ start: iso(r), end: iso(r), reason: 'storm' }] }), 'monthly')!.windows.map((w) => w.status)).toEqual(['kept']);
+		const over = { start: iso(r - 20), end: iso(r), reason: 'observer away' };
+		const skipped = rainAccumulations(series, zr({ missing: m, addAccumulations: [over] }), 'monthly')!;
+		expect(skipped.windows.map((w) => [w.source, w.status])).toEqual([['detected', 'setAside']]);
+		expect(skipped.skipped[0]).toContain('overlaps a period listed as missing');
+		const spread = rainAccumulations(series, zr({ addAccumulations: [over] }), 'monthly')!;
+		expect(spread.windows.map((w) => [w.source, w.status])).toEqual([['listed', 'spread']]);
+	});
+
+	it('a rain-source period is not unknown: its days have rain, and a detection touching it is dropped as before', () => {
+		const { series, r } = base();
+		expect(rainAccumulations(series, zr(), 'monthly', { replaced: [{ from: day(r - 20), to: day(r - 1) }] })!.windows).toEqual([]);
 	});
 });
 
@@ -451,6 +543,33 @@ describe('property: random records (200 seeds)', () => {
 				}
 			}
 		}
+	});
+
+	it('with random listed missing periods: no window touches one, and every set-aside reading follows > 7 days blank or listed', () => {
+		let asides = 0;
+		for (const seed of SEEDS) {
+			const { c, h } = randomRecord(seed);
+			const g = new Rng(seed + 77);
+			const spans: [number, number][] = [];
+			for (let k = 0; k < 4; k++) {
+				const a = g.int(0, c.length - 30);
+				spans.push([a, a + g.int(0, 20)]);
+			}
+			const missing = spans.map(([a, b]) => ({ start: iso(a), end: iso(b), reason: 'random' }));
+			const acc = rainAccumulations({ rain_catchment_mm: ds(c), rain_chirps_mm: ds(h) }, zr({ mode: 'asRecorded', missing }), 'none')!;
+			const listed = (i: number) => spans.some(([a, b]) => i >= a && i <= b);
+			const unknown = (i: number) => listed(i) || c[i] == null || !Number.isFinite(c[i]!);
+			for (const w of acc.windows) {
+				for (let d = w.from; d <= w.to; d++) expect(listed(d - s0), `seed ${seed}`).toBe(false);
+				if (w.status !== 'setAside') continue;
+				asides++;
+				const r = w.to - s0;
+				for (let i = r - w.outageDays!; i < r; i++) expect(unknown(i)).toBe(true);
+				expect(r - w.outageDays! - 1 < 0 || !unknown(r - w.outageDays! - 1)).toBe(true);
+				expect(w.outageDays).toBeGreaterThan(ACC_MAX_BLANK_DAYS);
+			}
+		}
+		expect(asides).toBeGreaterThan(20);
 	});
 
 	it("spreading: each window adds up to its total, no day holds more than it or less than 0, and outage readings aren't spread", () => {

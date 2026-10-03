@@ -70,7 +70,7 @@ export function zeroRainShading(
 			`${plural(windows.length, 'multi-day accumulation')}, ${plural(claimed.size, 'day')}, whose recorded total a run spreads over the days it covers by CHIRPS`
 		);
 	}
-	if (aside.length) parts.push(`${plural(aside.length, 'reading')} after a blank outage that a run sets aside, so CHIRPS fills its day`);
+	if (aside.length) parts.push(`${plural(aside.length, 'reading')} after an outage that a run sets aside, so CHIRPS fills its day`);
 	return {
 		ranges: [...periods.map(clip), ...windows.map(clip), ...aside.map(clip)].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)),
 		days,

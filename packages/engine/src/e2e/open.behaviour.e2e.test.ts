@@ -285,8 +285,8 @@ describe('item 11 (b): a ≥ 20 mm reading after a long blank outage is set asid
 		// Nothing was spread, so there is no spread column.
 		expect(ser(out, null, 'rain_catchment_spread')).toBeUndefined();
 		expect(out.summary.rainAccumulation!).toMatchObject({ spreadWindows: 0, spreadDays: 0, spreadMm: 0 });
-		const warn = out.summary.warnings.find((x) => x.includes('after a blank outage set aside as missing'));
-		expect(warn).toContain('2018-03-01 (30 mm read after 150 blank days; 0 mm used instead)');
+		const warn = out.summary.warnings.find((x) => x.includes('after an outage set aside as missing'));
+		expect(warn).toContain('2018-03-01 (30 mm read after a 150-day outage; 0 mm used instead)');
 		// The stored series is unchanged.
 		expect(series(30).rain_catchment_mm.values[read]).toBe(30);
 	});

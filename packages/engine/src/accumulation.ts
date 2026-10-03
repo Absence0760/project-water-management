@@ -87,7 +87,7 @@ export interface AccumulationCandidate {
 	nearChirpsMm: number;
 	/** CHIRPS over the window's run days (an outage reading: the outage's last 92 days) except the day before the reading, × factor, mm. */
 	runChirpsMm: number;
-	/** Engine ≥ 1.70.0: present on a reading that ends a blank outage (more than ACC_MAX_BLANK_DAYS blank days), its length; the window is then the reading day alone. */
+	/** Engine ≥ 1.70.0: present on a reading that ends a blank outage (more than ACC_MAX_BLANK_DAYS blank days; rainAccumulations reads days listed as missing as blank), its length; the window is then the reading day alone. */
 	outageDays?: number;
 }
 
@@ -223,7 +223,10 @@ const overlaps = (xs: readonly Span[], a: number, b: number) => xs.some(([x, y])
  *   compares amounts; raw CHIRPS when no month has a factor). A detection is
  *   dropped when its window overlaps a listed window or a missing period (the
  *   hydrologist has said what those days are) or, in zero-run mode
- *   'missing', a keep-dry period (its zeros are confirmed readings).
+ *   'missing', a keep-dry period (its zeros are confirmed readings). The
+ *   detection reads days listed as missing as blank (engine ≥ 1.70.0), so a
+ *   listed stretch longer than ACC_MAX_BLANK_DAYS is an outage: it ends a run,
+ *   and a reading straight after it can be set aside.
  * - A detection whose reading day is in a keep-reading period is 'kept'; in
  *   mode 'asRecorded' the rest are 'asRecorded'. In mode 'spread', a reading
  *   that ends a blank outage (its window is its own day) is 'setAside'.
@@ -294,7 +297,17 @@ export function rainAccumulations(
 		// The run's fit period too (engine ≥ 0.29.0): a window is judged with its own range's factors.
 		const pre = chirpsBiasFactors(series, chirpsMode, zr, [], fit);
 		const factor = (day: number) => chirpsFactorOn(pre, day) ?? 1;
-		for (const c of detectAccumulations(sa, sb, factor)) {
+		// Days listed as missing (engine ≥ 1.70.0) are unknown, as blank days are: the detection reads them as blank,
+		// so a listed stretch of more than ACC_MAX_BLANK_DAYS (alone or with blank days next to it) is an outage too.
+		// A rain-source period is not: its days have rain, from the period's series.
+		const listedMissing = exclusionRanges(zr.missing).map(spanOf);
+		let view = sa;
+		if (listedMissing.length) {
+			const values = sa.values.slice();
+			for (const [a, b] of listedMissing) for (let d = Math.max(a, c0); d <= Math.min(b, c0 + values.length - 1); d++) values[d - c0] = null;
+			view = { startDate: sa.startDate, values };
+		}
+		for (const c of detectAccumulations(view, sb, factor)) {
 			if (overlaps(listed, c.from, c.to) || overlaps(missing, c.from, c.to) || overlaps(keepDry, c.from, c.to)) continue;
 			const k = keep.find((r) => c.to >= toEpochDay(r.start) && c.to <= toEpochDay(r.end));
 			let total = 0;
@@ -453,7 +466,7 @@ const listed = (parts: string[]) =>
 	parts.length > MAX_LISTED ? `${parts.slice(0, MAX_LISTED).join('; ')}; and ${parts.length - MAX_LISTED} more` : parts.join('; ');
 const windowLabel = (w: AccumulationWindowInfo) =>
 	w.outageDays
-		? `${w.end} (${mm(w.totalMm)} read after ${plural(w.outageDays, 'blank day')})`
+		? `${w.end} (${mm(w.totalMm)} read after a ${w.outageDays}-day outage)`
 		: `${w.start} to ${w.end} (${plural(w.daysInRun, 'day')}, ${mm(w.totalMm)} ` +
 			(w.source === 'detected' ? `read on ${w.end}, detected` : `listed: ${w.reason}`) +
 			')';
@@ -488,9 +501,9 @@ export function accumulationWarnings(a: RainAccumulationInfo | null, doubleCount
 	const aside = by('setAside');
 	if (aside.length) {
 		out.push(
-			`${plural(aside.length, 'catchment reading')} after a blank outage set aside as missing: ` +
-				`${listed(aside.map((w) => `${w.end} (${mm(w.readingMm)} read after ${plural(w.outageDays ?? 0, 'blank day')}; ${mm(w.usedMm)} used instead)`))}. ` +
-				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} blank days, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
+			`${plural(aside.length, 'catchment reading')} after an outage set aside as missing: ` +
+				`${listed(aside.map((w) => `${w.end} (${mm(w.readingMm)} read after a ${w.outageDays ?? 0}-day outage; ${mm(w.usedMm)} used instead)`))}. ` +
+				`Each is ${ACC_MIN_MM} mm or more on the first day after more than ${ACC_MAX_BLANK_DAYS} days blank or listed as missing, on a day CHIRPS was nearly dry after CHIRPS rained over the outage, ` +
 				"so it may hold the outage's rain (a gauge nobody read) rather than one day's. " +
 				'The run fills its day like the outage, from bias-corrected CHIRPS (then forecast rain), and leaves it out of the CHIRPS factor fit. The stored series is unchanged. ' +
 				'Settings → Rain gaps and CHIRPS keeps a reading as recorded (keep readings) or spreads it over days you list (add accumulations).'

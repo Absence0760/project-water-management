@@ -1539,7 +1539,8 @@ changed.**
   fills, because that rain is then counted twice.
 
 **Readings after a blank outage** (engine ≥ 1.70.0, issue #90 Q31, issue
-#393, `detectAccumulations` and `applyAccumulations`). A blank outage ends
+#393, `detectAccumulations` and `applyAccumulations`). A blank outage
+(more than 7 days blank or listed as missing in a row, *Interplay* below) ends
 the run, so a reading straight after it (no day of 0 or blank between) has
 no window. When that reading would otherwise pass every test of the table
 above, read over the outage instead of a run (at least 20 mm; bias-corrected
@@ -1593,21 +1594,33 @@ run. The hydrologist may move the limit (issue #90 Q31).
   them. Zeros before an outage are judged by §2.4c on their own (filled
   when flagged, else run as recorded); zeros after it can form a window as
   before. A set-aside reading is never a zero, so no flagged run claims it.
-- **Listed missing periods.** A detection, window or set-aside reading, is
-  still dropped when its days touch a listed missing period (a missing period
-  on the reading day sets that day aside anyway). Listing an outage as
-  missing is no longer needed: its days were blank, and CHIRPS fills them
-  either way; the reading after it is judged on its own day as above (up to
-  1.69.0 the docs advised listing long outages as missing so the detection
-  stood down and the reading stayed on its day). Listing a long stretch of
-  *zeros* as missing still drops a window that touches it, as before.
+- **Listed missing periods count as blank.** A day listed under
+  `zeroRainRuns.missing` is the modeller saying its rain is unknown, as a
+  blank day is, so the detection reads it as blank, whatever it records (a
+  zero, a reading or nothing). A listed stretch, alone or joined to blank days
+  next to it, of more than 7 days is an outage: it ends a run, and a reading
+  straight after it is judged and set aside as above (otherwise listing an
+  outage as missing would bring back the one-day storm). Its days are filled
+  as listed missing days always are (§2.4c; `rain_catchment_missing`). A
+  stretch of 7 days or less counts towards the run like short blanks, and a
+  detection whose days touch a listed period is still dropped, as before
+  1.70.0 (a period on the reading day sets that day aside anyway). Before
+  1.70.0 a listed period of any length dropped every detection touching it,
+  so the docs advised listing long outages as missing to keep a reading on its
+  day; that advice is gone: listing a blank outage changes nothing now, and
+  listing a stretch of zeros longer than 7 days makes it an outage. Zeros
+  after a listed outage can form their own window, which doesn't touch it.
+  A rain-source period (§2.4e) is not unknown (its series gives the rain): a
+  detection touching it is dropped, and it ends no run.
 - **Keep-dry periods** (zero-run mode `'missing'`) drop a detection whose
   days they touch, a set-aside reading included.
 - **`keepReadings`** keeps a set-aside reading as one day's rain: it runs as
   recorded and counts in the CHIRPS fit (the warning goes). **`addAccumulations`**
   spreads it over the days the modeller lists (e.g. the outage's days, when
   the station log says the gauge was simply not read): a listed window wins
-  over a detection it overlaps.
+  over a detection it overlaps. A listed window that touches a missing period
+  is skipped (the missing period wins, as before), so to spread a reading
+  over days listed as missing, take them off the missing list first.
 - **Mode `'asRecorded'`** leaves the reading on its day; it is still left out
   of the fit, and the run warns that the outage's rain may be counted twice.
 - **The verify/ probe `accumulation-window-run`** (zeros only) is unchanged.

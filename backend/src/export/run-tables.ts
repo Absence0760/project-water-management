@@ -806,7 +806,7 @@ const ACCUMULATION_STATUS: Record<string, string> = {
 	asRecorded: 'run as recorded',
 	kept: 'kept as recorded (settings)',
 	noReading: 'nothing to spread',
-	setAside: 'set aside as missing (read after a blank outage; CHIRPS fills its day)'
+	setAside: 'set aside as missing (read after an outage; CHIRPS fills its day)'
 };
 
 /** Multi-day accumulations in the catchment rain (engine ≥ 0.20.0, model.md §2.4d, audit B4), one row per window. */
