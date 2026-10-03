@@ -16,9 +16,12 @@ export function damsWithoutStopLevel(nodes: readonly { kind?: string; damCapacit
 	return (nodes ?? []).filter((n) => n.kind === 'farm' && (n.damCapacityM3 ?? 0) > 0 && !((n.damMinPct ?? 0) > 0)).length;
 }
 
-/** Why this run can't be published, or null. The server refuses the same (audit H1). */
-export function publishBlocker(run: Pick<RunMeta, 'legacy'>): string | null {
-	return run.legacy ? 'This run used the legacy runoff model (a workbook comparison), so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.' : null;
+/** Why this run can't be published, or null. The server refuses the same (audit H1; a scenario run, publish.ts). */
+export function publishBlocker(run: Pick<RunMeta, 'legacy' | 'scenarioName'>): string | null {
+	if (run.legacy) return 'This run used the legacy runoff model (a workbook comparison), so it can’t be published. Engine 1.0.0 removed that model: run the project again (a new run uses GR4J) and publish that run.';
+	// scenarioName stays set once the scenario is deleted (the run records it).
+	if (run.scenarioName != null) return 'This is a scenario run, its scenario’s changes on a base run, so it can’t be published: farmers are shown the catchment as it is. Publish a run of the model.';
+	return null;
 }
 
 /** The runs any publication in the history holds: the server keeps them (409 on delete). */
