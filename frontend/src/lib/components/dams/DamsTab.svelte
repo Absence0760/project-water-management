@@ -168,7 +168,10 @@
 	const cards = $derived(damCards(editor.model.nodes, levels));
 	const damParam = $derived(page.url.searchParams.get('dam'));
 	const picked = $derived(pickDam(cards, damParam));
-	const runText = $derived(latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null);
+	// A failed run list is not "no run yet": the header says which it is, as the alert below does.
+	const runText = $derived(
+		runs === null ? 'run list couldn’t be loaded' : latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null
+	);
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
 	const record = (s: DailySeries): DailySeries => ({ startDate: s.startDate, values: Array.from(beforeForecast(s.values, s.startDate, run?.summary.forecast?.from)) });

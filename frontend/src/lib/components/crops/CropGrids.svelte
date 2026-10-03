@@ -476,8 +476,10 @@
 	.cell-label {
 		display: none;
 	}
-	/* 44rem is 616 px at the 14 px root: the page column of a 640 px window, or override mode's column beside the Scenarios rail. */
-	@container crop-grids (max-width: 44rem) {
+	/* 80rem is 1 120 px at the 14 px root: the factor table's own least width (a 150 px name column and twelve
+	   64 px months, with their inputs and padding, measured 1 114 px), so any narrower column stacks rather than
+	   scrolls sideways: override mode's beside the Scenarios rail at 1024 (~760 px), the grid modal under ~1 150. */
+	@container crop-grids (max-width: 80rem) {
 		.factors thead,
 		.areas thead {
 			display: none;

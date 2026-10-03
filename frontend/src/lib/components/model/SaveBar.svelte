@@ -74,7 +74,7 @@
 		listAnd([
 			...(editor.dirty ? (areas.length ? areas.map((a) => AREA_WORDS[a]) : ['the model']) : []),
 			...dirtyDrafts.map((d) => d.what),
-			...(invalid.length ? [`the ${invalid.length === 1 ? 'number' : 'numbers'} that need fixing`] : [])
+			...(invalid.length ? [invalid.length === 1 ? 'the number that needs fixing' : 'the numbers that need fixing'] : [])
 		])
 	);
 	/** Whether a reason field shows: a model or settings change keeps one. */

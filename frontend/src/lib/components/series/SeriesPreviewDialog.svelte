@@ -394,6 +394,8 @@
 	/* Which check flagged a value, Rain used's source, an exclusion's reason: on screen, compact, the row still 28 px. */
 	.tag {
 		font-size: 0.75rem;
+		/* Its own small line box: at the cell's 27 px, the smaller text's baseline shift grew the line, and every row, by ~1 px. */
+		line-height: 1;
 		color: var(--text-2);
 	}
 	.hl {

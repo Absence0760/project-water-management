@@ -110,7 +110,7 @@
 						</div>
 					</div>
 					{#if !readonly && onremove}
-						<button type="button" class="btn btn-sm" onclick={() => onremove(b.id)}>Remove borehole {i + 1}</button>
+						<button type="button" class="btn btn-sm" onclick={() => remove(b, i)}>Remove {itemName(b.name, 'borehole', i)}</button>
 					{/if}
 				</li>
 			{/each}

@@ -99,12 +99,15 @@
 		outline: 2px solid var(--focus);
 		outline-offset: 1px;
 	}
+	/* Over the whole toggle, its 1 px border too, so the control itself is the 24 px target (not 2 px short of it). */
 	input {
 		position: absolute;
 		opacity: 0;
-		inset: 0;
-		width: 100%;
-		height: 100%;
+		inset: -1px;
+		width: calc(100% + 2px);
+		height: calc(100% + 2px);
+		/* app.css caps every control at its box (max-width: 100%), which would undo the 2 px. */
+		max-width: none;
 		margin: 0;
 		cursor: pointer;
 	}

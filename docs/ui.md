@@ -3388,9 +3388,9 @@ under crop names (`planAreaPaste`), and crop factors, a row per crop under
 the months Oct … Sep ("Oct" or "October", `planFactorPaste`), so one row
 copied from Excel fills a crop's 12 months; both in `crops/areaPaste.ts` on
 the shared reader (`spreadsheet/paste/grid.ts`). A value below 0 stops the
-paste. Below a 44rem column (`@container crop-grids`, a wrapper, so scenario
-override mode's narrow column beside the Scenarios rail counts, not the
-window) each row is a card with labelled fields instead of a sideways-scrolling table.
+paste. Below an 80rem column (1 120 px, the factor table's own least width;
+`@container crop-grids`, a wrapper, so scenario override mode's narrow column
+beside the Scenarios rail counts, not the window) each row is a card with labelled fields instead of a sideways-scrolling table.
 `CropsTab` with a `sections` prop renders it: the grid modal passes one
 section (crop factors or planted areas), scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
 inline, on the scenario's model, so neither the crop sheet nor the page's
