@@ -111,6 +111,13 @@ describe('auth', () => {
 		expect(res.status).toBe(401);
 	});
 
+	it('refuses a sign-up whose display name would show as nothing, and makes no account', async () => {
+		const email = `blank-${crypto.randomUUID()}@x.io`;
+		const res = await app.request('/auth/register', json({ email, password: 'longenough', displayName: '\u200b', acceptTerms: LEGAL_VERSION }));
+		expect(res.status).toBe(400);
+		expect(await asOwner('SELECT 1 FROM app_user WHERE email = $1', [email])).toEqual([]);
+	});
+
 	it('validates register input', async () => {
 		const res = await app.request('/auth/register', json({ email: 'not-an-email', password: 'short', displayName: '', acceptTerms: LEGAL_VERSION }));
 		expect(res.status).toBe(400);
@@ -404,6 +411,11 @@ describe('account: display name and password change (WP-1.9)', () => {
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
+		// A name that shows as nothing, or reorders the words around it, is refused or cleaned (auth/displayName.ts).
+		expect((await u.call('PATCH', '/auth/me', { displayName: '\u200b\u200d' })).status).toBe(400);
+		const spoof = await u.call('PATCH', '/auth/me', { displayName: 'Dr\u202E Renamed\nAgain' });
+		expect(spoof.status).toBe(200);
+		expect(spoof.body.user.displayName).toBe('Dr Renamed Again');
 		// Unknown keys are ignored: the address isn't editable here.
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'Still me', email: 'hijack@example.com' })).status).toBe(200);
 		expect((await u.call('GET', '/auth/me')).body.user).toMatchObject({ email: u.email, displayName: 'Still me' });
