@@ -144,6 +144,22 @@ describe('a catchment too large for the request', () => {
 		expect((await asOwner('SELECT count(*)::int AS n FROM delineation_proposal WHERE project_id = $1', [projectId]))[0].n).toBe(proposalsBefore);
 	});
 
+	it('hands the worker where the request’s window cut the catchment, so its first window is placed over it', async () => {
+		// The valley above the dam runs about 150 cells north of it: a 256-cell window centred on the click holds 128 of them, so a job
+		// starting centred again would refuse at its only window; placed over what the request's 128-cell window cut (its north side),
+		// it holds about 200, and the job proposes.
+		delineationLimits.requestWindows = [128];
+		delineationLimits.jobWindows = [256];
+		const res = await editor.call('POST', at('/map/delineation'), { ...DAM, from: 'dam_wall' });
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		const [row] = await asOwner('SELECT aim FROM delineation_request WHERE id = $1', [res.body.request.id]);
+		expect(row.aim).toMatchObject({ zoom: 10 });
+		expect(row.aim.cut[1]).toBe(true);
+		await tick();
+		const done = (await editor.call('GET', at(`/map/delineation/requests/${res.body.request.id}`))).body.request;
+		expect(done).toMatchObject({ status: 'proposed', proposal: { from: 'dam_wall', windowCells: 256 } });
+	});
+
 	it('refuses as before when the worker has no larger window than the request', async () => {
 		delineationLimits.requestWindows = [256];
 		delineationLimits.jobWindows = [128, 256];

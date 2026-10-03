@@ -48,7 +48,7 @@ export const SNAP_RADIUS_M = 150;
 export const WINDOWS = [1024, 2048, 3072] as const;
 /**
  * The windows the background worker tries (the `delineate` job, docs/design/delineation.md § Where it runs), from the one after
- * where the request stopped: the same code, up to about 200 km at zoom 11. 6 144 cells peaks at about 1.2 GB (the pans' copy of the elevations included), which the worker's
+ * where the request stopped: the same code, up to about 200 km at zoom 11. 6 144 cells peaks at about 1.1 GB (the pans' copy of the elevations included; measured, docs/design/delineation.md § Where it runs), which the worker's
  * memory is sized for (infra/jobs.tf, at least 2 048 MB with delineation_dem on).
  */
 export const JOB_WINDOWS = [...WINDOWS, 4096, 6144] as const;
@@ -88,7 +88,9 @@ export class DelineationRefused extends Error {
 		message: string,
 		readonly larger?: LargerChannel,
 		/** With `too_large`: the window (cells a side) it stopped at, so the worker can go on from the next (background.ts). */
-		readonly windowCells?: number
+		readonly windowCells?: number,
+		/** With `too_large` from the window ladder: where that window cut the catchment, so the worker's first window is placed over it. */
+		readonly aim?: WindowAim
 	) {
 		super(message);
 	}
@@ -256,6 +258,11 @@ export interface Aim {
 	cut: [boolean, boolean, boolean, boolean];
 }
 
+/** An Aim at a zoom, as a request hands it to the worker (delineation_request.aim): used only at that zoom. */
+export interface WindowAim extends Aim {
+	zoom: number;
+}
+
 /** Where `mask` (a catchment in the window at x0, y0) lies, for placing the next window. */
 export function aimAt(mask: Uint8Array, n: number, x0: number, y0: number): Aim {
 	let bx0 = n;
@@ -343,6 +350,8 @@ export async function delineate(
 		 * a river cut at the request's last window goes on to the worker (too_large with windowCells) rather than to a gully.
 		 */
 		capCells?: number;
+		/** Where an earlier try's last window cut the catchment (the request's, for the worker): the first window is placed over it. */
+		aim?: WindowAim | null;
 		/** Called before each window is read, with its place in `windows` (the worker reports it as the job's progress). */
 		onWindow?: (index: number, of: number) => Promise<void> | void;
 	} = {}
@@ -372,7 +381,7 @@ export async function delineate(
 	const cellKm2 = (cellSizeM * cellSizeM) / 1e6;
 	const capCells = opts.capCells ?? windows[windows.length - 1]!;
 	/** Where the last window cut the catchment: the next window is placed over it. */
-	let aim: Aim | null = null;
+	let aim: Aim | null = opts.aim && opts.aim.zoom === z ? { box: opts.aim.box, cut: opts.aim.cut } : null;
 	for (let wi = 0; wi < windows.length; wi++) {
 		const nCells = windows[wi]!;
 		await opts.onWindow?.(wi, windows.length);
@@ -393,7 +402,7 @@ export async function delineate(
 			const next = windows[wi + 1];
 			if (last || (next !== undefined && elapsed * (1 + (next / nCells) ** 2) > budget)) {
 				const km = Math.round((nCells * cellSizeM) / 1000);
-				throw new DelineationRefused('too_large', tooLargeText('click', km, opts.expected?.km2), undefined, nCells);
+				throw new DelineationRefused('too_large', tooLargeText('click', km, opts.expected?.km2), undefined, nCells, { zoom: z, ...aimAt(mask, nCells, x0, y0) });
 			}
 			aim = aimAt(mask, nCells, x0, y0);
 		};

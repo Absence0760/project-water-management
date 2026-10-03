@@ -32,7 +32,7 @@ import { logEvent } from '../logging/logEvent.js';
 import { beginDemAttempt, finishDemAttempt } from './attempt.js';
 import { requireRole } from '../projects/access.js';
 import { configuredDem } from './dem.js';
-import { delineate, DelineationRefused } from './delineate.js';
+import { delineate, DelineationRefused, type WindowAim } from './delineate.js';
 import { checkNote, loadProposal, SELECT, storeProposal, toProposal, type ProposalRow } from './proposals.js';
 import { delineationLimits, jobWindowsFrom, loadRequest, nextJobWindow, queueDelineation, waitingRequest } from './requests.js';
 import { ConfluenceAmbiguity, ReachChoiceBody, reachFor, ReachNotNear } from './reach.js';
@@ -101,8 +101,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 		const body = DelineateBody.parse(await readJson(c));
 		const id = c.req.param('id');
 		const userId = c.get('userId');
-		const queue = (db: Db, fromWindow: number) =>
-			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, reach: body.reach ?? null, fromWindow });
+		const queue = (db: Db, fromWindow: number, aim: WindowAim | null = null) =>
+			queueDelineation(db, { projectId: id, userId, from: body.from, lon: body.lon, lat: body.lat, keepPoint: body.keepPoint, reach: body.reach ?? null, fromWindow, aim });
 		const attempt = await withUser(userId, async (db) => {
 			await requireRole(db, id, 'editor');
 			const { rows } = await db.query<{ n: number }>(
@@ -153,7 +153,8 @@ export const delineationRoutes = new Hono<AuthEnv>()
 					if (next !== null && jobWindowsFrom(next).length > 0) {
 						const queued = await withUser(userId, async (db) => {
 							await requireRole(db, id, 'editor');
-							return queue(db, next);
+							// Where the request's window cut it: the job's first window goes over it, not centred on the click again.
+							return queue(db, next, err.aim ?? null);
 						});
 						await wakeWorker(queued.jobId);
 						return c.json({ request: queued.request }, 202);

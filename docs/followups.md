@@ -3832,15 +3832,17 @@ the Map tab, Settings → WR2012 check → Propose from the map;
       missing DEM data is the data's edge instead of a sink beside it.
       Measured with `scripts/research/snap-outlets.ts`
       (design/delineation-snapping.md § Outlets of quaternaries).
-- [ ] **Start, Divide and Sub-catchments still route centred windows that
-      never grow for a cut river** (finding 1's third bullet, found with
-      the fix above). `delineateUnits` starts at the first window that
-      holds the clicks or the boundary, centred on them, and its points
-      don't yet carry the reach's area on the Start/Divide paths
-      (finding 3). Durable fix: reuse `windowOrigin` and `cutChannel`
-      (`delineate.ts`) in `delineateUnits` for its outlet, once finding 3
-      gives Start/Divide's outlet an expected area. Trigger: finding 3's
-      fix landing.
+- [x] **Start, Divide and Sub-catchments still routed centred windows that
+      never grew for a cut river** (finding 1's third bullet; `start-12`,
+      branch wip/r3-windows, design/start-from-map.md § step 1): once
+      `start-7` gave the gauge outlet its reach's area, `delineateUnits`
+      reuses `windowOrigin` and `cutChannel` for its outlet (a gauge or the
+      lowest click), and a cut click keeps `unmatched` unless its reach is
+      larger than the routed square.
+- [x] **The worker's first window lost the request's aim** (code review of
+      round 3): the request stores where its last window cut the
+      catchment (`delineation_request.aim`, 191) and the job's first window
+      is placed over it, rather than centred on the click again.
 - [x] **Loading the register of dams in production** (2026-10-02, PR
       feat/infra-map-data): the reference-dataset path is built and refuses
       `dam-register` while the register's licence decision above is open; on

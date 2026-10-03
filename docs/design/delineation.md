@@ -115,13 +115,20 @@ polygon).
   whose next window would break the 20 s, is handed to a `delineate` job
   instead of refused. The job runs the same `delineate()` with the
   worker's windows (`JOB_WINDOWS`: 4 096 and 6 144 cells, about 135 and
-  200 km at zoom 11), from the one after where the request stopped, within
-  a 150 s budget under the worker's 300 s timeout. Measured on an invented
-  valley (this laptop, 2026-10-03): 4 096 cells about 4.5 s and 530 MB, 6 144
-  cells about 11 s and 1.05 GB peak (8 192 would be about 21 s and 1.8 GB,
-  hence the cap); the pans' copy of the elevations (§ Pans) adds 4 bytes a
-  cell, so 6 144 cells now peak at about 1.2 GB (the real DEM around
-  Bultfontein, 2026-10-03). With `delineation_dem` on, Terraform gives the worker at
+  200 km at zoom 11), from the one after where the request stopped and
+  placed over the catchment that window cut (the request stores where,
+  `delineation_request.aim`, so the job doesn't start centred on the click
+  again and spend its first window on the side away from it), within
+  a 150 s budget under the worker's 300 s timeout. **Memory, measured once
+  on the merged code** (`delineate-10`, the real DEM, peak resident set of
+  the whole process, this laptop idle, 2026-10-03): at 6 144 cells
+  0.95 GB (A62H's outlet, proposed), 1.05 and 1.08 GB (two clicks refused
+  `larger_channel` after routing) and 0.99 GB (around Bultfontein with the
+  whole window as the catchment, the pans' worst case), so **about
+  1.1 GB**; 4 096 cells 0.53–0.60 GB, 3 072 cells 0.39–0.42 GB, each
+  window in 3–15 s. It includes the pans' copy of the elevations (§ Pans,
+  4 bytes a cell) and the window-edge flags (`openFlags`, 1 byte a cell).
+  8 192 cells would need about 1.9 GB, hence the cap. With `delineation_dem` on, Terraform gives the worker at
   least 2 048 MB (`infra/jobs.tf`), which also buys it more CPU.
   **Why only then, not every click**: most catchments are proposed in a
   few seconds by the request, and locally the worker runs only with `pnpm
@@ -323,8 +330,8 @@ after it) and reports, beside the catchment:
 - **Cost** (the real DEM around Bultfontein, the whole window as the
   catchment, the worst case): 0.3 s at 2 048 cells, 0.8 s at the
   request's 3 072-cell cap, 2.7 s at the worker's 6 144 (against fills of
-  0.65, 1.7 and 13 s); the copy is 4 bytes a cell, so the worker's largest
-  window now peaks at about 1.2 GB (it was 1.05 GB), inside its 2 048 MB.
+  0.65, 1.7 and 13 s); the copy is 4 bytes a cell, and the worker's largest
+  window peaks at about 1.1 GB with it (§ Where it runs), inside its 2 048 MB.
 - **Beside missing data**: the pans read the elevations before the fill,
   where a missing cell is NaN; only the catchment's cells are looked at, and
   a catchment never holds a missing cell or one beside it (§ Method 9), so
