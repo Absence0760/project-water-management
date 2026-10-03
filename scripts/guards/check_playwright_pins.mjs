@@ -24,6 +24,12 @@
 // `pkg=version`. Dependabot's docker entry (.github/dependabot.yml) moves the
 // tag and digest; the apt pins move by hand with the snapshot.
 //
+// And the operator scripts' docker images (scriptImageProblems): every
+// `<NAME>_IMAGE="${<NAME>_IMAGE:-<image>}"` default in bin/*.sh names its image
+// by @sha256 digest (bin/tiles-dev.sh's GDAL image, which `water` runs when
+// gdalwarp isn't installed). An override in the environment is the operator's
+// choice and isn't checked.
+//
 // The image's digest can't be checked offline; a digest left on the old
 // version keeps the old browser under a new tag, and the renderer image smoke
 // (infra/scripts/smoke-renderer-image.sh, step 1) fails because the image's
@@ -33,7 +39,7 @@
 // CI:    ci.yml, job `workflow-lint` (Playwright pins step).
 // Tests: node --test scripts/guards/check_playwright_pins.test.mjs
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -128,6 +134,23 @@ export function imageProblems(dockerfile) {
 	return problems;
 }
 
+const SCRIPT_IMAGE = /^\s*([A-Z][A-Z0-9_]*_IMAGE)="\$\{\1:-([^}]*)\}"/gm;
+
+/**
+ * The docker images an operator script runs by default and isn't pinned by
+ * digest: one line each. `where` names the script. A script with no
+ * `*_IMAGE` default has nothing to check.
+ */
+export function scriptImageProblems(script, where) {
+	const problems = [];
+	for (const m of script.matchAll(SCRIPT_IMAGE)) {
+		if (!/^[^\s@]+:[^\s@]+@sha256:[0-9a-f]{64}$/.test(m[2])) {
+			problems.push(`${where}: ${m[1]} default "${m[2]}" is not pinned by digest (image:tag@sha256:…; docker buildx imagetools inspect <image:tag> gives it)`);
+		}
+	}
+	return problems;
+}
+
 /** What is wrong with the pins: one line each, empty when they agree. */
 export function pinProblems(pins) {
 	const problems = [];
@@ -150,8 +173,14 @@ function main() {
 	const image = imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8'));
 	if (problems.length) console.error(`::error::Playwright pins:\n${problems.join('\n')}`);
 	if (image.length) console.error(`::error::Renderer image pins:\n${image.join('\n')}`);
-	if (problems.length || image.length) process.exit(1);
-	console.log(`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot.`);
+	const scripts = readdirSync(join(root, 'bin'))
+		.filter((f) => f.endsWith('.sh'))
+		.flatMap((f) => scriptImageProblems(readFileSync(join(root, 'bin', f), 'utf8'), `bin/${f}`));
+	if (scripts.length) console.error(`::error::Operator script images:\n${scripts.join('\n')}`);
+	if (problems.length || image.length || scripts.length) process.exit(1);
+	console.log(
+		`Playwright pins agree: ${pins[0].version} in ${pins.length} places. Renderer image: base by digest, apt packages by version and snapshot. Operator script images: by digest.`
+	);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();

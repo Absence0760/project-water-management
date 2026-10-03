@@ -1,0 +1,21 @@
+# SHA-256 of every whole file the operator scripts download (bin/tiles-dev.sh
+# rivers | water, bin/evaporation-fetch.sh), checked after each download by
+# scripts/guards/source_checksums.mjs. None of these publishers offers a
+# checksum (docs/maps.md § Sources), so these are ours, recorded on 2026-10-03
+# (HydroRIVERS' zip and the 20E_30S tile also matched a fetch the day before).
+# A file not listed is
+# recorded here on its first fetch; commit the line. Never edit a line to make
+# a mismatch pass unless the publisher has confirmed a re-issue.
+#
+# HydroRIVERS v1.0, Africa (https://data.hydrosheds.org/file/HydroRIVERS/)
+63cc615134d8812b73f27ee9dfd9d790c520af96bc609dfc97bcd47811fec125  HydroRIVERS_v10_af_shp.zip
+# JRC Global Surface Water v1.5 (1984-2024) occurrence, the six 10° tiles over
+# the default TILES_BBOX (cloudferro .../download2024/Aggregated/VER1-5/occurrence/)
+dd5fe4108d93952f0bc00857707a24903a8277e84fdf8454562e75cef9e0e2d2  occurrence_10E_20S_v1_5_2024.tif
+70eb455ab73f2576e38b17eb01340f0032e86aad0404d8481587ec868dba49db  occurrence_10E_30S_v1_5_2024.tif
+0ea2cc8dc7e61a12acec1428efafbb8b4f0a350fddd3f95b3c2392229af8ee38  occurrence_20E_20S_v1_5_2024.tif
+b77d0b921d60813b5625d7a2a1f0ba5e033c809ad6b9730e59e61e20f287cb46  occurrence_20E_30S_v1_5_2024.tif
+c4187d4cdfc26f79190547e766e64f55d9cb97fa1181b5ca82884db30dad0708  occurrence_30E_20S_v1_5_2024.tif
+c583f29418d666373beb10e1f984a11406314ebe266f6d0d9b4ba63cbb972e9f  occurrence_30E_30S_v1_5_2024.tif
+# dPET (hPET daily, Singer et al. 2021; data.bris.ac.uk qb8ujazzda0s2aykkv0oq0ctp):
+# about 2.4 GB a year, so recorded by the first bin/evaporation-fetch.sh run.
