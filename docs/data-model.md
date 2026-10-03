@@ -707,7 +707,10 @@ the result change?", and put back any earlier version.
   (issue #153: the rules' revision and, when signed, the signer's typed name;
   the actor is the signing account),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
-  registration numbers, file name and hash, counts; never a holder's name),
+  registration numbers, file name and hash, counts; never a holder's name;
+  a viewer reads `allocation.created/changed/deleted` without the
+  registration number and volume until an owner lets viewers read each
+  volume: the History reads every subject through `app_audit_subject`, 190),
   `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
   series, lifetime; never the key or its hash), `alert_rules.changed` (051:
   an editor switched alert kinds on or off or changed a threshold),

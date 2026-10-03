@@ -7,6 +7,7 @@
 import { diffInputs, upgradeLegacyModel, type InputChange, type RunInputsSnapshot } from '@water-management/engine';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
+import { allocationUnitsHidden, redactRunAllocations } from '../allocations/viewerUnits.js';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
@@ -146,7 +147,9 @@ const TS = `to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z
  * One page of the project's timeline, newest first: revisions and audit
  * events in one order (created_at, then type, then id, all descending).
  * Items of one change set share created_at (one transaction's now()), so
- * they come out together.
+ * they come out together. Each event's subject is read as the reader may see
+ * it (app_audit_subject, 190): an allocation event without the registration
+ * number or volume for a viewer who can't read the allocations themselves.
  */
 async function historyPage(db: Db, projectId: string, q: z.infer<typeof HistoryQuery>) {
 	const kind = q.kind ?? null;
@@ -163,7 +166,7 @@ async function historyPage(db: Db, projectId: string, q: z.infer<typeof HistoryQ
 					WHERE NOT EXISTS (SELECT 1 FROM unnest($10::text[]) w WHERE strpos(lower(c->>'text'), w) = 0)))
 			UNION ALL
 			SELECT 'event', e.id, ${TS.replace('created_at', 'e.created_at')}, e.created_at, e.change_set,
-				e.actor_label, e.kind, NULL, NULL, e.subject, NULL, NULL
+				e.actor_label, e.kind, NULL, NULL, app_audit_subject(e.project_id, e.kind, e.subject), NULL, NULL
 			FROM audit_event e
 			WHERE $3 AND e.project_id = $1 AND ($4::uuid IS NULL OR e.subject->>'nodeId' = $4::text)
 				AND ($5::text IS NULL OR e.kind = $5 OR e.kind LIKE $5 || '.%')
@@ -316,9 +319,12 @@ export const historyRoutes = new Hono<AuthEnv>()
 	.get('/:id/runs/:runId/changes-since', async (c) => {
 		const { id, runId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
-			await requireRole(db, id, 'viewer');
-			const run = await runInputs(db, id, runId);
-			if (!run) throw new ApiError(404, 'not found');
+			const role = await requireRole(db, id, 'viewer');
+			const found = await runInputs(db, id, runId);
+			if (!found) throw new ApiError(404, 'not found');
+			// A viewer who can't read each registered volume (162, D3): RLS gives them none of today's,
+			// so the run's copy would read as "removed", volumes and all. Neither side has them.
+			const run = (await allocationUnitsHidden(db, id, role)) ? redactRunAllocations(found) : found;
 			const now = await loadModelInput(db, id);
 			const current: RunInputsSnapshot = {
 				settings: now.settings as RunInputsSnapshot['settings'],
