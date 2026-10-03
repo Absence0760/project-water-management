@@ -34,7 +34,7 @@ import {
 	type LargerChannel
 } from './delineate.js';
 import { JUNCTION_MATCH_M, JUNCTION_PATH_M, junctionOutlets, type JunctionRiver } from './junction.js';
-import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, onOwnChannel, place, WIDE_MATCH_M } from './place.js';
+import { GULLY_SHARE, GUARD_RADIUS_M, LARGER_FACTOR, MATCH_RADIUS_M, MIN_ACCORDANCE, expectedOnGrid, onOwnChannel, place, WIDE_MATCH_M, type HeadHint } from './place.js';
 import { accumulate, d8, DX, DY, edgeMask, fill, NO_DATA_EDGE, OUT, openFlags, touchesEdge, upstream } from './flow.js';
 import { simplifyRing, traceRings, type Pt } from './outline.js';
 import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
@@ -55,9 +55,10 @@ import { findPans, ncAreaM2, panReport, type PanReport } from './pans.js';
  * drains into pans (closed depressions the fill routes onward) reported as non-contributing beside the areas (pans.ts); the areas unchanged;
  * start-12 (issue #390, findings 1 and 6 reaching Start, Divide and Sub-catchments): a river the window cuts at the outlet grows the
  * window instead of leaving the outlet in a gully, each larger window is placed over the catchment (delineate.ts windowOrigin), and a
- * cut click keeps its `unmatched` unless its reach is larger than the routed square.
+ * cut click keeps its `unmatched` unless its reach is larger than the routed square;
+ * start-13 (delineate-11 reaching them): a head reach's area at the point from the DEM's own area at its upper end (place.ts expectedOnGrid).
  */
-export const START_METHOD_VERSION = 'start-12';
+export const START_METHOD_VERSION = 'start-13';
 /** Cells kept between the boundary's box and the window's edge, so its divide isn't routed at the edge. */
 const MARGIN_CELLS = 32;
 
@@ -74,6 +75,8 @@ export type PlacedBy = 'matched' | 'snapped' | 'junction' | 'larger' | 'exact' |
 export interface PlacementHints {
 	/** A point's expected upstream area (km², a nearby river reach's): the point is matched to it (place.ts, issue #374). */
 	expectedKm2?: number | null;
+	/** The reach is a head reach: its upper end's area is read from the window's DEM in place of HEAD_KM2 (place.ts expectedOnGrid). */
+	head?: HeadHint | null;
 	/** The editor picked the reach at a confluence: looked for over JUNCTION_MATCH_M (place.ts `chosen`). */
 	chosen?: boolean;
 	/** How far the point is from that reach's line (m): off the line, a point on a DEM channel of its own stays there (place.ts rule 3). */
@@ -551,6 +554,8 @@ export async function delineateUnits(
 		const how = new Map<string, { placedBy: PlacedBy; larger?: LargerChannel; unmatched?: boolean }>();
 		/** The outlet's own key in `how` (no point's id is empty). */
 		const OUTLET = '';
+		/** Each point's area matched to in this window (expectedOnGrid), by its key. */
+		const expectedAt = new Map<string, number>();
 		const snapAt = (p: Position, key?: string, hints: PlacementHints = {}): number | null => {
 			const [x, y] = toGrid(p);
 			if (x < 0 || y < 0 || x >= nCells || y >= nCells) return null;
@@ -562,9 +567,12 @@ export async function delineateUnits(
 				return c;
 			}
 			const g0 = { nx: nCells, ny: nCells, acc, edge, cellSizeM };
-			const placed = place(g0, x, y, { snapRadiusM, expectedKm2: hints.expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM });
+			// A head reach's area at the point, from the DEM's own area at its upper end where this window reads it (place.ts).
+			const expectedKm2 = expectedOnGrid({ ...g0, dir, open: cutFlags }, x, y, { snapRadiusM, expectedKm2: hints.expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM }, hints.head, toGrid);
+			if (key !== undefined && expectedKm2) expectedAt.set(key, expectedKm2);
+			const placed = place(g0, x, y, { snapRadiusM, expectedKm2, chosen: hints.chosen, reachDistanceM: hints.reachDistanceM });
 			// Beside a junction nobody picked a river at, a point on a DEM channel of its own stays there (place.ts rule 3), as in Delineate.
-			const ownChannel = !hints.chosen && onOwnChannel(g0, x, y, { expectedKm2: hints.expectedKm2, reachDistanceM: hints.reachDistanceM });
+			const ownChannel = !hints.chosen && onOwnChannel(g0, x, y, { expectedKm2, reachDistanceM: hints.reachDistanceM });
 			const atJunction = hints.junction && !ownChannel ? junctionOutlets({ ...g0, dir }, x, y, hints.junction.rivers, snapRadiusM)?.get(hints.junction.chosenKey) : undefined;
 			if (atJunction !== undefined) {
 				record({ placedBy: 'junction' });
@@ -572,7 +580,7 @@ export async function delineateUnits(
 			}
 			if (!placed) return null;
 			// A channel matching the reach, offered (place.ts rules 3 and 4), says more than "unmatched" would.
-			const unmatched = !!hints.expectedKm2 && placed.how === 'snapped' && !placed.larger?.reach;
+			const unmatched = !!expectedKm2 && placed.how === 'snapped' && !placed.larger?.reach;
 			if (placed.larger && hints.useLarger) {
 				// The editor chose the channel the guard named: the point goes on it (found again here, never taken from the request).
 				record({ placedBy: 'larger', ...(unmatched ? { unmatched } : {}) });
@@ -586,7 +594,7 @@ export async function delineateUnits(
 							distanceM: placed.larger.distanceM,
 							km2: km2(acc[placed.larger.cell]!),
 							pointKm2: km2(acc[placed.cell]!),
-							...(placed.larger.reach && hints.expectedKm2 ? { reachKm2: hints.expectedKm2 } : {})
+							...(placed.larger.reach && expectedKm2 ? { reachKm2: expectedKm2 } : {})
 						};
 					})()
 				: undefined;
@@ -637,7 +645,7 @@ export async function delineateUnits(
 		const outletHints: PlacementHints | undefined = lowest ? req.points.find((p) => p.id === outletId) : fixedOutlet ? req.outletHints : undefined;
 		const outletAt: Position | null = lowest ? (req.points.find((p) => p.id === outletId)?.geometry as { coordinates?: Position } | undefined)?.coordinates ?? null : fixedOutlet;
 		const outletHow = how.get(lowest ? (outletId ?? OUTLET) : OUTLET);
-		const expectedKm2 = outletHints?.expectedKm2;
+		const expectedKm2 = expectedAt.get(lowest ? (outletId ?? OUTLET) : OUTLET) ?? outletHints?.expectedKm2;
 		if (expectedKm2 && outletAt && outletHow?.placedBy === 'snapped' && outletHow.larger?.reachKm2 === undefined && !outletHints?.useLarger) {
 			const [cx, cy] = toGrid(outletAt);
 			const gully = acc[outlet]! * cellKm2 < GULLY_SHARE * expectedKm2;

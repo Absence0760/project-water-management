@@ -142,7 +142,7 @@ export const delineationRoutes = new Hono<AuthEnv>()
 					windows: delineationLimits.requestWindows,
 					// A river cut at the request's last window goes on to the worker's windows.
 					capCells: delineationLimits.jobWindows[delineationLimits.jobWindows.length - 1],
-					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM } : null,
+					expected: attempt.reach ? { km2: attempt.reach.upstreamKm2, reach: `reach ${attempt.reach.reachId} of ${attempt.reach.dataset}`, chosen: !!body.reach, distanceM: attempt.reach.distanceM, head: attempt.reach.head } : null,
 					junction: attempt.junction,
 					keepPoint: body.keepPoint
 				});
