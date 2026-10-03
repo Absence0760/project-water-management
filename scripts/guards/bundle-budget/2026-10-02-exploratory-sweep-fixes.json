@@ -1,0 +1,4 @@
+{
+	"addKb": 1,
+	"why": "Exploratory sweep fixes together: the verify-email page's resend form, the Runs tab's publish and nominate blockers for scenario runs, the upload form's stale-read guard, the share page's latest-only load and the map's earlier-outline label. Measured 1620 KB against 1619 with help-page-guides already counted."
+}
