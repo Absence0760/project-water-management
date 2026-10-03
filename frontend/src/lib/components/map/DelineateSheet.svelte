@@ -83,6 +83,8 @@
 
 	/** A refusal beside a much larger channel (issue #374): the sentence, the channel, and the point that was asked for. */
 	let larger = $state<{ message: string; channel: LargerChannel; asked: [number, number] } | null>(null);
+	/** The river-network check on the proposal just made (a reach nearby whose area no channel matched); not stored, so a reopened sheet has none. */
+	let check = $state<string | null>(null);
 	async function propose(e: SubmitEvent) {
 		e.preventDefault();
 		tried = true;
@@ -101,6 +103,7 @@
 		try {
 			const r = await api.delineation.propose(projectId, { lon: at[0], lat: at[1], from, ...(keepPoint ? { keepPoint } : {}) });
 			replace = false;
+			check = r.check;
 			await onproposed(r.proposal);
 			setAsking(false);
 		} catch (err) {
@@ -213,6 +216,7 @@
 					{#each CAVEATS as c (c)}<li>{c}</li>{/each}
 				</ul>
 			</section>
+			{#if check}<p class="offer" role="note" data-testid="delineate-check">{check}</p>{/if}
 			{#if notice}<p class="hint notice">{notice}</p>{/if}
 			{#if boundary}
 				<label class="tick">

@@ -3139,6 +3139,8 @@ export interface ClickPiece {
 	reach: { dataset: string; reachId: number; upstreamKm2: number } | null;
 	/** Snapped beside a much larger channel: that channel, to offer instead. */
 	larger: LargerChannel | null;
+	/** A river reach was near but no channel near the click matched its area: that reach (the click may be on another stream). */
+	unmatched: { dataset: string; reachId: number; upstreamKm2: number } | null;
 }
 
 /** GET …/map/channels?tile=i,j: one tile of the elevation model's channels (cells with ≥ minKm2 draining through them). */

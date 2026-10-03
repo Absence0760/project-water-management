@@ -56,14 +56,21 @@ export function pieceLine(r: ClickPieces, click: number): string {
 		return d ? `not a piece: it ${d.reason}` : 'not a piece';
 	}
 	const km2 = (m2: number) => `${(m2 / 1e6).toFixed(2)} km²`;
-	const into = p.drainsInto === null ? 'the lowest click: everything above it drains out here' : `drains into ${p.drainsInto + 1}`;
+	const into = p.drainsInto === null ? 'the lowest point: the rest drains out here' : `drains into ${p.drainsInto + 1}`;
 	if (p.open || p.areaM2 === null) return `an inflow point: its catchment runs past the area routed around the clicks, so no piece; the water from above it enters ${p.drainsInto === null ? 'here' : `${p.drainsInto + 1}`} as an inflow`;
 	const inflows = r.pieces.filter((q) => q.open && q.drainsInto === p.click).map((q) => q.click + 1);
 	const upstream = p.totalAreaM2 === null ? ' · more upstream than was routed' : p.drainsInto !== null || r.pieces.length > 1 ? ` · ${km2(p.totalAreaM2)} upstream in all` : '';
 	const placed = p.reach ? ` · on the channel matching river reach ${p.reach.reachId} (${km2(p.reach.upstreamKm2 * 1e6)})` : '';
-	// A larger channel nearby explains a small piece better than the missed-channel warning does.
-	const warn = p.larger ? ` · ${largerLine(p.point, p.larger)}` : missed(p) ? ` · ${MISSED}` : '';
-	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${warn}`;
+	const moved = p.snapDistanceM !== null && p.snapDistanceM >= 50 ? ` · moved ${Math.round(p.snapDistanceM)} m to the channel` : '';
+	// A larger channel nearby explains a small piece better than the other warnings do.
+	const warn = p.larger
+		? ` · ${largerLine(p.point, p.larger)}`
+		: p.unmatched
+			? ` · river reach ${p.unmatched.reachId} nearby drains ${km2(p.unmatched.upstreamKm2 * 1e6)}, and no channel near the click matches it: check it is the right stream`
+			: missed(p)
+				? ` · ${MISSED}`
+				: '';
+	return `${km2(p.areaM2)} · ${into}${upstream}${inflows.length ? ` · an inflow enters at ${inflows.join(' and ')}` : ''}${placed}${moved}${warn}`;
 }
 
 /** The pieces Save keeps: whole and outlined. */
