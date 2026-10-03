@@ -738,6 +738,22 @@ runs and accumulations are real) can't be decided without the client.
       once the hydrologist says which; until then the gauge total is kept.
       Trigger: the hydrologist's review of issue #2.
       **Provisional decision 2026-10-01 (to be confirmed by the client's hydrologist):** keep the thresholds and the gauge total as recorded; confirming any one window needs the station's observer logs (client data).
+      **Blank outages (issue #90 Q31, issue #393), built in engine 1.70.0:** a blank stretch counts towards a run only up to 7 days (`ACC_MAX_BLANK_DAYS`); days listed as missing count as blank; a ≥ 20 mm reading straight after a longer outage that passes the CHIRPS tests is set aside as missing (CHIRPS fills it, out of the fit, warned). Provisional (operator, 2026-10-03), to be confirmed by the hydrologist with the limit itself (it rests on reasoning, not a source; model.md §2.4d).
+- [ ] **`verify/` follows the blank-outage rule (engine 1.70.0, model.md §2.4d).**
+      `verify/model.py` `detect_accumulations` counts every blank day back
+      from a reading like a zero. It needs: (1) the run to stop at a stretch
+      of more than 7 days blank or listed as missing (measured whole; the
+      detection reads listed-missing days as blank), so the window is only the
+      days after it; (2) a reading with an outage straight before it (no run)
+      judged by the same tests over the outage's last 92 days (the day before
+      left out), and, when it passes, added to the days set aside (CHIRPS ×
+      factor, then forecast) and to the fit's left-out days, not spread; (3)
+      in accumulation mode `'asRecorded'`, kept on its day but still left out
+      of the fit; (4) `keepReadings`/`addAccumulations` as for any detection
+      (the harness refuses those today). A probe: 150 blank days ended by
+      30 mm (the `item 11 (b)` case in `open.behaviour.e2e.test.ts`). The probe
+      `accumulation-window-run` (zeros only) is unaffected. Trigger: the next
+      `verify/` change, before engine 1.70.0 ships.
 - [ ] **Zero-rain runs treated as missing (CR-20, issue #2; the hydrologist's answer is on #46). Built
       (2026-09-24): engine, API and CSV export landed in engine 0.15.0
       (audit B2, model.md §2.4c), then the Settings section, the Data tab
