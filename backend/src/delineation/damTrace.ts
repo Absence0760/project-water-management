@@ -17,7 +17,7 @@
 // committed synthetic fixture is waterFixture.ts). A value outside 0–100 (a
 // transparent pixel, GSW's 255 for no data) is no data.
 import { checkGeometry, type Geometry, type Position } from '../geo/geojson.js';
-import { EARTH_RADIUS_M, readWindow, toLonLat, toPx, worldPx } from './delineate.js';
+import { boundsText, EARTH_RADIUS_M, readWindow, toLonLat, toPx, worldPx } from './delineate.js';
 import { openDem, type Dem, type DemInfo } from './dem.js';
 import { simplifyRing, traceOutline } from './outline.js';
 
@@ -85,7 +85,7 @@ export async function traceDam(water: Dem, click: Position, minOccurrence: MinOc
 	const [lon, lat] = click;
 	const [w, s, e, n] = info.bounds;
 	if (lon < w || lon > e || lat < s || lat > n) {
-		throw new TraceRefused('outside', `That point is outside the water occurrence data (${info.label} covers ${w}° to ${e}° E, ${s}° to ${n}° N).`);
+		throw new TraceRefused('outside', `That point is outside the water occurrence data (${info.label} covers ${boundsText(info.bounds)}).`);
 	}
 	const z = Math.min(TRACE_ZOOM, info.maxZoom);
 	const probe = toPx(lon, lat, 2 ** z);

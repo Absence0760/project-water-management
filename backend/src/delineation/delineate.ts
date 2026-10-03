@@ -58,6 +58,10 @@ export interface Delineation {
 	methodVersion: string;
 }
 
+const deg = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? neg : pos}`;
+/** A dataset's bounds in words for a refusal: "20.39° E to 21.09° E, 33.72° S to 33.14° S" (not "-33.7243397° … N"). */
+export const boundsText = ([w, s, e, n]: readonly [number, number, number, number]) => `${deg(w, 'E', 'W')} to ${deg(e, 'E', 'W')}, ${deg(s, 'N', 'S')} to ${deg(n, 'N', 'S')}`;
+
 export const worldPx = (z: number, size: number) => 2 ** z * size;
 export const toPx = (lon: number, lat: number, W: number): [number, number] => {
 	const s = Math.sin((Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI) / 180);
@@ -129,7 +133,7 @@ export async function delineate(
 	const [lon, lat] = click;
 	const [w, s, e, n] = info.bounds;
 	if (lon < w || lon > e || lat < s || lat > n) {
-		throw new DelineationRefused('outside', `That point is outside the elevation model (${info.label} covers ${w}° to ${e}° E, ${s}° to ${n}° N).`);
+		throw new DelineationRefused('outside', `That point is outside the elevation model (${info.label} covers ${boundsText(info.bounds)}).`);
 	}
 	const z = Math.min(TARGET_ZOOM, info.maxZoom);
 	// The tile under the click gives the tile size, and says whether there is data there at all.
