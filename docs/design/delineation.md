@@ -66,7 +66,11 @@ derived from the DEM on the server**, with depression filling.
   clone and CI download nothing.
 - `DEM_URL=http://localhost:9002/tiles/terrain.pmtiles` (what
   `pnpm dev:tiles:env` prints, after `pnpm dev:tiles:terrain`): the local
-  MinIO copy of the operator-fetched DEM, read by ranged GETs.
+  MinIO copy of the operator-fetched DEM, read by ranged GETs. A GET whose
+  connection closes before any answer is sent once more: a large window
+  routes for tens of seconds with the event loop held, so the next read
+  can reuse a kept-alive socket the server closed meanwhile (the gauge
+  rerun's worker windows hit it on every large catchment).
 - `DEM_URL=backend/fixtures/dem/synthetic-dem.pmtiles` (or any file path,
   `file:` URL): the **committed synthetic fixture**, invented terrain (an
   elliptical valley with a river, a dam and its reservoir, a closed pit),
