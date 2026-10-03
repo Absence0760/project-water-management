@@ -50,7 +50,7 @@ test('an editor delineates the valley from its outlet, reviews it and accepts it
 	await expect(r.getByRole('heading', { name: 'The delineated catchment' })).toBeFocused();
 	await r.getByText('How it was made').click();
 	await expect(r.getByTestId('delineate-fact-dataset')).toContainText('Synthetic DEM');
-	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-10]');
+	await expect(r.getByTestId('delineate-fact-method')).toContainText('[delineate-11]');
 	await expect(r.getByTestId('delineate-fact-pans')).toContainText('Non-contributing (pans)');
 	await expect(r.getByRole('heading', { name: 'Before you accept it' })).toBeVisible();
 	for (const scheme of ['light', 'dark'] as const) {

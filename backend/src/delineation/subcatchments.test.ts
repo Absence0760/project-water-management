@@ -438,7 +438,7 @@ describe('delineateUnits: pans (the hydrologist’s review, finding 8)', () => {
 		near(gauge.totalNonContributingM2, r.pans.nonContributingM2, 1e-6);
 		// Reported, not taken out: the areas are what they were.
 		near(dam.areaM2 + r.rest.areaM2, r.catchment.areaM2, 1e-12);
-		expect(r.methodVersion).toBe('start-12');
+		expect(r.methodVersion).toBe('start-13');
 	});
 
 	it('never counts a depression a unit’s point is in: a dam put on the pan makes it that unit’s own basin', async () => {

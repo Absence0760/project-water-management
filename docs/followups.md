@@ -5751,7 +5751,7 @@ handling: Delineation, Map data files, Geometry cost). Left open:
 
 ## Placing a click on the DEM's channel (hydrologist persona findings 4, 7, 13; delineate-5)
 
-- [ ] **A head reach's upper-end area is a constant.** `reach.ts` takes
+- [x] **A head reach's upper-end area is a constant.** `reach.ts` takes
       HydroRIVERS' stated 10 km² threshold (`HEAD_KM2`) for the upper end
       of a reach nothing flows into. Where the DEM drains well under that at
       the head (4 of 27 matched head-reach clicks, 2026-10-03,
@@ -5761,4 +5761,13 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       reach's first vertex (the matching cell there) instead of a constant,
       or match head reaches only within the snap radius. Trigger: the next
       Delineate accuracy round, or a client report of a dam wall placed
-      below itself.
+      below itself. **Done 2026-10-03 (`delineate-11`, `start-13`):** the
+      area is read from the routed window by climbing the DEM's channel from
+      the cell the constant matches to its cell nearest the reach's first
+      vertex (`place.ts` `expectedOnGrid`), the constant kept where the
+      window can't say. On 180 head-reach clicks slides down the click's own
+      channel fell from 6 to 3, within 250 m rose from 89 to 95; reading the
+      most-drained cell near the vertex instead was rejected (hillside
+      cells), and matching only within the snap radius turned 41 of 90
+      clicks into asks
+      ([delineation-snapping.md § The head reach's upper end](./design/delineation-snapping.md#the-head-reachs-upper-end-seventh-experiment-delineate-11)).

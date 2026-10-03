@@ -165,7 +165,7 @@ async function attempt(db: Db, dem: Dem, click: Position, published: number): Pr
 	const reach = r.reach ? { reachId: r.reach.reachId, km2: r.reach.upstreamKm2, distanceM: r.reach.distanceM } : null;
 	try {
 		const d = await delineate(dem, click, {
-			expected: r.reach ? { km2: r.reach.upstreamKm2, reach: `reach ${r.reach.reachId} of ${r.reach.dataset}`, chosen: !!confluence } : null,
+			expected: r.reach ? { km2: r.reach.upstreamKm2, reach: `reach ${r.reach.reachId} of ${r.reach.dataset}`, chosen: !!confluence, head: r.reach.head } : null,
 			junction: r.junction,
 			budgetMs: Infinity
 		});

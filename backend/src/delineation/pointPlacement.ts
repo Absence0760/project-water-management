@@ -65,7 +65,7 @@ export async function pointReaches(db: Db, points: readonly PointToPlace[]): Pro
 			out.set(p.key, {
 				reach: f.reach,
 				chosen: !!p.reach,
-				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, chosen: !!p.reach, reachDistanceM: f.reach?.distanceM ?? null, junction: f.junction, useLarger: !!p.useLarger }
+				hints: { expectedKm2: f.reach?.upstreamKm2 ?? null, head: f.reach?.head ?? null, chosen: !!p.reach, reachDistanceM: f.reach?.distanceM ?? null, junction: f.junction, useLarger: !!p.useLarger }
 			});
 		} catch (err) {
 			if (err instanceof ConfluenceAmbiguity) ambiguous.push({ featureId: p.key, name: p.name, choices: err.choices });

@@ -540,7 +540,8 @@ HydroRIVERS, fixed in `place.ts` / `reach.ts`, and measured before and after
   a head reach) plus the rest in proportion to the length down the line. 27
   matched, 4 slid over 250 m (median slide −24 m, median |slide| 97 m), 0
   gullies, 3 asked. The 4 left are where the DEM drains well under 10 km² at
-  the head, so a cell further down fits the band better.
+  the head, so a cell further down fits the band better: `delineate-11`
+  reads that area from the DEM (§ The head reach's upper end, below).
 
 **Nothing else regressed** (the as-built rules on the first experiment's
 220 reaches, `snap-methods.ts --no-mask`, `AB4`/`AB5` rows of
@@ -567,6 +568,70 @@ snaps with the guard's offer. The confluence experiment
 the app uses it: the picked river within 2.5 km 161 of 180 right before and
 after, the junction rule untouched; an unpicked click there (never placed by
 the app, which asks) flags 24 instead of 16.
+
+## The head reach's upper end (seventh experiment, `delineate-11`)
+
+The sixth experiment took a head reach's upper-end area as HydroRIVERS'
+stated threshold, 10 km² (`reach.ts` `HEAD_KM2`), and left the clicks
+where GLO-30 drains less there sliding down the line. Now the routed
+window gives that area (`place.ts` `expectedOnGrid`): from the cell the
+constant's figure matches, the channel is climbed (into the most-drained
+cell flowing in, down to 0.1 km²) to its cell nearest the reach's first
+vertex, and that cell's area replaces the 10 km². The constant stays where
+the climb passes no nearer than 1 km (the upper end off the window, or
+another channel), where the cell's catchment is cut by the window, or
+where it drains more than the whole reach.
+
+**Reading it nearby doesn't work.** The first try, the most-drained cell
+within 150, 300 or 500 m of the first vertex, read hillside cells of
+0.1–0.3 km² for a third of the heads (the line's vertex sits off the
+DEM's channel as every vertex does) and moved as many clicks onto the
+wrong stream as it fixed (32 of 90 placements changed at 300 m, about
+evenly better and worse). Climbing the channel reads 6–14 km² at most
+heads (median about 10): GLO-30 mostly agrees with the threshold, and the
+fix matters at the few where it doesn't. The followup's other option, matching a head
+reach only within the snap radius (150 m), ended every slide but asked on
+41 of 90 clicks (9 with the constant) and snapped 18: rejected.
+
+`backend/scripts/research/snap-head.ts` clicks the second vertex of
+HydroRIVERS head reaches of 10–50 km² (nothing flowing in, ≥ 3 vertices,
+the reach the nearest and no confluence, South Africa) through the app's
+path (`reachFor`, `delineate`), with `--constant` for the old rule. A
+matched outlet is scored by the click being *inside* its catchment (the
+outlet on the click's own flow path below it: a slide down the channel)
+and by how far it moved; the sixth experiment's slide along the line's
+projection is kept beside it. Two seeds, 90 clicks each (2026-10-03, GLO-30
+from the local MinIO):
+
+| Seed | Rule | Matched within 250 m | Slid > 250 m down its own channel | Matched > 250 m elsewhere | Snapped | Asked | Projection slide > 250 m |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `head-1` | 10 km² (delineate-10) | 44 | 3 | 24 | 10 (1 gully) | 9 | 17 of 71 |
+| `head-1` | DEM's (delineate-11) | 48 | 2 | 21 | 10 (1 gully) | 9 | 14 of 71 |
+| `head-2` | 10 km² | 45 | 3 | 11 | 20 | 10 (+1 too large) | 10 of 59 |
+| `head-2` | DEM's | 47 | 1 | 11 | 20 | 10 (+1 too large) | 7 of 59 |
+
+Of 180 clicks, 24 placements change: slides down the click's own channel
+fall from 6 to 3 (e.g. a 754 m slide to a 5.9 km² cell now matched 122 m
+off at 5.2 km²), within 250 m rises from 89 to 95, and the projection's
+slides over 250 m from 27 to 21. Two get worse: one placed 172 m off now
+goes 270 m to another channel, one 316 m off another channel now lands
+310 m down its own; and a 570 m slide now moves 303 m onto another
+channel, which this score can't call better or worse. The snaps and the asks don't change: the rule only
+moves a click the constant already matched. The first 30 of `head-1`
+(the sixth experiment's count) go from 5 to 4 projection slides over
+250 m; this sampling is not the sixth experiment's (its harness wasn't
+kept), so its 27 / 4 / 3 isn't reproduced exactly.
+
+**Nothing else changed:** the first experiment's 220 reaches
+(`snap-methods.ts --no-mask`, new row `AB6`) place every click on the same
+cell as `AB5`, the table above unchanged (clicked next to the lower end,
+the head's area barely weighs). Reaches with something flowing in are
+untouched by construction.
+
+**What it can't fix:** the "elsewhere" moves (21 and 11) are mostly clicks
+on a hillside beside the channel, the line displaced, which the score
+can't tell from a wrong stream; and where the climb goes up the wrong
+branch at a fork of two similar channels it reads that branch's head.
 
 ## Outlets of quaternaries: the windows (issue #390)
 
