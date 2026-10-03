@@ -7,6 +7,7 @@ import {
 	GEO_MAX_BYTES,
 	GEO_MAX_FEATURES,
 	GEO_MAX_VERTICES,
+	holesNested,
 	kindFromWord,
 	parseGeoJson,
 	pointInGeometry,
@@ -311,5 +312,58 @@ describe('overlapping parts and nested holes', () => {
 		comb.push([1, -1], [0, -1], comb[0]!);
 		const frame = [box(-2, -3, 3, 4), box(-1, -2, 2, 3)];
 		expect(checkGeometry(mp([comb], frame))).toEqual({ problem: expect.stringMatching(/too complex to check for overlaps/) });
+	});
+});
+
+describe('nested holes, checked without comparing every pair (round-4 hardening)', () => {
+	const outer = box(19.9, -30.1, 20.2, -29.8);
+	/** A C: an annulus round (x0, y0) between radii r and R, open over the east (`n` vertices on each arc). */
+	const cShape = (x0: number, y0: number, r: number, R: number, n: number): Position[] => {
+		const at = (rad: number, k: number): Position => {
+			const a = ((10 + (340 * k) / (n - 1)) * Math.PI) / 180;
+			return [Math.round((x0 + rad * Math.cos(a)) * 1e7) / 1e7, Math.round((y0 + rad * Math.sin(a)) * 1e7) / 1e7];
+		};
+		const ring = [...Array.from({ length: n }, (_, k) => at(R, k)), ...Array.from({ length: n }, (_, k) => at(r, n - 1 - k))];
+		return [...ring, ring[0]!];
+	};
+	/** A k × k grid of small square holes filling the square of side `side` centred on (x0, y0). */
+	const grid = (x0: number, y0: number, side: number, k: number): Position[][] => {
+		const step = side / k;
+		const out: Position[][] = [];
+		for (let i = 0; i < k; i++) {
+			for (let j = 0; j < k; j++) {
+				const [w, s] = [x0 - side / 2 + i * step, y0 - side / 2 + j * step];
+				out.push(box(w + 0.2 * step, s + 0.2 * step, w + 0.8 * step, s + 0.8 * step));
+			}
+		}
+		return out;
+	};
+
+	it('finds a hole inside a hole inside a hole, and one that shares its west edge with the hole around it', () => {
+		expect(holesNested([box(0, 0, 10, 10), box(1, 1, 9, 9), box(2, 2, 8, 8)])).toBe(true);
+		expect(holesNested([box(2, 2, 3, 3), box(0, 0, 10, 10)])).toBe(true);
+		expect(holesNested([box(0, 0, 4, 1), box(0, 0.25, 4, 0.75)].reverse())).toBe(true);
+		expect(holesNested([box(0, 0, 1, 1), box(2, 0, 3, 1), box(0, 2, 3, 3)])).toBe(false);
+	});
+
+	it('takes small holes inside a big C-shaped hole’s box but outside the C (positive control: one in the C’s body is refused)', () => {
+		const c = cShape(20.05, -29.95, 0.02, 0.04, 10_000);
+		const small = grid(20.05, -29.95, 0.026, 60);
+		expect(small.length).toBe(3_600);
+		expect(checkGeometry(poly(outer, c, ...small))).toHaveProperty('geometry');
+		// The same, with one more small hole in the C's body (west of its centre, between the radii).
+		const inBody = box(20.05 - 0.0305, -29.9505, 20.05 - 0.0295, -29.9495);
+		expect(checkGeometry(poly(outer, c, ...small, inBody))).toEqual({ problem: expect.stringMatching(/hole inside another hole/) });
+	});
+
+	it('takes a polygon with 4 900 holes side by side, which comparing every pair refused as too complex', () => {
+		const holes = grid(20.05, -29.95, 0.1, 70);
+		expect(problemOf(poly(outer, ...holes))).toBeNull();
+		// Positive control: the same holes with one inside another is refused.
+		const last = holes[holes.length - 1]!;
+		const [w, s] = last[0]!;
+		const [e, n] = last[2]!;
+		const inner = box(w + (e - w) / 4, s + (n - s) / 4, e - (e - w) / 4, n - (n - s) / 4);
+		expect(problemOf(poly(outer, ...holes, inner))).toMatch(/hole inside another hole/);
 	});
 });

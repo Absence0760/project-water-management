@@ -252,6 +252,100 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
 }
 
 /**
+ * Whether a hole lies inside another hole (its area would be taken away
+ * twice). The holes have passed ringsIntersect, so no two cross or touch:
+ * each pair is either apart or one wholly inside the other, and one is
+ * inside another exactly when its first vertex is. This is GEOS's
+ * IndexedNestedHoleTester (IsValidOp, once it knows no rings cross): an
+ * index of the holes' boxes, then a point-in-ring test only for a box that
+ * holds another, against the ring indexed by its edges' latitudes
+ * (IndexedPointInAreaLocator).
+ *
+ * Sub-quadratic: the holes' boxes are swept by their least longitude, so a
+ * hole is compared only with the boxes still open at its west edge, and a
+ * pair goes on to the point-in-ring test only when one box holds the other.
+ * Each ring with candidates inside its box is indexed once into horizontal
+ * strips (about √edges of them, each edge in the strips its latitudes span),
+ * so a big hole with thousands of small holes in its box costs its edges
+ * once plus a strip per candidate, not its edges per candidate. Every box
+ * compared, edge indexed and edge tested counts against GEO_MAX_SWEEP_STEPS;
+ * past it the polygon is refused as too complex (the box comparisons are
+ * already bounded by ringsIntersect's own sweep: boxes open together at a
+ * longitude have edges open together there).
+ */
+export function holesNested(holes: readonly (readonly Position[])[]): boolean {
+	if (holes.length < 2) return false;
+	let steps = 0;
+	const spend = (n: number) => {
+		steps += n;
+		if (steps > GEO_MAX_SWEEP_STEPS) throw new Refused('has holes too complex to check; simplify it');
+	};
+	const boxes = holes.map((r) => {
+		let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+		for (const [x, y] of r) (w = Math.min(w, x)), (e = Math.max(e, x)), (s = Math.min(s, y)), (n = Math.max(n, y));
+		return { w, s, e, n };
+	});
+	spend(holes.reduce((a, r) => a + r.length, 0));
+	const holds = (o: number, i: number) => {
+		const [a, b] = [boxes[o]!, boxes[i]!];
+		return a.w <= b.w && a.e >= b.e && a.s <= b.s && a.n >= b.n;
+	};
+	// Candidate pairs, by the ring that may hold the other.
+	const inside = new Map<number, number[]>();
+	const add = (o: number, i: number) => {
+		const list = inside.get(o);
+		if (list) list.push(i);
+		else inside.set(o, [i]);
+	};
+	const order = holes.map((_, i) => i).sort((a, b) => boxes[a]!.w - boxes[b]!.w);
+	const open: number[] = [];
+	for (const i of order) {
+		const b = boxes[i]!;
+		let kept = 0;
+		for (let k = 0; k < open.length; k++) {
+			const o = open[k]!;
+			if (boxes[o]!.e < b.w) continue; // passed: dropped from the sweep
+			open[kept++] = o;
+			spend(1);
+			// Open boxes start at or west of this one: only an equal west edge lets this one hold the other.
+			if (holds(o, i)) add(o, i);
+			else if (holds(i, o)) add(i, o);
+		}
+		open.length = kept;
+		open.push(i);
+	}
+	for (const [o, list] of inside) {
+		const ring = holes[o]!;
+		const { s, n } = boxes[o]!;
+		const m = ring.length - 1; // edges; the ring is closed
+		const strips = Math.max(1, Math.ceil(Math.sqrt(m)));
+		const h = (n - s) / strips;
+		const strip = (y: number) => Math.min(strips - 1, Math.max(0, Math.floor((y - s) / h)));
+		const index: number[][] = Array.from({ length: strips }, () => []);
+		for (let k = 0; k < m; k++) {
+			const [lo, hi] = [ring[k]![1], ring[k + 1]![1]];
+			const [a, b] = [strip(Math.min(lo, hi)), strip(Math.max(lo, hi))];
+			spend(b - a + 1);
+			for (let t = a; t <= b; t++) index[t]!.push(k);
+		}
+		for (const i of list) {
+			// pointInRing's ray, over the edges of the point's strip only (an edge crosses latitude y only if it spans it).
+			const [px, py] = holes[i]![0]!;
+			const edges = index[strip(py)]!;
+			spend(edges.length);
+			let odd = false;
+			for (const k of edges) {
+				const [xi, yi] = ring[k]!;
+				const [xj, yj] = ring[k + 1]!;
+				if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) odd = !odd;
+			}
+			if (odd) return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Whether `groups` overlap by more than `share` of their area: the area
  * inside two of them (in degrees², planar: a ratio over one catchment)
  * against the sum of their own areas. Each group is one region of closed
@@ -262,7 +356,8 @@ export function pointInRing(p: Position, r: readonly Position[]): boolean {
  * neighbouring quaternaries do, pass, and so do the slivers where two
  * independently digitised neighbours overlap a little along their shared
  * boundary: the DWS quaternaries overlap by up to 0.023 % of a group's area,
- * so OVERLAP_SHARE leaves several times that.
+ * so OVERLAP_SHARE leaves several times that. (Holes inside holes are
+ * holesNested's: rings that can't cross need no area sweep.)
  *
  * Two groups can overlap only inside the box their boxes share, so each
  * pair whose boxes meet is clipped to that box (geo/clip.ts) and swept
@@ -372,7 +467,7 @@ function polygon(a: unknown, count: { n: number }): Position[][] {
 		if (!pointInRing(hole[0]!, rings[0]!)) throw new Refused('has a hole outside its polygon');
 	}
 	// The rings don't cross, so a hole can still lie inside another: its area would be taken away twice.
-	if (rings.length > 2 && polygonsOverlap(rings.slice(1).map((h) => [h]))) throw new Refused('has a hole inside another hole');
+	if (rings.length > 2 && holesNested(rings.slice(1))) throw new Refused('has a hole inside another hole');
 	const xs = rings[0]!.map((p) => p[0]);
 	if (Math.max(...xs) - Math.min(...xs) > 180) throw new Refused('crosses the antimeridian, which isn’t supported');
 	return rings;

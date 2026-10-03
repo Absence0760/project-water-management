@@ -2662,12 +2662,17 @@ placed points. The server never trusts the browser with geometry:
   sawtooth whose edges all overlap in longitude took ~9 s of blocked event
   loop before; now refused in under 0.1 s) and checks a polygon's rings
   against each other, so a hole can't cross its outer ring or another hole.
-  The overlap check (`polygonsOverlap`: MultiPolygon parts, holes inside
-  holes, a boundary file's polygons, a split's two parts) counts every
+  The overlap check (`polygonsOverlap`: MultiPolygon parts, a boundary
+  file's polygons, a split's two parts) counts every
   vertex it clips and every edge it visits per latitude slab against
   `GEO_MAX_SWEEP_STEPS` (10 million) and refuses past it, so a comb of long
   teeth at distinct heights, or hundreds of parts whose boxes all meet,
-  can't make it quadratic.
+  can't make it quadratic. Holes inside holes (`holesNested`) are found by
+  a sweep over the holes' boxes and a point-in-ring test only where one box
+  holds another, the ring indexed into latitude strips, with every box
+  compared and edge indexed or tested counted against the same budget: a
+  big C-shaped hole with thousands of small holes in its box costs its
+  edges once, not once per small hole.
   Placing a dam's outline on the DEM (`rasterize`, start from the map and
   divide) adds each edge only to the rows it spans, rather than testing
   every edge on every row, and refuses past `RASTER_MAX_CROSSINGS`.

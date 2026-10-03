@@ -587,7 +587,13 @@ did, and refuses the whole file on any problem, listing them per feature:
   `geojson.ts` clips each pair of parts whose boxes meet to the box they
   share and sweeps it slab by slab, with its own budget
   (`GEO_MAX_SWEEP_STEPS`); a boundary of all 288 quaternaries of drainage
-  region D (173 000 vertices) checks in about 0.4 s.
+  region D (173 000 vertices) checks in about 0.4 s. Holes need no area
+  sweep, since they can't cross: `holesNested` compares only holes whose
+  boxes are open together in a sweep by longitude, and tests a point of a
+  hole against another only when the other's box holds it, against that
+  ring indexed into latitude strips (GEOS's nested-hole test), so 4 900
+  holes side by side check in about 50 ms where comparing every pair
+  refused them as too complex.
 - **Limits**: 5 MB of text, 500 features, 50 000 positions per feature. The
   route has its own body limit (app.ts exempts it from the general 4 MB).
 - **Properties**: only `name` (or `Name`, `NAME`, `label`, `title`) as the

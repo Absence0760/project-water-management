@@ -5565,12 +5565,14 @@ handling: Delineation, Map data files, Geometry cost). Left open:
       2 000 rows, so minutes at 20 000), so a budget is the fix, not a
       cleverer order; the comb is refused in about 0.3 s
       (`geo/clip.test.ts`, `feeds/boundaryCells.test.ts`).
-- [ ] **Nested holes.** `checkGeometry` now refuses a hole that crosses its
-      outer ring or another hole, but not a hole wholly inside another hole
-      (its area is subtracted twice). A full check is a point-in-ring test
-      per pair of holes, quadratic in the number of holes, so it needs a
-      cap on holes first. Trigger: a real file with nested holes, or an area
-      found below a polygon's outer ring minus its holes.
+- [x] **Nested holes** (2026-10-03). Refused since 8e623dad4 through
+      `polygonsOverlap`, but pairwise: 4 900 holes side by side were
+      refused as too complex. `holesNested` (`geo/geojson.ts`) sweeps the
+      holes' boxes by longitude and tests a point-in-ring only where one box
+      holds another, against the ring indexed into latitude strips (GEOS's
+      IndexedNestedHoleTester), under `GEO_MAX_SWEEP_STEPS`; tested with
+      nested and side-by-side crafted holes, a 20 000-vertex C-shaped hole
+      round 3 600 small ones, and 4 900 holes (`geo/geojson.test.ts`).
 - [ ] **Pin the GDAL image by digest.** `bin/tiles-dev.sh water` runs
       `$GDAL_IMAGE` (`ghcr.io/osgeo/gdal:ubuntu-small-3.11.3`) by tag when
       gdalwarp isn't installed; `pnpm check:pins` doesn't cover it. Pin it
