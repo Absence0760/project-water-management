@@ -19,8 +19,9 @@
 --    the unit took: 'gross' (its whole area, as WR2012's quaternary areas
 --    are) or 'effective' (without what drains into pans). NULL exactly when
 --    the area is typed: a typed change clears it with area_source (store.ts).
---  * Backfill: an accepted proposal's feature gets its pans figure; a Start or
---    Divide parcel gets its piece's from the applied plan; every area already
+--  * Backfill: an accepted proposal's feature gets its pans figure, and a Start or
+--    Divide parcel its piece's from the applied plan, each only while its area
+--    is still the delineated one (a reshaped feature keeps NULL); every area already
 --    from the map was taken gross (the only choice there was).
 --  * No new table, policy, grant or function: the columns inherit their
 --    tables' RLS and water_app's table grants (152).
@@ -44,13 +45,15 @@ ALTER TABLE node
 COMMENT ON COLUMN node.area_basis IS
 	'With area_source = ''map'', which area of area_feature_id was taken: gross (all of it) or effective (less map_feature.non_contributing_m2, what drains into pans; 195). NULL when typed.';
 
--- An accepted delineation's feature: the proposal's figure (capped at the area, which it never exceeds).
+-- An accepted delineation's feature: the proposal's figure (capped at the area, which it never exceeds), only while the
+-- feature still has the proposal's area (not reshaped since: the figure was the delineated outline's).
 UPDATE map_feature f
 	SET non_contributing_m2 = LEAST((p.pans ->> 'nonContributingM2')::double precision, f.area_m2)
 	FROM delineation_proposal p
 	WHERE p.feature_id = f.id AND p.project_id = f.project_id AND p.status = 'accepted'
 		AND p.pans ? 'nonContributingM2' AND f.area_m2 IS NOT NULL
-		AND jsonb_typeof(p.pans -> 'nonContributingM2') = 'number';
+		AND jsonb_typeof(p.pans -> 'nonContributingM2') = 'number'
+		AND abs(f.area_m2 - p.area_m2) <= 1e-6 * p.area_m2 + 0.01;
 
 -- A Start or Divide parcel: its piece's figure from the applied plan (a unit's by its key, the rest's), the
 -- newest plan that made or redrew it, and only while the parcel still has that piece's area (not reshaped since).

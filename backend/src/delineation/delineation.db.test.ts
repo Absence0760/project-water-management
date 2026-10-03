@@ -12,7 +12,7 @@
 //  - deleting the accepted feature keeps the proposal and clears the link;
 //  - a stranger gets 404, and another project's proposal can't be decided;
 //  - the hourly cap answers 429.
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -257,5 +257,42 @@ describe('with the synthetic DEM', () => {
 		);
 		const res = await editor.call('POST', at('/map/delineation'), { ...OUTLET, from: 'outlet' });
 		expect(res.status).toBe(429);
+	});
+});
+
+describe('195’s backfill of an accepted feature’s pans figure', () => {
+	// The migration's own statement, run again over rows as they stood before it (no figure).
+	const MIGRATION = readFileSync(new URL('../../migrations/195_effective_area.sql', import.meta.url), 'utf8');
+	const start = MIGRATION.indexOf('-- An accepted delineation');
+	const BACKFILL = MIGRATION.slice(start, MIGRATION.indexOf(';', start) + 1);
+
+	beforeAll(() => {
+		process.env.DEM_URL = FIXTURE;
+	});
+
+	it('gives an accepted feature its proposal’s figure, never one reshaped since (its outline is no longer the delineated one)', async () => {
+		expect(BACKFILL).toMatch(/abs\(f\.area_m2 - p\.area_m2\)/);
+		const pid = (await owner.call('POST', '/projects', { name: 'Backfill 195' })).body.project.id as string;
+		const accepted = async () => {
+			const r = await owner.call('POST', at('/map/delineation', pid), { ...DAM, from: 'dam_wall' });
+			expect(r.status, JSON.stringify(r.body)).toBe(201);
+			const a = await owner.call('POST', at(`/map/delineation/${r.body.proposal.id}/accept`, pid), { as: 'other' });
+			expect(a.status, JSON.stringify(a.body)).toBe(200);
+			return { feature: a.body.feature.id as string, nc: r.body.proposal.pans.nonContributingM2 as number };
+		};
+		const kept = await accepted();
+		const reshaped = await accepted();
+		expect(kept.nc).toBeGreaterThan(0);
+		// Reshaped in the app: a new outline, a new area (and the app drops the figure itself).
+		const moved = await owner.call('PATCH', at(`/map/features/${reshaped.feature}`, pid), { geometry: { type: 'Polygon', coordinates: SQUARE } });
+		expect(moved.status, JSON.stringify(moved.body)).toBe(200);
+		// As before 195: no figure on either.
+		await asOwner('UPDATE map_feature SET non_contributing_m2 = NULL WHERE project_id = $1', [pid]);
+		await asOwner(BACKFILL);
+		const rows = await asOwner('SELECT id, non_contributing_m2 FROM map_feature WHERE project_id = $1', [pid]);
+		const by = new Map(rows.map((r) => [r.id, r.non_contributing_m2]));
+		// The positive control: the unreshaped one gets its proposal's figure back.
+		expect(by.get(kept.feature)).toBeCloseTo(kept.nc, 6);
+		expect(by.get(reshaped.feature)).toBeNull();
 	});
 });
