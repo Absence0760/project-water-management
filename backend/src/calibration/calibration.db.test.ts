@@ -10,6 +10,7 @@ import { defaultCalibrationRules, runModel, type CalibrationRules, type ModelInp
 import { describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { runTick } from '../jobs/runner.js';
+import { localDate } from '../projects/timeZone.js';
 import { AUTO_CALIBRATION_JOBS_PER_USER } from './schema.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -146,8 +147,8 @@ describe('POST /projects/:id/auto-calibrations', () => {
 			settings: { calibrationRules: { ...settings.calibrationRules, signedOff: { by: 'Dr A. Hydrologist', on: '2000-01-01' } } }
 		});
 		expect(signed.status).toBe(200);
-		// The typed name is the signature; the date is the server's; the account is the audit event's actor.
-		expect(signed.body.project.settings.calibrationRules.signedOff).toEqual({ by: 'Dr A. Hydrologist', on: new Date().toISOString().slice(0, 10) });
+		// The typed name is the signature; the date is the server's, on the project's calendar; the account is the audit event's actor.
+		expect(signed.body.project.settings.calibrationRules.signedOff).toEqual({ by: 'Dr A. Hydrologist', on: localDate(new Date(), 'Africa/Johannesburg') });
 		const [ev] = await asOwner(`SELECT actor_user_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'calibration_rules.signed_off'`, [c.projectId]);
 		expect(ev).toMatchObject({ actor_user_id: owner.id, subject: { revision: 2, fullName: 'Dr A. Hydrologist' } });
 		// Sending the stored sign-off back keeps it, with no new event; a sign-off alone is no rule change.
@@ -158,6 +159,23 @@ describe('POST /projects/:id/auto-calibrations', () => {
 		const withdrawn = await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { calibrationRules: { ...signed.body.project.settings.calibrationRules, signedOff: null } } });
 		expect(withdrawn.body.project.settings.calibrationRules).toMatchObject({ revision: 2, signedOff: null });
 		expect(await asOwner(`SELECT actor_user_id FROM audit_event WHERE project_id = $1 AND kind = 'calibration_rules.sign_off_withdrawn'`, [c.projectId])).toEqual([{ actor_user_id: owner.id }]);
+	});
+
+	it('dates a sign-off on the project’s calendar, not UTC’s', async () => {
+		// A zone whose date differs from UTC's right now, whatever the hour: Pago Pago (UTC−11) is a day
+		// behind before 11:00 UTC, Kiritimati (UTC+14) a day ahead from 10:00 UTC.
+		const zone = new Date().getUTCHours() < 11 ? 'Pacific/Pago_Pago' : 'Pacific/Kiritimati';
+		const owner = await signUp('AutocalSignZone');
+		const c = await calibratable(owner);
+		const settings = (await owner.call('GET', `/projects/${c.projectId}`)).body.project.settings;
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { timeZone: zone })).status).toBe(200);
+		const signed = await owner.call('PATCH', `/projects/${c.projectId}`, {
+			settings: { calibrationRules: { ...settings.calibrationRules, signedOff: { by: 'Dr A. Hydrologist', on: '2000-01-01' } } }
+		});
+		expect(signed.status).toBe(200);
+		const on = localDate(new Date(), zone);
+		expect(on).not.toBe(new Date().toISOString().slice(0, 10));
+		expect(signed.body.project.settings.calibrationRules.signedOff).toEqual({ by: 'Dr A. Hydrologist', on });
 	});
 
 	it('fails a run whose input changed between its cases, saying so', async () => {
@@ -266,7 +284,7 @@ describe('new data queues the calibration rules (after.onNewData)', () => {
 		const [row] = (await owner.call('GET', `/projects/${c.projectId}/auto-calibrations`)).body.calibrations;
 		expect(row).toMatchObject({ trigger: 'new_data', status: 'complete', appliedBy: 'AutocalApply', appliedRunId: expect.any(String) });
 		const after = (await owner.call('GET', `/projects/${c.projectId}`)).body.project.settings;
-		expect(after.fitRecord.auto.rules.signedOff).toEqual({ by: 'x', on: new Date().toISOString().slice(0, 10) });
+		expect(after.fitRecord.auto.rules.signedOff).toEqual({ by: 'x', on: localDate(new Date(), 'Africa/Johannesburg') });
 		const run = (await owner.call('GET', `/projects/${c.projectId}/runs/${row.appliedRunId}`)).body.run;
 		expect(run.trigger).toBe('auto');
 	});
