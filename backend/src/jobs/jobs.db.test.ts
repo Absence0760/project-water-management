@@ -275,6 +275,29 @@ describe('retries, backoff and dead-lettering', () => {
 		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
 	});
 
+	it('a progress report that fails is logged by name and SQLSTATE only, and the job carries on', async () => {
+		const u = await signUp('Progress');
+		const pid = await project(u);
+		const registry: HandlerRegistry = {
+			rerun: defineHandler({
+				role: 'editor',
+				payload: z.object({}).passthrough(),
+				// NaN reaches Postgres as "NaN", which an integer refuses with the value quoted in the error's text.
+				run: async ({ progress }) => {
+					expect(await progress(Number.NaN)).toBe(true);
+				}
+			})
+		};
+		const { job } = await enqueue(u, { projectId: pid, kind: 'rerun' });
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		await runTick({ handlers: registry, projectIds: [pid], feeds: false, reports: false, alerts: false });
+		const lines = warn.mock.calls.map((c) => c.join(' ')).filter((l) => l.includes('"event":"job_progress_failed"'));
+		warn.mockRestore();
+		expect(await jobRow(job.id)).toMatchObject({ status: 'done' });
+		expect(lines).toHaveLength(1);
+		expect(JSON.parse(lines[0]!)).toEqual({ event: 'job_progress_failed', jobId: job.id, error: 'error', code: '22P02' });
+	});
+
 	it('a kind with no handler, or a payload its handler rejects, is dead at once', async () => {
 		const u = await signUp('Unhandled');
 		const pid = await project(u);

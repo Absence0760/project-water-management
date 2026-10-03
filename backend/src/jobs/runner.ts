@@ -113,7 +113,7 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 		const { rows } = await withoutUser((db) => db.query<{ go: boolean }>('SELECT app_job_progress($1, $2, $3) AS go', [job.id, job.leaseToken, v]));
 		return rows[0]?.go !== false;
 	} catch (err) {
-		logEvent('warn', { event: 'job_progress_failed', jobId: job.id, error: (err as Error).message });
+		logEvent('warn', { event: 'job_progress_failed', jobId: job.id, ...safeError(err) });
 		return true;
 	}
 }
@@ -138,7 +138,7 @@ async function scheduleAlertCheck(projectId: string): Promise<void> {
 	try {
 		await withoutUser((db) => db.query("SELECT app_alert_schedule($1, interval '0', 1)", [projectId]));
 	} catch (err) {
-		logEvent('error', { event: 'alert_schedule_failed', projectId, error: (err as Error).message });
+		logEvent('error', { event: 'alert_schedule_failed', projectId, ...safeError(err) });
 	}
 }
 
