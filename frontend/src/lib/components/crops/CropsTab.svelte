@@ -1,3 +1,8 @@
+<script module lang="ts">
+	// Load crop factors (issue #54 item 1) is its own chunk, fetched when first opened (as in CropGrids).
+	const loadCropFactors = () => import('./LoadCropFactorsDialog.svelte');
+</script>
+
 <script lang="ts">
 	// Crops & demand (issue #17, option A · A3): the answers first, the crop
 	// grids one click away. A compact crop list, largest planted area first (a
@@ -19,6 +24,8 @@
 	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Sparkline from '$lib/components/charts/Sparkline.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { prefetch } from '$lib/components/common/lazy';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
 	import { fmtNum, fmtQty } from '$lib/format/number';
@@ -186,6 +193,17 @@
 		});
 	}
 
+	// --- Load crop factors: from the header (and a crop's sheet), mounted on first open, then kept ---
+	let loadMounted = $state(false);
+	let loadOpen = $state(false);
+	function openLoad() {
+		loadMounted = true;
+		loadOpen = true;
+	}
+	let announce = $state('');
+	const loaded = (names: string[]) =>
+		(announce = `Loaded crop factors into ${names.join(', ')}. Review them and save the model to keep them.`);
+
 	// --- the Tables menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
@@ -224,7 +242,12 @@
 			{#each GRID_LINKS as [id, label] (id)}<a href={withParam(page.url, 'grid', id)} onclick={closeGrids}>{label}</a>{/each}
 		</div>
 	</details>
-	{#if !readonly}<button type="button" class="btn" onclick={add}>+ Add crop</button>{/if}
+	{#if !readonly}
+		{#if crops.length}
+			<button type="button" class="btn" onclick={openLoad} onpointerenter={() => prefetch(loadCropFactors)} onfocus={() => prefetch(loadCropFactors)}>Load crop factors…</button>
+		{/if}
+		<button type="button" class="btn" onclick={add}>+ Add crop</button>
+	{/if}
 {/snippet}
 
 {#snippet cropRow(r: CropRow, member: boolean)}
@@ -254,7 +277,10 @@
 		{#if crops.length === 0}
 			<section class="panel" aria-label="No crops yet">
 				<div class="empty">
-					<p>No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors.</p>
+					<p>
+						No crops defined. Add each irrigated crop (e.g. citrus, vines, pasture) with its monthly crop factors{#if !readonly}, or add
+							the crops and then fill their factors from the ARC/SABI library or a workbook with Load crop factors{/if}.
+					</p>
 					{#if !readonly}<button type="button" class="btn btn-primary" bind:this={emptyAddEl} onclick={add}>Add crop</button>{/if}
 				</div>
 			</section>
@@ -269,7 +295,7 @@
 			{#if crops.length}
 				<section class="panel list-card" class:capped={!listAll} aria-labelledby="crop-list-h">
 					<div class="panel-head">
-						<h3 id="crop-list-h">Crops</h3>
+						<h2 id="crop-list-h">Crops</h2>
 						<span class="muted small">Largest planted area first</span>
 					</div>
 					<!-- The sparklines' caption, once, over their column (each keeps it in its accessible name). -->
@@ -300,15 +326,15 @@
 			<div class="results">
 				<section class="panel dem-card" aria-labelledby="crop-dem-h">
 					<div class="panel-head">
-						<h3 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h3>
+						<h2 id="crop-dem-h">Irrigation demand by month <HelpTip key="settings.apanMm" label="About A-pan evaporation" /></h2>
 						<span class="muted small">Gross demand, whole catchment, m³/day</span>
 					</div>
 					{#if !apanSet}
 						<div class="alert alert-info">
 							{#if apanDaily}
-								{DAILY_APAN_NO_MEANS} <a href="?tab=settings">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
+								{DAILY_APAN_NO_MEANS} <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
 							{:else}
-								A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+								A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings#set-demand">Enter the monthly A-pan values</a>
 								(Settings & calibration, Demand).
 							{/if}
 						</div>
@@ -344,7 +370,7 @@
 
 				<section class="panel area-card" aria-labelledby="crop-area-h">
 					<div class="panel-head">
-						<h3 id="crop-area-h">Planted area by hydrological unit</h3>
+						<h2 id="crop-area-h">Planted area by hydrological unit</h2>
 						<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
 					</div>
 					{#if farms.length === 0 || crops.length === 0}
@@ -374,7 +400,15 @@
 	</div>
 
 	{#if sheetCrop && onsave}
-		<CropSheet bind:open={sheetOpen} {editor} cropId={sheetCrop} {farms} {readonly} {onsave} onremove={removed} bind:reason />
+		<CropSheet bind:open={sheetOpen} {editor} cropId={sheetCrop} {farms} {readonly} {onsave} onremove={removed} onloadfactors={openLoad} bind:reason />
+	{/if}
+	<p class="visually-hidden" aria-live="polite">{announce}</p>
+	{#if loadMounted}
+		<Lazy load={loadCropFactors}>
+			{#snippet children(LoadCropFactorsDialog)}
+				<LoadCropFactorsDialog bind:open={loadOpen} {editor} {settings} {farmIds} onapplied={loaded} />
+			{/snippet}
+		</Lazy>
 	{/if}
 {/if}
 
@@ -433,7 +467,7 @@
 		margin: 0;
 		min-width: 0;
 	}
-	.panel-head h3 {
+	.panel-head h2 {
 		font-size: 1.05rem;
 	}
 	.small {
@@ -743,7 +777,8 @@
 			grid-template-rows: auto;
 		}
 	}
-	@media (max-width: 640px) {
+	/* 44rem is 616 px at the 14 px root: the page column of a 640 px window. */
+	@container crops-page (max-width: 44rem) {
 		.demand-chart {
 			height: 240px;
 		}

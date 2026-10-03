@@ -17,14 +17,20 @@
 	// "Add a change" form's check, the list checked to give back the edited
 	// model) and hands them to the scenario editor, which appends them with
 	// one PATCH, as the form does. Edits no op can express are listed and
-	// block recording; nothing is dropped silently.
+	// block recording; nothing is dropped silently. A number field holding text
+	// it can't take counts here, in this editor's own registry
+	// (common/invalidFields), not in the page's save bar: it blocks Record, is
+	// listed with a link, and closing or leaving asks.
 	import { untrack } from 'svelte';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { provideInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import { guardUnsaved } from '$lib/nav/unsaved';
 	import IssueList from '$lib/components/model/IssueList.svelte';
+	import ProblemLinks from '$lib/components/model/ProblemLinks.svelte';
+	import type { ProblemLink } from '$lib/components/model/pageDraft';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import OpList from './OpList.svelte';
 	import { namesOf, opItems } from './ops';
@@ -61,8 +67,12 @@
 	} = $props();
 
 	const editor = new ModelEditor();
+	// The tables' number fields that hold text they can't take: this editor's own, never the page's.
+	const invalidFields = provideInvalidFields();
+	/** Unrecorded work: edits to the model, or typed numbers it hasn't taken. */
+	const unrecorded = $derived(editor.dirty || invalidFields.count > 0);
 	// A table whose chunk fails to download warns about unrecorded edits before offering a reload.
-	provideUnsaved(() => editor.dirty);
+	provideUnsaved(() => unrecorded);
 	let loaded = $state.raw<ModelInput | null>(null);
 	$effect(() => {
 		void loadKey;
@@ -72,7 +82,7 @@
 		});
 	});
 	$effect(() => {
-		dirty = editor.dirty;
+		dirty = unrecorded;
 	});
 
 	type Area = 'network' | 'crops' | 'transfers';
@@ -84,7 +94,9 @@
 	let area = $state<Area>('network');
 
 	const diff = $derived(editor.dirty && loaded ? diffModel(loaded, editor.snapshot()) : null);
-	const blocking = $derived(editor.issues.length);
+	// The tables' problems (IssueList lists them above) and the numbers to fix, linked here.
+	const invalid = $derived<ProblemLink[]>(invalidFields.fields.map((f) => ({ message: f.label ? `${f.label}: ${f.message}` : f.message, href: `#${f.id}` })));
+	const blocking = $derived(editor.issues.length + invalid.length);
 	const pending = $derived(diff && loaded ? opItems(diff.ops, null, null, anonymisedCount ? null : loaded, namesOf([editor.model, loaded.model], diff.ops)) : null);
 	const canRecord = $derived(!!diff && diff.ops.length > 0 && !diff.unsupported.length && !diff.problems.length && !blocking && !saving);
 	let note = $state('');
@@ -96,7 +108,7 @@
 	}
 	async function close() {
 		if (
-			editor.dirty &&
+			unrecorded &&
 			!(await confirmDialog({
 				title: 'Close override mode?',
 				message: `Your edits to the scenario “${scenarioName}” haven't been recorded. Closing override mode loses them.`,
@@ -108,10 +120,14 @@
 			return;
 		onclose();
 	}
+	function discard() {
+		editor.revert();
+		invalidFields.reset();
+	}
 	// A navigation that stays on this scenario (only other URL parameters
 	// change) keeps override mode and its edits: only leaving the scenario
 	// (another tab, scenario or page, or the browser) asks (lib/nav/leaveGuard.ts).
-	guardUnsaved({ dirty: () => editor.dirty, what: () => `override edits not yet recorded in “${scenarioName}”`, leaves: leavesScenario });
+	guardUnsaved({ dirty: () => unrecorded, what: () => `override edits not yet recorded in “${scenarioName}”`, leaves: leavesScenario });
 
 	// Opened below the fold on a long scenario, the sticky "Edits to record" bar would cover this banner and its
 	// Close button (issue #17): bring the banner to the top once, when override mode opens.
@@ -163,8 +179,12 @@
 
 <section class="panel record" aria-labelledby="record-h" data-testid="override-record">
 	<h2 id="record-h">Edits to record</h2>
-	{#if !editor.dirty}
+	{#if !editor.dirty && !invalid.length}
 		<p class="muted">No edits yet. Change a value in the tables above; each edit becomes a change to “{scenarioName}”.</p>
+	{:else if !editor.dirty}
+		<!-- Only typed numbers the tables haven't taken: nothing to record yet, and they block it. -->
+		<p class="warn" role="status">{invalid.length === 1 ? '1 problem' : `${invalid.length} problems`} in the tables to fix before recording.</p>
+		<ProblemLinks problems={invalid} id="override-problems" lead="Fix before recording:" />
 	{:else if diff}
 		{#if diff.unsupported.length}
 			<div class="alert alert-warning" role="status">
@@ -185,6 +205,7 @@
 		{/if}
 		{#if blocking}
 			<p class="warn" role="status">{blocking === 1 ? '1 problem' : `${blocking} problems`} in the tables to fix before recording.</p>
+			<ProblemLinks problems={invalid} id="override-problems" lead="Fix before recording:" />
 		{/if}
 		{#if pending && pending.items.length}
 			<OpList items={pending.items} label="Edits to record in {scenarioName}" />
@@ -193,10 +214,10 @@
 		{/if}
 	{/if}
 	<div class="toolbar">
-		<button type="button" class="btn btn-primary" disabled={!canRecord} onclick={record}
+		<button type="button" class="btn btn-primary" disabled={!canRecord} onclick={record} aria-describedby={invalid.length ? 'override-problems' : undefined}
 			>{saving ? 'Recording…' : diff?.ops.length ? `Record ${diff.ops.length === 1 ? '1 change' : `${diff.ops.length} changes`}` : 'Record changes'}</button
 		>
-		<button type="button" class="btn" disabled={!editor.dirty || saving} onclick={() => editor.revert()}>Discard edits</button>
+		<button type="button" class="btn" disabled={!unrecorded || saving} onclick={discard}>Discard edits</button>
 	</div>
 	<p class="visually-hidden" role="status">{note}</p>
 </section>

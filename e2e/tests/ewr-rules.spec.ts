@@ -8,6 +8,8 @@ import { copyProject, createProject, createRun, putModel, putSeries, sampleModel
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { whatChanged } from '../support/compare.ts';
+import { answerConfirm } from '../support/confirm.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 
 const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
 const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
@@ -50,7 +52,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	await page.goto(`/projects/${id}?tab=settings`);
 
 	const section = page.getByRole('region', { name: /^Reserve rule tables/ });
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	await expect(section.getByText('No rule table: runs report the days below the pragmatic EWR only.')).toBeVisible();
 	await section.getByRole('button', { name: 'Add a rule table' }).click();
 
@@ -97,8 +99,7 @@ test('a rule table pasted from a spreadsheet is checked, saved and reloaded', as
 	await expect(save).toBeEnabled();
 	await expectNoViolations(page);
 
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(table.getByLabel('Source', { exact: true })).toHaveValue('Synthetic determination, table 1');
 	await expect(table.getByLabel('Recommended ecological category (REC)')).toHaveValue('B/C');
@@ -162,7 +163,7 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await updateSettings(page.request, id, { ewrRules: [janOnlyTable(0)] });
 	await page.goto(`/projects/${id}?tab=settings`);
 	const section = page.getByRole('region', { name: /^Reserve rule tables/ });
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	const table = section.getByRole('group', { name: 'Rule table at Outlet (Outflow gauge)' });
 
 	// Splitting out the low flows adds a blank grid that blocks Save until it is filled.
@@ -184,8 +185,7 @@ test('low flows and a freshet are entered by paste, saved and reloaded (engine 0
 	await expect(save).toBeEnabled();
 	await expectNoViolations(page);
 
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(table.getByLabel('Low flows (maintenance to drought), Jan, 50 %, Mm³')).toHaveValue('0');
 	await expect(high.getByLabel('High flow 1 daily-mean peak, m³/s')).toHaveValue('0.2');
@@ -250,4 +250,52 @@ test('run comparison compares Reserve compliance and lists the rule-table change
 	await expect(table.getByRole('row', { name: /^Months not met 3 0/ })).toBeVisible();
 	const months = section.getByRole('table', { name: /^Share of months met per month of the year/ });
 	await expect(months.getByRole('row', { name: /^Jan 0% 100%/ })).toBeVisible();
+});
+
+test('Add a rule table sits above the tables; removing a table, or filling over typed values, asks first', async ({ page, owner }) => {
+	void owner;
+	const id = await seedThreeYears(page.request, 'Reserve rules asks');
+	await updateSettings(page.request, id, {
+		ewrRules: [{ ...janOnlyTable(2), highFlows: [{ label: 'Synthetic freshet', months: [11, 12, 1], peakM3s: 0.2, durationDays: 2, perYear: 1 }] }]
+	});
+	await page.goto(`/projects/${id}?tab=settings`);
+	const section = page.getByRole('region', { name: /^Reserve rule tables/ });
+	const table = section.getByRole('group', { name: 'Rule table at Outlet (Outflow gauge)' });
+	await expect(table).toBeVisible();
+	// The "new" action is above the first table (in the panel head), not screens down under them.
+	const add = (await section.getByRole('button', { name: 'Add a rule table' }).boundingBox())!;
+	expect(add.y).toBeLessThan((await table.boundingBox())!.y);
+	// The high flows' caption is hidden text, not a repeat of the legend on screen.
+	const caption = (await table.locator('caption', { hasText: 'High-flow components at' }).boundingBox())!;
+	expect(caption.width * caption.height).toBeLessThanOrEqual(1);
+
+	// Fill over a grid that holds values: asked, naming how many; Cancel keeps them.
+	const csv = ['Month,' + POINTS.map((p) => `${p}%`).join(','), ...MONTHS.map((m) => `${m},${POINTS.map(() => '5').join(',')}`)].join('\n');
+	await table.getByLabel('Paste from a spreadsheet').fill(csv);
+	await table.getByRole('button', { name: 'Fill the EWR values' }).click();
+	await answerConfirm(page, false, 'The 10 values in the grid will be replaced by the pasted ones.');
+	await expect(table.getByLabel('EWR, Jan, 50 %, Mm³')).toHaveValue('2');
+	// The same for the high flows.
+	const high = table.getByRole('group', { name: 'High flows: freshets and floods' });
+	await high.getByLabel('Paste high flows').fill('Other freshet,Oct,0.5,1,1');
+	await high.getByRole('button', { name: 'Fill the high flows' }).click();
+	await answerConfirm(page, false, 'The 1 component listed will be replaced by the 1 filled in.');
+	await expect(high.getByLabel('High flow 1 name')).toHaveValue('Synthetic freshet');
+
+	// Months that don't read are said under their field, block the save, and are listed in the save bar.
+	const months = high.getByLabel('High flow 1 months it may peak in');
+	await months.fill('Smarch');
+	await expect(months).toHaveAccessibleDescription('Enter the months as names or numbers, e.g. Nov-Jan or Nov Dec Jan.');
+	await expect(saveChanges(page)).toBeDisabled();
+	await expect(page.getByRole('region', { name: /^Unsaved / }).getByRole('link', { name: /^High flow 1 months it may peak in: Enter the months/ })).toBeVisible();
+	await months.fill('Nov-Jan');
+	await expect(months).not.toHaveAttribute('aria-invalid', 'true');
+
+	// Remove the table: asked; Cancel keeps it, Remove the table removes it.
+	await table.getByRole('button', { name: 'Remove the rule table at Outlet (Outflow gauge)' }).click();
+	await answerConfirm(page, false, 'Remove the rule table at Outlet (Outflow gauge)?');
+	await expect(table).toBeVisible();
+	await table.getByRole('button', { name: 'Remove the rule table at Outlet (Outflow gauge)' }).click();
+	await answerConfirm(page, true, 'Its EWR grid, 1 high-flow component and source go with it.');
+	await expect(table).toHaveCount(0);
 });

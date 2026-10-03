@@ -17,6 +17,7 @@
 	// abstraction of its own with its own pump and pool (WaterSourceFields,
 	// engine ≥ 1.65.0, issue #344). The objects are the editor's own, so edits
 	// land in the model directly.
+	import { tick } from 'svelte';
 	import {
 		BASIC_NEEDS_CATEGORIES,
 		DEMAND_OBJECT_CATEGORIES,
@@ -33,6 +34,9 @@
 		type NetworkNode
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { hasDam } from './fields';
+	import { demandObjectQuestion, focusAfter, itemName } from './removeQuestions';
 	import DemandScheduleFields from './DemandScheduleFields.svelte';
 	import WaterSourceFields from './WaterSourceFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -77,6 +81,21 @@
 	/** Its mean abstraction demand over the year, m³/day (the engine's own sizing). */
 	const meanOf = (o: DemandObject) => objectMonthlyM3Day(o, []).reduce((s, v) => s + v, 0) / 12;
 
+	/** "Town A", or "demand 2" while it has no name: in its month fields' names and its water source's. */
+	const whoOf = (o: DemandObject, i: number) => o.name.trim() || `demand ${i + 1}`;
+	let addBtn: HTMLButtonElement | undefined = $state();
+
+	/** Asks first when the object holds a demand, a schedule or a note, then puts the focus on the next one (or the add row). */
+	async function remove(o: DemandObject, i: number) {
+		const q = demandObjectQuestion(o, i);
+		if (q && !(await confirmDialog(q))) return;
+		const at = focusAfter(i, objects.length);
+		const nextId = at === null ? null : objects.filter((x) => x.id !== o.id)[at]?.id;
+		onremove?.(o.id);
+		await tick();
+		(nextId ? document.getElementById(`do-name-${nextId}`) : addBtn)?.focus();
+	}
+
 	function setDestination(o: DemandObject, d: DemandObjectDestination) {
 		o.destination = d;
 		// Nothing returns from water piped out (the save refuses a return share there).
@@ -97,7 +116,7 @@
 				<legend><span class="lbl">Supply order on a short day<HelpTip key="demandObject.priority" /></span></legend>
 				<p class="muted small">
 					1 is supplied first; demands at one number share pro rata. Pick “between” to put one in a place of its own. The order holds among the demands on one water source: the
-					unit’s own supply ({node.damCapacityM3 > 0 ? 'its dam, river pump and boreholes' : 'its river pump and boreholes'}) serves its demands first, and the river abstractions
+					unit’s own supply ({hasDam(node) ? 'its dam, river pump and boreholes' : 'its river pump and boreholes'}) serves its demands first, and the river abstractions
 					share what passes it, each in this order.
 				</p>
 				<ol class="order-list">
@@ -127,6 +146,8 @@
 		<ul class="list">
 			{#each objects as o, i (o.id)}
 				<li data-testid="demand-object-{o.id}">
+					<fieldset class="obj">
+					<legend>Demand object {i + 1}{o.name.trim() ? `: ${o.name.trim()}` : ''}</legend>
 					<div class="grid">
 						<div class="field">
 							<label for="do-name-{o.id}">Name</label>
@@ -192,7 +213,7 @@
 								<NumberInput id="do-lpd-{o.id}" min={0} grouped disabled={readonly} value={o.litresPerUnitDay ?? 0} onchange={(v) => (o.litresPerUnitDay = v ?? 0)} />
 							</div>
 							<div class="field">
-								<label for="do-loss-{o.id}">Distribution losses <span class="u">(%)</span></label>
+								<span class="lbl"><label for="do-loss-{o.id}">Distribution losses <span class="u">(%)</span></label><HelpTip key="demand-object" label="About demand objects: sizing and losses" /></span>
 								<NumberInput id="do-loss-{o.id}" min={0} max={99} scale={100} disabled={readonly} value={o.lossPct} onchange={(v) => (o.lossPct = v ?? 0)} />
 							</div>
 						{/if}
@@ -215,7 +236,7 @@
 						{/if}
 						<WaterSourceFields
 							idBase="ws-{o.id}"
-							who={o.name || `demand ${i + 1}`}
+							who={whoOf(o, i)}
 							helpKey="demandObject.waterSource"
 							rule={SUPPLY_RULE_LABEL[node.supplyRule ?? 'damFirst']}
 							source={o.waterSource}
@@ -227,13 +248,14 @@
 							onpool={(v) => (o.riverPoolM3 = v)}
 						/>
 						<div class="field check">
-							<label><input type="checkbox" disabled={readonly} bind:checked={o.enabled} /> Modelled</label>
+							<label><input type="checkbox" disabled={readonly} bind:checked={o.enabled} aria-describedby="do-on-hint-{o.id}" /> Modelled</label>
+							<span class="muted small" id="do-on-hint-{o.id}">Untick to keep it on record without running it.</span>
 						</div>
 					</div>
 					{#if o.sizing === 'monthly'}
 						<MonthFields
 							values={o.monthlyM3Day}
-							label={(m) => `Demand of ${o.name} in ${m}, m³/day`}
+							label={(m) => `Demand of ${whoOf(o, i)} in ${m}, m³/day`}
 							caption="Demand, m³/day, per month"
 							fillLabel="Use October’s demand for every month"
 							{readonly}
@@ -242,7 +264,7 @@
 					{:else}
 						<MonthFields
 							values={o.monthlyFactor}
-							label={(m) => `Profile of ${o.name} in ${m}`}
+							label={(m) => `Profile of ${whoOf(o, i)} in ${m}`}
 							caption="Monthly profile (× the daily use; blank = 1)"
 							blank={1}
 							grouped={false}
@@ -263,9 +285,10 @@
 					{/if}
 					{#if !readonly}
 						<div class="row-actions">
-							{#if onremove}<button type="button" class="btn btn-sm" onclick={() => onremove(o.id)}>Remove demand object {i + 1}</button>{/if}
+							{#if onremove}<button type="button" class="btn btn-sm" onclick={() => remove(o, i)}>Remove {itemName(o.name, 'demand object', i)}</button>{/if}
 						</div>
 					{/if}
+					</fieldset>
 				</li>
 			{/each}
 		</ul>
@@ -276,7 +299,7 @@
 			<select id="do-new-{node.id}" bind:value={newCategory}>
 				{#each DEMAND_OBJECT_CATEGORIES as c (c)}<option value={c}>{DEMAND_OBJECT_CATEGORY_LABEL[c]}</option>{/each}
 			</select>
-			<button type="button" class="btn" onclick={() => onadd(newCategory)}>+ Add demand</button>
+			<button type="button" class="btn" onclick={() => onadd(newCategory)} bind:this={addBtn}>+ Add demand</button>
 		</div>
 	{/if}
 </div>
@@ -288,8 +311,30 @@
 		margin: 0 0 0.5rem;
 	}
 	.list li {
-		border-top: 1px solid var(--border);
-		padding: 0.5rem 0;
+		padding: 0.5rem 0 0;
+	}
+	/* Each object a small card titled by its name, so its fields read as its own. */
+	.obj {
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		margin: 0;
+		padding: 0 0.75rem 0.5rem;
+		min-width: 0;
+	}
+	.obj > legend {
+		float: left;
+		width: calc(100% + 1.5rem);
+		margin: 0 -0.75rem 0.5rem;
+		padding: 0.35rem 0.75rem;
+		background: var(--surface-2);
+		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius) var(--radius) 0 0;
+		font-weight: 600;
+		font-size: 0.9rem;
+		overflow-wrap: anywhere;
+	}
+	.obj > legend + * {
+		clear: both;
 	}
 	.grid {
 		display: grid;

@@ -68,7 +68,8 @@ test('order two municipalities before the crops, one after the other, and keep i
 	// Back to one object: the dropdown returns, and the one left keeps no rank it can't show.
 	await page.setViewportSize({ width: 1280, height: 900 });
 	const objs = page.getByRole('group', { name: 'Demand objects', exact: true });
-	await objs.getByRole('button', { name: 'Remove demand object 1' }).click();
+	// Town A holds no demand yet, so it goes without a question; the button names it.
+	await objs.getByRole('button', { name: 'Remove Town A' }).click();
 	await expect(objs.getByRole('group', { name: /^Supply order on a short day/ })).toHaveCount(0);
 	await expect(objs.getByLabel('Priority', { exact: true })).toHaveValue('first');
 });

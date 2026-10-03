@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyAreaPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
+import { applyAreaPaste, applyFactorPaste, cropFactorsCsv, planFactorPaste, plantedAreasCsv, planAreaPaste } from './areaPaste';
 
 const farms = [
 	{ id: 'u', name: 'Upper farm' },
@@ -65,5 +65,59 @@ describe('plantedAreasCsv', () => {
 		expect(plan(planAreaPaste(csv, fs, cs, a))).toEqual({ changes: [], unchanged: 4, notes: ['Matched 2 rows by name.'] });
 		const p = plan(planAreaPaste(csv.replace('Farm A (east),0,0', 'Farm A (east),0,7'), fs, cs, a));
 		expect(p.changes.map((c) => [c.rowId, c.key, c.to])).toEqual([['e', 'my', 7]]);
+	});
+});
+
+describe('planFactorPaste', () => {
+	const factors = () => [
+		{ id: 'c', name: 'Citrus', cropFactor: [0.6, 0.7, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.4, 0.4, 0.5, 0.6] },
+		{ id: 'v', name: 'Vines', cropFactor: new Array(12).fill(0) }
+	];
+	const plan = (r: ReturnType<typeof planFactorPaste>) => {
+		if ('error' in r) throw new Error(r.error);
+		return r;
+	};
+
+	it('takes one copied row of 12 months into the crop it was pasted into, from that month on', () => {
+		const p = plan(planFactorPaste('0.3\t0.45\t0.6\t0.6\t0.6\t0.45\t0.3\t0\t0\t0\t0\t0.15', factors(), { row: 1, col: 0 }));
+		expect(p.changes.map((c) => [c.rowId, c.column, c.to])).toEqual([
+			['v', 'Oct', 0.3],
+			['v', 'Nov', 0.45],
+			['v', 'Dec', 0.6],
+			['v', 'Jan', 0.6],
+			['v', 'Feb', 0.6],
+			['v', 'Mar', 0.45],
+			['v', 'Apr', 0.3],
+			['v', 'Sep', 0.15]
+		]);
+		expect(p.unchanged).toBe(4);
+		const set: [string, number, number][] = [];
+		applyFactorPaste(p, (id, m, f) => set.push([id, m, f]));
+		expect(set[0]).toEqual(['v', 0, 0.3]);
+		expect(set.at(-1)).toEqual(['v', 11, 0.15]);
+	});
+
+	it('matches crops by name and months by heading, short or long, in any order', () => {
+		const p = plan(planFactorPaste('Crop\tJanuary\tOct\nvines\t1,05\t0,2', factors()));
+		expect(p.changes.map((c) => [c.rowId, c.key, c.from, c.to])).toEqual([
+			['v', '3', 0, 1.05],
+			['v', '0', 0, 0.2]
+		]);
+		expect(p.notes).toContain('Matched 1 row by name.');
+	});
+
+	it('stops on a negative factor and on a row longer than the months left', () => {
+		expect(planFactorPaste('Citrus\t-0.1', factors())).toEqual({ error: 'Citrus, Oct: a crop factor of -0.1 is below 0.' });
+		expect(planFactorPaste('1\t2\t3', factors(), { row: 0, col: 10 })).toHaveProperty('error');
+	});
+});
+
+describe('cropFactorsCsv', () => {
+	it('is the grid with a heading of months and pastes back as no change', () => {
+		const crops = [{ id: 'c', name: 'Citrus', cropFactor: [0.6, 0.7, 0.8, 0.8, 0.8, 0.7, 0.6, 0.5, 0.4, 0.4, 0.5, 0.6] }];
+		const csv = cropFactorsCsv(crops);
+		expect(csv).toBe('Crop,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep\r\nCitrus,0.6,0.7,0.8,0.8,0.8,0.7,0.6,0.5,0.4,0.4,0.5,0.6\r\n');
+		const p = planFactorPaste(csv, crops);
+		expect('error' in p ? p.error : p.changes).toEqual([]);
 	});
 });

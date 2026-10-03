@@ -12,6 +12,7 @@ import { addMember, createProject, createRun, putSeries, seedRunnableProject } f
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
@@ -447,8 +448,7 @@ test('with automatic runs on, new data runs the model without anyone pressing Ru
 	await group.getByLabel('Re-run the model after new data').check();
 	await group.getByLabel(/^Wait after the latest new data/).fill('0');
 	await expect(group.getByLabel('Publishing')).toHaveValue('never');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// New days (the seed's rain runs 2021-10-01 to 2022-01-28): the merge answers when the re-run is due.
 	const merged = await page.request.post(`${API_URL}/projects/${project.id}/series/merge`, {

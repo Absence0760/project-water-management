@@ -20,6 +20,8 @@
 	import { inStoredUnit, latestFileText, type UploadResult, type UploadSubmit } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
+	import { newSeriesEffect } from './roles';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
 
 	let {
 		projectId,
@@ -61,6 +63,10 @@
 	// A kind picked by hand is never overridden by the file-name guess.
 	let kindTouched = $state(false);
 	let targetValues = $state.raw<Daily | null>(null);
+	// The stored values failed to load (the merge preview needs them): said in the summary, with Try again.
+	let targetError = $state<string | null>(null);
+	let targetTry = $state(0);
+	let errorEl: HTMLElement | undefined = $state();
 	// CHIRPS only (issue #40 part c): which product and version the file holds, as a provenance key ('' = not recorded).
 	let provenanceKey = $state('');
 	let provenanceTouched = $state(false);
@@ -114,8 +120,12 @@
 	const labelFields = $derived(
 		askProvenance ? (provenanceKey ? provenanceFields(provenanceKey) : null) : askFree ? freeProvenanceFields(freeProduct, freeVersion) : null
 	);
+	// One of the free pair filled and not the other: the server refuses a half label, so the form asks for both or neither.
+	const halfLabel = $derived(askFree && !freeProvenanceFields(freeProduct, freeVersion) && !!(freeProduct.trim() || freeVersion.trim()));
 	const boundaryFields = $derived(subDailyText !== null ? { dayBoundary } : {});
 	const namesForKind = $derived(list.filter((s) => s.kind === kind).map((s) => s.name));
+	// A new series of a kind that has some: whether runs will read it, and the name it was probably meant to be.
+	const newEffect = $derived(target ? null : newSeriesEffect(list, kind, name));
 	// The file in the stored unit, so the preview compares like with like.
 	const stored = $derived(parsed ? inStoredUnit(kind, unit.trim(), parsed.values) : null);
 	const preview = $derived(
@@ -146,9 +156,11 @@
 		if (asking && overwrite) return overwrite.changes ? `Overwrite ${plural(overwrite.days, 'day')}` : `Replace ${plural(overwrite.days, 'day')}`;
 		return target && mode === 'merge' ? 'Upload and merge' : target ? 'Upload and replace' : 'Upload';
 	});
-	const submitDisabled = $derived(asking ? uploading : !parsed || uploading || !unit.trim() || (!!target && mode === 'merge' && !preview));
+	const submitDisabled = $derived(
+		asking ? uploading : !parsed || uploading || !unit.trim() || halfLabel || (!!target && mode === 'merge' && !preview)
+	);
 	$effect(() => {
-		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking };
+		submit = { label: submitLabel, disabled: submitDisabled, confirming: asking, uploading };
 	});
 	/** Back out of the overwrite question (the dialog's Back). */
 	export function back() {
@@ -163,9 +175,12 @@
 	const units = $derived(unitOptions(kind));
 	const converted = $derived(unit && units[0] && unit !== units[0] ? units[0] : null);
 
-	// Stored values of the target series, for the merge preview.
+	// Stored values of the target series, for the merge preview. A failed read is kept and said, with Try
+	// again (`targetTry`): without the stored values the merge can't say what it changes, so it waits.
 	$effect(() => {
 		const t = target;
+		void targetTry;
+		targetError = null;
 		if (!t) {
 			targetValues = null;
 			return;
@@ -182,10 +197,18 @@
 				const v = cacheValues(projectId, d);
 				if (target?.id === t.id) targetValues = v;
 			})
-			.catch(() => {});
+			.catch((e: unknown) => {
+				if (target?.id === t.id) targetError = msg(e);
+			});
+	});
+	// A refused upload's reason is about that file, series, mode and unit: another choice clears it.
+	$effect(() => {
+		void [kind, name, mode, unit];
+		untrack(() => (error = null));
 	});
 
 	function onKind(k: string) {
+		error = null;
 		kind = k;
 		// Keep a chosen unit while it still fits the kind (l/s for another flow); else the kind's own.
 		if (!unitTouched || !unitOptions(k).includes(unit)) unit = defaultUnit(k);
@@ -200,6 +223,7 @@
 		parsed = null;
 		parseError = null;
 		uploadDone = null;
+		error = null;
 		guessed = null;
 		subDailyText = null;
 		parseSeq++;
@@ -309,6 +333,9 @@
 			await onuploaded?.(result);
 		} catch (err) {
 			error = msg(err);
+			// Beside the action, but the dialog's body may be scrolled: bring it into view.
+			await tick();
+			errorEl?.scrollIntoView({ block: 'nearest' });
 		} finally {
 			uploading = false;
 		}
@@ -316,7 +343,6 @@
 </script>
 
 <form id={id('form')} onsubmit={upload}>
-	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<details class="fmt">
 		<summary>File formats</summary>
 		<p>Two columns, <span class="mono">date,value</span>, one row per day; a header row is optional.</p>
@@ -334,18 +360,18 @@
 				YYYYMMDD), as text or the saved page. Days whose quality code says the data is missing (151, 165, 170, 172, 246, 247, 255), and blank
 				or negative values such as -999, are stored as gaps; the summary counts them.
 			</li>
-			<li>Units: rainfall in mm per day; flow as the daily mean in m³/s.</li>
+			<li>Units: pick the file's unit below and the values are converted; flow is stored as the daily mean in m³/s, rain and evaporation in mm per day.</li>
 			<li>Name the file after the series (e.g. <span class="mono">Weir flow.csv</span>) and it is picked for you.</li>
 		</ul>
 	</details>
 	<div class="field">
-		<label for={id('file')}>CSV file</label>
+		<label for={id('file')}>CSV file or DWS export</label>
 		<input id={id('file')} type="file" accept=".csv,.tsv,.txt,.htm,.html,text/csv,text/plain" bind:this={fileInput} onchange={(e) => read(e.currentTarget.files?.[0])} />
 		{#if fileName && !fileInput?.files?.length}<span class="hint">{fileName}</span>{/if}
 	</div>
 	{#if guessed}<p class="hint muted guess">Looks like <strong>{guessed}</strong> — change below if not.</p>{/if}
 	<div class="field">
-		<label for={id('kind')}>Kind</label>
+		<span class="label-row"><label for={id('kind')}>Kind</label><HelpTip key={`series.${kind}`} /></span>
 		<select id={id('kind')} value={kind} onchange={(e) => ((kindTouched = true), onKind(e.currentTarget.value))}>
 			{#each KIND_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
 		</select>
@@ -388,16 +414,34 @@
 			</span>
 		</div>
 	{:else if askFree}
-		<div class="form-row">
-			<div class="field grow">
-				<label for={id('product')}>Product <span class="muted">(optional)</span></label>
-				<input id={id('product')} maxlength="40" placeholder="e.g. SASSCAL AWS, ERA5" bind:value={freeProduct} />
+		<fieldset class="pair">
+			<legend>Product and version <span class="muted">(optional)</span></legend>
+			<div class="form-row">
+				<div class="field grow">
+					<label for={id('product')}>Product</label>
+					<input
+						id={id('product')}
+						maxlength="40"
+						placeholder="e.g. SASSCAL AWS, ERA5"
+						bind:value={freeProduct}
+						aria-invalid={halfLabel && !freeProduct.trim() ? 'true' : undefined}
+						aria-describedby={halfLabel && !freeProduct.trim() ? id('pair-h') : undefined}
+					/>
+				</div>
+				<div class="field unit">
+					<label for={id('version')}>Version</label>
+					<input
+						id={id('version')}
+						maxlength="20"
+						placeholder="e.g. 1"
+						bind:value={freeVersion}
+						aria-invalid={halfLabel && !freeVersion.trim() ? 'true' : undefined}
+						aria-describedby={halfLabel && !freeVersion.trim() ? id('pair-h') : undefined}
+					/>
+				</div>
 			</div>
-			<div class="field unit">
-				<label for={id('version')}>Version</label>
-				<input id={id('version')} maxlength="20" placeholder="e.g. 1" bind:value={freeVersion} />
-			</div>
-		</div>
+			{#if halfLabel}<span class="hint warn-text" id={id('pair-h')} data-testid="half-label">Give both, or leave both blank.</span>{/if}
+		</fieldset>
 	{/if}
 	{#if subDailyText !== null}
 		<fieldset class="mode" data-testid="day-boundary">
@@ -422,8 +466,27 @@
 			<label><input type="radio" name="{idPrefix}-mode" value="merge" bind:group={mode} /> Append / update: add new days, correct overlapping ones</label>
 			<label><input type="radio" name="{idPrefix}-mode" value="replace" bind:group={mode} /> Replace the whole series with this file</label>
 		</fieldset>
-	{:else}
-		<p class="hint muted">Creates a new series. Pick an existing name to append to it instead.</p>
+	{:else if newEffect}
+		{@const what = kindLabel(kind)}
+		{@const cur = newEffect.current ? `“${newEffect.current.name || what}”` : ''}
+		<p class="hint muted" data-testid="new-series-effect">
+			{#if newEffect.effect === 'first'}
+				Creates a new series.
+			{:else if newEffect.effect === 'replaces'}
+				Creates a second {what} series. Runs read the first by name, so this one <strong>will replace {cur || 'the one they read'} in runs</strong>.
+			{:else if newEffect.effect === 'keeps'}
+				Creates a second {what} series. Runs read the first by name, so they keep reading {cur}.
+			{:else}
+				Creates a second {what} series.
+			{/if}
+			{#if newEffect.didYouMean}
+				{@const dym = newEffect.didYouMean}
+				Did you mean “{dym.name}”?
+				<button type="button" class="btn btn-sm" onclick={() => (name = dym.name)}>Use “{dym.name}”</button>
+			{:else if newEffect.effect !== 'first'}
+				Pick an existing name to append to it instead.
+			{/if}
+		</p>
 	{/if}
 	{#if converted}
 		<p class="hint muted" data-testid="unit-converted">Values in {unit} are converted to {converted} when saved.</p>
@@ -501,6 +564,14 @@
 						</dd>
 					</div>
 				{/if}
+			{:else if target && mode === 'merge' && targetError}
+				<div class="wide">
+					<dt>Couldn't read the stored series to compare</dt>
+					<dd class="target-error" role="alert" data-testid="target-error">
+						<span>“{target.name || kindLabel(target.kind)}”: {targetError}</span>
+						<button type="button" class="btn btn-sm" onclick={() => targetTry++}>Try again</button>
+					</dd>
+				</div>
 			{:else if target && mode === 'merge'}
 				<div class="wide"><dt>Comparing with the stored series…</dt><dd></dd></div>
 			{:else if target && mode === 'replace'}
@@ -544,7 +615,10 @@
 				</div>
 			{/if}
 		</div>
-	{:else if !external}
+	{/if}
+	<!-- A refused upload, beside the action that sent it (the dialog's body scrolls; the top of the form is out of sight). -->
+	{#if error}<div class="alert alert-error upload-error" role="alert" bind:this={errorEl} data-testid="upload-error">{error}</div>{/if}
+	{#if !asking && !external}
 		<button type="submit" class="btn btn-primary" disabled={submitDisabled}>{submitLabel}</button>
 	{/if}
 </form>
@@ -574,6 +648,33 @@
 		margin: 0.25rem 0 0;
 		padding-left: 1.1rem;
 		color: var(--text-2);
+	}
+	.label-row {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.pair {
+		border: 0;
+		padding: 0;
+		margin: 0 0 0.75rem;
+		min-width: 0;
+	}
+	.pair legend {
+		font-size: 0.85rem;
+		font-weight: 600;
+		padding: 0;
+		margin-bottom: 0.25rem;
+	}
+	.target-error {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.6rem;
+		color: var(--danger);
+	}
+	.upload-error {
+		margin: 0.75rem 0 0;
 	}
 	.guess {
 		margin: -0.25rem 0 0.5rem;

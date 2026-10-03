@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lastWaterYear, newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback, withQuantileMap } from './rainSource';
+import { lastWaterYear, newRainSourcePeriod, periodHasWork, rainSourceFormError, rainSourceProblems, withFactorMode, withFallback, withQuantileMap } from './rainSource';
 
 const AT = new Date(Date.UTC(2026, 8, 26)); // 26 September 2026: water year 2025/26 still running
 
@@ -58,5 +58,30 @@ describe('the quantile map of a rain-source period (engine ≥ 1.21.0)', () => {
 		expect(rainSourceFormError([{ ...on, quantileMap: { ...on.quantileMap!, wetDayMm: 0 } }])).toMatch(/wet-day threshold must be 0\.1–10 mm/);
 		// A fixed-factor period takes the ten water years before it.
 		expect(withQuantileMap(withFactorMode(fit, 'fixed'), true).quantileMap).toEqual({ fromWaterYear: 2010, toWaterYear: 2019, wetDayMm: 1 });
+	});
+});
+
+describe('rainSourceProblems', () => {
+	const ok = () => ({ ...newRainSourcePeriod(AT), reason: 'gauges closed 2012' });
+	it('puts each period’s problem on the field it is fixed in', () => {
+		expect(rainSourceProblems([ok()])).toEqual([null]);
+		expect(rainSourceProblems([newRainSourcePeriod(AT)])[0]).toMatchObject({ field: 'reason', message: expect.stringMatching(/^Rain-source period 1 needs a reason/) });
+		expect(rainSourceProblems([{ ...ok(), end: '2000-01-01' }])[0]?.field).toBe('end');
+		const fixed = withFactorMode(ok(), 'fixed');
+		expect(rainSourceProblems([fixed])[0]?.field).toBe('source');
+		const sourced = { ...fixed, provenance: { ...fixed.provenance!, source: 'hydrologist' } };
+		expect(rainSourceProblems([sourced])[0]?.field).toBe('method');
+	});
+	it('says which earlier period one overlaps, on its start', () => {
+		expect(rainSourceProblems([ok(), ok()])[1]).toEqual({ field: 'start', message: 'Rain-source period 2 overlaps period 1' });
+	});
+	it('agrees with the form’s one error', () => {
+		const list = [ok(), newRainSourcePeriod(AT)];
+		expect(rainSourceProblems(list).find(Boolean)?.message).toBe(rainSourceFormError(list));
+	});
+	it('asks before removing a period with something written in it', () => {
+		expect(periodHasWork(newRainSourcePeriod(AT))).toBe(false);
+		expect(periodHasWork(ok())).toBe(true);
+		expect(periodHasWork(withFactorMode(newRainSourcePeriod(AT), 'fixed'))).toBe(true);
 	});
 });

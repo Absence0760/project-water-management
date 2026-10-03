@@ -1,6 +1,6 @@
 import { droughtRestrictionIssues, RESTRICTION_DATES_MAX, RESTRICTION_LEVELS_MAX } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
+import { joinMonthDay, noticeDay, PART_LABEL, restrictionFormError, restrictionProblemAt, splitMonthDay, startingRule, withCut, withDateAdded, withLevelAdded } from './droughtRestriction';
 
 describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 	it('starts from a rule the engine accepts: reviews on 1 October and 1 January, lifted 1 May, three deepening levels', () => {
@@ -23,6 +23,16 @@ describe('the drought restriction form (engine 1.54.0, WP-3.8)', () => {
 		const less = startingRule();
 		less.levels[2]!.cuts.crops = 0.1;
 		expect(restrictionFormError(less)).toMatch(/^Level 3: level 3 cuts crops less than level 2/);
+	});
+
+	it('says where the first problem is fixed, so the form can show it there', () => {
+		expect(restrictionProblemAt(null)).toBeNull();
+		expect(restrictionProblemAt(startingRule())).toBeNull();
+		expect(restrictionProblemAt({ ...startingRule(), reviewDates: [] })).toBe('reviewDates');
+		expect(restrictionProblemAt({ ...startingRule(), liftDates: ['10-01'] })).toBe('liftDates');
+		const shallower = startingRule();
+		shallower.levels[1]!.belowPct = 0.7;
+		expect(restrictionProblemAt(shallower)).toBe('level-1');
 	});
 
 	it('edits dates, levels and cuts', () => {

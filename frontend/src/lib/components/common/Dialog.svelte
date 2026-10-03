@@ -248,9 +248,11 @@
 	.subhead {
 		margin: 0 0 0.75rem;
 	}
-	/* The body scrolls; the title and the actions (a save row) stay in view. */
+	/* The body scrolls; the title and the actions (a save row) stay in view. Clipped, not
+	   hidden: a hidden box is still a scroll container, so a scrollIntoView near the end of
+	   the body scrolled the whole dialog and took the title and the sub-header off screen. */
 	dialog.side {
-		overflow: hidden;
+		overflow: clip;
 	}
 	dialog.side .body {
 		flex: 1;

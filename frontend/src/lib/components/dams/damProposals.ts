@@ -6,6 +6,7 @@
 // saved model holds now; the page accepts them one at a time.
 import type { DamProposals, RegisterDamProposal } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
+import { positionText } from '$lib/components/map/mapData';
 import { fmtVolume } from './dams';
 
 export type DamProposalRow =
@@ -41,6 +42,17 @@ export type DamProposalRow =
 			synthetic: false;
 			value: number;
 	  };
+
+/**
+ * Where the register was searched from, with the place written as the rest of
+ * the app writes one (degrees with a hemisphere, map/mapData.ts positionText):
+ * "Searched from “Upper dam” (its polygon’s centre, 33.6800° S, 21.3200° E)".
+ */
+export function searchedFrom(dam: NonNullable<DamProposals['dam']>): string {
+	const what = dam.name ? `“${dam.name}”` : 'the dam on the map';
+	const how = dam.geometryType === 'Point' ? 'a point' : 'its polygon’s centre';
+	return `Searched from ${what} (${how}, ${positionText(dam.point)})`;
+}
 
 /** A distance in words: "250 m", "1.2 km". */
 export const fmtDistance = (m: number) => (m < 950 ? `${fmtNum(Math.round(m / 10) * 10)} m` : `${fmtNum(m / 1000, 1)} km`);

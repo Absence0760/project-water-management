@@ -69,7 +69,7 @@
 
 <section class="proposals {variant}" class:panel={variant === 'page'} {id} aria-labelledby="{uid}-h" data-testid={testid}>
 	{#if variant === 'page'}
-		<div class="panel-head"><h3 id="{uid}-h">{title}</h3></div>
+		<div class="panel-head"><h2 id="{uid}-h">{title}</h2></div>
 	{:else}
 		<h3 id="{uid}-h">{title}</h3>
 	{/if}
@@ -98,7 +98,7 @@
 	.page {
 		margin: 0 0 1rem;
 	}
-	.page .panel-head h3 {
+	.page .panel-head h2 {
 		font-size: 1.05rem;
 	}
 	.drawer {

@@ -312,3 +312,13 @@ export function exampleGridCsv(kind: 'total' | 'lowFlow'): string {
 
 /** A synthetic example of the high-flow CSV. Invented numbers. */
 export const EXAMPLE_HIGH_FLOWS_CSV = 'Name,Months,Peak (m3/s),Duration (days),Events per year\nClass I freshet,Oct-Nov,2.5,2,2\nClass II flood,Dec-Mar,8,3,1\n';
+
+/**
+ * How many cells of a grid hold a value other than 0 (a new table's grid is all
+ * 0): a Fill over a grid with any asks first; over a blank one it fills at once.
+ */
+export const filledCells = (grid: readonly (readonly (number | null)[])[] | null | undefined): number =>
+	(grid ?? []).reduce((n, row) => n + row.filter((v) => typeof v === 'number' && Number.isFinite(v) && v !== 0).length, 0);
+
+/** Whether a high-flow component holds anything typed (a Fill over the list asks first then). */
+export const highFlowTyped = (e: EwrHighFlowEvent): boolean => !!e.label.trim() || Number.isFinite(e.peakM3s);

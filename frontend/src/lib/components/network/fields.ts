@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { estimatedDamAreaM2, IRRIGATION_SYSTEMS, onRiverDam, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
+import { areaMismatches, estimatedDamAreaM2, IRRIGATION_SYSTEMS, onRiverDam, type FlowShareMethod, type IrrigationSystemId, type NetworkNode, type NodeKind } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -56,7 +56,7 @@ export const GROUPS: Record<NodeField['group'], string> = {
 	routing: 'Routing',
 	irrigation: 'Irrigation',
 	share: 'Flow share',
-	groundwater: 'Groundwater (boreholes)'
+	groundwater: 'Combined boreholes (one capacity)'
 };
 
 export const NODE_FIELDS: NodeField[] = [
@@ -223,12 +223,12 @@ export const NODE_FIELDS: NodeField[] = [
 		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
 		detailOnly: true,
 		notGauge: true,
-		label: 'Borehole capacity',
+		label: 'Combined borehole capacity',
 		unit: 'm³/day',
 		group: 'groundwater',
 		nullable: true,
-		aria: (n) => `Borehole capacity of ${n}, m³/day`,
-		help: 'Most that the boreholes can pump in a day. Empty (or 0) means no boreholes. Groundwater counts as supply; the rule below says when it is used.'
+		aria: (n) => `Combined borehole capacity of ${n}, m³/day`,
+		help: 'Most that all the boreholes together can pump in a day. Empty (or 0) means none here. Groundwater counts as supply; the rule below says when it is used.'
 	},
 	{
 		key: 'boreholeTriggerPct',
@@ -244,7 +244,7 @@ export const NODE_FIELDS: NodeField[] = [
 		key: 'streamDepletionFrac',
 		detailOnly: true,
 		notGauge: true,
-		label: 'Stream depletion',
+		label: 'Combined stream depletion',
 		unit: '%',
 		group: 'groundwater',
 		aria: (n) => `Share of pumping taken from the river at ${n}, %`,
@@ -254,7 +254,7 @@ export const NODE_FIELDS: NodeField[] = [
 		key: 'streamDepletionLagDays',
 		detailOnly: true,
 		notGauge: true,
-		label: 'Depletion lag',
+		label: 'Combined depletion lag',
 		unit: 'days',
 		group: 'groundwater',
 		aria: (n) => `Stream depletion lag of ${n}, days`,
@@ -301,14 +301,41 @@ export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
 export const fieldScale = (f: NodeField) => (isPct(f) ? 100 : (f.scale ?? 1));
 
 /**
- * Why a field isn't used on this node, or null: River to dam on a dam on the
- * river (engine ≥ 1.68.0, onRiverDam), which shows the field read-only.
+ * Why a field isn't used on this node, or null; the field then shows
+ * read-only with this as its hint, its stored value kept. River to dam on a
+ * dam on the river (engine ≥ 1.68.0, onRiverDam). In the one-node form, which
+ * passes the flow-share method: a dam's own fields on a unit with no dam
+ * (capacity 0, as the engine reads it), the high/low MAP areas unless the
+ * method is the high/low MAP split, and the manual share unless it is manual.
+ * The node table passes no method and keeps those editable, so a block pasted
+ * or typed across a row lands whole.
  */
-export function fieldUnused(f: NodeField, n: Pick<NetworkNode, 'pctUpstreamToDam'>): string | null {
+export function fieldUnused(f: NodeField, n: Pick<NetworkNode, 'pctUpstreamToDam'> & Partial<Pick<NetworkNode, 'damCapacityM3'>>, method?: FlowShareMethod): string | null {
 	if (f.key === 'divertCapacityM3Day' && onRiverDam(n)) // gitleaks:allow (a field name, not a secret)
 		return 'Not available: the dam is on the river (Upstream inflow to dam is 100 %). River to dam fills an off-channel dam; set Upstream inflow to dam below 100 % to use it.';
+	if (!method) return null;
+	if (f.group === 'dam' && f.key !== 'damCapacityM3' && !((n.damCapacityM3 ?? 0) > 0)) return 'Not used: no dam (capacity 0). Enter a capacity to use it.';
+	if ((f.key === 'areaHiKm2' || f.key === 'areaLoKm2') && method !== 'hiLo')
+		return 'Not used: the flow-share method isn’t the high/low MAP split (Settings & calibration). Pick it there to use this.';
+	if (f.key === 'flowShareManual' && method !== 'manual') return 'Not used: the flow-share method isn’t Manual (Settings & calibration). Pick it there to use this.';
 	return null;
 }
+
+/**
+ * Under the high/low MAP areas while that method is in use: their sum against
+ * the unit's area, by the rule the run checks after it has run (engine
+ * quality.ts areaMismatches, more than 1 % apart), so it is caught while
+ * typing. Null when they agree.
+ */
+export function hiLoHint(n: NetworkNode): string | null {
+	const m = areaMismatches([n], 'hiLo')[0];
+	if (!m) return null;
+	return `High-MAP + Low-MAP = ${fmtNum(m.hiLoKm2, 2)} km², but the area is ${fmtNum(m.areaKm2, 2)} km²: they should add up to it.`;
+}
+
+/** A node's kind in the workspace's words (playbook § 3: a farm is a hydrological unit here). */
+export const KIND_WORD: Record<NodeKind, string> = { farm: 'hydrological unit', gauge: 'gauge', user: 'other water user' };
+
 /** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */
 export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/day';
 

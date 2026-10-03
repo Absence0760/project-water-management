@@ -6,6 +6,7 @@
 import { addMember, createProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 
 const DEFAULT_RULE_TEXT =
 	'skill score KGE′, lowest skill kept 0.5, worst wr2012 flag kept query, largest low-flow bias kept ±50 %, members 300, bounds typical, pan coefficient shift ±0.1';
@@ -45,8 +46,12 @@ test('an editor declares the rule from the defaults, saves it whole, and a viewe
 	await section.getByLabel('Worst WR2012 flag kept').selectOption({ label: 'No check' });
 	await section.getByLabel('Largest low-flow bias kept (± %)').fill('');
 	await section.getByLabel('Largest low-flow bias kept (± %)').blur();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	// Unticked and ticked again before saving: the rule just typed comes back, never the defaults.
+	await declare.uncheck();
+	await declare.check();
+	await expect(section.getByLabel('Members')).toHaveValue('200');
+	await expect(section.getByLabel('Lowest skill kept')).toHaveValue('0.6');
+	await saveSettings(page);
 
 	const expected = { members: 200, bounds: 'typical', panOffset: 0.1, thresholds: { objective: 'kgePrime', minSkill: 0.6, wr2012MaxLevel: 'unusable', maxLowFlowBiasPct: null } };
 	expect(await savedRule(page, project.id)).toEqual(expected);
@@ -69,13 +74,12 @@ test('an editor declares the rule from the defaults, saves it whole, and a viewe
 	await expect(seen.getByLabel('Declare an uncertainty rule for evidence')).toBeDisabled();
 	await expect(seen.getByLabel('Worst WR2012 flag kept')).toBeDisabled();
 	await expect(seen.getByLabel('Members')).toHaveAttribute('readonly', '');
-	await expect(viewer.page.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
+	await expect(viewer.page.getByRole('region', { name: /^Unsaved / })).toHaveCount(0);
 
 	// Withdrawn: the save sends null, and the section says no ensemble is cited.
 	await declare.uncheck();
 	await expect(section.getByText('With no rule declared, an evidence report cites no ensemble.')).toBeVisible();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	expect(await savedRule(page, project.id)).toBeNull();
 	await page.reload();
 	await expect(declare).not.toBeChecked();

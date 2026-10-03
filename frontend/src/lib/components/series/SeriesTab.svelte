@@ -66,7 +66,7 @@
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
-	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
+	import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, roleBadge, seriesInUse, SITED_KINDS } from './roles';
 	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
@@ -81,7 +81,6 @@
 		projectId,
 		readonly,
 		initial = null,
-		runs = null,
 		settings = null,
 		gauges = [],
 		timeZone = null,
@@ -92,6 +91,7 @@
 		readonly: boolean;
 		/** Already-loaded list (the page's), so the first frame has the final layout. */
 		initial?: SeriesMeta[] | null;
+		/** Not read: "New data since the latest run" is the page's own notice (series/freshness.ts `newDataSinceRun`), on this tab as on every other. */
 		runs?: RunMeta[] | null;
 		/** The project's settings, the same object the Settings tab gets; null only before the page's own load finishes. */
 		settings?: ProjectSettings | null;
@@ -113,6 +113,8 @@
 	let list = $state<SeriesMeta[]>(untrack(() => initial ?? []));
 	let loading = $state(untrack(() => initial === null));
 	let loadError = $state<string | null>(null);
+	// A refresh that failed while a list was already drawn: a slim note with Try again; the table stays.
+	let refreshError = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 
 	// Full values per series (for coverage and the chart). Input series are few
@@ -201,19 +203,22 @@
 	// The gauge calibration scores at (settings.calibrationSiteNodeId, engine ≥ 1.41.0); null = the outlet.
 	const calibrationSite = $derived(settings?.calibrationSiteNodeId ?? null);
 	const siteName = (id: string) => gauges.find((g) => g.id === id)?.name ?? 'a node no longer in the model';
-	const latestRun = $derived(runs?.[0] ?? null);
+	const gaugeIds = $derived(new Set(gauges.map((g) => g.id)));
 	// Depth series in mm/day: rain, and daily A-pan evaporation (issue #45).
 	const isRain = (k: string) => k.endsWith('_mm');
 
 	async function load() {
 		if (!list.length) loading = true;
 		loadError = null;
+		refreshError = null;
 		try {
 			list = await api.series.list(projectId);
 			onSeriesChange?.(list);
 			void loadValues();
 		} catch (e) {
-			loadError = msg(e);
+			// With a list already drawn (the page's), keep it and say the refresh failed; else the error replaces the table.
+			if (list.length) refreshError = msg(e);
+			else loadError = msg(e);
 		} finally {
 			loading = false;
 		}
@@ -261,10 +266,6 @@
 		Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageStats(values[s.id]!, s.kind) : null]))
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
-	// Recorded rain drives a run, so it is what "up to" means (series/freshness.ts).
-	const newerThanRun = $derived(
-		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
-	);
 
 	// The series a run reads for a kind: the first of that kind by name, among the outlet's (a gauge's record,
 	// 084_gauge_records, is read only at its gauge: seriesInUse and the backend's loadLiveInput skip it too).
@@ -317,18 +318,32 @@
 		return flowFlagLanes(flags, v.startDate, qualityFlags);
 	});
 
-	/** Say where a series' values came from (107_series_source.sql); '' clears it. Its values are untouched. */
-	async function resource(s: SeriesMeta, text: string) {
-		actionError = null;
-		const next = text.trim() || null;
-		if (next === (s.source ?? null)) return;
+	// The controls that save on change (CHIRPS product, where measured, source): each says Saving…, Saved or why
+	// not beside itself, and a failed save puts the control back to the stored value (the one-way `value=` doesn't
+	// change when the list doesn't, so Svelte would leave the unsaved choice showing).
+	let saves = $state<Record<string, { state: 'saving' | 'saved' | 'error'; text?: string }>>({});
+	const saveId = (s: SeriesMeta, field: string) => `save-${s.id}-${field}`;
+	async function saveOnChange(key: string, el: HTMLInputElement | HTMLSelectElement, stored: string, save: () => Promise<void>) {
+		saves = { ...saves, [key]: { state: 'saving' } };
 		try {
+			await save();
+			saves = { ...saves, [key]: { state: 'saved' } };
+		} catch (e) {
+			el.value = stored;
+			saves = { ...saves, [key]: { state: 'error', text: msg(e) } };
+		}
+	}
+	const saveFailed = (key: string) => saves[key]?.state === 'error';
+
+	/** Say where a series' values came from (107_series_source.sql); '' clears it. Its values are untouched. */
+	function resource(s: SeriesMeta, el: HTMLInputElement) {
+		const next = el.value.trim() || null;
+		if (next === (s.source ?? null)) return;
+		void saveOnChange(saveId(s, 'source'), el, s.source ?? '', async () => {
 			const meta = await api.series.source(projectId, s.id, next);
 			list = list.map((x) => (x.id === s.id ? { ...x, source: meta.source ?? null } : x));
 			onSeriesChange?.(list);
-		} catch (e) {
-			actionError = msg(e);
-		}
+		});
 	}
 
 	// Gauge vs logger, when both records exist.
@@ -405,29 +420,25 @@
 		}
 	}
 
+	const labelKey = (s: SeriesMeta) => (s.product && s.productVersion ? `${s.product}/${s.productVersion}` : '');
 	/** Say which CHIRPS product and version a series holds (issue #40 part c); its values are untouched. */
-	async function relabel(s: SeriesMeta, key: string) {
-		actionError = null;
-		const f = provenanceFields(key);
-		try {
+	function relabel(s: SeriesMeta, el: HTMLSelectElement) {
+		const f = provenanceFields(el.value);
+		void saveOnChange(saveId(s, 'label'), el, labelKey(s), async () => {
 			const meta = await api.series.label(projectId, s.id, f.product, f.productVersion);
 			list = list.map((x) => (x.id === s.id ? { ...x, product: meta.product, productVersion: meta.productVersion } : x));
 			onSeriesChange?.(list);
-		} catch (e) {
-			actionError = msg(e);
-		}
+		});
 	}
 
 	/** Move a flow record to a gauge inside the network, or back to the outlet (''). */
-	async function moveSite(s: SeriesMeta, nodeId: string) {
-		actionError = null;
-		try {
+	function moveSite(s: SeriesMeta, el: HTMLSelectElement) {
+		const nodeId = el.value;
+		void saveOnChange(saveId(s, 'site'), el, s.siteNodeId ?? '', async () => {
 			const meta = await api.series.site(projectId, s.id, nodeId || null);
 			list = list.map((x) => (x.id === s.id ? { ...x, siteNodeId: meta.siteNodeId ?? null } : x));
 			onSeriesChange?.(list);
-		} catch (e) {
-			actionError = msg(e);
-		}
+		});
 	}
 
 	const typical = (s: SeriesMeta) => {
@@ -465,7 +476,8 @@
 	let pageW = $state(0);
 	let chartEl: HTMLElement | undefined = $state();
 	let open = $state(false);
-	// Six rows and the chart's head sit on a 1440 × 960 first screen; below 640 px each row is a tall card, so four.
+	// Six rows and the chart's head sit on a 1440 × 960 first screen; in a column 640 px or narrower each row is a
+	// tall card (the same container width as the CSS's `@container data-page`), so four.
 	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
 	const fold = $derived(foldList(rows, (r) => r.id, selectedId, open, cap));
 	const CHART_H = 320;
@@ -518,21 +530,29 @@
 	});
 </script>
 
+<!-- Saving…, Saved or why not, beside a control that saves on change (a polite live region, always there so it is announced). -->
+{#snippet saveStatus(key: string)}
+	{@const st = saves[key]}
+	<span class="save-st" class:err={st?.state === 'error'} class:ok={st?.state === 'saved'} id={key} role="status" data-testid="save-status"
+		>{st?.state === 'saving' ? 'Saving…' : st?.state === 'saved' ? 'Saved' : st?.state === 'error' ? `Not saved: ${st.text}` : ''}</span
+	>
+{/snippet}
+
 {#snippet headerActions()}
 	{#if list.length}
 		<button type="button" class="btn" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
 	{/if}
 {/snippet}
 
-<!-- The notices: one slim line each under the section header, as the page's own. -->
-{#if actionError || (newerThanRun.length && latestRun) || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
+<!-- The notices: one slim line each under the section header, as the page's own. "New data since the latest run"
+     is the page's notice (newDataSinceRun, with Re-run model or the queued automatic re-run), here as on every tab. -->
+{#if actionError || refreshError || rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
 	<div class="notes">
 		{#if actionError}<p class="note err" role="alert">{actionError}</p>{/if}
-		{#if newerThanRun.length && latestRun}
-			<p class="note note-info" role="status">
-				New data since the latest run: {newerThanRun.map((s) => s.name || kindLabel(s.kind)).join(', ')} now run{newerThanRun.length === 1 ? 's' : ''}
-				to {newerThanRun.reduce((m, s) => (endDate(s) > m ? endDate(s) : m), '')}, but “{latestRun.label || 'the latest run'}” ends {latestRun.endDate}.
-				<a href="?tab=runs">Re-run the model</a> to include it.
+		{#if refreshError}
+			<p class="note err" role="alert" data-testid="refresh-error">
+				Couldn't refresh the series ({refreshError}); showing the list as last loaded.
+				<button type="button" class="btn btn-sm" onclick={load}>Try again</button>
 			</p>
 		{/if}
 		{#if rebuildingNote(list, (s) => s.name || kindLabel(s.kind))}
@@ -561,7 +581,7 @@
 		{#snippet emptyAction()}
 			{#if !readonly && onadddata}
 				<!-- Secondary: the header's Add data is the page's primary action; this is the same dialog, where the eye lands. -->
-				<button type="button" class="btn" onclick={addFromEmpty}>Upload a CSV</button>
+				<button type="button" class="btn" onclick={addFromEmpty}>Add a data file</button>
 			{/if}
 		{/snippet}
 		<!-- Below 640px each row is a card (CSS grid), so the row's numbers, coverage and
@@ -575,7 +595,7 @@
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
 						<th scope="col" role="columnheader">Data up to</th>
-						<th scope="col" role="columnheader">From</th>
+						<th scope="col" role="columnheader" class="from-col">From</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
 						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
@@ -587,7 +607,7 @@
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
-						{@const role = KIND_ROLES[s.kind]}
+						{@const role = roleBadge(s, { list, inUse, gaugeInUse, gaugeIds, calibrationSite })}
 						{@const behind = behindAge.get(s.id)}
 						{@const fed = feedMark(s.feed, st?.present)}
 						<!-- Pointer shortcut only; the View button is the accessible control. -->
@@ -607,12 +627,15 @@
 											class="prov"
 											data-testid="series-provenance"
 											aria-label="Product and version of {s.name || kindLabel(s.kind)}"
-											value={s.product && s.productVersion ? `${s.product}/${s.productVersion}` : ''}
-											onchange={(e) => relabel(s, e.currentTarget.value)}
+											aria-describedby={saveId(s, 'label')}
+											aria-invalid={saveFailed(saveId(s, 'label')) ? 'true' : undefined}
+											value={labelKey(s)}
+											onchange={(e) => relabel(s, e.currentTarget)}
 										>
 											<option value="">Version not recorded</option>
 											{#each CHIRPS_CHOICES as c (c.value)}<option value={c.value}>{c.label}</option>{/each}
 										</select>
+										{@render saveStatus(saveId(s, 'label'))}
 									{/if}
 								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
 									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
@@ -633,8 +656,10 @@
 											class="prov"
 											data-testid="series-site"
 											aria-label="Where {s.name || kindLabel(s.kind)} was measured"
+											aria-describedby={saveId(s, 'site')}
+											aria-invalid={saveFailed(saveId(s, 'site')) ? 'true' : undefined}
 											value={s.siteNodeId ?? ''}
-											onchange={(e) => moveSite(s, e.currentTarget.value)}
+											onchange={(e) => moveSite(s, e.currentTarget)}
 										>
 											<option value="">At the outlet</option>
 											{#each gauges as g (g.id)}<option value={g.id}>At gauge {g.name}</option>{/each}
@@ -642,36 +667,27 @@
 												<option value={s.siteNodeId} disabled>At a node no longer in the model</option>
 											{/if}
 										</select>
+										{@render saveStatus(saveId(s, 'site'))}
 									{/if}
 								{/if}
 								{#if s.dayBoundary}
-									<span class="prov" data-testid="series-day-boundary" title="Added up from sub-daily readings in {s.dayBoundary}–{s.dayBoundary} windows"
-										>{s.dayBoundary} day</span
-									>
+									<!-- In words, not a hover title: a day added up from sub-daily readings in these windows. -->
+									<span class="prov" data-testid="series-day-boundary">{s.dayBoundary}–{s.dayBoundary} days, added up from sub-daily readings</span>
 								{/if}
 								{#if role}
-									<span class="role" class:unused={!inUse.has(s.id) && !gaugeInUse.has(s.id)} title={s.siteNodeId ? (s.siteNodeId === calibrationSite ? 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results), and calibration and a run’s calibration statistics score it there (Settings → Calibration record → Scored at); the outlet’s EWR test uses the outlet’s records.' : 'Checked against the simulated flow at its gauge (the Plausibility checks on Runs & results); calibration scores it only if Settings → Calibration record → Scored at picks this gauge, and the outlet’s EWR test uses the outlet’s records.') : role.help}>
-										{s.siteNodeId
-											? gaugeInUse.has(s.id)
-												? s.siteNodeId === calibrationSite
-													? 'Gauge record (calibration site)'
-													: 'Gauge record (checks only)'
-												: gauges.some((g) => g.id === s.siteNodeId)
-													? 'Not used (another record of this kind is at this gauge)'
-													: 'Not used: its gauge is no longer in the model'
-											: inUse.has(s.id) || s.kind === 'flow_reference_m3s'
-											? role.role
-											: s.kind === 'flow_logger_m3s' && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
-												? 'Calibration if chosen in settings'
-												: isPeriodOnly(s.kind) && !list.some((x) => x.kind === s.kind && inUse.has(x.id))
-													? 'Not used: no rain-source period names it'
-													: 'Not used (another series of this kind is)'}
+									<!-- The badge, the kind's role as a HelpTip (keyboard and touch reach it; a title doesn't), and for a gauge record where it is checked and scored, in words. -->
+									<span class="role-line">
+										<span class="role" class:unused={role.unused} data-testid="series-role">{role.label}</span>
+										<HelpTip key={`series.${s.kind}`} />
 									</span>
+									{#if role.why}<span class="prov why" data-testid="series-role-why">{role.why}</span>{/if}
 								{/if}
 							</th>
 							<td role="cell" class="upto" data-label="Data up to">
 								<span class="num">{st?.lastValueDate ?? end}</span>
 								<span class="age">{agoText(age)}</span>
+								<!-- In a mid-width column From folds in here (the From column is hidden from sight, kept for screen readers). -->
+								<span class="from-inline" aria-hidden="true">from {s.startDate}</span>
 								{#if behind !== undefined}
 									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
 										>Behind</span
@@ -679,7 +695,7 @@
 								{/if}
 							</td>
 							<!-- The start only: the end is Data up to's (issue #174). -->
-							<td role="cell" class="num period" data-label="From">{s.startDate}</td>
+							<td role="cell" class="num period from-col" data-label="From">{s.startDate}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -752,9 +768,12 @@
 						id="series-source-input"
 						maxlength="200"
 						placeholder="Not recorded: e.g. DWS X1H001, farm logger file"
+						aria-describedby={saveId(viewing, 'source')}
+						aria-invalid={saveFailed(saveId(viewing, 'source')) ? 'true' : undefined}
 						value={viewing.source ?? ''}
-						onchange={(e) => resource(viewing, e.currentTarget.value)}
+						onchange={(e) => resource(viewing, e.currentTarget)}
 					/>
+					{@render saveStatus(saveId(viewing, 'source'))}
 				{/key}
 			{/if}
 			<span class="muted" data-testid="series-given-unit">
@@ -768,7 +787,7 @@
 
 {#if agreement}
 	<section class="panel" id="data-agreement" aria-label="Gauge vs logger agreement">
-		<AgreementTable {agreement} headingLevel={2} />
+		<AgreementTable {agreement} headingLevel={2} fold />
 	</section>
 {/if}
 
@@ -872,16 +891,45 @@
 		flex: 1 1 16rem;
 		max-width: 28rem;
 	}
+	.role-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.15rem;
+		margin-top: 0.15rem;
+	}
 	.role {
 		display: inline-block;
-		margin-top: 0.15rem;
 		font-size: 0.7rem;
 		font-weight: 600;
 		padding: 0 0.4rem;
 		border-radius: 999px;
 		background: var(--accent-soft);
 		color: var(--accent);
-		cursor: help;
+	}
+	.why {
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	/* Saved / not saved, beside a control that saves on change. */
+	.save-st {
+		display: block;
+		font-size: 0.72rem;
+		font-weight: 400;
+		color: var(--text-muted);
+	}
+	.save-st:empty {
+		display: none;
+	}
+	.save-st.ok {
+		color: var(--success);
+	}
+	.save-st.err {
+		color: var(--danger);
+		font-weight: 600;
+	}
+	.origin .save-st {
+		flex-basis: 100%;
 	}
 	.role.unused {
 		background: var(--surface-2);
@@ -913,9 +961,46 @@
 	.key .behind {
 		margin-left: 0.4rem;
 	}
-	@media (min-width: 641px) {
+	@container data-page (min-width: 641px) {
 		tr.is-behind > th[scope='row'] {
 			box-shadow: inset 3px 0 0 var(--warning);
+		}
+	}
+	.from-inline {
+		display: none;
+	}
+	/* A mid-width column (beside the sidebar, e.g. a 1024 px window): the table fits without a sideways scroll by
+	   folding From under Data up to, letting the row header and coverage narrow, and wrapping the actions two to a
+	   line. Container, not viewport, widths: the sidebar takes 240 px, so the viewport lies about the room. */
+	@container data-page (max-width: 72rem) {
+		.series th[scope='row'] {
+			min-width: 9rem;
+		}
+		.cov {
+			min-width: 7.5rem;
+		}
+		.series .from-col {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+			border: 0;
+		}
+		.from-inline {
+			display: block;
+			font-size: 0.75rem;
+			color: var(--text-muted);
+		}
+		.act {
+			white-space: normal;
+		}
+		.acts {
+			flex-wrap: wrap;
+			max-width: 9.5rem;
+			margin-left: auto;
 		}
 	}
 	.notes {
@@ -1037,8 +1122,22 @@
 		text-transform: none;
 		margin-right: 0.25rem;
 	}
-	/* Phone: each series row becomes a card, so nothing hides behind a sideways scroll. */
-	@media (max-width: 640px) {
+	/* A phone-width column: each series row becomes a card, so nothing hides behind a sideways scroll. */
+	@container data-page (max-width: 640px) {
+		.from-inline {
+			display: none;
+		}
+		.series td.from-col {
+			position: static;
+			width: auto;
+			height: auto;
+			overflow: visible;
+			clip: auto;
+		}
+		.acts {
+			max-width: none;
+			margin-left: 0;
+		}
 		.series,
 		.series tbody {
 			display: block;

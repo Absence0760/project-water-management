@@ -31,9 +31,11 @@ test('the dialog shows the upload form, closes on Escape and gives focus back to
 	await addButton(page).click();
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByRole('heading', { level: 2, name: 'Add data' })).toBeVisible();
-	await expect(dialog).toContainText('Upload a CSV of daily rainfall or flow. New days are appended to the matching series');
+	await expect(dialog).toContainText('Upload a CSV (or a DWS export) of daily rainfall, flow or evaporation. New days are appended to the matching series');
 	await expect(dialog.getByText('File formats')).toBeVisible();
-	for (const label of ['CSV file', 'Kind', 'Unit']) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
+	for (const label of ['CSV file or DWS export', 'Kind', 'Unit']) await expect(dialog.getByLabel(label, { exact: true })).toBeVisible();
+	// The kind's own tip, beside the field where the kind is chosen.
+	await expect(dialog.getByRole('button', { name: 'About Catchment rainfall' })).toBeVisible();
 	await expect(dialog.getByLabel(/^Name/)).toBeVisible();
 	// The one series of the default kind is picked, so the form offers to merge into it; nothing to send yet.
 	await expect(dialog.getByRole('group', { name: /“Rainfall — catchment” already exists/ })).toBeVisible();
@@ -165,3 +167,130 @@ for (const size of [
 		expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 	});
 }
+
+test('a failed read of the stored series says so and Try again recovers', async ({ page, owner }) => {
+	void owner;
+	// Every read of a series' values fails at the network until the route is lifted (the summary may have warmed the cache otherwise).
+	let fail = true;
+	await page.route(/\/series\/[^/?]+$/, async (route) => {
+		if (route.request().method() !== 'GET' || !fail) return route.fallback();
+		await route.abort('connectionrefused');
+	});
+	await seeded(page, 'Add data stored read fails');
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('rain.csv', NEW_DAYS));
+	const err = dialog.getByTestId('target-error');
+	await expect(err).toBeVisible();
+	await expect(dialog.getByText('Comparing with the stored series…')).toHaveCount(0);
+	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeDisabled();
+
+	fail = false;
+	await err.getByRole('button', { name: 'Try again' }).click();
+	await expect(err).toHaveCount(0);
+	const newDays = dialog.getByRole('term').filter({ hasText: /^New days$/ });
+	await expect(newDays).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
+});
+
+test('a refused upload shows its reason in view beside the action, and another file clears it', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 640 });
+	await page.route(/\/series\/merge$/, (route) =>
+		route.request().method() === 'POST'
+			? route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'This series holds another version.' }) })
+			: route.fallback()
+	);
+	await seeded(page, 'Add data refused');
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	// A long file: the summary and the preview chart make the form taller than the dialog.
+	const long = ['date,value', ...Array.from({ length: 60 }, (_, i) => `${new Date(Date.UTC(2021, 9, 31 + i)).toISOString().slice(0, 10)},${i % 7}`)].join('\n');
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('rain.csv', long));
+	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
+	const alert = dialog.getByTestId('upload-error');
+	await expect(alert).toHaveText('This series holds another version.');
+	await expect(alert).toBeInViewport();
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('rain2.csv', NEW_DAYS));
+	await expect(alert).toHaveCount(0);
+});
+
+test('a new series of a kind that has one says whether runs will read it, and offers a name that differs only in case', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Add data second series');
+	await putSeries(page.request, project.id, { ...RAIN, name: 'Station 0021' });
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByRole('heading', { level: 1, name: 'Summary' })).toBeVisible();
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	const name = dialog.getByLabel(/^Name/);
+	const effect = dialog.getByTestId('new-series-effect');
+
+	await name.fill('Aa station');
+	await expect(effect).toContainText('Creates a second Rainfall — catchment series. Runs read the first by name, so this one will replace “Station 0021” in runs.');
+	await name.fill('Zz station');
+	await expect(effect).toContainText('so they keep reading “Station 0021”.');
+	await name.fill('station 0021');
+	await expect(effect).toContainText('Did you mean “Station 0021”?');
+	await effect.getByRole('button', { name: 'Use “Station 0021”' }).click();
+	await expect(name).toHaveValue('Station 0021');
+	await expect(dialog.getByRole('group', { name: /“Station 0021” already exists/ })).toBeVisible();
+});
+
+test('the alternative gauge’s product and version are one optional pair: one without the other is said and blocks the upload', async ({ page, owner }) => {
+	void owner;
+	await seeded(page, 'Add data half label');
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	await dialog.getByLabel('Kind').selectOption('rain_catchment_alt_mm');
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('aws.csv', NEW_DAYS));
+	await expect(dialog.getByRole('group', { name: 'Product and version (optional)' })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled();
+	await dialog.getByLabel('Product', { exact: true }).fill('SASSCAL AWS');
+	await expect(dialog.getByTestId('half-label')).toHaveText('Give both, or leave both blank.');
+	await expect(dialog.getByLabel('Version', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+	await expect(dialog.getByRole('button', { name: 'Upload' })).toBeDisabled();
+	await dialog.getByLabel('Version', { exact: true }).fill('1');
+	await expect(dialog.getByTestId('half-label')).toHaveCount(0);
+	await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled();
+});
+
+test('while uploading, Cancel is disabled and Escape doesn’t ask to discard a file already on its way', async ({ page, owner }) => {
+	void owner;
+	let release: () => void = () => {};
+	const held = new Promise<void>((r) => (release = r));
+	await page.route(/\/series\/merge$/, async (route) => {
+		if (route.request().method() !== 'POST') return route.fallback();
+		await held;
+		await route.fallback();
+	});
+	await seeded(page, 'Add data uploading');
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	await dialog.getByLabel('CSV file', { exact: false }).setInputFiles(csv('rain.csv', NEW_DAYS));
+	await dialog.getByRole('button', { name: 'Upload and merge' }).click();
+	await expect(dialog.getByRole('button', { name: 'Uploading…' })).toBeVisible();
+	await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await expect(dialog).toBeVisible();
+	release();
+	await expect(dialog).toBeHidden();
+	await expect(page.getByText('Updated “Rainfall — catchment”: 2 new days')).toBeVisible();
+});
+
+test('a second file dropped on a read one asks before replacing it', async ({ page, owner }) => {
+	void owner;
+	await seeded(page, 'Add data drop twice');
+	const dialog = addDataDialog(page);
+	await dropCsv(page, 'Rainfall — catchment.csv', NEW_DAYS);
+	await expect(dialog.getByRole('definition').filter({ hasText: '2021-10-31 → 2021-11-01' })).toBeVisible();
+
+	await dropCsv(page, 'other.csv', 'date,value\n2021-11-05,2\n');
+	await answerConfirm(page, false, 'Replace the file?');
+	await expect(dialog.getByRole('definition').filter({ hasText: '2021-10-31 → 2021-11-01' })).toBeVisible();
+
+	await dropCsv(page, 'other.csv', 'date,value\n2021-11-05,2\n');
+	await answerConfirm(page, true, 'Replace the file?');
+	await expect(dialog.getByRole('definition').filter({ hasText: '2021-11-05 → 2021-11-05' })).toBeVisible();
+});

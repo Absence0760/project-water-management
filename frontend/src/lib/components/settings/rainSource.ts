@@ -2,7 +2,7 @@
 // 0.30.0, issue #40 (b), docs/model.md §2.4e): what a new period starts as,
 // switching between fixed and fitted factors, and the check the form blocks
 // Save on (the engine's own, which the API uses too).
-import { QM_WET_DAY_MM_DEFAULT, rainSourceError, type RainSourcePeriod } from '@water-management/engine';
+import { EXCLUSION_REASON_MAX, QM_WET_DAY_MM_DEFAULT, rainSourceError, rainSourcePeriodError, type RainSourcePeriod } from '@water-management/engine';
 
 /** Last complete water year (each named by the calendar year its 1 October falls in). */
 export function lastWaterYear(now = new Date()): number {
@@ -66,3 +66,43 @@ export function withQuantileMap(p: RainSourcePeriod, on: boolean): RainSourcePer
 
 /** The first problem with the list, as the form shows it, or null. */
 export const rainSourceFormError = (list: readonly RainSourcePeriod[]): string | null => rainSourceError(list);
+
+/** The field of a period a problem is fixed in ('period': none in particular, the message goes under the period). */
+export type RainSourceField = 'start' | 'end' | 'reason' | 'source' | 'method' | 'fittedFrom' | 'fittedTo' | 'period';
+
+const isoDate = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/**
+ * Each period's first problem (the engine's check, as rainSourceError words
+ * it) with the field it is fixed in, so the form puts the message beside that
+ * field and ties it to it (aria-describedby); null for a period without one.
+ */
+export function rainSourceProblems(list: readonly RainSourcePeriod[]): ({ field: RainSourceField; message: string } | null)[] {
+	return list.map((p, i) => {
+		const err = rainSourcePeriodError(p);
+		if (err) {
+			const prov = p.factors === 'fit' ? undefined : p.provenance;
+			const field: RainSourceField = !isoDate(p.start)
+				? 'start'
+				: !isoDate(p.end) || p.start > p.end
+					? 'end'
+					: !p.reason?.trim() || p.reason.length > EXCLUSION_REASON_MAX
+						? 'reason'
+						: prov && !prov.source?.trim()
+							? 'source'
+							: prov && !prov.method?.trim()
+								? 'method'
+								: prov && !isoDate(prov.fittedFrom)
+									? 'fittedFrom'
+									: prov && (!isoDate(prov.fittedTo) || prov.fittedFrom > prov.fittedTo)
+										? 'fittedTo'
+										: 'period';
+			return { field, message: `Rain-source period ${i + 1} ${err}` };
+		}
+		const j = list.findIndex((x, k) => k < i && p.start <= x.end && p.end >= x.start);
+		return j >= 0 ? { field: 'start', message: `Rain-source period ${i + 1} overlaps period ${j + 1}` } : null;
+	});
+}
+
+/** Whether removing a period should ask first: anything written in it (a fresh one, with no reason and fitted factors, goes at once). */
+export const periodHasWork = (p: RainSourcePeriod): boolean => !!p.reason.trim() || p.factors !== 'fit';

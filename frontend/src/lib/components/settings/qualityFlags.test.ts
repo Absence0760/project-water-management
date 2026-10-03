@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type QualityFlagSettings } from '@water-management/engine';
-import { qualityFlagsError, ratedKinds, ratingField, withRating } from './qualityFlags';
+import { qualityFlagsError, ratedKinds, ratingField, ratingProblem, withRating } from './qualityFlags';
 
 const base = (): QualityFlagSettings => defaultProjectSettings().qualityFlags;
 
@@ -30,5 +30,21 @@ describe('the quality-flag fields (Settings → Calibration record)', () => {
 		expect(qualityFlagsError(inverted)).toMatch(/^Gauge record gauged range: The lowest gauging must be below the highest\.$/);
 		// Positive control: a complete range is fine.
 		expect(qualityFlagsError({ ...base(), ratings: { flow_observed_m3s: { gaugedMaxM3s: 12, gaugedMinM3s: 0.05, source: 's' } } })).toBeNull();
+	});
+});
+
+describe('ratingProblem', () => {
+	const rating = (r: Partial<{ gaugedMaxM3s: number | null; gaugedMinM3s: number | null; source: string }>): QualityFlagSettings => ({
+		...base(),
+		ratings: { flow_observed_m3s: { gaugedMaxM3s: null, gaugedMinM3s: null, source: '', ...r } }
+	});
+	it('names the field each problem is fixed in, with the form’s message', () => {
+		expect(ratingProblem(base(), 'flow_observed_m3s')).toBeNull();
+		expect(ratingProblem(rating({ gaugedMaxM3s: 40, source: 'DWS list' }), 'flow_observed_m3s')).toBeNull();
+		expect(ratingProblem(rating({ gaugedMaxM3s: 0, source: 'x' }), 'flow_observed_m3s')?.field).toBe('max');
+		expect(ratingProblem(rating({ gaugedMaxM3s: 4, gaugedMinM3s: 9, source: 'x' }), 'flow_observed_m3s')?.field).toBe('min');
+		const p = ratingProblem(rating({ gaugedMaxM3s: 40 }), 'flow_observed_m3s');
+		expect(p?.field).toBe('source');
+		expect(p?.message).toBe(qualityFlagsError(rating({ gaugedMaxM3s: 40 })));
 	});
 });

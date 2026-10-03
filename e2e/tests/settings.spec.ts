@@ -1,7 +1,9 @@
 import type { Page } from '@playwright/test';
 import { createProject, putSeries } from '../support/api.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { anySaveBar, saveChanges, saveSettings, settingsBar } from '../support/settings.ts';
 
 test('monthly A-pan and EWR values are saved and survive a reload', async ({ page, owner }) => {
 	void owner;
@@ -10,19 +12,17 @@ test('monthly A-pan and EWR values are saved and survive a reload', async ({ pag
 
 	const apan = (m: string) => page.getByLabel(`A-pan evaporation, ${m}, mm`);
 	const ewr = (m: string) => page.getByLabel(`Pragmatic EWR, ${m}, m³/day`);
-	const save = page.getByRole('button', { name: 'Save settings' });
 
 	await expect(apan('Oct')).toHaveValue('0');
-	await expect(save).toBeDisabled();
+	// Nothing unsaved: no save bar (Settings has none of its own; the page's one bar saves it).
+	await expect(anySaveBar(page)).toHaveCount(0);
 
 	await apan('Oct').fill('152');
 	await apan('Jan').fill('231.5');
 	await ewr('Oct').fill('1800');
 	await ewr('Jul').fill('5400');
-	await expect(page.getByText('Unsaved settings')).toBeVisible();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
-	await expect(save).toBeDisabled();
+	await expect(settingsBar(page)).toContainText('Unsaved changes to the settings');
+	await saveSettings(page);
 
 	await page.reload();
 	// Under the EWR row, its annual total (1800 × 31 + 5400 × 31 m³ = 0.223 Mm³); no chart redraws the row (issue #174).
@@ -33,7 +33,7 @@ test('monthly A-pan and EWR values are saved and survive a reload', async ({ pag
 	await expect(apan('Nov')).toHaveValue('0');
 	await expect(ewr('Oct')).toHaveValue('1800');
 	await expect(ewr('Jul')).toHaveValue('5400');
-	await expect(page.getByText('Unsaved settings')).toBeHidden();
+	await expect(anySaveBar(page)).toHaveCount(0);
 });
 
 test('the high/low MAP split shows only while that flow-share method is chosen', async ({ page, owner }) => {
@@ -74,8 +74,7 @@ test('days in February is behind an advanced disclosure whose summary names its 
 	await feb.fill('28');
 	await feb.press('Tab');
 	await expect(summary).toHaveText('Advanced: days in February, 28 (not the default 28.25)');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// Closed after a reload, the changed value still shows in the summary; opened, it is editable.
 	await page.reload();
@@ -86,16 +85,22 @@ test('days in February is behind an advanced disclosure whose summary names its 
 	await expect(feb).toBeEditable();
 });
 
-test('discarding settings restores the saved values', async ({ page, owner }) => {
+test('discarding settings asks first, and restores the saved values', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings discard');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const apan = page.getByLabel('A-pan evaporation, Mar, mm');
 
 	await apan.fill('99');
-	await page.getByRole('button', { name: 'Discard' }).click();
+	await apan.blur();
+	await settingsBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
+	// Cancel keeps the edit.
+	await answerConfirm(page, false, 'Your unsaved changes to the settings will be lost.');
+	await expect(apan).toHaveValue('99');
+	await settingsBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
+	await answerConfirm(page, true);
 	await expect(apan).toHaveValue('0');
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+	await expect(anySaveBar(page)).toHaveCount(0);
 });
 
 test('a simulation end before its start cannot be saved', async ({ page, owner }) => {
@@ -105,20 +110,23 @@ test('a simulation end before its start cannot be saved', async ({ page, owner }
 
 	await page.getByLabel('Simulation start').fill('2022-06-01');
 	await page.getByLabel('Simulation end').fill('2022-01-01');
-	await expect(page.getByRole('alert')).toHaveText('Simulation start must be before the end.');
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+	// The message is tied to both dates.
+	await expect(page.getByLabel('Simulation end')).toHaveAccessibleDescription('Simulation start must be before the end.');
+	await expect(page.getByLabel('Simulation start')).toHaveAttribute('aria-invalid', 'true');
+	await expect(saveChanges(page)).toBeDisabled();
 
 	// The save bar says why Save is off and links to the group to fix; the menu flags it too.
 	await page.evaluate(() => window.scrollTo(0, 0));
-	const blockers = page.getByRole('status').filter({ hasText: 'to fix before saving' });
-	await expect(blockers).toContainText('1 group has a problem to fix before saving:');
+	await expect(settingsBar(page)).toContainText('1 problem to fix before saving');
 	await expect(page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: /^Simulation period\s*\(has a problem\)$/ })).toBeVisible();
-	await blockers.getByRole('link', { name: 'Simulation period: Simulation start must be before the end.' }).click();
-	await expect(page).toHaveURL(/#set-period$/);
-	await expect(page.getByRole('heading', { name: 'Simulation period' })).toBeInViewport();
+	await settingsBar(page).getByRole('link', { name: 'Simulation period: Simulation start must be before the end.' }).click();
+	const heading = page.getByRole('heading', { name: 'Simulation period' });
+	await expect(heading).toBeInViewport();
+	await expect(heading).toBeFocused();
 
 	await page.getByLabel('Simulation end').fill('2022-12-31');
-	await expect(blockers).toBeHidden();
+	await expect(settingsBar(page)).not.toContainText('to fix before saving');
+	await expect(saveChanges(page)).toBeEnabled();
 });
 
 test('the On this page menu stays in view, jumps to each group below it and marks the one being read', async ({ page, owner }) => {
@@ -179,7 +187,7 @@ test('the data-quality ratios read as a short percentage, not the stored two thi
 	await expect(page.getByLabel('Lowest gauge/logger ratio (%)')).toHaveValue('66.7');
 	await expect(page.getByLabel('Highest gauge/logger ratio (%)')).toHaveValue('150');
 	// Showing it rounded doesn't change the stored value: nothing to save.
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+	await expect(anySaveBar(page)).toHaveCount(0);
 });
 
 test('the monthly rows fit a 1280px screen without sideways scrolling, six-digit values included', async ({ page, owner }) => {
@@ -217,49 +225,54 @@ test('flow calibration is split into its own groups, and a bad exclusion points 
 
 	// An exclusion with no reason blocks Save, and the save bar sends you to the calibration record.
 	await record.getByRole('button', { name: 'Exclude a water year' }).click();
-	const blockers = page.getByRole('status').filter({ hasText: 'to fix before saving' });
-	await expect(blockers.getByRole('link', { name: /^Calibration record: / })).toBeVisible();
-	await blockers.getByRole('link', { name: /^Calibration record: / }).click();
-	await expect(page).toHaveURL(/#set-record$/);
+	await expect(settingsBar(page).getByRole('link', { name: /^Calibration record: / })).toBeVisible();
+	await settingsBar(page).getByRole('link', { name: /^Calibration record: / }).click();
 	await expect(page.getByRole('heading', { name: 'Calibration record' })).toBeInViewport();
+	await expect(page.getByRole('heading', { name: 'Calibration record' })).toBeFocused();
 });
 
 // CHIRPS fit period (engine ≥ 0.29.0, issue #40). Synthetic records only.
 test.describe('CHIRPS fit period', () => {
 	const fit = (page: Page) => page.getByTestId('chirps-fit-period');
-	const saved = (page: Page) => expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 
 	test('listed water-year ranges: add and remove, a missing reason or an overlap blocks Save, and the list survives a reload', async ({ page, owner }) => {
 		void owner;
 		const project = await createProject(page.request, 'Settings fit period');
 		await page.goto(`/projects/${project.id}?tab=settings`);
 		const section = fit(page);
-		const save = page.getByRole('button', { name: 'Save settings' });
 		const mode = section.getByLabel('CHIRPS fit period', { exact: true });
 		await expect(mode).toHaveValue('all');
 
 		await mode.selectOption('ranges');
-		// A new range has no reason yet: Save is blocked and the section says why.
-		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
-		await expect(save).toBeDisabled();
+		// A new range has no reason yet: Save is blocked and the save bar says why, but the field isn't
+		// marked before it has been left.
+		const reason = section.getByLabel('Reason').first();
+		await expect(settingsBar(page).getByRole('link', { name: 'Rain gaps: Fit range 1: needs a reason' })).toBeVisible();
+		await expect(saveChanges(page)).toBeDisabled();
+		await expect(reason).not.toHaveAttribute('aria-invalid', 'true');
+		await reason.focus();
+		await reason.blur();
+		await expect(reason).toHaveAttribute('aria-invalid', 'true');
+		await expect(reason).toHaveAccessibleDescription('Fit range 1: needs a reason.');
 		await section.getByLabel('From water year').first().fill('1990');
 		await section.getByLabel('To water year').first().fill('2004');
-		await section.getByLabel('Reason').first().fill('old gauge network');
-		await expect(section.getByRole('alert')).toBeHidden();
+		await reason.fill('old gauge network');
+		await expect(reason).not.toHaveAttribute('aria-invalid', 'true');
+		await expect(settingsBar(page)).not.toContainText('to fix before saving');
 
 		// A second range, overlapping the first.
 		await section.getByRole('button', { name: 'Add a range' }).click();
 		await section.getByLabel('From water year').nth(1).fill('2000');
 		await section.getByLabel('To water year').nth(1).fill('2019');
 		await section.getByLabel('Reason').nth(1).fill('new gauge network');
-		await expect(section.getByRole('alert')).toHaveText('Fit ranges overlap: 2000/01–2019/20 overlaps 1990/91–2004/05.');
-		await expect(save).toBeDisabled();
+		// An overlap is no one range's: said under the list.
+		await expect(section.getByText('Fit ranges overlap: 2000/01–2019/20 overlaps 1990/91–2004/05.', { exact: true })).toBeVisible();
+		await expect(saveChanges(page)).toBeDisabled();
 		await section.getByLabel('From water year').nth(1).fill('2005');
-		await expect(section.getByRole('alert')).toBeHidden();
-		await expect(save).toBeEnabled();
+		await expect(section.getByText(/^Fit ranges overlap/)).toHaveCount(0);
+		await expect(saveChanges(page)).toBeEnabled();
 
-		await save.click();
-		await saved(page);
+		await saveSettings(page);
 		await page.reload();
 		await expect(mode).toHaveValue('ranges');
 		await expect(section.getByLabel('From water year')).toHaveCount(2);
@@ -268,8 +281,7 @@ test.describe('CHIRPS fit period', () => {
 
 		// Remove one, save, reload: one left.
 		await section.getByRole('button', { name: 'Remove fit range 2' }).click();
-		await save.click();
-		await saved(page);
+		await saveSettings(page);
 		await page.reload();
 		await expect(section.getByLabel('From water year')).toHaveCount(1);
 		await expect(section.getByLabel('Reason')).toHaveValue('old gauge network');
@@ -280,16 +292,17 @@ test.describe('CHIRPS fit period', () => {
 		const project = await createProject(page.request, 'Settings fit period off');
 		await page.goto(`/projects/${project.id}?tab=settings`);
 		const section = fit(page);
-		const save = page.getByRole('button', { name: 'Save settings' });
 		await section.getByLabel('CHIRPS fit period', { exact: true }).selectOption('ranges');
-		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
+		await section.getByLabel('Reason').focus();
+		await section.getByLabel('Reason').blur();
+		await expect(section.getByText('Fit range 1: needs a reason.', { exact: true })).toBeVisible();
 		await page.getByLabel('CHIRPS bias correction', { exact: true }).selectOption('none');
 		// Still shown, marked as unused, and still what blocks Save, so it can be fixed.
 		await expect(section.getByTestId('chirps-fit-inactive')).toBeVisible();
-		await expect(section.getByRole('alert')).toHaveText('Fit range 1: needs a reason.');
-		await expect(save).toBeDisabled();
+		await expect(section.getByText('Fit range 1: needs a reason.', { exact: true })).toBeVisible();
+		await expect(saveChanges(page)).toBeDisabled();
 		await section.getByLabel('Reason').fill('station history');
-		await expect(save).toBeEnabled();
+		await expect(saveChanges(page)).toBeEnabled();
 	});
 
 	test('proposes ranges from the double-mass breaks, stored only on Save', async ({ page, owner }) => {
@@ -326,10 +339,15 @@ test.describe('CHIRPS fit period', () => {
 		await expect(section.getByLabel('CHIRPS fit period', { exact: true })).toHaveValue('all');
 		await propose.click();
 		await expect(section.getByLabel('From water year')).toHaveCount(2);
-		await page.getByRole('button', { name: 'Save settings' }).click();
-		await saved(page);
+		await saveSettings(page);
 		await page.reload();
 		await expect(section.getByLabel('From water year').nth(1)).toHaveValue('2000');
+
+		// Proposing over listed ranges asks first, naming how many; Cancel keeps them.
+		await section.getByLabel('Reason').nth(0).fill('station history: new network from 2000');
+		await propose.click();
+		await answerConfirm(page, false, 'The 2 ranges you listed, with their reasons, will be replaced by 2 proposed ranges.');
+		await expect(section.getByLabel('Reason').nth(0)).toHaveValue('station history: new network from 2000');
 	});
 
 	test('says why there is nothing to propose', async ({ page, owner }) => {
@@ -348,34 +366,41 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	const project = await createProject(page.request, 'Settings rain source');
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('rain-source');
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const problem = section.locator('.err');
 	await expect(section.getByTestId('rain-source-none')).toBeVisible();
 
 	await section.getByRole('button', { name: 'Add a rain-source period' }).click();
 	const period = section.getByTestId('rain-source-period');
-	await expect(section.getByRole('alert')).toHaveText(/^Rain-source period 1 needs a reason/);
-	await expect(save).toBeDisabled();
+	// No reason yet: the save bar says so; the field is marked once it has been left, and names the message.
+	await expect(settingsBar(page).getByRole('link', { name: /^Rain gaps: Rain-source period 1 needs a reason/ })).toBeVisible();
+	await expect(saveChanges(page)).toBeDisabled();
+	await expect(period.getByLabel('Reason')).not.toHaveAttribute('aria-invalid', 'true');
+	await period.getByLabel('Reason').focus();
+	await period.getByLabel('Reason').blur();
+	await expect(period.getByLabel('Reason')).toHaveAccessibleDescription(/^Rain-source period 1 needs a reason/);
 	await period.getByLabel('From', { exact: true }).fill('2012-10-01');
 	await period.getByLabel('To', { exact: true }).fill('2019-09-30');
 	await period.getByLabel('Reason').fill('gauges closed; automatic station from 2012');
 	// The default is a fit against the reanalysis, which needs nothing else.
 	await expect(period.getByLabel('Factors')).toHaveValue('fit');
-	await expect(section.getByRole('alert')).toBeHidden();
+	await expect(problem).toHaveCount(0);
 
-	// Fixed factors need their provenance.
+	// Fixed factors need their provenance: the message is on the field that is missing.
 	await period.getByLabel('Factors').selectOption('fixed');
-	await expect(section.getByRole('alert')).toHaveText(/provenance needs a source and a method/);
+	await expect(period.getByLabel('Fitted by')).toHaveAccessibleDescription(/provenance needs a source and a method/);
+	await expect(period.getByLabel('Fitted by')).toHaveAttribute('aria-invalid', 'true');
 	await period.getByLabel('Factor, Oct, period 1').fill('1.3');
 	await period.getByLabel('Fitted by').fill('hydrologist');
+	await expect(period.getByLabel('Method')).toHaveAccessibleDescription(/provenance needs a source and a method/);
 	await period.getByLabel('Method').fill('catchment ÷ ERA5 over the reference era, by month');
-	await expect(section.getByRole('alert')).toBeHidden();
+	await expect(problem).toHaveCount(0);
 
 	// A gauge CHIRPS ingests can't fall through to CHIRPS: name the reanalysis.
 	await period.getByLabel(/CHIRPS ingests this gauge/).check();
-	await expect(section.getByRole('alert')).toHaveText(/need a fallback that isn’t CHIRPS/);
-	await expect(save).toBeDisabled();
+	await expect(problem).toHaveText(/need a fallback that isn’t CHIRPS/);
+	await expect(saveChanges(page)).toBeDisabled();
 	await period.getByLabel('Gaps from').selectOption('rain_reanalysis_mm');
-	await expect(section.getByRole('alert')).toBeHidden();
+	await expect(problem).toHaveCount(0);
 
 	// The quantile map (engine ≥ 1.21.0) is opt-in, at 1 mm; a wet-day threshold outside 0.1–10 mm isn't taken.
 	await period.getByLabel(/Quantile-map its wet days/).check();
@@ -385,10 +410,9 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await expect(period.getByLabel('Wet day from (mm)')).toHaveAttribute('aria-invalid', 'true');
 	await period.getByLabel('Wet day from (mm)').fill('2.5');
 	await expect(period.getByLabel('Wet day from (mm)')).not.toHaveAttribute('aria-invalid');
-	await expect(section.getByRole('alert')).toBeHidden();
-	await expect(save).toBeEnabled();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await expect(problem).toHaveCount(0);
+	await expect(saveChanges(page)).toBeEnabled();
+	await saveSettings(page);
 
 	await page.reload();
 	await expect(period.getByLabel('Reason')).toHaveValue('gauges closed; automatic station from 2012');
@@ -410,10 +434,31 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 		})
 	]);
 
-	// Remove it: none again.
+	// Remove it (it has a reason and factors, so it asks first; Cancel keeps it): none again.
 	await section.getByRole('button', { name: 'Remove rain-source period 1' }).click();
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await answerConfirm(page, false, 'its dates, reason and factors, with where they came from, go with it.');
+	await expect(period).toHaveCount(1);
+	await section.getByRole('button', { name: 'Remove rain-source period 1' }).click();
+	await answerConfirm(page, true);
+	await saveSettings(page);
 	await page.reload();
 	await expect(section.getByTestId('rain-source-none')).toBeVisible();
+});
+
+test('an out-of-range value says the range it takes, stays as typed, and blocks Save', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings out of range');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const erf = page.getByLabel('Effective rainfall (%)');
+	await erf.fill('150');
+	await erf.blur();
+	await expect(erf).toHaveValue('150');
+	await expect(erf).toHaveAttribute('aria-invalid', 'true');
+	await expect(erf).toHaveAccessibleDescription(/Enter a number from 0 to 100/);
+	// Unsaved, invalid work: the bar lists it as a link to the field, and Save is off.
+	const bar = anySaveBar(page);
+	await expect(bar.getByRole('link', { name: /^Effective rainfall \(%\).*: Enter a number from 0 to 100$/ })).toBeVisible();
+	await expect(saveChanges(page)).toBeDisabled();
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings.effectiveRainFraction;
+	expect(stored).toBe(0.65);
 });

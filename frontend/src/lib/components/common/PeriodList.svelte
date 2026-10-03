@@ -16,6 +16,7 @@
 		readonly = false,
 		legend,
 		helpKey,
+		helpLabel,
 		hint,
 		empty,
 		addYearLabel,
@@ -28,6 +29,8 @@
 		readonly?: boolean;
 		legend: string;
 		helpKey: string;
+		/** The tip's name, when another tip on the page shares its key (each tip needs its own). */
+		helpLabel?: string;
 		hint: string;
 		/** Shown when the list is empty. */
 		empty: string;
@@ -77,7 +80,7 @@
 </script>
 
 <fieldset class="plain excl" aria-describedby="{uid}-hint">
-	<legend>{legend} <HelpTip key={helpKey} /></legend>
+	<legend>{legend} <HelpTip key={helpKey} label={helpLabel} /></legend>
 	<p class="hint" id="{uid}-hint">{hint}</p>
 	{#if list.length}
 		<ol class="rows">

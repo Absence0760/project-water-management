@@ -4,10 +4,14 @@
 	// annual cap per water year, supply mode, target (straight to the crop or
 	// into the dam) and stream-depletion share. The boreholes are the editor's
 	// own objects, so edits land in the model directly.
+	import { tick } from 'svelte';
 	import { BOREHOLE_MODES, ga538VolumeM3, type Borehole, type BoreholeMode, type BoreholeTarget, type NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
+	import { hasDam as damOn } from './fields';
+	import { boreholeQuestion, focusAfter, itemName } from './removeQuestions';
 
 	let {
 		node,
@@ -27,20 +31,35 @@
 	const MODE_LABEL: Record<BoreholeMode, string> = {
 		supplemental: 'Supplemental: after the dam and river',
 		primary: 'Primary: first, the dam and river cover the rest',
-		emergency: 'Emergency: supplemental while the dam is below its level',
+		// 'drought', as the combined boreholes' rule calls the same thing (the engine's mode is still `emergency`).
+		emergency: 'Drought: supplemental while the dam is below its level',
 		none: 'None: on record, never pumps'
 	};
-	const hasDam = $derived(node.kind === 'farm' && node.damCapacityM3 > 0);
+	// A dam as the map and the dam tile count one (≥ 1 m³, fields.ts hasDam): a workbook's 0.5 m³ placeholder isn't one to pump into.
+	const hasDam = $derived(damOn(node));
 	const label = $derived(node.name || (node.kind === 'user' ? 'this user' : 'this hydrological unit'));
 	// The GN 538 volume for the property (engine ≥ 1.12.0): area × Table 2 rate, at most 40 000 m³/a; else the ceiling.
 	const ga = $derived(ga538VolumeM3(node));
+	let addBtn: HTMLButtonElement | undefined = $state();
+
+	/** Asks first when the borehole holds figures, then puts the focus on the next one (or + Add borehole). */
+	async function remove(b: Borehole, i: number) {
+		const q = boreholeQuestion(b, i);
+		if (q && !(await confirmDialog(q))) return;
+		const at = focusAfter(i, boreholes.length);
+		const nextId = at === null ? null : boreholes.filter((x) => x.id !== b.id)[at]?.id;
+		onremove?.(b.id);
+		await tick();
+		(nextId ? document.getElementById(`bh-name-${nextId}`) : addBtn)?.focus();
+	}
 	const capped = $derived(boreholes.filter((b) => b.mode !== 'none').reduce<number | null>((s, b) => (s === null || b.annualCapM3 === null ? null : s + b.annualCapM3), 0));
 </script>
 
 <div class="bores" data-testid="boreholes-{node.id}">
 	<p class="hint">
-		Each borehole pumps up to its capacity a day and, with a cap, up to its annual cap per water year (October to September). The
-		combined capacity above, if any, runs as well. <HelpTip key="node.boreholeCapacityM3Day" />
+		Each borehole on its own: use these when each has its own yield, annual cap, mode or depletion. Each pumps up to its capacity a day
+		and, with a cap, up to its annual cap per water year (October to September). The combined boreholes above, if set, run as well.
+		<HelpTip key="node.boreholeCapacityM3Day" />
 	</p>
 	<p class="hint note" role="note">
 		<span class="badge badge-warn">Low confidence</span> Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology report.
@@ -57,7 +76,7 @@
 							<input id="bh-name-{b.id}" maxlength="200" readonly={readonly} bind:value={b.name} />
 						</div>
 						<div class="field">
-							<label for="bh-cap-{b.id}">Capacity <span class="u">(m³/day)</span></label>
+							<span class="lbl"><label for="bh-cap-{b.id}">Capacity <span class="u">(m³/day)</span></label><HelpTip key="borehole" label="About a borehole’s capacity and annual cap" /></span>
 							<NumberInput id="bh-cap-{b.id}" min={0} grouped disabled={readonly} value={b.capacityM3Day} onchange={(v) => (b.capacityM3Day = v ?? 0)} />
 						</div>
 						<div class="field">
@@ -65,7 +84,7 @@
 							<NumberInput id="bh-annual-{b.id}" min={0} grouped nullable placeholder="no cap" disabled={readonly} value={b.annualCapM3} onchange={(v) => (b.annualCapM3 = v)} />
 						</div>
 						<div class="field">
-							<label for="bh-mode-{b.id}">Mode</label>
+							<span class="lbl"><label for="bh-mode-{b.id}">Mode</label><HelpTip key="node.boreholeRule" label="About borehole rules" /></span>
 							<select id="bh-mode-{b.id}" disabled={readonly} value={b.mode} onchange={(e) => (b.mode = e.currentTarget.value as BoreholeMode)}>
 								{#each BOREHOLE_MODES as m (m)}<option value={m} disabled={m === 'emergency' && !hasDam}>{MODE_LABEL[m]}</option>{/each}
 							</select>
@@ -86,12 +105,12 @@
 							</div>
 						{/if}
 						<div class="field">
-							<label for="bh-dep-{b.id}">Stream depletion <span class="u">(% of pumping)</span></label>
+							<span class="lbl"><label for="bh-dep-{b.id}">Stream depletion <span class="u">(% of pumping)</span></label><HelpTip key="node.streamDepletionFrac" label="About stream depletion" /></span>
 							<NumberInput id="bh-dep-{b.id}" min={0} max={100} scale={100} disabled={readonly} value={b.depletionFactor} onchange={(v) => (b.depletionFactor = v ?? 0)} />
 						</div>
 					</div>
 					{#if !readonly && onremove}
-						<button type="button" class="btn btn-sm" onclick={() => onremove(b.id)}>Remove borehole {i + 1}</button>
+						<button type="button" class="btn btn-sm" onclick={() => remove(b, i)}>Remove {itemName(b.name, 'borehole', i)}</button>
 					{/if}
 				</li>
 			{/each}
@@ -110,7 +129,7 @@
 		</p>
 	{/if}
 	{#if !readonly && onadd}
-		<button type="button" class="btn" onclick={onadd}>+ Add borehole</button>
+		<button type="button" class="btn" onclick={onadd} bind:this={addBtn}>+ Add borehole</button>
 	{/if}
 </div>
 
@@ -138,6 +157,11 @@
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
+	}
+	.lbl {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
 	}
 	.note .badge {
 		margin-right: 0.35rem;

@@ -48,3 +48,14 @@ export function moveWindow<T>(list: readonly T[], i: number, by: -1 | 1): T[] {
 	[next[i], next[j]] = [next[j]!, next[i]!];
 	return next;
 }
+
+/**
+ * Which of a window's fields its problem (the engine's scheduleWindowProblem
+ * message) is about, so the form marks those fields and points them at it.
+ */
+export function problemFields(problem: string | null): 'factor' | 'weekdays' | 'bounds' | null {
+	if (!problem) return null;
+	if (problem.startsWith('its factor')) return 'factor';
+	if (problem.startsWith('its weekdays')) return 'weekdays';
+	return 'bounds';
+}

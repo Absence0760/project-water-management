@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillFromFirst, monthsOf, withMonth } from './monthFields';
+import { fillFromFirst, fillMessage, monthsOf, withMonth } from './monthFields';
 
 describe('monthsOf', () => {
 	it('is twelve copies of the value', () => {
@@ -36,5 +36,13 @@ describe('fillFromFirst', () => {
 	it('uses the blank value when there is no row', () => {
 		expect(fillFromFirst(null)).toEqual(new Array(12).fill(0));
 		expect(fillFromFirst(undefined, 1)).toEqual(new Array(12).fill(1));
+	});
+});
+
+describe('fillMessage', () => {
+	it("says which value went into every month, as the fields show it", () => {
+		expect(fillMessage([150, 0], 0, 1, 'Demand, m³/day, per month')).toBe('Copied October’s 150 to every month of Demand, m³/day, per month.');
+		expect(fillMessage(null, 1, 1, 'Monthly profile')).toBe('Copied October’s 1 to every month of Monthly profile.');
+		expect(fillMessage([17_280], 0, 1 / 86_400, 'River to dam, m³/s')).toBe('Copied October’s 0.2 to every month of River to dam, m³/s.');
 	});
 });

@@ -1,5 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 
 // Audit B4 (engine ≥ 0.20.0): a multi-day accumulation in the catchment rain.
 // Synthetic records only: CHIRPS reads 4 mm every third day April–September
@@ -55,12 +56,11 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await keep.getByRole('button', { name: "Keep a date range's readings" }).click();
 	await keep.getByLabel('From').fill('2012-06-21');
 	await keep.getByLabel('To').fill('2012-06-21');
-	const save = page.getByRole('button', { name: 'Save settings' });
+	const save = saveChanges(page);
 	await expect(keep.getByRole('alert')).toHaveText('Keep-reading period 1: needs a reason.');
 	await expect(save).toBeDisabled();
 	await keep.getByLabel('Reason').fill('Thunderstorm, farm records agree');
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// The Data tab follows the saved settings.
 	// Its old rain is behind, so the section's link carries the badge's count in its name.
@@ -78,8 +78,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await expect(add.getByRole('alert')).toHaveText('Listed accumulation 1: needs a reason.');
 	await expect(save).toBeDisabled();
 	await add.getByLabel('Reason').fill('Station log: gauge read after the observer returned');
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	// Its old rain is behind, so the section's link carries the badge's count in its name.
 	await page.getByRole('link', { name: /^Data \(\d+ series behind\)$/ }).click();
 	await viewCatchment();
@@ -89,8 +88,7 @@ test('a multi-day accumulation is shaded as spread until Settings keeps the read
 	await tab('Settings & calibration').click();
 	await mode.selectOption('asRecorded');
 	await expect(section.getByRole('group', { name: /^Keep as recorded/ })).toHaveCount(0);
-	await save.click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	await page.reload();
 	await expect(page.getByTestId('zero-rain-settings').getByLabel('Accumulated readings')).toHaveValue('asRecorded');
 	await expect(page.getByTestId('zero-rain-settings').getByRole('group', { name: /^Also spread/ }).getByLabel('Reason')).toHaveValue(

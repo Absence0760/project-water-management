@@ -172,9 +172,9 @@ export function farmBarLabel(bar: FarmBar, ha: (m2: number) => string): string {
 	return `${bar.name}: ${ha(bar.totalM2)} ha, ${joinNames(bar.parts.map((p) => `${p.name} ${ha(p.areaM2)} ha`))}`;
 }
 
-/** The header's line: "4 crops · 312.5 ha irrigated on 6 farms · water year October to September". */
+/** The header's line: "4 crops · 312.5 ha irrigated on 6 hydrological units · water year October to September" (the workspace says unit, playbook § 3). */
 export function cropsSummary(cropCount: number, totalM2: number, plantedFarms: number, ha: (m2: number) => string): string {
 	const crops = `${cropCount} crop${cropCount === 1 ? '' : 's'}`;
-	const planted = plantedFarms ? `${ha(totalM2)} ha irrigated on ${plantedFarms} farm${plantedFarms === 1 ? '' : 's'}` : 'nothing planted yet';
+	const planted = plantedFarms ? `${ha(totalM2)} ha irrigated on ${plantedFarms} hydrological unit${plantedFarms === 1 ? '' : 's'}` : 'nothing planted yet';
 	return `${crops} · ${planted} · water year October to September`;
 }

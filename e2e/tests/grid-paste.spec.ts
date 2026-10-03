@@ -1,5 +1,5 @@
 // Pasting a block from a spreadsheet into the node table and the
-// planted-areas grid (issue #285): a block pasted into a cell opens the
+// planted-areas and crop-factor grids (issue #285): a block pasted into a cell opens the
 // preview with every value it would change, Apply writes them into the grid
 // (unsaved, as if typed), and Save keeps them. The mapping itself is unit
 // tested (frontend/src/lib/spreadsheet/paste, network/nodePaste.ts,
@@ -99,6 +99,48 @@ test('planted areas: the toolbar paste reads hectares by farm and crop, refuses 
 	await save(page, project.id, grid);
 	await page.reload();
 	await expect(page.getByRole('dialog', { name: 'Planted areas' }).getByLabel('Orchard on Lower farm, ha')).toHaveValue('15.5');
+});
+
+test('crop factors: a pasted 12-month row is previewed, applied and saved; the sheet takes one too', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Grid paste factors');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=crops&grid=crop-factors`);
+	const grid = page.getByRole('dialog', { name: 'Crop factors' });
+
+	// One row copied from Excel, pasted into Oct: the 12 months from there.
+	await pasteInto(grid.getByLabel('Orchard crop factor, Oct'), '0.4\t0.5\t0.6\t0.7\t0.8\t0.7\t0.6\t0.5\t0.4\t0.4\t0.5\t0.6\n');
+	const dlg = page.getByRole('dialog', { name: 'Paste crop factors' });
+	await expect(dlg.getByTestId('paste-where')).toContainText('Orchard, Oct');
+	await expect(dlg.getByTestId('paste-summary')).toHaveText('4 values change; 8 already have the pasted value.');
+	expect(await templateCsv(dlg)).toBe('﻿Crop,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep\r\nOrchard,0.6,0.7,0.8,0.8,0.8,0.7,0.6,0.5,0.4,0.4,0.5,0.6\r\n');
+	await expectNoViolations(page);
+	await dlg.getByRole('button', { name: 'Apply 4 changes' }).click();
+	await expect(dlg).toBeHidden();
+	await expect(grid.getByLabel('Orchard crop factor, Oct')).toHaveValue('0.4');
+	await expect(grid.getByLabel('Orchard crop factor, Jan')).toHaveValue('0.7');
+
+	// A negative factor stops the paste with where it is.
+	await grid.getByRole('button', { name: 'Paste from a spreadsheet…' }).click();
+	await dlg.getByLabel('Cells copied from a spreadsheet').fill('Crop\tJan\nOrchard\t-1\n');
+	await expect(dlg.getByText('Orchard, Jan: a crop factor of -1 is below 0.')).toBeVisible();
+	await dlg.getByRole('button', { name: 'Cancel' }).click();
+
+	await save(page, project.id, grid);
+	await page.reload();
+	await expect(page.getByRole('dialog', { name: 'Crop factors' }).getByLabel('Orchard crop factor, Nov')).toHaveValue('0.5');
+
+	// The crop's sheet: a row pasted into a month, previewed and applied the same way.
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	await page.getByRole('button', { name: 'Edit Orchard' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Edit Orchard' });
+	await pasteInto(sheet.getByLabel('Orchard crop factor, Jul'), '0.9\t0.9\t0.9\n');
+	const sheetDlg = page.getByRole('dialog', { name: 'Paste Orchard\'s crop factors' });
+	await expect(sheetDlg.getByTestId('paste-where')).toContainText('Orchard, Jul');
+	await sheetDlg.getByRole('button', { name: 'Apply 3 changes' }).click();
+	await expect(sheet.getByLabel('Orchard crop factor, Sep')).toHaveValue('0.9');
+	await expect(sheet).toContainText('Unsaved changes to the model');
 });
 
 test('thirty nodes: the whole table pasted back changed scrolls in its own list, from the keyboard too; Escape closes it; a viewer has no paste', async ({ page, owner, signIn }) => {

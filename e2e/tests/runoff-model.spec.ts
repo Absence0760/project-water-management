@@ -8,6 +8,7 @@ import type { Page } from '@playwright/test';
 import { createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { plantLegacyRun } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { whatChanged } from '../support/compare.ts';
 
 const sections = (page: Page) => page.getByRole('navigation', { name: 'Result sections' });
@@ -39,8 +40,7 @@ test('GR4J is the only runoff model: no picker, its parameters save, and a run r
 
 	await x1.fill('420');
 	await page.getByLabel('Pan coefficient, Jan').fill('0.8');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	await page.reload();
 	await expect(x1).toHaveValue('420');

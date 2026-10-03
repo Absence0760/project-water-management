@@ -10,6 +10,7 @@ import { addMember, createProject } from '../support/api.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveChanges, saveSettings } from '../support/settings.ts';
 
 async function savedRule(page: import('@playwright/test').Page, projectId: string): Promise<unknown> {
 	const res = await page.request.get(`${API_URL}/projects/${projectId}`);
@@ -50,7 +51,10 @@ test('an editor switches drought restrictions on from the template, edits and sa
 	await section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %').fill('10');
 	await section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %').blur();
 	await expect(section.getByTestId('restriction-error')).toHaveText(/^Level 2: level 2 cuts crops less than level 1/);
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+	// The message is in the level it is fixed in, which names it.
+	await expect(levels.nth(1).getByTestId('restriction-error')).toBeVisible();
+	await expect(levels.nth(1)).toHaveAccessibleDescription(/^Level 2: level 2 cuts crops less than level 1/);
+	await expect(saveChanges(page)).toBeDisabled();
 	await section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %').fill('45');
 	await section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %').blur();
 	await expect(section.getByTestId('restriction-error')).toHaveCount(0);
@@ -59,8 +63,7 @@ test('an editor switches drought restrictions on from the template, edits and sa
 	await section.getByRole('button', { name: 'Remove the deepest level' }).click();
 	await expect(levels.locator('legend')).toHaveText(['Level 1', 'Level 2']);
 	await section.getByRole('button', { name: 'Add a review date' }).click();
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	expect(await savedRule(page, project.id)).toEqual({
 		reviewDates: ['10-01', '01-01', '02-01'],
@@ -73,6 +76,8 @@ test('an editor switches drought restrictions on from the template, edits and sa
 	await page.reload();
 	await expect(on).toBeChecked();
 	await expect(section.getByLabel('Level 2: cut on Crops (irrigation of the crop areas), %')).toHaveValue('45');
+	// A part with a basic-needs floor says so in its accessible name, not only in hidden text.
+	await expect(section.getByLabel(/^Level 1: cut on .*domestic.*, %, basic-needs floor kept$/i)).toHaveValue('10');
 
 	// A viewer reads the rule but can't change it.
 	const viewer = await signIn('Restriction viewer');
@@ -82,11 +87,16 @@ test('an editor switches drought restrictions on from the template, edits and sa
 	await expect(seen.getByTestId('restriction-words')).toContainText('Level 2 (below 40 %): crops 45 %');
 	await expect(seen.getByLabel('Apply drought restrictions in runs')).toBeDisabled();
 	await expect(seen.getByRole('button', { name: 'Add a deeper level' })).toHaveCount(0);
+	// Text and number fields are read-only, not disabled: a keyboard viewer still reaches and reads them.
+	const name = seen.getByLabel('Level 1: name');
+	await expect(name).toHaveAttribute('readonly', '');
+	await expect(name).toBeEnabled();
+	await expect(name).toHaveValue('Level 1');
+	await expect(seen.getByLabel('Review date 1: day')).toHaveAttribute('readonly', '');
 
 	// Off: the save sends null.
 	await on.uncheck();
 	await expect(section.getByTestId('restriction-levels')).toHaveCount(0);
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	expect(await savedRule(page, project.id)).toBeNull();
 });

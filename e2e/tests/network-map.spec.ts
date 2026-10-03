@@ -3,12 +3,13 @@
 // list of every node, the existing grids one click away in a full-screen
 // modal (the node table included), and a node's full form in a sheet from its card.
 import type { Page } from '@playwright/test';
-import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { closeModal, openNodeTable } from '../support/network.ts';
+import { closeModal, openNodeForm, openNodeTable } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const nodeList = (page: Page) => page.getByRole('list', { name: 'All nodes' });
 const card = (page: Page) => page.getByTestId('node-card');
@@ -279,7 +280,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 
 	// Transfers too; Back closes a grid as well.
 	await (await gridLink(page, 'Transfers')).click();
-	await expect(page.getByRole('dialog', { name: 'Transfers' }).getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByRole('dialog', { name: 'Transfers' }).getByLabel('Enabled, transfer 1')).toBeChecked();
 	await page.goBack();
 	await expect(page.getByRole('dialog', { name: 'Transfers' })).toHaveCount(0);
 
@@ -291,7 +292,7 @@ test('the grids open in a modal from the map, edit the same model, save, and clo
 
 	// Over the grid's own tab it isn't opened: the Transfers table is already on the page.
 	await page.goto(`/projects/${project.id}?tab=transfers&grid=transfers`);
-	await expect(page.getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByLabel('Enabled, transfer 1')).toBeChecked();
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).toHaveURL(/\?tab=transfers$/);
 });
@@ -334,4 +335,188 @@ test.describe('phone', () => {
 		expect(box.width).toBeGreaterThan(370);
 		await expectNoViolations(page);
 	});
+});
+
+/** Whether `inner`'s box lies inside `outer`'s (both on screen now). */
+async function inside(inner: import('@playwright/test').Locator, outer: import('@playwright/test').Locator): Promise<boolean> {
+	const [a, b] = [await inner.boundingBox(), await outer.boundingBox()];
+	return !!a && !!b && a.x >= b.x - 1 && a.y >= b.y - 1 && a.x + a.width <= b.x + b.width + 1 && a.y + a.height <= b.y + b.height + 1;
+}
+
+test('a pick is kept in the URL: Back steps through the picks and a reload keeps the last', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network pick URL');
+	const [, upper, lower] = project.model.nodes.map((n) => n.id as string);
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]node=${upper}`));
+	await nodeList(page).getByRole('button', { name: /^Lower farm/ }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]node=${lower}`));
+	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(new RegExp(`[?&]node=${upper}`));
+	await expect(card(page).getByRole('heading', { name: 'Upper farm' })).toBeVisible();
+	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ })).toHaveAttribute('aria-pressed', 'true');
+	await page.goForward();
+	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
+	await page.reload();
+	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
+	// Editing a node picks it too, so closing the sheet leaves the map on it.
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	await card(page).getByRole('button', { name: 'Edit Upper farm' }).click();
+	await page.getByRole('dialog', { name: 'Edit Upper farm' }).getByRole('button', { name: 'Next node' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]node=${lower}`));
+	await closeModal(page);
+	await expect(card(page).getByRole('heading', { name: 'Lower farm' })).toBeVisible();
+});
+
+test('on a big network a picked node is brought into view, in the drawing and in the list', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1280, height: 800 });
+	const project = await createProject(page.request, 'Network big pick');
+	const model = sampleModel();
+	const [gauge, farm] = [model.nodes[0]!, model.nodes[1]!];
+	model.nodes = [gauge, ...Array.from({ length: 30 }, (_, i) => ({ ...farm, id: crypto.randomUUID(), name: `Unit ${String(i + 1).padStart(2, '0')}`, sortOrder: i + 2 }))];
+	model.cropAreas = [];
+	model.transfers = [];
+	await putModel(page.request, project.id, model);
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await waitForMapFit(page);
+	const scroller = page.locator('.map-card .scroller');
+	const list = page.locator('.node-list');
+
+	// The last row of the list: its node on the drawing scrolls into the drawing's box.
+	await nodeList(page).getByRole('button', { name: /^Unit 30/ }).click();
+	const last = page.locator('svg.schematic g.node.selected');
+	await expect(last).toContainText('Unit 30');
+	await expect.poll(() => inside(last, scroller)).toBe(true);
+
+	// A node picked on the drawing: its row scrolls into the list's card.
+	await nodeList(page).getByRole('button', { name: /^Unit 30/ }).scrollIntoViewIfNeeded();
+	const first = page.locator('svg.schematic g.node').filter({ hasText: 'Unit 01' });
+	await first.scrollIntoViewIfNeeded();
+	await first.click();
+	const row = nodeList(page).getByRole('button', { name: /^Unit 01/ });
+	await expect(row).toHaveAttribute('aria-pressed', 'true');
+	await expect.poll(() => inside(row, list)).toBe(true);
+
+	// A link to the last node lands with both in view.
+	await page.goto(`/projects/${project.id}?tab=network&node=${model.nodes.at(-1)!.id as string}`);
+	await waitForMapFit(page);
+	await expect.poll(() => inside(page.locator('svg.schematic g.node.selected'), scroller)).toBe(true);
+	await expect.poll(() => inside(nodeList(page).getByRole('button', { name: /^Unit 30/ }), list)).toBe(true);
+});
+
+test('the node sheet runs in the order water moves, with a jump row that stays put', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network sheet order');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	await expect(sheet.locator('.detail > fieldset > legend')).toHaveText([
+		'Catchment area',
+		'Flow share',
+		'Dam',
+		'Dam survey and releases',
+		'Routing',
+		'Supply',
+		'Irrigation',
+		'Demand objects',
+		'Combined boreholes (one capacity)',
+		'Individual boreholes',
+		'Land cover'
+	]);
+	const jump = sheet.getByRole('navigation', { name: 'Sections of the form' });
+	await jump.getByRole('button', { name: 'Individual boreholes' }).click();
+	const target = sheet.getByRole('group', { name: 'Individual boreholes', exact: true });
+	await expect(target).toBeFocused();
+	await expect(target.locator('legend')).toBeInViewport();
+	// The row sits in the sheet's fixed sub-header, so it is still on screen after the jump.
+	await expect(jump).toBeInViewport();
+	await expectNoViolations(page);
+});
+
+test('fields only another set-up reads show read-only, saying what would use them', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network unused fields');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.getByTestId('section-header').getByRole('button', { name: '+ Add node' }).click();
+	const sheet = page.getByRole('dialog', { name: /^Edit Unit/ });
+	const minimum = sheet.getByLabel('Minimum level (%)');
+	await expect(minimum).toHaveAttribute('readonly', '');
+	await expect(minimum).toHaveAccessibleDescription(/Not used: no dam \(capacity 0\)/);
+	// The flow-share method is by area: the manual share and the high/low split are not read.
+	await expect(sheet.getByLabel('Manual (%)')).toHaveAttribute('readonly', '');
+	await expect(sheet.getByLabel('High-MAP (km²)')).toHaveAccessibleDescription(/high\/low MAP split/);
+	await sheet.getByLabel('Capacity (m³)').fill('5000');
+	await expect(minimum).not.toHaveAttribute('readonly', '');
+});
+
+test('removing a node from its sheet asks, names what goes with it, and leaves the focus on the page', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network sheet remove');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	await sheet.getByRole('button', { name: 'Remove Upper farm' }).click();
+	const box = page.getByRole('alertdialog', { name: 'Remove “Upper farm”?' });
+	await expect(box).toContainText('Its 1 crop area and 1 transfer go with it.');
+	await expect(box).not.toContainText('(s)');
+	await expect(box.getByRole('button', { name: 'Remove hydrological unit' })).toBeVisible();
+	await answerConfirm(page, true);
+	await expect(page.getByRole('dialog', { name: /^Edit / })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'All nodes' })).toBeFocused();
+	await expect(nodeList(page).getByRole('button')).toHaveCount(2);
+});
+
+test('a unit’s sheet points to its planted areas and transfers', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network sheet elsewhere');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	const line = sheet.getByTestId('node-elsewhere');
+	await expect(line).toHaveText('Set elsewhere: its crops, 20.00 ha planted, 1 crop; its transfers, 1 transfer, to Lower farm.');
+	// The planted areas open in the farm drawer, in place of the sheet.
+	const planted = line.getByRole('link', { name: '20.00 ha planted, 1 crop' });
+	await expect(planted).toHaveAttribute('href', /[?&]farm=/);
+	await expect(planted).not.toHaveAttribute('href', /[?&]edit=/);
+	await expect(line.getByRole('link', { name: '1 transfer, to Lower farm' })).toHaveAttribute('href', '?tab=transfers');
+});
+
+test('the header adds an other water user, opening its form on its name', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network add user');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.getByTestId('section-header').getByRole('button', { name: '+ Add other user' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Edit Other user 1' });
+	await expect(sheet.getByLabel('Name', { exact: true })).toBeFocused();
+	await expect(sheet.getByRole('combobox', { name: 'Kind' })).toHaveValue('user');
+});
+
+test('an empty network offers the map as a start to an editor, and tells a viewer who builds it', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Network empty');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const empty = page.getByTestId('network-empty');
+	await expect(empty.getByRole('button', { name: 'Add outflow gauge' })).toBeVisible();
+	await expect(empty.getByRole('link', { name: 'Start from the map' })).toHaveAttribute('href', '?tab=map&start=1');
+
+	const viewer = await signIn('Network empty viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	await viewer.page.goto(`/projects/${project.id}?tab=network`);
+	const vEmpty = viewer.page.getByTestId('network-empty');
+	await expect(vEmpty).toHaveText('No nodes yet. An editor builds the network here or from the Map.');
+	await expect(vEmpty.getByRole('button')).toHaveCount(0);
+	await expect(vEmpty.getByRole('link')).toHaveCount(0);
+});
+
+test('the drawing’s text and the supply tile say it in the workspace’s words', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network words');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const tree = page.getByRole('list', { name: 'Drainage tree' });
+	await expect(tree).toContainText('Upper farm, hydrological unit');
+	await expect(tree).not.toContainText(', farm,');
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	// The tile's tint has its band in words under it.
+	await expect(card(page).getByTestId('supply-band')).toHaveText(/supplied$/);
 });

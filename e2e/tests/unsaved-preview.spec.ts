@@ -13,7 +13,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openSettings } from '../support/settings.ts';
+import { openSettings, settingsBar } from '../support/settings.ts';
 
 const preview = (page: Page) => page.getByRole('dialog', { name: /^Preview: your unsaved / });
 
@@ -59,7 +59,7 @@ test('Settings: the unsaved A-pan previewed against the last run, nothing saved 
 	// Closed, the edits are still unsaved, and the preview made no run and saved nothing.
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(dialog).toBeHidden();
-	await expect(page.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+	await expect(settingsBar(page).getByRole('button', { name: 'Save changes' })).toBeEnabled();
 	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('450');
 	expect(await runCount(page, project.id)).toBe(1);
 	const res = await page.request.get(`${API_URL}/projects/${project.id}`);
@@ -92,7 +92,7 @@ test("Crops & demand: the save bar's Preview shows the unit whose supply the uns
 	expect(await runCount(page, project.id)).toBe(1);
 });
 
-test("Settings: with the model's edits too, and the save bar's own Preview hidden; a runs list the page couldn't load is asked for again", async ({ page, owner }) => {
+test("Settings: the one save bar's Preview takes the settings and the model's edits; a runs list the page couldn't load is asked for again", async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Preview both');
 	await createRun(page.request, project.id, 'Base');
@@ -114,14 +114,15 @@ test("Settings: with the model's edits too, and the save bar's own Preview hidde
 	await closeModal(page);
 	expect(failed).toBe(1);
 
-	// On Settings the save bar keeps its Save but not its Preview: the form's Preview takes the model's edits.
+	// On Settings there is still one bar, with one Preview: it takes the settings with the model's edits.
 	await page.getByRole('link', { name: 'Settings & calibration' }).first().click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Save changes' })).toBeVisible();
-	await expect(page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Preview', exact: true })).toHaveCount(0);
+	const bar = page.getByRole('region', { name: 'Unsaved model changes' });
+	await expect(bar.getByRole('button', { name: 'Save changes' })).toBeVisible();
 	await page.getByLabel('A-pan evaporation, Oct, mm').fill('450');
 	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
-	await page.getByRole('button', { name: 'Preview', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Preview', exact: true })).toHaveCount(1);
+	await bar.getByRole('button', { name: 'Preview', exact: true }).click();
 
 	const dialog = preview(page);
 	await expect(dialog).toHaveAccessibleName('Preview: your unsaved settings and model edits');

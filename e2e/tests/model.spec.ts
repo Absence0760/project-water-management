@@ -69,15 +69,15 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await expect(areas.getByRole('row', { name: /^Total/ })).toContainText('33.00 ha');
 	await closeModal(page);
 	// The page's bars and header follow.
-	await expect(page.getByTestId('crops-summary')).toHaveText('1 crop · 33 ha irrigated on 2 farms · water year October to September');
+	await expect(page.getByTestId('crops-summary')).toHaveText('1 crop · 33 ha irrigated on 2 hydrological units · water year October to September');
 	await expect(page.getByRole('img', { name: 'Hilltop farm: 25 ha, Vines 25 ha' })).toBeVisible();
 
 	// --- a transfer from Hilltop to Valley in Dec + Jan ----------------------
 	await tab(page, 'Transfers').click();
 	// The section header's main action (issue #17).
 	await page.getByTestId('section-header').getByRole('button', { name: '+ Add transfer', exact: true }).click();
-	await page.getByLabel('Source of transfer 1').selectOption({ label: 'Hilltop farm' });
-	await page.getByLabel('Destination of transfer 1').selectOption({ label: 'Valley farm' });
+	await page.getByLabel('From, transfer 1', { exact: true }).selectOption({ label: 'Hilltop farm' });
+	await page.getByLabel('To, transfer 1', { exact: true }).selectOption({ label: 'Valley farm' });
 	// A rate for each month it runs (engine 1.14.0).
 	await page.getByLabel('Max rate of transfer 1 in Dec, m³/s').fill('0.02');
 	await page.getByLabel('Max rate of transfer 1 in Jan, m³/s').fill('0.02');
@@ -93,12 +93,12 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 
 	// --- reload: everything came back from the server ------------------------
 	await page.reload();
-	await expect(page.getByLabel('Source of transfer 1').locator('option:checked')).toHaveText('Hilltop farm');
-	await expect(page.getByLabel('Destination of transfer 1').locator('option:checked')).toHaveText('Valley farm');
+	await expect(page.getByLabel('From, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Hilltop farm');
+	await expect(page.getByLabel('To, transfer 1', { exact: true }).locator('option:checked')).toHaveText('Valley farm');
 	await expect(page.getByLabel('Max rate of transfer 1 in Dec, m³/s')).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 1 in Jan, m³/s')).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 1 in Feb, m³/s')).toHaveValue('');
-	await expect(page.getByLabel('transfer 1 enabled')).toBeChecked();
+	await expect(page.getByLabel('Enabled, transfer 1')).toBeChecked();
 
 	await tab(page, 'Crops').click();
 	const factors = await openCropGrid(page, 'crop-factors');
@@ -157,7 +157,8 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	await expect(save).toBeDisabled();
 
 	// Discard (the grid's, as the save bar's) puts the saved network back.
-	await grid.getByRole('button', { name: 'Discard' }).click();
+	await grid.getByRole('button', { name: 'Discard model changes' }).click();
+	await answerConfirm(page, true, 'Discard all unsaved model changes?');
 	await expect(saveBar(page)).toBeHidden();
 	await expect(problems).toBeHidden();
 	await expect(page.getByLabel('Upper farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
@@ -166,6 +167,31 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	await page.reload();
 	await expect(page.getByLabel('Lower farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
 	await expect(page.getByLabel('Upper farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
+});
+
+test('the node sheet’s save row lists its problems as links to where they are fixed', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Sheet problems');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	await sheet.getByLabel('Name', { exact: true }).fill('Lower farm');
+	// The page's list is behind the modal: the row names the problem, as a link to the node's sheet.
+	await expect(sheet).toContainText('1 problem to fix before saving');
+	const link = sheet.getByRole('link', { name: 'Node name "Lower farm" is used 2 times.' });
+	await expect(link).toHaveAttribute('href', /^\?tab=network&edit=/);
+	const save = sheet.getByRole('button', { name: 'Save changes' });
+	await expect(save).toBeDisabled();
+	await expect(save).toHaveAccessibleDescription(/Node name "Lower farm" is used 2 times\./);
+	// Discard model changes asks first (it reverts every unsaved model edit, not only this sheet's).
+	await sheet.getByRole('button', { name: 'Discard model changes' }).click();
+	await answerConfirm(page, false, 'including any made on other pages');
+	await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Lower farm');
+	await sheet.getByRole('button', { name: 'Discard model changes' }).click();
+	await answerConfirm(page, true, 'Your unsaved changes to the network will be lost, including');
+	await expect(sheet).toContainText('Changes discarded. No unsaved changes');
+	await expect(sheet.getByRole('button', { name: 'Done' })).toBeFocused();
 });
 
 test('leaving with unsaved model changes asks first, in the app’s dialog', async ({ page, owner }) => {

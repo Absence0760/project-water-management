@@ -49,3 +49,21 @@ export function qualityFlagsError(q: QualityFlagSettings | null | undefined): st
 	}
 	return null;
 }
+
+export type RatingField = 'max' | 'min' | 'source';
+
+/**
+ * A record's gauged-range problem with the field it is fixed in, so the form
+ * can put the message beside that field (aria-describedby), or null. The
+ * message is qualityFlagsError's for that record.
+ */
+export function ratingProblem(q: QualityFlagSettings | null | undefined, kind: CalibrationFlowKind): { field: RatingField; message: string } | null {
+	const r = q?.ratings?.[kind];
+	if (!r) return null;
+	const err = ratingError(r);
+	if (!err) return null;
+	const ok = (v: unknown) => v === null || (typeof v === 'number' && Number.isFinite(v) && v >= 0);
+	const { gaugedMaxM3s: hi, gaugedMinM3s: lo } = r;
+	const field: RatingField = !ok(hi) || hi === 0 ? 'max' : !ok(lo) || (hi !== null && lo !== null && lo >= hi) ? 'min' : 'source';
+	return { field, message: `${RECORD_NAME[kind]} gauged range: ${err.charAt(0).toUpperCase()}${err.slice(1)}.` };
+}

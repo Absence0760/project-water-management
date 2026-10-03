@@ -181,8 +181,8 @@ describe('farmBars', () => {
 
 describe('cropsSummary', () => {
 	it('reads as one line', () => {
-		expect(cropsSummary(4, 3_125_000, 6, ha)).toBe('4 crops · 312.5 ha irrigated on 6 farms · water year October to September');
+		expect(cropsSummary(4, 3_125_000, 6, ha)).toBe('4 crops · 312.5 ha irrigated on 6 hydrological units · water year October to September');
 		expect(cropsSummary(1, 0, 0, ha)).toBe('1 crop · nothing planted yet · water year October to September');
-		expect(cropsSummary(1, 200_000, 1, ha)).toBe('1 crop · 20.0 ha irrigated on 1 farm · water year October to September');
+		expect(cropsSummary(1, 200_000, 1, ha)).toBe('1 crop · 20.0 ha irrigated on 1 hydrological unit · water year October to September');
 	});
 });

@@ -17,6 +17,7 @@ import { acceptInvites, acknowledgeFarmNotice, addMember, createProject, createR
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 import { grouped } from '../support/format.ts';
 import { runJobsTick } from '../support/jobs.ts';
 import { words as siteWords } from '../support/lang.ts';
@@ -94,8 +95,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(section.getByTestId('share-pending')).toHaveCount(0);
 	await section.getByRole('checkbox', { name: 'Use the default planning share (80 %)' }).uncheck();
 	await section.getByLabel('Planning share (% of analogue years)').fill('55');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByText('Settings saved.')).toBeVisible();
+	await saveSettings(page);
 	const saved = await getJson<{ project: { settings: { outlook: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outlook).toEqual({ season: null, planningShare: 0.55, review: null });
 

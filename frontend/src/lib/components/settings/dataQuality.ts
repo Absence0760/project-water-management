@@ -30,11 +30,11 @@ export function dataQualityError(dq: Partial<DataQualitySettings> | null | undef
 	const factor = (v: unknown) => num(v) && v > 1 && v <= 1000;
 	if (!factor(dq?.outlierFactorRain)) return 'The rain outlier factor must be above 1 and at most 1000.';
 	if (!factor(dq?.outlierFactorFlow)) return 'The flow outlier factor must be above 1 and at most 1000.';
-	if (!whole(dq?.flatlineRainDays, 2, 366)) return 'The rain flat-line must be a whole number of days from 2 to 366.';
-	if (!whole(dq?.flatlineEvapDays, 2, 366)) return 'The A-pan flat-line must be a whole number of days from 2 to 366.';
-	if (!whole(dq?.flatlineFlowMinDays, 2, 366)) return 'The shortest flow flat-line must be a whole number of days from 2 to 366.';
-	if (!whole(dq?.flatlineFlowMaxDays, 2, 366)) return 'The longest flow flat-line must be a whole number of days from 2 to 366.';
-	if (dq!.flatlineFlowMaxDays! < dq!.flatlineFlowMinDays!) return 'The longest flow flat-line can’t be shorter than the shortest.';
+	if (!whole(dq?.flatlineRainDays, 2, 366)) return 'The rain flat stretch must be a whole number of days from 2 to 366.';
+	if (!whole(dq?.flatlineEvapDays, 2, 366)) return 'The A-pan flat stretch must be a whole number of days from 2 to 366.';
+	if (!whole(dq?.flatlineFlowMinDays, 2, 366)) return 'The shortest flow flat stretch must be a whole number of days from 2 to 366.';
+	if (!whole(dq?.flatlineFlowMaxDays, 2, 366)) return 'The longest flow flat stretch must be a whole number of days from 2 to 366.';
+	if (dq!.flatlineFlowMaxDays! < dq!.flatlineFlowMinDays!) return 'The longest flow flat stretch can’t be shorter than the shortest.';
 	if (!(ZERO_RUN_RULES as readonly unknown[]).includes(dq?.zeroRunRule)) return 'Choose how zero-rain runs are judged.';
 	if (!whole(dq?.zeroRunMinWetDays, 1, 366)) return 'Zero-rain runs: the wet-season days must be a whole number from 1 to 366.';
 	const share = dq?.zeroRunUsualShare;
