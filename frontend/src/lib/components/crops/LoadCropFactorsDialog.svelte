@@ -256,7 +256,8 @@
 	{/if}
 	<div class="kp">
 		<label for="lcf-kp">Pan coefficient Kp</label>
-		<NumberInput id="lcf-kp" min={0.1} max={1.5} step={0.05} bind:value={kp} aria-describedby="lcf-kp-why" />
+		<NumberInput id="lcf-kp" min={0.1} max={1.5} step={0.05} bind:value={kp} aria-describedby="lcf-kp-why lcf-kp-range" />
+		<span class="muted small" id="lcf-kp-range">0.1 to 1.5</span>
 		{#if !isKp(kp, kpDefault)}<button type="button" class="btn btn-sm btn-ghost" onclick={useDefaultKp}>Use the default, {kpDefault}</button>{/if}
 	</div>
 	<p class="muted small" id="lcf-kp-why" data-testid="kp-why">
@@ -269,7 +270,7 @@
 			a Kp of 0.35–0.85 (<a href={FAO56_TABLE5_URL} target="_blank" rel="noopener noreferrer">FAO-56 Table 5</a>).
 		{/if}
 	</p>
-	{#if kp === null || !(kp > 0)}<p class="alert alert-warning small">Enter a pan coefficient above 0.</p>{/if}
+	{#if kp === null || !(kp > 0)}<p class="alert alert-warning small">Enter a pan coefficient between 0.1 and 1.5.</p>{/if}
 
 	{#if sources.length && crops.length}
 		<h3>Match crops</h3>
@@ -296,7 +297,7 @@
 								{#if st && plant[c.id]}
 									{@const p = plant[c.id]!}
 									<div class="plant">
-										<select aria-label="{c.name} planting month" bind:value={p.month}>
+										<select aria-label="{c.name} planting month" aria-describedby={p.month ? undefined : `lcf-${c.id}-month`} bind:value={p.month}>
 											<option value={0}>Planting month…</option>
 											{#each MONTHS as m, i (m)}<option value={i + 1}>{m}</option>{/each}
 										</select>
@@ -304,6 +305,12 @@
 										<NumberInput label="{c.name} season, days" min={1} max={365} step={1} bind:value={p.days} />
 										<span class="muted small">days; Table 4.7: {st.seasons.map((s) => `${s.label} ${s.days}`).join(', ')}</span>
 									</div>
+									{#if !p.month}
+										<!-- Otherwise the crop is quietly left out of Apply: say why. -->
+										<p class="month-why small" id="lcf-{c.id}-month" data-testid="planting-month-why">
+											Pick a planting month: until then {st.name} has no factors to load into {c.name || 'this crop'}.
+										</p>
+									{/if}
 								{/if}
 							</td>
 							<td>
@@ -427,6 +434,10 @@
 </Dialog>
 
 <style>
+	.month-why {
+		margin: 0.3rem 0 0;
+		color: var(--text-2);
+	}
 	.row {
 		display: flex;
 		flex-wrap: wrap;

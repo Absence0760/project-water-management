@@ -8,10 +8,13 @@
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import GridPasteDialog from '$lib/components/model/GridPasteDialog.svelte';
 	import ModelSaveRow from '$lib/components/model/ModelSaveRow.svelte';
+	import { gridPasteTarget, type PastePlan } from '$lib/spreadsheet/paste/grid';
 	import { fmtNum } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import { applyFactorPaste, cropFactorsCsv, planFactorPaste } from './areaPaste';
 	import { joinNames } from './demand';
 
 	let {
@@ -22,6 +25,7 @@
 		readonly,
 		onsave,
 		onremove,
+		onloadfactors,
 		reason = $bindable('')
 	}: {
 		open?: boolean;
@@ -33,6 +37,8 @@
 		onsave: () => void;
 		/** Told before the crop is removed, so the page can put the focus somewhere that stays (the Edit button that opened the sheet goes with its row). */
 		onremove?: (cropId: string) => void;
+		/** Opens Load crop factors (the library or a workbook) over the sheet; absent, no link. */
+		onloadfactors?: () => void;
 		reason?: string;
 	} = $props();
 
@@ -45,6 +51,27 @@
 			return m2 > 0 ? [`${f.name || '(unnamed)'} (${fmtNum(m2 / 10_000, 2)} ha)`] : [];
 		})
 	);
+
+	// A block pasted into a month (one copied row of 12 factors, say): previewed, then applied from that month on.
+	let pasteOpen = $state(false);
+	let pasteText = $state('');
+	let pasteCol = $state(0);
+	let announce = $state('');
+	function onPaste(e: ClipboardEvent) {
+		const t = gridPasteTarget(e);
+		if (!t) return;
+		const cell = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-paste-col]') : null;
+		pasteCol = cell ? Number(cell.dataset.pasteCol) : 0;
+		pasteText = t.text;
+		pasteOpen = true;
+	}
+	function applyPaste(plan: PastePlan) {
+		applyFactorPaste(plan, (id, m, f) => {
+			const c = editor.model.crops.find((x) => x.id === id);
+			if (c) c.cropFactor[m] = f;
+		});
+		announce = `Pasted ${plan.changes.length} crop ${plan.changes.length === 1 ? 'factor' : 'factors'}. Save the model to keep them.`;
+	}
 
 	async function remove() {
 		if (!crop) return;
@@ -75,17 +102,34 @@
 			</label>
 			<fieldset>
 				<legend>Crop factor by month <HelpTip key="crop.cropFactor" /></legend>
-				<div class="months">
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div class="months" onpaste={readonly ? undefined : onPaste}>
 					{#each WATER_YEAR_MONTHS as m, i (m)}
-						<div class="month">
+						<div class="month" data-paste-col={i}>
 							<span class="m" aria-hidden="true">{m}</span>
-							<NumberInput label="{label} crop factor, {m}" min={0} step={0.01} disabled={readonly} bind:value={crop.cropFactor[i]} />
+							<!-- Cleared, a factor is 0 (a month the crop isn't irrigated), never an empty field over a value the model keeps. -->
+							<NumberInput
+								label="{label} crop factor, {m}"
+								min={0}
+								step={0.01}
+								disabled={readonly}
+								nullable
+								bind:value={() => crop.cropFactor[i] ?? 0, (v) => (crop.cropFactor[i] = v ?? 0)}
+							/>
 						</div>
 					{/each}
 				</div>
 				<!-- No mean factor: an unweighted 12-month average the b023 workbook doesn't have, which reads as more than it is (issue #174). -->
-				<p class="muted small">Water year, October → September</p>
+				<p class="muted small">
+					Water year, October → September.{#if !readonly}{' '}Paste a copied row of 12 factors into Oct to fill them all.{/if}
+				</p>
 			</fieldset>
+			{#if !readonly && onloadfactors}
+				<p class="small">
+					<button type="button" class="btn btn-sm" onclick={onloadfactors}>Load crop factors…</button>
+					<span class="muted">from the ARC/SABI library or a workbook</span>
+				</p>
+			{/if}
 			{#if high.length}
 				<p class="alert alert-warning small" role="status">
 					A factor above 1.0 ({high.join(', ')}) means the crop uses more water than an open A-pan loses. That can happen, but check it
@@ -104,6 +148,21 @@
 				<p><button type="button" class="btn btn-sm btn-danger" aria-label="Remove {label}" onclick={remove}>Remove crop</button></p>
 			{/if}
 		</div>
+
+		<p class="visually-hidden" aria-live="polite">{announce}</p>
+		{#if !readonly}
+			<GridPasteDialog
+				bind:open={pasteOpen}
+				bind:text={pasteText}
+				title="Paste {crop.name || 'unnamed crop'}'s crop factors"
+				layout="Crop factors (× A-pan), one row of months; without a heading row the values fill from the month you pasted into. 0 is a month the crop isn't irrigated."
+				where="{crop.name || '(unnamed)'}, {WATER_YEAR_MONTHS[pasteCol]}"
+				plan={(t) => planFactorPaste(t, [crop], { row: 0, col: pasteCol })}
+				onapply={applyPaste}
+				csv={() => cropFactorsCsv([crop])}
+				csvName="crop-factors.csv"
+			/>
+		{/if}
 
 		{#snippet actions()}
 			{#if readonly}

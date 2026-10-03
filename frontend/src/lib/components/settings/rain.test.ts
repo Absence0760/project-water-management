@@ -1,6 +1,6 @@
 import { ACCUMULATION_MODES, CHIRPS_BIAS_MODES, defaultProjectSettings, ZERO_RAIN_MODES } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, describeZeroRain, withChirpsQuantileMap, ZERO_RAIN_OPTIONS } from './rain';
+import { ACCUMULATION_OPTIONS, CHIRPS_BIAS_OPTIONS, CHIRPS_FIT_OPTIONS, chirpsFitChoice, chirpsFitRangesError, chirpsFitRangesProblem, describeZeroRain, withChirpsQuantileMap, ZERO_RAIN_OPTIONS } from './rain';
 
 describe('CHIRPS_BIAS_OPTIONS', () => {
 	it('offers every engine mode once, default first', () => {
@@ -28,6 +28,12 @@ describe('chirpsFitRangesError', () => {
 		expect(chirpsFitRangesError([r(1990, 1999), r(2005, 2001)])).toBe('Fit range 2: ends before it starts');
 		expect(chirpsFitRangesError([r(1990, 1999, '  ')])).toBe('Fit range 1: needs a reason');
 		expect(chirpsFitRangesError([r(1990, 1999), r(1995, 2005)])).toBe('Fit ranges overlap: 1995/96–2005/06 overlaps 1990/91–1999/00');
+	});
+	it('says which range and field each problem is fixed in', () => {
+		expect(chirpsFitRangesProblem([r(1990, 1999), r(2005, 2001)])).toMatchObject({ index: 1, field: 'to' });
+		expect(chirpsFitRangesProblem([r(1990, 1999, '  ')])).toMatchObject({ index: 0, field: 'reason' });
+		expect(chirpsFitRangesProblem([r(1990, 1999), r(1995, 2005)])).toMatchObject({ index: null, field: null });
+		expect(chirpsFitRangesProblem([])).toMatchObject({ index: null, field: null });
 	});
 });
 

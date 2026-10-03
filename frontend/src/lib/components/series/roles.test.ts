@@ -1,6 +1,6 @@
 import { SERIES_KINDS, type SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { gaugeRecordsInUse, KIND_ROLES, rainSourceKinds, seriesInUse } from './roles';
+import { gaugeRecordsInUse, KIND_ROLES, newSeriesEffect, rainSourceKinds, roleBadge, seriesInUse } from './roles';
 
 const meta = (id: string, kind: string, name = ''): SeriesMeta => ({ id, kind, name, unit: '', startDate: '2020-01-01', length: 1 });
 
@@ -58,5 +58,72 @@ describe('gauge records (084_gauge_records, engine ≥ 1.4.0)', () => {
 		];
 		expect([...gaugeRecordsInUse(list, [{ id: 'n1' }, { id: 'n2' }])].sort()).toEqual(['g1', 'gl', 'k']);
 		expect([...gaugeRecordsInUse(list, [])]).toEqual([]);
+	});
+});
+
+describe('newSeriesEffect', () => {
+	const station = meta('s', 'rain_catchment_mm', 'Station 0021');
+
+	it('the first series of a kind just creates it', () => {
+		expect(newSeriesEffect([meta('c', 'rain_chirps_mm')], 'rain_catchment_mm', 'Station 0021')).toEqual({ effect: 'first', current: null, didYouMean: null });
+	});
+
+	it('a name that sorts first will replace the series runs read', () => {
+		const e = newSeriesEffect([station], 'rain_catchment_mm', 'Aa station');
+		expect(e.effect).toBe('replaces');
+		expect(e.current?.id).toBe('s');
+		// A blank name sorts first too.
+		expect(newSeriesEffect([station], 'rain_catchment_mm', '').effect).toBe('replaces');
+	});
+
+	it('a name that sorts after keeps runs on the one they read', () => {
+		const e = newSeriesEffect([station], 'rain_catchment_mm', 'Zz station');
+		expect(e.effect).toBe('keeps');
+		expect(e.current?.id).toBe('s');
+		expect(e.didYouMean).toBeNull();
+	});
+
+	it('offers the existing name when one differs only in case or spacing', () => {
+		expect(newSeriesEffect([station], 'rain_catchment_mm', 'station  0021').didYouMean?.id).toBe('s');
+		expect(newSeriesEffect([station], 'rain_catchment_mm', 'Station 0022').didYouMean).toBeNull();
+	});
+
+	it('says nothing about which when runs read none of the kind either way', () => {
+		// A reference gauge is never read; a logger beside an observed gauge isn't either.
+		expect(newSeriesEffect([meta('r', 'flow_reference_m3s', 'Ref')], 'flow_reference_m3s', 'A').effect).toBe('unread');
+		expect(newSeriesEffect([meta('o', 'flow_observed_m3s', 'Weir'), meta('l', 'flow_logger_m3s', 'L')], 'flow_logger_m3s', 'A').effect).toBe('unread');
+	});
+
+	it('a gauge’s record (sited) doesn’t count: an upload goes to the outlet', () => {
+		const sited = { ...meta('g', 'flow_observed_m3s', 'Upper'), siteNodeId: 'n1' };
+		expect(newSeriesEffect([sited], 'flow_observed_m3s', 'Weir').effect).toBe('first');
+	});
+});
+
+describe('roleBadge', () => {
+	const ctx = (list: SeriesMeta[], extra: Partial<Parameters<typeof roleBadge>[1]> = {}) => ({
+		list,
+		inUse: seriesInUse(list),
+		gaugeInUse: gaugeRecordsInUse(list, [{ id: 'n1' }]),
+		gaugeIds: new Set(['n1']),
+		calibrationSite: null,
+		...extra
+	});
+
+	it('names the role of a series a run reads, and marks the others unused with the reason in the badge', () => {
+		const a = meta('a', 'rain_catchment_mm', 'A');
+		const b = meta('b', 'rain_catchment_mm', 'B');
+		expect(roleBadge(a, ctx([a, b]))).toEqual({ label: 'Main rainfall', unused: false, why: null });
+		expect(roleBadge(b, ctx([a, b]))).toEqual({ label: 'Not used (another series of this kind is)', unused: true, why: null });
+	});
+
+	it('says in words where a gauge record is checked and scored', () => {
+		const g = { ...meta('g', 'flow_observed_m3s', 'Upper'), siteNodeId: 'n1' };
+		const checks = roleBadge(g, ctx([g]));
+		expect(checks?.label).toBe('Gauge record (checks only)');
+		expect(checks?.why).toMatch(/Settings → Calibration record/);
+		expect(roleBadge(g, ctx([g], { calibrationSite: 'n1' }))?.label).toBe('Gauge record (calibration site)');
+		const gone = { ...g, siteNodeId: 'n9' };
+		expect(roleBadge(gone, ctx([gone]))?.label).toBe('Not used: its gauge is no longer in the model');
 	});
 });

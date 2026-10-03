@@ -4,7 +4,10 @@
 	// drawn as a small area–volume chart; the release rule and its monthly
 	// amounts sit below it. The outlet capacity and seepage share are ordinary
 	// number fields in the Farm dam group (./fields.ts).
+	import { tick } from 'svelte';
 	import { DAM_RELEASE_RULES, type DamReleaseRule, type NetworkNode } from '@water-management/engine';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { curveQuestion } from './removeQuestions';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -29,21 +32,32 @@
 	let pasteError = $state<string | null>(null);
 	let editing = $state(false);
 
-	function startEdit() {
+	// The paste box replaces the button that opened it, and goes when its rows are used or
+	// cancelled: the focus moves into it, then back to the button (playbook § 4).
+	let startBtn: HTMLButtonElement | undefined = $state();
+	async function startEdit() {
 		pasted = curveText(node.damCurve);
 		pasteError = null;
 		editing = true;
+		await tick();
+		document.getElementById(id('paste'))?.focus();
+	}
+	async function closeEdit() {
+		editing = false;
+		await tick();
+		startBtn?.focus();
 	}
 	function applyPaste() {
 		const p = parseDamCurve(pasted);
 		pasteError = p.error;
 		if (p.error) return;
 		node.damCurve = p.rows;
-		editing = false;
+		void closeEdit();
 	}
-	function removeCurve() {
+	async function removeCurve() {
+		if (!(await confirmDialog(curveQuestion(rows.length, label)))) return;
 		node.damCurve = null;
-		editing = false;
+		await closeEdit();
 	}
 
 	// The chart: area against volume, 0 to the largest of each.
@@ -120,11 +134,11 @@
 			</div>
 			<div class="actions">
 				<button type="button" class="btn btn-sm" onclick={applyPaste}>Use these rows</button>
-				<button type="button" class="btn btn-sm" onclick={() => (editing = false)}>Cancel</button>
+				<button type="button" class="btn btn-sm" onclick={closeEdit}>Cancel</button>
 			</div>
 		{:else}
 			<div class="actions">
-				<button type="button" class="btn btn-sm" onclick={startEdit}>{rows.length ? 'Edit the survey rows' : 'Paste survey rows'}</button>
+				<button type="button" class="btn btn-sm" onclick={startEdit} bind:this={startBtn}>{rows.length ? 'Edit the survey rows' : 'Paste survey rows'}</button>
 				{#if rows.length}<button type="button" class="btn btn-sm" onclick={removeCurve}>Remove the curve</button>{/if}
 			</div>
 		{/if}

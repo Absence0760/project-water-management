@@ -1,6 +1,6 @@
 import { defaultWr2012Settings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, wr2012Errors } from './wr2012';
+import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors } from './wr2012';
 
 // Synthetic reference: an invented quaternary and round numbers.
 const monthly = (mar: number) => [31, 30, 31, 31, 28.25, 31, 30, 31, 30, 31, 31, 30].map((d) => (mar * d) / 365.25);
@@ -57,5 +57,21 @@ describe('units', () => {
 	it('labels water years by the calendar year they start in', () => {
 		expect(waterYearLabel(1999)).toBe('1999/00');
 		expect(waterYearLabel(2009)).toBe('2009/10');
+	});
+});
+
+describe('switching the WR2012 check and its MAR band off and on', () => {
+	it('brings back the reference switched off, else a blank one', () => {
+		expect(withReference(false, blankReference())).toBeNull();
+		expect(withReference(true, null)).toEqual(blankReference());
+		const typed = { ...blankReference(), quaternary: 'X99Z', areaKm2: 120, marMm3: 14 };
+		const back = withReference(true, typed);
+		expect(back).toEqual(typed);
+		expect(back).not.toBe(typed);
+	});
+	it('brings back the band switched off; off clears both bounds', () => {
+		expect(withMarBand(false, { marLowMm3: 10, marHighMm3: 20 })).toEqual({ marLowMm3: null, marHighMm3: null });
+		expect(withMarBand(true, null)).toEqual({ marLowMm3: null, marHighMm3: null });
+		expect(withMarBand(true, { marLowMm3: 10, marHighMm3: 20 })).toEqual({ marLowMm3: 10, marHighMm3: 20 });
 	});
 });

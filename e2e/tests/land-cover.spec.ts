@@ -6,6 +6,7 @@ import { copyProject, createRun, putModel, seedRunnableProject, type Model } fro
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 import { whatChanged } from '../support/compare.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -25,7 +26,7 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	await cover.getByLabel('Condensed cover (%)').fill('50');
 	await expect(cover.getByText('Class reductions at full cover: 50 % of flows, 60 % of low flows.')).toBeVisible();
 	// Upper farm is 12 km²: 3 × 50 % = 1.5 km², 13 %.
-	await expect(cover.getByText(/Condensed cover 13 % of the hydrological unit's 12 km²/)).toBeVisible();
+	await expect(cover.getByText(/Condensed cover 13 % of the hydrological unit's 12\.00 km²/)).toBeVisible();
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
@@ -59,4 +60,26 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	await page.goto(`/compare?a=${project.id}:${invadedRun}&b=${copy}:${clearedRun}`);
 	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
 	await expect(whatChanged(page).getByText('Land cover "invasive" removed from Upper farm (was 1.5 km² condensed)')).toBeVisible();
+});
+
+test('removing a patch with an area asks, names it, and moves the focus on', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Land cover remove');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	const sheet = await openNodeForm(page, 'Upper farm');
+	const cover = sheet.getByRole('group', { name: 'Land cover', exact: true });
+	await cover.getByRole('button', { name: '+ Add land cover' }).click();
+	await cover.getByRole('button', { name: '+ Add land cover' }).click();
+	await cover.getByLabel('Area (km²)').first().fill('2');
+	await cover.getByRole('button', { name: /^Remove land-cover patch 1 \(/ }).click();
+	await answerConfirm(page, false, 'Its area and cover go with it.');
+	await expect(cover.getByLabel('Cover class')).toHaveCount(2);
+	await cover.getByRole('button', { name: /^Remove land-cover patch 1 \(/ }).click();
+	await answerConfirm(page, true);
+	await expect(cover.getByLabel('Cover class')).toHaveCount(1);
+	await expect(cover.getByLabel('Cover class')).toBeFocused();
+	// The one left has no area: it goes at once, and + Add land cover takes the focus.
+	await cover.getByRole('button', { name: /^Remove land-cover patch 1 \(/ }).click();
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await expect(cover.getByRole('button', { name: '+ Add land cover' })).toBeFocused();
 });

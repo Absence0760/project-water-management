@@ -8,6 +8,7 @@ import { API_URL } from '../support/env.ts';
 import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings, type Model } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { saveSettings } from '../support/settings.ts';
 
 const DAYS = 120;
 
@@ -37,8 +38,7 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	// The outlet and the gauge with a record; never the bare gauge.
 	await expect(scoredAt.getByRole('option')).toHaveText(['The outlet', 'Middle weir']);
 	await scoredAt.selectOption({ label: 'Middle weir' });
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
 	expect(stored.calibrationSiteNodeId).toBe(weir.id);
 	await expectNoViolations(page);
@@ -58,8 +58,7 @@ test('a fit is scored at a gauge inside the network, and its record says where',
 	await scoredAt.selectOption({ label: 'The outlet' });
 	await expect(record.getByText('The calibration site has changed since the fit, so it was fitted to another gauge’s record.')).toBeVisible();
 	await scoredAt.selectOption({ label: 'Middle weir' });
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// The Data page says the weir's record is the calibration site.
 	await page.goto(`/projects/${project.id}?tab=series`);

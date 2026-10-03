@@ -17,6 +17,8 @@ export interface UploadSubmit {
 	disabled: boolean;
 	/** Asking before an overwrite: the row shows Back beside the button. */
 	confirming: boolean;
+	/** The upload is on its way: the dialog can't be closed (the request would finish anyway). */
+	uploading: boolean;
 }
 
 /**

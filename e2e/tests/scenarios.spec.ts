@@ -8,7 +8,9 @@
 // with a 1,200 m³/day pump (WP-3.8), its pumping compared with the base's
 // none as 0 (issue #54); a trigger farm goes straight to run of river one
 // change at a time (an edit group: the half-made edit says why, the finished
-// one applies); a viewer reads it all but changes nothing.
+// one applies); override mode records table edits, and text a number field
+// can't take there blocks its Record without reaching the page's save bar; a
+// viewer reads it all but changes nothing.
 // Axe-scanned in both themes and on a phone.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -396,7 +398,7 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	await mode.getByRole('button', { name: 'Crops', exact: true }).click();
 	await page.getByLabel('Orchard on Lower farm, ha').fill('15');
 	await mode.getByRole('button', { name: 'Transfers', exact: true }).click();
-	await page.getByLabel('transfer 1 enabled').uncheck();
+	await page.getByLabel('Enabled, transfer 1').uncheck();
 	const pending = record.getByRole('list', { name: `Edits to record in ${NAME}` }).getByRole('listitem');
 	// The capacity edit brings the area the table shows with it (blank = estimated): the
 	// capacity change alone would resize the dam's area along its own relation (docs/scenarios.md).
@@ -432,6 +434,52 @@ test('override mode records edits in the Network, Crops and Transfers tables as 
 	await mode.getByRole('button', { name: 'Close override mode' }).click();
 	await expect(page.getByTestId('override-mode')).toHaveCount(0);
 	await expect(page.getByRole('form', { name: 'Add a change' })).toBeVisible();
+});
+
+test('a number override mode can’t take blocks its Record, lists the problem and asks before leaving, never reaching the page’s save bar', async ({ page, owner }) => {
+	void owner;
+	const { project, scenarioId } = await seedScenario(page, 'Scenario override invalid number');
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	await page.getByRole('button', { name: 'Edit in the model tables' }).click();
+	const mode = page.getByTestId('override-mode');
+	const record = page.getByTestId('override-record');
+	await expect(record).toContainText('No edits yet.');
+
+	// Text the field can't take: the field keeps it, and override mode (not the page) counts it.
+	const capacity = page.getByLabel('Dam capacity of Lower farm, m³');
+	await capacity.fill('abc');
+	await capacity.blur();
+	await expect(capacity).toHaveAttribute('aria-invalid', 'true');
+	await expect(record.getByRole('status').first()).toHaveText('1 problem in the tables to fix before recording.');
+	const problem = record.getByRole('link', { name: /^Dam capacity of Lower farm, m³: / });
+	await expect(problem).toBeVisible();
+	await expect(record.getByRole('button', { name: /^Record/ })).toBeDisabled();
+	// The workspace's save bar never sees it: its Discard would reset override fields, its Save save nothing.
+	await expect(page.getByRole('region', { name: /^Unsaved/ })).toHaveCount(0);
+
+	// The link takes the focus to the field.
+	await problem.click();
+	await expect(capacity).toBeFocused();
+
+	// With a real edit as well, Record is still held back by the number.
+	await page.getByLabel('Dam capacity of Upper farm, m³').fill('190000');
+	await expect(record.getByRole('list', { name: `Edits to record in ${NAME}` }).getByRole('listitem').first()).toContainText('Upper farm: Dam capacity');
+	await expect(record.getByRole('button', { name: /^Record/ })).toBeDisabled();
+	await expect(page.getByRole('region', { name: /^Unsaved/ })).toHaveCount(0);
+	await page.getByLabel('Dam capacity of Upper farm, m³').fill('180000');
+
+	// Leaving the scenario with only the typed text asks, and staying keeps it.
+	await page.getByRole('link', { name: 'Runs & results' }).click();
+	await answerConfirm(page, false, `You have unsaved changes (override edits not yet recorded in “${NAME}”).`);
+	await expect(capacity).toHaveValue('abc');
+
+	// Discard edits puts the field back; then there is nothing to record and closing doesn't ask.
+	await record.getByRole('button', { name: 'Discard edits' }).click();
+	await expect(capacity).toHaveValue('90000');
+	await expect(capacity).not.toHaveAttribute('aria-invalid', 'true');
+	await expect(record).toContainText('No edits yet.');
+	await mode.getByRole('button', { name: 'Close override mode' }).click();
+	await expect(page.getByTestId('override-mode')).toHaveCount(0);
 });
 
 test('a viewer reads a scenario and its comparison but changes nothing', async ({ page, owner, signIn }) => {

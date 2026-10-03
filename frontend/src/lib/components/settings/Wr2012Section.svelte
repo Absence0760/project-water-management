@@ -3,6 +3,9 @@
 	flow, entered by the user from the public WR2012 study (never bundled), and
 	how runs compare with it. Bind `value` (settings.wr2012); `error` is set
 	while anything would be rejected, so the parent form can block saving.
+	Bind `last` and `lastBand` to the page's draft (settingsDraft `kept`): what
+	unticking the check or the MAR band turned off, brought back when ticked
+	again until the form is saved or discarded.
 -->
 <script module lang="ts">
 	// "Propose from the map" (issue #288) is its own chunk, fetched when asked for: the Settings tab's chunk stays as it was.
@@ -10,24 +13,33 @@
 </script>
 
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '$lib/components/notes/notes';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
+	import MonthPicker from '$lib/components/common/MonthPicker.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { fmtNum } from '$lib/format/number';
 	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
-	import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, wr2012Errors, type Wr2012Draft } from './wr2012';
+	import { mm3MonthToM3s, monthlySum, waterYearLabel, withMarBand, withReference, wr2012Errors, type MarBand, type Wr2012Draft } from './wr2012';
 
 	let {
 		value = $bindable(),
 		error = $bindable(null),
 		readonly = false,
 		projectId = null,
-		modelAreaKm2
+		modelAreaKm2,
+		last = $bindable(),
+		lastBand = $bindable()
 	}: {
 		value: Wr2012Settings;
 		error?: string | null;
+		/** The reference unticking the check turned off, kept until saved or discarded. */
+		last?: unknown;
+		/** The MAR band's bounds unticking it turned off, likewise. */
+		lastBand?: unknown;
 		readonly?: boolean;
 		/** For "Propose from the map" (the quaternary lookup, issue #288); without it the form is typed only. */
 		projectId?: string | null;
@@ -37,6 +49,12 @@
 
 	const uid = $props.id();
 	let proposing = $state(false);
+	const FLAG_FIELDS = [
+		{ key: 'notePct', label: 'Note it' },
+		{ key: 'queryPct', label: 'Query it' },
+		{ key: 'queryWetterPct', label: '…or query it when wetter by' },
+		{ key: 'unusablePct', label: 'Not usable for EWR findings' }
+	] as const;
 	// The form edits a draft whose numbers may still be blank.
 	const ref = $derived(value.reference as Wr2012Draft | null);
 	const errors = $derived(wr2012Errors(value));
@@ -54,8 +72,11 @@
 	});
 
 	function setEnabled(on: boolean) {
-		value.reference = on ? (blankReference() as unknown as Wr2012Settings['reference']) : null;
-		if (!on) value.calibrationPenalty.enabled = false;
+		if (!on && ref) last = { reference: $state.snapshot(ref), penalty: value.calibrationPenalty.enabled };
+		const kept = last as { reference: Wr2012Draft; penalty: boolean } | null | undefined;
+		value.reference = withReference(on, kept?.reference) as unknown as Wr2012Settings['reference'];
+		value.calibrationPenalty.enabled = on ? (kept?.penalty ?? false) : false;
+		if (!on) proposing = false;
 	}
 
 	function setOwnMonths(on: boolean) {
@@ -65,19 +86,29 @@
 
 	function setOwnBand(on: boolean) {
 		ownBand = on;
-		if (!on) {
-			value.calibrationPenalty.marLowMm3 = null;
-			value.calibrationPenalty.marHighMm3 = null;
-		}
+		const p = value.calibrationPenalty;
+		if (!on && (p.marLowMm3 !== null || p.marHighMm3 !== null)) lastBand = { marLowMm3: p.marLowMm3, marHighMm3: p.marHighMm3 };
+		const b = withMarBand(on, lastBand as MarBand | null | undefined);
+		p.marLowMm3 = b.marLowMm3;
+		p.marHighMm3 = b.marHighMm3;
 	}
 
 	const err = (k: string) => errors[k];
+
+	// "Propose from the map" opens the lookup in place; Close puts the button back and the focus on it.
+	let proposeBtn: HTMLButtonElement | undefined = $state();
+	async function closeProposal() {
+		proposing = false;
+		await tick();
+		proposeBtn?.focus();
+	}
 </script>
 
 <section class="panel" aria-labelledby="{uid}-h">
 	<div class="panel-head">
 		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
 		<span class="muted small">Optional: compare simulated natural flow with the quaternary’s naturalised flow</span>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('wr2012')} />{/if}
 	</div>
 	<p class="hint muted">
 		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
@@ -97,9 +128,12 @@
 						<QuaternaryProposal {projectId} bind:ref={() => ref!, (v) => (value.reference = v as unknown as Wr2012Settings['reference'])} />
 					{/snippet}
 				</Lazy>
+				<p class="propose">
+					<button type="button" class="btn btn-sm btn-ghost" onclick={closeProposal}>Close the proposal</button>
+				</p>
 			{:else}
 				<p class="propose">
-					<button type="button" class="btn btn-sm" onclick={() => (proposing = true)}>Propose from the map</button>
+					<button type="button" class="btn btn-sm" onclick={() => (proposing = true)} bind:this={proposeBtn}>Propose from the map</button>
 					<span class="hint muted">Look up the quaternary under a point and use its reference values one by one.</span>
 				</p>
 			{/if}
@@ -162,7 +196,17 @@
 					<tr>
 						<th scope="row" class="sticky">Mean naturalised flow <span class="u">Mm³</span></th>
 						{#each WATER_YEAR_MONTHS as m, i (m)}
-							<td><NumberInput label="WR2012 monthly mean, {m}, Mm³" min={0} nullable disabled={readonly} bind:value={ref.monthlyMm3[i]} /></td>
+							<td>
+								<NumberInput
+									label="WR2012 monthly mean, {m}, Mm³"
+									min={0}
+									nullable
+									disabled={readonly}
+									bind:value={ref.monthlyMm3[i]}
+									aria-invalid={err('monthlyMm3') ? 'true' : undefined}
+									aria-describedby={err('monthlyMm3') ? `${uid}-monthly-e` : undefined}
+								/>
+							</td>
 						{/each}
 						<td class="num">{sum === null ? '–' : fmtNum(sum, 3)}</td>
 					</tr>
@@ -178,7 +222,7 @@
 			Monthly volumes in <strong>million m³ per month</strong>, October → September, as the WR2012 tables give them (not m³/s). They should add
 			up to the MAR within {WR2012_MONTHLY_SUM_TOLERANCE * 100} %.
 		</p>
-		{#if err('monthlyMm3')}<p class="err" role="alert">{err('monthlyMm3')}</p>{/if}
+		{#if err('monthlyMm3')}<p class="err" id="{uid}-monthly-e">{err('monthlyMm3')}</p>{/if}
 
 		<div class="fields">
 			<div class="field">
@@ -202,9 +246,11 @@
 				Choose the dry-season months
 			</label>
 			{#if ownMonths && value.lowFlowMonths}
-				<MonthPicker label="Dry-season months" disabled={readonly} bind:months={value.lowFlowMonths} />
+				<div aria-describedby={err('lowFlowMonths') ? `${uid}-months-e` : undefined} role="group" aria-label="Dry-season months">
+					<MonthPicker label="Dry-season months" disabled={readonly} bind:months={value.lowFlowMonths} />
+				</div>
 			{/if}
-			{#if err('lowFlowMonths')}<p class="err" role="alert">{err('lowFlowMonths')}</p>{/if}
+			{#if err('lowFlowMonths')}<p class="err" id="{uid}-months-e">{err('lowFlowMonths')}</p>{/if}
 			<span class="hint">
 				Unticked, each run uses the project’s own low-flow months: those whose simulated natural flow is below half the average month.
 			</span>
@@ -213,27 +259,23 @@
 		<fieldset class="plain flags">
 			<legend>When the simulated MAR differs from WR2012 by…</legend>
 			<div class="fields">
-				<div class="field">
-					<label for="{uid}-note">Note it <span class="u">(%)</span></label>
-					<NumberInput id="{uid}-note" min={0} max={1000} disabled={readonly} bind:value={value.flags.notePct} />
-				</div>
-				<div class="field">
-					<label for="{uid}-query">Query it <span class="u">(%)</span></label>
-					<NumberInput id="{uid}-query" min={0} max={1000} disabled={readonly} bind:value={value.flags.queryPct} aria-invalid={err('queryPct') ? 'true' : undefined} />
-				</div>
-				<div class="field">
-					<label for="{uid}-wet">…or query it when wetter by <span class="u">(%)</span></label>
-					<NumberInput id="{uid}-wet" min={0} max={1000} disabled={readonly} bind:value={value.flags.queryWetterPct} aria-invalid={err('queryWetterPct') ? 'true' : undefined} />
-				</div>
-				<div class="field">
-					<label for="{uid}-unusable">Not usable for EWR findings <span class="u">(%)</span></label>
-					<NumberInput id="{uid}-unusable" min={0} max={1000} disabled={readonly} bind:value={value.flags.unusablePct} />
-				</div>
+				{#each FLAG_FIELDS as f (f.key)}
+					<div class="field">
+						<label for="{uid}-{f.key}">{f.label} <span class="u">(%)</span></label>
+						<NumberInput
+							id="{uid}-{f.key}"
+							min={0}
+							max={1000}
+							disabled={readonly}
+							bind:value={value.flags[f.key]}
+							aria-invalid={err(f.key) ? 'true' : undefined}
+							aria-describedby={err(f.key) ? `${uid}-${f.key}-e` : undefined}
+						/>
+						{#if err(f.key)}<span class="err" id="{uid}-{f.key}-e">{err(f.key)}</span>{/if}
+					</div>
+				{/each}
 			</div>
 			<span class="hint">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
-			{#each ['notePct', 'queryPct', 'queryWetterPct', 'unusablePct'] as k (k)}
-				{#if err(k)}<p class="err" role="alert">{err(k)}</p>{/if}
-			{/each}
 		</fieldset>
 
 		<fieldset class="plain penalty">
@@ -384,6 +426,21 @@
 		   13rem holds the longest row label on one line. */
 		width: 13rem;
 		white-space: normal;
+	}
+	/* A narrow panel (a phone): the row label takes a narrow column and wraps, its unit on a line of its own,
+	   so about four months show beside it instead of two. A container query on the scroll box: the app
+	   frame's width isn't the viewport's. */
+	.table-wrap {
+		container: monthly / inline-size;
+	}
+	@container monthly (max-width: 30rem) {
+		.monthly th.sticky {
+			width: 6.5rem;
+			min-width: 6.5rem;
+		}
+		.monthly th.sticky .u {
+			display: block;
+		}
 	}
 	.derived td,
 	.derived th {

@@ -3,14 +3,20 @@
 	freshets and floods, each a name, the months it may peak in, a peak
 	(m³/s), an event duration (days, rise to recession) and the events required per water year. Rows
 	are edited in place, pasted from a spreadsheet, or read from a CSV file.
-	Part of EwrRuleTablesEditor.svelte's chunk; helpers in ./ewrRules.ts.
+	Part of EwrRuleTablesEditor.svelte's chunk; helpers in ./ewrRules.ts. A
+	"Peaks in" that doesn't read as months is kept as typed, said under its field
+	and counted as invalid (common/invalidFields), so it blocks the save as an
+	invalid number does; a Fill over typed components asks first.
 -->
 <script lang="ts">
 	import { EWR_HIGH_FLOWS_MAX, highFlowsIssue, type EwrHighFlowEvent } from '@water-management/engine';
+	import { untrack } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { useInvalidFields } from '$lib/components/common/invalidFields.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { describeMonths } from '$lib/format/months';
-	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, parseHighFlows, parseMonths } from './ewrRules';
+	import { blankHighFlow, EXAMPLE_HIGH_FLOWS_CSV, highFlowTyped, parseHighFlows, parseMonths } from './ewrRules';
 
 	let {
 		value = $bindable(),
@@ -22,6 +28,8 @@
 		readonly?: boolean;
 		siteLabel: string;
 	} = $props();
+	// The nearest owner's registry of invalid fields (the workspace page, or a scenario's override mode).
+	const invalidFields = useInvalidFields();
 
 	const uid = $props.id();
 	// Months as typed, by row, until they parse.
@@ -44,6 +52,25 @@
 		monthsBad = {};
 	}
 
+	const MONTHS_MESSAGE = 'Enter the months as names or numbers, e.g. Nov-Jan or Nov Dec Jan.';
+	const monthsId = (k: number) => `${uid}-m${k}`;
+	// A month list that doesn't read is unsaved, invalid work, as a number field's text is: the save bar
+	// lists it and blocks the save, and leaving asks. A Discard (invalidFields.reset) puts the text back.
+	$effect(() => {
+		const bad = Object.entries(monthsBad).filter(([, b]) => b).map(([k]) => Number(k));
+		for (const k of bad) invalidFields.set(`${uid}-m${k}`, { id: monthsId(k), label: `High flow ${k + 1} months it may peak in`, message: MONTHS_MESSAGE });
+		return () => {
+			for (const k of bad) invalidFields.delete(`${uid}-m${k}`);
+		};
+	});
+	let epoch = invalidFields.epoch;
+	$effect(() => {
+		const e = invalidFields.epoch;
+		if (e === epoch) return;
+		epoch = e;
+		untrack(resetText);
+	});
+
 	// The list is replaced, never mutated in place: a table saved before high flows existed binds a fresh [] that only a new value reaches.
 	function add() {
 		value = [...value, blankHighFlow()];
@@ -54,12 +81,22 @@
 		resetText();
 	}
 
-	function fill(text: string) {
+	async function fill(text: string) {
 		const r = parseHighFlows(text);
 		if ('error' in r) {
 			note = { ok: false, text: r.error };
 			return;
 		}
+		const typed = value.filter(highFlowTyped).length;
+		if (
+			typed &&
+			!(await confirmDialog({
+				title: `Replace the high flows at ${siteLabel}?`,
+				message: `${typed === 1 ? 'The 1 component' : `The ${typed} components`} listed will be replaced by the ${r.length} filled in.`,
+				confirmLabel: 'Replace the high flows'
+			}))
+		)
+			return;
 		value = r;
 		resetText();
 		paste = '';
@@ -105,13 +142,16 @@
 							<td><input aria-label="High flow {k + 1} name" readonly={readonly} maxlength="100" placeholder="Class II freshet" bind:value={e.label} /></td>
 							<td>
 								<input
+									id={monthsId(k)}
 									aria-label="High flow {k + 1} months it may peak in"
 									readonly={readonly}
 									value={monthsText[k] ?? describeMonths(e.months)}
 									oninput={(ev) => setMonths(k, ev.currentTarget.value)}
 									aria-invalid={monthsBad[k] ? 'true' : undefined}
+									aria-describedby={monthsBad[k] ? `${monthsId(k)}-err` : undefined}
 									placeholder="Nov-Jan"
 								/>
+								{#if monthsBad[k]}<span class="err" id="{monthsId(k)}-err">{MONTHS_MESSAGE}</span>{/if}
 							</td>
 							<td><NumberInput label="High flow {k + 1} daily-mean peak, m³/s" min={0} nullable disabled={readonly} value={Number.isFinite(e.peakM3s) ? e.peakM3s : null} onchange={(v) => (e.peakM3s = v ?? NaN)} /></td>
 							<td><NumberInput label="High flow {k + 1} event duration, days" min={1} max={90} step={1} nullable disabled={readonly} value={e.durationDays} onchange={(v) => (e.durationDays = v ?? NaN)} /></td>
@@ -127,7 +167,6 @@
 	{:else}
 		<p class="muted small">None: only the monthly flows are judged.</p>
 	{/if}
-	{#if Object.values(monthsBad).some(Boolean)}<p class="err">Enter the months as names or numbers, e.g. Nov-Jan or Nov Dec Jan.</p>{/if}
 	{#if issue}<p class="err" role="alert">{issue}</p>{/if}
 	{#if !readonly}
 		<div class="actions">

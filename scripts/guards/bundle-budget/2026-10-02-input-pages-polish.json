@@ -1,0 +1,4 @@
+{
+	"addKb": 26,
+	"why": "PR #394, the data input pages polish (one save bar with drafts and problem links, the scoped invalid-field registry, the node sheet's jump row and section order, crop and dam page fixes, Settings tips and headings). Measured 1645 KB locally against 1619 KB on main @ 594f16691 (+26 KB)."
+}

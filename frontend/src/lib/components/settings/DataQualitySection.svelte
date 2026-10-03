@@ -5,7 +5,7 @@
 	the zero-rain run and low-vs-CHIRPS limits (engine ≥ 1.20.0, issue #66)
 	change results, because a run treats flagged zero runs as missing (§2.4c)
 	and leaves flagged water years out of the CHIRPS factor fit (§2.4b). Part
-	of the Settings form: Save settings saves it, and `error` blocks saving.
+	of the Settings form: the save bar saves it, and `error` blocks saving.
 -->
 <script lang="ts">
 	import type { DataQualitySettings } from '@water-management/engine';
@@ -29,7 +29,7 @@
 <section class="panel" id="set-quality" aria-labelledby="dq-h" data-testid="data-quality-settings">
 	<div class="panel-head">
 		<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
-		<span class="muted small">Checks on the Data tab and in run warnings</span>
+		<span class="muted small">Input checks, and the zero-rain and low-vs-CHIRPS limits runs use</span>
 		<NotesDrawer {projectId} target={settingTarget('quality')} />
 	</div>
 
@@ -162,7 +162,7 @@
 		</div>
 	</div>
 	<p class="hint muted">
-		These change results: a run treats flagged zero-rain runs as missing (Settings → Zero-rain runs) and leaves flagged water years out
+		These change results: a run treats flagged zero-rain runs as missing (<a href="#set-rain">Rain gaps</a>, Zero-rain runs) and leaves flagged water years out
 		of the CHIRPS factor fit, and a fit made under other limits asks to be redone. The defaults are the rules runs used before these were
 		settings; the alternatives follow a hydrologist review and are still to be tested on a semi-arid record.
 	</p>

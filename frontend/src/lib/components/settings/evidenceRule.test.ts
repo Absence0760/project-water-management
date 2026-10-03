@@ -1,6 +1,6 @@
 import { declaredRuleError, declaredRuleText, ENSEMBLE_DEFAULTS, WR2012_LEVELS } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { defaultEvidenceRule, evidenceRuleFieldsError, RULE_BOUNDS_LABEL, RULE_WR2012_LABEL, withdrawnRule } from './evidenceRule';
+import { defaultEvidenceRule, evidenceRuleFieldsError, RULE_BOUNDS_LABEL, RULE_WR2012_LABEL, withdrawnRule, withEvidenceRule } from './evidenceRule';
 
 describe('defaultEvidenceRule', () => {
 	it('is the ensemble’s own defaults, a valid rule the server accepts', () => {
@@ -50,5 +50,17 @@ describe('labels', () => {
 		expect(Object.keys(RULE_BOUNDS_LABEL).sort()).toEqual(['typical', 'wide']);
 		expect(Object.keys(RULE_WR2012_LABEL)).toEqual([...WR2012_LEVELS]);
 		expect(RULE_WR2012_LABEL.unusable).toBe('No check');
+	});
+});
+
+describe('withEvidenceRule', () => {
+	it('on brings back the rule switched off, not the defaults; off withdraws it', () => {
+		const declared = { ...defaultEvidenceRule(), members: 300, panOffset: 0.05 };
+		expect(withEvidenceRule(false, declared, declared)).toBeNull();
+		expect(withEvidenceRule(false, undefined, declared)).toBeUndefined();
+		expect(withEvidenceRule(true, declared, null)).toEqual(defaultEvidenceRule());
+		const back = withEvidenceRule(true, declared, declared);
+		expect(back).toEqual(declared);
+		expect(back).not.toBe(declared);
 	});
 });

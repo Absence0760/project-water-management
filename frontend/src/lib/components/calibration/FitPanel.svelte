@@ -463,7 +463,7 @@
 				{#if !readonly}
 					<div class="row">
 						<button type="button" class="btn btn-primary" onclick={apply}>Apply to form</button>
-						<span class="muted small">Fills in the fitted parameters and records this fit with them; nothing is saved until you press Save settings.</span>
+						<span class="muted small">Fills in the fitted parameters and records this fit with them; nothing is saved until you save your changes.</span>
 					</div>
 				{/if}
 			</div>

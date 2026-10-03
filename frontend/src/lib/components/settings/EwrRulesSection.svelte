@@ -11,6 +11,8 @@
 	import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure, NetworkNode } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
+	import { settingTarget } from '$lib/components/notes/notes';
 	import { newTable, rulesError, siteOptions } from './ewrRules';
 
 	let {
@@ -19,7 +21,8 @@
 		chargeSource = $bindable(),
 		lowFlowMeasure = $bindable(),
 		readonly = false,
-		nodes
+		nodes,
+		projectId = null
 	}: {
 		value: EwrRuleTable[];
 		error?: string | null;
@@ -28,6 +31,8 @@
 		/** settings.lowFlowMeasure (engine ≥ 1.3.0); undefined = 'total'. */
 		lowFlowMeasure?: LowFlowMeasure;
 		readonly?: boolean;
+		/** For the group's notes; none without it. */
+		projectId?: string | null;
 		/** The network, for the site picker (outlet and gauges). */
 		nodes: readonly NetworkNode[];
 	} = $props();
@@ -51,7 +56,13 @@
 	<div class="panel-head">
 		<h2 id="{uid}-h">Reserve rule tables <HelpTip key="settings.ewrRules" /></h2>
 		<span class="muted small">Optional: judge each month against the Ecological Reserve’s assurance rules</span>
+		{#if projectId}<NotesDrawer {projectId} target={settingTarget('reserve')} />{/if}
+		<!-- In the head, above the tables: with several sites they run screens long (a "new" action goes above a long list). -->
+		{#if !readonly}
+			<button type="button" class="btn btn-sm head-add" disabled={!canAdd} onclick={add} aria-describedby={!canAdd && value.length ? `${uid}-full` : undefined}>Add a rule table</button>
+		{/if}
 	</div>
+	{#if !readonly && !canAdd && value.length}<p class="hint muted" id="{uid}-full">Every EWR site has a table. Add a gauge on the Network tab for another site.</p>{/if}
 	<p class="hint muted">
 		A Reserve determination gives the EWR as a table: for each month, the flow required at each assurance level (“% point”, the share of
 		time it should be equalled or exceeded; 10 % is the wet-condition flow, 99 % the drought flow). Each month’s <strong>natural flow</strong>
@@ -94,10 +105,6 @@
 		</div>
 	{/if}
 
-	{#if !readonly}
-		<button type="button" class="btn btn-sm" disabled={!canAdd} onclick={add}>Add a rule table</button>
-		{#if !canAdd && value.length}<span class="hint muted"> Every EWR site has a table. Add a gauge on the Network tab for another site.</span>{/if}
-	{/if}
 </section>
 
 <style>
@@ -110,6 +117,9 @@
 	}
 	h2 :global(.helptip) {
 		margin-left: 0.15rem;
+	}
+	.head-add {
+		margin-left: auto;
 	}
 	/* As Settings' .fields: the two method choices side by side, stacked on a phone. */
 	.methods {

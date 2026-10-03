@@ -10,6 +10,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { developmentIssue } from '$lib/model/validate';
+	import { developmentProblemFields, type DevelopmentField } from './problemFields';
 
 	let { node, readonly, part }: { node: NetworkNode; readonly: boolean; part: 'dam' | 'abstraction' } = $props();
 
@@ -18,6 +19,11 @@
 	const problem = $derived(developmentIssue(node));
 	/** Which of the fields the problem is about, so it shows once, beside them. */
 	const problemHere = $derived(problem !== null && (part === 'abstraction' ? /abstraction|gauge/.test(problem) : !/abstraction|gauge/.test(problem)));
+	const problemId = $derived(id(`problem-${part}`));
+	/** The fields the problem is about point at it and are marked invalid (only where it shows, beside them). */
+	const bad = $derived(problemHere ? developmentProblemFields(problem) : []);
+	const describe = (f: DevelopmentField) => [`${id(f)}-h`, ...(bad.includes(f) ? [problemId] : [])].join(' ');
+	const invalid = (f: DevelopmentField) => (bad.includes(f) ? 'true' : undefined);
 	const dateOf = (v: string) => (v === '' ? null : v);
 </script>
 
@@ -32,7 +38,8 @@
 					type="date"
 					{readonly}
 					value={node.damSurveyDate ?? ''}
-					aria-describedby="{id('survey')}-h"
+					aria-describedby={describe('survey')}
+					aria-invalid={invalid('survey')}
 					onchange={(e) => (node.damSurveyDate = dateOf(e.currentTarget.value))}
 				/>
 				<span class="hint" id="{id('survey')}-h">The day the capacity above was measured. Empty: not recorded.</span>
@@ -48,7 +55,8 @@
 					nullable
 					placeholder="none"
 					disabled={readonly}
-					aria-describedby="{id('sediment')}-h"
+					aria-describedby={describe('sediment')}
+					aria-invalid={invalid('sediment')}
 					value={node.damSedimentPctPerYear ?? null}
 					onchange={(v) => (node.damSedimentPctPerYear = v)}
 				/>
@@ -62,7 +70,8 @@
 					type="date"
 					{readonly}
 					value={node.damInServiceFrom ?? ''}
-					aria-describedby="{id('in-service')}-h"
+					aria-describedby={describe('in-service')}
+					aria-invalid={invalid('in-service')}
 					onchange={(e) => (node.damInServiceFrom = dateOf(e.currentTarget.value))}
 				/>
 				<span class="hint" id="{id('in-service')}-h">The first day the dam holds water; before it the unit has no dam. Empty: the whole run.</span>
@@ -77,7 +86,8 @@
 				type="date"
 				{readonly}
 				value={node.abstractionFrom ?? ''}
-				aria-describedby="{id('abstraction')}-h"
+				aria-describedby={describe('abstraction')}
+					aria-invalid={invalid('abstraction')}
 				onchange={(e) => (node.abstractionFrom = dateOf(e.currentTarget.value))}
 			/>
 			<span class="hint" id="{id('abstraction')}-h">
@@ -86,7 +96,7 @@
 			<FieldHistoryLine field="node:{node.id}:abstractionFrom" {unit} />
 		</div>
 	{/if}
-	{#if problemHere}<p class="problem" role="alert">{problem!.charAt(0).toUpperCase() + problem!.slice(1)}</p>{/if}
+	{#if problemHere}<p class="problem" role="alert" id={problemId}>{problem!.charAt(0).toUpperCase() + problem!.slice(1)}</p>{/if}
 </div>
 
 <style>

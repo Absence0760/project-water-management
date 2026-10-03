@@ -12,9 +12,10 @@ test('add a town as an other water user, save, run, and see what it took', async
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Town on the river');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await openNodeTable(page);
+	const grid = await openNodeTable(page);
 
-	await page.getByRole('button', { name: '+ Add other user' }).click();
+	// The node table's own toolbar button: the page header has one too, behind the modal.
+	await grid.getByRole('button', { name: '+ Add other user' }).click();
 	const users = page.getByRole('region', { name: /^Other water users/ });
 	await expect(users).toBeVisible();
 	await users.getByLabel('User name').fill('Town');
@@ -28,7 +29,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	const tableRow = page.getByRole('row').filter({ has: page.getByLabel('Kind of Town') });
 	await expect(tableRow.getByText('not used for an other water user').first()).toBeAttached();
 	// The schematic draws and lists it.
-	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByText(/^\s*Town, user, level 2/)).toBeAttached();
+	await expect(page.getByRole('list', { name: 'Drainage tree' }).getByText(/^\s*Town, other water user, level 2/)).toBeAttached();
 
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);

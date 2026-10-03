@@ -15,6 +15,7 @@ import { answerConfirm } from '../support/confirm.ts';
 import { API_URL } from '../support/env.ts';
 import { loadSyntheticEvaporation } from '../support/evaporation.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { anySaveBar } from '../support/settings.ts';
 import { box } from '../support/map.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
@@ -73,7 +74,7 @@ test('an editor uses the boundary’s reference ET as GR4J’s monthly PE; Histo
 	await expect(page.getByTestId('gr4j-pe').getByRole('radio', { checked: true })).toHaveAccessibleName(/monthly/i);
 	await expect(page.getByLabel('Monthly PE, Oct, mm')).toHaveValue('120');
 	await expect(page.locator('#st-pe-source')).toHaveValue(/^Proposed from the map: reference evapotranspiration \(FAO-56 Penman-Monteith ET₀\), SYNTHETIC/);
-	await expect(page.getByText('Unsaved settings')).toHaveCount(0);
+	await expect(anySaveBar(page)).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="evaporation-proposal"]' });
 
 	await page.goto(`/projects/${project.id}?tab=history`);
@@ -122,6 +123,7 @@ test('Use waits for unsaved settings, and a project with no boundary is told to 
 	await apanOct.blur();
 	await expect(use).toBeDisabled();
 	await expect(panel(page)).toContainText('Save or discard your settings changes first');
-	await page.getByRole('button', { name: 'Discard' }).click();
+	await anySaveBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
+	await answerConfirm(page, true);
 	await expect(use).toBeEnabled();
 });

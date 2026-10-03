@@ -3,12 +3,14 @@
 	which loads it only once the project has a table, so a project without one
 	downloads none of it): site, source and its kind, the REC, what it covers, unit, natural source,
 	scale, the determination's natural MAR, % points, the EWR and natural grids, paste from a spreadsheet, the
-	plausibility notes and Remove. Helpers in ./ewrRules.ts.
+	plausibility notes and Remove. Remove, and a Fill over a grid that already
+	holds values, ask first. Helpers in ./ewrRules.ts.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { EWR_ASSURANCE_MIN_YEARS, EWR_NATURAL_MAR_TOLERANCE, type EwrRuleTable } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { latestFileText } from '$lib/files/latest';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import EwrHighFlowsEditor from './EwrHighFlowsEditor.svelte';
@@ -16,6 +18,7 @@
 		applyPaste,
 		categoryFromText,
 		exampleGridCsv,
+		filledCells,
 		naturalComplete,
 		parseGrid,
 		parsePoints,
@@ -59,7 +62,16 @@
 
 	const siteLabel = (id: string | null) => options.find((o) => o.id === id)?.label ?? 'Outlet';
 
-	function remove(i: number) {
+	async function remove(i: number) {
+		const t = value[i]!;
+		const grids = ['EWR', ...(t.lowFlow ? ['low-flow'] : []), ...(t.natural ? ['natural-flow'] : [])];
+		const ok = await confirmDialog({
+			title: `Remove the rule table at ${siteLabel(t.siteNodeId)}?`,
+			message: `Its ${grids.join(', ')} grid${grids.length === 1 ? '' : 's'}${t.highFlows?.length ? `, ${t.highFlows.length} high-flow component${t.highFlows.length === 1 ? '' : 's'}` : ''} and source go with it.`,
+			confirmLabel: 'Remove the table',
+			danger: true
+		});
+		if (!ok) return;
 		value.splice(i, 1);
 		for (const list of [pointsText, pointsBad, pasteText, pasteNote, readers] as unknown[][]) list.splice(i, 1);
 	}
@@ -103,7 +115,7 @@
 
 	const exampleHref = (kind: 'total' | 'lowFlow') => `data:text/csv;charset=utf-8,${encodeURIComponent(exampleGridCsv(kind))}`;
 
-	function paste(i: number, which: GridKey) {
+	async function paste(i: number, which: GridKey) {
 		const g = parseGrid(pasteText[i] ?? '');
 		if ('error' in g) {
 			pasteNote[i] = { ok: false, text: g.error };
@@ -114,6 +126,19 @@
 			pasteNote[i] = { ok: false, text: out.error };
 			return;
 		}
+		// Over a grid that already holds values: say how many cells are replaced, and ask.
+		const t = value[i]!;
+		const filled = filledCells(which === 'ewr' ? t.ewr : which === 'lowFlow' ? t.lowFlow : t.natural);
+		const name = which === 'ewr' ? 'EWR' : which === 'lowFlow' ? 'low-flow' : 'natural-flow';
+		if (
+			filled &&
+			!(await confirmDialog({
+				title: `Replace the ${name} values at ${siteLabel(t.siteNodeId)}?`,
+				message: `${filled === 1 ? 'The 1 value' : `The ${filled} values`} in the grid will be replaced by the pasted ones.`,
+				confirmLabel: 'Replace the values'
+			}))
+		)
+			return;
 		value[i] = out;
 		pointsText[i] = out.points.join(', ');
 		pointsBad[i] = false;

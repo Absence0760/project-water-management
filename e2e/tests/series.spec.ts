@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, putSeries } from '../support/api.ts';
+import { createProject, node, putModel, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
@@ -184,7 +184,7 @@ test('on a phone each series row is a card: every column and button fits without
 	// Empty: the hint points at Add data, and its button, right in the series panel, opens that dialog.
 	await page.goto(`/projects/${project.id}?tab=series`);
 	await expect(page.getByText('No time series yet.')).toContainText('with Add data.');
-	await page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Upload a CSV' }).click();
+	await page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Add a data file' }).click();
 	await expect(addDataDialog(page)).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(addDataDialog(page)).toBeHidden();
@@ -429,7 +429,7 @@ test('an hourly file is added up into 08:00 days, or midnight days, and the seri
 	await expect(uploadedNote(page)).toHaveText('Uploaded 3 days to “Rainfall — alternative catchment gauge”.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — alternative catchment gauge' });
-	await expect(row.getByTestId('series-day-boundary')).toHaveText('08:00 day');
+	await expect(row.getByTestId('series-day-boundary')).toHaveText('08:00–08:00 days, added up from sub-daily readings');
 	await expect(row.getByTestId('series-provenance')).toHaveText('SASSCAL AWS v1');
 	// No rain-source period names it yet, so no run reads it.
 	await expect(row).toContainText('Not used: no rain-source period names it');
@@ -511,4 +511,74 @@ test('a semicolon file with decimal commas loads; one that mixes decimal points 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
 	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()) as { values: (number | null)[] };
 	expect(stored.values).toEqual([12.5, 1234.5, 0]);
+});
+
+test('the row and chart controls that save on change say Saved, and a failed save reverts the control and says why beside it', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series save on change');
+	const outlet = node('Outflow gauge', 'gauge', null, 1, { pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	const weir = node('Middle weir', 'gauge', outlet.id, 2, { areaKm2: 0, pctRunoffToDam: 0, damInitialPct: 0, damMinPct: 0 });
+	const farm = node('Lower farm', 'farm', outlet.id, 3, { areaKm2: 8 });
+	await putModel(page.request, project.id, { nodes: [outlet, weir, farm], crops: [], cropAreas: [], transfers: [] });
+	await putSeries(page.request, project.id, { kind: 'rain_chirps_mm', name: 'Grid', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Weir', unit: 'm³/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
+
+	let fail = true;
+	await page.route(/\/series\/[^/?]+$/, (route) =>
+		route.request().method() === 'PATCH' && fail
+			? route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Internal error' }) })
+			: route.fallback()
+	);
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const region = page.getByRole('region', { name: 'Input time series' });
+	const chirps = region.getByRole('row').filter({ hasText: 'Rainfall — CHIRPS' });
+	const flow = region.getByRole('row').filter({ hasText: 'Flow — observed gauge' });
+
+	// A failed relabel: the select shows the stored label again, and the reason sits beside it.
+	const label = chirps.getByRole('combobox', { name: 'Product and version of Grid' });
+	await label.selectOption({ label: 'CHIRPS v2.0' });
+	await expect(chirps.getByTestId('save-status')).toContainText('Not saved:');
+	await expect(label).toHaveValue('');
+	await expect(label).toHaveAttribute('aria-invalid', 'true');
+
+	// A failed move: back at the outlet, and said beside it.
+	const site = flow.getByLabel('Where Weir was measured');
+	await site.selectOption({ label: 'At gauge Middle weir' });
+	await expect(flow.getByTestId('save-status')).toContainText('Not saved:');
+	await expect(site).toHaveValue('');
+
+	// A failed source edit under the chart: the input shows the stored (empty) source again.
+	await flow.getByRole('button', { name: 'View', exact: true }).click();
+	const source = page.getByLabel('Source', { exact: true });
+	await source.fill('DWS X1H001');
+	await source.press('Tab');
+	await expect(page.getByTestId('series-origin').getByTestId('save-status')).toContainText('Not saved:');
+	await expect(source).toHaveValue('');
+
+	// Saves that go through say so beside the control.
+	fail = false;
+	await label.selectOption({ label: 'CHIRPS v2.0' });
+	await expect(chirps.getByTestId('save-status')).toHaveText('Saved');
+	await expect(label).toHaveValue('CHIRPS/2.0');
+	await expect(label).not.toHaveAttribute('aria-invalid', 'true');
+	await source.fill('DWS X1H001');
+	await source.press('Tab');
+	await expect(page.getByTestId('series-origin').getByTestId('save-status')).toHaveText('Saved');
+	await expectNoViolations(page);
+});
+
+test('a series row’s role explains itself through a tip the keyboard reaches, not a hover title', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Series role tip');
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Station A', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Station B', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
+	await page.goto(`/projects/${project.id}?tab=series`);
+	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Station B' });
+	await expect(row.getByTestId('series-role')).toHaveText('Not used (another series of this kind is)');
+	await expect(row.getByTestId('series-role')).not.toHaveAttribute('title');
+	const tip = row.getByRole('button', { name: 'About Catchment rainfall' });
+	await tip.focus();
+	await page.keyboard.press('Enter');
+	await expect(tip).toHaveAttribute('aria-expanded', 'true');
+	await expect(page.locator(`[id="${await tip.getAttribute('aria-controls')}"]`)).toContainText('Daily catchment-average rainfall');
 });

@@ -6,13 +6,16 @@
 // example catchments for a real fit record.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, updateSettings } from '../support/api.ts';
+import { addMember, createProject, putModel, sampleModel, updateSettings } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { DEMO, KLEINBERG, seedExamplesOnce } from '../support/examples.ts';
+import { loadSyntheticQuaternaries } from '../support/map.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { fitSummary, header, openSettings, settingsMenu } from '../support/settings.ts';
+import { answerConfirm } from '../support/confirm.ts';
+import { anySaveBar, fitSummary, header, isProjectPatch, openSettings, saveChanges, saveSettings, settingsBar, settingsMenu } from '../support/settings.ts';
 
-const AFTER_FORM = 'Data feeds, API keys and scheduled reports save as you change them, not with Save settings.';
+const AFTER_FORM = 'Data feeds, API keys and scheduled reports save as you change them, not with the save bar’s Save changes.';
 
 test('the header says there is no fit record and jumps to Fit automatically; the menu is grouped and reaches the panels after the form', async ({ page, owner }) => {
 	void owner;
@@ -131,7 +134,7 @@ test('a dam evaporation preset fills the monthly factors and their source, needs
 	const project = await createProject(page.request, 'Lake preset');
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openSettings(page, project.id);
-	const preset = page.getByLabel('Dam evaporation preset');
+	const preset = page.getByLabel('Dam evaporation preset', { exact: true });
 	const source = page.getByLabel('Dam evaporation factor source');
 	// A new project has no A-pan: a WR90 preset can't convert its S-pan factors, and says so.
 	await preset.selectOption({ label: 'WR90 lake factors, WR90 pan conversion' });
@@ -151,8 +154,7 @@ test('a dam evaporation preset fills the monthly factors and their source, needs
 	await expect(source).toHaveValue(/^WR90 lake factors, WR90 pan conversion preset: .*Midgley.*0\.8793/);
 	// The picker resets: it is an action, not a setting.
 	await expect(preset).toHaveValue('');
-	await page.getByRole('button', { name: 'Save settings' }).click();
-	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+	await saveSettings(page);
 
 	// Saved, and the note still matches the values.
 	await openSettings(page, project.id);
@@ -184,7 +186,7 @@ test('a viewer reads where the parameters came from, with nothing to fit and no 
 	// The same one group link (API keys, an owner's panel, isn't on the page for a viewer).
 	await expect(settingsMenu(v).getByRole('list', { name: 'Automation & access' }).getByRole('link')).toHaveText(['Automation & access']);
 	await expect(v.locator('#set-api-keys')).toHaveCount(0);
-	await expect(v.getByRole('button', { name: 'Save settings' })).toHaveCount(0);
+	await expect(anySaveBar(v)).toHaveCount(0);
 });
 
 test.describe('with a fitted example catchment', () => {
@@ -218,13 +220,190 @@ test.describe('with a fitted example catchment', () => {
 		// A fit writes nine decimals; the field shows three and keeps the value (nothing to save).
 		const x1 = page.getByLabel(/^Production store capacity X1/);
 		await expect(x1).toHaveValue(/^\d+(\.\d{1,3})?$/);
-		await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
+		await expect(anySaveBar(page)).toHaveCount(0);
 
 		// Editing a fitted parameter by hand: the line says the fit no longer describes the form, until discarded.
 		await x1.fill('500');
 		await expect(fitSummary(page)).toHaveText(/ · changed since the fit$/);
-		await page.getByRole('button', { name: 'Discard' }).click();
+		await settingsBar(page).getByRole('button', { name: 'Discard', exact: true }).click();
+		await answerConfirm(page, true);
 		await expect(fitSummary(page)).toHaveText(fitted);
 		await expectNoViolations(page);
 	});
+});
+
+test('a note or a quaternary lookup doesn’t save the settings: their forms aren’t nested in a settings form', async ({ page, owner }) => {
+	void owner;
+	await loadSyntheticQuaternaries();
+	const project = await createProject(page.request, 'Settings nested forms');
+	await openSettings(page, project.id);
+	const patches: string[] = [];
+	page.on('request', (r) => {
+		if (isProjectPatch(r.method(), r.url())) patches.push(r.url());
+	});
+	await expect(page.locator('form form')).toHaveCount(0);
+	await page.getByLabel('A-pan evaporation, Oct, mm').fill('150');
+	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
+	await expect(settingsBar(page)).toBeVisible();
+
+	// A note on Demand, added with its own form's Add note.
+	await page.getByRole('button', { name: 'Add a note on Demand' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Notes on Demand' });
+	await dialog.getByLabel('Add a note').fill('Trying the WR90 A-pan for this quaternary');
+	await dialog.getByRole('button', { name: 'Add note' }).click();
+	await expect(dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem')).toContainText('Trying the WR90 A-pan');
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+	// The quaternary lookup, submitted with Enter in its coordinates.
+	const wr = page.getByRole('region', { name: /^WR2012 check/ });
+	await wr.getByLabel('Compare runs with WR2012 naturalised flow').check();
+	await wr.getByRole('button', { name: 'Propose from the map' }).click();
+	await wr.getByLabel('Look up at').selectOption('typed');
+	await wr.getByLabel('Latitude').fill('-33.61');
+	await wr.getByLabel('Longitude').fill('21.34');
+	await wr.getByLabel('Longitude').press('Enter');
+	// Answered (a proposal, none, or an error): the lookup ran on its own.
+	await expect(wr.getByTestId('quaternary-proposal').locator('[role="status"], [role="alert"]').first()).toBeVisible();
+
+	// Neither saved the settings: they are still unsaved, and the A-pan is as stored.
+	expect(patches).toEqual([]);
+	await expect(settingsBar(page)).toBeVisible();
+	await expect(page.getByLabel('A-pan evaporation, Oct, mm')).toHaveValue('150');
+	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings.apanMm[0];
+	expect(stored).toBe(0);
+});
+
+test('with model and settings edits there is one save bar, one Discard, one reason field, and the reason is kept with the settings', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Settings one bar');
+	await putModel(page.request, project.id, sampleModel());
+	await page.goto(`/projects/${project.id}?tab=transfers`);
+	await page.getByLabel('Priority of transfer 1 (lower moves first)', { exact: true }).fill('3');
+	await page.getByLabel('Priority of transfer 1 (lower moves first)', { exact: true }).blur();
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Demand' })).toBeVisible();
+	await page.getByLabel('A-pan evaporation, Oct, mm').fill('150');
+	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
+
+	await expect(page.getByRole('region', { name: /^Unsaved / })).toHaveCount(1);
+	await expect(page.getByRole('button', { name: 'Discard', exact: true })).toHaveCount(1);
+	await expect(page.getByRole('button', { name: /^Save (changes|settings)$/ })).toHaveCount(1);
+	await expect(page.getByRole('textbox', { name: 'Reason for this change (optional)' })).toHaveCount(1);
+	await expect(anySaveBar(page)).toContainText('Unsaved changes to the model and the settings');
+	// The header's badge counts the settings too.
+	await expect(header(page).getByText('Unsaved changes', { exact: true })).toBeVisible();
+
+	await page.getByRole('textbox', { name: 'Reason for this change (optional)' }).fill('WR90 A-pan for the quaternary');
+	await saveSettings(page);
+	const settings = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
+	expect(settings.apanMm[0]).toBe(150);
+	const model = await (await page.request.get(`${API_URL}/projects/${project.id}/model`)).json();
+	expect(model.transfers[0].priority).toBe(3);
+	await page.goto(`/projects/${project.id}?tab=history`);
+	await expect(page.getByText('WR90 A-pan for the quaternary').first()).toBeVisible();
+});
+
+test('a failed save says so in the save bar, beside Save, in view', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings save fails');
+	await openSettings(page, project.id);
+	await page.route(
+		(url) => url.pathname.endsWith(`/projects/${project.id}`),
+		(route) => (route.request().method() === 'PATCH' ? route.fulfill({ status: 500, json: { error: 'The server is down for maintenance.' } }) : route.continue())
+	);
+	// Deep in the form: the automatic runs at the bottom.
+	const wait = page.getByLabel('Wait after the latest new data (minutes)');
+	await page.getByLabel('Re-run the model after new data').check();
+	await wait.fill('30');
+	await wait.blur();
+	await saveChanges(page).click();
+	const failed = settingsBar(page).getByText(/^Save failed: /);
+	await expect(failed).toBeInViewport();
+	await expect(saveChanges(page)).toBeInViewport();
+	// Still unsaved, nothing lost.
+	await expect(wait).toHaveValue('30');
+});
+
+test('on a phone the save bar keeps Discard and Save on one row, and stays short', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const project = await createProject(page.request, 'Settings phone bar');
+	await openSettings(page, project.id);
+	await page.getByLabel('A-pan evaporation, Oct, mm').fill('150');
+	await page.getByLabel('A-pan evaporation, Oct, mm').blur();
+	const bar = settingsBar(page);
+	const height = (await bar.boundingBox())!.height;
+	expect(height).toBeLessThanOrEqual(200);
+	const discard = (await bar.getByRole('button', { name: 'Discard', exact: true }).boundingBox())!;
+	const save = (await bar.getByRole('button', { name: 'Save changes' }).boundingBox())!;
+	expect(Math.abs(discard.y - save.y)).toBeLessThan(2);
+	await expectNoSidewaysScroll(page);
+});
+
+test('on a phone a monthly row’s label takes a narrow column, so the months get the room', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const project = await createProject(page.request, 'Settings phone months');
+	await openSettings(page, project.id);
+	const row = page.getByRole('row', { name: /^A-pan evaporation/ });
+	const label = (await row.locator('th.sticky').boundingBox())!;
+	const wrap = (await row.locator('xpath=ancestor::div[contains(@class, "table-wrap")][1]').boundingBox())!;
+	expect(label.width).toBeLessThanOrEqual(wrap.width * 0.4);
+	await expectNoSidewaysScroll(page);
+});
+
+test('the long panels’ sub-groups are headings, in the order shown, and Fit the parameters lands on its own heading', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings headings');
+	await openSettings(page, project.id);
+	// The headings on the page: a closed notes drawer's title (a dialog, in the DOM while shut) is not one.
+	const names = (id: string) =>
+		page
+			.locator(`#${id}`)
+			.locator('h2, h3')
+			.evaluateAll((els) => els.filter((e) => !e.closest('dialog:not([open])')).map((e) => (e.textContent ?? '').replace(/\s+/g, ' ').trim()));
+	// The lazy panels first: Evaporation from the map, the quality flags and the flow gaps.
+	await expect(page.locator('#set-flow').getByRole('heading', { name: 'Evaporation from the map' })).toBeVisible();
+	await expect(page.locator('#set-record').getByRole('heading', { name: 'Flow gaps' })).toBeVisible();
+	await expect(page.locator('#set-record').getByRole('heading', { name: /^Quality flags for Fit automatically/ })).toBeVisible();
+	expect((await names('set-flow')).slice(0, 4)).toEqual([
+		'Flow calibration (rain → natural flow)',
+		'Areal rainfall correction',
+		'GR4J potential evaporation',
+		'Evaporation from the map'
+	]);
+	expect(await names('set-rain')).toEqual([
+		'Rain gaps and CHIRPS',
+		'CHIRPS bias correction and quantile map',
+		'CHIRPS fit period',
+		'Zero-rain runs in the catchment rain',
+		'Multi-day accumulations',
+		'Rain source periods'
+	]);
+	const record = await names('set-record');
+	expect(record[0]).toBe('Calibration record');
+	expect(record).toContain('Quality flags for Fit automatically');
+	expect(record).toContain('Flow gaps');
+	const fit = await names('set-fit');
+	expect(fit[0]).toBe('Fit the parameters');
+	expect(fit[1]).toBe('Fit automatically');
+
+	// A link from elsewhere (a fresh load: from this same page, a goto would only move to the fragment).
+	await page.goto('about:blank');
+	await page.goto(`/projects/${project.id}?tab=settings#set-fit`);
+	await expect(page.locator('#set-fit').getByRole('heading', { level: 2, name: 'Fit the parameters' })).toBeFocused();
+});
+
+test('every help tip on the page has its own name, and the annual assurance threshold isn’t part of the reporting window', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings tip names');
+	await openSettings(page, project.id);
+	await expect(page.getByRole('button', { name: /^About / }).first()).toBeVisible();
+	const tips = await page.getByRole('button', { name: /^About / }).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? e.textContent ?? ''));
+	const dupes = tips.filter((t, i) => tips.indexOf(t) !== i);
+	expect(dupes).toEqual([]);
+	const window = page.getByRole('group', { name: /^Curtailment reporting window/ });
+	await expect(window.getByLabel(/^Annual assurance threshold/)).toHaveCount(0);
+	await expect(page.getByLabel(/^Annual assurance threshold/)).toBeVisible();
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectModel } from '@water-management/engine';
-import { farmDrawerHref, farmPlanting, withoutFarm } from './farmDrawer';
+import { farmDrawerHref, farmPlanting, inOrder, plantedFirst, withoutFarm } from './farmDrawer';
 
 const model = {
 	nodes: [],
@@ -36,6 +36,29 @@ describe('farmPlanting', () => {
 		expect(p.rows.map((r) => r.areaM2)).toEqual([0, 0, 0]);
 		expect(p.totalM2).toBe(0);
 		expect(p.planted).toBe(0);
+	});
+});
+
+describe('plantedFirst and inOrder', () => {
+	it('puts the planted crops first, largest area first, then the rest in model order', () => {
+		expect(plantedFirst(farmPlanting(model, 'f1').rows)).toEqual(['c2', 'c1', 'c3']);
+		expect(plantedFirst(farmPlanting(model, 'nope').rows)).toEqual(['c1', 'c2', 'c3']);
+	});
+
+	it('keeps the order it was given while areas change, and puts a crop added since last', () => {
+		const order = ['c2', 'c1', 'c3'];
+		const rows = [
+			{ cropId: 'c1', areaM2: 0 },
+			{ cropId: 'c4', areaM2: 0 },
+			{ cropId: 'c2', areaM2: 0 },
+			{ cropId: 'c3', areaM2: 90_000 }
+		];
+		expect(inOrder(rows, order).map((r) => r.cropId)).toEqual(['c2', 'c1', 'c3', 'c4']);
+	});
+
+	it('with 30 crops, a unit’s two planted crops come first', () => {
+		const rows = Array.from({ length: 30 }, (_, i) => ({ cropId: `c${i}`, name: `Crop ${i}`, areaM2: i === 27 ? 5_000 : i === 29 ? 80_000 : 0 }));
+		expect(plantedFirst(rows).slice(0, 3)).toEqual(['c29', 'c27', 'c0']);
 	});
 });
 

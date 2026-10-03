@@ -288,3 +288,69 @@ test('many dams: every card shows, emptiest first, with no “Show all” fold; 
 	await expect(chart(page)).toBeInViewport();
 	await expectNoViolations(page);
 });
+
+test('at 1120×800 the chart sits beside the cards at 420 px, and a pick doesn’t scroll the window', async ({ page, owner }) => {
+	void owner;
+	// A page column between 784 px (56rem at the 14 px root) and 896 px: the script and the container query used to disagree here.
+	await page.setViewportSize({ width: 1120, height: 800 });
+	const project = await seedThreeDams(page, 'Dams 1120');
+	await createRun(page.request, project.id, 'Baseline');
+	await openDams(page, project.id);
+	await chartReady(page);
+	const list = (await page.getByRole('list', { name: 'Dams' }).boundingBox())!;
+	const box = (await chart(page).boundingBox())!;
+	expect(box.x).toBeGreaterThan(list.x + list.width);
+	// The plot is drawn at the side-by-side height.
+	expect((await chart(page).locator('figure.chart').boundingBox())!.height).toBeGreaterThan(400);
+	const y = await page.evaluate(() => window.scrollY);
+	await cards(page).last().locator('a.name').click();
+	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${(await cards(page).last().locator('a.name').textContent())!}`);
+	expect(await page.evaluate(() => window.scrollY)).toBe(y);
+});
+
+test('a failed run list says so, not “No run yet”', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dams runs fail');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.route(`**/projects/${project.id}/runs`, (route) => (route.request().method() === 'GET' ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' }) : route.fallback()));
+	await openDams(page, project.id);
+	await expect(page.getByTestId('dams-runs-error')).toHaveText("The run list couldn’t be loaded, so the cards show each dam's capacity only. Reload the page to try again.");
+	await expect(page.getByText('No run yet')).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Run the model' })).toHaveCount(0);
+	await expect(card(page, 'Upper farm')).toContainText('Run list couldn’t be loaded');
+	await expect(card(page, 'Upper farm')).toContainText('150 000 m³');
+});
+
+test('a card’s Edit dam opens its node sheet, Back returns to Dams with the pick; the header has the Node table; panels are h2', async ({ page, owner }) => {
+	void owner;
+	const project = await seedThreeDams(page, 'Dams edit');
+	await createRun(page.request, project.id, 'Baseline');
+	const lowerId = project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string;
+	await openDams(page, project.id, `&dam=${lowerId}`);
+	await chartReady(page);
+	await expect(page.getByRole('heading', { level: 2, name: /^Storage: Lower farm/ })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 2, name: 'Each dam' })).toBeAttached();
+	await expect(page.locator('.dams-page h3')).toHaveCount(0);
+
+	await card(page, 'Lower farm').getByRole('link', { name: 'Edit dam: Lower farm' }).click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=network&edit=${lowerId}$`));
+	await expect(page.getByRole('dialog', { name: /Lower farm/ })).toBeVisible();
+	await page.goBack();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}$`));
+	await expect(chart(page).getByRole('heading')).toHaveText('Storage: Lower farm');
+
+	await page.getByRole('link', { name: 'Node table', exact: true }).click();
+	await expect(page).toHaveURL(new RegExp(`\\?tab=dams&dam=${lowerId}&grid=nodes$`));
+	await expect(page.getByRole('dialog', { name: 'Node table' })).toBeVisible();
+});
+
+test('a viewer’s card links to Dam details, not Edit dam', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Dams viewer details');
+	const viewer = await signIn('Dams viewer details');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await openDams(v, project.id);
+	await expect(card(v, 'Upper farm').getByRole('link', { name: 'Dam details: Upper farm' })).toBeVisible();
+	await expect(v.getByRole('link', { name: /^Edit dam/ })).toHaveCount(0);
+});

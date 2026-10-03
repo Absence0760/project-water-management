@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, sampleModel, seedRunnableProject } from '../support/api.ts';
 import { answerConfirm, confirmBox } from '../support/confirm.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal } from '../support/network.ts';
 import { createScenario, openScenarios } from '../support/scenarios.ts';
@@ -36,9 +37,40 @@ test('unsaved model edits: a tab change keeps them without asking; leaving asks,
 
 	// Discarded: nothing asks any more.
 	await page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Discard' }).click();
+	await answerConfirm(page, true, 'Your unsaved changes to the network will be lost.');
 	await projectsLink(page).click();
 	await expect(projectsHeading(page)).toBeVisible();
 	await expect(confirmBox(page)).toBeHidden();
+});
+
+test('unsaved settings: another section keeps them without asking; another page asks, and Stay keeps the form', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Guard settings');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const apan = page.getByLabel('A-pan evaporation, Oct, mm');
+	await apan.fill('152');
+	await apan.blur();
+
+	// Another section: no question; the page holds the settings, so they are there on the way back.
+	await sections(page).getByRole('link', { name: 'Network', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
+	await expect(confirmBox(page)).toBeHidden();
+	await expect(page.getByRole('region', { name: 'Unsaved settings' })).toContainText('Unsaved changes to the settings');
+	await expect(page.getByTestId('section-header').getByText('Unsaved changes', { exact: true })).toBeVisible();
+	await sections(page).getByRole('link', { name: 'Settings & calibration', exact: true }).click();
+	await expect(apan).toHaveValue('152');
+
+	// The projects list: asked, naming the settings; Stay keeps the form.
+	await projectsLink(page).click();
+	await answerConfirm(page, false, 'You have unsaved changes (settings). Leave and go to All projects?');
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=settings`));
+	await expect(apan).toHaveValue('152');
+	// Leave: gone, and nothing was saved.
+	await projectsLink(page).click();
+	await answerConfirm(page, true);
+	await expect(projectsHeading(page)).toBeVisible();
+	const res = await page.request.get(`${API_URL}/projects/${project.id}`);
+	expect(((await res.json()) as { project: { settings: { apanMm: number[] } } }).project.settings.apanMm[0]).toBe(0);
 });
 
 test('Back with unsaved project details asks; Leave takes the step back', async ({ page, owner }) => {

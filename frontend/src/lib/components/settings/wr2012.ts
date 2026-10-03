@@ -72,3 +72,23 @@ export function mm3MonthToM3s(mm3: number, wyIndex: number): number {
 
 /** Water year label: 1990 → "1990/91". */
 export const waterYearLabel = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, '0')}`;
+
+/**
+ * The reference switched on or off. On brings back the one switched off
+ * (`last`, kept until the form is saved or discarded), else a blank one, so
+ * a mis-click on the check never throws typed values away.
+ */
+export function withReference(on: boolean, last: Wr2012Draft | null | undefined): Wr2012Draft | null {
+	if (!on) return null;
+	return last ? (JSON.parse(JSON.stringify(last)) as Wr2012Draft) : blankReference();
+}
+
+export interface MarBand {
+	marLowMm3: number | null;
+	marHighMm3: number | null;
+}
+
+/** The MAR band's bounds switched on or off: on brings back the pair switched off (`last`), else both blank; off clears them. */
+export function withMarBand(on: boolean, last: MarBand | null | undefined): MarBand {
+	return on && last ? { marLowMm3: last.marLowMm3, marHighMm3: last.marHighMm3 } : { marLowMm3: null, marHighMm3: null };
+}
